@@ -14,7 +14,7 @@
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
-                <button class="btn btn-secondary" id="btnSettings" title="Settings">⚙️</button>
+                <button class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)">⚙️</button>
                 <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat">💬</button>
             </div>
         </header>
@@ -385,6 +385,12 @@
                     }
                 }
 
+                // Ctrl+, - Settings
+                if (e.ctrlKey && e.key === ',') {
+                    e.preventDefault();
+                    openSettings();
+                }
+
                 // Ctrl+B - Toggle sidebar
                 if (e.ctrlKey && e.key === 'b') {
                     e.preventDefault();
@@ -673,7 +679,8 @@
                     <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${run.name}</div>
                     <div class="issue-title" style="font-size: 11px; color: var(--text-muted);">${run.branch} · ${run.event}</div>
                 </div>
-            `).join('');        }
+            `).join('');
+        }
 
         async function refreshWorkflows() {
             if (!State.currentProject) return;
