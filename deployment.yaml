@@ -1,0 +1,72 @@
+# 1. Deployment (No changes needed)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-editor-deployment
+  labels:
+    app: ai-editor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-editor
+  template:
+    metadata:
+      labels:
+        app: ai-editor
+    spec:
+      containers:
+      - name: ai-editor
+        image: registry.gobha.me:5000/xcaliber/ai-editor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+
+---
+# 2. Service (No changes needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-editor-service
+spec:
+  selector:
+    app: ai-editor
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+# 3. Middleware (CORRECTED API VERSION)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ai-editor-strip-prefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /editor
+
+---
+# 4. Ingress (CORRECTED MIDDLEWARE REFERENCE)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-editor-ingress
+  annotations:
+    # Reference updated to match the Middleware's new API group
+    traefik.ingress.kubernetes.io/router.middlewares: default-ai-editor-strip-prefix@kubernetescrd
+spec:
+  ingressClassName: "traefik"
+  rules:
+  - host: "ai.gobha.me"
+    http:
+      paths:
+      - path: /editor
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-editor-service
+            port:
+              number: 80

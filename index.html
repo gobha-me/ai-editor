@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Editor</title>
-    <link rel="stylesheet" href="css/editor.css">
+    <link rel="stylesheet" href="editor/css/editor.css">
 </head>
 <body>
     <div class="app-container">
@@ -277,11 +277,11 @@
 
     <!-- Main Script -->
     <script type="module">
-        import { EventBus, State, Storage, loadSettings, saveSettings as coreSaveSettings } from './js/core.js';
-        import { GiteaAPI, loadProject, loadFile, saveFile } from './js/gitea.js';
-        import { LLM, generateCommitMessage } from './js/llm.js';
-        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './js/editor.js';
-        import { initChat, addMessage, stopGeneration } from './js/chat.js';
+        import { EventBus, State, Storage, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
+        import { GiteaAPI, loadProject, loadFile, saveFile } from './editor/js/gitea.js';
+        import { LLM, generateCommitMessage } from './editor/js/llm.js';
+        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
+        import { initChat, addMessage, stopGeneration } from './editor/js/chat.js';
 
         // ============================================
         // UI HELPERS (Define early for event listeners)

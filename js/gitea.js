@@ -43,7 +43,7 @@ const GiteaAPI = {
     // ========================================
 
     async listUserRepos() {
-        const repos = await this.request('GET', '/user/repos?limit=100');
+        const repos = await this.request('GET', '/user/repos');
         return repos.map(r => ({
             id: r.id,
             owner: r.owner.login,
