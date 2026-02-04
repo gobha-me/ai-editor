@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Editor</title>
+    <link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>⚡ AI Editor</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
+                <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
+                <button class="btn btn-secondary" id="btnSettings" title="Settings">⚙️</button>
+                <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat">💬</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Sidebar (Left) -->
+            <aside class="sidebar" id="sidebar">
+                <!-- Project Selector -->
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        Projects
+                        <button id="btnRefreshProjects" title="Refresh">🔄</button>
+                    </div>
+                    <div class="project-selector">
+                        <select id="projectSelect">
+                            <option value="">Select a project...</option>
+                        </select>
+                    </div>
+                    <div class="branch-selector">
+                        <select id="branchSelect">
+                            <option value="main">main</option>
+                        </select>
+                        <button class="btn btn-secondary" id="btnNewBranch" title="New Branch">+</button>
+                    </div>
+                </div>
+
+                <!-- File Tree -->
+                <div class="sidebar-section" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="sidebar-header">
+                        Files
+                        <div>
+                            <button id="btnNewFile" title="New File">📄</button>
+                            <button id="btnNewFolder" title="New Folder">📁</button>
+                        </div>
+                    </div>
+                    <div class="file-tree" id="fileTree">
+                        <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
+                            Select a project to browse files
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Issues Panel -->
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        Issues
+                        <button id="btnRefreshIssues" title="Refresh">🔄</button>
+                    </div>
+                    <div class="issues-panel" id="issuesPanel">
+                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                            No issues loaded
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workflow Runs -->
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        Workflows
+                        <button id="btnRefreshWorkflows" title="Refresh">🔄</button>
+                    </div>
+                    <div class="workflows-panel" id="workflowsPanel">
+                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                            No workflow runs
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Editor Panel (Center) -->
+            <section class="editor-panel">
+                <!-- Tabs -->
+                <div class="editor-tabs" id="editorTabs">
+                    <div class="editor-tab active">
+                        <span>Welcome</span>
+                    </div>
+                </div>
+
+                <!-- Editor Container -->
+                <div class="editor-container" id="editorContainer">
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                        <div style="text-align: center;">
+                            <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                            <p>Configure your Gitea and LLM settings to get started.</p>
+                            <button class="btn btn-primary" style="margin-top: 1rem;" onclick="openSettings()">
+                                ⚙️ Open Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Bar -->
+                <div class="editor-status">
+                    <div class="status-left">
+                        <span class="status-item" id="statusFile">No file open</span>
+                        <span class="status-item" id="statusModified"></span>
+                    </div>
+                    <div class="status-right">
+                        <span class="status-item" id="statusBranch">main</span>
+                        <span class="status-item" id="statusConnection">●</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Panel (Right) -->
+            <aside class="chat-panel" id="chatPanel">
+                <div class="chat-header">
+                    <h3>💬 AI Assistant</h3>
+                    <div class="model-selector">
+                        <select id="modelSelect">
+                            <option value="">Select model...</option>
+                        </select>
+                        <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Messages rendered here -->
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="chat-input-wrapper">
+                        <textarea 
+                            id="chatInput" 
+                            placeholder="Ask me to edit code, explain something, or help with an issue..."
+                            rows="3"
+                        ></textarea>
+                        <div class="chat-input-actions">
+                            <button id="btnSend" title="Send (Enter)">📤</button>
+                            <button id="btnStop" class="btn-stop" title="Stop" style="display: none;">⏹</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>⚙️ Settings</h2>
+                <button class="modal-close" onclick="closeSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Gitea Configuration</h4>
+                
+                <div class="form-group">
+                    <label for="settingGiteaUrl">Gitea URL</label>
+                    <input type="text" id="settingGiteaUrl" placeholder="https://git.gobha.me">
+                    <small>Base URL of your Gitea instance</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="settingGiteaToken">Gitea API Token</label>
+                    <input type="password" id="settingGiteaToken" placeholder="Your API token">
+                    <small>Generate in Gitea: Settings → Applications → Generate Token</small>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+
+                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">LLM Configuration</h4>
+
+                <div class="form-group">
+                    <label for="settingLlmEndpoint">API Endpoint</label>
+                    <input type="text" id="settingLlmEndpoint" placeholder="https://api.openai.com/v1">
+                    <small>OpenAI-compatible API endpoint</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="settingLlmApiKey">API Key</label>
+                    <input type="password" id="settingLlmApiKey" placeholder="sk-...">
+                </div>
+
+                <div class="form-group">
+                    <label for="settingLlmModel">Default Model</label>
+                    <input type="text" id="settingLlmModel" placeholder="gpt-4" value="gpt-4">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Branch Modal -->
+    <div class="modal-overlay" id="newBranchModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>🌿 Create New Branch</h2>
+                <button class="modal-close" onclick="closeNewBranchModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newBranchName">Branch Name</label>
+                    <input type="text" id="newBranchName" placeholder="feature/my-feature">
+                </div>
+                <div class="form-group">
+                    <label for="newBranchFrom">Create from</label>
+                    <select id="newBranchFrom">
+                        <option value="main">main</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeNewBranchModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="createNewBranch()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Commit Modal -->
+    <div class="modal-overlay" id="commitModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>💾 Commit Changes</h2>
+                <button class="modal-close" onclick="closeCommitModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="commitMessage">Commit Message</label>
+                    <textarea id="commitMessage" rows="3" placeholder="Describe your changes..."></textarea>
+                </div>
+                <button class="btn btn-secondary" onclick="generateCommitMsg()" style="margin-bottom: 1rem;">
+                    🤖 Generate with AI
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCommitModal()">Cancel</button>
+                <button class="btn btn-success" onclick="commitAndPush()">✅ Commit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div class="modal-overlay" id="newFileModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📄 New File</h2>
+                <button class="modal-close" onclick="closeNewFileModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newFileName">File Path</label>
+                    <input type="text" id="newFileName" placeholder="src/myfile.js">
+                    <small>Include directories in path (e.g., src/utils/helper.js)</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeNewFileModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="createNewFile()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Main Script -->
+    <script type="module">
+        import { EventBus, State, Storage, loadSettings, saveSettings as coreSaveSettings } from './js/core.js';
+        import { GiteaAPI, loadProject, loadFile, saveFile } from './js/gitea.js';
+        import { LLM, generateCommitMessage } from './js/llm.js';
+        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './js/editor.js';
+        import { initChat, addMessage, stopGeneration } from './js/chat.js';
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+
+        async function init() {
+            console.log('Initializing AI Editor...');
+            
+            // Load settings
+            loadSettings();
+            populateSettingsForm();
+            
+            // Initialize components
+            initChat(
+                document.getElementById('chatMessages'),
+                document.getElementById('chatInput')
+            );
+
+            // Setup event listeners
+            setupEventListeners();
+            setupKeyboardShortcuts();
+
+            // Load projects if configured
+            if (State.settings.giteaUrl && State.settings.giteaToken) {
+                await refreshProjects();
+            }
+
+            // Load models if configured
+            if (State.settings.llmEndpoint && State.settings.llmApiKey) {
+                await fetchModels();
+            }
+
+            // Pre-load CodeMirror
+            await loadCodeMirror();
+
+            console.log('AI Editor initialized');
+        }
+
+        // ============================================
+        // EVENT LISTENERS
+        // ============================================
+
+        function setupEventListeners() {
+            // Header buttons
+            document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
+            document.getElementById('btnSave').addEventListener('click', openCommitModal);
+            document.getElementById('btnSettings').addEventListener('click', openSettings);
+            document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
+
+            // Sidebar buttons
+            document.getElementById('btnRefreshProjects').addEventListener('click', refreshProjects);
+            document.getElementById('btnNewBranch').addEventListener('click', openNewBranchModal);
+            document.getElementById('btnNewFile').addEventListener('click', openNewFileModal);
+            document.getElementById('btnRefreshIssues').addEventListener('click', refreshIssues);
+            document.getElementById('btnRefreshWorkflows').addEventListener('click', refreshWorkflows);
+
+            // Selectors
+            document.getElementById('projectSelect').addEventListener('change', onProjectChange);
+            document.getElementById('branchSelect').addEventListener('change', onBranchChange);
+            document.getElementById('modelSelect').addEventListener('change', onModelChange);
+
+            // Chat
+            document.getElementById('btnSend').addEventListener('click', () => {
+                const input = document.getElementById('chatInput');
+                if (input.value.trim()) {
+                    window.Chat.sendMessage(input.value.trim());
+                    input.value = '';
+                }
+            });
+            document.getElementById('btnStop').addEventListener('click', stopGeneration);
+            document.getElementById('btnFetchModels').addEventListener('click', fetchModels);
+
+            // EventBus listeners
+            EventBus.on('llm:generating', (isGenerating) => {
+                document.getElementById('btnSend').style.display = isGenerating ? 'none' : 'block';
+                document.getElementById('btnStop').style.display = isGenerating ? 'block' : 'none';
+            });
+
+            EventBus.on('editor:change', () => {
+                updateStatusBar();
+                document.getElementById('btnSave').disabled = false;
+            });
+
+            EventBus.on('gitea:saved', () => {
+                document.getElementById('btnSave').disabled = true;
+                showToast('File saved successfully', 'success');
+            });
+
+            EventBus.on('gitea:error', (error) => {
+                showToast(error.message, 'error');
+            });
+        }
+
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                // Ctrl+S - Save
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    if (!document.getElementById('btnSave').disabled) {
+                        openCommitModal();
+                    }
+                }
+
+                // Ctrl+B - Toggle sidebar
+                if (e.ctrlKey && e.key === 'b') {
+                    e.preventDefault();
+                    toggleSidebar();
+                }
+
+                // Escape - Close modals
+                if (e.key === 'Escape') {
+                    closeAllModals();
+                }
+            });
+        }
+
+        // ============================================
+        // PROJECT MANAGEMENT
+        // ============================================
+
+        async function refreshProjects() {
+            try {
+                const repos = await GiteaAPI.listUserRepos();
+                const select = document.getElementById('projectSelect');
+                select.innerHTML = '<option value="">Select a project...</option>';
+                
+                repos.forEach(repo => {
+                    const option = document.createElement('option');
+                    option.value = `${repo.owner}/${repo.name}`;
+                    option.textContent = repo.fullName;
+                    select.appendChild(option);
+                });
+
+                showToast(`Loaded ${repos.length} projects`, 'success');
+            } catch (error) {
+                console.error('Failed to load projects:', error);
+                showToast('Failed to load projects. Check Gitea settings.', 'error');
+            }
+        }
+
+        async function onProjectChange(e) {
+            const value = e.target.value;
+            if (!value) return;
+
+            const [owner, repo] = value.split('/');
+            
+            try {
+                await loadProject(owner, repo);
+                
+                // Update branch selector
+                const branchSelect = document.getElementById('branchSelect');
+                branchSelect.innerHTML = '';
+                State.branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch.name;
+                    option.textContent = branch.name + (branch.protected ? ' 🔒' : '');
+                    branchSelect.appendChild(option);
+                });
+                branchSelect.value = State.currentBranch;
+
+                // Render file tree
+                renderFileTree();
+                
+                // Render issues
+                renderIssues();
+                
+                // Render workflows
+                renderWorkflows();
+
+                updateStatusBar();
+                showToast(`Loaded ${owner}/${repo}`, 'success');
+
+            } catch (error) {
+                console.error('Failed to load project:', error);
+                showToast('Failed to load project', 'error');
+            }
+        }
+
+        async function onBranchChange(e) {
+            State.currentBranch = e.target.value;
+            
+            if (State.currentProject) {
+                // Reload file tree for new branch
+                const { owner, repo } = State.currentProject;
+                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                renderFileTree();
+            }
+
+            updateStatusBar();
+        }
+
+        // ============================================
+        // FILE TREE
+        // ============================================
+
+        function renderFileTree() {
+            const container = document.getElementById('fileTree');
+            
+            if (State.fileTree.length === 0) {
+                container.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No files found</div>';
+                return;
+            }
+
+            // Build tree structure
+            const tree = buildTreeStructure(State.fileTree);
+            container.innerHTML = renderTreeNodes(tree, 0);
+        }
+
+        function buildTreeStructure(files) {
+            const root = { children: {} };
+            
+            files.forEach(file => {
+                const parts = file.path.split('/');
+                let current = root;
+                
+                parts.forEach((part, i) => {
+                    if (!current.children[part]) {
+                        current.children[part] = {
+                            name: part,
+                            path: parts.slice(0, i + 1).join('/'),
+                            type: i === parts.length - 1 ? file.type : 'dir',
+                            sha: file.sha,
+                            children: {}
+                        };
+                    }
+                    current = current.children[part];
+                });
+            });
+
+            return root.children;
+        }
+
+        function renderTreeNodes(nodes, depth) {
+            return Object.values(nodes)
+                .sort((a, b) => {
+                    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+                    return a.name.localeCompare(b.name);
+                })
+                .map(node => {
+                    const isDir = node.type === 'dir';
+                    const icon = getFileIcon(node.name, isDir);
+                    const hasChildren = Object.keys(node.children).length > 0;
+                    
+                    let html = `
+                        <div class="tree-item ${isDir ? 'dir' : ''}" 
+                             data-depth="${depth}" 
+                             data-path="${node.path}"
+                             data-type="${node.type}"
+                             onclick="window.onTreeItemClick('${node.path}', '${node.type}')">
+                            <span class="icon">${icon}</span>
+                            <span class="name">${node.name}</span>
+                            <div class="actions">
+                                ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${node.path}')" title="Delete">🗑</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                    if (isDir && hasChildren) {
+                        html += renderTreeNodes(node.children, depth + 1);
+                    }
+
+                    return html;
+                }).join('');
+        }
+
+        window.onTreeItemClick = async function(path, type) {
+            if (type === 'dir') {
+                // Toggle directory expansion (could implement later)
+                return;
+            }
+
+            // Check if it's a text file
+            if (!isTextFile(path)) {
+                showToast('Cannot edit binary files', 'warning');
+                return;
+            }
+
+            try {
+                await loadFile(path);
+                
+                // Create editor
+                await createEditor(
+                    document.getElementById('editorContainer'),
+                    State.editorContent,
+                    path
+                );
+
+                // Update tabs
+                updateEditorTabs(path);
+                
+                // Update status
+                updateStatusBar();
+                document.getElementById('btnSave').disabled = !State.editorDirty;
+
+                // Highlight active file in tree
+                document.querySelectorAll('.tree-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.path === path);
+                });
+
+            } catch (error) {
+                console.error('Failed to load file:', error);
+                showToast('Failed to load file', 'error');
+            }
+        };
+
+        window.deleteFile = async function(path) {
+            if (!confirm(`Delete ${path}?`)) return;
+
+            const { owner, repo } = State.currentProject;
+            const file = State.fileTree.find(f => f.path === path);
+            
+            try {
+                await GiteaAPI.deleteFile(owner, repo, path, `Delete ${path}`, file.sha, State.currentBranch);
+                
+                // Refresh file tree
+                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                renderFileTree();
+                
+                showToast('File deleted', 'success');
+            } catch (error) {
+                showToast('Failed to delete file', 'error');
+            }
+        };
+
+        function updateEditorTabs(path) {
+            const tabs = document.getElementById('editorTabs');
+            const fileName = path.split('/').pop();
+            
+            tabs.innerHTML = `
+                <div class="editor-tab active">
+                    <span>${fileName}</span>
+                    <span class="modified" style="display: ${State.editorDirty ? 'inline' : 'none'}">●</span>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // ISSUES & WORKFLOWS
+        // ============================================
+
+        function renderIssues() {
+            const container = document.getElementById('issuesPanel');
+            
+            if (State.issues.length === 0) {
+                container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">No open issues</div>';
+                return;
+            }
+
+            container.innerHTML = State.issues.slice(0, 10).map(issue => `
+                <div class="issue-item" onclick="window.Chat.sendMessage('Work on issue #${issue.number}')">
+                    <div class="issue-number">#${issue.number}</div>
+                    <div class="issue-title">${issue.title}</div>
+                    ${issue.labels.length ? `
+                        <div class="issue-labels">
+                            ${issue.labels.map(l => `<span class="issue-label">${l}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function refreshIssues() {
+            if (!State.currentProject) return;
+            
+            const { owner, repo } = State.currentProject;
+            State.issues = await GiteaAPI.listIssues(owner, repo);
+            renderIssues();
+        }
+
+        function renderWorkflows() {
+            const container = document.getElementById('workflowsPanel');
+            
+            if (State.workflowRuns.length === 0) {
+                container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">No workflow runs</div>';
+                return;
+            }
+
+            const statusIcons = {
+                'completed': '✅',
+                'success': '✅',
+                'failure': '❌',
+                'cancelled': '⚪',
+                'in_progress': '🔄',
+                'queued': '⏳'
+            };
+
+            container.innerHTML = State.workflowRuns.slice(0, 5).map(run => `
+                <div class="issue-item" onclick="window.open('${run.url}', '_blank')">
+                    <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${run.name}</div>
+                    <div class="issue-title" style="font-size: 11px; color: var(--text-muted);">${run.branch} · ${run.event}</div>
+                </div>
+            `).join('');        }
+
+        async function refreshWorkflows() {
+            if (!State.currentProject) return;
+            
+            const { owner, repo } = State.currentProject;
+            State.workflowRuns = await GiteaAPI.listWorkflowRuns(owner, repo);
+            renderWorkflows();
+        }
+
+        // ============================================
+        // MODELS
+        // ============================================
+
+        async function fetchModels() {
+            try {
+                const models = await LLM.listModels();
+                const select = document.getElementById('modelSelect');
+                
+                select.innerHTML = '';
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.id;
+                    select.appendChild(option);
+                });
+
+                select.value = State.settings.llmModel;
+                showToast(`Loaded ${models.length} models`, 'success');
+            } catch (error) {
+                console.error('Failed to fetch models:', error);
+                showToast('Failed to fetch models', 'error');
+            }
+        }
+
+        function onModelChange(e) {
+            State.settings.llmModel = e.target.value;
+            Storage.set('settings', State.settings);
+        }
+
+        // ============================================
+        // SETTINGS
+        // ============================================
+
+        window.openSettings = function() {
+            document.getElementById('settingsModal').classList.add('active');
+        };
+
+        window.closeSettings = function() {
+            document.getElementById('settingsModal').classList.remove('active');
+        };
+
+        function populateSettingsForm() {
+            document.getElementById('settingGiteaUrl').value = State.settings.giteaUrl || '';
+            document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
+            document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
+            document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
+            document.getElementById('settingLlmModel').value = State.settings.llmModel || 'gpt-4';
+        }
+
+        window.saveSettings = function() {
+            State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
+            State.settings.giteaToken = document.getElementById('settingGiteaToken').value.trim();
+            State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
+            State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
+            State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
+
+            coreSaveSettings();
+            closeSettings();
+            showToast('Settings saved', 'success');
+
+            // Refresh data with new settings
+            if (State.settings.giteaUrl && State.settings.giteaToken) {
+                refreshProjects();
+            }
+            if (State.settings.llmEndpoint && State.settings.llmApiKey) {
+                fetchModels();
+            }
+        };
+
+        // ============================================
+        // MODALS
+        // ============================================
+
+        window.openNewBranchModal = function() {
+            const fromSelect = document.getElementById('newBranchFrom');
+            fromSelect.innerHTML = State.branches.map(b => 
+                `<option value="${b.name}">${b.name}</option>`
+            ).join('');
+            document.getElementById('newBranchModal').classList.add('active');
+        };
+
+        window.closeNewBranchModal = function() {
+            document.getElementById('newBranchModal').classList.remove('active');
+        };
+
+        window.createNewBranch = async function() {
+            const name = document.getElementById('newBranchName').value.trim();
+            const from = document.getElementById('newBranchFrom').value;
+            
+            if (!name) {
+                showToast('Please enter a branch name', 'warning');
+                return;
+            }
+
+            const { owner, repo } = State.currentProject;
+            
+            try {
+                await GiteaAPI.createBranch(owner, repo, name, from);
+                
+                // Refresh branches and switch to new one
+                State.branches = await GiteaAPI.listBranches(owner, repo);
+                State.currentBranch = name;
+                
+                const branchSelect = document.getElementById('branchSelect');
+                branchSelect.innerHTML = State.branches.map(b => 
+                    `<option value="${b.name}">${b.name}${b.protected ? ' 🔒' : ''}</option>`
+                ).join('');
+                branchSelect.value = name;
+
+                closeNewBranchModal();
+                showToast(`Created branch: ${name}`, 'success');
+            } catch (error) {
+                showToast('Failed to create branch', 'error');
+            }
+        };
+
+        window.openNewFileModal = function() {
+            document.getElementById('newFileModal').classList.add('active');
+        };
+
+        window.closeNewFileModal = function() {
+            document.getElementById('newFileModal').classList.remove('active');
+        };
+
+        window.createNewFile = async function() {
+            const path = document.getElementById('newFileName').value.trim();
+            
+            if (!path) {
+                showToast('Please enter a file path', 'warning');
+                return;
+            }
+
+            const { owner, repo } = State.currentProject;
+            
+            try {
+                await GiteaAPI.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
+                
+                // Refresh file tree
+                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                renderFileTree();
+                
+                closeNewFileModal();
+                showToast(`Created: ${path}`, 'success');
+                
+                // Open the new file
+                window.onTreeItemClick(path, 'file');
+            } catch (error) {
+                showToast('Failed to create file', 'error');
+            }
+        };
+
+        window.openCommitModal = function() {
+            document.getElementById('commitModal').classList.add('active');
+        };
+
+        window.closeCommitModal = function() {
+            document.getElementById('commitModal').classList.remove('active');
+        };
+
+        window.generateCommitMsg = async function() {
+            const textarea = document.getElementById('commitMessage');
+            textarea.value = 'Generating...';
+            textarea.disabled = true;
+            
+            try {
+                const msg = await generateCommitMessage();
+                textarea.value = msg;
+            } catch (error) {
+                textarea.value = '';
+                showToast('Failed to generate commit message', 'error');
+            }
+            
+            textarea.disabled = false;
+        };
+
+        window.commitAndPush = async function() {
+            const message = document.getElementById('commitMessage').value.trim();
+            
+            if (!message) {
+                showToast('Please enter a commit message', 'warning');
+                return;
+            }
+
+            try {
+                await saveFile(message);
+                closeCommitModal();
+                document.getElementById('commitMessage').value = '';
+            } catch (error) {
+                showToast('Failed to commit', 'error');
+            }
+        };
+
+        function closeAllModals() {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+        }
+
+        // ============================================
+        // UI HELPERS
+        // ============================================
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        function toggleChat() {
+            document.getElementById('chatPanel').classList.toggle('open');
+        }
+
+        function updateStatusBar() {
+            const fileEl = document.getElementById('statusFile');
+            const modifiedEl = document.getElementById('statusModified');
+            const branchEl = document.getElementById('statusBranch');
+
+            fileEl.textContent = State.currentFile?.path || 'No file open';
+            modifiedEl.textContent = State.editorDirty ? '● Modified' : '';
+            modifiedEl.className = `status-item ${State.editorDirty ? 'modified' : 'saved'}`;
+            branchEl.textContent = `🌿 ${State.currentBranch}`;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // ============================================
+        // START
+        // ============================================
+
+        init();
+    </script>
+</body>
+</html>
