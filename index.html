@@ -100,7 +100,7 @@
                         <div style="text-align: center;">
                             <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
                             <p>Configure your Gitea and LLM settings to get started.</p>
-                            <button class="btn btn-primary" style="margin-top: 1rem;" onclick="openSettings()">
+                            <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
                                 ⚙️ Open Settings
                             </button>
                         </div>
@@ -158,7 +158,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>⚙️ Settings</h2>
-                <button class="modal-close" onclick="closeSettings()">×</button>
+                <button class="modal-close" onclick="window.closeSettings()">×</button>
             </div>
             <div class="modal-body">
                 <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Gitea Configuration</h4>
@@ -196,8 +196,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveSettings()">💾 Save</button>
+                <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
             </div>
         </div>
     </div>
@@ -207,7 +207,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>🌿 Create New Branch</h2>
-                <button class="modal-close" onclick="closeNewBranchModal()">×</button>
+                <button class="modal-close" onclick="window.closeNewBranchModal()">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -222,8 +222,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeNewBranchModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="createNewBranch()">Create</button>
+                <button class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.createNewBranch()">Create</button>
             </div>
         </div>
     </div>
@@ -233,20 +233,20 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>💾 Commit Changes</h2>
-                <button class="modal-close" onclick="closeCommitModal()">×</button>
+                <button class="modal-close" onclick="window.closeCommitModal()">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
                     <label for="commitMessage">Commit Message</label>
                     <textarea id="commitMessage" rows="3" placeholder="Describe your changes..."></textarea>
                 </div>
-                <button class="btn btn-secondary" onclick="generateCommitMsg()" style="margin-bottom: 1rem;">
+                <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="margin-bottom: 1rem;">
                     🤖 Generate with AI
                 </button>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeCommitModal()">Cancel</button>
-                <button class="btn btn-success" onclick="commitAndPush()">✅ Commit</button>
+                <button class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
+                <button class="btn btn-success" onclick="window.commitAndPush()">✅ Commit</button>
             </div>
         </div>
     </div>
@@ -256,7 +256,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>📄 New File</h2>
-                <button class="modal-close" onclick="closeNewFileModal()">×</button>
+                <button class="modal-close" onclick="window.closeNewFileModal()">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -266,8 +266,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeNewFileModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="createNewFile()">Create</button>
+                <button class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.createNewFile()">Create</button>
             </div>
         </div>
     </div>
@@ -282,6 +282,207 @@
         import { LLM, generateCommitMessage } from './js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './js/editor.js';
         import { initChat, addMessage, stopGeneration } from './js/chat.js';
+
+        // ============================================
+        // UI HELPERS (Define early for event listeners)
+        // ============================================
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        function toggleChat() {
+            document.getElementById('chatPanel').classList.toggle('open');
+        }
+
+        function updateStatusBar() {
+            const fileEl = document.getElementById('statusFile');
+            const modifiedEl = document.getElementById('statusModified');
+            const branchEl = document.getElementById('statusBranch');
+
+            fileEl.textContent = State.currentFile?.path || 'No file open';
+            modifiedEl.textContent = State.editorDirty ? '● Modified' : '';
+            modifiedEl.className = `status-item ${State.editorDirty ? 'modified' : 'saved'}`;
+            branchEl.textContent = `🌿 ${State.currentBranch}`;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        function closeAllModals() {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+        }
+
+        // ============================================
+        // SETTINGS (Define early for inline onclick)
+        // ============================================
+
+        window.openSettings = function() {
+            populateSettingsForm();
+            document.getElementById('settingsModal').classList.add('active');
+        };
+
+        window.closeSettings = function() {
+            document.getElementById('settingsModal').classList.remove('active');
+        };
+
+        function populateSettingsForm() {
+            document.getElementById('settingGiteaUrl').value = State.settings.giteaUrl || '';
+            document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
+            document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
+            document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
+            document.getElementById('settingLlmModel').value = State.settings.llmModel || 'gpt-4';
+        }
+
+        window.saveSettings = function() {
+            State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
+            State.settings.giteaToken = document.getElementById('settingGiteaToken').value.trim();
+            State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
+            State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
+            State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
+
+            coreSaveSettings();
+            window.closeSettings();
+            showToast('Settings saved', 'success');
+
+            // Refresh data with new settings
+            if (State.settings.giteaUrl && State.settings.giteaToken) {
+                refreshProjects();
+            }
+            if (State.settings.llmEndpoint && State.settings.llmApiKey) {
+                fetchModels();
+            }
+        };
+
+        // ============================================
+        // MODALS (Define early for inline onclick)
+        // ============================================
+
+        window.openNewBranchModal = function() {
+            const fromSelect = document.getElementById('newBranchFrom');
+            fromSelect.innerHTML = State.branches.map(b => 
+                `<option value="${b.name}">${b.name}</option>`
+            ).join('');
+            document.getElementById('newBranchModal').classList.add('active');
+        };
+
+        window.closeNewBranchModal = function() {
+            document.getElementById('newBranchModal').classList.remove('active');
+        };
+
+        window.createNewBranch = async function() {
+            const name = document.getElementById('newBranchName').value.trim();
+            const from = document.getElementById('newBranchFrom').value;
+            
+            if (!name) {
+                showToast('Please enter a branch name', 'warning');
+                return;
+            }
+
+            const { owner, repo } = State.currentProject;
+            
+            try {
+                await GiteaAPI.createBranch(owner, repo, name, from);
+                
+                // Refresh branches and switch to new one
+                State.branches = await GiteaAPI.listBranches(owner, repo);
+                State.currentBranch = name;
+                
+                const branchSelect = document.getElementById('branchSelect');
+                branchSelect.innerHTML = State.branches.map(b => 
+                    `<option value="${b.name}">${b.name}${b.protected ? ' 🔒' : ''}</option>`
+                ).join('');
+                branchSelect.value = name;
+
+                window.closeNewBranchModal();
+                showToast(`Created branch: ${name}`, 'success');
+            } catch (error) {
+                showToast('Failed to create branch', 'error');
+            }
+        };
+
+        window.openNewFileModal = function() {
+            document.getElementById('newFileModal').classList.add('active');
+        };
+
+        window.closeNewFileModal = function() {
+            document.getElementById('newFileModal').classList.remove('active');
+        };
+
+        window.createNewFile = async function() {
+            const path = document.getElementById('newFileName').value.trim();
+            
+            if (!path) {
+                showToast('Please enter a file path', 'warning');
+                return;
+            }
+
+            const { owner, repo } = State.currentProject;
+            
+            try {
+                await GiteaAPI.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
+                
+                // Refresh file tree
+                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                renderFileTree();
+                
+                window.closeNewFileModal();
+                showToast(`Created: ${path}`, 'success');
+                
+                // Open the new file
+                window.onTreeItemClick(path, 'file');
+            } catch (error) {
+                showToast('Failed to create file', 'error');
+            }
+        };
+
+        window.openCommitModal = function() {
+            document.getElementById('commitModal').classList.add('active');
+        };
+
+        window.closeCommitModal = function() {
+            document.getElementById('commitModal').classList.remove('active');
+        };
+
+        window.generateCommitMsg = async function() {
+            const textarea = document.getElementById('commitMessage');
+            textarea.value = 'Generating...';
+            textarea.disabled = true;
+            
+            try {
+                const msg = await generateCommitMessage();
+                textarea.value = msg;
+            } catch (error) {
+                textarea.value = '';
+                showToast('Failed to generate commit message', 'error');
+            }
+            
+            textarea.disabled = false;
+        };
+
+        window.commitAndPush = async function() {
+            const message = document.getElementById('commitMessage').value.trim();
+            
+            if (!message) {
+                showToast('Please enter a commit message', 'warning');
+                return;
+            }
+
+            try {
+                await saveFile(message);
+                window.closeCommitModal();
+                document.getElementById('commitMessage').value = '';
+            } catch (error) {
+                showToast('Failed to commit', 'error');
+            }
+        };
 
         // ============================================
         // INITIALIZATION
@@ -327,14 +528,14 @@
         function setupEventListeners() {
             // Header buttons
             document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
-            document.getElementById('btnSave').addEventListener('click', openCommitModal);
-            document.getElementById('btnSettings').addEventListener('click', openSettings);
+            document.getElementById('btnSave').addEventListener('click', window.openCommitModal);
+            document.getElementById('btnSettings').addEventListener('click', window.openSettings);
             document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
 
             // Sidebar buttons
             document.getElementById('btnRefreshProjects').addEventListener('click', refreshProjects);
-            document.getElementById('btnNewBranch').addEventListener('click', openNewBranchModal);
-            document.getElementById('btnNewFile').addEventListener('click', openNewFileModal);
+            document.getElementById('btnNewBranch').addEventListener('click', window.openNewBranchModal);
+            document.getElementById('btnNewFile').addEventListener('click', window.openNewFileModal);
             document.getElementById('btnRefreshIssues').addEventListener('click', refreshIssues);
             document.getElementById('btnRefreshWorkflows').addEventListener('click', refreshWorkflows);
 
@@ -381,14 +582,14 @@
                 if (e.ctrlKey && e.key === 's') {
                     e.preventDefault();
                     if (!document.getElementById('btnSave').disabled) {
-                        openCommitModal();
+                        window.openCommitModal();
                     }
                 }
 
                 // Ctrl+, - Settings
                 if (e.ctrlKey && e.key === ',') {
                     e.preventDefault();
-                    openSettings();
+                    window.openSettings();
                 }
 
                 // Ctrl+B - Toggle sidebar
@@ -718,206 +919,6 @@
         function onModelChange(e) {
             State.settings.llmModel = e.target.value;
             Storage.set('settings', State.settings);
-        }
-
-        // ============================================
-        // SETTINGS
-        // ============================================
-
-        window.openSettings = function() {
-            document.getElementById('settingsModal').classList.add('active');
-        };
-
-        window.closeSettings = function() {
-            document.getElementById('settingsModal').classList.remove('active');
-        };
-
-        function populateSettingsForm() {
-            document.getElementById('settingGiteaUrl').value = State.settings.giteaUrl || '';
-            document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
-            document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
-            document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
-            document.getElementById('settingLlmModel').value = State.settings.llmModel || 'gpt-4';
-        }
-
-        window.saveSettings = function() {
-            State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
-            State.settings.giteaToken = document.getElementById('settingGiteaToken').value.trim();
-            State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
-            State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
-            State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
-
-            coreSaveSettings();
-            closeSettings();
-            showToast('Settings saved', 'success');
-
-            // Refresh data with new settings
-            if (State.settings.giteaUrl && State.settings.giteaToken) {
-                refreshProjects();
-            }
-            if (State.settings.llmEndpoint && State.settings.llmApiKey) {
-                fetchModels();
-            }
-        };
-
-        // ============================================
-        // MODALS
-        // ============================================
-
-        window.openNewBranchModal = function() {
-            const fromSelect = document.getElementById('newBranchFrom');
-            fromSelect.innerHTML = State.branches.map(b => 
-                `<option value="${b.name}">${b.name}</option>`
-            ).join('');
-            document.getElementById('newBranchModal').classList.add('active');
-        };
-
-        window.closeNewBranchModal = function() {
-            document.getElementById('newBranchModal').classList.remove('active');
-        };
-
-        window.createNewBranch = async function() {
-            const name = document.getElementById('newBranchName').value.trim();
-            const from = document.getElementById('newBranchFrom').value;
-            
-            if (!name) {
-                showToast('Please enter a branch name', 'warning');
-                return;
-            }
-
-            const { owner, repo } = State.currentProject;
-            
-            try {
-                await GiteaAPI.createBranch(owner, repo, name, from);
-                
-                // Refresh branches and switch to new one
-                State.branches = await GiteaAPI.listBranches(owner, repo);
-                State.currentBranch = name;
-                
-                const branchSelect = document.getElementById('branchSelect');
-                branchSelect.innerHTML = State.branches.map(b => 
-                    `<option value="${b.name}">${b.name}${b.protected ? ' 🔒' : ''}</option>`
-                ).join('');
-                branchSelect.value = name;
-
-                closeNewBranchModal();
-                showToast(`Created branch: ${name}`, 'success');
-            } catch (error) {
-                showToast('Failed to create branch', 'error');
-            }
-        };
-
-        window.openNewFileModal = function() {
-            document.getElementById('newFileModal').classList.add('active');
-        };
-
-        window.closeNewFileModal = function() {
-            document.getElementById('newFileModal').classList.remove('active');
-        };
-
-        window.createNewFile = async function() {
-            const path = document.getElementById('newFileName').value.trim();
-            
-            if (!path) {
-                showToast('Please enter a file path', 'warning');
-                return;
-            }
-
-            const { owner, repo } = State.currentProject;
-            
-            try {
-                await GiteaAPI.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
-                
-                // Refresh file tree
-                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
-                renderFileTree();
-                
-                closeNewFileModal();
-                showToast(`Created: ${path}`, 'success');
-                
-                // Open the new file
-                window.onTreeItemClick(path, 'file');
-            } catch (error) {
-                showToast('Failed to create file', 'error');
-            }
-        };
-
-        window.openCommitModal = function() {
-            document.getElementById('commitModal').classList.add('active');
-        };
-
-        window.closeCommitModal = function() {
-            document.getElementById('commitModal').classList.remove('active');
-        };
-
-        window.generateCommitMsg = async function() {
-            const textarea = document.getElementById('commitMessage');
-            textarea.value = 'Generating...';
-            textarea.disabled = true;
-            
-            try {
-                const msg = await generateCommitMessage();
-                textarea.value = msg;
-            } catch (error) {
-                textarea.value = '';
-                showToast('Failed to generate commit message', 'error');
-            }
-            
-            textarea.disabled = false;
-        };
-
-        window.commitAndPush = async function() {
-            const message = document.getElementById('commitMessage').value.trim();
-            
-            if (!message) {
-                showToast('Please enter a commit message', 'warning');
-                return;
-            }
-
-            try {
-                await saveFile(message);
-                closeCommitModal();
-                document.getElementById('commitMessage').value = '';
-            } catch (error) {
-                showToast('Failed to commit', 'error');
-            }
-        };
-
-        function closeAllModals() {
-            document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
-        }
-
-        // ============================================
-        // UI HELPERS
-        // ============================================
-
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
-        }
-
-        function toggleChat() {
-            document.getElementById('chatPanel').classList.toggle('open');
-        }
-
-        function updateStatusBar() {
-            const fileEl = document.getElementById('statusFile');
-            const modifiedEl = document.getElementById('statusModified');
-            const branchEl = document.getElementById('statusBranch');
-
-            fileEl.textContent = State.currentFile?.path || 'No file open';
-            modifiedEl.textContent = State.editorDirty ? '● Modified' : '';
-            modifiedEl.className = `status-item ${State.editorDirty ? 'modified' : 'saved'}`;
-            branchEl.textContent = `🌿 ${State.currentBranch}`;
-        }
-
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            container.appendChild(toast);
-            
-            setTimeout(() => toast.remove(), 4000);
         }
 
         // ============================================
