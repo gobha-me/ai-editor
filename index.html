@@ -533,7 +533,7 @@
         import { GiteaAPI, loadProject, loadFile, saveFile } from './editor/js/gitea.js';
         import { LLM, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
-        import { initChat, addMessage, stopGeneration } from './editor/js/chat.js';
+        import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
 
         // ============================================
         // UI HELPERS (Define early for event listeners)
@@ -555,7 +555,7 @@
             fileEl.textContent = State.currentFile?.path || 'No file open';
             modifiedEl.textContent = State.editorDirty ? '● Modified' : '';
             modifiedEl.className = `status-item ${State.editorDirty ? 'modified' : 'saved'}`;
-            branchEl.textContent = `🌿 ${State.currentBranch}`;
+            branchEl.textContent = State.currentBranch || 'main';
         }
 
         function showToast(message, type = 'success') {
@@ -637,7 +637,7 @@
                 showToast('Please enter a branch name', 'warning');
                 return;
             }
-
+            
             const { owner, repo } = State.currentProject;
             
             try {
