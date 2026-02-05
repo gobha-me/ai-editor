@@ -26,33 +26,16 @@ LLMTools.handlers = {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor' };
         }
-<<<<<<< Updated upstream
-        return {
-            path: State.currentFile.path,
-            content: State.editorContent,
-=======
         const content = State.editorContent;
         const lines = content.split('\n');
         return {
             path: State.currentFile.path,
             content: content,
             line_count: lines.length,
->>>>>>> Stashed changes
             language: State.currentFile.path.split('.').pop()
         };
     },
 
-<<<<<<< Updated upstream
-    edit_current_file: async ({ content }) => {
-        if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
-        }
-        applyEdit(content);
-        return {
-            success: true,
-            path: State.currentFile.path,
-            message: 'File content updated in editor. User should review and save.'
-=======
     replace_lines: async ({ start_line, end_line, new_content }) => {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor' };
@@ -150,7 +133,6 @@ LLMTools.handlers = {
             lines_deleted: deletedCount,
             new_line_count: lines.length,
             message: `Deleted lines ${start_line}-${clampedEnd}. Review and save when ready.`
->>>>>>> Stashed changes
         };
     },
 
@@ -204,17 +186,11 @@ LLMTools.handlers = {
         const { owner, repo } = State.currentProject;
         try {
             const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
-<<<<<<< Updated upstream
-            return {
-                path: file.path,
-                content: file.content,
-=======
             const lines = file.content.split('\n');
             return {
                 path: file.path,
                 content: file.content,
                 line_count: lines.length,
->>>>>>> Stashed changes
                 language: path.split('.').pop()
             };
         } catch (error) {

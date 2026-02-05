@@ -10,11 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-<<<<<<< Updated upstream
-            <h1>⚡ AI Editor <span class="version">v0.2.0</span></h1>
-=======
             <h1>⚡ AI Editor <span class="version">v0.2.1</span></h1>
->>>>>>> Stashed changes
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
@@ -1040,25 +1036,15 @@
                     const hasChildren = Object.keys(node.children).length > 0;
                     const chevron = isDir ? '<span class="chevron">▶</span>' : '<span class="chevron-spacer"></span>';
                     
-<<<<<<< Updated upstream
-                    // Add double-click handler for files to pin preview tabs
-                    const dblClickHandler = !isDir ? `ondblclick="window.onTreeItemDoubleClick('${node.path}', '${node.type}')"` : '';
-=======
                     // Use mousedown handler with click counting for proper single/double click detection
                     const clickHandler = `window.handleTreeClick(event, '${node.path}', '${node.type}')`;
->>>>>>> Stashed changes
                     
                     let html = `
                         <div class="tree-item ${isDir ? 'dir' : ''}" 
                              data-depth="${depth}" 
                              data-path="${node.path}"
                              data-type="${node.type}"
-<<<<<<< Updated upstream
-                             onclick="window.onTreeItemClick('${node.path}', '${node.type}')"
-                             ${dblClickHandler}>
-=======
                              onclick="${clickHandler}">
->>>>>>> Stashed changes
                             ${chevron}
                             <span class="icon">${icon}</span>
                             <span class="name">${node.name}</span>
@@ -1076,9 +1062,6 @@
                 }).join('');
         }
 
-<<<<<<< Updated upstream
-        window.onTreeItemClick = async function(path, type, isDoubleClick = false) {
-=======
         // Click handling with debounce for single/double click detection
         let clickTimer = null;
         let clickCount = 0;
@@ -1113,7 +1096,6 @@
         window.onTreeItemClick = async function(path, type, isDoubleClick = false) {
             console.log(`onTreeItemClick: path=${path}, type=${type}, isDoubleClick=${isDoubleClick}`);
             
->>>>>>> Stashed changes
             if (type === 'dir') {
                 // Toggle directory expansion
                 const item = document.querySelector(`.tree-item[data-path="${path}"]`);
@@ -1137,17 +1119,11 @@
             try {
                 // Check if file is already open
                 const existingTabIndex = State.openTabs.findIndex(t => t.path === path);
-<<<<<<< Updated upstream
-                
-                if (existingTabIndex >= 0) {
-                    // File already open - switch to it
-=======
                 console.log(`Existing tab index: ${existingTabIndex}, open tabs: ${State.openTabs.length}`);
                 
                 if (existingTabIndex >= 0) {
                     // File already open - switch to it
                     console.log('Switching to existing tab');
->>>>>>> Stashed changes
                     await switchToTab(existingTabIndex);
                     // If double-clicked, pin the preview tab
                     if (isDoubleClick && State.openTabs[existingTabIndex].isPreview) {
@@ -1158,26 +1134,17 @@
                 }
 
                 // Load the file
-<<<<<<< Updated upstream
-=======
                 console.log('Loading file...');
->>>>>>> Stashed changes
                 await loadFile(path);
                 
                 // Handle preview tabs - single click opens preview, replaces existing preview
                 const isPreview = !isDoubleClick;
-<<<<<<< Updated upstream
-=======
                 console.log(`Creating tab: isPreview=${isPreview}`);
->>>>>>> Stashed changes
                 
                 if (isPreview) {
                     // Find and replace existing preview tab
                     const previewIndex = State.openTabs.findIndex(t => t.isPreview);
-<<<<<<< Updated upstream
-=======
                     console.log(`Preview index: ${previewIndex}`);
->>>>>>> Stashed changes
                     if (previewIndex >= 0) {
                         // Replace preview tab
                         State.openTabs[previewIndex] = {
@@ -1211,11 +1178,8 @@
                     State.activeTabIndex = State.openTabs.length - 1;
                 }
                 
-<<<<<<< Updated upstream
-=======
                 console.log(`After adding: openTabs=${State.openTabs.length}, activeIndex=${State.activeTabIndex}`);
                 
->>>>>>> Stashed changes
                 // Create editor
                 await createEditor(
                     document.getElementById('editorContainer'),
@@ -1242,13 +1206,7 @@
         };
 
         // Handle double-click on file tree items
-<<<<<<< Updated upstream
-        window.onTreeItemDoubleClick = function(path, type) {
-            window.onTreeItemClick(path, type, true);
-        };
-=======
         // Note: Now handled in handleTreeClick with debounce
->>>>>>> Stashed changes
 
         // Switch to a specific tab
         async function switchToTab(index) {
