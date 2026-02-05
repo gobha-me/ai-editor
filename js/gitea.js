@@ -26,16 +26,29 @@ const GiteaAPI = {
             options.body = JSON.stringify(data);
         }
 
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Gitea API Error: ${response.status} - ${error}`);
-        }
+        try {
+            const response = await fetch(url, options);
+            
+            if (!response.ok) {
+                const error = await response.text();
+                const fullError = new Error(`Gitea API Error: ${response.status} - ${error}`);
+                fullError.status = response.status;
+                fullError.url = url;
+                fullError.endpoint = endpoint;
+                throw fullError;
+            }
 
-        // Handle empty responses
-        const text = await response.text();
-        return text ? JSON.parse(text) : null;
+            // Handle empty responses
+            const text = await response.text();
+            return text ? JSON.parse(text) : null;
+        } catch (error) {
+            // Add context to network errors
+            if (!error.status) {
+                error.url = url;
+                error.endpoint = endpoint;
+            }
+            throw error;
+        }
     },
 
     // ========================================
@@ -296,8 +309,14 @@ const GiteaAPI = {
                 url: r.html_url
             }));
         } catch (e) {
-            // Actions might not be enabled
-            console.warn('Could not fetch workflow runs:', e);
+            // Actions might not be enabled - log full error
+            console.warn('Could not fetch workflow runs:', {
+                message: e.message,
+                status: e.status,
+                url: e.url,
+                endpoint: e.endpoint,
+                stack: e.stack
+            });
             return [];
         }
     },
@@ -323,7 +342,13 @@ const GiteaAPI = {
             const logs = await this.request('GET', `/repos/${owner}/${repo}/actions/runs/${runId}/logs`);
             return logs;
         } catch (e) {
-            console.warn('Could not fetch workflow logs:', e);
+            console.warn('Could not fetch workflow logs:', {
+                message: e.message,
+                status: e.status,
+                url: e.url,
+                endpoint: e.endpoint,
+                stack: e.stack
+            });
             return null;
         }
     },
@@ -389,14 +414,26 @@ async function loadProject(owner, repo) {
         try {
             State.issues = await GiteaAPI.listIssues(owner, repo);
         } catch (e) {
-            console.warn('Failed to load issues:', e);
+            console.warn('Failed to load issues:', {
+                message: e.message,
+                status: e.status,
+                url: e.url,
+                endpoint: e.endpoint,
+                stack: e.stack
+            });
             State.issues = [];
         }
 
         try {
             State.workflowRuns = await GiteaAPI.listWorkflowRuns(owner, repo);
         } catch (e) {
-            console.warn('Failed to load workflow runs:', e);
+            console.warn('Failed to load workflow runs:', {
+                message: e.message,
+                status: e.status,
+                url: e.url,
+                endpoint: e.endpoint,
+                stack: e.stack
+            });
             State.workflowRuns = [];
         }
 
@@ -404,6 +441,16 @@ async function loadProject(owner, repo) {
         return State.currentProject;
 
     } catch (error) {
+        // Log full error with context
+        console.error('loadProject failed:', {
+            owner,
+            repo,
+            message: error.message,
+            status: error.status,
+            url: error.url,
+            endpoint: error.endpoint,
+            stack: error.stack
+        });
         EventBus.emit('gitea:error', error);
         throw error;
     }
@@ -438,6 +485,18 @@ async function loadFile(path) {
         return file;
 
     } catch (error) {
+        // Log full error with context
+        console.error('Failed to load file:', {
+            owner,
+            repo,
+            branch: State.currentBranch,
+            path,
+            message: error.message,
+            status: error.status,
+            url: error.url,
+            endpoint: error.endpoint,
+            stack: error.stack
+        });
         EventBus.emit('gitea:error', error);
         throw error;
     }
@@ -473,6 +532,18 @@ async function saveFile(commitMessage) {
         return result;
 
     } catch (error) {
+        // Log full error with context
+        console.error('saveFile failed:', {
+            owner,
+            repo,
+            branch: State.currentBranch,
+            path,
+            message: error.message,
+            status: error.status,
+            url: error.url,
+            endpoint: error.endpoint,
+            stack: error.stack
+        });
         EventBus.emit('gitea:error', error);
         throw error;
     }
