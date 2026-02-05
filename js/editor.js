@@ -12,7 +12,7 @@ import { getLanguageFromPath } from './llm.js';
 
 let EditorView, EditorState, basicSetup, keymap, javascript, python, go, rust, markdown, json, html, css, sql, xml;
 let oneDark, indentWithTab, defaultKeymap, historyKeymap, history, indentOnInput;
-let lineNumbers, highlightActiveLineGutter, highlightActiveLine, bracketMatching, foldGutter;
+let lineNumbers, highlightActiveLineGutter, highlightActiveLine, bracketMatching, foldGutter, lineWrapping;
 
 // Language support mapping
 const languageModules = {};
@@ -64,6 +64,7 @@ async function loadCodeMirror() {
             lineNumbers = cmView.lineNumbers;
             highlightActiveLineGutter = cmView.highlightActiveLineGutter;
             highlightActiveLine = cmView.highlightActiveLine;
+            lineWrapping = cmView.lineWrapping;
             
             // Commands
             indentWithTab = cmCommands.indentWithTab;
@@ -201,7 +202,7 @@ async function createEditor(options) {
                 EventBus.emit('editor:change', { content: State.editorContent });
             }
         }),
-        EditorView.lineWrapping,
+        lineWrapping,
         ...(Array.isArray(languageExt) ? languageExt : [languageExt])
     ];
 
