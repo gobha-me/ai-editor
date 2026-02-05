@@ -184,9 +184,19 @@ function getLanguageExtension(filename) {
 // EDITOR CREATION
 // ============================================
 
-async function createEditor(options) {
-    // Accept options object: { container, doc, filename }
-    const { container, doc: content = '', filename = '' } = options;
+async function createEditor(container, content, filename) {
+    // Handle both options object (for future) and positional args (for backward compat)
+    if (typeof container === 'object' && container !== null && !container.nodeType) {
+        // Called with options object: createEditor({ container, doc, filename })
+        const options = container;
+        container = options.container;
+        content = options.doc;
+        filename = options.filename;
+    }
+    
+    // Set defaults
+    content = content || '';
+    filename = filename || '';
     
     if (!EditorView) {
         console.log('CodeMirror not loaded, attempting to load...');
@@ -227,7 +237,7 @@ async function createEditor(options) {
     }
     
     // Add update listener
-    if (EditorView?.updateListener) {
+    if (EditorView?.updateListener?.of) {
         extensions.push(EditorView.updateListener.of(update => {
             if (update.docChanged) {
                 State.editorContent = update.state.doc.toString();
