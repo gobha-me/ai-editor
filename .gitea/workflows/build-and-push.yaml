@@ -12,8 +12,11 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-        
-      - name: Build and push Docker image
+          
+      - name: Build Docker image
         run: |
           docker build -t registry.gobha.me:5000/xcaliber/ai-editor:latest .
+          
+      - name: Push Docker image
+        run: |
           docker push registry.gobha.me:5000/xcaliber/ai-editor:latest
