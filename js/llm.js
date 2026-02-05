@@ -294,17 +294,6 @@ You have access to tools that let you:
 - Open specific files in the editor (open_file)
 - Read any file's content without opening it (read_file)
 - List all open tabs (list_open_tabs)
-- Create new files in the repository (create_file) - commits directly to the current branch
-- Search for text patterns across the codebase (search_in_files) - find usages, definitions, strings
-
-INVESTIGATION WORKFLOW - When asked to find, diagnose, or fix something:
-1. Use get_project_tree to understand the project structure
-2. Use search_in_files to locate relevant code (e.g., search for function names, error strings, variable names)
-3. Use read_file to examine candidate files in detail
-4. Use open_file to switch to the file that needs changes
-5. Use read_current_file to see exact line numbers before editing
-6. Make targeted edits with replace_lines, insert_lines, or delete_lines
-7. If a new file is needed, use create_file
 
 IMPORTANT EDITING RULES:
 1. ALWAYS use read_current_file FIRST to see the current content and line count
@@ -313,6 +302,11 @@ IMPORTANT EDITING RULES:
 4. Use delete_lines to remove code
 5. NEVER try to replace the entire file at once - make targeted edits
 6. After editing, explain what lines you changed
+
+When working on issues or tasks:
+1. Use get_project_tree to understand the project structure
+2. Use open_file to navigate to relevant files
+3. Use read_file to examine related code without switching tabs
 
 Current context:
 - Project: {{project}}
@@ -379,10 +373,10 @@ function buildSystemPrompt() {
     
     // Add open issues context if available
     if (State.issues && State.issues.length > 0) {
-        const issuesSummary = State.issues.map(i => 
+        const issuesSummary = State.issues.slice(0, 10).map(i => 
             `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
         ).join('\n');
-        prompt = prompt.replace('{{issues}}', `\nOpen issues (${State.issues.length}):\n${issuesSummary}`);
+        prompt = prompt.replace('{{issues}}', `\nOpen issues:\n${issuesSummary}`);
     } else {
         prompt = prompt.replace('{{issues}}', '');
     }
@@ -606,56 +600,6 @@ const LLMTools = {
                     type: 'object',
                     properties: {},
                     required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'create_file',
-                description: 'Create a new file in the project repository. Commits directly to the current branch via Gitea API. Use this for adding new source files, configs, documentation, etc.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'File path relative to repo root (e.g., "src/utils/helpers.js"). Intermediate directories are created automatically.'
-                        },
-                        content: {
-                            type: 'string',
-                            description: 'File content to write'
-                        },
-                        message: {
-                            type: 'string',
-                            description: 'Git commit message for the file creation (optional, defaults to "Create <path>")'
-                        }
-                    },
-                    required: ['path', 'content']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'search_in_files',
-                description: 'Search for text/patterns across project files. Returns matching lines with file paths and line numbers. Use this to find where specific functions, variables, strings, or patterns are used in the codebase.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: 'Text to search for (case-insensitive substring match)'
-                        },
-                        path: {
-                            type: 'string',
-                            description: 'Optional directory prefix to limit search scope (e.g., "js/" to only search JavaScript files)'
-                        },
-                        max_results: {
-                            type: 'integer',
-                            description: 'Maximum number of files to return results from (default: 20)'
-                        }
-                    },
-                    required: ['query']
                 }
             }
         },

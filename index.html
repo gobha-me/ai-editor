@@ -10,7 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.3</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.2</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -1359,14 +1359,6 @@
 
             EventBus.on('issues:refresh', () => {
                 refreshIssues();
-            });
-
-            EventBus.on('tree:refresh', async () => {
-                if (State.currentProject) {
-                    const { owner, repo } = State.currentProject;
-                    State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
-                    renderFileTree();
-                }
             });
 
             EventBus.on('cost:updated', () => {

@@ -24,7 +24,7 @@ let pendingEdit = null;  // { code, explanation } waiting for user approval
 LLMTools.handlers = {
     read_current_file: async () => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         const content = State.editorContent;
         const lines = content.split('\n');
@@ -38,7 +38,7 @@ LLMTools.handlers = {
 
     replace_lines: async ({ start_line, end_line, new_content }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -72,7 +72,7 @@ LLMTools.handlers = {
 
     insert_lines: async ({ after_line, content }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -104,7 +104,7 @@ LLMTools.handlers = {
 
     delete_lines: async ({ start_line, end_line }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -210,108 +210,6 @@ LLMTools.handlers = {
         };
     },
 
-    // === FILE CREATION TOOLS ===
-
-    create_file: async ({ path, content = '', message = '' }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        const branch = State.currentBranch || 'main';
-        const commitMsg = message || `Create ${path}`;
-
-        try {
-            const result = await GiteaAPI.createFile(owner, repo, path, content, commitMsg, branch);
-            // Refresh the file tree
-            EventBus.emit('tree:refresh');
-            return {
-                success: true,
-                path: path,
-                sha: result?.content?.sha || null,
-                message: `Created ${path} on branch ${branch}`
-            };
-        } catch (error) {
-            return { error: `Failed to create file ${path}: ${error.message}` };
-        }
-    },
-
-    // === SEARCH TOOLS ===
-
-    search_in_files: async ({ query, path = '', max_results = 20 }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        const branch = State.currentBranch || 'main';
-
-        try {
-            // Get all files from the tree (filtered by path prefix if provided)
-            let files = State.fileTree.filter(f => f.type !== 'dir');
-            if (path) {
-                files = files.filter(f => f.path.startsWith(path));
-            }
-
-            // Filter to searchable text files
-            const textExtensions = new Set([
-                'js', 'ts', 'jsx', 'tsx', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'hpp',
-                'java', 'rb', 'php', 'css', 'scss', 'html', 'htm', 'xml', 'json',
-                'yaml', 'yml', 'toml', 'md', 'txt', 'sh', 'bash', 'sql', 'vue',
-                'svelte', 'astro', 'conf', 'cfg', 'ini', 'env', 'gitignore',
-                'dockerfile', 'makefile', 'pl', 'pm'
-            ]);
-            files = files.filter(f => {
-                const ext = f.path.split('.').pop().toLowerCase();
-                const name = f.path.split('/').pop().toLowerCase();
-                return textExtensions.has(ext) || textExtensions.has(name);
-            });
-
-            const results = [];
-            const queryLower = query.toLowerCase();
-
-            // Search through files (limit to first 50 files to avoid API hammering)
-            for (const file of files.slice(0, 50)) {
-                if (results.length >= max_results) break;
-                try {
-                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
-                    const lines = fileData.content.split('\n');
-                    const matches = [];
-
-                    for (let i = 0; i < lines.length; i++) {
-                        if (lines[i].toLowerCase().includes(queryLower)) {
-                            matches.push({
-                                line: i + 1,
-                                text: lines[i].trim().substring(0, 200)
-                            });
-                            if (matches.length >= 5) break; // Max 5 matches per file
-                        }
-                    }
-
-                    if (matches.length > 0) {
-                        results.push({
-                            path: file.path,
-                            matches: matches
-                        });
-                    }
-                } catch (e) {
-                    // Skip files that can't be read (binary, etc.)
-                }
-            }
-
-            return {
-                query: query,
-                files_searched: Math.min(files.length, 50),
-                total_files: files.length,
-                results: results,
-                truncated: files.length > 50,
-                message: results.length > 0
-                    ? `Found "${query}" in ${results.length} files`
-                    : `No matches for "${query}" in ${Math.min(files.length, 50)} files`
-            };
-        } catch (error) {
-            return { error: `Search failed: ${error.message}` };
-        }
-    },
-
     // === ISSUE TOOL HANDLERS ===
 
     list_issues: async ({ state = 'open', labels = '' } = {}) => {
@@ -320,7 +218,7 @@ LLMTools.handlers = {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const params = new URLSearchParams({ state, type: 'issues', limit: '50' });
+            const params = new URLSearchParams({ state, type: 'issues', limit: '20' });
             if (labels) params.append('labels', labels);
             const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
             const response = await fetch(url, {
@@ -655,6 +553,137 @@ function renderMessage(message) {
     chatContainer.appendChild(messageEl);
 }
 
+/**
+ * Add a collapsible tool call message showing tool name, args summary, and result.
+ * Renders inline in the chat as a compact system message with expandable details.
+ */
+function addToolCallMessage(toolName, args, result) {
+    // Build a short args summary for the header
+    const argSummary = summarizeToolArgs(toolName, args);
+    
+    // Determine result status
+    const isError = result?.error;
+    const statusIcon = isError ? '❌' : '✅';
+    const resultSummary = summarizeToolResult(toolName, result);
+    
+    // Format full args and result for the expandable section
+    const argsJson = JSON.stringify(args, null, 2);
+    const resultJson = JSON.stringify(result, null, 2);
+    // Truncate very long results (e.g., file contents)
+    const truncatedResult = resultJson.length > 2000 
+        ? resultJson.substring(0, 2000) + '\n... (truncated)'
+        : resultJson;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = `chat-message tool-call ${isError ? 'tool-error' : 'tool-success'}`;
+    messageEl.innerHTML = `
+        <details class="tool-call-details">
+            <summary class="tool-call-summary">
+                <span class="tool-call-icon">🔧</span>
+                <span class="tool-call-name">${escapeHtml(toolName)}</span>
+                <span class="tool-call-args-summary">${escapeHtml(argSummary)}</span>
+                <span class="tool-call-status">${statusIcon} ${escapeHtml(resultSummary)}</span>
+            </summary>
+            <div class="tool-call-body">
+                <div class="tool-call-section">
+                    <div class="tool-call-label">Arguments</div>
+                    <pre class="tool-call-json">${escapeHtml(argsJson)}</pre>
+                </div>
+                <div class="tool-call-section">
+                    <div class="tool-call-label">Result</div>
+                    <pre class="tool-call-json">${escapeHtml(truncatedResult)}</pre>
+                </div>
+            </div>
+        </details>
+    `;
+    chatContainer.appendChild(messageEl);
+    scrollToBottom();
+
+    // Don't add to chatHistory (tool calls are tracked in the message thread already)
+}
+
+function summarizeToolArgs(toolName, args) {
+    if (!args || Object.keys(args).length === 0) return '';
+    
+    switch (toolName) {
+        case 'read_file':
+        case 'open_file':
+            return args.path || '';
+        case 'read_current_file':
+        case 'list_open_tabs':
+        case 'get_project_tree':
+            return args.path || '';
+        case 'replace_lines':
+            return `L${args.start_line}-${args.end_line}`;
+        case 'insert_lines':
+            return `after L${args.after_line} (${(args.content || '').split('\n').length} lines)`;
+        case 'delete_lines':
+            return `L${args.start_line}-${args.end_line}`;
+        case 'create_file':
+            return args.path || '';
+        case 'search_in_files':
+            return `"${args.query}"${args.path ? ` in ${args.path}` : ''}`;
+        case 'read_issue':
+            return `#${args.number}`;
+        case 'list_issues':
+            return args.state || 'open';
+        case 'create_issue':
+            return args.title ? `"${args.title.substring(0, 50)}"` : '';
+        case 'update_issue':
+            return `#${args.number}`;
+        case 'add_issue_comment':
+            return `#${args.number}`;
+        default:
+            // Show first string arg
+            const firstArg = Object.entries(args).find(([k, v]) => typeof v === 'string');
+            return firstArg ? `${firstArg[0]}=${firstArg[1].substring(0, 40)}` : '';
+    }
+}
+
+function summarizeToolResult(toolName, result) {
+    if (!result) return 'no result';
+    if (result.error) return result.error.substring(0, 80);
+    
+    switch (toolName) {
+        case 'read_file':
+        case 'read_current_file':
+            return `${result.line_count || '?'} lines`;
+        case 'get_project_tree':
+            return `${result.files?.length || 0} files`;
+        case 'open_file':
+            return result.message || 'opened';
+        case 'replace_lines':
+        case 'insert_lines':
+        case 'delete_lines':
+            return result.message || 'edited';
+        case 'create_file':
+            return result.message || 'created';
+        case 'search_in_files':
+            return `${result.results?.length || 0} matches in ${result.files_searched || 0} files`;
+        case 'list_issues':
+            return `${result.count || 0} issues`;
+        case 'read_issue':
+            return result.title ? `#${result.number}: ${result.title.substring(0, 50)}` : 'loaded';
+        case 'create_issue':
+            return result.message || 'created';
+        case 'update_issue':
+            return result.message || 'updated';
+        case 'add_issue_comment':
+            return result.message || 'commented';
+        default:
+            return result.message || result.success ? 'done' : JSON.stringify(result).substring(0, 60);
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function renderMessages() {
     if (!chatContainer) return;
     
@@ -772,45 +801,25 @@ async function handleUserInput() {
 function detectIntent(input) {
     const lower = input.toLowerCase();
     
-    // Commit message is very specific, check first
-    if (lower.includes('commit message') || lower.includes('generate commit')) {
-        return 'commit';
+    if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+        lower.includes('add') || lower.includes('remove') || lower.includes('fix') ||
+        lower.includes('refactor') || lower.includes('update') || lower.includes('rewrite')) {
+        return 'edit';
     }
     
-    // Issue reference with a number — but only if it's a simple "work on issue" request
-    // Complex requests like "fix the bug in issue #3" should go to general for tool use
-    if ((lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue'))
-        && !lower.includes('find') && !lower.includes('search') && !lower.includes('create')) {
-        return 'issue';
-    }
-    
-    // Edit intent — ONLY if a file is already open in the editor.
-    // Without a file open, "fix this" or "change this" needs the general handler
-    // so the LLM can use tools to find and open the right file first.
-    if (State.currentFile) {
-        // Strong edit signals when we have a file open
-        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-            lower.includes('refactor') || lower.includes('rewrite')) {
-            return 'edit';
-        }
-        // Weaker signals — only treat as edit if the request is clearly about the current file
-        // "fix this", "add a function", "remove the loop" — about current file
-        // "find and fix", "add a new file", "remove the old config" — investigative
-        if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
-            && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
-            && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
-            && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')) {
-            return 'edit';
-        }
-    }
-    
-    // Explain — can work with or without a file (LLM has tools to read files)
     if (lower.includes('explain') || lower.includes('what does') || lower.includes('how does') ||
         lower.includes('why does') || lower.includes('understand')) {
         return 'explain';
     }
     
-    // Everything else goes to the general handler which has full tool access
+    if (lower.includes('commit message') || lower.includes('generate commit')) {
+        return 'commit';
+    }
+    
+    if (lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue')) {
+        return 'issue';
+    }
+    
     return 'general';
 }
 
@@ -820,10 +829,7 @@ function detectIntent(input) {
 
 async function handleEditRequest(input) {
     if (!State.currentFile) {
-        // No file open — fall through to general handler so the LLM can
-        // use tools to find and open the right file first
-        addMessage('system', 'ℹ️ No file open — investigating with tools...');
-        await handleGeneralRequest(input);
+        addMessage('system', '⚠️ Please open a file first.');
         return;
     }
 
@@ -897,13 +903,15 @@ async function handleIssueRequest(input) {
         return;
     }
 
-    // Show issue context
     addMessage('system', `📋 **Issue #${issue.number}: ${issue.title}**\n\n${issue.body || 'No description'}`);
     
-    // Route through general handler with issue context injected
-    // This gives the LLM full tool access to investigate and work on the issue
-    const enrichedInput = `Work on issue #${issue.number}: "${issue.title}"\n\nIssue description:\n${issue.body || 'No description'}\n\nOriginal request: ${input}\n\nPlease investigate the codebase to understand what needs to change, then make the necessary edits.`;
-    await handleGeneralRequest(enrichedInput);
+    addStreamingMessage();
+
+    const analysis = await analyzeIssue(issue, (token, content) => {
+        updateStreamingMessage(content);
+    });
+
+    finalizeStreamingMessage(analysis, { hasCode: false });
 }
 
 async function handleGeneralRequest(input) {
@@ -925,6 +933,7 @@ async function handleGeneralRequest(input) {
     // Iterative tool call loop — max 5 rounds to prevent infinite loops
     const MAX_TOOL_ROUNDS = 5;
     let finalContent = '';
+    const toolActions = []; // Track all tool executions for fallback summary
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         let content = '';
@@ -958,9 +967,14 @@ async function handleGeneralRequest(input) {
             if (round > 0 && content) {
                 // We have partial content from streaming, use it
                 finalContent = content;
-            } else if (round > 0) {
+            } else if (round > 0 && toolActions.length > 0) {
                 // Follow-up failed, show tool results summary as fallback
-                finalContent = `*Tool calls completed but follow-up response failed: ${err.message}*`;
+                const summaryLines = toolActions.map(a => {
+                    const status = a.error ? '❌' : '✅';
+                    const detail = a.result?.message || a.result?.error || '';
+                    return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
+                });
+                finalContent = `Tool calls completed but follow-up response failed (${err.message}):\n\n${summaryLines.join('\n')}`;
             } else {
                 throw err; // First call failed, let outer catch handle
             }
@@ -994,11 +1008,25 @@ async function handleGeneralRequest(input) {
 
             for (const toolCall of toolCalls) {
                 const toolName = toolCall.function?.name || toolCall.name || 'unknown';
-                addMessage('system', `🔧 Using tool: ${toolName}`);
+                let args = {};
+                try {
+                    args = JSON.parse(toolCall.function?.arguments || '{}');
+                } catch (e) { /* malformed args */ }
 
                 const toolResult = await executeToolCall(toolCall);
-                const isDelta = deltaToolCalls.some(dtc => dtc.id === toolCall.id);
 
+                // Show collapsible tool call with args and result
+                addToolCallMessage(toolName, args, toolResult);
+
+                // Track for summary fallback
+                toolActions.push({
+                    tool: toolName,
+                    args: args,
+                    result: toolResult,
+                    error: !!toolResult?.error
+                });
+
+                const isDelta = deltaToolCalls.some(dtc => dtc.id === toolCall.id);
                 if (isDelta) {
                     deltaResults.push({
                         tool_call_id: toolCall.id,
@@ -1056,7 +1084,17 @@ async function handleGeneralRequest(input) {
 
     // Handle empty responses
     if (!finalContent.trim()) {
-        finalContent = '*The model returned an empty response. Try rephrasing or switching models.*';
+        if (toolActions.length > 0) {
+            // Build a summary of what tools did
+            const summaryLines = toolActions.map(a => {
+                const status = a.error ? '❌' : '✅';
+                const detail = a.result?.message || a.result?.error || '';
+                return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
+            });
+            finalContent = `Completed ${toolActions.length} tool call${toolActions.length > 1 ? 's' : ''} but the model did not provide a summary:\n\n${summaryLines.join('\n')}`;
+        } else {
+            finalContent = '*The model returned an empty response. Try rephrasing or switching models.*';
+        }
     }
 
     finalizeStreamingMessage(finalContent, { hasCode: false });

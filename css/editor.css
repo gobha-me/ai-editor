@@ -712,6 +712,121 @@ body {
     font-size: 12px;
 }
 
+/* Tool call messages — compact, collapsible */
+.chat-message.tool-call {
+    padding: 0;
+    margin: 2px 0;
+}
+
+.tool-call-details {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    font-size: 11px;
+    overflow: hidden;
+}
+
+.tool-call-summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    list-style: none;
+}
+
+.tool-call-summary::-webkit-details-marker {
+    display: none;
+}
+
+.tool-call-summary::before {
+    content: '▸';
+    font-size: 9px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+}
+
+.tool-call-details[open] .tool-call-summary::before {
+    transform: rotate(90deg);
+}
+
+.tool-call-summary:hover {
+    background: var(--bg-hover);
+}
+
+.tool-call-icon {
+    flex-shrink: 0;
+}
+
+.tool-call-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.tool-call-args-summary {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.tool-call-status {
+    margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+}
+
+.tool-call-body {
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+}
+
+.tool-call-section {
+    margin-bottom: 6px;
+}
+
+.tool-call-section:last-child {
+    margin-bottom: 0;
+}
+
+.tool-call-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.tool-call-json {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: var(--bg-secondary);
+    padding: 4px 6px;
+    border-radius: 3px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.chat-message.tool-error .tool-call-summary {
+    border-left: 2px solid var(--error);
+}
+
 .chat-message .message-content code.inline-code {
     background: var(--bg-primary);
     padding: 0.1rem 0.3rem;
