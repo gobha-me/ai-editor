@@ -787,65 +787,239 @@ async function handleGeneralRequest(input) {
     addStreamingMessage();
 
     const systemPrompt = buildSystemPrompt();
-    let content = '';
-
-    // Check if current model supports function calling
     const currentModel = State.models.find(m => m.id === State.settings.llmModel);
     const supportsTools = currentModel?.capabilities?.supportsFunctionCalling !== false;
 
-    // Include tools only if the model supports function calling
-    const chatOptions = {
-        stream: true,
-        onToken: (token, fullContent) => {
-            content = fullContent;
-            updateStreamingMessage(fullContent);
-        }
-    };
+    const roleTools = supportsTools ? LLMTools.getToolsForRole() : null;
 
-    if (supportsTools) {
-        chatOptions.tools = LLMTools.getToolsForRole();
-    }
-
-    const result = await LLM.chat([
+    // Build initial message thread
+    const messages = [
         { role: 'system', content: systemPrompt },
         ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
         { role: 'user', content: input }
-    ], chatOptions);
+    ];
 
-    // Handle tool calls if present
-    if (result.toolCalls && result.toolCalls.length > 0) {
-        // Execute tool calls and continue conversation
-        const toolResults = [];
-        for (const toolCall of result.toolCalls) {
-            addMessage('system', `🔧 Using tool: ${toolCall.function.name}`);
-            const toolResult = await executeToolCall(toolCall);
-            toolResults.push({
-                tool_call_id: toolCall.id,
-                role: 'tool',
-                content: JSON.stringify(toolResult)
-            });
-        }
-        
-        // Get follow-up response with tool results
-        let followUpContent = '';
-        await LLM.chat([
-            { role: 'system', content: systemPrompt },
-            ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
-            { role: 'user', content: input },
-            { role: 'assistant', content: result.content || '', tool_calls: result.toolCalls },
-            ...toolResults
-        ], {
+    // Iterative tool call loop — max 5 rounds to prevent infinite loops
+    const MAX_TOOL_ROUNDS = 5;
+    let finalContent = '';
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        let content = '';
+
+        const chatOptions = {
             stream: true,
             onToken: (token, fullContent) => {
-                followUpContent = fullContent;
+                content = fullContent;
                 updateStreamingMessage(fullContent);
             }
-        });
+        };
+
+        // Pass tools on every round so model can chain calls
+        if (roleTools) {
+            chatOptions.tools = roleTools;
+        }
+
+        let result;
+        try {
+            result = await Promise.race([
+                LLM.chat(messages, chatOptions),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Response timeout (60s)')), 60000)
+                )
+            ]);
+        } catch (err) {
+            // Abort any in-flight request
+            LLM.stop();
+            
+            // Timeout or network error on this round
+            if (round > 0 && content) {
+                // We have partial content from streaming, use it
+                finalContent = content;
+            } else if (round > 0) {
+                // Follow-up failed, show tool results summary as fallback
+                finalContent = `*Tool calls completed but follow-up response failed: ${err.message}*`;
+            } else {
+                throw err; // First call failed, let outer catch handle
+            }
+            break;
+        }
+
+        // Check for text-embedded tool calls (Minimax, custom models)
+        // Do this even if we already have delta-based tool calls,
+        // since some models emit BOTH formats simultaneously
+        let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
+        let cleanContent = result.content || '';
         
-        finalizeStreamingMessage(followUpContent, { hasCode: false });
-    } else {
-        finalizeStreamingMessage(content, { hasCode: false });
+        const parsed = parseTextToolCalls(cleanContent);
+        if (parsed.toolCalls.length > 0) {
+            toolCalls.push(...parsed.toolCalls);
+            cleanContent = parsed.cleanContent;
+            // Re-render without the XML markup
+            updateStreamingMessage(cleanContent);
+        }
+
+        if (toolCalls && toolCalls.length > 0) {
+            // Separate delta-based (API-aware) from text-parsed tool calls
+            const deltaToolCalls = result.toolCalls || [];
+            const textToolCalls = toolCalls.filter(tc => 
+                !deltaToolCalls.some(dtc => dtc.id === tc.id)
+            );
+
+            // Execute ALL tool calls
+            const deltaResults = [];
+            const textResults = [];
+
+            for (const toolCall of toolCalls) {
+                const toolName = toolCall.function?.name || toolCall.name || 'unknown';
+                addMessage('system', `🔧 Using tool: ${toolName}`);
+
+                const toolResult = await executeToolCall(toolCall);
+                const isDelta = deltaToolCalls.some(dtc => dtc.id === toolCall.id);
+
+                if (isDelta) {
+                    deltaResults.push({
+                        tool_call_id: toolCall.id,
+                        role: 'tool',
+                        content: JSON.stringify(toolResult)
+                    });
+                } else {
+                    textResults.push({ name: toolName, result: toolResult });
+                }
+            }
+
+            // Build assistant message for the thread
+            const assistantMsg = { role: 'assistant', content: cleanContent || '' };
+            if (deltaToolCalls.length > 0) {
+                assistantMsg.tool_calls = deltaToolCalls;
+            }
+            messages.push(assistantMsg);
+
+            // Add delta-based tool results as proper tool messages
+            if (deltaResults.length > 0) {
+                messages.push(...deltaResults);
+            }
+
+            // Add text-parsed tool results as a user context message
+            // (API doesn't know about these, so we frame as context)
+            if (textResults.length > 0) {
+                const summary = textResults.map(tr =>
+                    `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
+                ).join('\n\n');
+                messages.push({
+                    role: 'user',
+                    content: `Tool results:\n${summary}\n\nPlease continue your response using these results.`
+                });
+            }
+
+            // Create fresh streaming indicator for next round
+            // Finalize current streaming message with partial content
+            const partialEl = document.getElementById('streaming-message');
+            if (partialEl) {
+                if (cleanContent) {
+                    // Show partial text from this round
+                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(cleanContent);
+                    partialEl.classList.remove('streaming');
+                }
+                partialEl.removeAttribute('id');
+            }
+            addStreamingMessage();
+            continue;
+        }
+
+        // No tool calls — we're done
+        finalContent = cleanContent || content;
+        break;
     }
+
+    // Handle empty responses
+    if (!finalContent.trim()) {
+        finalContent = '*The model returned an empty response. Try rephrasing or switching models.*';
+    }
+
+    finalizeStreamingMessage(finalContent, { hasCode: false });
+}
+
+/**
+ * Parse tool calls embedded as XML in text content.
+ * Handles formats like:
+ *   <tool_call>{"name":"fn","arguments":{...}}</tool_call>
+ *   <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
+ *   <function_call>{"name":"fn","arguments":"..."}</function_call>
+ * 
+ * Returns { toolCalls: [], cleanContent: string }
+ */
+function parseTextToolCalls(text) {
+    const toolCalls = [];
+    let cleanContent = text;
+
+    // Pattern 1: JSON-style tool calls  <tool_call>{"name":"...","arguments":{...}}</tool_call>
+    const jsonToolPattern = /<(?:tool_call|function_call)>\s*(\{[\s\S]*?\})\s*<\/(?:tool_call|function_call)>/gi;
+    let match;
+    while ((match = jsonToolPattern.exec(text)) !== null) {
+        try {
+            const parsed = JSON.parse(match[1]);
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: {
+                    name: parsed.name || parsed.function?.name || '',
+                    arguments: typeof parsed.arguments === 'string'
+                        ? parsed.arguments
+                        : JSON.stringify(parsed.arguments || parsed.parameters || {})
+                }
+            });
+            cleanContent = cleanContent.replace(match[0], '');
+        } catch (e) {
+            // Invalid JSON, skip
+        }
+    }
+
+    // Pattern 2: Minimax XML-style  <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
+    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
+    while ((match = minimaxPattern.exec(text)) !== null) {
+        const invokeBlock = match[1];
+        // Parse each <invoke> within the block
+        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
+        let invokeMatch;
+        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
+            const fnName = invokeMatch[1];
+            const paramsBlock = invokeMatch[2];
+            const args = {};
+
+            // Parse <parameter name="key">value</parameter>
+            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
+            let paramMatch;
+            while ((paramMatch = paramPattern.exec(paramsBlock)) !== null) {
+                args[paramMatch[1]] = paramMatch[2].trim();
+            }
+
+            toolCalls.push({
+                id: `minimax_call_${toolCalls.length}`,
+                type: 'function',
+                function: {
+                    name: fnName,
+                    arguments: JSON.stringify(args)
+                }
+            });
+        }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // Pattern 3: Generic XML invoke (Qwen, etc.) <tool_call><name>fn</name><arguments>{...}</arguments></tool_call>
+    const genericPattern = /<tool_call>\s*<name>([^<]+)<\/name>\s*<arguments>([\s\S]*?)<\/arguments>\s*<\/tool_call>/gi;
+    while ((match = genericPattern.exec(text)) !== null) {
+        toolCalls.push({
+            id: `generic_call_${toolCalls.length}`,
+            type: 'function',
+            function: {
+                name: match[1].trim(),
+                arguments: match[2].trim()
+            }
+        });
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    return { toolCalls, cleanContent: cleanContent.trim() };
 }
 
 // ============================================
