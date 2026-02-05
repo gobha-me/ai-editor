@@ -238,17 +238,32 @@ const GiteaAPI = {
 
     async listIssues(owner, repo, state = 'open') {
         const issues = await this.request('GET', `/repos/${owner}/${repo}/issues?state=${state}&limit=50`);
-        return (issues || []).map(i => ({
-            number: i.number,
-            title: i.title,
-            body: i.body || '',
-            state: i.state,
-            labels: (i.labels || []).map(l => l.name),
-            assignees: (i.assignees || []).map(a => a.login),
-            createdAt: i.created_at,
-            updatedAt: i.updated_at,
-            url: i.html_url
-        }));
+        return (issues || []).map(i => {
+            // Parse dependencies from issue body (looks for "depends on #X", "blocked by #X", "requires #X")
+            const depPattern = /(?:depends\s+on|blocked\s+by|requires|after|prerequisite[s]?:?)\s*#(\d+)/gi;
+            const body = i.body || '';
+            const deps = [];
+            let match;
+            while ((match = depPattern.exec(body)) !== null) {
+                const depNum = parseInt(match[1]);
+                if (!deps.includes(depNum)) {
+                    deps.push(depNum);
+                }
+            }
+            
+            return {
+                number: i.number,
+                title: i.title,
+                body: body,
+                state: i.state,
+                labels: (i.labels || []).map(l => l.name),
+                assignees: (i.assignees || []).map(a => a.login),
+                dependencies: deps,
+                createdAt: i.created_at,
+                updatedAt: i.updated_at,
+                url: i.html_url
+            };
+        });
     },
 
     async getIssue(owner, repo, number) {
@@ -295,18 +310,35 @@ const GiteaAPI = {
 
     async listWorkflowRuns(owner, repo) {
         try {
-            // Gitea Actions API
-            const runs = await this.request('GET', `/repos/${owner}/${repo}/actions/runs?limit=20`);
-            return (runs.workflow_runs || []).map(r => ({
+            // Gitea Actions API - try different endpoint formats
+            let runs;
+            try {
+                // Newer Gitea versions use this endpoint
+                const response = await this.request('GET', `/repos/${owner}/${repo}/actions/runs?limit=20`);
+                runs = response.workflow_runs || response.runs || response || [];
+            } catch (e) {
+                // Fallback: Try alternate endpoint format for older versions
+                if (e.status === 404) {
+                    const response = await this.request('GET', `/repos/${owner}/${repo}/actions/workflows/runs?limit=20`);
+                    runs = response.workflow_runs || response.runs || response || [];
+                } else {
+                    throw e;
+                }
+            }
+            
+            // Handle both array and object responses
+            const runsList = Array.isArray(runs) ? runs : [];
+            
+            return runsList.map(r => ({
                 id: r.id,
-                name: r.name,
+                name: r.name || r.workflow_name || 'Workflow',
                 status: r.status,
                 conclusion: r.conclusion,
-                branch: r.head_branch,
+                branch: r.head_branch || r.branch,
                 event: r.event,
                 createdAt: r.created_at,
                 updatedAt: r.updated_at,
-                url: r.html_url
+                url: r.html_url || `${State.settings.giteaUrl}/${owner}/${repo}/actions/runs/${r.id}`
             }));
         } catch (e) {
             // Actions might not be enabled - log full error

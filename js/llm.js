@@ -204,16 +204,24 @@ const LLM = {
 const EditorPrompts = {
     systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
 
-When asked to edit code:
-1. Make precise, minimal changes to achieve the goal
-2. Preserve existing code style and formatting
-3. Return the COMPLETE file content, not just the changed parts
-4. Explain your changes briefly after the code
+You have access to tools that let you:
+- Read the current file open in the editor (read_current_file)
+- Edit the current file's content (edit_current_file)
+- Query the project file tree (get_project_tree)
+- Open specific files in the editor (open_file)
+- Read any file's content without opening it (read_file)
+- List all open tabs (list_open_tabs)
 
-When asked to create new files:
-1. Follow best practices for the language
-2. Include appropriate comments
-3. Return the complete file content
+When asked to edit code:
+1. Use read_current_file to see the current content
+2. Make precise, minimal changes to achieve the goal
+3. Use edit_current_file to apply your changes
+4. Explain your changes briefly
+
+When working on issues or tasks:
+1. Use get_project_tree to understand the project structure
+2. Use open_file to navigate to relevant files
+3. Use read_file to examine related code without switching tabs
 
 When explaining code:
 1. Be concise but thorough
@@ -360,6 +368,111 @@ function getLanguageFromPath(path) {
 }
 
 // ============================================
+// LLM TOOLS DEFINITIONS
+// ============================================
+
+const LLMTools = {
+    // Tool definitions for function calling
+    definitions: [
+        {
+            type: 'function',
+            function: {
+                name: 'read_current_file',
+                description: 'Read the content of the currently open file in the editor',
+                parameters: {
+                    type: 'object',
+                    properties: {},
+                    required: []
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'edit_current_file',
+                description: 'Replace the entire content of the currently open file with new content',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        content: {
+                            type: 'string',
+                            description: 'The new content for the file'
+                        }
+                    },
+                    required: ['content']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'get_project_tree',
+                description: 'Get the file tree structure of the current project',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'Optional path to filter files (e.g., "src/" to only list files in src directory)'
+                        }
+                    },
+                    required: []
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'open_file',
+                description: 'Open a specific file from the project in the editor',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'The path to the file to open (e.g., "src/main.js")'
+                        }
+                    },
+                    required: ['path']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'read_file',
+                description: 'Read the content of a specific file without opening it in the editor',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'The path to the file to read'
+                        }
+                    },
+                    required: ['path']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'list_open_tabs',
+                description: 'List all currently open tabs in the editor',
+                parameters: {
+                    type: 'object',
+                    properties: {},
+                    required: []
+                }
+            }
+        }
+    ],
+
+    // Tool execution handlers - these will be connected to the actual implementations
+    handlers: {}
+};
+
+// ============================================
 // HIGH-LEVEL FUNCTIONS
 // ============================================
 
@@ -441,6 +554,7 @@ async function analyzeIssue(issue, onToken = null) {
 
 export {
     LLM,
+    LLMTools,
     EditorPrompts,
     buildSystemPrompt,
     generateEdit,

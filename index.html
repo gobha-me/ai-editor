@@ -10,7 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.1.2</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.2.0</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
@@ -196,7 +196,11 @@
 
                 <div class="form-group">
                     <label for="settingLlmModel">Default Model</label>
-                    <input type="text" id="settingLlmModel" placeholder="gpt-4" value="gpt-4">
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="settingLlmModel" placeholder="gpt-4" value="gpt-4" style="flex: 1;">
+                        <button class="btn btn-secondary" onclick="window.fetchModelsForSettings()" title="Fetch available models">🔄 Fetch</button>
+                    </div>
+                    <small>Enter model name or click Fetch to see available models</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -825,6 +829,13 @@
 
             EventBus.on('gitea:saved', () => {
                 document.getElementById('btnSave').disabled = true;
+                // Update tab dirty state
+                if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                    State.openTabs[State.activeTabIndex].dirty = false;
+                    State.openTabs[State.activeTabIndex].content = State.editorContent;
+                    State.openTabs[State.activeTabIndex].sha = State.currentFile?.sha;
+                    renderEditorTabs();
+                }
                 showToast('File saved successfully', 'success');
             });
 
@@ -990,12 +1001,16 @@
                     const hasChildren = Object.keys(node.children).length > 0;
                     const chevron = isDir ? '<span class="chevron">▶</span>' : '<span class="chevron-spacer"></span>';
                     
+                    // Add double-click handler for files to pin preview tabs
+                    const dblClickHandler = !isDir ? `ondblclick="window.onTreeItemDoubleClick('${node.path}', '${node.type}')"` : '';
+                    
                     let html = `
                         <div class="tree-item ${isDir ? 'dir' : ''}" 
                              data-depth="${depth}" 
                              data-path="${node.path}"
                              data-type="${node.type}"
-                             onclick="window.onTreeItemClick('${node.path}', '${node.type}')">
+                             onclick="window.onTreeItemClick('${node.path}', '${node.type}')"
+                             ${dblClickHandler}>
                             ${chevron}
                             <span class="icon">${icon}</span>
                             <span class="name">${node.name}</span>
@@ -1013,7 +1028,7 @@
                 }).join('');
         }
 
-        window.onTreeItemClick = async function(path, type) {
+        window.onTreeItemClick = async function(path, type, isDoubleClick = false) {
             if (type === 'dir') {
                 // Toggle directory expansion
                 const item = document.querySelector(`.tree-item[data-path="${path}"]`);
@@ -1035,17 +1050,71 @@
             }
 
             try {
+                // Check if file is already open
+                const existingTabIndex = State.openTabs.findIndex(t => t.path === path);
+                
+                if (existingTabIndex >= 0) {
+                    // File already open - switch to it
+                    await switchToTab(existingTabIndex);
+                    // If double-clicked, pin the preview tab
+                    if (isDoubleClick && State.openTabs[existingTabIndex].isPreview) {
+                        State.openTabs[existingTabIndex].isPreview = false;
+                        renderEditorTabs();
+                    }
+                    return;
+                }
+
+                // Load the file
                 await loadFile(path);
                 
-                // Create editor (positional args: container, content, filename)
+                // Handle preview tabs - single click opens preview, replaces existing preview
+                const isPreview = !isDoubleClick;
+                
+                if (isPreview) {
+                    // Find and replace existing preview tab
+                    const previewIndex = State.openTabs.findIndex(t => t.isPreview);
+                    if (previewIndex >= 0) {
+                        // Replace preview tab
+                        State.openTabs[previewIndex] = {
+                            path: path,
+                            content: State.editorContent,
+                            sha: State.currentFile.sha,
+                            dirty: State.editorDirty,
+                            isPreview: true
+                        };
+                        State.activeTabIndex = previewIndex;
+                    } else {
+                        // Add new preview tab
+                        State.openTabs.push({
+                            path: path,
+                            content: State.editorContent,
+                            sha: State.currentFile.sha,
+                            dirty: State.editorDirty,
+                            isPreview: true
+                        });
+                        State.activeTabIndex = State.openTabs.length - 1;
+                    }
+                } else {
+                    // Double-click: add as permanent tab
+                    State.openTabs.push({
+                        path: path,
+                        content: State.editorContent,
+                        sha: State.currentFile.sha,
+                        dirty: State.editorDirty,
+                        isPreview: false
+                    });
+                    State.activeTabIndex = State.openTabs.length - 1;
+                }
+                
+                // Create editor
                 await createEditor(
                     document.getElementById('editorContainer'),
                     State.editorContent,
                     path
                 );
 
-                // Update tabs
-                updateEditorTabs(path);
+                // Render tabs
+                renderEditorTabs();
                 
                 // Update status
                 updateStatusBar();
@@ -1062,6 +1131,155 @@
             }
         };
 
+        // Handle double-click on file tree items
+        window.onTreeItemDoubleClick = function(path, type) {
+            window.onTreeItemClick(path, type, true);
+        };
+
+        // Switch to a specific tab
+        async function switchToTab(index) {
+            if (index < 0 || index >= State.openTabs.length) return;
+            
+            // Save current tab state if there's an active tab
+            if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                State.openTabs[State.activeTabIndex].content = State.editorContent;
+                State.openTabs[State.activeTabIndex].dirty = State.editorDirty;
+            }
+            
+            State.activeTabIndex = index;
+            const tab = State.openTabs[index];
+            
+            // Update current file state
+            State.currentFile = {
+                path: tab.path,
+                content: tab.content,
+                sha: tab.sha
+            };
+            State.editorContent = tab.content;
+            State.editorDirty = tab.dirty;
+            
+            // Create editor with tab content
+            await createEditor(
+                document.getElementById('editorContainer'),
+                tab.content,
+                tab.path
+            );
+            
+            renderEditorTabs();
+            updateStatusBar();
+            document.getElementById('btnSave').disabled = !State.editorDirty;
+            
+            // Highlight active file in tree
+            document.querySelectorAll('.tree-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.path === tab.path);
+            });
+        }
+        window.switchToTab = switchToTab;
+
+        // Close a tab
+        function closeTab(index, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            if (index < 0 || index >= State.openTabs.length) return;
+            
+            const tab = State.openTabs[index];
+            
+            // Warn if dirty
+            if (tab.dirty && !confirm(`${tab.path} has unsaved changes. Close anyway?`)) {
+                return;
+            }
+            
+            // Remove tab
+            State.openTabs.splice(index, 1);
+            
+            // Adjust active index
+            if (State.openTabs.length === 0) {
+                State.activeTabIndex = -1;
+                State.currentFile = null;
+                State.editorContent = '';
+                State.editorDirty = false;
+                // Show welcome screen
+                document.getElementById('editorContainer').innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                        <div style="text-align: center;">
+                            <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                            <p>Select a file to edit</p>
+                        </div>
+                    </div>
+                `;
+                renderEditorTabs();
+                updateStatusBar();
+            } else if (index <= State.activeTabIndex) {
+                // Switch to previous or next tab
+                const newIndex = Math.min(State.activeTabIndex, State.openTabs.length - 1);
+                if (newIndex !== State.activeTabIndex || index === State.activeTabIndex) {
+                    State.activeTabIndex = Math.max(0, newIndex - (index < State.activeTabIndex ? 1 : 0));
+                    switchToTab(State.activeTabIndex);
+                } else {
+                    renderEditorTabs();
+                }
+            } else {
+                renderEditorTabs();
+            }
+        }
+        window.closeTab = closeTab;
+
+        // Pin a preview tab (convert to permanent)
+        function pinTab(index) {
+            if (index >= 0 && index < State.openTabs.length) {
+                State.openTabs[index].isPreview = false;
+                renderEditorTabs();
+            }
+        }
+        window.pinTab = pinTab;
+
+        // Render all editor tabs
+        function renderEditorTabs() {
+            const tabsContainer = document.getElementById('editorTabs');
+            
+            if (State.openTabs.length === 0) {
+                tabsContainer.innerHTML = `
+                    <div class="editor-tab active">
+                        <span class="tab-name">Welcome</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            tabsContainer.innerHTML = State.openTabs.map((tab, index) => {
+                const fileName = tab.path.split('/').pop();
+                const isActive = index === State.activeTabIndex;
+                const previewClass = tab.isPreview ? 'preview' : '';
+                const activeClass = isActive ? 'active' : '';
+                
+                return `
+                    <div class="editor-tab ${activeClass} ${previewClass}" 
+                         onclick="window.switchToTab(${index})"
+                         ondblclick="window.pinTab(${index})"
+                         title="${tab.path}">
+                        <span class="tab-name">${fileName}</span>
+                        <span class="modified" style="display: ${tab.dirty ? 'inline' : 'none'}">●</span>
+                        <button class="close" onclick="window.closeTab(${index}, event)" title="Close">×</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update current tab's dirty state when editor changes
+        EventBus.on('editor:change', () => {
+            if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                State.openTabs[State.activeTabIndex].dirty = true;
+                State.openTabs[State.activeTabIndex].content = State.editorContent;
+                // Pin the tab if it was a preview (editing pins it)
+                if (State.openTabs[State.activeTabIndex].isPreview) {
+                    State.openTabs[State.activeTabIndex].isPreview = false;
+                }
+                renderEditorTabs();
+            }
+        });
+
         window.deleteFile = async function(path) {
             if (!confirm(`Delete ${path}?`)) return;
 
@@ -1070,6 +1288,18 @@
             
             try {
                 await GiteaAPI.deleteFile(owner, repo, path, `Delete ${path}`, file.sha, State.currentBranch);
+                
+                // Close tab if open
+                const tabIndex = State.openTabs.findIndex(t => t.path === path);
+                if (tabIndex >= 0) {
+                    State.openTabs.splice(tabIndex, 1);
+                    if (State.activeTabIndex >= tabIndex) {
+                        State.activeTabIndex = Math.max(0, State.activeTabIndex - 1);
+                    }
+                    if (State.openTabs.length > 0) {
+                        switchToTab(State.activeTabIndex);
+                    }
+                }
                 
                 // Refresh file tree
                 State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
@@ -1081,16 +1311,9 @@
             }
         };
 
+        // Legacy function for compatibility
         function updateEditorTabs(path) {
-            const tabs = document.getElementById('editorTabs');
-            const fileName = path.split('/').pop();
-            
-            tabs.innerHTML = `
-                <div class="editor-tab active">
-                    <span>${fileName}</span>
-                    <span class="modified" style="display: ${State.editorDirty ? 'inline' : 'none'}">●</span>
-                </div>
-            `;
+            renderEditorTabs();
         }
 
         // ============================================
@@ -1105,17 +1328,36 @@
                 return;
             }
 
-            container.innerHTML = State.issues.slice(0, 10).map(issue => `
-                <div class="issue-item" onclick="window.Chat.sendMessage('Work on issue #${issue.number}')">
-                    <div class="issue-number">#${issue.number}</div>
-                    <div class="issue-title">${issue.title}</div>
-                    ${issue.labels.length ? `
-                        <div class="issue-labels">
-                            ${issue.labels.map(l => `<span class="issue-label">${l}</span>`).join('')}
-                        </div>
-                    ` : ''}
-                </div>
-            `).join('');
+            container.innerHTML = State.issues.slice(0, 15).map(issue => {
+                // Build dependencies display
+                let depsHtml = '';
+                if (issue.dependencies && issue.dependencies.length > 0) {
+                    const depLinks = issue.dependencies.map(depNum => 
+                        `<span class="dep-link" onclick="event.stopPropagation(); window.Chat.sendMessage('Show me issue #${depNum}')">#${depNum}</span>`
+                    ).join(', ');
+                    depsHtml = `<div class="issue-deps">⛓️ Depends on: ${depLinks}</div>`;
+                }
+                
+                return `
+                    <div class="issue-item" onclick="window.Chat.sendMessage('Work on issue #${issue.number}')">
+                        <div class="issue-number">#${issue.number}</div>
+                        <div class="issue-title">${escapeHtml(issue.title)}</div>
+                        ${issue.labels.length ? `
+                            <div class="issue-labels">
+                                ${issue.labels.map(l => `<span class="issue-label">${escapeHtml(l)}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        ${depsHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Helper to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         async function refreshIssues() {
@@ -1167,8 +1409,9 @@
             try {
                 const models = await LLM.listModels();
                 const select = document.getElementById('modelSelect');
+                const settingsModelInput = document.getElementById('settingLlmModel');
                 
-                select.innerHTML = '';
+                select.innerHTML = '<option value="">Select model...</option>';
                 models.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.id;
@@ -1176,13 +1419,82 @@
                     select.appendChild(option);
                 });
 
-                select.value = State.settings.llmModel;
+                // Set the selected model from settings, or first model if settings model not found
+                if (State.settings.llmModel && models.find(m => m.id === State.settings.llmModel)) {
+                    select.value = State.settings.llmModel;
+                } else if (models.length > 0) {
+                    // Default to first model if saved model not available
+                    select.value = models[0].id;
+                    State.settings.llmModel = models[0].id;
+                    Storage.set('settings', State.settings);
+                }
+                
+                // Also update the settings input to show available models as a datalist
+                if (settingsModelInput) {
+                    // Create or update datalist for model suggestions
+                    let datalist = document.getElementById('modelSuggestions');
+                    if (!datalist) {
+                        datalist = document.createElement('datalist');
+                        datalist.id = 'modelSuggestions';
+                        settingsModelInput.parentNode.appendChild(datalist);
+                        settingsModelInput.setAttribute('list', 'modelSuggestions');
+                    }
+                    datalist.innerHTML = models.map(m => `<option value="${m.id}">`).join('');
+                }
+                
                 showToast(`Loaded ${models.length} models`, 'success');
             } catch (error) {
                 console.error('Failed to fetch models:', error);
                 showToast('Failed to fetch models', 'error');
             }
         }
+
+        // Fetch models specifically from settings dialog (uses current input values)
+        window.fetchModelsForSettings = async function() {
+            const endpoint = document.getElementById('settingLlmEndpoint').value.trim();
+            const apiKey = document.getElementById('settingLlmApiKey').value.trim();
+            const modelInput = document.getElementById('settingLlmModel');
+            
+            if (!endpoint || !apiKey) {
+                showToast('Please enter API endpoint and key first', 'warning');
+                return;
+            }
+            
+            try {
+                // Temporarily set the values for the API call
+                const originalEndpoint = State.settings.llmEndpoint;
+                const originalApiKey = State.settings.llmApiKey;
+                
+                State.settings.llmEndpoint = endpoint;
+                State.settings.llmApiKey = apiKey;
+                
+                const models = await LLM.listModels();
+                
+                // Restore original values (user hasn't saved yet)
+                State.settings.llmEndpoint = originalEndpoint;
+                State.settings.llmApiKey = originalApiKey;
+                
+                // Create or update datalist for model suggestions
+                let datalist = document.getElementById('modelSuggestions');
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = 'modelSuggestions';
+                    modelInput.parentNode.insertBefore(datalist, modelInput.nextSibling);
+                    modelInput.setAttribute('list', 'modelSuggestions');
+                }
+                datalist.innerHTML = models.map(m => `<option value="${m.id}">`).join('');
+                
+                // If no model is set, default to first one
+                if (!modelInput.value && models.length > 0) {
+                    modelInput.value = models[0].id;
+                }
+                
+                showToast(`Found ${models.length} models`, 'success');
+            } catch (error) {
+                console.error('Failed to fetch models:', error);
+                showToast('Failed to fetch models: ' + error.message, 'error');
+            }
+        };
 
         function onModelChange(e) {
             State.settings.llmModel = e.target.value;

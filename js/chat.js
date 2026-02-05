@@ -4,8 +4,9 @@
  */
 
 import { State, EventBus, Storage } from './core.js';
-import { LLM, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js';
+import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js';
 import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
+import { GiteaAPI, loadFile } from './gitea.js';
 
 // ============================================
 // CHAT STATE
@@ -14,6 +15,124 @@ import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from '
 let chatContainer = null;
 let inputElement = null;
 let pendingEdit = null;  // { code, explanation } waiting for user approval
+
+// ============================================
+// LLM TOOL HANDLERS
+// ============================================
+
+// Register tool handlers for LLM function calling
+LLMTools.handlers = {
+    read_current_file: async () => {
+        if (!State.currentFile) {
+            return { error: 'No file is currently open in the editor' };
+        }
+        return {
+            path: State.currentFile.path,
+            content: State.editorContent,
+            language: State.currentFile.path.split('.').pop()
+        };
+    },
+
+    edit_current_file: async ({ content }) => {
+        if (!State.currentFile) {
+            return { error: 'No file is currently open in the editor' };
+        }
+        applyEdit(content);
+        return {
+            success: true,
+            path: State.currentFile.path,
+            message: 'File content updated in editor. User should review and save.'
+        };
+    },
+
+    get_project_tree: async ({ path = '' }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        let files = State.fileTree;
+        if (path) {
+            files = files.filter(f => f.path.startsWith(path));
+        }
+        return {
+            project: `${State.currentProject.owner}/${State.currentProject.repo}`,
+            branch: State.currentBranch,
+            files: files.map(f => ({
+                path: f.path,
+                type: f.type,
+                name: f.name
+            }))
+        };
+    },
+
+    open_file: async ({ path }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const file = State.fileTree.find(f => f.path === path);
+        if (!file) {
+            return { error: `File not found: ${path}` };
+        }
+        if (file.type === 'dir') {
+            return { error: `Cannot open directory: ${path}` };
+        }
+        
+        // Trigger file open through the global handler
+        if (window.onTreeItemClick) {
+            await window.onTreeItemClick(path, 'file', true); // true = pin as non-preview
+        }
+        
+        return {
+            success: true,
+            path: path,
+            message: `Opened ${path} in editor`
+        };
+    },
+
+    read_file: async ({ path }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
+            return {
+                path: file.path,
+                content: file.content,
+                language: path.split('.').pop()
+            };
+        } catch (error) {
+            return { error: `Failed to read file: ${error.message}` };
+        }
+    },
+
+    list_open_tabs: async () => {
+        return {
+            tabs: State.openTabs.map((tab, index) => ({
+                path: tab.path,
+                dirty: tab.dirty,
+                isPreview: tab.isPreview,
+                isActive: index === State.activeTabIndex
+            })),
+            activeTab: State.activeTabIndex >= 0 ? State.openTabs[State.activeTabIndex]?.path : null
+        };
+    }
+};
+
+// Execute a tool call from the LLM
+async function executeToolCall(toolCall) {
+    const handler = LLMTools.handlers[toolCall.function.name];
+    if (!handler) {
+        return { error: `Unknown tool: ${toolCall.function.name}` };
+    }
+    
+    try {
+        const args = JSON.parse(toolCall.function.arguments || '{}');
+        const result = await handler(args);
+        return result;
+    } catch (error) {
+        return { error: `Tool execution failed: ${error.message}` };
+    }
+}
 
 // ============================================
 // INITIALIZATION
@@ -410,19 +529,54 @@ async function handleGeneralRequest(input) {
     const systemPrompt = buildSystemPrompt();
     let content = '';
 
-    await LLM.chat([
+    // Include tools for file operations
+    const result = await LLM.chat([
         { role: 'system', content: systemPrompt },
         ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
         { role: 'user', content: input }
     ], {
         stream: true,
+        tools: LLMTools.definitions,
         onToken: (token, fullContent) => {
             content = fullContent;
             updateStreamingMessage(fullContent);
         }
     });
 
-    finalizeStreamingMessage(content, { hasCode: false });
+    // Handle tool calls if present
+    if (result.toolCalls && result.toolCalls.length > 0) {
+        // Execute tool calls and continue conversation
+        const toolResults = [];
+        for (const toolCall of result.toolCalls) {
+            addMessage('system', `🔧 Using tool: ${toolCall.function.name}`);
+            const toolResult = await executeToolCall(toolCall);
+            toolResults.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                content: JSON.stringify(toolResult)
+            });
+        }
+        
+        // Get follow-up response with tool results
+        let followUpContent = '';
+        await LLM.chat([
+            { role: 'system', content: systemPrompt },
+            ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
+            { role: 'user', content: input },
+            { role: 'assistant', content: result.content || '', tool_calls: result.toolCalls },
+            ...toolResults
+        ], {
+            stream: true,
+            onToken: (token, fullContent) => {
+                followUpContent = fullContent;
+                updateStreamingMessage(fullContent);
+            }
+        });
+        
+        finalizeStreamingMessage(followUpContent, { hasCode: false });
+    } else {
+        finalizeStreamingMessage(content, { hasCode: false });
+    }
 }
 
 // ============================================
@@ -484,7 +638,8 @@ window.Chat = {
     rejectPendingEdit,
     stopGeneration,
     clearChat,
-    sendMessage
+    sendMessage,
+    executeToolCall
 };
 
 // ============================================
@@ -498,5 +653,7 @@ export {
     stopGeneration,
     sendMessage,
     applyPendingEdit,
-    rejectPendingEdit
+    rejectPendingEdit,
+    executeToolCall,
+    LLMTools
 };

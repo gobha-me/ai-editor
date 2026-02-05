@@ -58,7 +58,9 @@ const State = {
     branches: [],              // ['main', 'feature-x', ...]
     models: [],                // [{ id, name }]
     
-    // Editor state
+    // Editor state - Multi-tab support
+    openTabs: [],              // [{ path, content, sha, dirty, isPreview }]
+    activeTabIndex: -1,        // Index of currently active tab
     editorContent: '',         // Current buffer
     editorDirty: false,        // Has unsaved changes
     drafts: {},                // { 'owner/repo/branch/path': content }
