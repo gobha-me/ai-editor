@@ -210,6 +210,12 @@ async function createEditor(container, content, filename) {
     if (editorInstance) {
         editorInstance.destroy();
     }
+    // Clear container before creating new editor
+    // This removes the "Welcome" message and any previous editor content
+    if (container) {
+        container.innerHTML = '';
+    }
+
 
     // Get language extension - ensure it's always an array
     const languageExt = getLanguageExtension(filename);
