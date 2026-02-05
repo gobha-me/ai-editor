@@ -368,17 +368,31 @@
                 this.updateBadge();
             },
 
-            logConsole(type, args) {
-                const message = args.map(arg => {
-                    if (typeof arg === 'object') {
-                        try {
-                            return JSON.stringify(arg, null, 2);
-                        } catch (e) {
-                            return String(arg);
-                        }
+            serializeValue(arg) {
+                // Handle Error objects specially
+                if (arg instanceof Error) {
+                    return JSON.stringify({
+                        name: arg.name,
+                        message: arg.message,
+                        stack: arg.stack,
+                        ...arg  // Include any custom properties
+                    }, null, 2);
+                }
+                
+                // Handle regular objects
+                if (typeof arg === 'object' && arg !== null) {
+                    try {
+                        return JSON.stringify(arg, null, 2);
+                    } catch (e) {
+                        return String(arg);
                     }
-                    return String(arg);
-                }).join(' ');
+                }
+                
+                return String(arg);
+            },
+
+            logConsole(type, args) {
+                const message = args.map(arg => this.serializeValue(arg)).join(' ');
 
                 const entry = {
                     timestamp: new Date().toISOString(),
