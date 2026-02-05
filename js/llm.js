@@ -223,7 +223,8 @@ When explaining code:
 Current context:
 - Project: {{project}}
 - File: {{file}}
-- Branch: {{branch}}`,
+- Branch: {{branch}}
+{{issues}}`,
 
     editPrompt: `The user wants you to edit the following file.
 
@@ -281,6 +282,16 @@ function buildSystemPrompt() {
     }
     
     prompt = prompt.replace('{{branch}}', State.currentBranch || 'main');
+    
+    // Add open issues context if available
+    if (State.issues && State.issues.length > 0) {
+        const issuesSummary = State.issues.slice(0, 10).map(i => 
+            `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
+        ).join('\n');
+        prompt = prompt.replace('{{issues}}', `\nOpen issues:\n${issuesSummary}`);
+    } else {
+        prompt = prompt.replace('{{issues}}', '');
+    }
     
     return prompt;
 }

@@ -225,13 +225,13 @@ const GiteaAPI = {
 
     async listIssues(owner, repo, state = 'open') {
         const issues = await this.request('GET', `/repos/${owner}/${repo}/issues?state=${state}&limit=50`);
-        return issues.map(i => ({
+        return (issues || []).map(i => ({
             number: i.number,
             title: i.title,
-            body: i.body,
+            body: i.body || '',
             state: i.state,
-            labels: i.labels.map(l => l.name),
-            assignees: i.assignees.map(a => a.login),
+            labels: (i.labels || []).map(l => l.name),
+            assignees: (i.assignees || []).map(a => a.login),
             createdAt: i.created_at,
             updatedAt: i.updated_at,
             url: i.html_url
@@ -243,10 +243,10 @@ const GiteaAPI = {
         return {
             number: i.number,
             title: i.title,
-            body: i.body,
+            body: i.body || '',
             state: i.state,
-            labels: i.labels.map(l => l.name),
-            assignees: i.assignees.map(a => a.login),
+            labels: (i.labels || []).map(l => l.name),
+            assignees: (i.assignees || []).map(a => a.login),
             comments: i.comments,
             createdAt: i.created_at,
             updatedAt: i.updated_at,
@@ -385,11 +385,20 @@ async function loadProject(owner, repo) {
         // Get file tree
         State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
 
-        // Get issues
-        State.issues = await GiteaAPI.listIssues(owner, repo);
+        // Load issues and workflows non-blocking (don't fail project load)
+        try {
+            State.issues = await GiteaAPI.listIssues(owner, repo);
+        } catch (e) {
+            console.warn('Failed to load issues:', e);
+            State.issues = [];
+        }
 
-        // Get workflow runs
-        State.workflowRuns = await GiteaAPI.listWorkflowRuns(owner, repo);
+        try {
+            State.workflowRuns = await GiteaAPI.listWorkflowRuns(owner, repo);
+        } catch (e) {
+            console.warn('Failed to load workflow runs:', e);
+            State.workflowRuns = [];
+        }
 
         EventBus.emit('gitea:projectLoaded', State.currentProject);
         return State.currentProject;

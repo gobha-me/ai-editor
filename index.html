@@ -10,7 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v1.0.0</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.1.0</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
@@ -124,11 +124,14 @@
             <aside class="chat-panel" id="chatPanel">
                 <div class="chat-header">
                     <h3>💬 AI Assistant</h3>
-                    <div class="model-selector">
-                        <select id="modelSelect">
-                            <option value="">Select model...</option>
-                        </select>
-                        <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+                    <div class="chat-header-actions">
+                        <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
+                        <div class="model-selector">
+                            <select id="modelSelect">
+                                <option value="">Select model...</option>
+                            </select>
+                            <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+                        </div>
                     </div>
                 </div>
 
@@ -554,6 +557,10 @@
             });
             document.getElementById('btnStop').addEventListener('click', stopGeneration);
             document.getElementById('btnFetchModels').addEventListener('click', fetchModels);
+            document.getElementById('btnNewChat').addEventListener('click', () => {
+                clearChat();
+                showToast('Chat cleared', 'success');
+            });
 
             // EventBus listeners
             EventBus.on('llm:generating', (isGenerating) => {
@@ -731,6 +738,7 @@
                     const isDir = node.type === 'dir';
                     const icon = getFileIcon(node.name, isDir);
                     const hasChildren = Object.keys(node.children).length > 0;
+                    const chevron = isDir ? '<span class="chevron">▶</span>' : '<span class="chevron-spacer"></span>';
                     
                     let html = `
                         <div class="tree-item ${isDir ? 'dir' : ''}" 
@@ -738,6 +746,7 @@
                              data-path="${node.path}"
                              data-type="${node.type}"
                              onclick="window.onTreeItemClick('${node.path}', '${node.type}')">
+                            ${chevron}
                             <span class="icon">${icon}</span>
                             <span class="name">${node.name}</span>
                             <div class="actions">
@@ -747,7 +756,7 @@
                     `;
 
                     if (isDir && hasChildren) {
-                        html += renderTreeNodes(node.children, depth + 1);
+                        html += `<div class="tree-children collapsed" data-parent="${node.path}">${renderTreeNodes(node.children, depth + 1)}</div>`;
                     }
 
                     return html;
@@ -756,7 +765,16 @@
 
         window.onTreeItemClick = async function(path, type) {
             if (type === 'dir') {
-                // Toggle directory expansion (could implement later)
+                // Toggle directory expansion
+                const item = document.querySelector(`.tree-item[data-path="${path}"]`);
+                const children = document.querySelector(`.tree-children[data-parent="${path}"]`);
+                if (children) {
+                    children.classList.toggle('collapsed');
+                    const chevron = item.querySelector('.chevron');
+                    if (chevron) {
+                        chevron.classList.toggle('expanded');
+                    }
+                }
                 return;
             }
 
@@ -769,12 +787,12 @@
             try {
                 await loadFile(path);
                 
-                // Create editor
-                await createEditor({
-                    container: document.getElementById('editorContainer'),
-                    doc: State.editorContent, // Use the content from State
-                    filename: path            // Use the path for the filename
-                });
+                // Create editor (positional args: container, content, filename)
+                await createEditor(
+                    document.getElementById('editorContainer'),
+                    State.editorContent,
+                    path
+                );
 
                 // Update tabs
                 updateEditorTabs(path);

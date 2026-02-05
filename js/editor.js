@@ -157,7 +157,10 @@ function getLanguageExtension(filename) {
 // EDITOR CREATION
 // ============================================
 
-async function createEditor(container, content = '', filename = '') {
+async function createEditor(options) {
+    // Accept options object: { container, doc, filename }
+    const { container, doc: content = '', filename = '' } = options;
+    
     if (!EditorView) {
         const loaded = await loadCodeMirror();
         if (!loaded) {
