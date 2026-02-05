@@ -13,20 +13,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
         
-      - name: Log in to Docker registry
-        run: |
-          echo "Logging into registry.gobha.me:5000"
-          docker login registry.gobha.me:5000 -u ${{ secrets.REGISTRY_USERNAME }} -p ${{ secrets.REGISTRY_PASSWORD }}
-        
-      - name: Build Docker image
+      - name: Build and push Docker image
         run: |
           docker build -t registry.gobha.me:5000/xcaliber/ai-editor:latest .
-          
-      - name: Push Docker image
-        run: |
           docker push registry.gobha.me:5000/xcaliber/ai-editor:latest
-          
-      - name: Cleanup
-        if: always()
-        run: |
-          docker logout registry.gobha.me:5000
