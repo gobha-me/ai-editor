@@ -622,19 +622,28 @@ async function handleGeneralRequest(input) {
     const systemPrompt = buildSystemPrompt();
     let content = '';
 
-    // Include tools for file operations
-    const result = await LLM.chat([
-        { role: 'system', content: systemPrompt },
-        ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
-        { role: 'user', content: input }
-    ], {
+    // Check if current model supports function calling
+    const currentModel = State.models.find(m => m.id === State.settings.llmModel);
+    const supportsTools = currentModel?.capabilities?.supportsFunctionCalling !== false;
+
+    // Include tools only if the model supports function calling
+    const chatOptions = {
         stream: true,
-        tools: LLMTools.definitions,
         onToken: (token, fullContent) => {
             content = fullContent;
             updateStreamingMessage(fullContent);
         }
-    });
+    };
+
+    if (supportsTools) {
+        chatOptions.tools = LLMTools.definitions;
+    }
+
+    const result = await LLM.chat([
+        { role: 'system', content: systemPrompt },
+        ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
+        { role: 'user', content: input }
+    ], chatOptions);
 
     // Handle tool calls if present
     if (result.toolCalls && result.toolCalls.length > 0) {

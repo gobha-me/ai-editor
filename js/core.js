@@ -48,6 +48,7 @@ const State = {
         llmApiKey: '',
         llmModel: 'gpt-4',
         commitModel: '',           // Optional small/fast model for commit messages
+        apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
         theme: 'dark'
     },
 
@@ -57,7 +58,7 @@ const State = {
     currentFile: null,         // { path, content, sha }
     fileTree: [],              // [{ path, type, sha }]
     branches: [],              // ['main', 'feature-x', ...]
-    models: [],                // [{ id, name }]
+    models: [],                // [{ id, name, capabilities, pricing, meta }]
     
     // Editor state - Multi-tab support
     openTabs: [],              // [{ path, content, originalContent, sha, dirty, isPreview }]
@@ -224,6 +225,176 @@ const Plugins = {
 };
 
 // ============================================
+// API PROVIDER REGISTRY
+// ============================================
+
+/**
+ * Providers normalize the /models response into a unified shape.
+ * Each provider is an object with:
+ *   id, name, description,
+ *   parseModels(rawArray) => [{ id, name, type, owned_by, capabilities, pricing, meta }]
+ * 
+ * capabilities shape (all booleans, all optional — default false):
+ *   supportsFunctionCalling, supportsVision, supportsReasoning,
+ *   supportsResponseSchema, supportsWebSearch, supportsAudioInput,
+ *   supportsVideoInput, supportsLogProbs, optimizedForCode
+ *
+ * pricing shape (optional):
+ *   { input, output, cacheInput }  — USD per 1M tokens
+ */
+
+const DEFAULT_CAPABILITIES = {
+    supportsFunctionCalling: false,
+    supportsVision: false,
+    supportsReasoning: false,
+    supportsResponseSchema: false,
+    supportsWebSearch: false,
+    supportsAudioInput: false,
+    supportsVideoInput: false,
+    supportsLogProbs: false,
+    optimizedForCode: false
+};
+
+const Providers = {
+    _registered: {},
+
+    register(provider) {
+        if (!provider.id || !provider.name || !provider.parseModels) {
+            console.error('Provider missing id, name, or parseModels:', provider);
+            return false;
+        }
+        this._registered[provider.id] = provider;
+        console.log(`Provider registered: ${provider.name} (${provider.id})`);
+        return true;
+    },
+
+    get(id) {
+        return this._registered[id] || this._registered['openai'];
+    },
+
+    list() {
+        return Object.values(this._registered);
+    },
+
+    /**
+     * Parse raw model array through the active provider.
+     * Falls back to openai (generic) parser.
+     */
+    parseModels(rawModels) {
+        const provider = this.get(State.settings.apiProvider);
+        return provider.parseModels(rawModels);
+    }
+};
+
+// ---- Built-in: Generic OpenAI-compatible ----
+Providers.register({
+    id: 'openai',
+    name: 'OpenAI / Generic',
+    description: 'Standard OpenAI-compatible API. No extended capability metadata.',
+    parseModels(raw) {
+        return raw.map(m => ({
+            id: m.id || m.name || String(m),
+            name: m.id || m.name || String(m),
+            type: m.type || 'text',
+            owned_by: m.owned_by || null,
+            capabilities: { ...DEFAULT_CAPABILITIES },
+            pricing: null,
+            meta: {}
+        }));
+    }
+});
+
+// ---- Built-in: Venice.ai ----
+Providers.register({
+    id: 'venice',
+    name: 'Venice.ai',
+    description: 'Venice.ai API with model_spec capabilities, pricing, and traits.',
+    parseModels(raw) {
+        return raw.map(m => {
+            const spec = m.model_spec || {};
+            const caps = spec.capabilities || {};
+            const price = spec.pricing || {};
+
+            return {
+                id: m.id || m.name || String(m),
+                name: spec.name || m.id || String(m),
+                type: m.type || 'text',
+                owned_by: m.owned_by || null,
+                capabilities: {
+                    supportsFunctionCalling: !!caps.supportsFunctionCalling,
+                    supportsVision: !!caps.supportsVision,
+                    supportsReasoning: !!caps.supportsReasoning,
+                    supportsResponseSchema: !!caps.supportsResponseSchema,
+                    supportsWebSearch: !!caps.supportsWebSearch,
+                    supportsAudioInput: !!caps.supportsAudioInput,
+                    supportsVideoInput: !!caps.supportsVideoInput,
+                    supportsLogProbs: !!caps.supportsLogProbs,
+                    optimizedForCode: !!caps.optimizedForCode
+                },
+                pricing: price.input ? {
+                    input: price.input?.usd ?? null,
+                    output: price.output?.usd ?? null,
+                    cacheInput: price.cache_input?.usd ?? null
+                } : null,
+                meta: {
+                    description: spec.description || '',
+                    traits: spec.traits || [],
+                    contextTokens: spec.availableContextTokens || null,
+                    quantization: caps.quantization || null,
+                    offline: !!spec.offline,
+                    privacy: spec.privacy || null,
+                    modelSource: spec.modelSource || null
+                }
+            };
+        });
+    }
+});
+
+// ---- Built-in: OpenRouter ----
+Providers.register({
+    id: 'openrouter',
+    name: 'OpenRouter',
+    description: 'OpenRouter API with pricing and per-model metadata.',
+    parseModels(raw) {
+        return raw.map(m => {
+            // OpenRouter uses: id, name, pricing.prompt, pricing.completion,
+            // context_length, architecture.modality, top_provider, per_request_limits
+            const pricing = m.pricing || {};
+            // OpenRouter pricing is per-token, convert to per-1M-token
+            const inputPrice = pricing.prompt ? parseFloat(pricing.prompt) * 1_000_000 : null;
+            const outputPrice = pricing.completion ? parseFloat(pricing.completion) * 1_000_000 : null;
+
+            // OpenRouter doesn't have explicit capability flags,
+            // but we can infer some from architecture and description
+            const arch = m.architecture || {};
+
+            return {
+                id: m.id || String(m),
+                name: m.name || m.id || String(m),
+                type: 'text',
+                owned_by: m.id ? m.id.split('/')[0] : null,
+                capabilities: {
+                    ...DEFAULT_CAPABILITIES,
+                    supportsVision: arch.modality === 'multimodal' || (m.description || '').toLowerCase().includes('vision'),
+                    supportsFunctionCalling: (m.description || '').toLowerCase().includes('function') || (m.description || '').toLowerCase().includes('tool')
+                },
+                pricing: inputPrice !== null ? {
+                    input: inputPrice,
+                    output: outputPrice,
+                    cacheInput: null
+                } : null,
+                meta: {
+                    description: m.description || '',
+                    contextTokens: m.context_length || null,
+                    modality: arch.modality || null,
+                    topProvider: m.top_provider || null
+                }
+            };
+        });
+    }
+});
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
@@ -273,6 +444,8 @@ export {
     State,
     Storage,
     Plugins,
+    Providers,
+    DEFAULT_CAPABILITIES,
     loadSettings,
     saveSettings
 };

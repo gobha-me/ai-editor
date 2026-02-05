@@ -136,6 +136,9 @@
                         </div>
                     </div>
                 </div>
+                <div class="model-status-bar" id="modelStatusBar" style="display: none;">
+                    <!-- Populated dynamically when model changes -->
+                </div>
 
                 <div class="chat-messages" id="chatMessages">
                     <!-- Messages rendered here -->
@@ -185,6 +188,14 @@
                 <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">LLM Configuration</h4>
 
                 <div class="form-group">
+                    <label for="settingApiProvider">API Provider</label>
+                    <select id="settingApiProvider">
+                        <!-- Populated dynamically from Providers registry -->
+                    </select>
+                    <small id="providerDescription">Standard OpenAI-compatible API.</small>
+                </div>
+
+                <div class="form-group">
                     <label for="settingLlmEndpoint">API Endpoint</label>
                     <input type="text" id="settingLlmEndpoint" placeholder="https://api.openai.com/v1">
                     <small>OpenAI-compatible API endpoint</small>
@@ -198,24 +209,25 @@
                 <div class="form-group">
                     <label for="settingLlmModel">Default Model</label>
                     <div style="display: flex; gap: 0.5rem;">
-                        <input type="text" id="settingLlmModel" placeholder="gpt-4" value="gpt-4" style="flex: 1;">
+                        <select id="settingLlmModel" style="flex: 1;">
+                            <option value="">Click Fetch to load models...</option>
+                        </select>
                         <button class="btn btn-secondary" onclick="window.fetchModelsForSettings()" title="Fetch available models">🔄 Fetch</button>
                     </div>
-                    <small>Enter model name or click Fetch to see available models</small>
+                    <small>Select provider above, then Fetch to load available models</small>
                 </div>
 
                 <div class="form-group">
                     <label for="settingCommitModel">Commit Message Model <span style="color: var(--text-muted);">(optional)</span></label>
-                    <input type="text" id="settingCommitModel" placeholder="Same as default model">
-                    <small>Use a smaller/faster model for generating commit messages (e.g., gpt-4o-mini). Leave blank to use the default model.</small>
+                    <select id="settingCommitModel">
+                        <option value="">Same as default model</option>
+                        <!-- Populated dynamically -->
+                    </select>
+                    <small>Use a smaller/faster model for commit messages. Leave blank to use the default.</small>
                 </div>
 
-                <div style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem;">
-                    <div style="font-size: 11px; color: var(--text-muted);">
-                        ℹ️ <strong>Tool Calling:</strong> The OpenAI <code>/models</code> endpoint does not expose whether a model supports function/tool calling. 
-                        This is not a standard field — neither in OpenAI nor Venice.ai extensions. 
-                        The editor will attempt tool calls with the selected model and fall back gracefully if unsupported.
-                    </div>
+                <div id="modelCapabilitiesInfo" style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; display: none;">
+                    <!-- Populated when a model is selected -->
                 </div>
             </div>
             <div class="modal-footer">
@@ -555,7 +567,7 @@
 
     <!-- Main Script -->
     <script type="module">
-        import { EventBus, State, Storage, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
+        import { EventBus, State, Storage, Providers, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
         import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
         import { LLM, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
@@ -616,8 +628,109 @@
             document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
             document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
             document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
-            document.getElementById('settingLlmModel').value = State.settings.llmModel || 'gpt-4';
-            document.getElementById('settingCommitModel').value = State.settings.commitModel || '';
+
+            // Populate provider dropdown
+            const providerSelect = document.getElementById('settingApiProvider');
+            providerSelect.innerHTML = Providers.list().map(p =>
+                `<option value="${p.id}" ${p.id === State.settings.apiProvider ? 'selected' : ''}>${p.name}</option>`
+            ).join('');
+            updateProviderDescription();
+
+            // Populate model selects from cached models
+            populateSettingsModelSelects(State.models);
+
+            // Set saved model value after populating
+            const modelSelect = document.getElementById('settingLlmModel');
+            if (State.settings.llmModel) {
+                modelSelect.value = State.settings.llmModel;
+            }
+            
+            // Wire up event handlers (use onchange to avoid stacking)
+            providerSelect.onchange = updateProviderDescription;
+            modelSelect.onchange = showModelCapabilities;
+            showModelCapabilities();
+        }
+
+        function updateProviderDescription() {
+            const providerSelect = document.getElementById('settingApiProvider');
+            const provider = Providers.get(providerSelect.value);
+            document.getElementById('providerDescription').textContent = provider?.description || '';
+        }
+
+        function populateCommitModelSelect() {
+            const select = document.getElementById('settingCommitModel');
+            const current = State.settings.commitModel || '';
+            select.innerHTML = '<option value="">Same as default model</option>';
+            
+            State.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.selected = model.id === current;
+                // Show capability badges inline
+                const badges = [];
+                if (model.pricing) badges.push(`$${model.pricing.input ?? '?'}/$${model.pricing.output ?? '?'}`);
+                if (model.capabilities?.supportsReasoning) badges.push('🧠');
+                option.textContent = model.name + (badges.length ? ` (${badges.join(' ')})` : '');
+                select.appendChild(option);
+            });
+        }
+
+        function showModelCapabilities() {
+            const modelId = document.getElementById('settingLlmModel').value;
+            const model = State.models.find(m => m.id === modelId);
+            const container = document.getElementById('modelCapabilitiesInfo');
+            
+            if (!model || !model.capabilities) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            const caps = model.capabilities;
+            const hasAnyCap = Object.values(caps).some(v => v);
+            
+            if (!hasAnyCap && !model.pricing) {
+                // Generic provider with no capability data
+                container.style.display = 'block';
+                container.innerHTML = `<div style="font-size: 11px; color: var(--text-muted);">
+                    ℹ️ No capability metadata available for this provider. Tool calling will be attempted and will fall back gracefully if unsupported.
+                </div>`;
+                return;
+            }
+            
+            const capBadges = [];
+            if (caps.supportsFunctionCalling) capBadges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
+            if (caps.supportsReasoning) capBadges.push('<span class="cap-badge cap-yes">🧠 Reasoning</span>');
+            if (caps.supportsVision) capBadges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
+            if (caps.supportsWebSearch) capBadges.push('<span class="cap-badge cap-yes">🔍 Web</span>');
+            if (caps.supportsResponseSchema) capBadges.push('<span class="cap-badge cap-yes">📐 Schema</span>');
+            if (caps.optimizedForCode) capBadges.push('<span class="cap-badge cap-yes">💻 Code</span>');
+            if (caps.supportsAudioInput) capBadges.push('<span class="cap-badge cap-yes">🎙 Audio</span>');
+            if (caps.supportsVideoInput) capBadges.push('<span class="cap-badge cap-yes">🎬 Video</span>');
+            
+            if (!caps.supportsFunctionCalling) capBadges.push('<span class="cap-badge cap-no">🚫 No Tools</span>');
+            
+            let html = `<div style="font-size: 11px;">
+                <div style="margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 600;">${model.name}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem;">${capBadges.join('')}</div>`;
+            
+            if (model.pricing) {
+                html += `<div style="color: var(--text-muted); margin-top: 0.25rem;">
+                    💰 $${model.pricing.input}/M in · $${model.pricing.output}/M out
+                    ${model.pricing.cacheInput ? ` · $${model.pricing.cacheInput}/M cache` : ''}
+                </div>`;
+            }
+            
+            if (model.meta?.contextTokens) {
+                html += `<div style="color: var(--text-muted);">📏 ${(model.meta.contextTokens / 1000).toFixed(0)}K context</div>`;
+            }
+            
+            if (model.meta?.description) {
+                html += `<div style="color: var(--text-muted); margin-top: 0.35rem; font-style: italic;">${model.meta.description.slice(0, 200)}</div>`;
+            }
+            
+            html += '</div>';
+            container.style.display = 'block';
+            container.innerHTML = html;
         }
 
         window.saveSettings = function() {
@@ -627,6 +740,7 @@
             State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
             State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
             State.settings.commitModel = document.getElementById('settingCommitModel').value.trim();
+            State.settings.apiProvider = document.getElementById('settingApiProvider').value;
 
             coreSaveSettings();
             window.closeSettings();
@@ -1675,38 +1789,34 @@
             try {
                 const models = await LLM.listModels();
                 const select = document.getElementById('modelSelect');
-                const settingsModelInput = document.getElementById('settingLlmModel');
                 
                 select.innerHTML = '<option value="">Select model...</option>';
                 models.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.id;
-                    option.textContent = model.id;
+                    // Show friendly name + key capability hints
+                    const hints = [];
+                    if (model.capabilities?.supportsFunctionCalling) hints.push('🔧');
+                    if (model.capabilities?.supportsReasoning) hints.push('🧠');
+                    if (model.capabilities?.supportsVision) hints.push('👁');
+                    if (model.capabilities?.optimizedForCode) hints.push('💻');
+                    const suffix = hints.length ? ' ' + hints.join('') : '';
+                    option.textContent = (model.name || model.id) + suffix;
                     select.appendChild(option);
                 });
 
-                // Set the selected model from settings, or first model if settings model not found
+                // Set the selected model
                 if (State.settings.llmModel && models.find(m => m.id === State.settings.llmModel)) {
                     select.value = State.settings.llmModel;
                 } else if (models.length > 0) {
-                    // Default to first model if saved model not available
                     select.value = models[0].id;
                     State.settings.llmModel = models[0].id;
                     Storage.set('settings', State.settings);
                 }
                 
-                // Also update the settings input to show available models as a datalist
-                if (settingsModelInput) {
-                    // Create or update datalist for model suggestions
-                    let datalist = document.getElementById('modelSuggestions');
-                    if (!datalist) {
-                        datalist = document.createElement('datalist');
-                        datalist.id = 'modelSuggestions';
-                        settingsModelInput.parentNode.appendChild(datalist);
-                        settingsModelInput.setAttribute('list', 'modelSuggestions');
-                    }
-                    datalist.innerHTML = models.map(m => `<option value="${m.id}">`).join('');
-                }
+                // Also populate the settings selects
+                populateSettingsModelSelects(models);
+                updateModelStatusBar();
                 
                 showToast(`Loaded ${models.length} models`, 'success');
             } catch (error) {
@@ -1715,11 +1825,67 @@
             }
         }
 
+        function populateSettingsModelSelects(models) {
+            models = models || State.models;
+            
+            // Default model select
+            const defaultSelect = document.getElementById('settingLlmModel');
+            if (defaultSelect) {
+                const currentVal = defaultSelect.value || State.settings.llmModel;
+                defaultSelect.innerHTML = '<option value="">Select model...</option>';
+                models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.selected = m.id === currentVal;
+                    const hints = [];
+                    if (m.capabilities?.supportsFunctionCalling) hints.push('🔧');
+                    if (m.capabilities?.supportsReasoning) hints.push('🧠');
+                    if (m.pricing) hints.push(`$${m.pricing.input ?? '?'}`);
+                    opt.textContent = (m.name || m.id) + (hints.length ? ' (' + hints.join(' ') + ')' : '');
+                    defaultSelect.appendChild(opt);
+                });
+            }
+
+            // Commit model select
+            populateCommitModelSelect();
+        }
+
+        function updateModelStatusBar() {
+            const bar = document.getElementById('modelStatusBar');
+            const model = State.models.find(m => m.id === State.settings.llmModel);
+            
+            if (!model || !model.capabilities) {
+                bar.style.display = 'none';
+                return;
+            }
+            
+            const caps = model.capabilities;
+            const badges = [];
+            
+            if (caps.supportsFunctionCalling) {
+                badges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
+            } else {
+                badges.push('<span class="cap-badge cap-no">🚫 Tools</span>');
+            }
+            if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes">🧠 Think</span>');
+            if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
+            if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes">💻 Code</span>');
+            if (model.pricing) {
+                badges.push(`<span class="cap-badge cap-neutral">$${model.pricing.input}/${model.pricing.output}</span>`);
+            }
+            if (model.meta?.contextTokens) {
+                badges.push(`<span class="cap-badge cap-neutral">${(model.meta.contextTokens / 1000).toFixed(0)}K</span>`);
+            }
+            
+            bar.innerHTML = badges.join('');
+            bar.style.display = badges.length ? 'flex' : 'none';
+        }
+
         // Fetch models specifically from settings dialog (uses current input values)
         window.fetchModelsForSettings = async function() {
             const endpoint = document.getElementById('settingLlmEndpoint').value.trim();
             const apiKey = document.getElementById('settingLlmApiKey').value.trim();
-            const modelInput = document.getElementById('settingLlmModel');
+            const provider = document.getElementById('settingApiProvider').value;
             
             if (!endpoint || !apiKey) {
                 showToast('Please enter API endpoint and key first', 'warning');
@@ -1728,32 +1894,26 @@
             
             try {
                 // Temporarily set the values for the API call
-                const originalEndpoint = State.settings.llmEndpoint;
-                const originalApiKey = State.settings.llmApiKey;
+                const origEndpoint = State.settings.llmEndpoint;
+                const origApiKey = State.settings.llmApiKey;
+                const origProvider = State.settings.apiProvider;
                 
                 State.settings.llmEndpoint = endpoint;
                 State.settings.llmApiKey = apiKey;
+                State.settings.apiProvider = provider;
                 
                 const models = await LLM.listModels();
                 
                 // Restore original values (user hasn't saved yet)
-                State.settings.llmEndpoint = originalEndpoint;
-                State.settings.llmApiKey = originalApiKey;
+                State.settings.llmEndpoint = origEndpoint;
+                State.settings.llmApiKey = origApiKey;
+                State.settings.apiProvider = origProvider;
                 
-                // Create or update datalist for model suggestions
-                let datalist = document.getElementById('modelSuggestions');
-                if (!datalist) {
-                    datalist = document.createElement('datalist');
-                    datalist.id = 'modelSuggestions';
-                    modelInput.parentNode.insertBefore(datalist, modelInput.nextSibling);
-                    modelInput.setAttribute('list', 'modelSuggestions');
-                }
-                datalist.innerHTML = models.map(m => `<option value="${m.id}">`).join('');
+                // Populate both model selects in settings
+                populateSettingsModelSelects(models);
                 
-                // If no model is set, default to first one
-                if (!modelInput.value && models.length > 0) {
-                    modelInput.value = models[0].id;
-                }
+                // Trigger capabilities display
+                showModelCapabilities();
                 
                 showToast(`Found ${models.length} models`, 'success');
             } catch (error) {
@@ -1765,6 +1925,7 @@
         function onModelChange(e) {
             State.settings.llmModel = e.target.value;
             Storage.set('settings', State.settings);
+            updateModelStatusBar();
         }
 
         // ============================================

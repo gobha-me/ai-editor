@@ -3,7 +3,7 @@
  * OpenAI-compatible API for chat completions
  */
 
-import { State, EventBus, Storage } from './core.js';
+import { State, EventBus, Storage, Providers } from './core.js';
 
 // ============================================
 // LLM API CLIENT
@@ -50,15 +50,17 @@ const LLM = {
         }
 
         const data = await response.json();
-        const models = data.data || data.models || data || [];
-        
-        State.models = Array.isArray(models) 
-            ? models.map(m => ({
-                id: m.id || m.name || m,
-                name: m.id || m.name || m,
-                owned_by: m.owned_by || null
-            })).sort((a, b) => a.id.localeCompare(b.id))
-            : [];
+        const rawModels = data.data || data.models || data || [];
+
+        if (!Array.isArray(rawModels)) {
+            State.models = [];
+            return State.models;
+        }
+
+        // Parse through the active provider to get normalized + enriched models
+        State.models = Providers.parseModels(rawModels)
+            .filter(m => m.type === 'text' || !m.type)  // Only text models by default
+            .sort((a, b) => a.id.localeCompare(b.id));
 
         Storage.set('models', State.models);
         EventBus.emit('llm:modelsLoaded', State.models);
