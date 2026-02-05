@@ -770,11 +770,11 @@
                 await loadFile(path);
                 
                 // Create editor
-                await createEditor(
-                    document.getElementById('editorContainer'),
-                    State.editorContent,
-                    path
-                );
+                await createEditor({
+                    container: document.getElementById('editorContainer'),
+                    doc: State.editorContent, // Use the content from State
+                    filename: path            // Use the path for the filename
+                });
 
                 // Update tabs
                 updateEditorTabs(path);
