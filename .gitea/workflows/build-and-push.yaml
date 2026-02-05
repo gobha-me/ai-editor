@@ -1,0 +1,26 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: registry.gobha.me:5000/xcaliber/ai-editor:latest
+          cache-from: type=registry,ref=registry.gobha.me:5000/xcaliber/ai-editor:buildcache
+          cache-to: type=registry,ref=registry.gobha.me:5000/xcaliber/ai-editor:buildcache,mode=max
