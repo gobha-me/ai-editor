@@ -15,6 +15,7 @@
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
                 <button class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)">⚙️</button>
+                <button class="btn btn-secondary" id="btnErrorLog" title="Error Log">🐛</button>
                 <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat">💬</button>
             </div>
         </header>
@@ -205,6 +206,31 @@
         </div>
     </div>
 
+    <!-- Error Log Modal -->
+    <div class="modal-overlay" id="errorLogModal">
+        <div class="modal" style="max-width: 900px; max-height: 80vh;">
+            <div class="modal-header">
+                <h2>🐛 Error Log</h2>
+                <button class="modal-close" onclick="window.closeErrorLog()">×</button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <div style="padding: 1rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="btn btn-secondary" onclick="window.clearErrorLog()" style="font-size: 12px;">Clear Log</button>
+                    <button class="btn btn-secondary" onclick="window.copyErrorLog()" style="font-size: 12px;">📋 Copy All</button>
+                    <button class="btn btn-secondary" onclick="window.exportErrorLog()" style="font-size: 12px;">💾 Export</button>
+                    <span style="margin-left: auto; font-size: 12px; color: var(--text-muted);">
+                        <span id="errorLogCount">0</span> entries
+                    </span>
+                </div>
+                <div id="errorLogContent" style="max-height: 500px; overflow-y: auto; padding: 1rem; font-family: monospace; font-size: 12px; line-height: 1.5;">
+                    <div style="color: var(--text-muted); text-align: center; padding: 2rem;">
+                        No errors logged yet
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- New Branch Modal -->
     <div class="modal-overlay" id="newBranchModal">
         <div class="modal">
@@ -277,6 +303,215 @@
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Error Logger Script (Before Main Script) -->
+    <script>
+        // ============================================
+        // ERROR LOGGER - Captures all errors
+        // ============================================
+        window.ErrorLogger = {
+            logs: [],
+            maxLogs: 500,
+
+            init() {
+                // Capture unhandled errors
+                window.addEventListener('error', (e) => {
+                    this.logError('ERROR', e.message, e.error?.stack || '', e.filename, e.lineno, e.colno);
+                });
+
+                // Capture unhandled promise rejections
+                window.addEventListener('unhandledrejection', (e) => {
+                    this.logError('UNHANDLED REJECTION', e.reason?.message || e.reason, e.reason?.stack || '', '', 0, 0);
+                });
+
+                // Intercept console methods
+                this.interceptConsole();
+            },
+
+            interceptConsole() {
+                const originalLog = console.log;
+                const originalWarn = console.warn;
+                const originalError = console.error;
+
+                console.log = (...args) => {
+                    this.logConsole('LOG', args);
+                    originalLog.apply(console, args);
+                };
+
+                console.warn = (...args) => {
+                    this.logConsole('WARN', args);
+                    originalWarn.apply(console, args);
+                };
+
+                console.error = (...args) => {
+                    this.logConsole('ERROR', args);
+                    originalError.apply(console, args);
+                };
+            },
+
+            logError(type, message, stack, file, line, col) {
+                const entry = {
+                    timestamp: new Date().toISOString(),
+                    type,
+                    message: String(message),
+                    stack: String(stack || ''),
+                    file: String(file || ''),
+                    line: line || 0,
+                    col: col || 0
+                };
+
+                this.logs.push(entry);
+                if (this.logs.length > this.maxLogs) {
+                    this.logs.shift();
+                }
+
+                this.updateBadge();
+            },
+
+            logConsole(type, args) {
+                const message = args.map(arg => {
+                    if (typeof arg === 'object') {
+                        try {
+                            return JSON.stringify(arg, null, 2);
+                        } catch (e) {
+                            return String(arg);
+                        }
+                    }
+                    return String(arg);
+                }).join(' ');
+
+                const entry = {
+                    timestamp: new Date().toISOString(),
+                    type,
+                    message,
+                    stack: '',
+                    file: '',
+                    line: 0,
+                    col: 0
+                };
+
+                this.logs.push(entry);
+                if (this.logs.length > this.maxLogs) {
+                    this.logs.shift();
+                }
+
+                this.updateBadge();
+            },
+
+            updateBadge() {
+                const btn = document.getElementById('btnErrorLog');
+                if (btn) {
+                    const errorCount = this.logs.filter(l => l.type === 'ERROR' || l.type === 'UNHANDLED REJECTION').length;
+                    if (errorCount > 0) {
+                        btn.style.backgroundColor = '#dc3545';
+                        btn.style.color = 'white';
+                    }
+                }
+            },
+
+            clear() {
+                this.logs = [];
+                this.updateBadge();
+            },
+
+            render() {
+                const container = document.getElementById('errorLogContent');
+                const countEl = document.getElementById('errorLogCount');
+
+                if (!container) return;
+
+                countEl.textContent = this.logs.length;
+
+                if (this.logs.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 2rem;">No errors logged yet</div>';
+                    return;
+                }
+
+                const typeColors = {
+                    'ERROR': '#dc3545',
+                    'UNHANDLED REJECTION': '#dc3545',
+                    'WARN': '#ffc107',
+                    'LOG': '#6c757d'
+                };
+
+                container.innerHTML = this.logs.map((entry, i) => {
+                    const time = new Date(entry.timestamp).toLocaleTimeString();
+                    const color = typeColors[entry.type] || '#6c757d';
+                    
+                    return `
+                        <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(0,0,0,0.1); border-left: 3px solid ${color}; border-radius: 3px;">
+                            <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem;">
+                                <span style="color: ${color}; font-weight: bold;">[${entry.type}]</span>
+                                <span style="color: var(--text-muted);">${time}</span>
+                                ${entry.file ? `<span style="color: var(--text-muted);">${entry.file}:${entry.line}:${entry.col}</span>` : ''}
+                            </div>
+                            <div style="color: var(--text-primary); margin-bottom: 0.5rem; white-space: pre-wrap;">${this.escapeHtml(entry.message)}</div>
+                            ${entry.stack ? `<details style="margin-top: 0.5rem;"><summary style="cursor: pointer; color: var(--text-muted);">Stack Trace</summary><pre style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); overflow-x: auto; font-size: 11px;">${this.escapeHtml(entry.stack)}</pre></details>` : ''}
+                        </div>
+                    `;
+                }).reverse().join('');
+            },
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            },
+
+            export() {
+                return JSON.stringify(this.logs, null, 2);
+            },
+
+            exportText() {
+                return this.logs.map(entry => {
+                    let text = `[${entry.timestamp}] [${entry.type}] ${entry.message}`;
+                    if (entry.file) text += `\n  at ${entry.file}:${entry.line}:${entry.col}`;
+                    if (entry.stack) text += `\n${entry.stack}`;
+                    return text;
+                }).join('\n\n');
+            }
+        };
+
+        // Initialize error logger immediately
+        window.ErrorLogger.init();
+
+        // Error log modal functions
+        window.openErrorLog = function() {
+            window.ErrorLogger.render();
+            document.getElementById('errorLogModal').classList.add('active');
+        };
+
+        window.closeErrorLog = function() {
+            document.getElementById('errorLogModal').classList.remove('active');
+        };
+
+        window.clearErrorLog = function() {
+            if (confirm('Clear all error logs?')) {
+                window.ErrorLogger.clear();
+                window.ErrorLogger.render();
+            }
+        };
+
+        window.copyErrorLog = function() {
+            const text = window.ErrorLogger.exportText();
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Error log copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        };
+
+        window.exportErrorLog = function() {
+            const text = window.ErrorLogger.exportText();
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `error-log-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+    </script>
 
     <!-- Main Script -->
     <script type="module">
@@ -533,6 +768,7 @@
             document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
             document.getElementById('btnSave').addEventListener('click', window.openCommitModal);
             document.getElementById('btnSettings').addEventListener('click', window.openSettings);
+            document.getElementById('btnErrorLog').addEventListener('click', window.openErrorLog);
             document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
 
             // Sidebar buttons
