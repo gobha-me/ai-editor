@@ -10,18 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        run: |
-          git clone https://git.gobha.me/xcaliber/ai-editor.git /workspace
-          cd /workspace
-          git checkout main
-
       - name: Build and push Docker image
         run: |
-          cd /workspace
-          
-          # Build Docker image with BuildKit
           docker build -t registry.gobha.me:5000/xcaliber/ai-editor:latest .
-          
-          # Push to registry
           docker push registry.gobha.me:5000/xcaliber/ai-editor:latest
