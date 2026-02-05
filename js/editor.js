@@ -59,25 +59,35 @@ async function loadCodeMirror() {
 
             EditorView = cmView.EditorView;
             EditorState = cmState.EditorState;
-            basicSetup = cmBasicSetup.basicSetup;
-            keymap = cmView.keymap;
-            lineNumbers = cmView.lineNumbers;
-            highlightActiveLineGutter = cmView.highlightActiveLineGutter;
-            highlightActiveLine = cmView.highlightActiveLine;
-            lineWrapping = cmView.lineWrapping;
+            basicSetup = cmBasicSetup?.basicSetup;
+            keymap = cmView?.keymap;
+            lineNumbers = cmView?.lineNumbers;
+            highlightActiveLineGutter = cmView?.highlightActiveLineGutter;
+            highlightActiveLine = cmView?.highlightActiveLine;
+            lineWrapping = cmView?.lineWrapping;
             
             // Commands
-            indentWithTab = cmCommands.indentWithTab;
-            defaultKeymap = cmCommands.defaultKeymap;
-            historyKeymap = cmCommands.historyKeymap;
-            history = cmCommands.history;
-            indentOnInput = cmLanguage.indentOnInput;
-            bracketMatching = cmLanguage.bracketMatching;
-            foldGutter = cmLanguage.foldGutter;
+            indentWithTab = cmCommands?.indentWithTab;
+            defaultKeymap = cmCommands?.defaultKeymap;
+            historyKeymap = cmCommands?.historyKeymap;
+            history = cmCommands?.history;
+            indentOnInput = cmLanguage?.indentOnInput;
+            bracketMatching = cmLanguage?.bracketMatching;
+            foldGutter = cmLanguage?.foldGutter;
 
             // Theme
             const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
-            oneDark = cmOneDark.oneDark;
+            oneDark = cmOneDark?.oneDark;
+
+            // Log loaded modules for debugging
+            console.log('CodeMirror modules loaded:', {
+                EditorView: !!EditorView,
+                EditorState: !!EditorState,
+                basicSetup: !!basicSetup,
+                keymap: !!keymap,
+                lineWrapping: !!lineWrapping,
+                oneDark: !!oneDark
+            });
 
             // Load language modules
             await loadLanguages(CDN);
@@ -126,6 +136,7 @@ async function loadLanguages(CDN) {
         if (result.status === 'fulfilled') {
             const [name] = entries[index];
             languageModules[name] = result.value;
+            console.log(`Loaded language module: ${name}`);
         } else {
             console.warn(`Failed to load language: ${entries[index][0]}`, result.reason);
         }
@@ -190,37 +201,83 @@ async function createEditor(options) {
         editorInstance.destroy();
     }
 
+    // Get language extension - ensure it's always an array
     const languageExt = getLanguageExtension(filename);
-    const extensions = [
-        basicSetup,
-        oneDark,
-        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
-        EditorView.updateListener.of(update => {
+    const languageExtensions = Array.isArray(languageExt) ? languageExt : (languageExt ? [languageExt] : []);
+
+    // Build extensions array with defensive checks
+    const extensions = [];
+    
+    // Add basicSetup if available (it's actually an array of extensions)
+    if (Array.isArray(basicSetup)) {
+        extensions.push(...basicSetup);
+    } else if (basicSetup) {
+        extensions.push(basicSetup);
+    }
+    
+    // Add theme
+    if (oneDark) extensions.push(oneDark);
+    
+    // Add keymaps with proper structure
+    if (keymap && indentWithTab) {
+        const keymapExtensions = [indentWithTab];
+        if (Array.isArray(defaultKeymap)) keymapExtensions.push(...defaultKeymap);
+        if (Array.isArray(historyKeymap)) keymapExtensions.push(...historyKeymap);
+        extensions.push(keymap.of(keymapExtensions));
+    }
+    
+    // Add update listener
+    if (EditorView?.updateListener) {
+        extensions.push(EditorView.updateListener.of(update => {
             if (update.docChanged) {
                 State.editorContent = update.state.doc.toString();
                 State.editorDirty = true;
                 EventBus.emit('editor:change', { content: State.editorContent });
             }
-        }),
-        lineWrapping,
-        ...(Array.isArray(languageExt) ? languageExt : [languageExt])
-    ];
+        }));
+    }
+    
+    // Add line wrapping
+    if (lineWrapping) extensions.push(lineWrapping);
+    
+    // Add language extensions
+    extensions.push(...languageExtensions);
 
-    const state = EditorState.create({
-        doc: content,
-        extensions
-    });
+    // Debug log extensions
+    console.log('Creating editor with extensions:', extensions.map(e => 
+        e ? (e.constructor?.name || typeof e) : 'undefined'
+    ));
 
-    editorInstance = new EditorView({
-        state,
-        parent: container
-    });
+    // Validate extensions before creating state
+    const validExtensions = extensions.filter(ext => ext !== undefined && ext !== null);
+    console.log(`Valid extensions count: ${validExtensions.length} / ${extensions.length}`);
 
-    State.editorContent = content;
-    State.editorDirty = false;
+    try {
+        const state = EditorState.create({
+            doc: content,
+            extensions: validExtensions
+        });
 
-    EventBus.emit('editor:created', { filename });
-    return editorInstance;
+        editorInstance = new EditorView({
+            state,
+            parent: container
+        });
+
+        State.editorContent = content;
+        State.editorDirty = false;
+
+        EventBus.emit('editor:created', { filename });
+        return editorInstance;
+    } catch (error) {
+        console.error('Failed to create editor state:', error);
+        console.error('Extensions that failed:', extensions.map((ext, i) => ({
+            index: i,
+            type: typeof ext,
+            constructor: ext?.constructor?.name,
+            hasExtension: ext?.extension !== undefined
+        })));
+        throw error;
+    }
 }
 
 // ============================================
