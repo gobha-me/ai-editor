@@ -76,6 +76,14 @@ const State = {
     chatHistory: [],           // [{ role, content, timestamp }]
     isGenerating: false,
 
+    // Session cost tracking
+    sessionCost: {
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCost: 0,          // USD estimate
+        requests: 0
+    },
+
     // Issues (bonus feature)
     issues: [],                // [{ number, title, body, state }]
     currentIssue: null,

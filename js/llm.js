@@ -94,6 +94,11 @@ const LLM = {
                 stream
             };
 
+            // Request usage stats in streaming mode (OpenAI extension, Venice supports it)
+            if (stream) {
+                requestBody.stream_options = { include_usage: true };
+            }
+
             if (tools) {
                 requestBody.tools = tools;
                 requestBody.tool_choice = 'auto';
@@ -117,16 +122,21 @@ const LLM = {
                 throw new Error(`LLM API Error: ${response.status} - ${error}`);
             }
 
+            let result;
             if (stream) {
-                return await this._handleStream(response, onToken);
+                result = await this._handleStream(response, onToken);
             } else {
                 const data = await response.json();
-                return {
+                result = {
                     content: data.choices?.[0]?.message?.content || '',
                     toolCalls: data.choices?.[0]?.message?.tool_calls || null,
                     usage: data.usage
                 };
             }
+
+            // Track cost
+            this._trackUsage(result.usage, model);
+            return result;
 
         } finally {
             State.isGenerating = false;
@@ -135,57 +145,128 @@ const LLM = {
         }
     },
 
+    /**
+     * Track token usage and estimated cost for the session.
+     */
+    _trackUsage(usage, modelId) {
+        if (!usage) {
+            // Estimate from content length if no usage data
+            return;
+        }
+
+        const inputTokens = usage.prompt_tokens || 0;
+        const outputTokens = usage.completion_tokens || 0;
+
+        State.sessionCost.totalInputTokens += inputTokens;
+        State.sessionCost.totalOutputTokens += outputTokens;
+        State.sessionCost.requests += 1;
+
+        // Calculate cost from model pricing
+        const model = State.models.find(m => m.id === modelId);
+        if (model?.pricing) {
+            // pricing is per 1M tokens
+            const inputCost = (inputTokens / 1_000_000) * (model.pricing.input || 0);
+            const outputCost = (outputTokens / 1_000_000) * (model.pricing.output || 0);
+            State.sessionCost.totalCost += inputCost + outputCost;
+        }
+
+        EventBus.emit('cost:updated', { usage, sessionCost: State.sessionCost });
+    },
+
     async _handleStream(response, onToken) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let content = '';
         let toolCalls = [];
+        let usage = null;
+        let buffer = '';       // Handle partial SSE lines
+        let inThinkBlock = false;
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            // Keep the last potentially incomplete line in the buffer
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
 
-                    try {
-                        const parsed = JSON.parse(data);
-                        const delta = parsed.choices?.[0]?.delta;
-                        
-                        if (delta?.content) {
-                            content += delta.content;
-                            if (onToken) onToken(delta.content, content);
-                            EventBus.emit('llm:token', { token: delta.content, content });
-                        }
+                try {
+                    const parsed = JSON.parse(data);
 
-                        if (delta?.tool_calls) {
-                            // Accumulate tool calls
-                            for (const tc of delta.tool_calls) {
-                                if (tc.index !== undefined) {
-                                    if (!toolCalls[tc.index]) {
-                                        toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-                                    }
-                                    if (tc.id) toolCalls[tc.index].id = tc.id;
-                                    if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-                                    if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
-                                }
+                    // Capture usage from the final chunk (stream_options.include_usage)
+                    if (parsed.usage) {
+                        usage = parsed.usage;
+                    }
+
+                    const delta = parsed.choices?.[0]?.delta;
+                    if (!delta) continue;
+
+                    if (delta.content) {
+                        // Strip <think>...</think> blocks from streamed content
+                        let chunk = delta.content;
+
+                        // Handle think block boundaries
+                        if (inThinkBlock) {
+                            const endIdx = chunk.indexOf('</think>');
+                            if (endIdx >= 0) {
+                                chunk = chunk.slice(endIdx + 8);
+                                inThinkBlock = false;
+                            } else {
+                                continue; // Still inside think block, skip
                             }
                         }
-                    } catch (e) {
-                        // Skip invalid JSON
+
+                        // Check for new think block starts
+                        const startIdx = chunk.indexOf('<think>');
+                        if (startIdx >= 0) {
+                            const before = chunk.slice(0, startIdx);
+                            const afterStart = chunk.slice(startIdx + 7);
+                            const endIdx = afterStart.indexOf('</think>');
+                            if (endIdx >= 0) {
+                                // Complete think block in one chunk
+                                chunk = before + afterStart.slice(endIdx + 8);
+                            } else {
+                                // Think block spans chunks
+                                chunk = before;
+                                inThinkBlock = true;
+                            }
+                        }
+
+                        if (chunk) {
+                            content += chunk;
+                            if (onToken) onToken(chunk, content);
+                            EventBus.emit('llm:token', { token: chunk, content });
+                        }
                     }
+
+                    if (delta.tool_calls) {
+                        for (const tc of delta.tool_calls) {
+                            if (tc.index !== undefined) {
+                                if (!toolCalls[tc.index]) {
+                                    toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                                }
+                                if (tc.id) toolCalls[tc.index].id = tc.id;
+                                if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Skip invalid JSON
                 }
             }
         }
 
         return {
             content,
-            toolCalls: toolCalls.length > 0 ? toolCalls : null
+            toolCalls: toolCalls.length > 0 ? toolCalls : null,
+            usage
         };
     },
 

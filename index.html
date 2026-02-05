@@ -135,6 +135,9 @@
                     <div class="chat-header-actions">
                         <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
                         <div class="model-selector">
+                            <select id="roleSelect" title="Active role — controls tool access">
+                                <!-- Populated dynamically -->
+                            </select>
                             <select id="modelSelect">
                                 <option value="">Select model...</option>
                             </select>
@@ -144,6 +147,10 @@
                 </div>
                 <div class="model-status-bar" id="modelStatusBar" style="display: none;">
                     <!-- Populated dynamically when model changes -->
+                </div>
+                <div class="cost-tracker-bar" id="costTrackerBar">
+                    <span id="costTrackerText">Session: 0 tokens · $0.00</span>
+                    <button id="btnResetCost" title="Reset session cost" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:10px;padding:0 2px;">✕</button>
                 </div>
 
                 <div class="chat-messages" id="chatMessages">
@@ -921,6 +928,10 @@
             // Apply visual settings
             applyVisualSettings();
 
+            // Sync main page role selector
+            document.getElementById('roleSelect').value = State.settings.role;
+            updateModelStatusBar();
+
             coreSaveSettings();
             window.closeSettings();
             showToast('Settings saved', 'success');
@@ -1142,6 +1153,74 @@
         // ============================================
 
         // ============================================
+        // ROLE SELECTOR (Chat Panel)
+        // ============================================
+
+        function populateRoleSelector() {
+            const select = document.getElementById('roleSelect');
+            select.innerHTML = Roles.list().map(role =>
+                `<option value="${role.id}" ${role.id === State.settings.role ? 'selected' : ''}>${role.icon} ${role.name}</option>`
+            ).join('');
+        }
+
+        function onRoleChange(e) {
+            State.settings.role = e.target.value;
+            Storage.set('settings', State.settings);
+            updateModelStatusBar();
+
+            // Also sync settings modal role cards if they exist
+            const cards = document.querySelectorAll('.role-card');
+            cards.forEach(c => {
+                c.classList.toggle('active', c.dataset.role === e.target.value);
+            });
+
+            const role = Roles.get(e.target.value);
+            showToast(`Role: ${role.icon} ${role.name}`, 'success');
+        }
+
+        // ============================================
+        // COST TRACKER
+        // ============================================
+
+        function initCostTracker() {
+            updateCostTracker();
+        }
+
+        function updateCostTracker() {
+            const el = document.getElementById('costTrackerText');
+            const sc = State.sessionCost;
+            const totalTokens = sc.totalInputTokens + sc.totalOutputTokens;
+
+            let text = `${totalTokens.toLocaleString()} tok`;
+            if (sc.totalInputTokens > 0) {
+                text += ` (${sc.totalInputTokens.toLocaleString()}↓ ${sc.totalOutputTokens.toLocaleString()}↑)`;
+            }
+
+            if (sc.totalCost > 0) {
+                const costStr = sc.totalCost < 0.01
+                    ? `$${sc.totalCost.toFixed(4)}`
+                    : `$${sc.totalCost.toFixed(3)}`;
+                text += ` · <span class="cost-highlight">${costStr}</span>`;
+            } else if (totalTokens > 0) {
+                text += ' · pricing N/A';
+            }
+
+            text += ` · ${sc.requests} req`;
+            el.innerHTML = text;
+        }
+
+        function resetSessionCost() {
+            State.sessionCost = {
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalCost: 0,
+                requests: 0
+            };
+            updateCostTracker();
+            showToast('Session cost reset', 'success');
+        }
+
+        // ============================================
         // VISUAL SETTINGS & SIDEBAR COLLAPSE
         // ============================================
 
@@ -1199,6 +1278,8 @@
             applyVisualSettings();
             initSidebarCollapse();
             exposeLLMTools();
+            populateRoleSelector();
+            initCostTracker();
             populateSettingsForm();
             
             // Initialize components
@@ -1251,6 +1332,8 @@
             document.getElementById('projectSelect').addEventListener('change', onProjectChange);
             document.getElementById('branchSelect').addEventListener('change', onBranchChange);
             document.getElementById('modelSelect').addEventListener('change', onModelChange);
+            document.getElementById('roleSelect').addEventListener('change', onRoleChange);
+            document.getElementById('btnResetCost').addEventListener('click', resetSessionCost);
 
             // Chat
             document.getElementById('btnSend').addEventListener('click', () => {
@@ -1264,6 +1347,7 @@
             document.getElementById('btnFetchModels').addEventListener('click', fetchModels);
             document.getElementById('btnNewChat').addEventListener('click', () => {
                 clearChat();
+                resetSessionCost();
                 showToast('Chat cleared', 'success');
             });
 
@@ -1275,6 +1359,10 @@
 
             EventBus.on('issues:refresh', () => {
                 refreshIssues();
+            });
+
+            EventBus.on('cost:updated', () => {
+                updateCostTracker();
             });
 
             EventBus.on('editor:change', () => {

@@ -1214,6 +1214,43 @@ body {
     flex-wrap: wrap;
 }
 
+/* Cost tracker bar */
+.cost-tracker-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 8px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.cost-tracker-bar .cost-highlight {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+/* Role selector in chat header */
+#roleSelect {
+    width: auto;
+    min-width: 0;
+    max-width: 90px;
+    padding: 0.2rem 0.3rem;
+    font-size: 11px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+#roleSelect:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
 /* ============================================
    SETTINGS TABS
    ============================================ */
