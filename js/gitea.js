@@ -380,6 +380,52 @@ const GiteaAPI = {
     },
 
     // ========================================
+    // BATCH OPERATIONS
+    // ========================================
+
+    /**
+     * Commit multiple files in a single batch.
+     * Uses sequential API calls (each creates a commit).
+     * Returns array of results with updated SHAs.
+     */
+    async batchUpdateFiles(owner, repo, files, message, branch = 'main') {
+        const results = [];
+        const errors = [];
+
+        for (const file of files) {
+            try {
+                const result = await this.updateFile(
+                    owner, repo,
+                    file.path,
+                    file.content,
+                    message,
+                    file.sha,
+                    branch
+                );
+                results.push({
+                    path: file.path,
+                    success: true,
+                    newSha: result.content.sha
+                });
+            } catch (error) {
+                errors.push({
+                    path: file.path,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        EventBus.emit('gitea:batchCommitted', { 
+            owner, repo, branch, message,
+            succeeded: results.length,
+            failed: errors.length
+        });
+
+        return { results, errors };
+    },
+
+    // ========================================
     // PULL REQUESTS
     // ========================================
 
@@ -575,6 +621,52 @@ async function saveFile(commitMessage) {
     }
 }
 
+/**
+ * Batch-save multiple dirty tabs in one operation.
+ * Returns { results, errors } with per-file status.
+ */
+async function batchSaveFiles(commitMessage, tabs) {
+    if (!State.currentProject) {
+        throw new Error('No project selected');
+    }
+
+    const { owner, repo } = State.currentProject;
+    const files = tabs.map(tab => ({
+        path: tab.path,
+        content: tab.content,
+        sha: tab.sha
+    }));
+
+    EventBus.emit('gitea:batchSaving', { files: files.map(f => f.path) });
+
+    const { results, errors } = await GiteaAPI.batchUpdateFiles(
+        owner, repo, files, commitMessage, State.currentBranch
+    );
+
+    // Update tab SHAs for successful saves
+    for (const result of results) {
+        const tab = tabs.find(t => t.path === result.path);
+        if (tab) {
+            tab.sha = result.newSha;
+            tab.dirty = false;
+            tab.originalContent = tab.content;
+        }
+        // Also update currentFile if it matches
+        if (State.currentFile && State.currentFile.path === result.path) {
+            State.currentFile.sha = result.newSha;
+            State.currentFile.content = tab.content;
+            State.editorDirty = false;
+        }
+    }
+
+    if (errors.length > 0) {
+        console.error('Batch save had errors:', errors);
+    }
+
+    EventBus.emit('gitea:batchSaved', { results, errors });
+    return { results, errors };
+}
+
 // ============================================
 // EXPORTS
 // ============================================
@@ -583,5 +675,6 @@ export {
     GiteaAPI,
     loadProject,
     loadFile,
-    saveFile
+    saveFile,
+    batchSaveFiles
 };

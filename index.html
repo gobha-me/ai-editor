@@ -10,10 +10,11 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.2.1</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.0</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
-                <button class="btn btn-secondary" id="btnSave" title="Save (Ctrl+S)" disabled>💾 Save</button>
+                <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
+                <button class="btn btn-commit" id="btnCommit" title="Commit all changes" style="display: none;">📦 Commit</button>
                 <button class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)">⚙️</button>
                 <button class="btn btn-secondary" id="btnErrorLog" title="Error Log">🐛</button>
                 <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat">💬</button>
@@ -202,6 +203,20 @@
                     </div>
                     <small>Enter model name or click Fetch to see available models</small>
                 </div>
+
+                <div class="form-group">
+                    <label for="settingCommitModel">Commit Message Model <span style="color: var(--text-muted);">(optional)</span></label>
+                    <input type="text" id="settingCommitModel" placeholder="Same as default model">
+                    <small>Use a smaller/faster model for generating commit messages (e.g., gpt-4o-mini). Leave blank to use the default model.</small>
+                </div>
+
+                <div style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem;">
+                    <div style="font-size: 11px; color: var(--text-muted);">
+                        ℹ️ <strong>Tool Calling:</strong> The OpenAI <code>/models</code> endpoint does not expose whether a model supports function/tool calling. 
+                        This is not a standard field — neither in OpenAI nor Venice.ai extensions. 
+                        The editor will attempt tool calls with the selected model and fall back gracefully if unsupported.
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
@@ -263,23 +278,30 @@
 
     <!-- Commit Modal -->
     <div class="modal-overlay" id="commitModal">
-        <div class="modal">
+        <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
-                <h2>💾 Commit Changes</h2>
+                <h2>📦 Commit Changes</h2>
                 <button class="modal-close" onclick="window.closeCommitModal()">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
+                    <label>Changed Files</label>
+                    <div id="commitFileList" class="commit-file-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                <div class="form-group">
                     <label for="commitMessage">Commit Message</label>
                     <textarea id="commitMessage" rows="3" placeholder="Describe your changes..."></textarea>
                 </div>
-                <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="margin-bottom: 1rem;">
+                <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="margin-bottom: 0.5rem;">
                     🤖 Generate with AI
                 </button>
+                <div id="commitModelInfo" style="font-size: 11px; color: var(--text-muted); margin-bottom: 0.5rem;"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
-                <button class="btn btn-success" onclick="window.commitAndPush()">✅ Commit</button>
+                <button class="btn btn-success" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit All</button>
             </div>
         </div>
     </div>
@@ -534,7 +556,7 @@
     <!-- Main Script -->
     <script type="module">
         import { EventBus, State, Storage, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
-        import { GiteaAPI, loadProject, loadFile, saveFile } from './editor/js/gitea.js';
+        import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
         import { LLM, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
         import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
@@ -595,6 +617,7 @@
             document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
             document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
             document.getElementById('settingLlmModel').value = State.settings.llmModel || 'gpt-4';
+            document.getElementById('settingCommitModel').value = State.settings.commitModel || '';
         }
 
         window.saveSettings = function() {
@@ -603,6 +626,7 @@
             State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
             State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
             State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
+            State.settings.commitModel = document.getElementById('settingCommitModel').value.trim();
 
             coreSaveSettings();
             window.closeSettings();
@@ -700,6 +724,43 @@
         };
 
         window.openCommitModal = function() {
+            // Ensure current tab content is up-to-date
+            if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                State.openTabs[State.activeTabIndex].content = State.editorContent;
+                State.openTabs[State.activeTabIndex].dirty = State.editorDirty;
+            }
+
+            // Build the changed files list
+            const dirtyTabs = State.openTabs.filter(t => t.dirty);
+            const fileListEl = document.getElementById('commitFileList');
+            
+            if (dirtyTabs.length === 0) {
+                showToast('No changes to commit', 'warning');
+                return;
+            }
+
+            fileListEl.innerHTML = dirtyTabs.map((tab, i) => {
+                const fileName = tab.path.split('/').pop();
+                const icon = getFileIcon(fileName);
+                return `
+                    <label class="commit-file-item">
+                        <input type="checkbox" checked data-path="${tab.path}">
+                        <span class="commit-file-icon">${icon}</span>
+                        <span class="commit-file-path">${tab.path}</span>
+                    </label>
+                `;
+            }).join('');
+
+            // Update commit button text
+            document.getElementById('btnDoCommit').textContent = `✅ Commit ${dirtyTabs.length} file(s)`;
+
+            // Show which model will be used for commit messages
+            const commitModel = State.settings.commitModel || State.settings.llmModel;
+            document.getElementById('commitModelInfo').textContent = 
+                State.settings.commitModel 
+                    ? `Commit model: ${commitModel}` 
+                    : `Using default model: ${commitModel}`;
+
             document.getElementById('commitModal').classList.add('active');
         };
 
@@ -713,15 +774,24 @@
             textarea.disabled = true;
             
             try {
-                const msg = await generateCommitMessage();
+                // Get checked dirty files for context
+                const checkedPaths = getCheckedCommitFiles();
+                const dirtyTabs = State.openTabs.filter(t => checkedPaths.includes(t.path));
+                
+                const msg = await generateCommitMessage(dirtyTabs);
                 textarea.value = msg;
             } catch (error) {
                 textarea.value = '';
-                showToast('Failed to generate commit message', 'error');
+                showToast('Failed to generate commit message: ' + error.message, 'error');
             }
             
             textarea.disabled = false;
         };
+
+        function getCheckedCommitFiles() {
+            const checkboxes = document.querySelectorAll('#commitFileList input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.dataset.path);
+        }
 
         window.commitAndPush = async function() {
             const message = document.getElementById('commitMessage').value.trim();
@@ -731,13 +801,47 @@
                 return;
             }
 
+            const checkedPaths = getCheckedCommitFiles();
+            if (checkedPaths.length === 0) {
+                showToast('No files selected', 'warning');
+                return;
+            }
+
+            // Get the dirty tabs that are checked
+            const tabsToCommit = State.openTabs.filter(t => checkedPaths.includes(t.path) && t.dirty);
+
+            if (tabsToCommit.length === 0) {
+                showToast('No changes to commit', 'warning');
+                return;
+            }
+
+            const commitBtn = document.getElementById('btnDoCommit');
+            commitBtn.disabled = true;
+            commitBtn.textContent = '⏳ Committing...';
+
             try {
-                await saveFile(message);
+                const { results, errors } = await batchSaveFiles(message, tabsToCommit);
+                
+                if (results.length > 0) {
+                    showToast(`Committed ${results.length} file(s)`, 'success');
+                }
+                if (errors.length > 0) {
+                    showToast(`${errors.length} file(s) failed to commit`, 'error');
+                }
+
+                // Update tab states and re-render
+                renderEditorTabs();
+                updateCommitButton();
+                updateStatusBar();
+
                 window.closeCommitModal();
                 document.getElementById('commitMessage').value = '';
             } catch (error) {
-                showToast('Failed to commit', 'error');
+                showToast('Commit failed: ' + error.message, 'error');
             }
+
+            commitBtn.disabled = false;
+            commitBtn.textContent = `✅ Commit ${tabsToCommit.length} file(s)`;
         };
 
         // ============================================
@@ -784,7 +888,8 @@
         function setupEventListeners() {
             // Header buttons
             document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
-            document.getElementById('btnSave').addEventListener('click', window.openCommitModal);
+            document.getElementById('btnCommit').addEventListener('click', window.openCommitModal);
+            document.getElementById('btnRevert').addEventListener('click', window.revertCurrentFile);
             document.getElementById('btnSettings').addEventListener('click', window.openSettings);
             document.getElementById('btnErrorLog').addEventListener('click', window.openErrorLog);
             document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
@@ -824,19 +929,28 @@
 
             EventBus.on('editor:change', () => {
                 updateStatusBar();
-                document.getElementById('btnSave').disabled = false;
+                updateCommitButton();
+                updateRevertButton();
             });
 
             EventBus.on('gitea:saved', () => {
-                document.getElementById('btnSave').disabled = true;
+                updateCommitButton();
+                updateRevertButton();
                 // Update tab dirty state
                 if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
                     State.openTabs[State.activeTabIndex].dirty = false;
                     State.openTabs[State.activeTabIndex].content = State.editorContent;
+                    State.openTabs[State.activeTabIndex].originalContent = State.editorContent;
                     State.openTabs[State.activeTabIndex].sha = State.currentFile?.sha;
                     renderEditorTabs();
                 }
                 showToast('File saved successfully', 'success');
+            });
+
+            EventBus.on('gitea:batchSaved', ({ results, errors }) => {
+                updateCommitButton();
+                updateRevertButton();
+                renderEditorTabs();
             });
 
             EventBus.on('gitea:error', (error) => {
@@ -844,14 +958,80 @@
             });
         }
 
+        // Commit button visibility/badge
+        function updateCommitButton() {
+            const btn = document.getElementById('btnCommit');
+            // Ensure current tab is reflected
+            if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                State.openTabs[State.activeTabIndex].content = State.editorContent;
+                State.openTabs[State.activeTabIndex].dirty = State.editorDirty;
+            }
+            const dirtyCount = State.openTabs.filter(t => t.dirty).length;
+            if (dirtyCount > 0) {
+                btn.style.display = 'inline-flex';
+                btn.textContent = `📦 Commit (${dirtyCount})`;
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+
+        // Revert button
+        function updateRevertButton() {
+            const btn = document.getElementById('btnRevert');
+            btn.disabled = !(State.currentFile && State.editorDirty);
+        }
+
+        window.revertCurrentFile = function() {
+            if (!State.currentFile) return;
+            
+            const tab = State.openTabs[State.activeTabIndex];
+            if (!tab) return;
+
+            const originalContent = tab.originalContent;
+            if (originalContent === undefined || originalContent === null) {
+                showToast('No original content to revert to', 'warning');
+                return;
+            }
+
+            if (!confirm(`Revert "${tab.path}" to last committed version? All local changes will be lost.`)) {
+                return;
+            }
+
+            // Reset editor to original content
+            const { createEditor: ce } = { createEditor };
+            State.editorContent = originalContent;
+            State.editorDirty = false;
+            tab.content = originalContent;
+            tab.dirty = false;
+
+            createEditor(
+                document.getElementById('editorContainer'),
+                originalContent,
+                tab.path
+            );
+
+            renderEditorTabs();
+            updateStatusBar();
+            updateCommitButton();
+            updateRevertButton();
+            showToast(`Reverted ${tab.path.split('/').pop()}`, 'success');
+        };
+
         function setupKeyboardShortcuts() {
             document.addEventListener('keydown', (e) => {
-                // Ctrl+S - Save
+                // Ctrl+S - Open commit modal
                 if (e.ctrlKey && e.key === 's') {
                     e.preventDefault();
-                    if (!document.getElementById('btnSave').disabled) {
+                    const dirtyCount = State.openTabs.filter(t => t.dirty).length;
+                    if (dirtyCount > 0) {
                         window.openCommitModal();
                     }
+                }
+
+                // Ctrl+Z on revert (Ctrl+Shift+Z = revert file to original)
+                if (e.ctrlKey && e.shiftKey && e.key === 'Z') {
+                    e.preventDefault();
+                    window.revertCurrentFile();
                 }
 
                 // Ctrl+, - Settings
@@ -1117,6 +1297,12 @@
             }
 
             try {
+                // *** FIX: Save current tab state BEFORE loading anything ***
+                if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+                    State.openTabs[State.activeTabIndex].content = State.editorContent;
+                    State.openTabs[State.activeTabIndex].dirty = State.editorDirty;
+                }
+
                 // Check if file is already open
                 const existingTabIndex = State.openTabs.findIndex(t => t.path === path);
                 console.log(`Existing tab index: ${existingTabIndex}, open tabs: ${State.openTabs.length}`);
@@ -1133,9 +1319,12 @@
                     return;
                 }
 
-                // Load the file
+                // Load the file from Gitea
                 console.log('Loading file...');
                 await loadFile(path);
+                
+                // Store the original (server) content for revert
+                const originalContent = State.editorContent;
                 
                 // Handle preview tabs - single click opens preview, replaces existing preview
                 const isPreview = !isDoubleClick;
@@ -1150,6 +1339,7 @@
                         State.openTabs[previewIndex] = {
                             path: path,
                             content: State.editorContent,
+                            originalContent: originalContent,
                             sha: State.currentFile.sha,
                             dirty: State.editorDirty,
                             isPreview: true
@@ -1160,6 +1350,7 @@
                         State.openTabs.push({
                             path: path,
                             content: State.editorContent,
+                            originalContent: originalContent,
                             sha: State.currentFile.sha,
                             dirty: State.editorDirty,
                             isPreview: true
@@ -1171,6 +1362,7 @@
                     State.openTabs.push({
                         path: path,
                         content: State.editorContent,
+                        originalContent: originalContent,
                         sha: State.currentFile.sha,
                         dirty: State.editorDirty,
                         isPreview: false
@@ -1192,7 +1384,8 @@
                 
                 // Update status
                 updateStatusBar();
-                document.getElementById('btnSave').disabled = !State.editorDirty;
+                updateCommitButton();
+                updateRevertButton();
 
                 // Highlight active file in tree
                 document.querySelectorAll('.tree-item').forEach(el => {
@@ -1224,7 +1417,7 @@
             // Update current file state
             State.currentFile = {
                 path: tab.path,
-                content: tab.content,
+                content: tab.originalContent || tab.content,
                 sha: tab.sha
             };
             State.editorContent = tab.content;
@@ -1239,7 +1432,8 @@
             
             renderEditorTabs();
             updateStatusBar();
-            document.getElementById('btnSave').disabled = !State.editorDirty;
+            updateCommitButton();
+            updateRevertButton();
             
             // Highlight active file in tree
             document.querySelectorAll('.tree-item').forEach(el => {

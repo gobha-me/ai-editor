@@ -555,22 +555,42 @@ async function generateEdit(request, onToken = null) {
     };
 }
 
-async function generateCommitMessage() {
-    if (!State.currentFile) {
-        return 'Update file';
+async function generateCommitMessage(changedFiles = null) {
+    // Build a prompt that covers all changed files
+    let prompt;
+    
+    if (changedFiles && changedFiles.length > 0) {
+        // Multi-file commit message
+        const fileDiffs = changedFiles.map(f => {
+            const original = (f.originalContent || '').slice(0, 2000);
+            const updated = (f.content || '').slice(0, 2000);
+            return `File: ${f.path}\n\nOriginal (truncated):\n\`\`\`\n${original}\n\`\`\`\n\nUpdated (truncated):\n\`\`\`\n${updated}\n\`\`\``;
+        }).join('\n\n---\n\n');
+        
+        prompt = `Generate a concise git commit message for the following changes across ${changedFiles.length} file(s).
+
+${fileDiffs}
+
+Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc). If multiple files changed, summarize the overall change.`;
+    } else if (State.currentFile) {
+        prompt = buildCommitMessagePrompt(
+            State.currentFile.content,
+            State.editorContent
+        );
+    } else {
+        return 'Update files';
     }
 
-    const prompt = buildCommitMessagePrompt(
-        State.currentFile.content,
-        State.editorContent
-    );
+    // Use commit model if configured, otherwise fall back to default
+    const commitModel = State.settings.commitModel || State.settings.llmModel;
 
     const result = await LLM.chat([
         { role: 'user', content: prompt }
     ], { 
         stream: false,
         temperature: 0.3,
-        maxTokens: 100
+        maxTokens: 150,
+        model: commitModel
     });
 
     return result.content.trim().replace(/^["']|["']$/g, '');

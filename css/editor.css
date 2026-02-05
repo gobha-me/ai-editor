@@ -834,6 +834,66 @@ body {
     color: var(--bg-primary);
 }
 
+.btn-commit {
+    background: #e87d0d;
+    color: white;
+    border: none;
+    font-weight: 600;
+    animation: commitPulse 2s ease-in-out infinite;
+}
+
+.btn-commit:hover {
+    background: #f5920e;
+}
+
+@keyframes commitPulse {
+    0%, 100% { box-shadow: none; }
+    50% { box-shadow: 0 0 8px rgba(232, 125, 13, 0.5); }
+}
+
+/* Commit file list */
+.commit-file-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+}
+
+.commit-file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.commit-file-item:last-child {
+    border-bottom: none;
+}
+
+.commit-file-item:hover {
+    background: var(--bg-hover);
+}
+
+.commit-file-item input[type="checkbox"] {
+    accent-color: var(--accent);
+    flex-shrink: 0;
+}
+
+.commit-file-icon {
+    flex-shrink: 0;
+}
+
+.commit-file-path {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;

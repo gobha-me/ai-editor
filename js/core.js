@@ -47,6 +47,7 @@ const State = {
         llmEndpoint: '',
         llmApiKey: '',
         llmModel: 'gpt-4',
+        commitModel: '',           // Optional small/fast model for commit messages
         theme: 'dark'
     },
 
@@ -59,7 +60,7 @@ const State = {
     models: [],                // [{ id, name }]
     
     // Editor state - Multi-tab support
-    openTabs: [],              // [{ path, content, sha, dirty, isPreview }]
+    openTabs: [],              // [{ path, content, originalContent, sha, dirty, isPreview }]
     activeTabIndex: -1,        // Index of currently active tab
     editorContent: '',         // Current buffer
     editorDirty: false,        // Has unsaved changes
