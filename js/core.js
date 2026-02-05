@@ -49,6 +49,11 @@ const State = {
         llmModel: 'gpt-4',
         commitModel: '',           // Optional small/fast model for commit messages
         apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
+        role: 'full',              // Active role: full | coder | pm | reviewer
+        fontSize: 13,              // UI font size in px
+        editorFontSize: 14,        // Editor font size in px
+        showIssues: true,          // Show issues panel in sidebar
+        showWorkflows: true,       // Show workflows panel in sidebar
         theme: 'dark'
     },
 
@@ -395,6 +400,99 @@ Providers.register({
 });
 
 // ============================================
+// ROLE DEFINITIONS
+// ============================================
+
+/**
+ * Roles restrict which tools are sent to the LLM.
+ * Each tool definition gets a `roles` array; when a role is active,
+ * only tools tagged with that role (or 'full') are included.
+ *
+ * Role shape: { id, name, icon, description, tools: string[] }
+ *   tools: array of tool names this role can access
+ */
+
+const Roles = {
+    _registered: {},
+
+    register(role) {
+        if (!role.id || !role.name) {
+            console.error('Role missing id or name:', role);
+            return false;
+        }
+        this._registered[role.id] = role;
+        return true;
+    },
+
+    get(id) {
+        return this._registered[id] || this._registered['full'];
+    },
+
+    list() {
+        return Object.values(this._registered);
+    },
+
+    /**
+     * Filter tool definitions to only those allowed by the active role.
+     * If role is 'full' or unknown, returns all tools.
+     */
+    filterTools(toolDefinitions) {
+        const role = this.get(State.settings.role);
+        if (!role || role.id === 'full') return toolDefinitions;
+
+        return toolDefinitions.filter(tool => {
+            const toolName = tool.function?.name || tool.name;
+            return role.tools.includes(toolName);
+        });
+    }
+};
+
+// ---- Built-in Roles ----
+
+Roles.register({
+    id: 'full',
+    name: 'Full Access',
+    icon: '🔓',
+    description: 'All tools enabled. Maximum capability, highest token overhead.',
+    tools: [] // Empty = all tools (special case)
+});
+
+Roles.register({
+    id: 'coder',
+    name: 'Coder',
+    icon: '💻',
+    description: 'Read/edit code, navigate project tree, read issues for context. No issue creation.',
+    tools: [
+        'read_current_file', 'replace_lines', 'insert_lines', 'delete_lines',
+        'get_project_tree', 'open_file', 'read_file', 'list_open_tabs',
+        'read_issue', 'list_issues'
+    ]
+});
+
+Roles.register({
+    id: 'pm',
+    name: 'Project Manager',
+    icon: '📋',
+    description: 'Create/manage issues, read code for context. No code editing.',
+    tools: [
+        'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'create_issue', 'update_issue', 'list_issues', 'read_issue',
+        'add_issue_comment'
+    ]
+});
+
+Roles.register({
+    id: 'reviewer',
+    name: 'Reviewer',
+    icon: '🔍',
+    description: 'Read-only code access, can comment on issues. No code editing or issue creation.',
+    tools: [
+        'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'list_issues', 'read_issue', 'add_issue_comment'
+    ]
+});
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
@@ -445,6 +543,7 @@ export {
     Storage,
     Plugins,
     Providers,
+    Roles,
     DEFAULT_CAPABILITIES,
     loadSettings,
     saveSettings

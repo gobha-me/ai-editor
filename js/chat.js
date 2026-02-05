@@ -208,6 +208,173 @@ LLMTools.handlers = {
             })),
             activeTab: State.activeTabIndex >= 0 ? State.openTabs[State.activeTabIndex]?.path : null
         };
+    },
+
+    // === ISSUE TOOL HANDLERS ===
+
+    list_issues: async ({ state = 'open', labels = '' } = {}) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const params = new URLSearchParams({ state, type: 'issues', limit: '20' });
+            if (labels) params.append('labels', labels);
+            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const issues = await response.json();
+            return {
+                project: `${owner}/${repo}`,
+                count: issues.length,
+                issues: issues.map(i => ({
+                    number: i.number,
+                    title: i.title,
+                    state: i.state,
+                    labels: (i.labels || []).map(l => l.name),
+                    created: i.created_at,
+                    assignee: i.assignee?.login || null
+                }))
+            };
+        } catch (error) {
+            return { error: `Failed to list issues: ${error.message}` };
+        }
+    },
+
+    read_issue: async ({ number }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const issue = await response.json();
+
+            // Also fetch comments
+            const commentsUrl = `${url}/comments`;
+            const commentsResp = await fetch(commentsUrl, {
+                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
+            });
+            const comments = commentsResp.ok ? await commentsResp.json() : [];
+
+            return {
+                number: issue.number,
+                title: issue.title,
+                body: issue.body,
+                state: issue.state,
+                labels: (issue.labels || []).map(l => l.name),
+                assignee: issue.assignee?.login || null,
+                created: issue.created_at,
+                comments: comments.slice(0, 20).map(c => ({
+                    user: c.user?.login,
+                    body: c.body,
+                    created: c.created_at
+                }))
+            };
+        } catch (error) {
+            return { error: `Failed to read issue #${number}: ${error.message}` };
+        }
+    },
+
+    create_issue: async ({ title, body = '', labels = [] }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues`;
+            const payload = { title, body };
+            if (labels.length > 0) payload.labels = labels; // Gitea expects label IDs for creation; names might not work
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${State.settings.giteaToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const issue = await response.json();
+            // Refresh issues list
+            EventBus.emit('issues:refresh');
+            return {
+                success: true,
+                number: issue.number,
+                title: issue.title,
+                url: issue.html_url,
+                message: `Created issue #${issue.number}: ${issue.title}`
+            };
+        } catch (error) {
+            return { error: `Failed to create issue: ${error.message}` };
+        }
+    },
+
+    update_issue: async ({ number, title, body, state }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
+            const payload = {};
+            if (title !== undefined) payload.title = title;
+            if (body !== undefined) payload.body = body;
+            if (state !== undefined) payload.state = state;
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `token ${State.settings.giteaToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const issue = await response.json();
+            EventBus.emit('issues:refresh');
+            return {
+                success: true,
+                number: issue.number,
+                title: issue.title,
+                state: issue.state,
+                message: `Updated issue #${issue.number}`
+            };
+        } catch (error) {
+            return { error: `Failed to update issue #${number}: ${error.message}` };
+        }
+    },
+
+    add_issue_comment: async ({ number, body }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        try {
+            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}/comments`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${State.settings.giteaToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ body })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const comment = await response.json();
+            return {
+                success: true,
+                issue_number: number,
+                comment_id: comment.id,
+                message: `Added comment to issue #${number}`
+            };
+        } catch (error) {
+            return { error: `Failed to add comment to issue #${number}: ${error.message}` };
+        }
     }
 };
 
@@ -636,7 +803,7 @@ async function handleGeneralRequest(input) {
     };
 
     if (supportsTools) {
-        chatOptions.tools = LLMTools.definitions;
+        chatOptions.tools = LLMTools.getToolsForRole();
     }
 
     const result = await LLM.chat([

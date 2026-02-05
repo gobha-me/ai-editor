@@ -3,7 +3,7 @@
  * OpenAI-compatible API for chat completions
  */
 
-import { State, EventBus, Storage, Providers } from './core.js';
+import { State, EventBus, Storage, Providers, Roles } from './core.js';
 
 // ============================================
 // LLM API CLIENT
@@ -299,6 +299,12 @@ function buildSystemPrompt() {
     } else {
         prompt = prompt.replace('{{issues}}', '');
     }
+
+    // Add role context
+    const role = Roles.get(State.settings.role);
+    if (role && role.id !== 'full') {
+        prompt += `\n\nActive role: ${role.name}. ${role.description}`;
+    }
     
     return prompt;
 }
@@ -373,6 +379,7 @@ function getLanguageFromPath(path) {
 const LLMTools = {
     // Tool definitions for function calling
     definitions: [
+        // === CODE TOOLS ===
         {
             type: 'function',
             function: {
@@ -514,11 +521,137 @@ const LLMTools = {
                     required: []
                 }
             }
+        },
+
+        // === ISSUE TOOLS ===
+        {
+            type: 'function',
+            function: {
+                name: 'list_issues',
+                description: 'List issues for the current project. Returns open issues by default.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        state: {
+                            type: 'string',
+                            enum: ['open', 'closed', 'all'],
+                            description: 'Filter by issue state (default: open)'
+                        },
+                        labels: {
+                            type: 'string',
+                            description: 'Comma-separated label names to filter by'
+                        }
+                    },
+                    required: []
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'read_issue',
+                description: 'Read a specific issue by number, including its body, labels, and comments.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        number: {
+                            type: 'integer',
+                            description: 'The issue number'
+                        }
+                    },
+                    required: ['number']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'create_issue',
+                description: 'Create a new issue in the current project.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        title: {
+                            type: 'string',
+                            description: 'Issue title'
+                        },
+                        body: {
+                            type: 'string',
+                            description: 'Issue body/description (markdown supported)'
+                        },
+                        labels: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Array of label names to apply'
+                        }
+                    },
+                    required: ['title']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'update_issue',
+                description: 'Update an existing issue (title, body, state, or labels).',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        number: {
+                            type: 'integer',
+                            description: 'The issue number to update'
+                        },
+                        title: {
+                            type: 'string',
+                            description: 'New title (optional)'
+                        },
+                        body: {
+                            type: 'string',
+                            description: 'New body (optional)'
+                        },
+                        state: {
+                            type: 'string',
+                            enum: ['open', 'closed'],
+                            description: 'Set issue state (optional)'
+                        }
+                    },
+                    required: ['number']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'add_issue_comment',
+                description: 'Add a comment to an existing issue.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        number: {
+                            type: 'integer',
+                            description: 'The issue number'
+                        },
+                        body: {
+                            type: 'string',
+                            description: 'Comment text (markdown supported)'
+                        }
+                    },
+                    required: ['number', 'body']
+                }
+            }
         }
     ],
 
     // Tool execution handlers - these will be connected to the actual implementations
-    handlers: {}
+    handlers: {},
+
+    /**
+     * Get tool definitions filtered by the active role.
+     * Uses Roles.filterTools() to strip tools the current role shouldn't access.
+     */
+    getToolsForRole() {
+        return Roles.filterTools(this.definitions);
+    }
 };
 
 // ============================================

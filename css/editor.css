@@ -33,6 +33,8 @@
     
     --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --ui-font-size: 13px;
+    --editor-font-size: 14px;
 }
 
 /* ============================================
@@ -52,7 +54,7 @@ html, body {
 
 body {
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: var(--ui-font-size);
     background: var(--bg-primary);
     color: var(--text-primary);
 }
@@ -110,10 +112,31 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .sidebar-section {
     border-bottom: 1px solid var(--border);
+}
+
+/* File tree section takes remaining space */
+.sidebar-section-flex {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;   /* Critical: allows flex child to shrink below content size */
+    overflow: hidden;
+}
+
+/* Issues/workflows pinned at bottom with max heights */
+.sidebar-section-bottom {
+    flex-shrink: 0;
+}
+
+.sidebar-section-bottom .issues-panel,
+.sidebar-section-bottom .workflows-panel {
+    max-height: 180px;
+    overflow-y: auto;
 }
 
 .sidebar-header {
@@ -126,6 +149,32 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
+}
+
+.sidebar-header-collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sidebar-header-collapsible:hover {
+    background: var(--bg-hover);
+}
+
+.sidebar-header-collapsible.collapsed span::first-letter {
+    /* Chevron rotates via text replacement in JS */
+}
+
+.sidebar-collapse-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar-collapse-body.collapsed {
+    display: none;
 }
 
 .sidebar-header button {
@@ -483,7 +532,7 @@ body {
 .editor-container .cm-editor {
     height: 100%;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--editor-font-size);
 }
 
 .editor-container .cm-scroller {
@@ -1163,4 +1212,113 @@ body {
     color: var(--text-muted);
     overflow-x: auto;
     flex-wrap: wrap;
+}
+
+/* ============================================
+   SETTINGS TABS
+   ============================================ */
+
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+}
+
+.settings-tab {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.settings-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.settings-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.settings-tab-content {
+    display: none;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+/* ============================================
+   ROLE CARDS
+   ============================================ */
+
+.role-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.role-card {
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.role-card:hover {
+    border-color: var(--border-light);
+    background: var(--bg-tertiary);
+}
+
+.role-card.active {
+    border-color: var(--accent);
+    background: rgba(14, 125, 202, 0.08);
+}
+
+.role-card-icon {
+    font-size: 20px;
+    margin-bottom: 0.25rem;
+}
+
+.role-card-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.role-card-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+/* Role tool list */
+.role-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.role-tool-item.enabled {
+    color: var(--text-primary);
+}
+
+.role-tool-item.disabled {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    opacity: 0.5;
 }

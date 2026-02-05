@@ -10,7 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.0</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.1</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -45,43 +45,49 @@
                 </div>
 
                 <!-- File Tree -->
-                <div class="sidebar-section" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="sidebar-header">
-                        Files
+                <div class="sidebar-section sidebar-section-flex">
+                    <div class="sidebar-header sidebar-header-collapsible" data-collapse="fileTreeBody">
+                        <span>▾ Files</span>
                         <div>
-                            <button id="btnNewFile" title="New File">📄</button>
-                            <button id="btnNewFolder" title="New Folder">📁</button>
+                            <button id="btnNewFile" title="New File" onclick="event.stopPropagation()">📄</button>
+                            <button id="btnNewFolder" title="New Folder" onclick="event.stopPropagation()">📁</button>
                         </div>
                     </div>
-                    <div class="file-tree" id="fileTree">
-                        <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
-                            Select a project to browse files
+                    <div class="sidebar-collapse-body" id="fileTreeBody">
+                        <div class="file-tree" id="fileTree">
+                            <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
+                                Select a project to browse files
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Issues Panel -->
-                <div class="sidebar-section">
-                    <div class="sidebar-header">
-                        Issues
-                        <button id="btnRefreshIssues" title="Refresh">🔄</button>
+                <div class="sidebar-section sidebar-section-bottom">
+                    <div class="sidebar-header sidebar-header-collapsible" data-collapse="issuesPanelBody">
+                        <span>▾ Issues</span>
+                        <button id="btnRefreshIssues" title="Refresh" onclick="event.stopPropagation()">🔄</button>
                     </div>
-                    <div class="issues-panel" id="issuesPanel">
-                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                            No issues loaded
+                    <div class="sidebar-collapse-body" id="issuesPanelBody">
+                        <div class="issues-panel" id="issuesPanel">
+                            <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                                No issues loaded
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Workflow Runs -->
-                <div class="sidebar-section">
-                    <div class="sidebar-header">
-                        Workflows
-                        <button id="btnRefreshWorkflows" title="Refresh">🔄</button>
+                <div class="sidebar-section sidebar-section-bottom">
+                    <div class="sidebar-header sidebar-header-collapsible" data-collapse="workflowsPanelBody">
+                        <span>▾ Workflows</span>
+                        <button id="btnRefreshWorkflows" title="Refresh" onclick="event.stopPropagation()">🔄</button>
                     </div>
-                    <div class="workflows-panel" id="workflowsPanel">
-                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                            No workflow runs
+                    <div class="sidebar-collapse-body" id="workflowsPanelBody">
+                        <div class="workflows-panel" id="workflowsPanel">
+                            <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                                No workflow runs
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -163,72 +169,142 @@
 
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
-        <div class="modal">
+        <div class="modal" style="max-width: 560px;">
             <div class="modal-header">
                 <h2>⚙️ Settings</h2>
                 <button class="modal-close" onclick="window.closeSettings()">×</button>
             </div>
+
+            <!-- Settings Tabs -->
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="tabGeneral">General</button>
+                <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
+                <button class="settings-tab" data-tab="tabRoles">Roles</button>
+            </div>
+
             <div class="modal-body">
-                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Gitea Configuration</h4>
-                
-                <div class="form-group">
-                    <label for="settingGiteaUrl">Gitea URL</label>
-                    <input type="text" id="settingGiteaUrl" placeholder="https://git.gobha.me">
-                    <small>Base URL of your Gitea instance</small>
-                </div>
 
-                <div class="form-group">
-                    <label for="settingGiteaToken">Gitea API Token</label>
-                    <input type="password" id="settingGiteaToken" placeholder="Your API token">
-                    <small>Generate in Gitea: Settings → Applications → Generate Token</small>
-                </div>
-
-                <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
-
-                <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">LLM Configuration</h4>
-
-                <div class="form-group">
-                    <label for="settingApiProvider">API Provider</label>
-                    <select id="settingApiProvider">
-                        <!-- Populated dynamically from Providers registry -->
-                    </select>
-                    <small id="providerDescription">Standard OpenAI-compatible API.</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="settingLlmEndpoint">API Endpoint</label>
-                    <input type="text" id="settingLlmEndpoint" placeholder="https://api.openai.com/v1">
-                    <small>OpenAI-compatible API endpoint</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="settingLlmApiKey">API Key</label>
-                    <input type="password" id="settingLlmApiKey" placeholder="sk-...">
-                </div>
-
-                <div class="form-group">
-                    <label for="settingLlmModel">Default Model</label>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <select id="settingLlmModel" style="flex: 1;">
-                            <option value="">Click Fetch to load models...</option>
-                        </select>
-                        <button class="btn btn-secondary" onclick="window.fetchModelsForSettings()" title="Fetch available models">🔄 Fetch</button>
+                <!-- TAB: General -->
+                <div class="settings-tab-content active" id="tabGeneral">
+                    <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Gitea Configuration</h4>
+                    
+                    <div class="form-group">
+                        <label for="settingGiteaUrl">Gitea URL</label>
+                        <input type="text" id="settingGiteaUrl" placeholder="https://git.gobha.me">
+                        <small>Base URL of your Gitea instance</small>
                     </div>
-                    <small>Select provider above, then Fetch to load available models</small>
+
+                    <div class="form-group">
+                        <label for="settingGiteaToken">Gitea API Token</label>
+                        <input type="password" id="settingGiteaToken" placeholder="Your API token">
+                        <small>Generate in Gitea: Settings → Applications → Generate Token</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+
+                    <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">LLM Configuration</h4>
+
+                    <div class="form-group">
+                        <label for="settingApiProvider">API Provider</label>
+                        <select id="settingApiProvider">
+                            <!-- Populated dynamically from Providers registry -->
+                        </select>
+                        <small id="providerDescription">Standard OpenAI-compatible API.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingLlmEndpoint">API Endpoint</label>
+                        <input type="text" id="settingLlmEndpoint" placeholder="https://api.openai.com/v1">
+                        <small>OpenAI-compatible API endpoint</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingLlmApiKey">API Key</label>
+                        <input type="password" id="settingLlmApiKey" placeholder="sk-...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingLlmModel">Default Model</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="settingLlmModel" style="flex: 1;">
+                                <option value="">Click Fetch to load models...</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="window.fetchModelsForSettings()" title="Fetch available models">🔄 Fetch</button>
+                        </div>
+                        <small>Select provider above, then Fetch to load available models</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingCommitModel">Commit Message Model <span style="color: var(--text-muted);">(optional)</span></label>
+                        <select id="settingCommitModel">
+                            <option value="">Same as default model</option>
+                            <!-- Populated dynamically -->
+                        </select>
+                        <small>Use a smaller/faster model for commit messages. Leave blank to use the default.</small>
+                    </div>
+
+                    <div id="modelCapabilitiesInfo" style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; display: none;">
+                        <!-- Populated when a model is selected -->
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="settingCommitModel">Commit Message Model <span style="color: var(--text-muted);">(optional)</span></label>
-                    <select id="settingCommitModel">
-                        <option value="">Same as default model</option>
+                <!-- TAB: Appearance -->
+                <div class="settings-tab-content" id="tabAppearance">
+                    <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">Display</h4>
+
+                    <div class="form-group">
+                        <label for="settingFontSize">Font Size</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingFontSize" min="10" max="20" step="1" value="13" style="flex: 1;">
+                            <span id="fontSizeValue" style="font-size: 12px; color: var(--text-secondary); min-width: 32px; text-align: right;">13px</span>
+                        </div>
+                        <small>Affects editor, sidebar, and chat text</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingEditorFontSize">Editor Font Size</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingEditorFontSize" min="10" max="24" step="1" value="14" style="flex: 1;">
+                            <span id="editorFontSizeValue" style="font-size: 12px; color: var(--text-secondary); min-width: 32px; text-align: right;">14px</span>
+                        </div>
+                        <small>Code editor font size (independent of UI)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Sidebar Panels</label>
+                        <small>Toggle which panels appear in the sidebar</small>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                                <input type="checkbox" id="settingShowIssues" checked> Show Issues panel
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                                <input type="checkbox" id="settingShowWorkflows" checked> Show Workflows panel
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Roles -->
+                <div class="settings-tab-content" id="tabRoles">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Active Role</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Roles control which tools are sent to the LLM. Fewer tools = less prompt overhead = faster, cheaper, and more focused responses.
+                    </p>
+
+                    <div class="form-group">
+                        <div class="role-cards" id="roleCards">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Active Tools for <span id="roleToolsLabel">current role</span></h4>
+                    <div id="roleToolsList" style="font-size: 12px;">
                         <!-- Populated dynamically -->
-                    </select>
-                    <small>Use a smaller/faster model for commit messages. Leave blank to use the default.</small>
+                    </div>
                 </div>
 
-                <div id="modelCapabilitiesInfo" style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; display: none;">
-                    <!-- Populated when a model is selected -->
-                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
@@ -567,7 +643,7 @@
 
     <!-- Main Script -->
     <script type="module">
-        import { EventBus, State, Storage, Providers, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
+        import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
         import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
         import { LLM, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
@@ -624,31 +700,120 @@
         };
 
         function populateSettingsForm() {
+            // --- General Tab ---
             document.getElementById('settingGiteaUrl').value = State.settings.giteaUrl || '';
             document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
             document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
             document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
 
-            // Populate provider dropdown
+            // Provider dropdown
             const providerSelect = document.getElementById('settingApiProvider');
             providerSelect.innerHTML = Providers.list().map(p =>
                 `<option value="${p.id}" ${p.id === State.settings.apiProvider ? 'selected' : ''}>${p.name}</option>`
             ).join('');
             updateProviderDescription();
 
-            // Populate model selects from cached models
+            // Model selects
             populateSettingsModelSelects(State.models);
-
-            // Set saved model value after populating
             const modelSelect = document.getElementById('settingLlmModel');
-            if (State.settings.llmModel) {
-                modelSelect.value = State.settings.llmModel;
-            }
+            if (State.settings.llmModel) modelSelect.value = State.settings.llmModel;
             
-            // Wire up event handlers (use onchange to avoid stacking)
             providerSelect.onchange = updateProviderDescription;
             modelSelect.onchange = showModelCapabilities;
             showModelCapabilities();
+
+            // --- Appearance Tab ---
+            const fontSlider = document.getElementById('settingFontSize');
+            const editorFontSlider = document.getElementById('settingEditorFontSize');
+            fontSlider.value = State.settings.fontSize || 13;
+            editorFontSlider.value = State.settings.editorFontSize || 14;
+            document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
+            document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
+
+            fontSlider.oninput = () => {
+                document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
+                // Live preview
+                document.documentElement.style.setProperty('--ui-font-size', fontSlider.value + 'px');
+            };
+            editorFontSlider.oninput = () => {
+                document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
+                document.documentElement.style.setProperty('--editor-font-size', editorFontSlider.value + 'px');
+            };
+
+            document.getElementById('settingShowIssues').checked = State.settings.showIssues !== false;
+            document.getElementById('settingShowWorkflows').checked = State.settings.showWorkflows !== false;
+
+            // --- Roles Tab ---
+            populateRoleCards();
+
+            // --- Settings tab switching ---
+            document.querySelectorAll('.settings-tab').forEach(tab => {
+                tab.onclick = () => {
+                    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(tab.dataset.tab).classList.add('active');
+                };
+            });
+        }
+
+        function populateRoleCards() {
+            const container = document.getElementById('roleCards');
+            const currentRole = State.settings.role || 'full';
+            
+            container.innerHTML = Roles.list().map(role => `
+                <div class="role-card ${role.id === currentRole ? 'active' : ''}" data-role="${role.id}">
+                    <div class="role-card-icon">${role.icon}</div>
+                    <div class="role-card-name">${role.name}</div>
+                    <div class="role-card-desc">${role.description}</div>
+                </div>
+            `).join('');
+
+            // Click handlers
+            container.querySelectorAll('.role-card').forEach(card => {
+                card.onclick = () => {
+                    container.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    updateRoleToolsList(card.dataset.role);
+                };
+            });
+
+            updateRoleToolsList(currentRole);
+        }
+
+        function updateRoleToolsList(roleId) {
+            const role = Roles.get(roleId);
+            const label = document.getElementById('roleToolsLabel');
+            const list = document.getElementById('roleToolsList');
+            
+            label.textContent = role.name;
+            
+            // Import LLMTools to get all tool names
+            const allTools = window._LLMTools ? window._LLMTools.definitions : [];
+            const isFullAccess = role.id === 'full';
+            
+            if (allTools.length === 0) {
+                list.innerHTML = '<div style="color: var(--text-muted); padding: 0.5rem 0;">Load models first to see tool details.</div>';
+                return;
+            }
+            
+            list.innerHTML = allTools.map(tool => {
+                const name = tool.function?.name || tool.name;
+                const desc = tool.function?.description || '';
+                const enabled = isFullAccess || role.tools.includes(name);
+                return `<div class="role-tool-item ${enabled ? 'enabled' : 'disabled'}">
+                    <span>${enabled ? '✅' : '⬜'}</span>
+                    <span><strong>${name}</strong> — ${desc.slice(0, 60)}${desc.length > 60 ? '…' : ''}</span>
+                </div>`;
+            }).join('');
+
+            // Show count
+            const enabledCount = isFullAccess ? allTools.length : allTools.filter(t => role.tools.includes(t.function?.name)).length;
+            list.insertAdjacentHTML('beforeend', `
+                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 11px;">
+                    ${enabledCount} of ${allTools.length} tools active · ~${(enabledCount * 120).toLocaleString()} fewer prompt tokens vs full
+                </div>
+            `);
         }
 
         function updateProviderDescription() {
@@ -734,6 +899,7 @@
         }
 
         window.saveSettings = function() {
+            // General
             State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
             State.settings.giteaToken = document.getElementById('settingGiteaToken').value.trim();
             State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
@@ -741,6 +907,19 @@
             State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
             State.settings.commitModel = document.getElementById('settingCommitModel').value.trim();
             State.settings.apiProvider = document.getElementById('settingApiProvider').value;
+
+            // Appearance
+            State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
+            State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
+            State.settings.showIssues = document.getElementById('settingShowIssues').checked;
+            State.settings.showWorkflows = document.getElementById('settingShowWorkflows').checked;
+
+            // Roles
+            const activeRoleCard = document.querySelector('.role-card.active');
+            State.settings.role = activeRoleCard ? activeRoleCard.dataset.role : 'full';
+
+            // Apply visual settings
+            applyVisualSettings();
 
             coreSaveSettings();
             window.closeSettings();
@@ -962,11 +1141,64 @@
         // INITIALIZATION
         // ============================================
 
+        // ============================================
+        // VISUAL SETTINGS & SIDEBAR COLLAPSE
+        // ============================================
+
+        function applyVisualSettings() {
+            // Font sizes
+            document.documentElement.style.setProperty('--ui-font-size', (State.settings.fontSize || 13) + 'px');
+            document.documentElement.style.setProperty('--editor-font-size', (State.settings.editorFontSize || 14) + 'px');
+
+            // Panel visibility
+            const issuesSections = document.querySelectorAll('[data-collapse="issuesPanelBody"]');
+            const workflowsSections = document.querySelectorAll('[data-collapse="workflowsPanelBody"]');
+            
+            issuesSections.forEach(el => {
+                el.closest('.sidebar-section').style.display = State.settings.showIssues !== false ? '' : 'none';
+            });
+            workflowsSections.forEach(el => {
+                el.closest('.sidebar-section').style.display = State.settings.showWorkflows !== false ? '' : 'none';
+            });
+        }
+
+        function initSidebarCollapse() {
+            document.querySelectorAll('.sidebar-header-collapsible').forEach(header => {
+                header.addEventListener('click', () => {
+                    const targetId = header.dataset.collapse;
+                    const body = document.getElementById(targetId);
+                    if (!body) return;
+
+                    const isCollapsed = body.classList.toggle('collapsed');
+                    const label = header.querySelector('span');
+                    if (label) {
+                        // Swap chevron
+                        const text = label.textContent.replace(/^[▾▸]\s*/, '');
+                        label.textContent = (isCollapsed ? '▸ ' : '▾ ') + text;
+                    }
+                });
+            });
+        }
+
+        // Expose LLMTools reference for role tool list display
+        // (Set after chat module loads)
+        function exposeLLMTools() {
+            // LLMTools is imported by chat.js, grab it from the module
+            import('./editor/js/llm.js').then(mod => {
+                window._LLMTools = mod.LLMTools;
+            }).catch(() => {
+                // Fallback: already available through chat module
+            });
+        }
+
         async function init() {
             console.log('Initializing AI Editor...');
             
             // Load settings
             loadSettings();
+            applyVisualSettings();
+            initSidebarCollapse();
+            exposeLLMTools();
             populateSettingsForm();
             
             // Initialize components
@@ -1039,6 +1271,10 @@
             EventBus.on('llm:generating', (isGenerating) => {
                 document.getElementById('btnSend').style.display = isGenerating ? 'none' : 'block';
                 document.getElementById('btnStop').style.display = isGenerating ? 'block' : 'none';
+            });
+
+            EventBus.on('issues:refresh', () => {
+                refreshIssues();
             });
 
             EventBus.on('editor:change', () => {
@@ -1853,28 +2089,31 @@
         function updateModelStatusBar() {
             const bar = document.getElementById('modelStatusBar');
             const model = State.models.find(m => m.id === State.settings.llmModel);
+            const role = Roles.get(State.settings.role);
             
-            if (!model || !model.capabilities) {
-                bar.style.display = 'none';
-                return;
-            }
-            
-            const caps = model.capabilities;
             const badges = [];
+
+            // Role badge
+            if (role && role.id !== 'full') {
+                badges.push(`<span class="cap-badge cap-yes">${role.icon} ${role.name}</span>`);
+            }
             
-            if (caps.supportsFunctionCalling) {
-                badges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
-            } else {
-                badges.push('<span class="cap-badge cap-no">🚫 Tools</span>');
-            }
-            if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes">🧠 Think</span>');
-            if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
-            if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes">💻 Code</span>');
-            if (model.pricing) {
-                badges.push(`<span class="cap-badge cap-neutral">$${model.pricing.input}/${model.pricing.output}</span>`);
-            }
-            if (model.meta?.contextTokens) {
-                badges.push(`<span class="cap-badge cap-neutral">${(model.meta.contextTokens / 1000).toFixed(0)}K</span>`);
+            if (model && model.capabilities) {
+                const caps = model.capabilities;
+                if (caps.supportsFunctionCalling) {
+                    badges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
+                } else {
+                    badges.push('<span class="cap-badge cap-no">🚫 Tools</span>');
+                }
+                if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes">🧠 Think</span>');
+                if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
+                if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes">💻 Code</span>');
+                if (model.pricing) {
+                    badges.push(`<span class="cap-badge cap-neutral">$${model.pricing.input}/${model.pricing.output}</span>`);
+                }
+                if (model.meta?.contextTokens) {
+                    badges.push(`<span class="cap-badge cap-neutral">${(model.meta.contextTokens / 1000).toFixed(0)}K</span>`);
+                }
             }
             
             bar.innerHTML = badges.join('');
