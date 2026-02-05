@@ -469,10 +469,11 @@ Roles.register({
     id: 'coder',
     name: 'Coder',
     icon: '💻',
-    description: 'Read/edit code, navigate project tree, read issues for context. No issue creation.',
+    description: 'Read/edit/create code, search the codebase, navigate project tree, read issues for context. No issue creation.',
     tools: [
         'read_current_file', 'replace_lines', 'insert_lines', 'delete_lines',
         'get_project_tree', 'open_file', 'read_file', 'list_open_tabs',
+        'create_file', 'search_in_files',
         'read_issue', 'list_issues'
     ]
 });
@@ -481,9 +482,10 @@ Roles.register({
     id: 'pm',
     name: 'Project Manager',
     icon: '📋',
-    description: 'Create/manage issues, read code for context. No code editing.',
+    description: 'Create/manage issues, search and read code for context. No code editing.',
     tools: [
         'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'search_in_files',
         'create_issue', 'update_issue', 'list_issues', 'read_issue',
         'add_issue_comment'
     ]
@@ -493,9 +495,10 @@ Roles.register({
     id: 'reviewer',
     name: 'Reviewer',
     icon: '🔍',
-    description: 'Read-only code access, can comment on issues. No code editing or issue creation.',
+    description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.',
     tools: [
         'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'search_in_files',
         'list_issues', 'read_issue', 'add_issue_comment'
     ]
 });

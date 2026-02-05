@@ -210,6 +210,108 @@ LLMTools.handlers = {
         };
     },
 
+    // === FILE CREATION TOOLS ===
+
+    create_file: async ({ path, content = '', message = '' }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+        const commitMsg = message || `Create ${path}`;
+
+        try {
+            const result = await GiteaAPI.createFile(owner, repo, path, content, commitMsg, branch);
+            // Refresh the file tree
+            EventBus.emit('tree:refresh');
+            return {
+                success: true,
+                path: path,
+                sha: result?.content?.sha || null,
+                message: `Created ${path} on branch ${branch}`
+            };
+        } catch (error) {
+            return { error: `Failed to create file ${path}: ${error.message}` };
+        }
+    },
+
+    // === SEARCH TOOLS ===
+
+    search_in_files: async ({ query, path = '', max_results = 20 }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+
+        try {
+            // Get all files from the tree (filtered by path prefix if provided)
+            let files = State.fileTree.filter(f => f.type !== 'dir');
+            if (path) {
+                files = files.filter(f => f.path.startsWith(path));
+            }
+
+            // Filter to searchable text files
+            const textExtensions = new Set([
+                'js', 'ts', 'jsx', 'tsx', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'hpp',
+                'java', 'rb', 'php', 'css', 'scss', 'html', 'htm', 'xml', 'json',
+                'yaml', 'yml', 'toml', 'md', 'txt', 'sh', 'bash', 'sql', 'vue',
+                'svelte', 'astro', 'conf', 'cfg', 'ini', 'env', 'gitignore',
+                'dockerfile', 'makefile', 'pl', 'pm'
+            ]);
+            files = files.filter(f => {
+                const ext = f.path.split('.').pop().toLowerCase();
+                const name = f.path.split('/').pop().toLowerCase();
+                return textExtensions.has(ext) || textExtensions.has(name);
+            });
+
+            const results = [];
+            const queryLower = query.toLowerCase();
+
+            // Search through files (limit to first 50 files to avoid API hammering)
+            for (const file of files.slice(0, 50)) {
+                if (results.length >= max_results) break;
+                try {
+                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
+                    const lines = fileData.content.split('\n');
+                    const matches = [];
+
+                    for (let i = 0; i < lines.length; i++) {
+                        if (lines[i].toLowerCase().includes(queryLower)) {
+                            matches.push({
+                                line: i + 1,
+                                text: lines[i].trim().substring(0, 200)
+                            });
+                            if (matches.length >= 5) break; // Max 5 matches per file
+                        }
+                    }
+
+                    if (matches.length > 0) {
+                        results.push({
+                            path: file.path,
+                            matches: matches
+                        });
+                    }
+                } catch (e) {
+                    // Skip files that can't be read (binary, etc.)
+                }
+            }
+
+            return {
+                query: query,
+                files_searched: Math.min(files.length, 50),
+                total_files: files.length,
+                results: results,
+                truncated: files.length > 50,
+                message: results.length > 0
+                    ? `Found "${query}" in ${results.length} files`
+                    : `No matches for "${query}" in ${Math.min(files.length, 50)} files`
+            };
+        } catch (error) {
+            return { error: `Search failed: ${error.message}` };
+        }
+    },
+
     // === ISSUE TOOL HANDLERS ===
 
     list_issues: async ({ state = 'open', labels = '' } = {}) => {
@@ -218,7 +320,7 @@ LLMTools.handlers = {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const params = new URLSearchParams({ state, type: 'issues', limit: '20' });
+            const params = new URLSearchParams({ state, type: 'issues', limit: '50' });
             if (labels) params.append('labels', labels);
             const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
             const response = await fetch(url, {
@@ -670,25 +772,45 @@ async function handleUserInput() {
 function detectIntent(input) {
     const lower = input.toLowerCase();
     
-    if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-        lower.includes('add') || lower.includes('remove') || lower.includes('fix') ||
-        lower.includes('refactor') || lower.includes('update') || lower.includes('rewrite')) {
-        return 'edit';
+    // Commit message is very specific, check first
+    if (lower.includes('commit message') || lower.includes('generate commit')) {
+        return 'commit';
     }
     
+    // Issue reference with a number — but only if it's a simple "work on issue" request
+    // Complex requests like "fix the bug in issue #3" should go to general for tool use
+    if ((lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue'))
+        && !lower.includes('find') && !lower.includes('search') && !lower.includes('create')) {
+        return 'issue';
+    }
+    
+    // Edit intent — ONLY if a file is already open in the editor.
+    // Without a file open, "fix this" or "change this" needs the general handler
+    // so the LLM can use tools to find and open the right file first.
+    if (State.currentFile) {
+        // Strong edit signals when we have a file open
+        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+            lower.includes('refactor') || lower.includes('rewrite')) {
+            return 'edit';
+        }
+        // Weaker signals — only treat as edit if the request is clearly about the current file
+        // "fix this", "add a function", "remove the loop" — about current file
+        // "find and fix", "add a new file", "remove the old config" — investigative
+        if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
+            && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
+            && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
+            && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')) {
+            return 'edit';
+        }
+    }
+    
+    // Explain — can work with or without a file (LLM has tools to read files)
     if (lower.includes('explain') || lower.includes('what does') || lower.includes('how does') ||
         lower.includes('why does') || lower.includes('understand')) {
         return 'explain';
     }
     
-    if (lower.includes('commit message') || lower.includes('generate commit')) {
-        return 'commit';
-    }
-    
-    if (lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue')) {
-        return 'issue';
-    }
-    
+    // Everything else goes to the general handler which has full tool access
     return 'general';
 }
 
@@ -698,7 +820,10 @@ function detectIntent(input) {
 
 async function handleEditRequest(input) {
     if (!State.currentFile) {
-        addMessage('system', '⚠️ Please open a file first.');
+        // No file open — fall through to general handler so the LLM can
+        // use tools to find and open the right file first
+        addMessage('system', 'ℹ️ No file open — investigating with tools...');
+        await handleGeneralRequest(input);
         return;
     }
 
@@ -772,15 +897,13 @@ async function handleIssueRequest(input) {
         return;
     }
 
+    // Show issue context
     addMessage('system', `📋 **Issue #${issue.number}: ${issue.title}**\n\n${issue.body || 'No description'}`);
     
-    addStreamingMessage();
-
-    const analysis = await analyzeIssue(issue, (token, content) => {
-        updateStreamingMessage(content);
-    });
-
-    finalizeStreamingMessage(analysis, { hasCode: false });
+    // Route through general handler with issue context injected
+    // This gives the LLM full tool access to investigate and work on the issue
+    const enrichedInput = `Work on issue #${issue.number}: "${issue.title}"\n\nIssue description:\n${issue.body || 'No description'}\n\nOriginal request: ${input}\n\nPlease investigate the codebase to understand what needs to change, then make the necessary edits.`;
+    await handleGeneralRequest(enrichedInput);
 }
 
 async function handleGeneralRequest(input) {
