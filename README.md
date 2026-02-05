@@ -12,6 +12,8 @@ A pure HTML/JS code editor with AI assistance, Gitea integration, and a plugin s
 - **Auto-save drafts**: Changes saved to localStorage, manual commit to Gitea
 
 ### Editor
+- **Multi-tab editing**: Open multiple files simultaneously
+- **Preview tabs**: Single-click opens preview (italic), double-click pins the tab
 - Full CRUD operations (create, rename, delete files)
 - Branch management (create new branches, switch between them)
 - Protected branch support (main requires branching)
@@ -19,9 +21,10 @@ A pure HTML/JS code editor with AI assistance, Gitea integration, and a plugin s
 
 ### AI Assistant
 - Ask to edit, explain, or refactor code
+- **LLM Tools**: AI can directly read/edit files and navigate the project
 - LLM edits directly in buffer, you review before save
-- Issue analysis and implementation suggestions
-- Context-aware (knows current file, project, branch)
+- Issue analysis with **dependency detection** (parses "depends on #X")
+- Context-aware (knows current file, project, branch, open tabs)
 
 ### Plugin System
 - Manifest-based registration
@@ -81,6 +84,19 @@ ai-editor/
 - `GET /models` - List available models
 - `POST /chat/completions` - Chat completion (streaming supported)
 
+### LLM Tools (Function Calling)
+The AI assistant has access to these tools for direct file operations:
+- `read_current_file` - Read the active file in the editor (returns content + line count)
+- `replace_lines` - Replace specific lines (safer than full file replacement)
+- `insert_lines` - Insert new lines at a position
+- `delete_lines` - Delete specific lines
+- `get_project_tree` - Query the project's file structure
+- `open_file` - Open a specific file in the editor
+- `read_file` - Read any file without opening it
+- `list_open_tabs` - List all currently open tabs
+
+**Note:** The LLM is instructed to use surgical line-based edits rather than replacing entire files to prevent accidental data loss.
+
 ## Plugin Development
 
 ```javascript
@@ -116,10 +132,12 @@ export default MyPlugin;
 
 ## Future Enhancements
 
-- [ ] Multi-tab editing
+- [x] Multi-tab editing (v0.2.0)
+- [x] Preview tabs - single click opens preview, double click pins (v0.2.0)
+- [x] LLM tools for file operations (v0.2.0)
+- [x] Issue dependency parsing (v0.2.0)
 - [ ] Diff viewer for pending changes
 - [ ] PR creation workflow
-- [ ] Tool/function calling for LLMs
 - [ ] File search (fuzzy finder)
 - [ ] Git blame/history view
 - [ ] Collaborative editing (WebRTC?)

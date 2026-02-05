@@ -26,13 +26,23 @@ LLMTools.handlers = {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor' };
         }
+<<<<<<< Updated upstream
         return {
             path: State.currentFile.path,
             content: State.editorContent,
+=======
+        const content = State.editorContent;
+        const lines = content.split('\n');
+        return {
+            path: State.currentFile.path,
+            content: content,
+            line_count: lines.length,
+>>>>>>> Stashed changes
             language: State.currentFile.path.split('.').pop()
         };
     },
 
+<<<<<<< Updated upstream
     edit_current_file: async ({ content }) => {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor' };
@@ -42,6 +52,105 @@ LLMTools.handlers = {
             success: true,
             path: State.currentFile.path,
             message: 'File content updated in editor. User should review and save.'
+=======
+    replace_lines: async ({ start_line, end_line, new_content }) => {
+        if (!State.currentFile) {
+            return { error: 'No file is currently open in the editor' };
+        }
+        
+        const lines = State.editorContent.split('\n');
+        const totalLines = lines.length;
+        
+        // Validate line numbers
+        if (start_line < 1 || end_line < start_line || start_line > totalLines) {
+            return { 
+                error: `Invalid line range. File has ${totalLines} lines. Got start=${start_line}, end=${end_line}` 
+            };
+        }
+        
+        // Clamp end_line to file length
+        const clampedEnd = Math.min(end_line, totalLines);
+        
+        // Replace lines (convert to 0-indexed)
+        const newLines = new_content.split('\n');
+        lines.splice(start_line - 1, clampedEnd - start_line + 1, ...newLines);
+        
+        const newContent = lines.join('\n');
+        applyEdit(newContent);
+        
+        return {
+            success: true,
+            path: State.currentFile.path,
+            replaced_lines: `${start_line}-${clampedEnd}`,
+            new_line_count: lines.length,
+            message: `Replaced lines ${start_line}-${clampedEnd} with ${newLines.length} new lines. Review and save when ready.`
+        };
+    },
+
+    insert_lines: async ({ after_line, content }) => {
+        if (!State.currentFile) {
+            return { error: 'No file is currently open in the editor' };
+        }
+        
+        const lines = State.editorContent.split('\n');
+        const totalLines = lines.length;
+        
+        // Validate
+        if (after_line < 0 || after_line > totalLines) {
+            return { 
+                error: `Invalid line number. File has ${totalLines} lines. after_line must be 0-${totalLines}` 
+            };
+        }
+        
+        // Insert lines
+        const newLines = content.split('\n');
+        lines.splice(after_line, 0, ...newLines);
+        
+        const newContent = lines.join('\n');
+        applyEdit(newContent);
+        
+        return {
+            success: true,
+            path: State.currentFile.path,
+            inserted_after: after_line,
+            lines_inserted: newLines.length,
+            new_line_count: lines.length,
+            message: `Inserted ${newLines.length} lines after line ${after_line}. Review and save when ready.`
+        };
+    },
+
+    delete_lines: async ({ start_line, end_line }) => {
+        if (!State.currentFile) {
+            return { error: 'No file is currently open in the editor' };
+        }
+        
+        const lines = State.editorContent.split('\n');
+        const totalLines = lines.length;
+        
+        // Validate
+        if (start_line < 1 || end_line < start_line || start_line > totalLines) {
+            return { 
+                error: `Invalid line range. File has ${totalLines} lines.` 
+            };
+        }
+        
+        const clampedEnd = Math.min(end_line, totalLines);
+        const deletedCount = clampedEnd - start_line + 1;
+        
+        // Delete lines
+        lines.splice(start_line - 1, deletedCount);
+        
+        const newContent = lines.join('\n');
+        applyEdit(newContent);
+        
+        return {
+            success: true,
+            path: State.currentFile.path,
+            deleted_lines: `${start_line}-${clampedEnd}`,
+            lines_deleted: deletedCount,
+            new_line_count: lines.length,
+            message: `Deleted lines ${start_line}-${clampedEnd}. Review and save when ready.`
+>>>>>>> Stashed changes
         };
     },
 
@@ -95,9 +204,17 @@ LLMTools.handlers = {
         const { owner, repo } = State.currentProject;
         try {
             const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
+<<<<<<< Updated upstream
             return {
                 path: file.path,
                 content: file.content,
+=======
+            const lines = file.content.split('\n');
+            return {
+                path: file.path,
+                content: file.content,
+                line_count: lines.length,
+>>>>>>> Stashed changes
                 language: path.split('.').pop()
             };
         } catch (error) {

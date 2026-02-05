@@ -310,6 +310,7 @@ const GiteaAPI = {
 
     async listWorkflowRuns(owner, repo) {
         try {
+<<<<<<< Updated upstream
             // Gitea Actions API - try different endpoint formats
             let runs;
             try {
@@ -330,6 +331,22 @@ const GiteaAPI = {
             const runsList = Array.isArray(runs) ? runs : [];
             
             return runsList.map(r => ({
+=======
+            // Gitea Actions API endpoint
+            const response = await this.request('GET', `/repos/${owner}/${repo}/actions/runs?limit=20`);
+            
+            // Handle various response formats from different Gitea versions
+            let runs = [];
+            if (Array.isArray(response)) {
+                runs = response;
+            } else if (response && response.workflow_runs) {
+                runs = response.workflow_runs;
+            } else if (response && response.runs) {
+                runs = response.runs;
+            }
+            
+            return runs.map(r => ({
+>>>>>>> Stashed changes
                 id: r.id,
                 name: r.name || r.workflow_name || 'Workflow',
                 status: r.status,

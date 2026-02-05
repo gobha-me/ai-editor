@@ -205,13 +205,19 @@ const EditorPrompts = {
     systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
 
 You have access to tools that let you:
+<<<<<<< Updated upstream
 - Read the current file open in the editor (read_current_file)
 - Edit the current file's content (edit_current_file)
+=======
+- Read the current file open in the editor (read_current_file) - returns full content with line count
+- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines) - ALWAYS prefer these over full file replacement
+>>>>>>> Stashed changes
 - Query the project file tree (get_project_tree)
 - Open specific files in the editor (open_file)
 - Read any file's content without opening it (read_file)
 - List all open tabs (list_open_tabs)
 
+<<<<<<< Updated upstream
 When asked to edit code:
 1. Use read_current_file to see the current content
 2. Make precise, minimal changes to achieve the goal
@@ -222,11 +228,20 @@ When working on issues or tasks:
 1. Use get_project_tree to understand the project structure
 2. Use open_file to navigate to relevant files
 3. Use read_file to examine related code without switching tabs
+=======
+IMPORTANT EDITING RULES:
+1. ALWAYS use read_current_file FIRST to see the current content and line count
+2. Use replace_lines for modifying existing code - specify exact line numbers
+3. Use insert_lines to add new code without replacing existing lines
+4. Use delete_lines to remove code
+5. NEVER try to replace the entire file at once - make targeted edits
+6. After editing, explain what lines you changed
+>>>>>>> Stashed changes
 
-When explaining code:
-1. Be concise but thorough
-2. Point out potential issues or improvements
-3. Reference specific line numbers when relevant
+When working on issues or tasks:
+1. Use get_project_tree to understand the project structure
+2. Use open_file to navigate to relevant files
+3. Use read_file to examine related code without switching tabs
 
 Current context:
 - Project: {{project}}
@@ -378,7 +393,11 @@ const LLMTools = {
             type: 'function',
             function: {
                 name: 'read_current_file',
+<<<<<<< Updated upstream
                 description: 'Read the content of the currently open file in the editor',
+=======
+                description: 'Read the content of the currently open file in the editor. Returns the full file content, path, and line count.',
+>>>>>>> Stashed changes
                 parameters: {
                     type: 'object',
                     properties: {},
@@ -389,6 +408,7 @@ const LLMTools = {
         {
             type: 'function',
             function: {
+<<<<<<< Updated upstream
                 name: 'edit_current_file',
                 description: 'Replace the entire content of the currently open file with new content',
                 parameters: {
@@ -400,6 +420,69 @@ const LLMTools = {
                         }
                     },
                     required: ['content']
+=======
+                name: 'replace_lines',
+                description: 'Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        start_line: {
+                            type: 'integer',
+                            description: 'First line to replace (1-indexed, inclusive)'
+                        },
+                        end_line: {
+                            type: 'integer', 
+                            description: 'Last line to replace (1-indexed, inclusive). Use same as start_line to replace single line.'
+                        },
+                        new_content: {
+                            type: 'string',
+                            description: 'The new content to insert (can be multiple lines)'
+                        }
+                    },
+                    required: ['start_line', 'end_line', 'new_content']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'insert_lines',
+                description: 'Insert new lines at a specific position in the current file without replacing existing content.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        after_line: {
+                            type: 'integer',
+                            description: 'Insert after this line number (0 to insert at beginning, 1-indexed)'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'The content to insert (can be multiple lines)'
+                        }
+                    },
+                    required: ['after_line', 'content']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'delete_lines',
+                description: 'Delete specific lines from the current file.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        start_line: {
+                            type: 'integer',
+                            description: 'First line to delete (1-indexed, inclusive)'
+                        },
+                        end_line: {
+                            type: 'integer',
+                            description: 'Last line to delete (1-indexed, inclusive)'
+                        }
+                    },
+                    required: ['start_line', 'end_line']
+>>>>>>> Stashed changes
                 }
             }
         },
