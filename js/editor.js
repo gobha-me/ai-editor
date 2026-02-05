@@ -28,61 +28,74 @@ let editorInstance = null;
 // ============================================
 
 async function loadCodeMirror() {
-    // Load CodeMirror 6 modules from CDN
-    const CDN = 'https://esm.sh';
-    
-    try {
-        EventBus.emit('editor:loading', 'Loading CodeMirror...');
+    // Try multiple CDNs in order of preference
+    const CDN_PROVIDERS = [
+        'https://cdn.jsdelivr.net/npm',
+        'https://unpkg.com',
+        'https://esm.sh'
+    ];
 
-        // Core modules
-        const [
-            cmView,
-            cmState,
-            cmBasicSetup,
-            cmCommands,
-            cmLanguage,
-            cmLint
-        ] = await Promise.all([
-            import(`${CDN}/@codemirror/view@6`),
-            import(`${CDN}/@codemirror/state@6`),
-            import(`${CDN}/codemirror@6`),
-            import(`${CDN}/@codemirror/commands@6`),
-            import(`${CDN}/@codemirror/language@6`),
-            import(`${CDN}/@codemirror/lint@6`)
-        ]);
+    for (const CDN of CDN_PROVIDERS) {
+        try {
+            EventBus.emit('editor:loading', `Loading CodeMirror from ${CDN}...`);
+            console.log(`Attempting to load CodeMirror from: ${CDN}`);
 
-        EditorView = cmView.EditorView;
-        EditorState = cmState.EditorState;
-        basicSetup = cmBasicSetup.basicSetup;
-        keymap = cmView.keymap;
-        lineNumbers = cmView.lineNumbers;
-        highlightActiveLineGutter = cmView.highlightActiveLineGutter;
-        highlightActiveLine = cmView.highlightActiveLine;
-        
-        // Commands
-        indentWithTab = cmCommands.indentWithTab;
-        defaultKeymap = cmCommands.defaultKeymap;
-        historyKeymap = cmCommands.historyKeymap;
-        history = cmCommands.history;
-        indentOnInput = cmLanguage.indentOnInput;
-        bracketMatching = cmLanguage.bracketMatching;
-        foldGutter = cmLanguage.foldGutter;
+            // Core modules
+            const [
+                cmView,
+                cmState,
+                cmBasicSetup,
+                cmCommands,
+                cmLanguage,
+                cmLint
+            ] = await Promise.all([
+                import(`${CDN}/@codemirror/view@6`),
+                import(`${CDN}/@codemirror/state@6`),
+                import(`${CDN}/codemirror@6`),
+                import(`${CDN}/@codemirror/commands@6`),
+                import(`${CDN}/@codemirror/language@6`),
+                import(`${CDN}/@codemirror/lint@6`)
+            ]);
 
-        // Theme
-        const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
-        oneDark = cmOneDark.oneDark;
+            EditorView = cmView.EditorView;
+            EditorState = cmState.EditorState;
+            basicSetup = cmBasicSetup.basicSetup;
+            keymap = cmView.keymap;
+            lineNumbers = cmView.lineNumbers;
+            highlightActiveLineGutter = cmView.highlightActiveLineGutter;
+            highlightActiveLine = cmView.highlightActiveLine;
+            
+            // Commands
+            indentWithTab = cmCommands.indentWithTab;
+            defaultKeymap = cmCommands.defaultKeymap;
+            historyKeymap = cmCommands.historyKeymap;
+            history = cmCommands.history;
+            indentOnInput = cmLanguage.indentOnInput;
+            bracketMatching = cmLanguage.bracketMatching;
+            foldGutter = cmLanguage.foldGutter;
 
-        // Load language modules
-        await loadLanguages(CDN);
+            // Theme
+            const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
+            oneDark = cmOneDark.oneDark;
 
-        EventBus.emit('editor:loaded', 'CodeMirror loaded');
-        return true;
+            // Load language modules
+            await loadLanguages(CDN);
 
-    } catch (error) {
-        console.error('Failed to load CodeMirror:', error);
-        EventBus.emit('editor:error', error);
-        return false;
+            console.log(`Successfully loaded CodeMirror from ${CDN}`);
+            EventBus.emit('editor:loaded', `CodeMirror loaded from ${CDN}`);
+            return true;
+
+        } catch (error) {
+            console.warn(`Failed to load from ${CDN}:`, error);
+            // Continue to next CDN
+        }
     }
+
+    // All CDNs failed
+    const error = new Error('Failed to load CodeMirror from all CDN providers');
+    console.error('Failed to load CodeMirror:', error);
+    EventBus.emit('editor:error', error);
+    return false;
 }
 
 async function loadLanguages(CDN) {
@@ -112,6 +125,8 @@ async function loadLanguages(CDN) {
         if (result.status === 'fulfilled') {
             const [name] = entries[index];
             languageModules[name] = result.value;
+        } else {
+            console.warn(`Failed to load language: ${entries[index][0]}`, result.reason);
         }
     });
 }
@@ -162,9 +177,10 @@ async function createEditor(options) {
     const { container, doc: content = '', filename = '' } = options;
     
     if (!EditorView) {
+        console.log('CodeMirror not loaded, attempting to load...');
         const loaded = await loadCodeMirror();
         if (!loaded) {
-            throw new Error('Failed to load CodeMirror');
+            throw new Error('Failed to load CodeMirror from all CDN providers. Check network connectivity or firewall settings.');
         }
     }
 
