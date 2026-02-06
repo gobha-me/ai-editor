@@ -990,13 +990,31 @@
         };
 
         window.createNewBranch = async function() {
-            const name = document.getElementById('newBranchName').value.trim();
-            const from = document.getElementById('newBranchFrom').value;
+            let name = document.getElementById('newBranchName').value.trim();
+            const from = document.getElementById('newBranchFrom').value || State.currentBranch || 'main';
             
             if (!name) {
                 showToast('Please enter a branch name', 'warning');
                 return;
             }
+
+            // Sanitize for git ref naming rules:
+            // Replace spaces/invalid chars with hyphens, collapse multiples
+            name = name
+                .replace(/[\s~^:?*\[\]\\@{}"'<>|]/g, '-') // invalid git ref chars → hyphen
+                .replace(/\.{2,}/g, '.')          // collapse consecutive dots
+                .replace(/-{2,}/g, '-')           // collapse consecutive hyphens
+                .replace(/^[-.]/, '')             // cannot start with - or .
+                .replace(/[-.]+$/, '')            // cannot end with - or .
+                .replace(/\.lock$/i, '');         // cannot end with .lock
+            
+            if (!name) {
+                showToast('Branch name contains only invalid characters', 'warning');
+                return;
+            }
+
+            // Update the input so user sees what was actually used
+            document.getElementById('newBranchName').value = name;
             
             const { owner, repo } = State.currentProject;
             
