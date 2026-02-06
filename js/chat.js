@@ -1145,7 +1145,8 @@ async function handleGeneralRequest(input) {
 
     // Iterative tool call loop — max 8 rounds to support complex workflows
     const MAX_TOOL_ROUNDS = 8;
-    let finalContent = '';
+    let finalContent = '';          // Accumulated across rounds (used for error fallback)
+    let lastRoundContent = '';      // Only the current round's text (used for DOM + history)
     const toolActions = []; // Track all tool executions for fallback summary
 
     // Keep isGenerating true for the entire tool loop
@@ -1170,18 +1171,15 @@ async function handleGeneralRequest(input) {
                 tools: roleTools,
                 onToken: (token, fullContent) => {
                     content = fullContent;
-                    if (round === 0) {
-                        updateStreamingMessage(fullContent);
-                    } else {
-                        // Show follow-up content combined with previous
-                        const combined = finalContent ? finalContent + '\n\n' + fullContent : fullContent;
-                        updateStreamingMessage(combined);
-                    }
+                    // Always show only THIS round's content in the streaming element.
+                    // finalContent accumulation is handled after the round completes,
+                    // and each round gets its own finalized DOM element.
+                    updateStreamingMessage(fullContent);
                 }
             };
 
             if (round > 0) {
-                updateStreamingMessage(finalContent || '*(processing tool results...)*');
+                updateStreamingMessage('*(processing tool results…)*');
             }
 
             result = await Promise.race([
@@ -1200,6 +1198,7 @@ async function handleGeneralRequest(input) {
         } catch (err) {
             // Abort any in-flight request
             LLM.stop();
+            lastRoundContent = '';  // Ensure error paths use finalContent fallback
             
             if (_cancelToolLoop) break;
             
@@ -1239,6 +1238,7 @@ async function handleGeneralRequest(input) {
         }
 
         // Accumulate text content across rounds
+        lastRoundContent = cleanContent;
         if (cleanContent.trim()) {
             finalContent = finalContent ? finalContent + '\n\n' + cleanContent : cleanContent;
         }
@@ -1314,12 +1314,15 @@ async function handleGeneralRequest(input) {
                 });
             }
 
-            // Prepare UI for next round
+            // Prepare UI for next round — commit THIS round's text only
             const partialEl = document.getElementById('streaming-message');
             if (partialEl) {
-                if (finalContent) {
-                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(finalContent);
+                if (cleanContent.trim()) {
+                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(cleanContent);
                     partialEl.classList.remove('streaming');
+                } else {
+                    // Round produced no text (only tool calls) — remove empty element
+                    partialEl.remove();
                 }
                 partialEl.removeAttribute('id');
             }
@@ -1354,7 +1357,10 @@ async function handleGeneralRequest(input) {
         }
     }
 
-    finalizeStreamingMessage(finalContent, { hasCode: false });
+    // Use last round's content for the final DOM element (avoids duplication
+    // with text already committed to previous elements between tool rounds).
+    // Fall back to finalContent for error/empty paths where lastRoundContent is blank.
+    finalizeStreamingMessage(lastRoundContent.trim() ? lastRoundContent : finalContent, { hasCode: false });
 }
 
 /**
