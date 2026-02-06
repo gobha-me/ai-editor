@@ -4,7 +4,7 @@
  */
 
 import { State, EventBus, Storage } from './core.js';
-import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
+import { LLM, LLMDebug, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
 import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
 import { GiteaAPI, loadFile } from './gitea.js';
 
@@ -1084,9 +1084,25 @@ async function handleGeneralRequest(input) {
             break;
         }
 
-        // All tool calls come from the structured API response (native tool calling)
-        const toolCalls = result.toolCalls || [];
-        const cleanContent = stripThinkBlocks(content || result.content || '');
+        // === LAYER 1: Structured tool_calls from API (primary path) ===
+        let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
+        let cleanContent = stripThinkBlocks(content || result.content || '');
+        let toolCallSource = toolCalls.length > 0 ? 'structured' : null;
+
+        // === LAYER 2: Text-format fallback ===
+        // If no structured tool_calls, check content for text-format tool calls.
+        // Handles APIs (e.g. Venice + Kimi K2) that emit tool call tokens in
+        // delta.content instead of delta.tool_calls.
+        // Safe: think blocks already stripped by streaming handler + stripThinkBlocks.
+        if (toolCalls.length === 0 && cleanContent) {
+            const parsed = parseTextToolCalls(cleanContent);
+            if (parsed.toolCalls.length > 0) {
+                toolCalls = parsed.toolCalls;
+                cleanContent = parsed.cleanContent;
+                toolCallSource = 'text';
+                updateStreamingMessage(cleanContent || finalContent || '');
+            }
+        }
 
         // Accumulate text content across rounds
         if (cleanContent.trim()) {
@@ -1095,7 +1111,8 @@ async function handleGeneralRequest(input) {
 
         if (toolCalls.length > 0) {
             // === EXECUTE TOOL CALLS ===
-            const toolResults = [];
+            const structuredResults = [];  // For proper OpenAI tool threading
+            const textResults = [];        // For user-message injection fallback
 
             for (const toolCall of toolCalls) {
                 const toolName = toolCall.function?.name || 'unknown';
@@ -1116,22 +1133,39 @@ async function handleGeneralRequest(input) {
                     error: !!toolResult?.error
                 });
 
-                toolResults.push({
-                    tool_call_id: toolCall.id,
-                    role: 'tool',
-                    content: JSON.stringify(toolResult)
-                });
+                if (toolCallSource === 'structured') {
+                    structuredResults.push({
+                        tool_call_id: toolCall.id,
+                        role: 'tool',
+                        content: JSON.stringify(toolResult)
+                    });
+                } else {
+                    textResults.push({ name: toolName, result: toolResult });
+                }
             }
 
             // === BUILD THREAD FOR NEXT ROUND ===
-            messages.push({
-                role: 'assistant',
-                content: cleanContent || null,
-                tool_calls: toolCalls
-            });
-
-            for (const tr of toolResults) {
-                messages.push(tr);
+            if (toolCallSource === 'structured') {
+                // Proper OpenAI threading: assistant with tool_calls → tool results
+                messages.push({
+                    role: 'assistant',
+                    content: cleanContent || null,
+                    tool_calls: toolCalls
+                });
+                for (const tr of structuredResults) {
+                    messages.push(tr);
+                }
+            } else {
+                // Text-parsed: inject results as user context
+                // (API didn't return structured tool_calls, so we can't use tool role)
+                messages.push({ role: 'assistant', content: cleanContent || null });
+                const summary = textResults.map(tr =>
+                    `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
+                ).join('\n\n');
+                messages.push({
+                    role: 'user',
+                    content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`
+                });
             }
 
             // Prepare UI for next round
@@ -1173,6 +1207,96 @@ async function handleGeneralRequest(input) {
     finalizeStreamingMessage(finalContent, { hasCode: false });
 }
 
+/**
+ * Parse tool calls embedded as text in LLM content.
+ * 
+ * IMPORTANT: This is a FALLBACK for APIs that don't return structured tool_calls
+ * (e.g. Venice.ai + Kimi K2). Only called when result.toolCalls is empty.
+ * Content MUST have think blocks stripped before calling this function.
+ * 
+ * Returns { toolCalls: [], cleanContent: string }
+ */
+function parseTextToolCalls(text) {
+    if (!text) return { toolCalls: [], cleanContent: text };
+
+    const toolCalls = [];
+    let cleanContent = text;
+    let match;
+
+    // Kimi K2: <|tool_calls_section_begin|>...<|tool_calls_section_end|>
+    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
+    while ((match = kimiSectionPattern.exec(text)) !== null) {
+        const sectionBlock = match[1];
+        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
+        let kimiMatch;
+        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
+            const fnName = kimiMatch[1].trim();
+            const argsStr = kimiMatch[2].trim();
+            let args = {};
+            try { args = JSON.parse(argsStr); } catch (e) { args = { _raw: argsStr }; }
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: { name: fnName, arguments: JSON.stringify(args) }
+            });
+        }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // JSON in tags: <tool_call>{"name":"fn","arguments":{...}}</tool_call> or <function_call>
+    const jsonToolPattern = /<(?:tool_call|function_call)>\s*(\{[\s\S]*?\})\s*<\/(?:tool_call|function_call)>/gi;
+    while ((match = jsonToolPattern.exec(text)) !== null) {
+        try {
+            const parsed = JSON.parse(match[1]);
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: {
+                    name: parsed.name || parsed.function?.name || '',
+                    arguments: typeof parsed.arguments === 'string'
+                        ? parsed.arguments
+                        : JSON.stringify(parsed.arguments || parsed.parameters || {})
+                }
+            });
+            cleanContent = cleanContent.replace(match[0], '');
+        } catch (e) { /* invalid JSON, skip */ }
+    }
+
+    // MiniMax XML: <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
+    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
+    while ((match = minimaxPattern.exec(text)) !== null) {
+        const invokeBlock = match[1];
+        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
+        let invokeMatch;
+        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
+            const args = {};
+            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
+            let paramMatch;
+            while ((paramMatch = paramPattern.exec(invokeMatch[2])) !== null) {
+                args[paramMatch[1]] = paramMatch[2].trim();
+            }
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: { name: invokeMatch[1], arguments: JSON.stringify(args) }
+            });
+        }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // Generic XML: <tool_call><name>fn</name><arguments>{...}</arguments></tool_call>
+    const genericPattern = /<tool_call>\s*<name>([^<]+)<\/name>\s*<arguments>([\s\S]*?)<\/arguments>\s*<\/tool_call>/gi;
+    while ((match = genericPattern.exec(text)) !== null) {
+        toolCalls.push({
+            id: `text_call_${toolCalls.length}`,
+            type: 'function',
+            function: { name: match[1].trim(), arguments: match[2].trim() }
+        });
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    return { toolCalls, cleanContent: cleanContent.trim() };
+}
 
 // ============================================
 // EDIT APPROVAL
