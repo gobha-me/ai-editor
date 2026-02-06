@@ -758,9 +758,7 @@ function setupInputHandlers() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             await handleUserInput();
-        let fullContent = content || result.content || '';
-        // Only strip think blocks for display, keep full content for message history
-        let cleanContent = stripThinkBlocks(fullContent);
+        }
     });
 }
 
@@ -820,7 +818,9 @@ function updateStreamingMessage(content) {
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
         const contentEl = messageEl.querySelector('.message-content');
-        contentEl.innerHTML = formatMessageContent(content);
+        // Strip think blocks for display only
+        const displayContent = stripThinkBlocks(content);
+        contentEl.innerHTML = formatMessageContent(displayContent);
         scrollToBottom();
     }
 }
@@ -832,7 +832,9 @@ function finalizeStreamingMessage(content, meta = {}) {
         messageEl.removeAttribute('id');
         
         const contentEl = messageEl.querySelector('.message-content');
-        contentEl.innerHTML = formatMessageContent(content);
+        // Strip think blocks for display only
+        const displayContent = stripThinkBlocks(content);
+        contentEl.innerHTML = formatMessageContent(displayContent);
         
         // Add action buttons if there's code
         if (meta.hasCode) {
@@ -846,13 +848,12 @@ function finalizeStreamingMessage(content, meta = {}) {
         }
     }
 
-    // Add to history
+    // Add to history with FULL content (including think blocks for LLM context)
     State.chatHistory.push({
         role: 'assistant',
-        content,
+        content,  // Full content with think blocks preserved
         timestamp: Date.now(),
-                    // Use full content (with think blocks) for LLM context
-                    content: fullContent || '',
+        ...meta
     });
     Storage.set('chatHistory', State.chatHistory.slice(-100));
 }
@@ -861,8 +862,7 @@ function renderMessage(message) {
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${message.role}`;
     
-                // Use full content (with think blocks) for LLM context
-                messages.push({ role: 'assistant', content: fullContent || '' });
+    const roleIcon = {
         user: '👤',
         assistant: '🤖',
         system: 'ℹ️',
@@ -878,12 +878,15 @@ function renderMessage(message) {
 
     const time = new Date(message.timestamp).toLocaleTimeString();
 
+    // Strip think blocks for display only
+    const displayContent = stripThinkBlocks(message.content);
+
     messageEl.innerHTML = `
         <div class="message-header">
             <span class="message-role">${roleIcon} ${roleName}</span>
             <span class="message-time">${time}</span>
         </div>
-        <div class="message-content">${formatMessageContent(message.content)}</div>
+        <div class="message-content">${formatMessageContent(displayContent)}</div>
     `;
 
     chatContainer.appendChild(messageEl);
@@ -1499,7 +1502,7 @@ async function handleGeneralRequest(input) {
             const partialEl = document.getElementById('streaming-message');
             if (partialEl) {
                 if (cleanContent.trim()) {
-                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(cleanContent);
+                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(stripThinkBlocks(cleanContent));
                     partialEl.classList.remove('streaming');
                 } else {
                     // Round produced no text (only tool calls) — remove empty element
@@ -1793,7 +1796,7 @@ function exportChat() {
     if (State.sessionCost.requests > 0) {
         lines.push('---');
         lines.push('');
-        lines.push(`**Session:** ${State.sessionCost.totalInputTokens + State.sessionCost.totalOutputTokens} tokens (${State.sessionCost.totalInputTokens}↓ ${State.sessionCost.totalOutputTokens}↑) · $${State.sessionCost.totalCost.toFixed(4)} · ${State.sessionCost.requests} requests`);
+        lines.push(`**Session:** ${State.sessionCost.totalInputTokens + State.sessionCost.totalOutputTokens} tokens (${State.sessionCost.totalInputTokens}↓ ${State.sessionCost.totalOutputTokens}↑) · ${State.sessionCost.totalCost.toFixed(4)} · ${State.sessionCost.requests} requests`);
     }
 
     const text = lines.join('\n');
