@@ -1003,6 +1003,14 @@ async function handleGeneralRequest(input) {
 
     const systemPrompt = buildSystemPrompt();
     const roleTools = LLMTools.getToolsForRole();
+    
+    // DEBUG: Why are tools empty?
+    if (!roleTools || roleTools.length === 0) {
+        const allDefs = LLMTools.definitions?.length || 0;
+        const role = State.settings.role || 'undefined';
+        console.error(`[TOOL-DEBUG] roleTools empty! definitions=${allDefs}, role="${role}"`);
+        addMessage('system', `⚠️ Tool debug: roleTools=${roleTools?.length || 0}, definitions=${allDefs}, role="${role}"`);
+    }
 
     // Build initial message thread
     const messages = [

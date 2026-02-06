@@ -281,8 +281,16 @@ const LLM = {
                 requestBody.tool_choice = 'auto';
             }
 
-            // === DEBUG: Start exchange logging ===
+            // === DEBUG: Start exchange logging with tool diagnostic ===
             LLMDebug.startExchange(requestBody);
+            // Extra diagnostic: WHY are tools missing?
+            if (!requestBody.tools || requestBody.tools.length === 0) {
+                LLMDebug.logThink('tool-diagnostic', 
+                    `tools param type=${typeof tools}, isArray=${Array.isArray(tools)}, ` +
+                    `length=${tools?.length}, truthy=${!!tools}, ` +
+                    `requestBody.tools=${JSON.stringify(requestBody.tools)?.slice(0, 100)}`
+                );
+            }
 
             const response = await fetch(
                 `${State.settings.llmEndpoint.replace(/\/$/, '')}/chat/completions`,
