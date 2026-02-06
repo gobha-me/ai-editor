@@ -10,16 +10,15 @@ import { State, EventBus, Storage, Providers, Roles } from './core.js';
 // ============================================
 
 /**
- * Strip <think>...</think> blocks from text content.
+ * Strip </think> blocks from text content.
  * Handles multiple blocks, nested whitespace, and partial/unclosed tags.
  * Used for non-streaming responses where think blocks arrive intact.
  */
 function stripThinkBlocks(text) {
-    if (!text) return text;
-    // Strip all <think>...</think> blocks (non-greedy, handles multiple)
-    let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    // Also strip unclosed <think> block at end (model cut off mid-thought)
-    result = result.replace(/<think>[\s\S]*$/gi, '');
+    if (!text) return text;// Strip all</think> blocks (non-greedy, handles multiple)
+    let result = text.replace(/[\s\S]*?<\/think>/gi, '');
+    // Also strip unclosed block at end (model cut off mid-thought)
+    result = result.replace(/\S]*$/gi, '');
     return result.trim();
 }
 
@@ -312,7 +311,7 @@ const LLM = {
 
             let result;
             if (stream) {
-                result = await this._handleStream(response, onToken);
+                result = await this._handleStream(response, onToken, !!tools);
             } else {
                 const data = await response.json();
                 // Log the raw non-streaming response
@@ -375,7 +374,7 @@ const LLM = {
         EventBus.emit('cost:updated', { usage, sessionCost: State.sessionCost });
     },
 
-    async _handleStream(response, onToken) {
+    async _handleStream(response, onToken, hasTools = false) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let content = '';
@@ -383,10 +382,9 @@ const LLM = {
         let usage = null;
         let finishReason = null;
         let buffer = '';       // Handle partial SSE lines
-        let hasToolCalls = false;  // Track if any tool calls were received
-        let fullContentWithThink = '';  // Preserve full content including think blocks
         let inThinkBlock = false;
         let thinkBuffer = '';  // Buffer for detecting split </think> tags
+        let hasToolCallsInResponse = false;  // Track if this response includes tool calls
 
         while (true) {
             const { done, value } = await reader.read();
@@ -447,44 +445,43 @@ const LLM = {
                     if (delta.content) {
                         let chunk = delta.content;
 
-                        // --- Think-block stripping (handles split tags) ---
-                        if (inThinkBlock) {
-                            thinkBuffer += chunk;
-                        
-                        // Always preserve full content including think blocks
-                        fullContentWithThink += chunk;
-                        // Only strip think blocks if NO tool calls are present
-                        // (reasoning models put their analysis in think blocks during tool calls)
-                        if (!hasToolCalls && inThinkBlock) {
-                            if (endIdx >= 0) {
-                                chunk = thinkBuffer.slice(endIdx + 8);
-                                inThinkBlock = false;
-                                LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
-                                thinkBuffer = '';
-                            } else {
-                                if (thinkBuffer.length > 8) {
-                                    thinkBuffer = thinkBuffer.slice(-7);
+                        // Only apply think-block stripping if NO tool calls in response
+                        // When tools are present, preserve full content for context
+                        if (!hasToolCallsInResponse && !hasTools) {
+                            // --- Think-block stripping (handles split tags) ---
+                            if (inThinkBlock) {
+                                thinkBuffer += chunk;
+                                const endIdx = thinkBuffer.indexOf('</think>');
+                                if (endIdx >= 0) {
+                                    chunk = thinkBuffer.slice(endIdx + 8);
+                                    inThinkBlock = false;
+                                    LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
+                                    thinkBuffer = '';
+                                } else {
+                                    if (thinkBuffer.length > 8) {
+                                        thinkBuffer = thinkBuffer.slice(-7);
+                                    }
+                                    continue; // Skip this chunk entirely
                                 }
-                                continue; // Skip this chunk entirely
                             }
-                        }
 
-                        const startIdx = chunk.indexOf('<think>');
-                        if (startIdx >= 0) {
-                            const before = chunk.slice(0, startIdx);
-                            const afterStart = chunk.slice(startIdx + 7);
-                            const endIdx = afterStart.indexOf('</think>');
-                        const startIdx = !hasToolCalls ? chunk.indexOf('<think>') : -1;
-                                chunk = before + afterStart.slice(endIdx + 8);
-                                LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
-                            } else {
-                                chunk = before;
-                                thinkBuffer = afterStart;
-                                inThinkBlock = true;
-                                LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
+                            const startIdx = chunk.indexOf('');
+                            if (startIdx >= 0) {
+                                const before = chunk.slice(0, startIdx);
+                                const afterStart = chunk.slice(startIdx + 7);
+                                const endIdx = afterStart.indexOf('</think>');
+                                if (endIdx >= 0) {
+                                    chunk = before + afterStart.slice(endIdx + 8);
+                                    LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
+                                } else {
+                                    chunk = before;
+                                    thinkBuffer = afterStart;
+                                    inThinkBlock = true;
+                                    LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
+                                }
                             }
+                            // --- End think-block stripping ---
                         }
-                        // --- End think-block stripping ---
 
                         if (chunk) {
                             content += chunk;
@@ -494,6 +491,7 @@ const LLM = {
                     }
 
                     if (delta.tool_calls) {
+                        hasToolCallsInResponse = true;
                         LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
                         for (const tc of delta.tool_calls) {
                             if (tc.index !== undefined) {
@@ -502,7 +500,6 @@ const LLM = {
                                 }
                                 if (tc.id) toolCalls[tc.index].id = tc.id;
                                 if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-                        hasToolCalls = true;  // Mark that we have tool calls
                                 if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
                             }
                         }
@@ -520,17 +517,7 @@ const LLM = {
             usage
         };
     },
-        // If tool calls are present, use full content including think blocks
-        // Otherwise use the stripped content
-        const finalContent = hasToolCalls ? fullContentWithThink : content;
-        
-        // Log what we're returning
-        if (hasToolCalls && fullContentWithThink !== content) {
-            LLMDebug.logThink('content-preservation', 
-                `Preserved think content for tool calls: ${fullContentWithThink.length} chars vs ${content.length} stripped`);
-        }
 
-            content: finalContent,
     stop() {
         if (this.abortController) {
             this.abortController.abort();
@@ -1135,11 +1122,7 @@ async function generateCommitMessage(changedFiles = null) {
             return `File: ${f.path}\n\nOriginal (truncated):\n\`\`\`\n${original}\n\`\`\`\n\nUpdated (truncated):\n\`\`\`\n${updated}\n\`\`\``;
         }).join('\n\n---\n\n');
         
-        prompt = `Generate a concise git commit message for the following changes across ${changedFiles.length} file(s).
-
-${fileDiffs}
-
-Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc). If multiple files changed, summarize the overall change.`;
+        prompt = `Generate a concise git commit message for the following changes across ${changedFiles.length} file(s).\n\n${fileDiffs}\n\nRespond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc). If multiple files changed, summarize the overall change.`;
     } else if (State.currentFile) {
         prompt = buildCommitMessagePrompt(
             State.currentFile.content,
@@ -1161,7 +1144,7 @@ Respond with ONLY the commit message, no quotes or explanation. Use conventional
         model: commitModel
     });
 
-    return result.content.trim().replace(/^["']|["']$/g, '');
+    return result.content.trim().replace(/^[\"']|[\"']$/g, '');
 }
 
 async function analyzeIssue(issue, onToken = null) {
