@@ -8,7 +8,7 @@
 </head>
 <body>
     <!-- Visible Error Diagnostic — catches module load failures -->
-    <div id="bootErrors" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:#300; color:#faa; padding:12px 16px; font-family:monospace; font-size:12px; max-height:40vh; overflow:auto; border-bottom:2px solid #f00;">
+    <div id="bootErrors" style="display:none; background:#300; color:#faa; padding:12px 16px; font-family:monospace; font-size:12px; max-height:30vh; overflow:auto; border-bottom:2px solid #f00;">
         <strong>⚠️ JS ERRORS:</strong><pre id="bootErrorList" style="margin:4px 0 0 0; white-space:pre-wrap;"></pre>
     </div>
     <script>
@@ -763,7 +763,7 @@
                 html += `<summary style="padding: 0.5rem 1rem; cursor: pointer; background: var(--bg-secondary); user-select: none;">`;
                 html += `<strong>${status} ${esc(ex.model)}</strong>`;
                 html += ` <span style="color: var(--text-muted);">tools:${ex.toolsSent} msgs:${ex.msgCount}${dur}${esc(toolInfo)}</span>`;
-                html += ` <span style="float:right; color: var(--text-muted);">${ex.ts.slice(11, 19)}</span>`;
+                html += ` <span style="float:right; color: var(--text-muted);">${(ex.ts || '').slice(11, 19)}</span>`;
                 html += `</summary>`;
                 html += `<div style="padding: 0.5rem 1rem;">`;
 
@@ -801,7 +801,7 @@
                 }
 
                 // Think events
-                if (ex.thinkEvents.length > 0) {
+                if ((ex.thinkEvents || []).length > 0) {
                     html += `<details style="margin-top: 4px;"><summary style="cursor: pointer; color: #fa0;">🧠 Think events (${ex.thinkEvents.length})</summary>`;
                     for (const t of ex.thinkEvents) {
                         html += `<div style="padding-left: 1rem;">@chunk${t.atChunk} <strong>${esc(t.event)}</strong>: ${esc(t.detail)}</div>`;
