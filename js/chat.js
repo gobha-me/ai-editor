@@ -899,8 +899,9 @@ function detectIntent(input) {
     }
     
     // Explain — works with or without a file
-    if (lower.includes('explain') || lower.includes('what does') || lower.includes('how does') ||
-        lower.includes('why does') || lower.includes('understand')) {
+    // Use word boundaries to avoid false positives like "understanding" → should be "general"
+    if (/\bexplain\b/.test(lower) || /\bwhat does\b/.test(lower) || /\bhow does\b/.test(lower) ||
+        /\bwhy does\b/.test(lower) || /\bunderstand\b/.test(lower)) {
         return 'explain';
     }
     
@@ -935,24 +936,9 @@ async function handleEditRequest(input) {
 }
 
 async function handleExplainRequest(input) {
-    addStreamingMessage();
-
-    const systemPrompt = buildSystemPrompt();
-    let content = '';
-
-    await LLM.chat([
-        { role: 'system', content: systemPrompt },
-        ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
-        { role: 'user', content: input }
-    ], {
-        stream: true,
-        onToken: (token, fullContent) => {
-            content = fullContent;
-            updateStreamingMessage(fullContent);
-        }
-    });
-
-    finalizeStreamingMessage(content, { hasCode: false });
+    // Explain requests benefit from tool access (reading files, searching code)
+    // Delegate to general handler which has the full tool loop
+    await handleGeneralRequest(input);
 }
 
 async function handleCommitRequest() {
