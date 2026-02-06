@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Editor v0.3.6</title>
+    <title>AI Editor v0.3.7</title>
     <link rel="stylesheet" href="editor/css/editor.css">
 </head>
 <body>
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.6</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.7</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -712,6 +712,7 @@
             
             setTimeout(() => toast.remove(), 4000);
         }
+        window.showToast = showToast;
 
         function closeAllModals() {
             document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
@@ -1015,7 +1016,8 @@
                 window.closeNewBranchModal();
                 showToast(`Created branch: ${name}`, 'success');
             } catch (error) {
-                showToast('Failed to create branch', 'error');
+                showToast(`Failed to create branch: ${error.message || error}`, 'error');
+                console.error('Branch creation error:', error);
             }
         };
 
@@ -1269,7 +1271,7 @@
         }
 
         // ============================================
-        // PREVIEW & DIFF PANE (v0.3.6)
+        // PREVIEW & DIFF PANE (v0.3.7)
         // ============================================
 
         let secondaryPaneMode = null; // 'preview' | 'diff' | null
@@ -1430,7 +1432,7 @@
         });
 
         // ============================================
-        // LINE NUMBERS TOGGLE (v0.3.6)
+        // LINE NUMBERS TOGGLE (v0.3.7)
         // ============================================
 
         function toggleLineNumbers() {
@@ -1669,6 +1671,12 @@
             State.editorDirty = false;
             tab.content = originalContent;
             tab.dirty = false;
+
+            // Clear the draft from localStorage
+            if (State.currentProject) {
+                const { owner, repo } = State.currentProject;
+                Storage.clearDraft(owner, repo, State.currentBranch, tab.path);
+            }
 
             createEditor(
                 document.getElementById('editorContainer'),
@@ -2011,8 +2019,10 @@
                 console.log('Loading file...');
                 await loadFile(path);
                 
-                // Store the original (server) content for revert
-                const originalContent = State.editorContent;
+                // Store the original (server) content for revert — NOT the draft
+                const originalContent = State.currentFile.content;
+                // Preserve draft dirty state (createEditor will reset State.editorDirty)
+                const hasDraft = State.editorDirty;
                 
                 // Handle preview tabs - single click opens preview, replaces existing preview
                 const isPreview = !isDoubleClick;
@@ -2066,6 +2076,14 @@
                     State.editorContent,
                     path
                 );
+
+                // Restore draft dirty state (createEditor resets editorDirty to false)
+                if (hasDraft) {
+                    State.editorDirty = true;
+                    if (State.activeTabIndex >= 0) {
+                        State.openTabs[State.activeTabIndex].dirty = true;
+                    }
+                }
 
                 // Render tabs
                 renderEditorTabs();
@@ -2126,6 +2144,9 @@
                 tab.content,
                 tab.path
             );
+            
+            // Restore dirty state (createEditor resets editorDirty to false)
+            State.editorDirty = tab.dirty;
             
             renderEditorTabs();
             updateStatusBar();

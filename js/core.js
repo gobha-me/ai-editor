@@ -527,22 +527,46 @@ function scheduleDraftSave() {
     if (draftSaveTimer) clearTimeout(draftSaveTimer);
     
     draftSaveTimer = setTimeout(() => {
-        if (State.editorDirty && State.currentFile && State.currentProject) {
-            Storage.saveDraft(
-                State.currentProject.owner,
-                State.currentProject.repo,
-                State.currentBranch,
-                State.currentFile.path,
-                State.editorContent
-            );
-        }
+        saveDraftNow();
     }, 2000); // 2 second debounce
+}
+
+// Immediate draft save (for tool edits and beforeunload)
+function saveDraftNow() {
+    if (State.editorDirty && State.currentFile && State.currentProject) {
+        Storage.saveDraft(
+            State.currentProject.owner,
+            State.currentProject.repo,
+            State.currentBranch,
+            State.currentFile.path,
+            State.editorContent
+        );
+    }
+    // Also persist all dirty tab contents
+    if (State.currentProject) {
+        const { owner, repo } = State.currentProject;
+        for (const tab of State.openTabs) {
+            if (tab.dirty && tab.content !== tab.originalContent) {
+                Storage.saveDraft(owner, repo, State.currentBranch, tab.path, tab.content);
+            }
+        }
+    }
 }
 
 // Listen for editor changes
 EventBus.on('editor:change', () => {
     State.editorDirty = true;
     scheduleDraftSave();
+});
+
+// Immediate save on tool-applied edits (these are discrete, important changes)
+EventBus.on('editor:editApplied', () => {
+    saveDraftNow();
+});
+
+// Save drafts before page unload (crash/refresh safety net)
+window.addEventListener('beforeunload', () => {
+    saveDraftNow();
 });
 
 // ============================================
@@ -558,5 +582,6 @@ export {
     Roles,
     DEFAULT_CAPABILITIES,
     loadSettings,
-    saveSettings
+    saveSettings,
+    saveDraftNow
 };

@@ -1453,7 +1453,7 @@ function exportChat() {
 
     // Copy to clipboard
     navigator.clipboard.writeText(text).then(() => {
-        showToast('Chat copied to clipboard', 'success');
+        window.showToast('Chat copied to clipboard', 'success');
     }).catch(() => {
         // Fallback: select in a textarea
         const ta = document.createElement('textarea');
@@ -1464,7 +1464,7 @@ function exportChat() {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('Chat copied to clipboard', 'success');
+        window.showToast('Chat copied to clipboard', 'success');
     });
 }
 
