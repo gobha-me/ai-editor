@@ -12,6 +12,7 @@ A pure HTML/JS code editor with AI assistance, Gitea integration, and a plugin s
 - **Auto-save drafts**: Changes saved to localStorage, manual commit to Gitea
 
 ### Editor
+- **Quick Open (Ctrl+P)**: Fuzzy file finder with ranked results, keyboard navigation, preview/pin support
 - **Multi-tab editing**: Open multiple files simultaneously
 - **Preview tabs**: Single-click opens preview (italic), double-click pins the tab
 - **Preview pane**: Live-rendered preview for HTML, Markdown, and SVG files (Ctrl+Shift+P)
@@ -26,6 +27,7 @@ A pure HTML/JS code editor with AI assistance, Gitea integration, and a plugin s
 - Ask to edit, explain, or refactor code
 - **LLM Tools**: AI can directly read/edit files and navigate the project
 - LLM edits directly in buffer, you review before save
+- **Chat history summarization**: Older messages compressed via lightweight model to stay within context limits
 - Issue analysis with **dependency detection** (parses "depends on #X")
 - Context-aware (knows current file, project, branch, open tabs)
 
@@ -67,6 +69,7 @@ ai-editor/
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+P` | Quick Open file finder |
 | `Ctrl+S` | Open commit dialog |
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+,` | Open settings |
