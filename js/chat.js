@@ -21,6 +21,7 @@ let pendingEdit = null;  // { code, explanation } waiting for user approval
 // ============================================
 
 // Register tool handlers for LLM function calling
+let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 LLMTools.handlers = {
     read_current_file: async () => {
         if (!State.currentFile) {
@@ -986,6 +987,7 @@ async function handleIssueRequest(input) {
 
 async function handleGeneralRequest(input) {
     addStreamingMessage();
+    _cancelToolLoop = false;  // Reset cancel flag
 
     const systemPrompt = buildSystemPrompt();
     const roleTools = LLMTools.getToolsForRole();
@@ -1010,56 +1012,60 @@ async function handleGeneralRequest(input) {
     let finalContent = '';
     const toolActions = []; // Track all tool executions for fallback summary
 
+    // Keep isGenerating true for the entire tool loop
+    State.isGenerating = true;
+    EventBus.emit('llm:generating', true);
+
+    try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        // Check cancellation before each round
+        if (_cancelToolLoop) {
+            console.log('[TOOL-LOOP] Cancelled by user');
+            break;
+        }
+
         let content = '';
         let result;
 
         try {
-            if (round === 0) {
-                // First round: STREAM to user for responsiveness
-                const chatOptions = {
-                    stream: true,
-                    tools: roleTools,
-                    onToken: (token, fullContent) => {
-                        content = fullContent;
+            const timeout = round === 0 ? 60000 : 90000;
+            const chatOptions = {
+                stream: true,
+                tools: roleTools,
+                onToken: (token, fullContent) => {
+                    content = fullContent;
+                    if (round === 0) {
                         updateStreamingMessage(fullContent);
+                    } else {
+                        // Show follow-up content combined with previous
+                        const combined = finalContent ? finalContent + '\n\n' + fullContent : fullContent;
+                        updateStreamingMessage(combined);
                     }
-                };
-
-                result = await Promise.race([
-                    LLM.chat(messages, chatOptions),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Response timeout (60s)')), 60000)
-                    )
-                ]);
-            } else {
-                const chatOptions = { stream: true, tools: roleTools };
-
-                // Show thinking indicator
-                updateStreamingMessage(finalContent || '*(processing tool results...)*');
-
-                result = await Promise.race([
-                    LLM.chat(messages, chatOptions),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Response timeout (90s)')), 90000)
-                    )
-                ]);
-
-                content = result.content || '';
-                // Show the new content
-                if (content) {
-                    const combined = finalContent ? finalContent + '\n\n' + content : content;
-                    updateStreamingMessage(combined);
                 }
+            };
+
+            if (round > 0) {
+                updateStreamingMessage(finalContent || '*(processing tool results...)*');
             }
 
-            // Keep isGenerating true between rounds
+            result = await Promise.race([
+                LLM.chat(messages, chatOptions),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`Response timeout (${timeout/1000}s)`)), timeout)
+                )
+            ]);
+
+            content = content || result.content || '';
+
+            // Re-assert isGenerating (LLM.chat's finally sets it false)
             State.isGenerating = true;
             EventBus.emit('llm:generating', true);
 
         } catch (err) {
             // Abort any in-flight request
             LLM.stop();
+            
+            if (_cancelToolLoop) break;
             
             if (toolActions.length > 0) {
                 // Show what tools did accomplish
@@ -1084,16 +1090,14 @@ async function handleGeneralRequest(input) {
         let toolCallSource = toolCalls.length > 0 ? 'structured' : null;
 
         // === LAYER 2: Text-format fallback ===
-        // If no structured tool_calls, check content for text-format tool calls.
-        // Handles APIs (e.g. Venice + Kimi K2) that emit tool call tokens in
-        // delta.content instead of delta.tool_calls.
-        // Safe: think blocks already stripped by streaming handler + stripThinkBlocks.
         if (toolCalls.length === 0 && cleanContent) {
             const parsed = parseTextToolCalls(cleanContent);
             if (parsed.toolCalls.length > 0) {
                 toolCalls = parsed.toolCalls;
                 cleanContent = parsed.cleanContent;
                 toolCallSource = 'text';
+                console.log(`[TOOL-LOOP] Text-parsed ${toolCalls.length} tool calls:`, 
+                    toolCalls.map(tc => tc.function?.name));
                 updateStreamingMessage(cleanContent || finalContent || '');
             }
         }
@@ -1105,17 +1109,30 @@ async function handleGeneralRequest(input) {
 
         if (toolCalls.length > 0) {
             // === EXECUTE TOOL CALLS ===
-            const structuredResults = [];  // For proper OpenAI tool threading
-            const textResults = [];        // For user-message injection fallback
+            const structuredResults = [];
+            const textResults = [];
 
             for (const toolCall of toolCalls) {
+                if (_cancelToolLoop) break;
+
                 const toolName = toolCall.function?.name || 'unknown';
                 let args = {};
                 try {
                     args = JSON.parse(toolCall.function?.arguments || '{}');
                 } catch (e) { /* malformed args */ }
 
-                const toolResult = await executeToolCall(toolCall);
+                // Execute with timeout (15s per tool call)
+                let toolResult;
+                try {
+                    toolResult = await Promise.race([
+                        executeToolCall(toolCall),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Tool execution timeout (15s)')), 15000)
+                        )
+                    ]);
+                } catch (e) {
+                    toolResult = { error: e.message };
+                }
 
                 // Show collapsible tool call detail
                 addToolCallMessage(toolName, args, toolResult);
@@ -1138,9 +1155,10 @@ async function handleGeneralRequest(input) {
                 }
             }
 
+            if (_cancelToolLoop) break;
+
             // === BUILD THREAD FOR NEXT ROUND ===
             if (toolCallSource === 'structured') {
-                // Proper OpenAI threading: assistant with tool_calls → tool results
                 messages.push({
                     role: 'assistant',
                     content: cleanContent || null,
@@ -1150,8 +1168,6 @@ async function handleGeneralRequest(input) {
                     messages.push(tr);
                 }
             } else {
-                // Text-parsed: inject results as user context
-                // (API didn't return structured tool_calls, so we can't use tool role)
                 messages.push({ role: 'assistant', content: cleanContent || null });
                 const summary = textResults.map(tr =>
                     `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
@@ -1175,13 +1191,17 @@ async function handleGeneralRequest(input) {
             continue;
         }
 
-        // === NO TOOL CALLS — CHECK IF WE'RE DONE ===
-        // If finish_reason is 'tool_calls' but no tool calls found, model may be confused
+        // === NO TOOL CALLS — DONE ===
         if (result.finishReason === 'tool_calls') {
             console.warn('Model signaled tool_calls but none were parsed — ending loop');
         }
 
         break;
+    }
+    } finally {
+        // Always clean up generating state
+        State.isGenerating = false;
+        EventBus.emit('llm:generating', false);
     }
 
     // Handle empty responses
@@ -1325,7 +1345,12 @@ function rejectPendingEdit() {
 // ============================================
 
 function stopGeneration() {
+    // Cancel any in-flight tool loop
+    _cancelToolLoop = true;
+    
     LLM.stop();
+    State.isGenerating = false;
+    EventBus.emit('llm:generating', false);
     
     const streamingEl = document.getElementById('streaming-message');
     if (streamingEl) {
