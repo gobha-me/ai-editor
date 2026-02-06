@@ -393,6 +393,260 @@ function focus() {
 }
 
 // ============================================
+// SECTION-BASED EDITING (for LLM tools)
+// ============================================
+
+/**
+ * Get information about a specific line in the editor.
+ * @param {number} lineNum - 1-indexed line number
+ * @returns {object|null} { from, to, text, length } or null if invalid
+ */
+function getLineInfo(lineNum) {
+    if (!editorInstance) return null;
+    
+    const doc = editorInstance.state.doc;
+    if (lineNum < 1 || lineNum > doc.lines) return null;
+    
+    const line = doc.line(lineNum);
+    return {
+        from: line.from,
+        to: line.to,
+        text: line.text,
+        length: line.length
+    };
+}
+
+/**
+ * Get the character position range for a line range.
+ * @param {number} startLine - 1-indexed start line
+ * @param {number} endLine - 1-indexed end line
+ * @returns {object|null} { from, to, text } or null if invalid
+ */
+function getLineRange(startLine, endLine) {
+    if (!editorInstance) return null;
+    
+    const doc = editorInstance.state.doc;
+    if (startLine < 1 || endLine < startLine || startLine > doc.lines) return null;
+    
+    const clampedEnd = Math.min(endLine, doc.lines);
+    const lineStart = doc.line(startLine);
+    const lineEnd = doc.line(clampedEnd);
+    
+    return {
+        from: lineStart.from,
+        to: lineEnd.to,
+        text: editorInstance.state.sliceDoc(lineStart.from, lineEnd.to)
+    };
+}
+
+/**
+ * Replace a range of lines with new content.
+ * This is the core function that LLM tools use for section-based editing.
+ * 
+ * @param {number} startLine - 1-indexed line to start replacement (inclusive)
+ * @param {number} endLine - 1-indexed line to end replacement (inclusive)
+ * @param {string} newContent - New content to insert (can be multi-line)
+ * @returns {object} { success, from, to, originalLineCount, newLineCount, lineDelta, totalLines, error }
+ */
+function replaceRange(startLine, endLine, newContent) {
+    if (!editorInstance) {
+        return { error: 'Editor not initialized' };
+    }
+    
+    const doc = editorInstance.state.doc;
+    const totalLines = doc.lines;
+    
+    // Validate line numbers
+    if (startLine < 1 || endLine < startLine || startLine > totalLines) {
+        return {
+            error: `Invalid line range. File has ${totalLines} lines. Got start=${startLine}, end=${endLine}`
+        };
+    }
+    
+    // Clamp end line to file length
+    const clampedEnd = Math.min(endLine, totalLines);
+    
+    // Get the range to replace
+    const lineStart = doc.line(startLine);
+    const lineEnd = doc.line(clampedEnd);
+    const from = lineStart.from;
+    const to = lineEnd.to;
+    
+    // Count original lines being replaced
+    const originalLineCount = clampedEnd - startLine + 1;
+    
+    // Count new lines
+    const newLines = newContent.split('\n');
+    const newLineCount = newLines.length;
+    
+    // Apply the replacement
+    editorInstance.dispatch({
+        changes: { from, to, insert: newContent }
+    });
+    
+    // Update state
+    State.editorContent = editorInstance.state.doc.toString();
+    State.editorDirty = true;
+    
+    const newTotalLines = editorInstance.state.doc.lines;
+    const lineDelta = newLineCount - originalLineCount;
+    
+    EventBus.emit('editor:rangeReplaced', {
+        startLine,
+        endLine: clampedEnd,
+        originalLineCount,
+        newLineCount,
+        lineDelta,
+        totalLines: newTotalLines
+    });
+    
+    return {
+        success: true,
+        from,
+        to,
+        originalLineCount,
+        newLineCount,
+        lineDelta,
+        totalLines: newTotalLines
+    };
+}
+
+/**
+ * Insert new lines at a specific position without replacing existing content.
+ * 
+ * @param {number} afterLine - Insert after this line (0 = beginning, 1-indexed)
+ * @param {string} content - Content to insert (can be multi-line)
+ * @returns {object} { success, insertedAfter, newLineCount, totalLines, error }
+ */
+function insertAtLine(afterLine, content) {
+    if (!editorInstance) {
+        return { error: 'Editor not initialized' };
+    }
+    
+    const doc = editorInstance.state.doc;
+    const totalLines = doc.lines;
+    
+    // Validate
+    if (afterLine < 0 || afterLine > totalLines) {
+        return {
+            error: `Invalid line number. File has ${totalLines} lines. after_line must be 0-${totalLines}`
+        };
+    }
+    
+    // Determine insertion position
+    let insertPos;
+    if (afterLine === 0) {
+        // Insert at beginning
+        insertPos = 0;
+    } else {
+        const line = doc.line(afterLine);
+        insertPos = line.to;
+    }
+    
+    // Ensure content ends with newline if not at end
+    let insertContent = content;
+    if (afterLine > 0 && afterLine < totalLines) {
+        if (!content.endsWith('\n')) {
+            insertContent = '\n' + content;
+        } else {
+            insertContent = '\n' + content.slice(0, -1);
+        }
+    } else if (afterLine === 0) {
+        if (!content.endsWith('\n')) {
+            insertContent = content + '\n';
+        }
+    }
+    
+    // Count new lines
+    const newLines = content.split('\n');
+    const newLineCount = newLines.length;
+    
+    // Apply the insertion
+    editorInstance.dispatch({
+        changes: { from: insertPos, insert: insertContent }
+    });
+    
+    // Update state
+    State.editorContent = editorInstance.state.doc.toString();
+    State.editorDirty = true;
+    
+    const newTotalLines = editorInstance.state.doc.lines;
+    
+    EventBus.emit('editor:linesInserted', {
+        afterLine,
+        newLineCount,
+        totalLines: newTotalLines
+    });
+    
+    return {
+        success: true,
+        insertedAfter: afterLine,
+        newLineCount,
+        totalLines: newTotalLines
+    };
+}
+
+/**
+ * Delete a range of lines.
+ * 
+ * @param {number} startLine - 1-indexed line to start deletion (inclusive)
+ * @param {number} endLine - 1-indexed line to end deletion (inclusive)
+ * @returns {object} { success, deletedCount, totalLines, error }
+ */
+function deleteRange(startLine, endLine) {
+    if (!editorInstance) {
+        return { error: 'Editor not initialized' };
+    }
+    
+    const doc = editorInstance.state.doc;
+    const totalLines = doc.lines;
+    
+    // Validate
+    if (startLine < 1 || endLine < startLine || startLine > totalLines) {
+        return {
+            error: `Invalid line range. File has ${totalLines} lines.`
+        };
+    }
+    
+    const clampedEnd = Math.min(endLine, totalLines);
+    const deletedCount = clampedEnd - startLine + 1;
+    
+    // Get the range to delete
+    const lineStart = doc.line(startLine);
+    const lineEnd = doc.line(clampedEnd);
+    
+    // Include the newline after the last deleted line if not at EOF
+    let to = lineEnd.to;
+    if (clampedEnd < totalLines) {
+        to = doc.line(clampedEnd + 1).from;
+    }
+    
+    // Apply the deletion
+    editorInstance.dispatch({
+        changes: { from: lineStart.from, to: to, insert: '' }
+    });
+    
+    // Update state
+    State.editorContent = editorInstance.state.doc.toString();
+    State.editorDirty = true;
+    
+    const newTotalLines = editorInstance.state.doc.lines;
+    
+    EventBus.emit('editor:linesDeleted', {
+        startLine,
+        endLine: clampedEnd,
+        deletedCount,
+        totalLines: newTotalLines
+    });
+    
+    return {
+        success: true,
+        deletedCount,
+        totalLines: newTotalLines
+    };
+}
+
+// ============================================
 // APPLY LLM EDIT
 // ============================================
 
@@ -535,5 +789,11 @@ export {
     formatDiffForDisplay,
     isTextFile,
     getFileIcon,
-    editorInstance
+    editorInstance,
+    // Section-based editing (for LLM tools)
+    getLineInfo,
+    getLineRange,
+    replaceRange,
+    insertAtLine,
+    deleteRange
 };

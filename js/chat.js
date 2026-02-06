@@ -5,7 +5,7 @@
 
 import { State, EventBus, Storage } from './core.js';
 import { LLM, LLMDebug, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
-import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
+import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay, replaceRange, insertAtLine, deleteRange } from './editor.js';
 import { GiteaAPI, loadFile } from './gitea.js';
 
 // ============================================
@@ -42,32 +42,23 @@ LLMTools.handlers = {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
-        const lines = State.editorContent.split('\n');
-        const totalLines = lines.length;
+        // Use the new replaceRange function from editor.js
+        const result = replaceRange(start_line, end_line, new_content);
         
-        // Validate line numbers
-        if (start_line < 1 || end_line < start_line || start_line > totalLines) {
-            return { 
-                error: `Invalid line range. File has ${totalLines} lines. Got start=${start_line}, end=${end_line}` 
-            };
+        if (result.error) {
+            return result;
         }
-        
-        // Clamp end_line to file length
-        const clampedEnd = Math.min(end_line, totalLines);
-        
-        // Replace lines (convert to 0-indexed)
-        const newLines = new_content.split('\n');
-        lines.splice(start_line - 1, clampedEnd - start_line + 1, ...newLines);
-        
-        const newContent = lines.join('\n');
-        applyEdit(newContent);
         
         return {
             success: true,
             path: State.currentFile.path,
-            replaced_lines: `${start_line}-${clampedEnd}`,
-            new_line_count: lines.length,
-            message: `Replaced lines ${start_line}-${clampedEnd} with ${newLines.length} new lines. Review and save when ready.`
+            replaced_lines: `${start_line}-${end_line}`,
+            original_line_count: result.originalLineCount,
+            new_line_count: result.newLineCount,
+            line_delta: result.lineDelta,
+            total_lines: result.totalLines,
+            message: `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
+                     `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). Review and save when ready.`
         };
     },
 
@@ -76,30 +67,20 @@ LLMTools.handlers = {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
         }
         
-        const lines = State.editorContent.split('\n');
-        const totalLines = lines.length;
+        // Use the new insertAtLine function from editor.js
+        const result = insertAtLine(after_line, content);
         
-        // Validate
-        if (after_line < 0 || after_line > totalLines) {
-            return { 
-                error: `Invalid line number. File has ${totalLines} lines. after_line must be 0-${totalLines}` 
-            };
+        if (result.error) {
+            return result;
         }
-        
-        // Insert lines
-        const newLines = content.split('\n');
-        lines.splice(after_line, 0, ...newLines);
-        
-        const newContent = lines.join('\n');
-        applyEdit(newContent);
         
         return {
             success: true,
             path: State.currentFile.path,
-            inserted_after: after_line,
-            lines_inserted: newLines.length,
-            new_line_count: lines.length,
-            message: `Inserted ${newLines.length} lines after line ${after_line}. Review and save when ready.`
+            inserted_after: result.insertedAfter,
+            lines_inserted: result.newLineCount,
+            total_lines: result.totalLines,
+            message: `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. Review and save when ready.`
         };
     },
 
@@ -108,32 +89,20 @@ LLMTools.handlers = {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
-        const lines = State.editorContent.split('\n');
-        const totalLines = lines.length;
+        // Use the new deleteRange function from editor.js
+        const result = deleteRange(start_line, end_line);
         
-        // Validate
-        if (start_line < 1 || end_line < start_line || start_line > totalLines) {
-            return { 
-                error: `Invalid line range. File has ${totalLines} lines.` 
-            };
+        if (result.error) {
+            return result;
         }
-        
-        const clampedEnd = Math.min(end_line, totalLines);
-        const deletedCount = clampedEnd - start_line + 1;
-        
-        // Delete lines
-        lines.splice(start_line - 1, deletedCount);
-        
-        const newContent = lines.join('\n');
-        applyEdit(newContent);
         
         return {
             success: true,
             path: State.currentFile.path,
-            deleted_lines: `${start_line}-${clampedEnd}`,
-            lines_deleted: deletedCount,
-            new_line_count: lines.length,
-            message: `Deleted lines ${start_line}-${clampedEnd}. Review and save when ready.`
+            deleted_lines: `${start_line}-${end_line}`,
+            lines_deleted: result.deletedCount,
+            total_lines: result.totalLines,
+            message: `Deleted ${result.deletedCount} lines (${start_line}-${end_line}). File now has ${result.totalLines} lines. Review and save when ready.`
         };
     },
 
