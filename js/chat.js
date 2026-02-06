@@ -1135,12 +1135,20 @@ async function handleGeneralRequest(input) {
         addMessage('system', `⚠️ Tool debug: roleTools=${roleTools?.length || 0}, definitions=${allDefs}, role="${role}"`);
     }
 
-    // Build initial message thread (summary-aware context)
+    // Build initial message thread (summary-aware context).
+    // NOTE: The caller (handleUserInput) already pushed the user message into
+    // State.chatHistory via addMessage(), so getContextMessages() will include it.
+    // We must NOT append `input` again or the API sees a duplicate user turn,
+    // which confuses the model into restarting its plan from scratch.
     const contextMessages = ChatSummarizer.getContextMessages();
+    const lastCtx = contextMessages[contextMessages.length - 1];
+    const alreadyInContext = lastCtx && lastCtx.role === 'user' && lastCtx.content === input;
+
     const messages = [
         { role: 'system', content: systemPrompt },
         ...contextMessages,
-        { role: 'user', content: input }
+        // Only append if not already the trailing message in context
+        ...( alreadyInContext ? [] : [{ role: 'user', content: input }] )
     ];
 
     // Iterative tool call loop — max 8 rounds to support complex workflows
@@ -1203,14 +1211,16 @@ async function handleGeneralRequest(input) {
             if (_cancelToolLoop) break;
             
             if (toolActions.length > 0) {
-                // Show what tools did accomplish
+                // Show what tools did accomplish — but only the error message,
+                // not previously accumulated content (already committed to DOM)
                 const summaryLines = toolActions.map(a => {
                     const status = a.error ? '❌' : '✅';
                     const detail = a.result?.message || a.result?.error || '';
                     return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
                 });
-                finalContent = (finalContent ? finalContent + '\n\n' : '') + 
-                    `⚠️ Follow-up failed (${err.message}). Tool results:\n\n${summaryLines.join('\n')}`;
+                // Replace (not append) — earlier rounds' text is in their own DOM elements
+                lastRoundContent = `⚠️ Follow-up failed (${err.message}). Tool results:\n\n${summaryLines.join('\n')}`;
+                finalContent = lastRoundContent;
             } else if (content) {
                 finalContent = content;
             } else {
@@ -1297,14 +1307,15 @@ async function handleGeneralRequest(input) {
             if (toolCallSource === 'structured') {
                 messages.push({
                     role: 'assistant',
-                    content: cleanContent || null,
+                    // Some providers (e.g. minimax) reject null content — use empty string
+                    content: cleanContent || '',
                     tool_calls: toolCalls
                 });
                 for (const tr of structuredResults) {
                     messages.push(tr);
                 }
             } else {
-                messages.push({ role: 'assistant', content: cleanContent || null });
+                messages.push({ role: 'assistant', content: cleanContent || '' });
                 const summary = textResults.map(tr =>
                     `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
                 ).join('\n\n');

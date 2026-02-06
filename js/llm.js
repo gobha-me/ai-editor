@@ -406,6 +406,18 @@ const LLM = {
                 try {
                     const parsed = JSON.parse(data);
 
+                    // === Detect error responses embedded in SSE stream ===
+                    if (parsed.error_type || parsed.error) {
+                        const errMsg = parsed.error_message || parsed.error?.message || JSON.stringify(parsed);
+                        console.error('[LLM] SSE error response:', errMsg);
+                        LLMDebug.logChunk(data.slice(0, 500), {
+                            hasContent: false, contentChunk: null,
+                            hasToolCalls: false, toolCallsDelta: null,
+                            finishReason: null, hasUsage: false
+                        });
+                        throw new Error(`LLM stream error: ${errMsg}`);
+                    }
+
                     // === DEBUG: Log raw chunk with parsed summary ===
                     const delta = parsed.choices?.[0]?.delta;
                     const chunkFinish = parsed.choices?.[0]?.finish_reason;
