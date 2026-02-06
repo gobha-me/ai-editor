@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Editor v0.3.9</title>
+    <title>AI Editor</title>
     <link rel="stylesheet" href="editor/css/editor.css">
 </head>
 <body>
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.9</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.1-debug</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
                 <button class="btn btn-commit" id="btnCommit" title="Commit all changes" style="display: none;">📦 Commit</button>
                 <button class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)">⚙️</button>
                 <button class="btn btn-secondary" id="btnErrorLog" title="Error Log">🐛</button>
+                <button class="btn btn-secondary" id="btnLLMDebug" title="LLM Debug Log">🔬</button>
                 <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat">💬</button>
             </div>
         </header>
@@ -96,41 +97,21 @@
             <!-- Editor Panel (Center) -->
             <section class="editor-panel">
                 <!-- Tabs -->
-                <div class="editor-tabs-bar">
-                    <div class="editor-tabs" id="editorTabs">
-                        <div class="editor-tab active">
-                            <span>Welcome</span>
-                        </div>
-                    </div>
-                    <div class="editor-toolbar">
-                        <button class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)">🔢</button>
-                        <button class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" disabled>👁 Preview</button>
-                        <button class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" disabled>± Diff</button>
+                <div class="editor-tabs" id="editorTabs">
+                    <div class="editor-tab active">
+                        <span>Welcome</span>
                     </div>
                 </div>
 
-                <!-- Editor + Secondary Pane Container -->
-                <div class="editor-split" id="editorSplit">
-                    <!-- Editor Container -->
-                    <div class="editor-container" id="editorContainer">
-                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
-                            <div style="text-align: center;">
-                                <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
-                                <p>Configure your Gitea and LLM settings to get started.</p>
-                                <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
-                                    ⚙️ Open Settings
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secondary Pane (Preview / Diff) -->
-                    <div class="secondary-pane" id="secondaryPane" style="display: none;">
-                        <div class="secondary-pane-header">
-                            <span id="secondaryPaneTitle">Preview</span>
-                            <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close">✕</button>
-                        </div>
-                        <div class="secondary-pane-content" id="secondaryPaneContent">
+                <!-- Editor Container -->
+                <div class="editor-container" id="editorContainer">
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                        <div style="text-align: center;">
+                            <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                            <p>Configure your Gitea and LLM settings to get started.</p>
+                            <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
+                                ⚙️ Open Settings
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -153,7 +134,6 @@
                 <div class="chat-header">
                     <h3>💬 AI Assistant</h3>
                     <div class="chat-header-actions">
-                        <button class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard">📋</button>
                         <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
                         <div class="model-selector">
                             <select id="roleSelect" title="Active role — controls tool access">
@@ -303,9 +283,6 @@
                         <small>Toggle which panels appear in the sidebar</small>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
                             <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
-                                <input type="checkbox" id="settingShowLineNumbers" checked> Show line numbers in editor
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
                                 <input type="checkbox" id="settingShowIssues" checked> Show Issues panel
                             </label>
                             <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
@@ -371,6 +348,36 @@
 
     <!-- New Branch Modal -->
     <div class="modal-overlay" id="newBranchModal">
+
+    <!-- LLM Debug Modal -->
+    <div class="modal-overlay" id="llmDebugModal">
+        <div class="modal" style="max-width: 1200px; max-height: 90vh;">
+            <div class="modal-header">
+                <h2>🔬 LLM Debug Log</h2>
+                <button class="modal-close" onclick="window.closeLLMDebug()">×</button>
+            </div>
+            <div class="modal-body" style="padding: 0;">
+                <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="window.clearLLMDebug()" style="font-size: 12px;">Clear</button>
+                    <button class="btn btn-secondary" onclick="window.copyLLMDebug()" style="font-size: 12px;">📋 Copy All</button>
+                    <button class="btn btn-secondary" onclick="window.exportLLMDebug()" style="font-size: 12px;">💾 Export</button>
+                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; margin-left: auto;">
+                        <input type="checkbox" id="llmDebugAutoScroll" checked> Auto-scroll
+                    </label>
+                    <span style="font-size: 12px; color: var(--text-muted);">
+                        <span id="llmDebugCount">0</span> exchanges
+                    </span>
+                </div>
+                <div id="llmDebugContent" style="max-height: 70vh; overflow-y: auto; padding: 0; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 11px; line-height: 1.4;">
+                    <div style="color: var(--text-muted); text-align: center; padding: 2rem;">
+                        No LLM calls recorded yet. Send a chat message to start logging.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Branch Modal (actual) -->
         <div class="modal">
             <div class="modal-header">
                 <h2>🌿 Create New Branch</h2>
@@ -676,9 +683,156 @@
     <script type="module">
         import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
         import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
-        import { LLM, generateCommitMessage } from './editor/js/llm.js';
+        import { LLM, LLMDebug, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
         import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
+
+        // ============================================
+        // LLM DEBUG MODAL
+        // ============================================
+
+        window.LLMDebug = LLMDebug;  // Expose for onclick handlers
+
+        function renderLLMDebug() {
+            const container = document.getElementById('llmDebugContent');
+            const countEl = document.getElementById('llmDebugCount');
+            if (!container) return;
+
+            countEl.textContent = LLMDebug.exchanges.length;
+
+            if (LLMDebug.exchanges.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 2rem;">No LLM calls recorded yet. Send a chat message to start logging.</div>';
+                return;
+            }
+
+            let html = '';
+            for (const ex of LLMDebug.exchanges) {
+                const status = ex.error ? '❌' : (ex.result?.toolCalls ? '🔧' : '✅');
+                const toolInfo = ex.result?.toolCalls
+                    ? ` → ${ex.result.toolCalls.map(tc => tc.name).join(', ')}`
+                    : (ex.result ? ' → no tool_calls' : '');
+                const dur = ex.durationMs ? ` ${ex.durationMs}ms` : ' …';
+
+                html += `<details style="border-bottom: 1px solid var(--border);">`;
+                html += `<summary style="padding: 0.5rem 1rem; cursor: pointer; background: var(--bg-secondary); user-select: none;">`;
+                html += `<strong>${status} ${esc(ex.model)}</strong>`;
+                html += ` <span style="color: var(--text-muted);">tools_sent:${ex.toolsSent} msgs:${ex.msgCount}${dur}${esc(toolInfo)}</span>`;
+                html += ` <span style="float:right; color: var(--text-muted);">${ex.ts.slice(11, 19)}</span>`;
+                html += `</summary>`;
+                html += `<div style="padding: 0.5rem 1rem;">`;
+
+                // Request messages
+                html += `<div style="margin-bottom: 0.5rem;"><strong>📤 Request (${ex.msgCount} messages):</strong></div>`;
+                for (const m of (ex.messages || [])) {
+                    let badge = m.role;
+                    if (m.hasToolCalls) badge += ' +tool_calls';
+                    if (m.toolCallId) badge += ` id=${m.toolCallId}`;
+                    html += `<div style="padding: 2px 0;"><span style="color: #6bf; font-weight: bold;">[${esc(badge)}]</span> <span style="color: var(--text-muted);">${esc(m.preview)}</span></div>`;
+                }
+
+                // Result
+                html += `<div style="margin: 0.5rem 0;"><strong>📥 Result:</strong></div>`;
+                if (ex.error) {
+                    html += `<div style="color: #f66;">ERROR: ${esc(ex.error)}</div>`;
+                } else if (ex.result) {
+                    html += `<div>content: ${ex.result.contentLen} chars | finishReason: <strong>${esc(ex.result.finishReason || 'null')}</strong></div>`;
+                    if (ex.result.toolCalls) {
+                        html += `<div style="color: #6f6; font-weight: bold;">toolCalls: ${ex.result.toolCalls.length}</div>`;
+                        for (const tc of ex.result.toolCalls) {
+                            html += `<div style="padding-left: 1rem;">🔧 <strong>${esc(tc.name)}</strong> (${esc(tc.id)}): <span style="color: var(--text-muted);">${esc(tc.argsPreview)}</span></div>`;
+                        }
+                    } else {
+                        html += `<div style="color: #fa0;">toolCalls: <strong>null</strong></div>`;
+                    }
+                    if (ex.result.contentPreview) {
+                        html += `<details style="margin-top: 4px;"><summary style="cursor: pointer; color: var(--text-muted);">Content preview…</summary><pre style="white-space: pre-wrap; max-height: 200px; overflow: auto; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">${esc(ex.result.contentPreview)}</pre></details>`;
+                    }
+                    if (ex.result.usage) {
+                        html += `<div style="color: var(--text-muted);">usage: ${esc(JSON.stringify(ex.result.usage))}</div>`;
+                    }
+                } else {
+                    html += `<div style="color: var(--text-muted);">(pending…)</div>`;
+                }
+
+                // Think events
+                if (ex.thinkEvents.length > 0) {
+                    html += `<details style="margin-top: 4px;"><summary style="cursor: pointer; color: #fa0;">🧠 Think events (${ex.thinkEvents.length})</summary>`;
+                    for (const t of ex.thinkEvents) {
+                        html += `<div style="padding-left: 1rem;">@chunk${t.atChunk} <strong>${esc(t.event)}</strong>: ${esc(t.detail)}</div>`;
+                    }
+                    html += `</details>`;
+                }
+
+                // Raw SSE chunks
+                html += `<details style="margin-top: 4px;"><summary style="cursor: pointer; color: var(--text-muted);">📡 Raw SSE chunks (${ex.chunks.length})</summary>`;
+                html += `<div style="max-height: 400px; overflow: auto;">`;
+                for (let i = 0; i < ex.chunks.length; i++) {
+                    const c = ex.chunks[i];
+                    const bg = c.parsed?.hasToolCalls ? 'rgba(0,255,0,0.08)' : (c.parsed?.finishReason ? 'rgba(255,200,0,0.08)' : 'transparent');
+                    html += `<div style="padding: 1px 0.5rem; background: ${bg}; border-bottom: 1px solid rgba(128,128,128,0.1);">`;
+                    html += `<span style="color: #888; min-width: 30px; display: inline-block;">${i}</span> `;
+                    if (c.parsed) {
+                        if (c.parsed.hasToolCalls) html += `<span style="color: #6f6; font-weight: bold;">🔧TC </span>`;
+                        if (c.parsed.hasContent) html += `<span style="color: #aaa;">📝"${esc((c.parsed.contentSnip || '').slice(0, 60))}"</span> `;
+                        if (c.parsed.finishReason) html += `<span style="color: #fa0;">⏹${esc(c.parsed.finishReason)}</span> `;
+                        if (c.parsed.hasUsage) html += `<span style="color: #6bf;">📊usage</span> `;
+                        if (c.parsed.toolCallDelta) html += `<span style="color: #6f6;">${esc(JSON.stringify(c.parsed.toolCallDelta).slice(0, 200))}</span>`;
+                    } else {
+                        html += `<span style="color: #888;">${esc(c.raw)}</span>`;
+                    }
+                    html += `</div>`;
+                }
+                html += `</div></details>`;
+
+                html += `</div></details>`;
+            }
+            container.innerHTML = html;
+
+            // Auto-scroll
+            if (document.getElementById('llmDebugAutoScroll')?.checked) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function esc(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        window.openLLMDebug = function() {
+            renderLLMDebug();
+            document.getElementById('llmDebugModal').classList.add('active');
+        };
+        window.closeLLMDebug = function() {
+            document.getElementById('llmDebugModal').classList.remove('active');
+        };
+        window.clearLLMDebug = function() {
+            if (confirm('Clear all debug logs?')) {
+                LLMDebug.clear();
+                renderLLMDebug();
+            }
+        };
+        window.copyLLMDebug = function() {
+            const text = LLMDebug.exportText();
+            navigator.clipboard.writeText(text).then(() => alert('Debug log copied!')).catch(e => console.error(e));
+        };
+        window.exportLLMDebug = function() {
+            const text = LLMDebug.exportText();
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `llm-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // Auto-refresh when modal is open
+        EventBus.on('debug:exchangeDone', () => {
+            if (document.getElementById('llmDebugModal')?.classList.contains('active')) {
+                renderLLMDebug();
+            }
+        });
 
         // ============================================
         // UI HELPERS (Define early for event listeners)
@@ -712,7 +866,6 @@
             
             setTimeout(() => toast.remove(), 4000);
         }
-        window.showToast = showToast;
 
         function closeAllModals() {
             document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
@@ -774,7 +927,6 @@
 
             document.getElementById('settingShowIssues').checked = State.settings.showIssues !== false;
             document.getElementById('settingShowWorkflows').checked = State.settings.showWorkflows !== false;
-            document.getElementById('settingShowLineNumbers').checked = State.settings.showLineNumbers !== false;
 
             // --- Roles Tab ---
             populateRoleCards();
@@ -944,7 +1096,6 @@
             // Appearance
             State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
             State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
-            State.settings.showLineNumbers = document.getElementById('settingShowLineNumbers').checked;
             State.settings.showIssues = document.getElementById('settingShowIssues').checked;
             State.settings.showWorkflows = document.getElementById('settingShowWorkflows').checked;
 
@@ -954,7 +1105,6 @@
 
             // Apply visual settings
             applyVisualSettings();
-            applyLineNumbersVisibility();
 
             // Sync main page role selector
             document.getElementById('roleSelect').value = State.settings.role;
@@ -990,31 +1140,13 @@
         };
 
         window.createNewBranch = async function() {
-            let name = document.getElementById('newBranchName').value.trim();
-            const from = document.getElementById('newBranchFrom').value || State.currentBranch || 'main';
+            const name = document.getElementById('newBranchName').value.trim();
+            const from = document.getElementById('newBranchFrom').value;
             
             if (!name) {
                 showToast('Please enter a branch name', 'warning');
                 return;
             }
-
-            // Sanitize for git ref naming rules:
-            // Replace spaces/invalid chars with hyphens, collapse multiples
-            name = name
-                .replace(/[\s~^:?*\[\]\\@{}"'<>|]/g, '-') // invalid git ref chars → hyphen
-                .replace(/\.{2,}/g, '.')          // collapse consecutive dots
-                .replace(/-{2,}/g, '-')           // collapse consecutive hyphens
-                .replace(/^[-.]/, '')             // cannot start with - or .
-                .replace(/[-.]+$/, '')            // cannot end with - or .
-                .replace(/\.lock$/i, '');         // cannot end with .lock
-            
-            if (!name) {
-                showToast('Branch name contains only invalid characters', 'warning');
-                return;
-            }
-
-            // Update the input so user sees what was actually used
-            document.getElementById('newBranchName').value = name;
             
             const { owner, repo } = State.currentProject;
             
@@ -1034,8 +1166,7 @@
                 window.closeNewBranchModal();
                 showToast(`Created branch: ${name}`, 'success');
             } catch (error) {
-                showToast(`Failed to create branch: ${error.message || error}`, 'error');
-                console.error('Branch creation error:', error);
+                showToast('Failed to create branch', 'error');
             }
         };
 
@@ -1288,188 +1419,6 @@
             });
         }
 
-        // ============================================
-        // PREVIEW & DIFF PANE (v0.3.8)
-        // ============================================
-
-        let secondaryPaneMode = null; // 'preview' | 'diff' | null
-
-        function isPreviewable(path) {
-            if (!path) return false;
-            const ext = path.split('.').pop().toLowerCase();
-            return ['html', 'htm', 'md', 'markdown', 'svg'].includes(ext);
-        }
-
-        function updateToolbarButtons() {
-            const path = State.currentFile?.path || '';
-            
-            document.getElementById('btnTogglePreview').disabled = !isPreviewable(path);
-            document.getElementById('btnToggleDiff').disabled = !(State.activeTabIndex >= 0 && State.openTabs[State.activeTabIndex]);
-            
-            document.getElementById('btnTogglePreview').classList.toggle('active', secondaryPaneMode === 'preview');
-            document.getElementById('btnToggleDiff').classList.toggle('active', secondaryPaneMode === 'diff');
-            document.getElementById('btnToggleLineNumbers').classList.toggle('active', State.settings.showLineNumbers !== false);
-        }
-
-        function togglePreviewPane() {
-            if (secondaryPaneMode === 'preview') { window.closeSecondaryPane(); return; }
-            secondaryPaneMode = 'preview';
-            document.getElementById('secondaryPane').style.display = 'flex';
-            document.getElementById('secondaryPaneTitle').textContent = '👁 Preview';
-            document.getElementById('editorSplit').classList.add('split-active');
-            renderPreview();
-            updateToolbarButtons();
-        }
-
-        function toggleDiffPane() {
-            if (secondaryPaneMode === 'diff') { window.closeSecondaryPane(); return; }
-            secondaryPaneMode = 'diff';
-            document.getElementById('secondaryPane').style.display = 'flex';
-            document.getElementById('secondaryPaneTitle').textContent = '± Diff';
-            document.getElementById('editorSplit').classList.add('split-active');
-            renderDiff();
-            updateToolbarButtons();
-        }
-
-        window.closeSecondaryPane = function() {
-            secondaryPaneMode = null;
-            document.getElementById('secondaryPane').style.display = 'none';
-            document.getElementById('secondaryPaneContent').innerHTML = '';
-            document.getElementById('editorSplit').classList.remove('split-active');
-            updateToolbarButtons();
-        };
-
-        function renderPreview() {
-            const pane = document.getElementById('secondaryPaneContent');
-            const path = State.currentFile?.path || '';
-            const content = State.editorContent || '';
-            const ext = path.split('.').pop().toLowerCase();
-
-            if (ext === 'html' || ext === 'htm') {
-                pane.innerHTML = `<iframe class="preview-iframe" sandbox="allow-scripts allow-same-origin" srcdoc="${escapeAttr(content)}"></iframe>`;
-            } else if (ext === 'md' || ext === 'markdown') {
-                pane.innerHTML = `<div class="preview-markdown">${renderMarkdown(content)}</div>`;
-            } else if (ext === 'svg') {
-                pane.innerHTML = `<div class="preview-svg">${content}</div>`;
-            } else {
-                pane.innerHTML = `<div class="preview-unsupported">Preview not available for .${ext} files</div>`;
-            }
-        }
-
-        function renderDiff() {
-            const pane = document.getElementById('secondaryPaneContent');
-            const tab = State.openTabs[State.activeTabIndex];
-            if (!tab) { pane.innerHTML = '<div class="diff-empty">No file open</div>'; return; }
-
-            const original = tab.originalContent || '';
-            const current = State.editorContent || '';
-            if (original === current) { pane.innerHTML = '<div class="diff-empty">No changes detected</div>'; return; }
-
-            const diffHtml = buildDiffView(original.split('\n'), current.split('\n'));
-            pane.innerHTML = `<div class="diff-view">${diffHtml}</div>`;
-        }
-
-        function buildDiffView(origLines, currLines) {
-            const ops = computeLCS(origLines, currLines);
-            let html = '', oi = 0, ci = 0;
-            for (const op of ops) {
-                if (op === 'equal') {
-                    html += `<div class="diff-line diff-equal"><span class="diff-ln">${oi+1}</span><span class="diff-ln">${ci+1}</span><span class="diff-text"> ${escapeHtml(origLines[oi])}</span></div>`;
-                    oi++; ci++;
-                } else if (op === 'delete') {
-                    html += `<div class="diff-line diff-removed"><span class="diff-ln">${oi+1}</span><span class="diff-ln"></span><span class="diff-text">-${escapeHtml(origLines[oi])}</span></div>`;
-                    oi++;
-                } else if (op === 'insert') {
-                    html += `<div class="diff-line diff-added"><span class="diff-ln"></span><span class="diff-ln">${ci+1}</span><span class="diff-text">+${escapeHtml(currLines[ci])}</span></div>`;
-                    ci++;
-                }
-            }
-            return html;
-        }
-
-        function computeLCS(a, b) {
-            const m = a.length, n = b.length;
-            if (m + n > 10000) return computeSimpleOps(a, b);
-            const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
-            for (let i = 1; i <= m; i++)
-                for (let j = 1; j <= n; j++)
-                    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
-            const ops = [];
-            let i = m, j = n;
-            while (i > 0 || j > 0) {
-                if (i > 0 && j > 0 && a[i-1] === b[j-1]) { ops.push('equal'); i--; j--; }
-                else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) { ops.push('insert'); j--; }
-                else { ops.push('delete'); i--; }
-            }
-            return ops.reverse();
-        }
-
-        function computeSimpleOps(a, b) {
-            const ops = [];
-            const max = Math.max(a.length, b.length);
-            for (let i = 0; i < max; i++) {
-                if (i >= a.length) ops.push('insert');
-                else if (i >= b.length) ops.push('delete');
-                else if (a[i] === b[i]) ops.push('equal');
-                else { ops.push('delete'); ops.push('insert'); }
-            }
-            return ops;
-        }
-
-        function escapeAttr(text) {
-            return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        }
-
-        function renderMarkdown(md) {
-            let html = md
-                .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`)
-                .replace(/`([^`]+)`/g, '<code>$1</code>')
-                .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
-                .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
-                .replace(/^####\s(.+)$/gm, '<h4>$1</h4>')
-                .replace(/^###\s(.+)$/gm, '<h3>$1</h3>')
-                .replace(/^##\s(.+)$/gm, '<h2>$1</h2>')
-                .replace(/^#\s(.+)$/gm, '<h1>$1</h1>')
-                .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">')
-                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-                .replace(/^---+$/gm, '<hr>')
-                .replace(/^>\s(.+)$/gm, '<blockquote>$1</blockquote>')
-                .replace(/^[-*]\s(.+)$/gm, '<li>$1</li>')
-                .replace(/^(?!<[hpuolibdcas]|<\/)(.+)$/gm, '<p>$1</p>');
-            html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, '<ul>$&</ul>');
-            return html;
-        }
-
-        // Live-refresh secondary pane on edits
-        EventBus.on('editor:change', () => {
-            if (secondaryPaneMode === 'preview') renderPreview();
-            else if (secondaryPaneMode === 'diff') renderDiff();
-        });
-
-        // ============================================
-        // LINE NUMBERS TOGGLE (v0.3.8)
-        // ============================================
-
-        function toggleLineNumbers() {
-            State.settings.showLineNumbers = !(State.settings.showLineNumbers !== false);
-            Storage.set('settings', State.settings);
-            applyLineNumbersVisibility();
-            updateToolbarButtons();
-            showToast(State.settings.showLineNumbers ? 'Line numbers shown' : 'Line numbers hidden', 'success');
-        }
-
-        function applyLineNumbersVisibility() {
-            const container = document.getElementById('editorContainer');
-            if (State.settings.showLineNumbers !== false) {
-                container.classList.remove('hide-line-numbers');
-            } else {
-                container.classList.add('hide-line-numbers');
-            }
-        }
-
         function initSidebarCollapse() {
             document.querySelectorAll('.sidebar-header-collapsible').forEach(header => {
                 header.addEventListener('click', () => {
@@ -1505,7 +1454,6 @@
             // Load settings
             loadSettings();
             applyVisualSettings();
-            applyLineNumbersVisibility();
             initSidebarCollapse();
             exposeLLMTools();
             populateRoleSelector();
@@ -1549,6 +1497,7 @@
             document.getElementById('btnRevert').addEventListener('click', window.revertCurrentFile);
             document.getElementById('btnSettings').addEventListener('click', window.openSettings);
             document.getElementById('btnErrorLog').addEventListener('click', window.openErrorLog);
+            document.getElementById('btnLLMDebug').addEventListener('click', window.openLLMDebug);
             document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
 
             // Sidebar buttons
@@ -1565,11 +1514,6 @@
             document.getElementById('roleSelect').addEventListener('change', onRoleChange);
             document.getElementById('btnResetCost').addEventListener('click', resetSessionCost);
 
-            // Editor toolbar
-            document.getElementById('btnToggleLineNumbers').addEventListener('click', toggleLineNumbers);
-            document.getElementById('btnTogglePreview').addEventListener('click', togglePreviewPane);
-            document.getElementById('btnToggleDiff').addEventListener('click', toggleDiffPane);
-
             // Chat
             document.getElementById('btnSend').addEventListener('click', () => {
                 const input = document.getElementById('chatInput');
@@ -1585,11 +1529,6 @@
                 resetSessionCost();
                 showToast('Chat cleared', 'success');
             });
-            document.getElementById('btnExportChat').addEventListener('click', () => {
-                if (window.Chat && window.Chat.exportChat) {
-                    window.Chat.exportChat();
-                }
-            });
 
             // EventBus listeners
             EventBus.on('llm:generating', (isGenerating) => {
@@ -1599,14 +1538,6 @@
 
             EventBus.on('issues:refresh', () => {
                 refreshIssues();
-            });
-
-            EventBus.on('tree:refresh', async () => {
-                if (State.currentProject) {
-                    const { owner, repo } = State.currentProject;
-                    State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
-                    renderFileTree();
-                }
             });
 
             EventBus.on('cost:updated', () => {
@@ -1690,12 +1621,6 @@
             tab.content = originalContent;
             tab.dirty = false;
 
-            // Clear the draft from localStorage
-            if (State.currentProject) {
-                const { owner, repo } = State.currentProject;
-                Storage.clearDraft(owner, repo, State.currentBranch, tab.path);
-            }
-
             createEditor(
                 document.getElementById('editorContainer'),
                 originalContent,
@@ -1736,28 +1661,6 @@
                 if (e.ctrlKey && e.key === 'b') {
                     e.preventDefault();
                     toggleSidebar();
-                }
-
-                // Ctrl+Shift+P - Toggle preview
-                if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-                    e.preventDefault();
-                    if (!document.getElementById('btnTogglePreview').disabled) {
-                        togglePreviewPane();
-                    }
-                }
-
-                // Ctrl+Shift+D - Toggle diff
-                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                    e.preventDefault();
-                    if (!document.getElementById('btnToggleDiff').disabled) {
-                        toggleDiffPane();
-                    }
-                }
-
-                // Ctrl+Shift+L - Toggle line numbers
-                if (e.ctrlKey && e.shiftKey && e.key === 'L') {
-                    e.preventDefault();
-                    toggleLineNumbers();
                 }
 
                 // Escape - Close modals
@@ -2037,10 +1940,8 @@
                 console.log('Loading file...');
                 await loadFile(path);
                 
-                // Store the original (server) content for revert — NOT the draft
-                const originalContent = State.currentFile.content;
-                // Preserve draft dirty state (createEditor will reset State.editorDirty)
-                const hasDraft = State.editorDirty;
+                // Store the original (server) content for revert
+                const originalContent = State.editorContent;
                 
                 // Handle preview tabs - single click opens preview, replaces existing preview
                 const isPreview = !isDoubleClick;
@@ -2095,14 +1996,6 @@
                     path
                 );
 
-                // Restore draft dirty state (createEditor resets editorDirty to false)
-                if (hasDraft) {
-                    State.editorDirty = true;
-                    if (State.activeTabIndex >= 0) {
-                        State.openTabs[State.activeTabIndex].dirty = true;
-                    }
-                }
-
                 // Render tabs
                 renderEditorTabs();
                 
@@ -2110,15 +2003,6 @@
                 updateStatusBar();
                 updateCommitButton();
                 updateRevertButton();
-                updateToolbarButtons();
-
-                // Refresh secondary pane for new file
-                if (secondaryPaneMode === 'preview') {
-                    if (isPreviewable(path)) renderPreview();
-                    else closeSecondaryPane();
-                } else if (secondaryPaneMode === 'diff') {
-                    renderDiff();
-                }
 
                 // Highlight active file in tree
                 document.querySelectorAll('.tree-item').forEach(el => {
@@ -2163,22 +2047,10 @@
                 tab.path
             );
             
-            // Restore dirty state (createEditor resets editorDirty to false)
-            State.editorDirty = tab.dirty;
-            
             renderEditorTabs();
             updateStatusBar();
             updateCommitButton();
             updateRevertButton();
-            updateToolbarButtons();
-            
-            // Refresh secondary pane content for new tab
-            if (secondaryPaneMode === 'preview') {
-                if (isPreviewable(tab.path)) renderPreview();
-                else closeSecondaryPane();
-            } else if (secondaryPaneMode === 'diff') {
-                renderDiff();
-            }
             
             // Highlight active file in tree
             document.querySelectorAll('.tree-item').forEach(el => {
