@@ -7,6 +7,25 @@
     <link rel="stylesheet" href="editor/css/editor.css">
 </head>
 <body>
+    <!-- Visible Error Diagnostic — catches module load failures -->
+    <div id="bootErrors" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:#300; color:#faa; padding:12px 16px; font-family:monospace; font-size:12px; max-height:40vh; overflow:auto; border-bottom:2px solid #f00;">
+        <strong>⚠️ JS ERRORS:</strong><pre id="bootErrorList" style="margin:4px 0 0 0; white-space:pre-wrap;"></pre>
+    </div>
+    <script>
+        window._bootErrors = [];
+        window.addEventListener('error', function(e) {
+            window._bootErrors.push('[ERROR] ' + e.message + (e.filename ? ' @ ' + e.filename + ':' + e.lineno + ':' + e.colno : ''));
+            var el = document.getElementById('bootErrors');
+            var list = document.getElementById('bootErrorList');
+            if (el && list) { el.style.display = 'block'; list.textContent = window._bootErrors.join('\n'); }
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            window._bootErrors.push('[REJECT] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+            var el = document.getElementById('bootErrors');
+            var list = document.getElementById('bootErrorList');
+            if (el && list) { el.style.display = 'block'; list.textContent = window._bootErrors.join('\n'); }
+        });
+    </script>
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
