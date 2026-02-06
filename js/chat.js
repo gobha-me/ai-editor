@@ -1044,9 +1044,7 @@ async function handleGeneralRequest(input) {
                     )
                 ]);
             } else {
-                // Follow-up rounds: NON-STREAMING for reliability
-                // Models handle tool results much better without streaming
-                const chatOptions = { stream: false };
+                const chatOptions = { stream: true };
                 if (roleTools) {
                     chatOptions.tools = roleTools;
                 }
