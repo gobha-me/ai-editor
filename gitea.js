@@ -97,14 +97,10 @@ const GiteaAPI = {
     },
 
     async createBranch(owner, repo, branchName, fromBranch = 'main') {
-        // First get the SHA of the source branch
-        const sourceBranch = await this.request('GET', `/repos/${owner}/${repo}/branches/${fromBranch}`);
-        const sha = sourceBranch.commit.id;
-
-        // Create new branch
-        await this.request('POST', `/repos/${owner}/${repo}/git/refs`, {
-            ref: `refs/heads/${branchName}`,
-            sha: sha
+        // Gitea API: POST /repos/{owner}/{repo}/branches
+        await this.request('POST', `/repos/${owner}/${repo}/branches`, {
+            new_branch_name: branchName,
+            old_branch_name: fromBranch
         });
 
         EventBus.emit('gitea:branchCreated', { owner, repo, branchName });
@@ -600,6 +596,9 @@ async function saveFile(commitMessage) {
         State.currentFile.content = State.editorContent;
         State.editorDirty = false;
 
+        // Clear draft from localStorage
+        Storage.clearDraft(owner, repo, State.currentBranch, path);
+
         EventBus.emit('gitea:saved', { path, sha: result.content.sha });
         return result;
 
@@ -657,6 +656,8 @@ async function batchSaveFiles(commitMessage, tabs) {
             State.currentFile.content = tab.content;
             State.editorDirty = false;
         }
+        // Clear draft from localStorage
+        Storage.clearDraft(owner, repo, State.currentBranch, result.path);
     }
 
     if (errors.length > 0) {

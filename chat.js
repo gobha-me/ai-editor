@@ -4,7 +4,7 @@
  */
 
 import { State, EventBus, Storage } from './core.js';
-import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js';
+import { LLM, LLMDebug, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
 import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
 import { GiteaAPI, loadFile } from './gitea.js';
 
@@ -24,7 +24,7 @@ let pendingEdit = null;  // { code, explanation } waiting for user approval
 LLMTools.handlers = {
     read_current_file: async () => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         const content = State.editorContent;
         const lines = content.split('\n');
@@ -38,7 +38,7 @@ LLMTools.handlers = {
 
     replace_lines: async ({ start_line, end_line, new_content }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -72,7 +72,7 @@ LLMTools.handlers = {
 
     insert_lines: async ({ after_line, content }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -104,7 +104,7 @@ LLMTools.handlers = {
 
     delete_lines: async ({ start_line, end_line }) => {
         if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor' };
+            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
         const lines = State.editorContent.split('\n');
@@ -210,6 +210,83 @@ LLMTools.handlers = {
         };
     },
 
+    // === FILE CREATION ===
+
+    create_file: async ({ path, content = '', message = '' }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+        const commitMsg = message || `Create ${path}`;
+        try {
+            const result = await GiteaAPI.createFile(owner, repo, path, content, commitMsg, branch);
+            EventBus.emit('tree:refresh');
+            return {
+                success: true,
+                path: path,
+                message: `Created ${path} on branch ${branch}`
+            };
+        } catch (error) {
+            return { error: `Failed to create file ${path}: ${error.message}` };
+        }
+    },
+
+    // === SEARCH ===
+
+    search_in_files: async ({ query, path = '', max_results = 20 }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+        try {
+            let files = State.fileTree.filter(f => f.type !== 'dir');
+            if (path) files = files.filter(f => f.path.startsWith(path));
+
+            const textExts = new Set([
+                'js','ts','jsx','tsx','py','go','rs','c','cpp','h','hpp',
+                'java','rb','php','css','scss','html','htm','xml','json',
+                'yaml','yml','toml','md','txt','sh','bash','sql','vue',
+                'svelte','conf','cfg','ini','pl','pm'
+            ]);
+            files = files.filter(f => {
+                const ext = f.path.split('.').pop().toLowerCase();
+                const name = f.path.split('/').pop().toLowerCase();
+                return textExts.has(ext) || textExts.has(name);
+            });
+
+            const results = [];
+            const queryLower = query.toLowerCase();
+            for (const file of files.slice(0, 50)) {
+                if (results.length >= max_results) break;
+                try {
+                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
+                    const lines = fileData.content.split('\n');
+                    const matches = [];
+                    for (let i = 0; i < lines.length; i++) {
+                        if (lines[i].toLowerCase().includes(queryLower)) {
+                            matches.push({ line: i + 1, text: lines[i].trim().substring(0, 200) });
+                            if (matches.length >= 5) break;
+                        }
+                    }
+                    if (matches.length > 0) {
+                        results.push({ path: file.path, matches });
+                    }
+                } catch (e) { /* skip unreadable files */ }
+            }
+            return {
+                query, files_searched: Math.min(files.length, 50),
+                results,
+                message: results.length > 0
+                    ? `Found "${query}" in ${results.length} file(s)`
+                    : `No matches for "${query}"`
+            };
+        } catch (error) {
+            return { error: `Search failed: ${error.message}` };
+        }
+    },
+
     // === ISSUE TOOL HANDLERS ===
 
     list_issues: async ({ state = 'open', labels = '' } = {}) => {
@@ -218,7 +295,7 @@ LLMTools.handlers = {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const params = new URLSearchParams({ state, type: 'issues', limit: '20' });
+            const params = new URLSearchParams({ state, type: 'issues', limit: '50' });
             if (labels) params.append('labels', labels);
             const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
             const response = await fetch(url, {
@@ -553,6 +630,128 @@ function renderMessage(message) {
     chatContainer.appendChild(messageEl);
 }
 
+/**
+ * Add a collapsible tool call message showing tool name, args summary, and result.
+ * Renders inline in the chat as a compact system message with expandable details.
+ */
+function addToolCallMessage(toolName, args, result) {
+    // Build a short args summary for the header
+    const argSummary = summarizeToolArgs(toolName, args);
+    
+    // Determine result status
+    const isError = result?.error;
+    const statusIcon = isError ? '❌' : '✅';
+    const resultSummary = summarizeToolResult(toolName, result);
+    
+    // Format full args and result for the expandable section
+    const argsJson = JSON.stringify(args, null, 2);
+    const resultJson = JSON.stringify(result, null, 2);
+    // Truncate very long results (e.g., file contents)
+    const truncatedResult = resultJson.length > 2000 
+        ? resultJson.substring(0, 2000) + '\n... (truncated)'
+        : resultJson;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = `chat-message tool-call ${isError ? 'tool-error' : 'tool-success'}`;
+    messageEl.innerHTML = `
+        <details class="tool-call-details">
+            <summary class="tool-call-summary">
+                <span class="tool-call-icon">🔧</span>
+                <span class="tool-call-name">${escapeHtml(toolName)}</span>
+                <span class="tool-call-args-summary">${escapeHtml(argSummary)}</span>
+                <span class="tool-call-status">${statusIcon} ${escapeHtml(resultSummary)}</span>
+            </summary>
+            <div class="tool-call-body">
+                <div class="tool-call-section">
+                    <div class="tool-call-label">Arguments</div>
+                    <pre class="tool-call-json">${escapeHtml(argsJson)}</pre>
+                </div>
+                <div class="tool-call-section">
+                    <div class="tool-call-label">Result</div>
+                    <pre class="tool-call-json">${escapeHtml(truncatedResult)}</pre>
+                </div>
+            </div>
+        </details>
+    `;
+    chatContainer.appendChild(messageEl);
+    scrollToBottom();
+
+    // Don't add to chatHistory (tool calls are tracked in the message thread already)
+}
+
+function summarizeToolArgs(toolName, args) {
+    if (!args || Object.keys(args).length === 0) return '';
+    
+    switch (toolName) {
+        case 'read_file':
+        case 'open_file':
+            return args.path || '';
+        case 'read_current_file':
+        case 'list_open_tabs':
+        case 'get_project_tree':
+            return args.path || '';
+        case 'replace_lines':
+            return `L${args.start_line}-${args.end_line}`;
+        case 'insert_lines':
+            return `after L${args.after_line} (${(args.content || '').split('\n').length} lines)`;
+        case 'delete_lines':
+            return `L${args.start_line}-${args.end_line}`;
+        case 'create_file':
+            return args.path || '';
+        case 'search_in_files':
+            return `"${args.query}"${args.path ? ` in ${args.path}` : ''}`;
+        case 'read_issue':
+            return `#${args.number}`;
+        case 'list_issues':
+            return args.state || 'open';
+        case 'create_issue':
+            return args.title ? `"${args.title.substring(0, 50)}"` : '';
+        case 'update_issue':
+            return `#${args.number}`;
+        case 'add_issue_comment':
+            return `#${args.number}`;
+        default:
+            // Show first string arg
+            const firstArg = Object.entries(args).find(([k, v]) => typeof v === 'string');
+            return firstArg ? `${firstArg[0]}=${firstArg[1].substring(0, 40)}` : '';
+    }
+}
+
+function summarizeToolResult(toolName, result) {
+    if (!result) return 'no result';
+    if (result.error) return result.error.substring(0, 80);
+    
+    switch (toolName) {
+        case 'read_file':
+        case 'read_current_file':
+            return `${result.line_count || '?'} lines`;
+        case 'get_project_tree':
+            return `${result.files?.length || 0} files`;
+        case 'open_file':
+            return result.message || 'opened';
+        case 'replace_lines':
+        case 'insert_lines':
+        case 'delete_lines':
+            return result.message || 'edited';
+        case 'create_file':
+            return result.message || 'created';
+        case 'search_in_files':
+            return `${result.results?.length || 0} matches in ${result.files_searched || 0} files`;
+        case 'list_issues':
+            return `${result.count || 0} issues`;
+        case 'read_issue':
+            return result.title ? `#${result.number}: ${result.title.substring(0, 50)}` : 'loaded';
+        case 'create_issue':
+            return result.message || 'created';
+        case 'update_issue':
+            return result.message || 'updated';
+        case 'add_issue_comment':
+            return result.message || 'commented';
+        default:
+            return result.message || result.success ? 'done' : JSON.stringify(result).substring(0, 60);
+    }
+}
+
 function renderMessages() {
     if (!chatContainer) return;
     
@@ -617,8 +816,9 @@ function formatMessageContent(content) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
 }
 
@@ -670,25 +870,41 @@ async function handleUserInput() {
 function detectIntent(input) {
     const lower = input.toLowerCase();
     
-    if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-        lower.includes('add') || lower.includes('remove') || lower.includes('fix') ||
-        lower.includes('refactor') || lower.includes('update') || lower.includes('rewrite')) {
-        return 'edit';
+    // Commit message is very specific, check first
+    if (lower.includes('commit message') || lower.includes('generate commit')) {
+        return 'commit';
     }
     
+    // Issue reference — but only simple "work on issue" requests
+    if ((lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue'))
+        && !lower.includes('find') && !lower.includes('search') && !lower.includes('create')) {
+        return 'issue';
+    }
+    
+    // Edit intent — ONLY if a file is already open.
+    // Without a file, the general handler uses tools to find the right file.
+    if (State.currentFile) {
+        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+            lower.includes('refactor') || lower.includes('rewrite')) {
+            return 'edit';
+        }
+        // Weaker signals — only edit if clearly about current file
+        if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
+            && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
+            && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
+            && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')
+            && !lower.includes('review') && !lower.includes('which')) {
+            return 'edit';
+        }
+    }
+    
+    // Explain — works with or without a file
     if (lower.includes('explain') || lower.includes('what does') || lower.includes('how does') ||
         lower.includes('why does') || lower.includes('understand')) {
         return 'explain';
     }
     
-    if (lower.includes('commit message') || lower.includes('generate commit')) {
-        return 'commit';
-    }
-    
-    if (lower.includes('issue #') || lower.includes('work on issue') || lower.includes('implement issue')) {
-        return 'issue';
-    }
-    
+    // Everything else → general handler with full tool access
     return 'general';
 }
 
@@ -698,7 +914,9 @@ function detectIntent(input) {
 
 async function handleEditRequest(input) {
     if (!State.currentFile) {
-        addMessage('system', '⚠️ Please open a file first.');
+        // No file open — use general handler so LLM can use tools to find the right file
+        addMessage('system', 'ℹ️ No file open — investigating with tools...');
+        await handleGeneralRequest(input);
         return;
     }
 
@@ -772,80 +990,312 @@ async function handleIssueRequest(input) {
         return;
     }
 
+    // Show issue context
     addMessage('system', `📋 **Issue #${issue.number}: ${issue.title}**\n\n${issue.body || 'No description'}`);
     
-    addStreamingMessage();
-
-    const analysis = await analyzeIssue(issue, (token, content) => {
-        updateStreamingMessage(content);
-    });
-
-    finalizeStreamingMessage(analysis, { hasCode: false });
+    // Route through general handler with full tool access
+    const enrichedInput = `Work on issue #${issue.number}: "${issue.title}"\n\nIssue description:\n${issue.body || 'No description'}\n\nOriginal request: ${input}\n\nPlease investigate the codebase to understand what needs to change, then make the necessary edits.`;
+    await handleGeneralRequest(enrichedInput);
 }
 
 async function handleGeneralRequest(input) {
     addStreamingMessage();
 
     const systemPrompt = buildSystemPrompt();
-    let content = '';
+    const roleTools = LLMTools.getToolsForRole();
 
-    // Check if current model supports function calling
-    const currentModel = State.models.find(m => m.id === State.settings.llmModel);
-    const supportsTools = currentModel?.capabilities?.supportsFunctionCalling !== false;
-
-    // Include tools only if the model supports function calling
-    const chatOptions = {
-        stream: true,
-        onToken: (token, fullContent) => {
-            content = fullContent;
-            updateStreamingMessage(fullContent);
-        }
-    };
-
-    if (supportsTools) {
-        chatOptions.tools = LLMTools.getToolsForRole();
-    }
-
-    const result = await LLM.chat([
+    // Build initial message thread
+    const messages = [
         { role: 'system', content: systemPrompt },
         ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
         { role: 'user', content: input }
-    ], chatOptions);
+    ];
 
-    // Handle tool calls if present
-    if (result.toolCalls && result.toolCalls.length > 0) {
-        // Execute tool calls and continue conversation
-        const toolResults = [];
-        for (const toolCall of result.toolCalls) {
-            addMessage('system', `🔧 Using tool: ${toolCall.function.name}`);
-            const toolResult = await executeToolCall(toolCall);
-            toolResults.push({
-                tool_call_id: toolCall.id,
-                role: 'tool',
-                content: JSON.stringify(toolResult)
+    // Iterative tool call loop — max 8 rounds to support complex workflows
+    const MAX_TOOL_ROUNDS = 8;
+    let finalContent = '';
+    const toolActions = []; // Track all tool executions for fallback summary
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        let content = '';
+        let result;
+
+        try {
+            if (round === 0) {
+                // First round: STREAM to user for responsiveness
+                const chatOptions = {
+                    stream: true,
+                    tools: roleTools,
+                    onToken: (token, fullContent) => {
+                        content = fullContent;
+                        updateStreamingMessage(fullContent);
+                    }
+                };
+
+                result = await Promise.race([
+                    LLM.chat(messages, chatOptions),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Response timeout (60s)')), 60000)
+                    )
+                ]);
+            } else {
+                const chatOptions = { stream: true, tools: roleTools };
+
+                // Show thinking indicator
+                updateStreamingMessage(finalContent || '*(processing tool results...)*');
+
+                result = await Promise.race([
+                    LLM.chat(messages, chatOptions),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Response timeout (90s)')), 90000)
+                    )
+                ]);
+
+                content = result.content || '';
+                // Show the new content
+                if (content) {
+                    const combined = finalContent ? finalContent + '\n\n' + content : content;
+                    updateStreamingMessage(combined);
+                }
+            }
+
+            // Keep isGenerating true between rounds
+            State.isGenerating = true;
+            EventBus.emit('llm:generating', true);
+
+        } catch (err) {
+            // Abort any in-flight request
+            LLM.stop();
+            
+            if (toolActions.length > 0) {
+                // Show what tools did accomplish
+                const summaryLines = toolActions.map(a => {
+                    const status = a.error ? '❌' : '✅';
+                    const detail = a.result?.message || a.result?.error || '';
+                    return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
+                });
+                finalContent = (finalContent ? finalContent + '\n\n' : '') + 
+                    `⚠️ Follow-up failed (${err.message}). Tool results:\n\n${summaryLines.join('\n')}`;
+            } else if (content) {
+                finalContent = content;
+            } else {
+                throw err;
+            }
+            break;
+        }
+
+        // === LAYER 1: Structured tool_calls from API (primary path) ===
+        let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
+        let cleanContent = stripThinkBlocks(content || result.content || '');
+        let toolCallSource = toolCalls.length > 0 ? 'structured' : null;
+
+        // === LAYER 2: Text-format fallback ===
+        // If no structured tool_calls, check content for text-format tool calls.
+        // Handles APIs (e.g. Venice + Kimi K2) that emit tool call tokens in
+        // delta.content instead of delta.tool_calls.
+        // Safe: think blocks already stripped by streaming handler + stripThinkBlocks.
+        if (toolCalls.length === 0 && cleanContent) {
+            const parsed = parseTextToolCalls(cleanContent);
+            if (parsed.toolCalls.length > 0) {
+                toolCalls = parsed.toolCalls;
+                cleanContent = parsed.cleanContent;
+                toolCallSource = 'text';
+                updateStreamingMessage(cleanContent || finalContent || '');
+            }
+        }
+
+        // Accumulate text content across rounds
+        if (cleanContent.trim()) {
+            finalContent = finalContent ? finalContent + '\n\n' + cleanContent : cleanContent;
+        }
+
+        if (toolCalls.length > 0) {
+            // === EXECUTE TOOL CALLS ===
+            const structuredResults = [];  // For proper OpenAI tool threading
+            const textResults = [];        // For user-message injection fallback
+
+            for (const toolCall of toolCalls) {
+                const toolName = toolCall.function?.name || 'unknown';
+                let args = {};
+                try {
+                    args = JSON.parse(toolCall.function?.arguments || '{}');
+                } catch (e) { /* malformed args */ }
+
+                const toolResult = await executeToolCall(toolCall);
+
+                // Show collapsible tool call detail
+                addToolCallMessage(toolName, args, toolResult);
+
+                toolActions.push({
+                    tool: toolName,
+                    args: args,
+                    result: toolResult,
+                    error: !!toolResult?.error
+                });
+
+                if (toolCallSource === 'structured') {
+                    structuredResults.push({
+                        tool_call_id: toolCall.id,
+                        role: 'tool',
+                        content: JSON.stringify(toolResult)
+                    });
+                } else {
+                    textResults.push({ name: toolName, result: toolResult });
+                }
+            }
+
+            // === BUILD THREAD FOR NEXT ROUND ===
+            if (toolCallSource === 'structured') {
+                // Proper OpenAI threading: assistant with tool_calls → tool results
+                messages.push({
+                    role: 'assistant',
+                    content: cleanContent || null,
+                    tool_calls: toolCalls
+                });
+                for (const tr of structuredResults) {
+                    messages.push(tr);
+                }
+            } else {
+                // Text-parsed: inject results as user context
+                // (API didn't return structured tool_calls, so we can't use tool role)
+                messages.push({ role: 'assistant', content: cleanContent || null });
+                const summary = textResults.map(tr =>
+                    `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
+                ).join('\n\n');
+                messages.push({
+                    role: 'user',
+                    content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`
+                });
+            }
+
+            // Prepare UI for next round
+            const partialEl = document.getElementById('streaming-message');
+            if (partialEl) {
+                if (finalContent) {
+                    partialEl.querySelector('.message-content').innerHTML = formatMessageContent(finalContent);
+                    partialEl.classList.remove('streaming');
+                }
+                partialEl.removeAttribute('id');
+            }
+            addStreamingMessage();
+            continue;
+        }
+
+        // === NO TOOL CALLS — CHECK IF WE'RE DONE ===
+        // If finish_reason is 'tool_calls' but no tool calls found, model may be confused
+        if (result.finishReason === 'tool_calls') {
+            console.warn('Model signaled tool_calls but none were parsed — ending loop');
+        }
+
+        break;
+    }
+
+    // Handle empty responses
+    if (!finalContent.trim()) {
+        if (toolActions.length > 0) {
+            const summaryLines = toolActions.map(a => {
+                const status = a.error ? '❌' : '✅';
+                const detail = a.result?.message || a.result?.error || '';
+                return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
+            });
+            finalContent = `Completed ${toolActions.length} tool call${toolActions.length > 1 ? 's' : ''} but the model did not provide a summary:\n\n${summaryLines.join('\n')}`;
+        } else {
+            finalContent = '*The model returned an empty response. Try rephrasing or switching models.*';
+        }
+    }
+
+    finalizeStreamingMessage(finalContent, { hasCode: false });
+}
+
+/**
+ * Parse tool calls embedded as text in LLM content.
+ * 
+ * IMPORTANT: This is a FALLBACK for APIs that don't return structured tool_calls
+ * (e.g. Venice.ai + Kimi K2). Only called when result.toolCalls is empty.
+ * Content MUST have think blocks stripped before calling this function.
+ * 
+ * Returns { toolCalls: [], cleanContent: string }
+ */
+function parseTextToolCalls(text) {
+    if (!text) return { toolCalls: [], cleanContent: text };
+
+    const toolCalls = [];
+    let cleanContent = text;
+    let match;
+
+    // Kimi K2: <|tool_calls_section_begin|>...<|tool_calls_section_end|>
+    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
+    while ((match = kimiSectionPattern.exec(text)) !== null) {
+        const sectionBlock = match[1];
+        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
+        let kimiMatch;
+        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
+            const fnName = kimiMatch[1].trim();
+            const argsStr = kimiMatch[2].trim();
+            let args = {};
+            try { args = JSON.parse(argsStr); } catch (e) { args = { _raw: argsStr }; }
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: { name: fnName, arguments: JSON.stringify(args) }
             });
         }
-        
-        // Get follow-up response with tool results
-        let followUpContent = '';
-        await LLM.chat([
-            { role: 'system', content: systemPrompt },
-            ...State.chatHistory.slice(-6).filter(m => m.role !== 'system'),
-            { role: 'user', content: input },
-            { role: 'assistant', content: result.content || '', tool_calls: result.toolCalls },
-            ...toolResults
-        ], {
-            stream: true,
-            onToken: (token, fullContent) => {
-                followUpContent = fullContent;
-                updateStreamingMessage(fullContent);
-            }
-        });
-        
-        finalizeStreamingMessage(followUpContent, { hasCode: false });
-    } else {
-        finalizeStreamingMessage(content, { hasCode: false });
+        cleanContent = cleanContent.replace(match[0], '');
     }
+
+    // JSON in tags: <tool_call>{"name":"fn","arguments":{...}}</tool_call> or <function_call>
+    const jsonToolPattern = /<(?:tool_call|function_call)>\s*(\{[\s\S]*?\})\s*<\/(?:tool_call|function_call)>/gi;
+    while ((match = jsonToolPattern.exec(text)) !== null) {
+        try {
+            const parsed = JSON.parse(match[1]);
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: {
+                    name: parsed.name || parsed.function?.name || '',
+                    arguments: typeof parsed.arguments === 'string'
+                        ? parsed.arguments
+                        : JSON.stringify(parsed.arguments || parsed.parameters || {})
+                }
+            });
+            cleanContent = cleanContent.replace(match[0], '');
+        } catch (e) { /* invalid JSON, skip */ }
+    }
+
+    // MiniMax XML: <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
+    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
+    while ((match = minimaxPattern.exec(text)) !== null) {
+        const invokeBlock = match[1];
+        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
+        let invokeMatch;
+        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
+            const args = {};
+            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
+            let paramMatch;
+            while ((paramMatch = paramPattern.exec(invokeMatch[2])) !== null) {
+                args[paramMatch[1]] = paramMatch[2].trim();
+            }
+            toolCalls.push({
+                id: `text_call_${toolCalls.length}`,
+                type: 'function',
+                function: { name: invokeMatch[1], arguments: JSON.stringify(args) }
+            });
+        }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // Generic XML: <tool_call><name>fn</name><arguments>{...}</arguments></tool_call>
+    const genericPattern = /<tool_call>\s*<name>([^<]+)<\/name>\s*<arguments>([\s\S]*?)<\/arguments>\s*<\/tool_call>/gi;
+    while ((match = genericPattern.exec(text)) !== null) {
+        toolCalls.push({
+            id: `text_call_${toolCalls.length}`,
+            type: 'function',
+            function: { name: match[1].trim(), arguments: match[2].trim() }
+        });
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    return { toolCalls, cleanContent: cleanContent.trim() };
 }
 
 // ============================================
@@ -902,13 +1352,135 @@ function sendMessage(content) {
 // EXPOSE TO GLOBAL (for onclick handlers)
 // ============================================
 
+/**
+ * Export the current chat as markdown text and copy to clipboard.
+ * Walks the DOM to capture all messages including tool call details.
+ */
+function exportChat() {
+    if (!chatContainer) return;
+
+    const lines = [];
+    const modelName = State.settings.llmModel || 'unknown';
+    const project = State.currentProject 
+        ? `${State.currentProject.owner}/${State.currentProject.repo}` 
+        : 'none';
+    
+    lines.push(`# AI Editor Chat Export`);
+    lines.push(`- **Model:** ${modelName}`);
+    lines.push(`- **Project:** ${project}`);
+    lines.push(`- **Branch:** ${State.currentBranch || 'main'}`);
+    lines.push(`- **Exported:** ${new Date().toLocaleString()}`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+
+    const messages = chatContainer.querySelectorAll('.chat-message');
+    for (const msg of messages) {
+        // Tool call messages
+        if (msg.classList.contains('tool-call')) {
+            const summary = msg.querySelector('.tool-call-summary');
+            const nameEl = msg.querySelector('.tool-call-name');
+            const argsSummEl = msg.querySelector('.tool-call-args-summary');
+            const statusEl = msg.querySelector('.tool-call-status');
+            const argsJson = msg.querySelector('.tool-call-section:first-child .tool-call-json');
+            const resultJson = msg.querySelector('.tool-call-section:last-child .tool-call-json');
+
+            const name = nameEl?.textContent?.trim() || 'unknown';
+            const argsSumm = argsSummEl?.textContent?.trim() || '';
+            const status = statusEl?.textContent?.trim() || '';
+
+            lines.push(`> 🔧 **${name}** ${argsSumm} → ${status}`);
+
+            // Include args and result in collapsed detail
+            if (argsJson?.textContent?.trim()) {
+                lines.push(`> <details><summary>Details</summary>`);
+                lines.push(`>`);
+                lines.push(`> **Args:**`);
+                lines.push(`> \`\`\`json`);
+                for (const line of argsJson.textContent.trim().split('\n')) {
+                    lines.push(`> ${line}`);
+                }
+                lines.push(`> \`\`\``);
+                if (resultJson?.textContent?.trim()) {
+                    lines.push(`> **Result:**`);
+                    lines.push(`> \`\`\`json`);
+                    // Truncate very long results
+                    const resultText = resultJson.textContent.trim();
+                    const resultLines = resultText.split('\n');
+                    const maxLines = 30;
+                    for (const line of resultLines.slice(0, maxLines)) {
+                        lines.push(`> ${line}`);
+                    }
+                    if (resultLines.length > maxLines) {
+                        lines.push(`> ... (${resultLines.length - maxLines} more lines)`);
+                    }
+                    lines.push(`> \`\`\``);
+                }
+                lines.push(`> </details>`);
+            }
+            lines.push('');
+            continue;
+        }
+
+        // Regular messages
+        const roleEl = msg.querySelector('.message-role');
+        const timeEl = msg.querySelector('.message-time');
+        const contentEl = msg.querySelector('.message-content');
+
+        const role = roleEl?.textContent?.trim() || 'Unknown';
+        const time = timeEl?.textContent?.trim() || '';
+        const content = contentEl?.textContent?.trim() || '';
+
+        if (msg.classList.contains('user')) {
+            lines.push(`### 👤 You (${time})`);
+        } else if (msg.classList.contains('assistant')) {
+            lines.push(`### 🤖 Assistant (${time})`);
+        } else if (msg.classList.contains('system')) {
+            lines.push(`### ℹ️ System (${time})`);
+        } else if (msg.classList.contains('error')) {
+            lines.push(`### ❌ Error (${time})`);
+        } else {
+            lines.push(`### ${role} (${time})`);
+        }
+
+        lines.push(content);
+        lines.push('');
+    }
+
+    // Cost summary
+    if (State.sessionCost.requests > 0) {
+        lines.push('---');
+        lines.push('');
+        lines.push(`**Session:** ${State.sessionCost.totalInputTokens + State.sessionCost.totalOutputTokens} tokens (${State.sessionCost.totalInputTokens}↓ ${State.sessionCost.totalOutputTokens}↑) · $${State.sessionCost.totalCost.toFixed(4)} · ${State.sessionCost.requests} requests`);
+    }
+
+    const text = lines.join('\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+        window.showToast('Chat copied to clipboard', 'success');
+    }).catch(() => {
+        // Fallback: select in a textarea
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        window.showToast('Chat copied to clipboard', 'success');
+    });
+}
+
 window.Chat = {
     applyPendingEdit,
     rejectPendingEdit,
     stopGeneration,
     clearChat,
     sendMessage,
-    executeToolCall
+    executeToolCall,
+    exportChat
 };
 
 // ============================================

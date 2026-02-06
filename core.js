@@ -54,6 +54,7 @@ const State = {
         editorFontSize: 14,        // Editor font size in px
         showIssues: true,          // Show issues panel in sidebar
         showWorkflows: true,       // Show workflows panel in sidebar
+        showLineNumbers: true,     // Show line numbers in editor
         theme: 'dark'
     },
 
@@ -469,10 +470,11 @@ Roles.register({
     id: 'coder',
     name: 'Coder',
     icon: '💻',
-    description: 'Read/edit code, navigate project tree, read issues for context. No issue creation.',
+    description: 'Read/edit/create code, search the codebase, navigate project tree, read issues for context. No issue creation.',
     tools: [
         'read_current_file', 'replace_lines', 'insert_lines', 'delete_lines',
         'get_project_tree', 'open_file', 'read_file', 'list_open_tabs',
+        'create_file', 'search_in_files',
         'read_issue', 'list_issues'
     ]
 });
@@ -481,9 +483,10 @@ Roles.register({
     id: 'pm',
     name: 'Project Manager',
     icon: '📋',
-    description: 'Create/manage issues, read code for context. No code editing.',
+    description: 'Create/manage issues, search and read code for context. No code editing.',
     tools: [
         'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'search_in_files',
         'create_issue', 'update_issue', 'list_issues', 'read_issue',
         'add_issue_comment'
     ]
@@ -493,9 +496,10 @@ Roles.register({
     id: 'reviewer',
     name: 'Reviewer',
     icon: '🔍',
-    description: 'Read-only code access, can comment on issues. No code editing or issue creation.',
+    description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.',
     tools: [
         'read_current_file', 'get_project_tree', 'read_file', 'list_open_tabs',
+        'search_in_files',
         'list_issues', 'read_issue', 'add_issue_comment'
     ]
 });
@@ -523,22 +527,46 @@ function scheduleDraftSave() {
     if (draftSaveTimer) clearTimeout(draftSaveTimer);
     
     draftSaveTimer = setTimeout(() => {
-        if (State.editorDirty && State.currentFile && State.currentProject) {
-            Storage.saveDraft(
-                State.currentProject.owner,
-                State.currentProject.repo,
-                State.currentBranch,
-                State.currentFile.path,
-                State.editorContent
-            );
-        }
+        saveDraftNow();
     }, 2000); // 2 second debounce
+}
+
+// Immediate draft save (for tool edits and beforeunload)
+function saveDraftNow() {
+    if (State.editorDirty && State.currentFile && State.currentProject) {
+        Storage.saveDraft(
+            State.currentProject.owner,
+            State.currentProject.repo,
+            State.currentBranch,
+            State.currentFile.path,
+            State.editorContent
+        );
+    }
+    // Also persist all dirty tab contents
+    if (State.currentProject) {
+        const { owner, repo } = State.currentProject;
+        for (const tab of State.openTabs) {
+            if (tab.dirty && tab.content !== tab.originalContent) {
+                Storage.saveDraft(owner, repo, State.currentBranch, tab.path, tab.content);
+            }
+        }
+    }
 }
 
 // Listen for editor changes
 EventBus.on('editor:change', () => {
     State.editorDirty = true;
     scheduleDraftSave();
+});
+
+// Immediate save on tool-applied edits (these are discrete, important changes)
+EventBus.on('editor:editApplied', () => {
+    saveDraftNow();
+});
+
+// Save drafts before page unload (crash/refresh safety net)
+window.addEventListener('beforeunload', () => {
+    saveDraftNow();
 });
 
 // ============================================
@@ -554,5 +582,6 @@ export {
     Roles,
     DEFAULT_CAPABILITIES,
     loadSettings,
-    saveSettings
+    saveSettings,
+    saveDraftNow
 };

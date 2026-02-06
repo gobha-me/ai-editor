@@ -6,151 +6,178 @@
 import { State, EventBus, Storage, Providers, Roles } from './core.js';
 
 // ============================================
+// THINK-BLOCK STRIPPING
+// ============================================
+
+/**
+ * Strip <think>...</think> blocks from text content.
+ * Handles multiple blocks, nested whitespace, and partial/unclosed tags.
+ * Used for non-streaming responses where think blocks arrive intact.
+ */
+function stripThinkBlocks(text) {
+    if (!text) return text;
+    // Strip all <think>...</think> blocks (non-greedy, handles multiple)
+    let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    // Also strip unclosed <think> block at end (model cut off mid-thought)
+    result = result.replace(/<think>[\s\S]*$/gi, '');
+    return result.trim();
+}
+
+// ============================================
 // LLM DEBUG LOGGER
 // ============================================
 
 /**
- * Ring-buffer debug logger. Captures raw SSE data, parsed deltas,
+ * Ring-buffer debug logger that captures raw SSE data, parsed deltas,
  * think-block filter decisions, and final results for every LLM exchange.
- * Zero impact on control flow — pure observation.
+ * Rendered by the 🔬 Debug Modal in index.html.
  */
 const LLMDebug = {
-    exchanges: [],
-    maxExchanges: 30,
-    _current: null,
+    exchanges: [],      // Ring buffer of exchange records
+    maxExchanges: 50,
+    _current: null,     // Exchange being recorded right now
 
-    /** Start recording a new exchange */
+    /** Start a new exchange. Called at top of LLM.chat(). */
     startExchange(requestBody) {
-        const ex = {
+        const exchange = {
             id: Date.now(),
-            ts: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
             model: requestBody.model,
             stream: requestBody.stream,
-            toolsSent: requestBody.tools?.length || 0,
-            msgCount: requestBody.messages?.length || 0,
+            toolCount: requestBody.tools?.length || 0,
+            messageCount: requestBody.messages?.length || 0,
             messages: requestBody.messages?.map(m => ({
                 role: m.role,
-                preview: typeof m.content === 'string'
-                    ? m.content.slice(0, 200) + (m.content.length > 200 ? '…' : '')
-                    : m.content === null ? '<null>' : '<array>',
+                contentPreview: typeof m.content === 'string'
+                    ? m.content.slice(0, 150) + (m.content.length > 150 ? '…' : '')
+                    : (m.content === null ? '<null>' : '<array>'),
                 hasToolCalls: !!m.tool_calls,
                 toolCallId: m.tool_call_id || null
             })),
-            chunks: [],       // raw SSE data lines + parsed summaries
-            thinkEvents: [],  // think-block filter decisions
-            result: null,
+            chunks: [],         // { raw, parsed } for each SSE data line
+            thinkEvents: [],    // Think-block filter decisions
+            result: null,       // Final { content, toolCalls, finishReason }
             error: null,
             durationMs: null
         };
-        this._current = ex;
-        this.exchanges.push(ex);
-        if (this.exchanges.length > this.maxExchanges) this.exchanges.shift();
-        EventBus.emit('debug:exchange', ex);
-        return ex;
+        this._current = exchange;
+        this.exchanges.push(exchange);
+        if (this.exchanges.length > this.maxExchanges) {
+            this.exchanges.shift();
+        }
+        EventBus.emit('debug:exchange', exchange);
+        return exchange;
     },
 
-    /** Log one raw SSE data line + what we parsed from it */
-    logChunk(rawData, parsed) {
+    /** Log a raw SSE chunk + what we parsed from it. */
+    logChunk(raw, parsed) {
         if (!this._current) return;
+        // Keep last 500 chunks per exchange to avoid memory blowout
         if (this._current.chunks.length >= 500) {
-            if (this._current.chunks.length === 500)
-                this._current.chunks.push({ raw: '--- TRUNCATED ---', parsed: null });
+            if (this._current.chunks.length === 500) {
+                this._current.chunks.push({ raw: '--- TRUNCATED (500 chunk limit) ---', parsed: null });
+            }
             return;
         }
-        this._current.chunks.push({ raw: rawData, parsed });
+        this._current.chunks.push({ raw, parsed });
     },
 
-    /** Log a think-block filter decision */
+    /** Log a think-block filter event. */
     logThink(event, detail) {
         if (!this._current) return;
-        this._current.thinkEvents.push({
-            event, detail,
-            atChunk: this._current.chunks.length
-        });
+        this._current.thinkEvents.push({ event, detail, chunkIndex: this._current.chunks.length });
     },
 
-    /** Finalize with result */
+    /** Finalize the current exchange with the result. */
     endExchange(result) {
         if (!this._current) return;
         this._current.result = {
-            contentLen: result.content?.length || 0,
-            contentPreview: (result.content || '').slice(0, 500),
+            contentLength: result.content?.length || 0,
+            contentPreview: (result.content || '').slice(0, 300),
             toolCalls: result.toolCalls ? result.toolCalls.map(tc => ({
                 id: tc.id,
                 name: tc.function?.name,
-                argsPreview: (tc.function?.arguments || '').slice(0, 300)
+                argsPreview: (tc.function?.arguments || '').slice(0, 200)
             })) : null,
-            finishReason: result.finishReason || null,
+            finishReason: result.finishReason,
             usage: result.usage
         };
         this._current.durationMs = Date.now() - this._current.id;
-        const done = this._current;
+        const finished = this._current;
         this._current = null;
-        EventBus.emit('debug:exchangeDone', done);
+        EventBus.emit('debug:exchangeDone', finished);
     },
 
-    /** Log an error */
-    logError(err) {
+    /** Log an error for the current exchange. */
+    logError(error) {
         if (!this._current) return;
-        this._current.error = err.message || String(err);
+        this._current.error = error.message || String(error);
         this._current.durationMs = Date.now() - this._current.id;
         this._current = null;
     },
 
+    /** Clear all exchanges. */
     clear() {
         this.exchanges = [];
         this._current = null;
         EventBus.emit('debug:cleared');
     },
 
-    /** Full text export of all exchanges */
+    /** Export all exchanges as text. */
     exportText() {
         return this.exchanges.map(ex => {
-            const L = [];
-            L.push(`=== ${ex.ts} | ${ex.model} | ${ex.stream ? 'stream' : 'non-stream'} | tools_sent:${ex.toolsSent} | msgs:${ex.msgCount} | ${ex.durationMs}ms ===`);
-            L.push('');
-            L.push('--- REQUEST MESSAGES ---');
+            const lines = [];
+            lines.push(`=== Exchange ${ex.timestamp} | ${ex.model} | ${ex.stream ? 'stream' : 'non-stream'} ===`);
+            lines.push(`Messages: ${ex.messageCount} | Tools: ${ex.toolCount} | Duration: ${ex.durationMs}ms`);
+            lines.push('');
+            
+            // Messages summary
+            lines.push('--- MESSAGES ---');
             for (const m of (ex.messages || [])) {
-                let d = `  [${m.role}]`;
-                if (m.hasToolCalls) d += ' +tool_calls';
-                if (m.toolCallId) d += ` tool_call_id=${m.toolCallId}`;
-                d += ` ${m.preview}`;
-                L.push(d);
+                let desc = `[${m.role}]`;
+                if (m.hasToolCalls) desc += ' (has tool_calls)';
+                if (m.toolCallId) desc += ` (tool_call_id: ${m.toolCallId})`;
+                desc += ` ${m.contentPreview}`;
+                lines.push(desc);
             }
-            L.push('');
-            L.push(`--- RAW SSE CHUNKS (${ex.chunks.length}) ---`);
-            for (let i = 0; i < ex.chunks.length; i++) {
-                const c = ex.chunks[i];
-                L.push(`[${i}] ${c.raw}`);
-                if (c.parsed) L.push(`     → ${JSON.stringify(c.parsed)}`);
+            lines.push('');
+
+            // Raw chunks
+            lines.push(`--- RAW SSE CHUNKS (${ex.chunks.length}) ---`);
+            for (const c of ex.chunks) {
+                lines.push(`RAW: ${c.raw}`);
+                if (c.parsed) lines.push(`  → ${JSON.stringify(c.parsed)}`);
             }
+            lines.push('');
+
+            // Think events
             if (ex.thinkEvents.length > 0) {
-                L.push('');
-                L.push(`--- THINK EVENTS (${ex.thinkEvents.length}) ---`);
+                lines.push(`--- THINK BLOCK EVENTS (${ex.thinkEvents.length}) ---`);
                 for (const t of ex.thinkEvents) {
-                    L.push(`  @chunk${t.atChunk} ${t.event}: ${t.detail}`);
+                    lines.push(`  [chunk ${t.chunkIndex}] ${t.event}: ${t.detail}`);
                 }
+                lines.push('');
             }
-            L.push('');
-            L.push('--- RESULT ---');
+
+            // Result
+            lines.push('--- RESULT ---');
             if (ex.error) {
-                L.push(`ERROR: ${ex.error}`);
+                lines.push(`ERROR: ${ex.error}`);
             } else if (ex.result) {
-                L.push(`content: ${ex.result.contentLen} chars | finishReason: ${ex.result.finishReason}`);
-                if (ex.result.contentPreview) L.push(`preview: ${ex.result.contentPreview}`);
+                lines.push(`Content: ${ex.result.contentLength} chars | finishReason: ${ex.result.finishReason}`);
+                if (ex.result.contentPreview) lines.push(`Preview: ${ex.result.contentPreview}`);
                 if (ex.result.toolCalls) {
-                    L.push(`toolCalls: ${ex.result.toolCalls.length}`);
-                    for (const tc of ex.result.toolCalls)
-                        L.push(`  ${tc.name} (${tc.id}): ${tc.argsPreview}`);
-                } else {
-                    L.push('toolCalls: null');
+                    lines.push(`Tool calls: ${ex.result.toolCalls.length}`);
+                    for (const tc of ex.result.toolCalls) {
+                        lines.push(`  ${tc.name} (${tc.id}): ${tc.argsPreview}`);
+                    }
                 }
-                if (ex.result.usage) L.push(`usage: ${JSON.stringify(ex.result.usage)}`);
+                if (ex.result.usage) lines.push(`Usage: ${JSON.stringify(ex.result.usage)}`);
             } else {
-                L.push('(no result)');
+                lines.push('(no result recorded)');
             }
-            L.push('');
-            return L.join('\n');
+            lines.push('');
+            return lines.join('\n');
         }).join('\n\n');
     }
 };
@@ -254,6 +281,7 @@ const LLM = {
                 requestBody.tool_choice = 'auto';
             }
 
+            // === DEBUG: Start exchange logging ===
             LLMDebug.startExchange(requestBody);
 
             const response = await fetch(
@@ -279,18 +307,22 @@ const LLM = {
                 result = await this._handleStream(response, onToken);
             } else {
                 const data = await response.json();
+                // Log the raw non-streaming response
                 LLMDebug.logChunk(JSON.stringify(data).slice(0, 2000), {
-                    type: 'non-stream',
+                    type: 'non-stream-response',
                     hasToolCalls: !!data.choices?.[0]?.message?.tool_calls,
                     finishReason: data.choices?.[0]?.finish_reason
                 });
+                const rawContent = data.choices?.[0]?.message?.content || '';
                 result = {
-                    content: data.choices?.[0]?.message?.content || '',
+                    content: stripThinkBlocks(rawContent),
                     toolCalls: data.choices?.[0]?.message?.tool_calls || null,
+                    finishReason: data.choices?.[0]?.finish_reason || 'stop',
                     usage: data.usage
                 };
             }
 
+            // === DEBUG: End exchange logging ===
             LLMDebug.endExchange(result);
 
             // Track cost
@@ -341,8 +373,10 @@ const LLM = {
         let content = '';
         let toolCalls = [];
         let usage = null;
+        let finishReason = null;
         let buffer = '';       // Handle partial SSE lines
         let inThinkBlock = false;
+        let thinkBuffer = '';  // Buffer for detecting split </think> tags
 
         while (true) {
             const { done, value } = await reader.read();
@@ -364,59 +398,66 @@ const LLM = {
                 try {
                     const parsed = JSON.parse(data);
 
+                    // === DEBUG: Log raw chunk with parsed summary ===
+                    const delta = parsed.choices?.[0]?.delta;
+                    const chunkFinish = parsed.choices?.[0]?.finish_reason;
+                    LLMDebug.logChunk(data.slice(0, 500), {
+                        hasContent: !!delta?.content,
+                        contentChunk: delta?.content ? delta.content.slice(0, 80) : null,
+                        hasToolCalls: !!delta?.tool_calls,
+                        toolCallsDelta: delta?.tool_calls || null,
+                        finishReason: chunkFinish || null,
+                        hasUsage: !!parsed.usage
+                    });
+
                     // Capture usage from the final chunk (stream_options.include_usage)
                     if (parsed.usage) {
                         usage = parsed.usage;
                     }
 
-                    const delta = parsed.choices?.[0]?.delta;
-                    const fr = parsed.choices?.[0]?.finish_reason;
-
-                    // === DEBUG: log every SSE data line ===
-                    LLMDebug.logChunk(data.slice(0, 500), {
-                        hasContent: !!delta?.content,
-                        contentSnip: delta?.content ? delta.content.slice(0, 100) : null,
-                        hasToolCalls: !!delta?.tool_calls,
-                        toolCallDelta: delta?.tool_calls || null,
-                        finishReason: fr || null,
-                        hasUsage: !!parsed.usage
-                    });
+                    // Capture finish_reason
+                    if (chunkFinish) {
+                        finishReason = chunkFinish;
+                    }
 
                     if (!delta) continue;
 
                     if (delta.content) {
-                        // Strip <think>...</think> blocks from streamed content
                         let chunk = delta.content;
 
-                        // Handle think block boundaries
+                        // --- Think-block stripping (handles split tags) ---
                         if (inThinkBlock) {
-                            const endIdx = chunk.indexOf('</think>');
+                            thinkBuffer += chunk;
+                            const endIdx = thinkBuffer.indexOf('</think>');
                             if (endIdx >= 0) {
-                                chunk = chunk.slice(endIdx + 8);
+                                chunk = thinkBuffer.slice(endIdx + 8);
                                 inThinkBlock = false;
-                                LLMDebug.logThink('think-end', `remaining: "${chunk.slice(0, 80)}"`);
+                                LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
+                                thinkBuffer = '';
                             } else {
-                                continue; // Still inside think block, skip
+                                if (thinkBuffer.length > 8) {
+                                    thinkBuffer = thinkBuffer.slice(-7);
+                                }
+                                continue; // Skip this chunk entirely
                             }
                         }
 
-                        // Check for new think block starts
                         const startIdx = chunk.indexOf('<think>');
                         if (startIdx >= 0) {
                             const before = chunk.slice(0, startIdx);
                             const afterStart = chunk.slice(startIdx + 7);
                             const endIdx = afterStart.indexOf('</think>');
                             if (endIdx >= 0) {
-                                // Complete think block in one chunk
                                 chunk = before + afterStart.slice(endIdx + 8);
-                                LLMDebug.logThink('think-inline', `complete block in one chunk`);
+                                LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
                             } else {
-                                // Think block spans chunks
                                 chunk = before;
+                                thinkBuffer = afterStart;
                                 inThinkBlock = true;
-                                LLMDebug.logThink('think-start', `entering think block, before: "${before.slice(0, 80)}"`);
+                                LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
                             }
                         }
+                        // --- End think-block stripping ---
 
                         if (chunk) {
                             content += chunk;
@@ -426,7 +467,7 @@ const LLM = {
                     }
 
                     if (delta.tool_calls) {
-                        LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls).slice(0, 300));
+                        LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
                         for (const tc of delta.tool_calls) {
                             if (tc.index !== undefined) {
                                 if (!toolCalls[tc.index]) {
@@ -447,6 +488,7 @@ const LLM = {
         return {
             content,
             toolCalls: toolCalls.length > 0 ? toolCalls : null,
+            finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
             usage
         };
     },
@@ -469,25 +511,30 @@ const EditorPrompts = {
     systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
 
 You have access to tools that let you:
-- Read the current file open in the editor (read_current_file) - returns full content with line count
-- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines) - ALWAYS prefer these over full file replacement
+- Read the current file open in the editor (read_current_file)
+- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
 - Query the project file tree (get_project_tree)
-- Open specific files in the editor (open_file)
+- Open specific files in the editor (open_file) — REQUIRED before using replace_lines/insert_lines/delete_lines
 - Read any file's content without opening it (read_file)
 - List all open tabs (list_open_tabs)
+- Create new files in the repository (create_file)
+- Search for text patterns across the codebase (search_in_files)
 
-IMPORTANT EDITING RULES:
-1. ALWAYS use read_current_file FIRST to see the current content and line count
-2. Use replace_lines for modifying existing code - specify exact line numbers
-3. Use insert_lines to add new code without replacing existing lines
-4. Use delete_lines to remove code
-5. NEVER try to replace the entire file at once - make targeted edits
-6. After editing, explain what lines you changed
+WORKFLOW — Follow these steps for investigation and editing tasks:
+1. get_project_tree — understand the project structure
+2. search_in_files — find where relevant code lives (function names, error strings, variables)
+3. read_file — examine candidate files in detail
+4. open_file — switch to the file that needs editing (MUST do this before editing)
+5. read_current_file — see exact line numbers
+6. replace_lines / insert_lines / delete_lines — make targeted edits
+7. create_file — if a new file is needed
 
-When working on issues or tasks:
-1. Use get_project_tree to understand the project structure
-2. Use open_file to navigate to relevant files
-3. Use read_file to examine related code without switching tabs
+IMPORTANT RULES:
+- You MUST call open_file before using replace_lines, insert_lines, or delete_lines
+- ALWAYS use read_current_file to see line numbers before editing
+- Make targeted edits, never replace entire files
+- After editing, explain what you changed and which lines
+- You can use multiple tools in sequence — use as many rounds as needed
 
 Current context:
 - Project: {{project}}
@@ -554,10 +601,10 @@ function buildSystemPrompt() {
     
     // Add open issues context if available
     if (State.issues && State.issues.length > 0) {
-        const issuesSummary = State.issues.slice(0, 10).map(i => 
+        const issuesSummary = State.issues.map(i => 
             `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
         ).join('\n');
-        prompt = prompt.replace('{{issues}}', `\nOpen issues:\n${issuesSummary}`);
+        prompt = prompt.replace('{{issues}}', `\nOpen issues (${State.issues.length}):\n${issuesSummary}`);
     } else {
         prompt = prompt.replace('{{issues}}', '');
     }
@@ -781,6 +828,56 @@ const LLMTools = {
                     type: 'object',
                     properties: {},
                     required: []
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'create_file',
+                description: 'Create a new file in the project repository. Commits directly to the current branch via Gitea API. Intermediate directories are created automatically.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'File path relative to repo root (e.g., "src/utils/helpers.js")'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'File content to write'
+                        },
+                        message: {
+                            type: 'string',
+                            description: 'Git commit message (optional, defaults to "Create <path>")'
+                        }
+                    },
+                    required: ['path', 'content']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'search_in_files',
+                description: 'Search for text across project files. Returns matching lines with file paths and line numbers. Use to find functions, variables, strings, or patterns in the codebase.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: 'Text to search for (case-insensitive)'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Optional directory prefix to limit scope (e.g., "js/")'
+                        },
+                        max_results: {
+                            type: 'integer',
+                            description: 'Max files to return (default: 20)'
+                        }
+                    },
+                    required: ['query']
                 }
             }
         },
@@ -1025,5 +1122,6 @@ export {
     generateEdit,
     generateCommitMessage,
     analyzeIssue,
-    getLanguageFromPath
+    getLanguageFromPath,
+    stripThinkBlocks
 };
