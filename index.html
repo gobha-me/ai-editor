@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Editor v0.3.8</title>
-    <link rel="stylesheet" href="editor/css/editor.css?v=0.3.8">
+    <link rel="stylesheet" href="editor/css/editor.css">
 </head>
 <body>
     <div class="app-container">
@@ -674,11 +674,11 @@
 
     <!-- Main Script -->
     <script type="module">
-        import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js?v=0.3.8';
-        import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js?v=0.3.8';
-        import { LLM, generateCommitMessage } from './editor/js/llm.js?v=0.3.8';
-        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js?v=0.3.8';
-        import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js?v=0.3.8';
+        import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
+        import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
+        import { LLM, generateCommitMessage } from './editor/js/llm.js';
+        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
+        import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
 
         // ============================================
         // UI HELPERS (Define early for event listeners)
