@@ -475,13 +475,22 @@ function replaceRange(startLine, endLine, newContent) {
     // Count original lines being replaced
     const originalLineCount = clampedEnd - startLine + 1;
     
-    // Count new lines
-    const newLines = newContent.split('\n');
+    // In CM6, line(n).to is the offset BEFORE the newline separator.
+    // The existing newline after the last replaced line is preserved.
+    // If new_content ends with \n, that produces a double-newline (spurious blank line).
+    // Strip it so the replacement joins cleanly with the preserved separator.
+    let insertText = newContent;
+    if (insertText.endsWith('\n') && clampedEnd < totalLines) {
+        insertText = insertText.slice(0, -1);
+    }
+    
+    // Count new lines (from actual inserted text for accurate reporting)
+    const newLines = insertText.split('\n');
     const newLineCount = newLines.length;
     
     // Apply the replacement
     editorInstance.dispatch({
-        changes: { from, to, insert: newContent }
+        changes: { from, to, insert: insertText }
     });
     
     // Update state
@@ -543,18 +552,21 @@ function insertAtLine(afterLine, content) {
         insertPos = line.to;
     }
     
-    // Ensure content ends with newline if not at end
+    // Ensure proper newline handling at insertion boundaries.
+    // insertPos is at line(afterLine).to, which is BEFORE the newline separator.
+    // We need to prepend \n to separate from the existing line.
     let insertContent = content;
-    if (afterLine > 0 && afterLine < totalLines) {
-        if (!content.endsWith('\n')) {
-            insertContent = '\n' + content;
-        } else {
-            insertContent = '\n' + content.slice(0, -1);
-        }
-    } else if (afterLine === 0) {
+    if (afterLine === 0) {
+        // Insert at beginning — append \n to separate from existing first line
         if (!content.endsWith('\n')) {
             insertContent = content + '\n';
         }
+    } else {
+        // Insert after an existing line — prepend \n as separator.
+        // Strip trailing \n from content to avoid double-newline with
+        // the existing separator after the current line (same issue as replaceRange).
+        const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content;
+        insertContent = '\n' + trimmed;
     }
     
     // Count new lines

@@ -172,6 +172,24 @@ let pendingEdit = null;  // { code, explanation } waiting for user approval
 
 // Register tool handlers for LLM function calling
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
+
+/**
+ * Return a few lines of surrounding context after an edit so the model
+ * can verify placement and know current line numbers for subsequent edits.
+ * Keeps the context small (5 lines before + edited region + 5 lines after)
+ * to avoid bloating tool results.
+ */
+function _getEditContext(editStart, editLineCount, totalLines) {
+    const content = State.editorContent;
+    if (!content) return null;
+    const lines = content.split('\n');
+    const CONTEXT = 3;
+    const ctxStart = Math.max(1, editStart - CONTEXT);
+    const ctxEnd = Math.min(totalLines, editStart + editLineCount + CONTEXT);
+    const slice = lines.slice(ctxStart - 1, ctxEnd);
+    return slice.map((l, i) => `${ctxStart + i}: ${l}`).join('\n');
+}
+
 LLMTools.handlers = {
     read_current_file: async () => {
         if (!State.currentFile) {
@@ -179,11 +197,79 @@ LLMTools.handlers = {
         }
         const content = State.editorContent;
         const lines = content.split('\n');
+        const lineCount = lines.length;
+        const MAX_LINES = 200;
+
+        // For large files, return first + last sections with line numbers
+        // so the model can target read_lines for specific regions
+        if (lineCount > MAX_LINES) {
+            const headCount = 120;
+            const tailCount = 60;
+            const head = lines.slice(0, headCount)
+                .map((l, i) => `${i + 1}: ${l}`).join('\n');
+            const tail = lines.slice(-tailCount)
+                .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
+            return {
+                path: State.currentFile.path,
+                content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
+                line_count: lineCount,
+                truncated: true,
+                language: State.currentFile.path.split('.').pop()
+            };
+        }
+
+        // Small files: return with line numbers for easy reference
+        const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
         return {
             path: State.currentFile.path,
-            content: content,
-            line_count: lines.length,
+            content: numbered,
+            line_count: lineCount,
             language: State.currentFile.path.split('.').pop()
+        };
+    },
+
+    read_lines: async ({ path, start_line, end_line }) => {
+        // Read from the currently open file if path matches, otherwise fetch from Gitea
+        let content;
+        let filePath;
+
+        if (State.currentFile && (!path || path === State.currentFile.path)) {
+            content = State.editorContent;
+            filePath = State.currentFile.path;
+        } else if (path) {
+            if (!State.currentProject) {
+                return { error: 'No project is currently loaded' };
+            }
+            const { owner, repo } = State.currentProject;
+            try {
+                const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
+                content = file.content;
+                filePath = file.path;
+            } catch (error) {
+                return { error: `Failed to read file: ${error.message}` };
+            }
+        } else {
+            return { error: 'No file specified and no file is currently open.' };
+        }
+
+        const lines = content.split('\n');
+        const totalLines = lines.length;
+        const start = Math.max(1, start_line || 1);
+        const end = Math.min(totalLines, end_line || totalLines);
+
+        if (start > totalLines) {
+            return { error: `start_line ${start} exceeds file length (${totalLines} lines)` };
+        }
+
+        const slice = lines.slice(start - 1, end);
+        const numbered = slice.map((l, i) => `${start + i}: ${l}`).join('\n');
+
+        return {
+            path: filePath,
+            start_line: start,
+            end_line: end,
+            line_count: totalLines,
+            content: numbered
         };
     },
 
@@ -199,6 +285,10 @@ LLMTools.handlers = {
             return result;
         }
         
+        // Return surrounding context so the model can verify placement
+        // and know correct line numbers for subsequent edits
+        const ctx = _getEditContext(start_line, result.newLineCount, result.totalLines);
+        
         return {
             success: true,
             path: State.currentFile.path,
@@ -207,8 +297,10 @@ LLMTools.handlers = {
             new_line_count: result.newLineCount,
             line_delta: result.lineDelta,
             total_lines: result.totalLines,
+            context: ctx,
             message: `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
-                     `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). Review and save when ready.`
+                     `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). ` +
+                     `IMPORTANT: Line numbers have shifted by ${result.lineDelta}. Use read_current_file or read_lines before your next edit.`
         };
     },
 
@@ -224,13 +316,17 @@ LLMTools.handlers = {
             return result;
         }
         
+        const ctx = _getEditContext(after_line + 1, result.newLineCount, result.totalLines);
+        
         return {
             success: true,
             path: State.currentFile.path,
             inserted_after: result.insertedAfter,
             lines_inserted: result.newLineCount,
             total_lines: result.totalLines,
-            message: `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. Review and save when ready.`
+            context: ctx,
+            message: `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. ` +
+                     `IMPORTANT: All lines after ${after_line} shifted by +${result.newLineCount}. Use read_lines before your next edit.`
         };
     },
 
@@ -246,13 +342,17 @@ LLMTools.handlers = {
             return result;
         }
         
+        const ctx = _getEditContext(start_line, 0, result.totalLines);
+        
         return {
             success: true,
             path: State.currentFile.path,
             deleted_lines: `${start_line}-${end_line}`,
             lines_deleted: result.deletedCount,
             total_lines: result.totalLines,
-            message: `Deleted ${result.deletedCount} lines (${start_line}-${end_line}). File now has ${result.totalLines} lines. Review and save when ready.`
+            context: ctx,
+            message: `Deleted ${result.deletedCount} lines (${start_line}-${end_line}). File now has ${result.totalLines} lines. ` +
+                     `IMPORTANT: All lines after ${start_line} shifted by -${result.deletedCount}. Use read_lines before your next edit.`
         };
     },
 
@@ -307,10 +407,30 @@ LLMTools.handlers = {
         try {
             const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
             const lines = file.content.split('\n');
+            const lineCount = lines.length;
+            const MAX_LINES = 200;
+
+            if (lineCount > MAX_LINES) {
+                const headCount = 120;
+                const tailCount = 60;
+                const head = lines.slice(0, headCount)
+                    .map((l, i) => `${i + 1}: ${l}`).join('\n');
+                const tail = lines.slice(-tailCount)
+                    .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
+                return {
+                    path: file.path,
+                    content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
+                    line_count: lineCount,
+                    truncated: true,
+                    language: path.split('.').pop()
+                };
+            }
+
+            const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
             return {
                 path: file.path,
-                content: file.content,
-                line_count: lines.length,
+                content: numbered,
+                line_count: lineCount,
                 language: path.split('.').pop()
             };
         } catch (error) {
@@ -821,6 +941,8 @@ function summarizeToolArgs(toolName, args) {
         case 'read_file':
         case 'open_file':
             return args.path || '';
+        case 'read_lines':
+            return `${args.path || 'current'} L${args.start_line || 1}-${args.end_line || 'end'}`;
         case 'read_current_file':
         case 'list_open_tabs':
         case 'get_project_tree':
@@ -859,7 +981,9 @@ function summarizeToolResult(toolName, result) {
     switch (toolName) {
         case 'read_file':
         case 'read_current_file':
-            return `${result.line_count || '?'} lines`;
+            return `${result.line_count || '?'} lines${result.truncated ? ' (truncated)' : ''}`;
+        case 'read_lines':
+            return `L${result.start_line}-${result.end_line} of ${result.line_count}`;
         case 'get_project_tree':
             return `${result.files?.length || 0} files`;
         case 'open_file':
@@ -1147,7 +1271,6 @@ async function handleGeneralRequest(input) {
     const messages = [
         { role: 'system', content: systemPrompt },
         ...contextMessages,
-        // Only append if not already the trailing message in context
         ...( alreadyInContext ? [] : [{ role: 'user', content: input }] )
     ];
 
@@ -1218,7 +1341,6 @@ async function handleGeneralRequest(input) {
                     const detail = a.result?.message || a.result?.error || '';
                     return `${status} **${a.tool}**${a.args?.path ? ` \`${a.args.path}\`` : ''}${detail ? ` — ${detail}` : ''}`;
                 });
-                // Replace (not append) — earlier rounds' text is in their own DOM elements
                 lastRoundContent = `⚠️ Follow-up failed (${err.message}). Tool results:\n\n${summaryLines.join('\n')}`;
                 finalContent = lastRoundContent;
             } else if (content) {
@@ -1304,10 +1426,49 @@ async function handleGeneralRequest(input) {
             if (_cancelToolLoop) break;
 
             // === BUILD THREAD FOR NEXT ROUND ===
+
+            // Compress old tool results to prevent token explosion.
+            // The model has already seen and processed these results.
+            // Replace large content with summaries for subsequent rounds.
+            for (let i = 0; i < messages.length; i++) {
+                const msg = messages[i];
+                if (msg.role === 'tool' && msg.content) {
+                    try {
+                        const parsed = JSON.parse(msg.content);
+                        let compressed = false;
+
+                        // Compress file contents
+                        if (parsed.content && parsed.content.length > 500) {
+                            parsed.content = `[Content of ${parsed.path || 'file'} — ${parsed.line_count || '?'} lines — already processed]`;
+                            compressed = true;
+                        }
+                        // Compress search results
+                        if (parsed.results && Array.isArray(parsed.results) && parsed.results.length > 0) {
+                            const matchCount = parsed.results.reduce((sum, r) => sum + (r.matches?.length || 0), 0);
+                            parsed.results = `[${matchCount} matches in ${parsed.results.length} files — already processed]`;
+                            compressed = true;
+                        }
+                        // Compress project tree
+                        if (parsed.files && Array.isArray(parsed.files) && parsed.files.length > 20) {
+                            parsed.files = `[${parsed.files.length} files — already processed]`;
+                            compressed = true;
+                        }
+                        // Compress edit context (already consumed)
+                        if (parsed.context && parsed.context.length > 200) {
+                            delete parsed.context;
+                            compressed = true;
+                        }
+
+                        if (compressed) {
+                            messages[i] = { ...msg, content: JSON.stringify(parsed) };
+                        }
+                    } catch (e) { /* not JSON, leave as-is */ }
+                }
+            }
+
             if (toolCallSource === 'structured') {
                 messages.push({
                     role: 'assistant',
-                    // Some providers (e.g. minimax) reject null content — use empty string
                     content: cleanContent || '',
                     tool_calls: toolCalls
                 });
@@ -1316,9 +1477,14 @@ async function handleGeneralRequest(input) {
                 }
             } else {
                 messages.push({ role: 'assistant', content: cleanContent || '' });
-                const summary = textResults.map(tr =>
-                    `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
-                ).join('\n\n');
+                const summary = textResults.map(tr => {
+                    // Truncate large results to prevent token explosion
+                    let resultStr = JSON.stringify(tr.result, null, 2);
+                    if (resultStr.length > 1500) {
+                        resultStr = resultStr.slice(0, 1500) + '\n... (truncated)';
+                    }
+                    return `[Tool: ${tr.name}]\n${resultStr}`;
+                }).join('\n\n');
                 messages.push({
                     role: 'user',
                     content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`

@@ -532,10 +532,11 @@ const EditorPrompts = {
 
 You have access to tools that let you:
 - Read the current file open in the editor (read_current_file)
+- Read specific line ranges efficiently (read_lines) — PREFERRED for large files
 - Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
 - Query the project file tree (get_project_tree)
 - Open specific files in the editor (open_file) — REQUIRED before using replace_lines/insert_lines/delete_lines
-- Read any file's content without opening it (read_file)
+- Read any file's content without opening it (read_file) — auto-truncates large files
 - List all open tabs (list_open_tabs)
 - Create new files in the repository (create_file)
 - Search for text patterns across the codebase (search_in_files)
@@ -543,18 +544,28 @@ You have access to tools that let you:
 WORKFLOW — Follow these steps for investigation and editing tasks:
 1. get_project_tree — understand the project structure
 2. search_in_files — find where relevant code lives (function names, error strings, variables)
-3. read_file — examine candidate files in detail
+3. read_lines — examine specific sections of candidate files (avoids loading entire files)
 4. open_file — switch to the file that needs editing (MUST do this before editing)
-5. read_current_file — see exact line numbers
-6. replace_lines / insert_lines / delete_lines — make targeted edits
+5. read_current_file or read_lines — see exact line numbers before editing
+6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 7. create_file — if a new file is needed
 
 IMPORTANT RULES:
 - You MUST call open_file before using replace_lines, insert_lines, or delete_lines
-- ALWAYS use read_current_file to see line numbers before editing
-- Make targeted edits, never replace entire files
+- ALWAYS use read_current_file or read_lines to see line numbers before editing
+- Prefer read_lines over read_file for files over 100 lines — only read the section you need
+- Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
 - After editing, explain what you changed and which lines
 - You can use multiple tools in sequence — use as many rounds as needed
+- Do NOT include trailing newlines in new_content for replace_lines
+
+⚠️ CRITICAL — LINE NUMBER DRIFT:
+Every edit changes line numbers for all subsequent lines in the file.
+- After replace_lines or insert_lines, ALL line numbers below the edit shift
+- You MUST call read_lines on the target region BEFORE each subsequent edit
+- NEVER make a second edit using line numbers from before a previous edit
+- The tool result includes surrounding context — verify your edit landed correctly
+- Work TOP-DOWN (edit higher line numbers first) to minimize drift impact
 
 Current context:
 - Project: {{project}}
@@ -713,7 +724,7 @@ const LLMTools = {
             type: 'function',
             function: {
                 name: 'read_current_file',
-                description: 'Read the content of the currently open file in the editor. Returns the full file content, path, and line count.',
+                description: 'Read the content of the currently open file in the editor. Returns line-numbered content. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
                 parameters: {
                     type: 'object',
                     properties: {},
@@ -725,7 +736,7 @@ const LLMTools = {
             type: 'function',
             function: {
                 name: 'replace_lines',
-                description: 'Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed.',
+                description: 'Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed. Do NOT include a trailing newline in new_content.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -826,7 +837,7 @@ const LLMTools = {
             type: 'function',
             function: {
                 name: 'read_file',
-                description: 'Read the content of a specific file without opening it in the editor',
+                description: 'Read the content of a specific file without opening it in the editor. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -836,6 +847,31 @@ const LLMTools = {
                         }
                     },
                     required: ['path']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'read_lines',
+                description: 'Read specific line range from a file. Use this instead of read_file when you only need to see a section of a large file. Lines are returned with line numbers for easy reference.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'File path to read from (omit to read from currently open file)'
+                        },
+                        start_line: {
+                            type: 'integer',
+                            description: 'First line to read (1-indexed, inclusive). Default: 1'
+                        },
+                        end_line: {
+                            type: 'integer',
+                            description: 'Last line to read (1-indexed, inclusive). Default: end of file'
+                        }
+                    },
+                    required: []
                 }
             }
         },
