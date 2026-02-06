@@ -3,10 +3,10 @@
  * Chat pane logic and LLM interaction
  */
 
-import { State, EventBus, Storage } from './core.js?v=0.3.8';
-import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js?v=0.3.8';
-import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js?v=0.3.8';
-import { GiteaAPI, loadFile } from './gitea.js?v=0.3.8';
+import { State, EventBus, Storage } from './core.js';
+import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
+import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
+import { GiteaAPI, loadFile } from './gitea.js';
 
 // ============================================
 // CHAT STATE
@@ -1094,9 +1094,15 @@ async function handleGeneralRequest(input) {
             break;
         }
 
-        // Check for text-embedded tool calls (Minimax, Qwen)
+        // Check for text-embedded tool calls (Minimax, Qwen, Kimi, etc.)
         let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
         let cleanContent = content || result.content || '';
+        
+        // Strip any residual <think> blocks before parsing text tool calls.
+        // Streaming strips these incrementally, but non-streaming (round > 0)
+        // may pass them through. Think blocks often contain "planned" tool call
+        // syntax that would otherwise be parsed as real tool calls.
+        cleanContent = stripThinkBlocks(cleanContent);
         
         const parsed = parseTextToolCalls(cleanContent);
         if (parsed.toolCalls.length > 0) {

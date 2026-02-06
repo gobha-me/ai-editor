@@ -6,6 +6,24 @@
 import { State, EventBus, Storage, Providers, Roles } from './core.js';
 
 // ============================================
+// THINK-BLOCK STRIPPING
+// ============================================
+
+/**
+ * Strip <think>...</think> blocks from text content.
+ * Handles multiple blocks, nested whitespace, and partial/unclosed tags.
+ * Used for non-streaming responses where think blocks arrive intact.
+ */
+function stripThinkBlocks(text) {
+    if (!text) return text;
+    // Strip all <think>...</think> blocks (non-greedy, handles multiple)
+    let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    // Also strip unclosed <think> block at end (model cut off mid-thought)
+    result = result.replace(/<think>[\s\S]*$/gi, '');
+    return result.trim();
+}
+
+// ============================================
 // LLM API CLIENT
 // ============================================
 
@@ -127,8 +145,9 @@ const LLM = {
                 result = await this._handleStream(response, onToken);
             } else {
                 const data = await response.json();
+                const rawContent = data.choices?.[0]?.message?.content || '';
                 result = {
-                    content: data.choices?.[0]?.message?.content || '',
+                    content: stripThinkBlocks(rawContent),
                     toolCalls: data.choices?.[0]?.message?.tool_calls || null,
                     finishReason: data.choices?.[0]?.finish_reason || 'stop',
                     usage: data.usage
@@ -183,6 +202,7 @@ const LLM = {
         let finishReason = null;
         let buffer = '';       // Handle partial SSE lines
         let inThinkBlock = false;
+        let thinkBuffer = '';  // Buffer for detecting split </think> tags
 
         while (true) {
             const { done, value } = await reader.read();
@@ -216,21 +236,29 @@ const LLM = {
                     if (!delta) continue;
 
                     if (delta.content) {
-                        // Strip <think>...</think> blocks from streamed content
                         let chunk = delta.content;
 
-                        // Handle think block boundaries
+                        // --- Think-block stripping (handles split tags) ---
                         if (inThinkBlock) {
-                            const endIdx = chunk.indexOf('</think>');
+                            // Accumulate into thinkBuffer to handle </think> split across chunks
+                            thinkBuffer += chunk;
+                            const endIdx = thinkBuffer.indexOf('</think>');
                             if (endIdx >= 0) {
-                                chunk = chunk.slice(endIdx + 8);
+                                // Found the end — extract content after </think>
+                                chunk = thinkBuffer.slice(endIdx + 8);
                                 inThinkBlock = false;
+                                thinkBuffer = '';
                             } else {
-                                continue; // Still inside think block, skip
+                                // Still inside think block; keep only the tail that could
+                                // be the start of a split '</think>' (max 7 chars)
+                                if (thinkBuffer.length > 8) {
+                                    thinkBuffer = thinkBuffer.slice(-7);
+                                }
+                                continue; // Skip this chunk entirely
                             }
                         }
 
-                        // Check for new think block starts
+                        // Check for new think block starts in the (possibly post-think) chunk
                         const startIdx = chunk.indexOf('<think>');
                         if (startIdx >= 0) {
                             const before = chunk.slice(0, startIdx);
@@ -240,11 +268,13 @@ const LLM = {
                                 // Complete think block in one chunk
                                 chunk = before + afterStart.slice(endIdx + 8);
                             } else {
-                                // Think block spans chunks
+                                // Think block spans chunks — keep pre-think content, buffer the rest
                                 chunk = before;
+                                thinkBuffer = afterStart;
                                 inThinkBlock = true;
                             }
                         }
+                        // --- End think-block stripping ---
 
                         if (chunk) {
                             content += chunk;
@@ -907,5 +937,6 @@ export {
     generateEdit,
     generateCommitMessage,
     analyzeIssue,
-    getLanguageFromPath
+    getLanguageFromPath,
+    stripThinkBlocks
 };
