@@ -1290,6 +1290,33 @@ function parseTextToolCalls(text) {
         cleanContent = cleanContent.replace(match[0], '');
     }
 
+    // Pattern 4: Kimi K2 format  <|tool_calls_section_begin|>...<|tool_calls_section_end|>
+    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
+    while ((match = kimiSectionPattern.exec(text)) !== null) {
+        const sectionBlock = match[1];
+        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
+        let kimiMatch;
+        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
+            const fnName = kimiMatch[1].trim();
+            const argsStr = kimiMatch[2].trim();
+            let args = {};
+            try {
+                args = JSON.parse(argsStr);
+            } catch (e) {
+                args = { _raw: argsStr };
+            }
+            toolCalls.push({
+                id: `kimi_call_${toolCalls.length}`,
+                type: 'function',
+                function: {
+                    name: fnName,
+                    arguments: JSON.stringify(args)
+                }
+            });
+        }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
     return { toolCalls, cleanContent: cleanContent.trim() };
 }
 
