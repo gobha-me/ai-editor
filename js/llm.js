@@ -130,6 +130,7 @@ const LLM = {
                 result = {
                     content: data.choices?.[0]?.message?.content || '',
                     toolCalls: data.choices?.[0]?.message?.tool_calls || null,
+                    finishReason: data.choices?.[0]?.finish_reason || 'stop',
                     usage: data.usage
                 };
             }
@@ -179,6 +180,7 @@ const LLM = {
         let content = '';
         let toolCalls = [];
         let usage = null;
+        let finishReason = null;
         let buffer = '';       // Handle partial SSE lines
         let inThinkBlock = false;
 
@@ -202,6 +204,12 @@ const LLM = {
                     // Capture usage from the final chunk (stream_options.include_usage)
                     if (parsed.usage) {
                         usage = parsed.usage;
+                    }
+
+                    // Capture finish_reason from any chunk that has it
+                    const chunkFinish = parsed.choices?.[0]?.finish_reason;
+                    if (chunkFinish) {
+                        finishReason = chunkFinish;
                     }
 
                     const delta = parsed.choices?.[0]?.delta;
@@ -266,6 +274,7 @@ const LLM = {
         return {
             content,
             toolCalls: toolCalls.length > 0 ? toolCalls : null,
+            finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
             usage
         };
     },
@@ -288,25 +297,30 @@ const EditorPrompts = {
     systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
 
 You have access to tools that let you:
-- Read the current file open in the editor (read_current_file) - returns full content with line count
-- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines) - ALWAYS prefer these over full file replacement
+- Read the current file open in the editor (read_current_file)
+- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
 - Query the project file tree (get_project_tree)
-- Open specific files in the editor (open_file)
+- Open specific files in the editor (open_file) — REQUIRED before using replace_lines/insert_lines/delete_lines
 - Read any file's content without opening it (read_file)
 - List all open tabs (list_open_tabs)
+- Create new files in the repository (create_file)
+- Search for text patterns across the codebase (search_in_files)
 
-IMPORTANT EDITING RULES:
-1. ALWAYS use read_current_file FIRST to see the current content and line count
-2. Use replace_lines for modifying existing code - specify exact line numbers
-3. Use insert_lines to add new code without replacing existing lines
-4. Use delete_lines to remove code
-5. NEVER try to replace the entire file at once - make targeted edits
-6. After editing, explain what lines you changed
+WORKFLOW — Follow these steps for investigation and editing tasks:
+1. get_project_tree — understand the project structure
+2. search_in_files — find where relevant code lives (function names, error strings, variables)
+3. read_file — examine candidate files in detail
+4. open_file — switch to the file that needs editing (MUST do this before editing)
+5. read_current_file — see exact line numbers
+6. replace_lines / insert_lines / delete_lines — make targeted edits
+7. create_file — if a new file is needed
 
-When working on issues or tasks:
-1. Use get_project_tree to understand the project structure
-2. Use open_file to navigate to relevant files
-3. Use read_file to examine related code without switching tabs
+IMPORTANT RULES:
+- You MUST call open_file before using replace_lines, insert_lines, or delete_lines
+- ALWAYS use read_current_file to see line numbers before editing
+- Make targeted edits, never replace entire files
+- After editing, explain what you changed and which lines
+- You can use multiple tools in sequence — use as many rounds as needed
 
 Current context:
 - Project: {{project}}
@@ -373,10 +387,10 @@ function buildSystemPrompt() {
     
     // Add open issues context if available
     if (State.issues && State.issues.length > 0) {
-        const issuesSummary = State.issues.slice(0, 10).map(i => 
+        const issuesSummary = State.issues.map(i => 
             `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
         ).join('\n');
-        prompt = prompt.replace('{{issues}}', `\nOpen issues:\n${issuesSummary}`);
+        prompt = prompt.replace('{{issues}}', `\nOpen issues (${State.issues.length}):\n${issuesSummary}`);
     } else {
         prompt = prompt.replace('{{issues}}', '');
     }
@@ -600,6 +614,56 @@ const LLMTools = {
                     type: 'object',
                     properties: {},
                     required: []
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'create_file',
+                description: 'Create a new file in the project repository. Commits directly to the current branch via Gitea API. Intermediate directories are created automatically.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'File path relative to repo root (e.g., "src/utils/helpers.js")'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'File content to write'
+                        },
+                        message: {
+                            type: 'string',
+                            description: 'Git commit message (optional, defaults to "Create <path>")'
+                        }
+                    },
+                    required: ['path', 'content']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'search_in_files',
+                description: 'Search for text across project files. Returns matching lines with file paths and line numbers. Use to find functions, variables, strings, or patterns in the codebase.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: 'Text to search for (case-insensitive)'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Optional directory prefix to limit scope (e.g., "js/")'
+                        },
+                        max_results: {
+                            type: 'integer',
+                            description: 'Max files to return (default: 20)'
+                        }
+                    },
+                    required: ['query']
                 }
             }
         },

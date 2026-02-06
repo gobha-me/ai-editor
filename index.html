@@ -10,7 +10,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.2</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.5</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -133,6 +133,7 @@
                 <div class="chat-header">
                     <h3>💬 AI Assistant</h3>
                     <div class="chat-header-actions">
+                        <button class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard">📋</button>
                         <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
                         <div class="model-selector">
                             <select id="roleSelect" title="Active role — controls tool access">
@@ -1350,6 +1351,11 @@
                 resetSessionCost();
                 showToast('Chat cleared', 'success');
             });
+            document.getElementById('btnExportChat').addEventListener('click', () => {
+                if (window.Chat && window.Chat.exportChat) {
+                    window.Chat.exportChat();
+                }
+            });
 
             // EventBus listeners
             EventBus.on('llm:generating', (isGenerating) => {
@@ -1359,6 +1365,14 @@
 
             EventBus.on('issues:refresh', () => {
                 refreshIssues();
+            });
+
+            EventBus.on('tree:refresh', async () => {
+                if (State.currentProject) {
+                    const { owner, repo } = State.currentProject;
+                    State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                    renderFileTree();
+                }
             });
 
             EventBus.on('cost:updated', () => {
