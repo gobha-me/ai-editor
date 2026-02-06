@@ -1002,10 +1002,7 @@ async function handleGeneralRequest(input) {
     addStreamingMessage();
 
     const systemPrompt = buildSystemPrompt();
-    const currentModel = State.models.find(m => m.id === State.settings.llmModel);
-    const supportsTools = currentModel?.capabilities?.supportsFunctionCalling !== false;
-
-    const roleTools = supportsTools ? LLMTools.getToolsForRole() : null;
+    const roleTools = LLMTools.getToolsForRole();
 
     // Build initial message thread
     const messages = [
@@ -1028,14 +1025,12 @@ async function handleGeneralRequest(input) {
                 // First round: STREAM to user for responsiveness
                 const chatOptions = {
                     stream: true,
+                    tools: roleTools,
                     onToken: (token, fullContent) => {
                         content = fullContent;
                         updateStreamingMessage(fullContent);
                     }
                 };
-                if (roleTools) {
-                    chatOptions.tools = roleTools;
-                }
 
                 result = await Promise.race([
                     LLM.chat(messages, chatOptions),
@@ -1044,10 +1039,7 @@ async function handleGeneralRequest(input) {
                     )
                 ]);
             } else {
-                const chatOptions = { stream: true };
-                if (roleTools) {
-                    chatOptions.tools = roleTools;
-                }
+                const chatOptions = { stream: true, tools: roleTools };
 
                 // Show thinking indicator
                 updateStreamingMessage(finalContent || '*(processing tool results...)*');
@@ -1092,36 +1084,21 @@ async function handleGeneralRequest(input) {
             break;
         }
 
-        // Check for text-embedded tool calls (Minimax, Qwen, Kimi, etc.)
-        let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
-        let cleanContent = content || result.content || '';
-        
-        // Strip any residual <think> blocks before parsing text tool calls.
-        // Streaming strips these incrementally, but non-streaming (round > 0)
-        // may pass them through. Think blocks often contain "planned" tool call
-        // syntax that would otherwise be parsed as real tool calls.
-        cleanContent = stripThinkBlocks(cleanContent);
-        
-        const parsed = parseTextToolCalls(cleanContent);
-        if (parsed.toolCalls.length > 0) {
-            toolCalls.push(...parsed.toolCalls);
-            cleanContent = parsed.cleanContent;
-            updateStreamingMessage(cleanContent || finalContent || '');
-        }
+        // All tool calls come from the structured API response (native tool calling)
+        const toolCalls = result.toolCalls || [];
+        const cleanContent = stripThinkBlocks(content || result.content || '');
 
         // Accumulate text content across rounds
         if (cleanContent.trim()) {
             finalContent = finalContent ? finalContent + '\n\n' + cleanContent : cleanContent;
         }
 
-        if (toolCalls && toolCalls.length > 0) {
+        if (toolCalls.length > 0) {
             // === EXECUTE TOOL CALLS ===
-            const deltaToolCalls = result.toolCalls || [];
-            const deltaResults = [];
-            const textResults = [];
+            const toolResults = [];
 
             for (const toolCall of toolCalls) {
-                const toolName = toolCall.function?.name || toolCall.name || 'unknown';
+                const toolName = toolCall.function?.name || 'unknown';
                 let args = {};
                 try {
                     args = JSON.parse(toolCall.function?.arguments || '{}');
@@ -1139,40 +1116,22 @@ async function handleGeneralRequest(input) {
                     error: !!toolResult?.error
                 });
 
-                const isDelta = deltaToolCalls.some(dtc => dtc.id === toolCall.id);
-                if (isDelta) {
-                    deltaResults.push({
-                        tool_call_id: toolCall.id,
-                        role: 'tool',
-                        content: JSON.stringify(toolResult)
-                    });
-                } else {
-                    textResults.push({ name: toolName, result: toolResult });
-                }
+                toolResults.push({
+                    tool_call_id: toolCall.id,
+                    role: 'tool',
+                    content: JSON.stringify(toolResult)
+                });
             }
 
             // === BUILD THREAD FOR NEXT ROUND ===
-            // Assistant message must include tool_calls for proper OpenAI threading
-            const assistantMsg = { role: 'assistant', content: cleanContent || null };
-            if (deltaToolCalls.length > 0) {
-                assistantMsg.tool_calls = deltaToolCalls;
-            }
-            messages.push(assistantMsg);
+            messages.push({
+                role: 'assistant',
+                content: cleanContent || null,
+                tool_calls: toolCalls
+            });
 
-            // Delta-based: proper tool result messages (one per call)
-            for (const dr of deltaResults) {
-                messages.push(dr);
-            }
-
-            // Text-parsed: inject as user context
-            if (textResults.length > 0) {
-                const summary = textResults.map(tr =>
-                    `[Tool: ${tr.name}]\n${JSON.stringify(tr.result, null, 2)}`
-                ).join('\n\n');
-                messages.push({
-                    role: 'user',
-                    content: `Tool results:\n${summary}\n\nPlease continue using these results. If you need more information, use additional tools. When done, provide your final response.`
-                });
+            for (const tr of toolResults) {
+                messages.push(tr);
             }
 
             // Prepare UI for next round
@@ -1214,139 +1173,6 @@ async function handleGeneralRequest(input) {
     finalizeStreamingMessage(finalContent, { hasCode: false });
 }
 
-/**
- * Parse tool calls embedded as XML in text content.
- * Handles formats like:
- *   <tool_call>{"name":"fn","arguments":{...}}</tool_call>
- *   <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
- *   <function_call>{"name":"fn","arguments":"..."}</function_call>
- * 
- * Returns { toolCalls: [], cleanContent: string }
- */
-function parseTextToolCalls(text) {
-    const toolCalls = [];
-    let cleanContent = text;
-
-    // Pattern 1: JSON-style tool calls  <tool_call>{"name":"...","arguments":{...}}</tool_call>
-    const jsonToolPattern = /<(?:tool_call|function_call)>\s*(\{[\s\S]*?\})\s*<\/(?:tool_call|function_call)>/gi;
-    let match;
-    while ((match = jsonToolPattern.exec(text)) !== null) {
-        try {
-            const parsed = JSON.parse(match[1]);
-            toolCalls.push({
-                id: `text_call_${toolCalls.length}`,
-                type: 'function',
-                function: {
-                    name: parsed.name || parsed.function?.name || '',
-                    arguments: typeof parsed.arguments === 'string'
-                        ? parsed.arguments
-                        : JSON.stringify(parsed.arguments || parsed.parameters || {})
-                }
-            });
-            cleanContent = cleanContent.replace(match[0], '');
-        } catch (e) {
-            // Invalid JSON, skip
-        }
-    }
-
-    // Pattern 2: Minimax XML-style  <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
-    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
-    while ((match = minimaxPattern.exec(text)) !== null) {
-        const invokeBlock = match[1];
-        // Parse each <invoke> within the block
-        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
-        let invokeMatch;
-        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
-            const fnName = invokeMatch[1];
-            const paramsBlock = invokeMatch[2];
-            const args = {};
-
-            // Parse <parameter name="key">value</parameter>
-            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
-            let paramMatch;
-            while ((paramMatch = paramPattern.exec(paramsBlock)) !== null) {
-                args[paramMatch[1]] = paramMatch[2].trim();
-            }
-
-            toolCalls.push({
-                id: `minimax_call_${toolCalls.length}`,
-                type: 'function',
-                function: {
-                    name: fnName,
-                    arguments: JSON.stringify(args)
-                }
-            });
-        }
-        cleanContent = cleanContent.replace(match[0], '');
-    }
-
-    // Pattern 3: Generic XML invoke (Qwen, etc.) <tool_call><name>fn</name><arguments>{...}</arguments></tool_call>
-    const genericPattern = /<tool_call>\s*<name>([^<]+)<\/name>\s*<arguments>([\s\S]*?)<\/arguments>\s*<\/tool_call>/gi;
-    while ((match = genericPattern.exec(text)) !== null) {
-        toolCalls.push({
-            id: `generic_call_${toolCalls.length}`,
-            type: 'function',
-            function: {
-                name: match[1].trim(),
-                arguments: match[2].trim()
-            }
-        });
-        cleanContent = cleanContent.replace(match[0], '');
-    }
-
-    // Pattern 4: Kimi K2 format  <|tool_calls_section_begin|>...<|tool_calls_section_end|>
-    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
-    while ((match = kimiSectionPattern.exec(text)) !== null) {
-        const sectionBlock = match[1];
-        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
-        let kimiMatch;
-        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
-            const fnName = kimiMatch[1].trim();
-            const argsStr = kimiMatch[2].trim();
-            let args = {};
-            try {
-                args = JSON.parse(argsStr);
-            } catch (e) {
-                args = { _raw: argsStr };
-            }
-            toolCalls.push({
-                id: `kimi_call_${toolCalls.length}`,
-                type: 'function',
-                function: {
-                    name: fnName,
-                    arguments: JSON.stringify(args)
-                }
-            });
-        }
-        cleanContent = cleanContent.replace(match[0], '');
-    }
-
-    // Pattern 5: MiniMax/invoke format  <invoke><tool_name><param>val</param>...</tool_name></invoke>
-    const invokePattern = /<invoke>\s*<(\w+)>([\s\S]*?)<\/\1>\s*<\/invoke>/gi;
-    while ((match = invokePattern.exec(text)) !== null) {
-        const fnName = match[1].trim();
-        const innerBlock = match[2];
-        const args = {};
-        // Parse <param_name>value</param_name> pairs inside
-        const paramPattern = /<(\w+)>([\s\S]*?)<\/\1>/gi;
-        let paramMatch;
-        while ((paramMatch = paramPattern.exec(innerBlock)) !== null) {
-            const val = paramMatch[2].trim();
-            if (val) args[paramMatch[1]] = val;
-        }
-        toolCalls.push({
-            id: `invoke_call_${toolCalls.length}`,
-            type: 'function',
-            function: {
-                name: fnName,
-                arguments: JSON.stringify(args)
-            }
-        });
-        cleanContent = cleanContent.replace(match[0], '');
-    }
-
-    return { toolCalls, cleanContent: cleanContent.trim() };
-}
 
 // ============================================
 // EDIT APPROVAL
