@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Editor v0.3.7</title>
-    <link rel="stylesheet" href="editor/css/editor.css">
+    <title>AI Editor v0.3.8</title>
+    <link rel="stylesheet" href="editor/css/editor.css?v=0.3.8">
 </head>
 <body>
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.3.7</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.3.8</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -674,11 +674,11 @@
 
     <!-- Main Script -->
     <script type="module">
-        import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js';
-        import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js';
-        import { LLM, generateCommitMessage } from './editor/js/llm.js';
-        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
-        import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
+        import { EventBus, State, Storage, Providers, Roles, loadSettings, saveSettings as coreSaveSettings } from './editor/js/core.js?v=0.3.8';
+        import { GiteaAPI, loadProject, loadFile, saveFile, batchSaveFiles } from './editor/js/gitea.js?v=0.3.8';
+        import { LLM, generateCommitMessage } from './editor/js/llm.js?v=0.3.8';
+        import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js?v=0.3.8';
+        import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js?v=0.3.8';
 
         // ============================================
         // UI HELPERS (Define early for event listeners)
@@ -1289,7 +1289,7 @@
         }
 
         // ============================================
-        // PREVIEW & DIFF PANE (v0.3.7)
+        // PREVIEW & DIFF PANE (v0.3.8)
         // ============================================
 
         let secondaryPaneMode = null; // 'preview' | 'diff' | null
@@ -1450,7 +1450,7 @@
         });
 
         // ============================================
-        // LINE NUMBERS TOGGLE (v0.3.7)
+        // LINE NUMBERS TOGGLE (v0.3.8)
         // ============================================
 
         function toggleLineNumbers() {

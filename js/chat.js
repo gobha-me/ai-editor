@@ -3,10 +3,10 @@
  * Chat pane logic and LLM interaction
  */
 
-import { State, EventBus, Storage } from './core.js';
-import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js';
-import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
-import { GiteaAPI, loadFile } from './gitea.js';
+import { State, EventBus, Storage } from './core.js?v=0.3.8';
+import { LLM, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt } from './llm.js?v=0.3.8';
+import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js?v=0.3.8';
+import { GiteaAPI, loadFile } from './gitea.js?v=0.3.8';
 
 // ============================================
 // CHAT STATE
@@ -1314,6 +1314,30 @@ function parseTextToolCalls(text) {
                 }
             });
         }
+        cleanContent = cleanContent.replace(match[0], '');
+    }
+
+    // Pattern 5: MiniMax/invoke format  <invoke><tool_name><param>val</param>...</tool_name></invoke>
+    const invokePattern = /<invoke>\s*<(\w+)>([\s\S]*?)<\/\1>\s*<\/invoke>/gi;
+    while ((match = invokePattern.exec(text)) !== null) {
+        const fnName = match[1].trim();
+        const innerBlock = match[2];
+        const args = {};
+        // Parse <param_name>value</param_name> pairs inside
+        const paramPattern = /<(\w+)>([\s\S]*?)<\/\1>/gi;
+        let paramMatch;
+        while ((paramMatch = paramPattern.exec(innerBlock)) !== null) {
+            const val = paramMatch[2].trim();
+            if (val) args[paramMatch[1]] = val;
+        }
+        toolCalls.push({
+            id: `invoke_call_${toolCalls.length}`,
+            type: 'function',
+            function: {
+                name: fnName,
+                arguments: JSON.stringify(args)
+            }
+        });
         cleanContent = cleanContent.replace(match[0], '');
     }
 
