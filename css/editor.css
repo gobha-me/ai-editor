@@ -1474,3 +1474,306 @@ body {
     text-decoration: line-through;
     opacity: 0.5;
 }
+/* ============================================
+   v0.3.6 - EDITOR TABS BAR (tabs + toolbar)
+   ============================================ */
+
+.editor-tabs-bar {
+    display: flex;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    min-height: 35px;
+}
+
+.editor-tabs-bar .editor-tabs {
+    flex: 1;
+    min-width: 0;
+    border-bottom: none;
+    min-height: unset;
+}
+
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+}
+
+.btn-toolbar {
+    padding: 2px 6px !important;
+    font-size: 11px !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    cursor: pointer;
+    border-radius: 3px !important;
+    white-space: nowrap;
+}
+
+.btn-toolbar:hover:not(:disabled) {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-toolbar:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.btn-toolbar.active {
+    background: var(--bg-active) !important;
+    color: var(--text-primary) !important;
+}
+
+/* ============================================
+   v0.3.6 - EDITOR SPLIT PANE
+   ============================================ */
+
+.editor-split {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+.editor-split .editor-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.editor-split.split-active .editor-container {
+    flex: 1;
+    min-width: 200px;
+}
+
+.secondary-pane {
+    display: flex;
+    flex-direction: column;
+    width: 45%;
+    min-width: 200px;
+    max-width: 60%;
+    border-left: 2px solid var(--accent);
+    background: var(--bg-primary);
+    overflow: hidden;
+}
+
+.secondary-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.secondary-pane-content {
+    flex: 1;
+    overflow: auto;
+}
+
+/* ============================================
+   v0.3.6 - PREVIEW PANE
+   ============================================ */
+
+.preview-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: white;
+}
+
+.preview-markdown {
+    padding: 1rem 1.5rem;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.preview-markdown h1 { font-size: 1.8em; margin: 1em 0 0.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+.preview-markdown h2 { font-size: 1.5em; margin: 0.8em 0 0.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+.preview-markdown h3 { font-size: 1.25em; margin: 0.6em 0 0.3em; }
+.preview-markdown h4, .preview-markdown h5, .preview-markdown h6 { font-size: 1.1em; margin: 0.5em 0 0.25em; }
+.preview-markdown p { margin: 0.5em 0; }
+.preview-markdown code { background: var(--bg-tertiary); padding: 0.15em 0.4em; border-radius: 3px; font-family: var(--font-mono); font-size: 0.9em; }
+.preview-markdown pre { background: var(--bg-secondary); padding: 1rem; border-radius: 4px; overflow-x: auto; margin: 0.75rem 0; }
+.preview-markdown pre code { background: none; padding: 0; }
+.preview-markdown blockquote { border-left: 3px solid var(--accent); padding: 0.25rem 1rem; margin: 0.5rem 0; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 0 4px 4px 0; }
+.preview-markdown ul { padding-left: 1.5rem; margin: 0.5em 0; }
+.preview-markdown li { margin: 0.25em 0; }
+.preview-markdown hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.preview-markdown a { color: var(--accent); text-decoration: none; }
+.preview-markdown a:hover { text-decoration: underline; }
+.preview-markdown img { max-width: 100%; border-radius: 4px; }
+
+.preview-svg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    min-height: 100%;
+    background: var(--bg-primary);
+}
+
+.preview-svg svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.preview-unsupported {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* ============================================
+   v0.3.6 - DIFF VIEW
+   ============================================ */
+
+.diff-view {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 0;
+    overflow-x: auto;
+}
+
+.diff-line {
+    display: flex;
+    padding: 0;
+    border-bottom: 1px solid rgba(60, 60, 60, 0.3);
+    min-height: 20px;
+}
+
+.diff-ln {
+    width: 40px;
+    min-width: 40px;
+    text-align: right;
+    padding: 0 6px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    user-select: none;
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+}
+
+.diff-text {
+    padding: 0 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    flex: 1;
+}
+
+.diff-equal {
+    color: var(--text-secondary);
+}
+
+.diff-added {
+    background: rgba(78, 201, 176, 0.1);
+    color: var(--success);
+}
+
+.diff-added .diff-ln {
+    background: rgba(78, 201, 176, 0.15);
+    color: var(--success);
+}
+
+.diff-removed {
+    background: rgba(241, 76, 76, 0.1);
+    color: var(--error);
+}
+
+.diff-removed .diff-ln {
+    background: rgba(241, 76, 76, 0.15);
+    color: var(--error);
+}
+
+.diff-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 2rem;
+}
+
+/* ============================================
+   v0.3.6 - LINE NUMBERS TOGGLE
+   ============================================ */
+
+.editor-container.hide-line-numbers .cm-lineNumbers {
+    display: none !important;
+}
+
+.editor-container.hide-line-numbers .cm-gutters {
+    border-right: none;
+}
+
+/* ============================================
+   v0.3.6 - MODEL DROPDOWN FIX
+   ============================================ */
+
+.model-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.model-selector select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.25rem 0.3rem;
+    font-size: 11px;
+    max-width: 130px;
+    min-width: 0;
+}
+
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* Ensure the chat header doesn't overflow */
+.chat-header {
+    padding: 0.5rem 0.5rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Role + Model selectors wrap properly on narrow panels */
+#roleSelect {
+    max-width: 75px;
+}
+
+#modelSelect {
+    max-width: 120px;
+    text-overflow: ellipsis;
+}
+
+/* Version badge */
+.version {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 400;
+}

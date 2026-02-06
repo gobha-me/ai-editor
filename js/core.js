@@ -54,6 +54,7 @@ const State = {
         editorFontSize: 14,        // Editor font size in px
         showIssues: true,          // Show issues panel in sidebar
         showWorkflows: true,       // Show workflows panel in sidebar
+        showLineNumbers: true,     // Show line numbers in editor
         theme: 'dark'
     },
 

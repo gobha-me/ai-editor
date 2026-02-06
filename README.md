@@ -14,6 +14,9 @@ A pure HTML/JS code editor with AI assistance, Gitea integration, and a plugin s
 ### Editor
 - **Multi-tab editing**: Open multiple files simultaneously
 - **Preview tabs**: Single-click opens preview (italic), double-click pins the tab
+- **Preview pane**: Live-rendered preview for HTML, Markdown, and SVG files (Ctrl+Shift+P)
+- **Diff pane**: Side-by-side view of original vs modified content (Ctrl+Shift+D)
+- **Line numbers toggle**: Show/hide line numbers via toolbar or settings (Ctrl+Shift+L)
 - Full CRUD operations (create, rename, delete files)
 - Branch management (create new branches, switch between them)
 - Protected branch support (main requires branching)
@@ -67,6 +70,10 @@ ai-editor/
 | `Ctrl+S` | Open commit dialog |
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+,` | Open settings |
+| `Ctrl+Shift+P` | Toggle Preview pane |
+| `Ctrl+Shift+D` | Toggle Diff pane |
+| `Ctrl+Shift+L` | Toggle line numbers |
+| `Ctrl+Shift+Z` | Revert file to last commit |
 | `Escape` | Close modals / Stop generation |
 | `Enter` | Send chat message |
 | `Shift+Enter` | New line in chat |
@@ -136,7 +143,9 @@ export default MyPlugin;
 - [x] Preview tabs - single click opens preview, double click pins (v0.2.0)
 - [x] LLM tools for file operations (v0.2.0)
 - [x] Issue dependency parsing (v0.2.0)
-- [ ] Diff viewer for pending changes
+- [x] Diff viewer for pending changes (v0.3.6)
+- [x] Preview pane for HTML/Markdown/SVG (v0.3.6)
+- [x] Line numbers toggle (v0.3.6)
 - [ ] PR creation workflow
 - [ ] File search (fuzzy finder)
 - [ ] Git blame/history view
