@@ -383,6 +383,8 @@ const LLM = {
         let usage = null;
         let finishReason = null;
         let buffer = '';       // Handle partial SSE lines
+        let hasToolCalls = false;  // Track if any tool calls were received
+        let fullContentWithThink = '';  // Preserve full content including think blocks
         let inThinkBlock = false;
         let thinkBuffer = '';  // Buffer for detecting split </think> tags
 
@@ -448,7 +450,12 @@ const LLM = {
                         // --- Think-block stripping (handles split tags) ---
                         if (inThinkBlock) {
                             thinkBuffer += chunk;
-                            const endIdx = thinkBuffer.indexOf('</think>');
+                        
+                        // Always preserve full content including think blocks
+                        fullContentWithThink += chunk;
+                        // Only strip think blocks if NO tool calls are present
+                        // (reasoning models put their analysis in think blocks during tool calls)
+                        if (!hasToolCalls && inThinkBlock) {
                             if (endIdx >= 0) {
                                 chunk = thinkBuffer.slice(endIdx + 8);
                                 inThinkBlock = false;
@@ -467,7 +474,7 @@ const LLM = {
                             const before = chunk.slice(0, startIdx);
                             const afterStart = chunk.slice(startIdx + 7);
                             const endIdx = afterStart.indexOf('</think>');
-                            if (endIdx >= 0) {
+                        const startIdx = !hasToolCalls ? chunk.indexOf('<think>') : -1;
                                 chunk = before + afterStart.slice(endIdx + 8);
                                 LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
                             } else {
@@ -495,6 +502,7 @@ const LLM = {
                                 }
                                 if (tc.id) toolCalls[tc.index].id = tc.id;
                                 if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                        hasToolCalls = true;  // Mark that we have tool calls
                                 if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
                             }
                         }
@@ -512,7 +520,17 @@ const LLM = {
             usage
         };
     },
+        // If tool calls are present, use full content including think blocks
+        // Otherwise use the stripped content
+        const finalContent = hasToolCalls ? fullContentWithThink : content;
+        
+        // Log what we're returning
+        if (hasToolCalls && fullContentWithThink !== content) {
+            LLMDebug.logThink('content-preservation', 
+                `Preserved think content for tool calls: ${fullContentWithThink.length} chars vs ${content.length} stripped`);
+        }
 
+            content: finalContent,
     stop() {
         if (this.abortController) {
             this.abortController.abort();

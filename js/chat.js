@@ -758,7 +758,9 @@ function setupInputHandlers() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             await handleUserInput();
-        }
+        let fullContent = content || result.content || '';
+        // Only strip think blocks for display, keep full content for message history
+        let cleanContent = stripThinkBlocks(fullContent);
     });
 }
 
@@ -849,7 +851,8 @@ function finalizeStreamingMessage(content, meta = {}) {
         role: 'assistant',
         content,
         timestamp: Date.now(),
-        ...meta
+                    // Use full content (with think blocks) for LLM context
+                    content: fullContent || '',
     });
     Storage.set('chatHistory', State.chatHistory.slice(-100));
 }
@@ -858,7 +861,8 @@ function renderMessage(message) {
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${message.role}`;
     
-    const roleIcon = {
+                // Use full content (with think blocks) for LLM context
+                messages.push({ role: 'assistant', content: fullContent || '' });
         user: '👤',
         assistant: '🤖',
         system: 'ℹ️',
