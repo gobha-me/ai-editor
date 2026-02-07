@@ -28,6 +28,55 @@ registerSearchTools(ToolRegistry);
 registerIssueTools(ToolRegistry);
 
 // ============================================
+// TOOL PARAMETER VALIDATION
+// ============================================
+
+/**
+ * Validate that required parameters are present and non-empty.
+ * Prevents bugs where AI hits token limits and sends incomplete tool calls.
+ */
+function validateToolParameters(toolName, args) {
+    // Define required parameters for each tool
+    const requiredParams = {
+        'create_file': ['path', 'content', 'message'],
+        'replace_lines': ['start_line', 'end_line', 'new_content'],
+        'insert_lines': ['after_line', 'content'],
+        'delete_lines': ['start_line', 'end_line'],
+        'read_file': ['path'],
+        'open_file': ['path'],
+        'read_lines': ['path', 'start_line', 'end_line'],
+        'search_in_files': ['query'],
+        'create_issue': ['title'],
+        'update_issue': ['number'],
+        'add_issue_comment': ['number', 'body'],
+        'read_issue': ['number'],
+        'scan_file': ['path'],
+        'read_function': ['name', 'path'],
+        'find_references': ['symbol']
+    };
+
+    const required = requiredParams[toolName];
+    if (!required) return null; // Unknown tool, let it through
+
+    const missing = required.filter(param => {
+        const value = args[param];
+        // Check for undefined, null, or empty string
+        return value === undefined || value === null || value === '';
+    });
+
+    if (missing.length > 0) {
+        return {
+            error: `Tool call validation failed for ${toolName}: Missing required parameters: ${missing.join(', ')}. ` +
+                   `This usually happens when the AI response was truncated. Please provide all required parameters.`,
+            missingParams: missing,
+            providedArgs: args
+        };
+    }
+
+    return null; // Validation passed
+}
+
+// ============================================
 // CHAT HISTORY SUMMARIZER
 // ============================================
 
@@ -194,6 +243,14 @@ let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 async function executeToolCall(toolCall) {
     try {
         const args = JSON.parse(toolCall.function.arguments || '{}');
+        
+        // VALIDATE PARAMETERS BEFORE EXECUTION
+        const validationError = validateToolParameters(toolCall.function.name, args);
+        if (validationError) {
+            console.error(`[Tool Validation] ${toolCall.function.name} failed:`, validationError);
+            return validationError;
+        }
+        
         const result = await ToolRegistry.execute(toolCall.function.name, args);
         return result;
     } catch (error) {
@@ -864,6 +921,26 @@ async function handleGeneralRequest(input) {
                 throw err;
             }
             break;
+        }
+
+        // === CHECK FOR TOKEN LIMIT TRUNCATION ===
+        if (result.finishReason === 'length') {
+            console.warn('[TOOL-LOOP] Response truncated due to token limit');
+            // Add guidance message to help AI recover
+            const guidanceMsg = {
+                role: 'system',
+                content: '⚠️ Your previous response was truncated due to token limit. Please continue with:\n' +
+                         '1. If you were calling tools, make the calls with complete parameters now\n' +
+                         '2. If generating code, break it into smaller sections\n' +
+                         '3. Focus on completing the current task in smaller steps'
+            };
+            messages.push(guidanceMsg);
+            addMessage('system', guidanceMsg.content);
+            
+            // Allow one more round to recover
+            if (round < MAX_TOOL_ROUNDS - 1) {
+                continue;
+            }
         }
 
         // === LAYER 1: Structured tool_calls from API (primary path) ===
