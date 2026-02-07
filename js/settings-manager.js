@@ -5,9 +5,12 @@
 import { State, Storage, Providers, Roles, saveSettings as coreSaveSettings } from './core.js';
 import { LLM } from './llm.js';
 import { ToolRegistry } from './tools/registry.js';
+import { ContextManager } from './context-manager.js';
+import { EmbeddingsClient } from './embeddings-client.js';
 
 export function openSettings() {
     populateSettingsForm();
+    updateEmbeddingsStatus(); // Update status when opening
     document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -60,6 +63,40 @@ function populateSettingsForm() {
     document.getElementById('settingShowWorkflows').checked = State.settings.showWorkflows !== false;
     document.getElementById('settingShowLineNumbers').checked = State.settings.showLineNumbers !== false;
 
+    // --- Context Tab ---
+    document.getElementById('settingUseEmbeddings').checked = State.settings.useEmbeddings || false;
+    document.getElementById('settingEmbeddingModel').value = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    document.getElementById('settingMaxRelevantFiles').value = State.settings.maxRelevantFiles || 5;
+    document.getElementById('maxRelevantFilesValue').textContent = State.settings.maxRelevantFiles || 5;
+    document.getElementById('settingAutoReindex').checked = State.settings.autoReindex !== false;
+    document.getElementById('settingEmbeddingCacheExpiry').value = State.settings.embeddingCacheExpiry || 7;
+
+    // Max files slider
+    const maxFilesSlider = document.getElementById('settingMaxRelevantFiles');
+    maxFilesSlider.oninput = () => {
+        document.getElementById('maxRelevantFilesValue').textContent = maxFilesSlider.value;
+    };
+
+    // Embeddings toggle
+    const embeddingsToggle = document.getElementById('settingUseEmbeddings');
+    const embeddingsSettings = document.getElementById('embeddingsSettings');
+    embeddingsToggle.onchange = () => {
+        embeddingsSettings.style.opacity = embeddingsToggle.checked ? '1' : '0.5';
+        embeddingsSettings.style.pointerEvents = embeddingsToggle.checked ? 'auto' : 'none';
+    };
+    embeddingsToggle.onchange(); // Initialize state
+
+    // Clear cache button
+    const clearCacheBtn = document.getElementById('btnClearEmbeddingsCache');
+    if (clearCacheBtn) {
+        clearCacheBtn.onclick = () => {
+            ContextManager.clearIndex();
+            EmbeddingsClient.clearCache();
+            updateEmbeddingsStatus();
+            window.showToast('Embeddings cache cleared', 'success');
+        };
+    }
+
     // --- Roles Tab ---
     populateRoleCards();
 
@@ -70,8 +107,34 @@ function populateSettingsForm() {
             document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
             document.getElementById(tab.dataset.tab).classList.add('active');
+            
+            // Update embeddings status when switching to Context tab
+            if (tab.dataset.tab === 'tabContext') {
+                updateEmbeddingsStatus();
+            }
         };
     });
+}
+
+function updateEmbeddingsStatus() {
+    const statusText = document.getElementById('embeddingsStatusText');
+    if (!statusText) return;
+
+    const stats = ContextManager.getStats();
+    const clientStats = EmbeddingsClient.getCacheStats();
+
+    if (!State.settings.useEmbeddings) {
+        statusText.innerHTML = '❌ Embeddings disabled';
+    } else if (stats.filesIndexed === 0) {
+        statusText.innerHTML = '⏳ No files indexed yet. Will index on next project load.';
+    } else {
+        statusText.innerHTML = `
+            ✅ <strong>${stats.filesIndexed} files</strong> indexed<br>
+            📁 Project: <code>${stats.project || 'None'}</code><br>
+            🤖 Model: <code>${State.settings.embeddingModel}</code><br>
+            ${stats.isIndexing ? '⏳ <em>Indexing in progress...</em>' : ''}
+        `;
+    }
 }
 
 function populateRoleCards() {
@@ -238,6 +301,13 @@ export function saveSettings() {
     State.settings.showLineNumbers = document.getElementById('settingShowLineNumbers').checked;
     State.settings.showIssues = document.getElementById('settingShowIssues').checked;
     State.settings.showWorkflows = document.getElementById('settingShowWorkflows').checked;
+
+    // Context
+    State.settings.useEmbeddings = document.getElementById('settingUseEmbeddings').checked;
+    State.settings.embeddingModel = document.getElementById('settingEmbeddingModel').value;
+    State.settings.maxRelevantFiles = parseInt(document.getElementById('settingMaxRelevantFiles').value) || 5;
+    State.settings.autoReindex = document.getElementById('settingAutoReindex').checked;
+    State.settings.embeddingCacheExpiry = parseInt(document.getElementById('settingEmbeddingCacheExpiry').value) || 7;
 
     // Roles
     const activeRoleCard = document.querySelector('.role-card.active');

@@ -43,7 +43,14 @@ const State = {
     // Settings (persisted)
     settings: {
         giteaUrl: '',
-        giteaToken: '',
+        theme: 'dark',
+        
+        // Embeddings / Context Management
+        useEmbeddings: false,      // Enable client-side embeddings
+        embeddingModel: 'Xenova/all-MiniLM-L6-v2', // Transformers.js model
+        autoReindex: true,         // Auto-update embeddings on file changes
+        embeddingCacheExpiry: 7,   // Days before re-indexing
+        maxRelevantFiles: 5        // Max files to return for context queries
         llmEndpoint: '',
         llmApiKey: '',
         llmModel: 'gpt-4',

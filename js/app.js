@@ -2,7 +2,7 @@
 // MAIN APPLICATION
 // ============================================
 
-import { State, EventBus, loadSettings } from './core.js';
+import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initChat, stopGeneration, clearChat } from './chat.js';
 import { loadCodeMirror } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
@@ -61,7 +61,8 @@ import './tools/edit-tools.js';
 import './tools/project-tools.js';
 import './tools/search-tools.js';
 import './tools/issue-tools.js';
-import './tools/scan-tools.js';  // NEW: Issue #32 efficient code navigation tools
+import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tools
+import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 
 // ============================================
 // EXPOSE WINDOW FUNCTIONS
