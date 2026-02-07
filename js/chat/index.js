@@ -14,38 +14,25 @@ import { registerIssueTools } from '../tools/issue-tools.js';
 
 // Import submodules
 import { 
-    initChatState, 
-    getChatContainer, 
-    getInputElement, 
-    getPendingEdit, 
-    setPendingEdit,
-    clearPendingEdit,
-    isToolLoopCancelled,
-    cancelToolLoop,
-    resetToolLoopCancel
+    initChatState,
+    getChatContainer,
+    getInputElement
 } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
-import { validateToolParameters, executeToolCall, parseTextToolCalls } from './tools.js';
+import { executeToolCall } from './tools.js';
 import { 
     addMessage, 
     addStreamingMessage, 
     updateStreamingMessage, 
     finalizeStreamingMessage,
-    renderMessage,
     renderMessages,
     clearChat,
-    addToolCallMessage,
     scrollToBottom
 } from './messages.js';
-import { setupInputHandlers, handleUserInputDirect, sendMessage, stopGeneration } from './input.js';
+import { setupInputHandlers, sendMessage, stopGeneration } from './input.js';
 import { exportChat } from './export.js';
 import { 
-    detectIntent,
-    handleEditRequest,
-    handleExplainRequest,
-    handleCommitRequest,
-    handleIssueRequest,
-    handleGeneralRequest,
+    handleUserInputDirect,
     applyPendingEdit,
     rejectPendingEdit
 } from './handlers.js';
@@ -85,8 +72,10 @@ function initChat(containerEl, inputEl) {
         State.chatHistory = savedHistory.slice(-50);
     }
 
-    renderMessages(displayHistory.slice(-50));
-    setupInputHandlers();
+    renderMessages();
+    
+    // Setup input handlers with correct parameters
+    setupInputHandlers(inputEl, handleUserInputDirect);
 
     // Listen for LLM events
     EventBus.on('llm:token', ({ token, content }) => {
@@ -94,9 +83,9 @@ function initChat(containerEl, inputEl) {
     });
 
     EventBus.on('llm:generating', (isGenerating) => {
-        const inputElement = getInputElement();
-        if (inputElement) {
-            inputElement.disabled = isGenerating;
+        const input = getInputElement();
+        if (input) {
+            input.disabled = isGenerating;
         }
     });
 
@@ -118,7 +107,7 @@ window.Chat = {
     rejectPendingEdit,
     stopGeneration,
     clearChat,
-    sendMessage,
+    sendMessage: (content) => sendMessage(content, handleUserInputDirect),
     executeToolCall,
     exportChat
 };
