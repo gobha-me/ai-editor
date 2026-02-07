@@ -47,7 +47,8 @@ export function registerProjectTools(registry) {
                 },
                 required: []
             }
-        }
+        },
+        roles: 'all'  // All roles can view project structure
     });
 
     // ========================================
@@ -94,6 +95,7 @@ export function registerProjectTools(registry) {
                 },
                 required: ['path', 'content']
             }
-        }
+        },
+        roles: ['coder']  // Only coders can create new files
     });
 }
