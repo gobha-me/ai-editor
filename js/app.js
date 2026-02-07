@@ -61,6 +61,7 @@ import './tools/edit-tools.js';
 import './tools/project-tools.js';
 import './tools/search-tools.js';
 import './tools/issue-tools.js';
+import './tools/scan-tools.js';  // NEW: Issue #32 efficient code navigation tools
 
 // ============================================
 // EXPOSE WINDOW FUNCTIONS
