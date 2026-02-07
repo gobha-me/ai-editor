@@ -244,14 +244,16 @@ function initChat(containerEl, inputEl) {
 function setupInputHandlers() {
     if (!inputElement) return;
 
-    // FIX: Use 'keypress' instead of 'keydown' to ensure last character is captured
-    // keydown fires BEFORE the character is added to the input field
-    inputElement.addEventListener('keypress', async (e) => {
+    // Use keydown to detect Enter, but defer reading value until after the key is processed
+    inputElement.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            // Small delay to ensure the character is committed
-            await new Promise(resolve => setTimeout(resolve, 10));
-            await handleUserInput();
+            
+            // Defer execution to next tick to ensure the final character is committed
+            // This works even if the Enter key was what triggered composition
+            setTimeout(() => {
+                handleUserInput();
+            }, 0);
         }
     });
 }
