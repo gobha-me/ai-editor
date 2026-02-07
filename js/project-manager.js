@@ -4,6 +4,7 @@
 
 import { State, EventBus } from './core.js';
 import { GiteaAPI, loadProject } from './gitea.js';
+import { renderFileTree } from './file-tree';
 
 export async function refreshProjects() {
     try {
@@ -195,14 +196,12 @@ function escapeHtml(text) {
 // Setup event listeners for project changes
 export function initProjectListeners() {
     EventBus.on('project:loaded', () => {
-        const { renderFileTree } = require('./file-tree.js');
         renderFileTree();
         renderIssues();
         renderWorkflows();
     });
     
     EventBus.on('tree:refresh', async () => {
-        const { renderFileTree } = await import('./file-tree.js');
         renderFileTree();
     });
     

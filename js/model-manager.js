@@ -2,7 +2,7 @@
 // MODEL MANAGER
 // ============================================
 
-import { State, Storage, Roles } from './core.js';
+import { State, Storage, Roles, EventBus } from './core.js';
 import { LLM } from './llm.js';
 import { populateSettingsModelSelects } from './settings-manager.js';
 
@@ -156,6 +156,5 @@ export function resetSessionCost() {
 
 // Setup event listener
 export function initCostTrackerListener() {
-    const { EventBus } = require('./core.js');
     EventBus.on('cost:updated', updateCostTracker);
 }
