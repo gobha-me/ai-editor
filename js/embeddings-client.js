@@ -1,11 +1,20 @@
 /**
- * Embeddings Client - Optional client-side embeddings using Transformers.js
- * Provides semantic file search for intelligent context management
+ * Embeddings Client - Dual-mode embeddings support
+ * 
+ * Local Mode: Transformers.js (client-side, browser-based)
+ *   - Models: Xenova/all-MiniLM-L6-v2, Xenova/bge-small-en-v1.5, etc.
+ *   - Privacy: Files never leave browser
+ *   - Cost: Free (one-time model download)
+ * 
+ * Remote Mode: Venice.ai API (server-side)
+ *   - Models: text-embedding-bge-m3, etc.
+ *   - Privacy: Files sent to API
+ *   - Cost: Per-token API pricing
  */
 
 import { State, EventBus, Storage } from './core.js';
 
-// Lazy-loaded Transformers.js modules
+// Lazy-loaded Transformers.js modules (for local mode)
 let transformers = null;
 let pipeline = null;
 let embeddingModel = null;
@@ -14,6 +23,7 @@ const EmbeddingsClient = {
     _initialized: false,
     _loading: false,
     _cache: new Map(), // In-memory cache for this session
+    _mode: null, // 'local' or 'remote'
 
     /**
      * Check if embeddings are enabled in settings
@@ -23,7 +33,15 @@ const EmbeddingsClient = {
     },
 
     /**
-     * Initialize the embeddings system (lazy load Transformers.js)
+     * Detect if model is local (Transformers.js) or remote (API)
+     */
+    _detectMode(modelName) {
+        return modelName.startsWith('Xenova/') ? 'local' : 'remote';
+    },
+
+    /**
+     * Initialize the embeddings system
+     * Routes to local (Transformers.js) or remote (API) based on model
      */
     async init() {
         if (this._initialized) return true;
@@ -45,29 +63,21 @@ const EmbeddingsClient = {
         }
 
         this._loading = true;
-        console.log('[Embeddings] Initializing...');
+        const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+        this._mode = this._detectMode(modelName);
+
+        console.log(`[Embeddings] Initializing in ${this._mode} mode with model: ${modelName}`);
 
         try {
-            // Dynamically import Transformers.js
-            transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-            
-            // Configure to use local models when possible
-            transformers.env.allowLocalModels = true;
-            transformers.env.useBrowserCache = true;
+            if (this._mode === 'local') {
+                await this._initLocal(modelName);
+            } else {
+                await this._initRemote(modelName);
+            }
 
-            const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
-            console.log(`[Embeddings] Loading model: ${modelName}`);
-
-            // Create embedding pipeline
-            pipeline = await transformers.pipeline('feature-extraction', modelName, {
-                quantized: true, // Use quantized model for smaller size
-            });
-
-            embeddingModel = pipeline;
             this._initialized = true;
             this._loading = false;
-
-            console.log('[Embeddings] Initialized successfully');
+            console.log(`[Embeddings] Initialized successfully (${this._mode} mode)`);
             EventBus.emit('embeddings:ready');
             return true;
 
@@ -80,9 +90,44 @@ const EmbeddingsClient = {
     },
 
     /**
+     * Initialize local mode (Transformers.js)
+     */
+    async _initLocal(modelName) {
+        console.log('[Embeddings] Loading Transformers.js...');
+        
+        // Dynamically import Transformers.js
+        transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        
+        // Configure to use local models when possible
+        transformers.env.allowLocalModels = true;
+        transformers.env.useBrowserCache = true;
+
+        console.log(`[Embeddings] Loading local model: ${modelName}`);
+
+        // Create embedding pipeline
+        pipeline = await transformers.pipeline('feature-extraction', modelName, {
+            quantized: true, // Use quantized model for smaller size
+        });
+
+        embeddingModel = pipeline;
+    },
+
+    /**
+     * Initialize remote mode (API-based)
+     * Just validates that API credentials are configured
+     */
+    async _initRemote(modelName) {
+        if (!State.settings.llmEndpoint || !State.settings.llmApiKey) {
+            throw new Error('API endpoint and key required for remote embeddings');
+        }
+        console.log(`[Embeddings] Remote mode ready with model: ${modelName}`);
+    },
+
+    /**
      * Generate embedding for a text string
+     * Routes to local or remote implementation
      * @param {string} text - Text to embed
-     * @returns {Promise<Float32Array|null>} Embedding vector
+     * @returns {Promise<Array|null>} Embedding vector
      */
     async embed(text) {
         if (!this.isEnabled()) return null;
@@ -93,19 +138,64 @@ const EmbeddingsClient = {
         }
 
         try {
-            const output = await embeddingModel(text, {
-                pooling: 'mean',
-                normalize: true
-            });
-
-            // Extract the embedding array
-            const embedding = Array.from(output.data);
-            return embedding;
-
+            if (this._mode === 'local') {
+                return await this._embedLocal(text);
+            } else {
+                return await this._embedRemote(text);
+            }
         } catch (error) {
-            console.error('[Embeddings] Failed to generate embedding:', error);
+            console.error(`[Embeddings] Failed to generate embedding (${this._mode} mode):`, error);
             return null;
         }
+    },
+
+    /**
+     * Generate embedding using Transformers.js (local)
+     */
+    async _embedLocal(text) {
+        const output = await embeddingModel(text, {
+            pooling: 'mean',
+            normalize: true
+        });
+
+        // Extract the embedding array
+        const embedding = Array.from(output.data);
+        return embedding;
+    },
+
+    /**
+     * Generate embedding using Venice.ai API (remote)
+     */
+    async _embedRemote(text) {
+        const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/embeddings`;
+        const modelName = State.settings.embeddingModel;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.settings.llmApiKey}`
+            },
+            body: JSON.stringify({
+                model: modelName,
+                input: text,
+                encoding_format: 'float'
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Embeddings API error: ${response.status} - ${error}`);
+        }
+
+        const data = await response.json();
+        
+        // Venice.ai returns: { data: [{ embedding: [0.123, ...], index: 0, object: "embedding" }], ... }
+        if (!data.data || !data.data[0] || !data.data[0].embedding) {
+            throw new Error('Invalid embeddings API response format');
+        }
+
+        return data.data[0].embedding;
     },
 
     /**
@@ -171,7 +261,8 @@ const EmbeddingsClient = {
         return {
             size: this._cache.size,
             initialized: this._initialized,
-            enabled: this.isEnabled()
+            enabled: this.isEnabled(),
+            mode: this._mode
         };
     }
 };
@@ -181,6 +272,16 @@ EventBus.on('settings:saved', async () => {
     if (State.settings.useEmbeddings && !EmbeddingsClient._initialized) {
         console.log('[Embeddings] Enabled in settings, initializing...');
         await EmbeddingsClient.init();
+    } else if (State.settings.useEmbeddings && EmbeddingsClient._initialized) {
+        // Model changed - reinitialize
+        const newMode = EmbeddingsClient._detectMode(State.settings.embeddingModel);
+        if (newMode !== EmbeddingsClient._mode) {
+            console.log(`[Embeddings] Mode changed from ${EmbeddingsClient._mode} to ${newMode}, reinitializing...`);
+            EmbeddingsClient._initialized = false;
+            embeddingModel = null;
+            pipeline = null;
+            await EmbeddingsClient.init();
+        }
     }
 });
 
