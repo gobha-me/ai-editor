@@ -95,6 +95,7 @@ export function registerSearchTools(registry) {
                 },
                 required: ['query']
             }
-        }
+        },
+        roles: 'all'  // All roles can search the codebase
     });
 }
