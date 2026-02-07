@@ -74,7 +74,7 @@ const ChatSummarizer = {
         const convo = messages
             .filter(m => m.role !== 'system')
             .map(m => {
-                const who = m.role === 'user' ? 'User' : 'Assistant';
+                const who = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : m.role;
                 const text = (typeof m.content === 'string'
                     ? m.content : JSON.stringify(m.content)).slice(0, 500);
                 return `${who}: ${text}`;
@@ -362,20 +362,23 @@ function renderMessage(message) {
         user: '👤',
         assistant: '🤖',
         system: 'ℹ️',
-        error: '❌'
+        error: '❌',
+        tool: '🔧'
     }[message.role] || '💬';
 
     const roleName = {
         user: 'You',
         assistant: 'Assistant',
         system: 'System',
-        error: 'Error'
+        error: 'Error',
+        tool: 'Tool Result'
     }[message.role] || message.role;
 
     const time = new Date(message.timestamp).toLocaleTimeString();
 
-    // Strip think blocks for display only
-    const displayContent = stripThinkBlocks(message.content);
+    // For tool messages, don't strip anything - just format as-is
+    // For other messages, strip think blocks for display only
+    const displayContent = message.role === 'tool' ? message.content : stripThinkBlocks(message.content);
 
     messageEl.innerHTML = `
         <div class="message-header">
@@ -911,6 +914,53 @@ async function handleGeneralRequest(input) {
             }
 
             if (_cancelToolLoop) break;
+
+            // === PERSIST ASSISTANT RESPONSE + TOOL RESULTS TO HISTORY ===
+            // This is critical for conversation continuity across user messages
+            
+            if (toolCallSource === 'structured') {
+                // Save assistant message with tool_calls
+                State.chatHistory.push({
+                    role: 'assistant',
+                    content: cleanContent || '',
+                    tool_calls: toolCalls,
+                    timestamp: Date.now()
+                });
+                
+                // Save each tool result as a separate message
+                for (const tr of structuredResults) {
+                    State.chatHistory.push({
+                        ...tr,
+                        timestamp: Date.now()
+                    });
+                }
+            } else {
+                // Text-based tool calls: save assistant message
+                State.chatHistory.push({
+                    role: 'assistant',
+                    content: cleanContent || '',
+                    timestamp: Date.now()
+                });
+                
+                // Save synthesized tool results message
+                const summary = textResults.map(tr => {
+                    let resultStr = JSON.stringify(tr.result, null, 2);
+                    if (resultStr.length > 1500) {
+                        resultStr = resultStr.slice(0, 1500) + '\n... (truncated)';
+                    }
+                    return `[Tool: ${tr.name}]\n${resultStr}`;
+                }).join('\n\n');
+                
+                State.chatHistory.push({
+                    role: 'user',
+                    content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`,
+                    timestamp: Date.now(),
+                    isToolResults: true
+                });
+            }
+            
+            // Persist to localStorage after each tool round
+            Storage.set('chatHistory', State.chatHistory.slice(-100));
 
             // === BUILD THREAD FOR NEXT ROUND ===
 
