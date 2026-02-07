@@ -4,7 +4,7 @@
 
 import { State, EventBus } from './core.js';
 import { GiteaAPI, loadProject } from './gitea.js';
-import { renderFileTree } from './file-tree';
+import { renderFileTree } from './file-tree.js';
 
 export async function refreshProjects() {
     try {
