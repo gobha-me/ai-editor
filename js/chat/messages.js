@@ -12,7 +12,7 @@ import { ChatSummarizer } from './summarizer.js';
  * Add a message to chat history and render it
  */
 export function addMessage(role, content, meta = {}) {
-    console.log(`[addMessage] role=${role}, content length=${content?.length}`);
+    console.log(`[addMessage] role=${role}, content length=${content?.length}, content="${content}"`);
     
     const message = {
         role,
@@ -85,7 +85,7 @@ export function updateStreamingMessage(content) {
  * Finalize streaming message and add to history
  */
 export function finalizeStreamingMessage(content, meta = {}) {
-    console.log(`[finalizeStreamingMessage] content length=${content?.length}`);
+    console.log(`[finalizeStreamingMessage] content length=${content?.length}, first 100 chars="${content?.slice(0, 100)}"`);
     
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
@@ -123,7 +123,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
  * Render a single message
  */
 export function renderMessage(message) {
-    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}`);
+    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}, content="${message.content}"`);
     
     // Skip rendering tool messages entirely
     if (message.role === 'tool') {
@@ -162,6 +162,8 @@ export function renderMessage(message) {
     if (typeof displayContent !== 'string') {
         displayContent = JSON.stringify(displayContent, null, 2);
     }
+    
+    console.log(`[renderMessage] After stripThinkBlocks: length=${displayContent?.length}, content="${displayContent}"`);
 
     messageEl.innerHTML = `
         <div class="message-header">
@@ -320,7 +322,6 @@ function summarizeToolResult(toolName, result) {
 
 /**
  * Render all messages in chat history
- * @param {Array} historyOverride - Optional filtered history to render instead of State.chatHistory
  */
 export function renderMessages(historyOverride = null) {
     const chatContainer = getChatContainer();
@@ -364,8 +365,9 @@ export function clearChat() {
 
 /**
  * Format message content with markdown-like formatting
+ * EXPORTED for use in handlers.js
  */
-function formatMessageContent(content) {
+export function formatMessageContent(content) {
     if (!content) return '';
     
     let html = escapeHtml(content);
@@ -393,8 +395,9 @@ function formatMessageContent(content) {
 
 /**
  * Escape HTML special characters
+ * EXPORTED for use in handlers.js
  */
-function escapeHtml(text) {
+export function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = String(text);
@@ -404,7 +407,7 @@ function escapeHtml(text) {
 /**
  * Scroll chat container to bottom
  */
-export function scrollToBottom() {
+function scrollToBottom() {
     const chatContainer = getChatContainer();
     if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
