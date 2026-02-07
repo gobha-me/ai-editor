@@ -226,6 +226,9 @@ export async function handleGeneralRequest(input) {
     State.isGenerating = true;
     EventBus.emit('llm:generating', true);
 
+    // Start elapsed time tracking
+    const requestStartTime = Date.now();
+
     try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             // Check cancellation before each round
@@ -238,18 +241,22 @@ export async function handleGeneralRequest(input) {
             let result;
 
             try {
-                const timeout = round === 0 ? 60000 : 90000;
+                // Use configurable timeout from settings (default 180s = 3min)
+                const timeout = State.settings.llmTimeout || 180000;
                 const chatOptions = {
                     stream: true,
                     tools: roleTools,
                     onToken: (token, fullContent) => {
                         content = fullContent;
-                        updateStreamingMessage(fullContent);
+                        // Update with elapsed time
+                        const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
+                        updateStreamingMessage(fullContent, elapsed);
                     }
                 };
 
                 if (round > 0) {
-                    updateStreamingMessage('*(processing tool results…)*');
+                    const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
+                    updateStreamingMessage('*(processing tool results…)*', elapsed);
                 }
 
                 result = await Promise.race([
@@ -323,7 +330,8 @@ export async function handleGeneralRequest(input) {
                     toolCallSource = 'text';
                     console.log(`[TOOL-LOOP] Text-parsed ${toolCalls.length} tool calls:`, 
                         toolCalls.map(tc => tc.function?.name));
-                    updateStreamingMessage(cleanContent || finalContent || '');
+                    const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
+                    updateStreamingMessage(cleanContent || finalContent || '', elapsed);
                 }
             }
 
@@ -347,13 +355,14 @@ export async function handleGeneralRequest(input) {
                         args = JSON.parse(toolCall.function?.arguments || '{}');
                     } catch (e) { /* malformed args */ }
 
-                    // Execute with timeout (15s per tool call)
+                    // Execute with configurable timeout (default 30s)
+                    const toolTimeout = State.settings.toolTimeout || 30000;
                     let toolResult;
                     try {
                         toolResult = await Promise.race([
                             executeToolCall(toolCall),
                             new Promise((_, reject) =>
-                                setTimeout(() => reject(new Error('Tool execution timeout (15s)')), 15000)
+                                setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
                             )
                         ]);
                     } catch (e) {
@@ -495,6 +504,9 @@ export async function handleGeneralRequest(input) {
         EventBus.emit('llm:generating', false);
     }
 
+    // Calculate total elapsed time
+    const totalElapsed = Math.floor((Date.now() - requestStartTime) / 1000);
+
     // Handle empty responses
     if (!finalContent.trim()) {
         if (toolActions.length > 0) {
@@ -509,8 +521,11 @@ export async function handleGeneralRequest(input) {
         }
     }
 
-    // Use last round's content for the final DOM element
-    finalizeStreamingMessage(lastRoundContent.trim() ? lastRoundContent : finalContent, { hasCode: false });
+    // Use last round's content for the final DOM element, add elapsed time metadata
+    finalizeStreamingMessage(
+        lastRoundContent.trim() ? lastRoundContent : finalContent, 
+        { hasCode: false, elapsedTime: totalElapsed }
+    );
 }
 
 /**
