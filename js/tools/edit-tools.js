@@ -84,7 +84,8 @@ export function registerEditTools(registry) {
                 },
                 required: ['start_line', 'end_line', 'new_content']
             }
-        }
+        },
+        roles: ['coder']  // Only coders can edit code
     });
 
     // ========================================
@@ -133,7 +134,8 @@ export function registerEditTools(registry) {
                 },
                 required: ['after_line', 'content']
             }
-        }
+        },
+        roles: ['coder']  // Only coders can insert code
     });
 
     // ========================================
@@ -182,6 +184,7 @@ export function registerEditTools(registry) {
                 },
                 required: ['start_line', 'end_line']
             }
-        }
+        },
+        roles: ['coder']  // Only coders can delete code
     });
 }
