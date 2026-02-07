@@ -51,11 +51,20 @@ const State = {
         autoReindex: true,         // Auto-update embeddings on file changes
         embeddingCacheExpiry: 7,   // Days before re-indexing
         maxRelevantFiles: 5,       // Max files to return for context queries
+        
+        // LLM Configuration
         llmEndpoint: '',
         llmApiKey: '',
         llmModel: 'gpt-4',
         commitModel: '',           // Optional small/fast model for commit messages
         apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
+        
+        // Timeout Configuration (in milliseconds)
+        llmTimeout: 180000,        // 3 minutes - Main LLM response timeout (for reasoning models like Kimi K2.5)
+        toolTimeout: 30000,        // 30 seconds - Individual tool execution timeout
+        summaryTimeout: 60000,     // 1 minute - Chat summary generation timeout
+        
+        // UI Configuration
         role: 'full',              // Active role: full | coder | pm | reviewer
         fontSize: 13,              // UI font size in px
         editorFontSize: 14,        // Editor font size in px
