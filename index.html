@@ -299,6 +299,40 @@
 
                     <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
 
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">⏱️ Timeout Configuration</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Configure timeouts for reasoning models like Kimi K2.5 that require longer processing times.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="settingLlmTimeout">LLM Response Timeout (seconds)</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingLlmTimeout" min="30" max="600" step="30" value="180" style="flex: 1;">
+                            <span id="llmTimeoutValue" style="font-size: 12px; color: var(--text-secondary); min-width: 50px; text-align: right;">180s</span>
+                        </div>
+                        <small>Maximum time to wait for LLM response (30s - 10min). Higher values needed for reasoning models.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingToolTimeout">Tool Execution Timeout (seconds)</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingToolTimeout" min="5" max="120" step="5" value="30" style="flex: 1;">
+                            <span id="toolTimeoutValue" style="font-size: 12px; color: var(--text-secondary); min-width: 50px; text-align: right;">30s</span>
+                        </div>
+                        <small>Maximum time for tool execution (5s - 2min). Affects file operations and searches.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingSummaryTimeout">Summary Generation Timeout (seconds)</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingSummaryTimeout" min="10" max="180" step="10" value="60" style="flex: 1;">
+                            <span id="summaryTimeoutValue" style="font-size: 12px; color: var(--text-secondary); min-width: 50px; text-align: right;">60s</span>
+                        </div>
+                        <small>Maximum time for chat history summarization (10s - 3min).</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+
                     <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Settings Management</h4>
                     <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 0.75rem;">
                         Export your settings to backup API keys and preferences. Import to restore on another device or after clearing browser data.
