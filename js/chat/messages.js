@@ -12,7 +12,7 @@ import { ChatSummarizer } from './summarizer.js';
  * Add a message to chat history and render it
  */
 export function addMessage(role, content, meta = {}) {
-    console.log(`[addMessage] role=${role}, content length=${content?.length}, content="${content}"`);
+    console.log(`[addMessage] role=${role}, content length=${content?.length}`);
     
     const message = {
         role,
@@ -85,7 +85,7 @@ export function updateStreamingMessage(content) {
  * Finalize streaming message and add to history
  */
 export function finalizeStreamingMessage(content, meta = {}) {
-    console.log(`[finalizeStreamingMessage] content length=${content?.length}, first 100 chars="${content?.slice(0, 100)}"`);
+    console.log(`[finalizeStreamingMessage] content length=${content?.length}`);
     
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
@@ -123,7 +123,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
  * Render a single message
  */
 export function renderMessage(message) {
-    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}, content="${message.content}"`);
+    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}`);
     
     // Skip rendering tool messages entirely
     if (message.role === 'tool') {
@@ -162,8 +162,6 @@ export function renderMessage(message) {
     if (typeof displayContent !== 'string') {
         displayContent = JSON.stringify(displayContent, null, 2);
     }
-    
-    console.log(`[renderMessage] After stripThinkBlocks: length=${displayContent?.length}, content="${displayContent}"`);
 
     messageEl.innerHTML = `
         <div class="message-header">
@@ -322,14 +320,17 @@ function summarizeToolResult(toolName, result) {
 
 /**
  * Render all messages in chat history
+ * @param {Array} historyOverride - Optional filtered history to render instead of State.chatHistory
  */
-export function renderMessages() {
+export function renderMessages(historyOverride = null) {
     const chatContainer = getChatContainer();
     if (!chatContainer) return;
     
     chatContainer.innerHTML = '';
     
-    if (State.chatHistory.length === 0) {
+    const history = historyOverride || State.chatHistory;
+    
+    if (history.length === 0) {
         chatContainer.innerHTML = `
             <div class="chat-welcome">
                 <h3>👋 Welcome to AI Editor</h3>
@@ -346,7 +347,7 @@ export function renderMessages() {
         return;
     }
 
-    State.chatHistory.forEach(msg => renderMessage(msg));
+    history.forEach(msg => renderMessage(msg));
     scrollToBottom();
 }
 
@@ -403,7 +404,7 @@ function escapeHtml(text) {
 /**
  * Scroll chat container to bottom
  */
-function scrollToBottom() {
+export function scrollToBottom() {
     const chatContainer = getChatContainer();
     if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
