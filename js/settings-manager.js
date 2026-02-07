@@ -128,16 +128,21 @@ function updateEmbeddingsStatus() {
 
     const stats = ContextManager.getStats();
     const clientStats = EmbeddingsClient.getCacheStats();
+    const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    const mode = modelName.startsWith('Xenova/') ? 'Local (Browser)' : 'Remote (API)';
+    const modeIcon = modelName.startsWith('Xenova/') ? '🏠' : '☁️';
 
     if (!State.settings.useEmbeddings) {
         statusText.innerHTML = '❌ Embeddings disabled';
     } else if (stats.filesIndexed === 0) {
-        statusText.innerHTML = '⏳ No files indexed yet. Will index on next project load.';
+        statusText.innerHTML = `⏳ No files indexed yet. Will index on next project load.<br>
+            ${modeIcon} <strong>${mode}</strong> mode selected`;
     } else {
         statusText.innerHTML = `
             ✅ <strong>${stats.filesIndexed} files</strong> indexed<br>
             📁 Project: <code>${stats.project || 'None'}</code><br>
             🤖 Model: <code>${State.settings.embeddingModel}</code><br>
+            ${modeIcon} Mode: <strong>${mode}</strong><br>
             ${stats.isIndexing ? '⏳ <em>Indexing in progress...</em>' : ''}
         `;
     }
@@ -423,19 +428,29 @@ export async function fetchEmbeddingModelsForSettings() {
         State.settings.llmApiKey = origApiKey;
         
         if (embeddingModels.length === 0) {
-            window.showToast('No embedding models found. You can still enter a model ID manually.', 'warning');
+            window.showToast('No embedding models found. You can still enter a model ID manually or use local Xenova/* models.', 'warning');
             return;
         }
         
-        // Populate the datalist
+        // Populate the datalist with API models
         const datalist = document.getElementById('embeddingModelsList');
         if (datalist) {
-            datalist.innerHTML = embeddingModels.map(m => 
-                `<option value="${m.id}">${m.name || m.id}</option>`
-            ).join('');
+            // Keep the local models, add API models
+            const localModels = [
+                { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Local, ~23MB)' },
+                { id: 'Xenova/bge-small-en-v1.5', name: 'bge-small-en-v1.5 (Local, ~33MB)' },
+                { id: 'Xenova/bge-base-en-v1.5', name: 'bge-base-en-v1.5 (Local, ~130MB)' }
+            ];
+            
+            const allModels = [
+                ...localModels.map(m => `<option value="${m.id}">${m.name}</option>`),
+                ...embeddingModels.map(m => `<option value="${m.id}">${m.name || m.id} (API)</option>`)
+            ];
+            
+            datalist.innerHTML = allModels.join('');
         }
         
-        window.showToast(`Found ${embeddingModels.length} embedding model(s)`, 'success');
+        window.showToast(`Found ${embeddingModels.length} API embedding model(s)`, 'success');
     } catch (error) {
         console.error('Failed to fetch embedding models:', error);
         window.showToast('Failed to fetch embedding models: ' + error.message, 'error');
