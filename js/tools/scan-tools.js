@@ -258,7 +258,8 @@ export function registerScanTools(registry) {
                 },
                 required: ['path']
             }
-        }
+        },
+        roles: 'all'  // All roles can scan file structure
     });
     
     // ========================================
@@ -348,7 +349,8 @@ export function registerScanTools(registry) {
                 },
                 required: ['path', 'name']
             }
-        }
+        },
+        roles: 'all'  // All roles can read specific functions
     });
     
     // ========================================
@@ -458,7 +460,8 @@ export function registerScanTools(registry) {
                 },
                 required: ['symbol']
             }
-        }
+        },
+        roles: 'all'  // All roles can find symbol references
     });
     
     // ========================================
@@ -532,6 +535,7 @@ export function registerScanTools(registry) {
                 },
                 required: ['path', 'start_line', 'end_line']
             }
-        }
+        },
+        roles: 'all'  // All roles can read specific line ranges
     });
 }
