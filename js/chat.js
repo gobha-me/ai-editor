@@ -244,9 +244,13 @@ function initChat(containerEl, inputEl) {
 function setupInputHandlers() {
     if (!inputElement) return;
 
-    inputElement.addEventListener('keydown', async (e) => {
+    // FIX: Use 'keypress' instead of 'keydown' to ensure last character is captured
+    // keydown fires BEFORE the character is added to the input field
+    inputElement.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            // Small delay to ensure the character is committed
+            await new Promise(resolve => setTimeout(resolve, 10));
             await handleUserInput();
         }
     });
