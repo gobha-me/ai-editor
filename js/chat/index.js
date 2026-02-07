@@ -72,7 +72,8 @@ function initChat(containerEl, inputEl) {
         State.chatHistory = savedHistory.slice(-50);
     }
 
-    renderMessages();
+    // Render filtered history on page load
+    renderMessages(displayHistory.slice(-50));
     
     // Setup input handlers with correct parameters
     setupInputHandlers(inputEl, handleUserInputDirect);
