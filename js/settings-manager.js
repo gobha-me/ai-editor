@@ -41,6 +41,29 @@ function populateSettingsForm() {
     modelSelect.onchange = showModelCapabilities;
     showModelCapabilities();
 
+    // Timeout sliders
+    const llmTimeoutSlider = document.getElementById('settingLlmTimeout');
+    const toolTimeoutSlider = document.getElementById('settingToolTimeout');
+    const summaryTimeoutSlider = document.getElementById('settingSummaryTimeout');
+    
+    llmTimeoutSlider.value = (State.settings.llmTimeout || 180000) / 1000;
+    toolTimeoutSlider.value = (State.settings.toolTimeout || 30000) / 1000;
+    summaryTimeoutSlider.value = (State.settings.summaryTimeout || 60000) / 1000;
+    
+    document.getElementById('llmTimeoutValue').textContent = llmTimeoutSlider.value + 's';
+    document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';
+    document.getElementById('summaryTimeoutValue').textContent = summaryTimeoutSlider.value + 's';
+
+    llmTimeoutSlider.oninput = () => {
+        document.getElementById('llmTimeoutValue').textContent = llmTimeoutSlider.value + 's';
+    };
+    toolTimeoutSlider.oninput = () => {
+        document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';
+    };
+    summaryTimeoutSlider.oninput = () => {
+        document.getElementById('summaryTimeoutValue').textContent = summaryTimeoutSlider.value + 's';
+    };
+
     // --- Appearance Tab ---
     const fontSlider = document.getElementById('settingFontSize');
     const editorFontSlider = document.getElementById('settingEditorFontSize');
@@ -306,6 +329,11 @@ export function saveSettings() {
     State.settings.commitModel = document.getElementById('settingCommitModel').value.trim();
     State.settings.apiProvider = document.getElementById('settingApiProvider').value;
 
+    // Timeouts (convert seconds to milliseconds)
+    State.settings.llmTimeout = parseInt(document.getElementById('settingLlmTimeout').value) * 1000 || 180000;
+    State.settings.toolTimeout = parseInt(document.getElementById('settingToolTimeout').value) * 1000 || 30000;
+    State.settings.summaryTimeout = parseInt(document.getElementById('settingSummaryTimeout').value) * 1000 || 60000;
+
     // Appearance
     State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
     State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
@@ -474,6 +502,11 @@ export function exportSettings() {
         llmModel: State.settings.llmModel,
         commitModel: State.settings.commitModel,
         apiProvider: State.settings.apiProvider,
+        
+        // Timeouts
+        llmTimeout: State.settings.llmTimeout,
+        toolTimeout: State.settings.toolTimeout,
+        summaryTimeout: State.settings.summaryTimeout,
         
         // Embeddings
         useEmbeddings: State.settings.useEmbeddings,
