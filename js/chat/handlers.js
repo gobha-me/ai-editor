@@ -380,10 +380,36 @@ export async function handleGeneralRequest(input) {
                     });
 
                     if (toolCallSource === 'structured') {
+                        // CRITICAL FIX: Truncate large tool results BEFORE sending to API
+                        // This prevents "zero-length document" errors when minimax receives massive payloads
+                        let toolContent = JSON.stringify(toolResult);
+                        
+                        // Truncate if over 2000 chars to prevent request bloat
+                        if (toolContent.length > 2000) {
+                            try {
+                                const truncated = JSON.parse(toolContent);
+                                if (truncated.content) {
+                                    const lineCount = (truncated.content.match(/\n/g) || []).length + 1;
+                                    truncated.content = `[Content truncated: ${lineCount} lines, ${toolContent.length} bytes]`;
+                                }
+                                if (truncated.results && Array.isArray(truncated.results)) {
+                                    const matchCount = truncated.results.reduce((sum, r) => sum + (r.matches?.length || 0), 0);
+                                    truncated.results = [`[${matchCount} matches in ${truncated.results.length} files]`];
+                                }
+                                if (truncated.files && Array.isArray(truncated.files)) {
+                                    truncated.files = [`[${truncated.files.length} files]`];
+                                }
+                                toolContent = JSON.stringify(truncated);
+                            } catch (e) {
+                                // If parse fails, just truncate the string
+                                toolContent = toolContent.substring(0, 2000) + '... [truncated]';
+                            }
+                        }
+                        
                         structuredResults.push({
                             tool_call_id: toolCall.id,
                             role: 'tool',
-                            content: JSON.stringify(toolResult)
+                            content: toolContent
                         });
                     } else {
                         textResults.push({ name: toolName, result: toolResult });
