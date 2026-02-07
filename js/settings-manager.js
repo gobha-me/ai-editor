@@ -456,3 +456,114 @@ export async function fetchEmbeddingModelsForSettings() {
         window.showToast('Failed to fetch embedding models: ' + error.message, 'error');
     }
 }
+
+// ============================================
+// SETTINGS EXPORT/IMPORT
+// ============================================
+
+/**
+ * Export all settings to JSON file for backup/transfer
+ */
+export function exportSettings() {
+    const settings = {
+        // API Configuration
+        giteaUrl: State.settings.giteaUrl,
+        giteaToken: State.settings.giteaToken,
+        llmEndpoint: State.settings.llmEndpoint,
+        llmApiKey: State.settings.llmApiKey,
+        llmModel: State.settings.llmModel,
+        commitModel: State.settings.commitModel,
+        apiProvider: State.settings.apiProvider,
+        
+        // Embeddings
+        useEmbeddings: State.settings.useEmbeddings,
+        embeddingModel: State.settings.embeddingModel,
+        embeddingMode: State.settings.embeddingMode,
+        embeddingCacheExpiry: State.settings.embeddingCacheExpiry,
+        autoReindex: State.settings.autoReindex,
+        maxRelevantFiles: State.settings.maxRelevantFiles,
+        
+        // Appearance
+        theme: State.settings.theme,
+        fontSize: State.settings.fontSize,
+        editorFontSize: State.settings.editorFontSize,
+        showLineNumbers: State.settings.showLineNumbers,
+        showIssues: State.settings.showIssues,
+        showWorkflows: State.settings.showWorkflows,
+        
+        // Other
+        role: State.settings.role,
+        
+        // Metadata
+        exportedAt: new Date().toISOString(),
+        exportedFrom: 'AI Editor',
+        version: '1.0'
+    };
+
+    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-editor-settings-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('[Settings] Exported settings');
+    window.showToast('Settings exported successfully', 'success');
+}
+
+/**
+ * Import settings from JSON file
+ */
+export async function importSettings() {
+    return new Promise((resolve, reject) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) {
+                reject(new Error('No file selected'));
+                return;
+            }
+
+            try {
+                const text = await file.text();
+                const imported = JSON.parse(text);
+
+                // Validate required fields
+                if (!imported.giteaUrl || !imported.llmEndpoint) {
+                    throw new Error('Invalid settings file: missing required fields (giteaUrl, llmEndpoint)');
+                }
+
+                // Apply settings (excluding metadata)
+                const { exportedAt, exportedFrom, version, ...settingsToApply } = imported;
+                Object.assign(State.settings, settingsToApply);
+
+                // Save to localStorage
+                Storage.set('settings', State.settings);
+
+                console.log('[Settings] Imported settings from:', file.name);
+                window.showToast('Settings imported successfully! Reloading...', 'success');
+                
+                // Reload to apply all settings
+                setTimeout(() => location.reload(), 1500);
+                
+                resolve(imported);
+            } catch (error) {
+                console.error('[Settings] Import failed:', error);
+                window.showToast(`Import failed: ${error.message}`, 'error');
+                reject(error);
+            }
+        };
+
+        input.click();
+    });
+}
+
+// Expose to window for button onclick handlers
+window.exportSettings = exportSettings;
+window.importSettings = importSettings;
