@@ -249,6 +249,84 @@ const LLM = {
         return State.models;
     },
 
+    /**
+     * Fetch embedding models from the API endpoint.
+     * Tries ?type=embedding query parameter first, falls back to filtering all models.
+     * @returns {Promise<Array>} Array of embedding model objects
+     */
+    async listEmbeddingModels() {
+        const baseUrl = State.settings.llmEndpoint.replace(/\/$/, '');
+        
+        // Try fetching with type=embedding parameter (Venice.ai style)
+        try {
+            const response = await fetch(`${baseUrl}/models?type=embedding`, {
+                headers: {
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const rawModels = data.data || data.models || data || [];
+                
+                if (Array.isArray(rawModels) && rawModels.length > 0) {
+                    console.log(`[LLM] Found ${rawModels.length} embedding models via ?type=embedding`);
+                    return rawModels.map(m => ({
+                        id: m.id || m.name || String(m),
+                        name: m.id || m.name || String(m),
+                        type: 'embedding',
+                        owned_by: m.owned_by || null
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn('[LLM] Failed to fetch embedding models with ?type=embedding:', e.message);
+        }
+
+        // Fallback: fetch all models and filter by type
+        try {
+            const response = await fetch(`${baseUrl}/models`, {
+                headers: {
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch models: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawModels = data.data || data.models || data || [];
+
+            if (!Array.isArray(rawModels)) {
+                return [];
+            }
+
+            // Filter for embedding models
+            const embeddingModels = rawModels
+                .filter(m => {
+                    const type = m.type || m.model_type || '';
+                    const id = m.id || m.name || '';
+                    return type === 'embedding' || 
+                           type.toLowerCase().includes('embedding') ||
+                           id.toLowerCase().includes('embedding');
+                })
+                .map(m => ({
+                    id: m.id || m.name || String(m),
+                    name: m.id || m.name || String(m),
+                    type: 'embedding',
+                    owned_by: m.owned_by || null
+                }));
+
+            console.log(`[LLM] Found ${embeddingModels.length} embedding models via filtering`);
+            return embeddingModels;
+
+        } catch (e) {
+            console.error('[LLM] Failed to fetch embedding models:', e);
+            throw e;
+        }
+    },
+
     // ========================================
     // CHAT COMPLETION
     // ========================================
