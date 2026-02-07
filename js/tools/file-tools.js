@@ -60,7 +60,8 @@ export function registerFileTools(registry) {
                 properties: {},
                 required: []
             }
-        }
+        },
+        roles: 'all'  // All roles can read files
     });
 
     // ========================================
@@ -132,7 +133,8 @@ export function registerFileTools(registry) {
                 },
                 required: []
             }
-        }
+        },
+        roles: 'all'  // All roles can read specific lines
     });
 
     // ========================================
@@ -190,7 +192,8 @@ export function registerFileTools(registry) {
                 },
                 required: ['path']
             }
-        }
+        },
+        roles: 'all'  // All roles can read files
     });
 
     // ========================================
@@ -233,7 +236,8 @@ export function registerFileTools(registry) {
                 },
                 required: ['path']
             }
-        }
+        },
+        roles: 'all'  // All roles can open files for viewing
     });
 
     // ========================================
@@ -259,6 +263,7 @@ export function registerFileTools(registry) {
                 properties: {},
                 required: []
             }
-        }
+        },
+        roles: 'all'  // All roles can see open tabs
     });
 }
