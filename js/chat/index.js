@@ -13,7 +13,17 @@ import { registerSearchTools } from '../tools/search-tools.js';
 import { registerIssueTools } from '../tools/issue-tools.js';
 
 // Import submodules
-import { chatState, setChatContainer, setInputElement, getPendingEdit, setPendingEdit, getCancelFlag, setCancelFlag } from './state.js';
+import { 
+    initChatState, 
+    getChatContainer, 
+    getInputElement, 
+    getPendingEdit, 
+    setPendingEdit,
+    clearPendingEdit,
+    isToolLoopCancelled,
+    cancelToolLoop,
+    resetToolLoopCancel
+} from './state.js';
 import { ChatSummarizer } from './summarizer.js';
 import { validateToolParameters, executeToolCall, parseTextToolCalls } from './tools.js';
 import { 
@@ -57,8 +67,7 @@ registerIssueTools(ToolRegistry);
 // ============================================
 
 function initChat(containerEl, inputEl) {
-    setChatContainer(containerEl);
-    setInputElement(inputEl);
+    initChatState(containerEl, inputEl);
 
     // Load chat history from storage (summary-aware)
     const savedHistory = Storage.get('chatHistory', []);
@@ -85,7 +94,7 @@ function initChat(containerEl, inputEl) {
     });
 
     EventBus.on('llm:generating', (isGenerating) => {
-        const inputElement = chatState.inputElement;
+        const inputElement = getInputElement();
         if (inputElement) {
             inputElement.disabled = isGenerating;
         }
