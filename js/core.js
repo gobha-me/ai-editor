@@ -50,7 +50,7 @@ const State = {
         embeddingModel: 'Xenova/all-MiniLM-L6-v2', // Transformers.js model
         autoReindex: true,         // Auto-update embeddings on file changes
         embeddingCacheExpiry: 7,   // Days before re-indexing
-        maxRelevantFiles: 5        // Max files to return for context queries
+        maxRelevantFiles: 5,       // Max files to return for context queries
         llmEndpoint: '',
         llmApiKey: '',
         llmModel: 'gpt-4',
