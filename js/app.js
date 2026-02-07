@@ -3,7 +3,7 @@
 // ============================================
 
 import { State, EventBus, Storage, loadSettings } from './core.js';
-import { initChat, stopGeneration, clearChat } from './chat.js';
+import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
