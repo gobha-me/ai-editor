@@ -5,14 +5,17 @@
 
 import { State, EventBus } from '../core.js';
 import { LLM } from '../llm.js';
-import { getInputElement, resetToolLoopCancel, cancelToolLoop } from './state.js';
-import { addMessage, updateStreamingMessage } from './messages.js';
+import { cancelToolLoop } from './state.js';
+import { addMessage } from './messages.js';
 
 /**
  * Setup input event handlers
  */
 export function setupInputHandlers(inputElement, handleUserInputFn) {
-    if (!inputElement) return;
+    if (!inputElement || !handleUserInputFn) {
+        console.error('[setupInputHandlers] Missing required parameters');
+        return;
+    }
 
     // Use keydown to detect Enter, but defer reading value until after the key is processed
     inputElement.addEventListener('keydown', (e) => {
@@ -32,17 +35,6 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
 }
 
 /**
- * Send a message programmatically
- */
-export function sendMessage(content, handleUserInputFn) {
-    const inputElement = getInputElement();
-    if (inputElement) {
-        inputElement.value = content;
-        handleUserInputFn(content);
-    }
-}
-
-/**
  * Stop generation
  */
 export function stopGeneration() {
@@ -59,21 +51,4 @@ export function stopGeneration() {
         streamingEl.remove();
         addMessage('assistant', content + '\n\n*(generation stopped)*');
     }
-}
-
-/**
- * Setup LLM event listeners for token streaming
- */
-export function setupLLMEventListeners() {
-    // Listen for LLM events
-    EventBus.on('llm:token', ({ token, content }) => {
-        updateStreamingMessage(content);
-    });
-
-    EventBus.on('llm:generating', (isGenerating) => {
-        const inputElement = getInputElement();
-        if (inputElement) {
-            inputElement.disabled = isGenerating;
-        }
-    });
 }
