@@ -567,3 +567,5 @@ export async function importSettings() {
 // Expose to window for button onclick handlers
 window.exportSettings = exportSettings;
 window.importSettings = importSettings;
+window.fetchModelsForSettings = fetchModelsForSettings;
+window.fetchEmbeddingModelsForSettings = fetchEmbeddingModelsForSettings;
