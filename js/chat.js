@@ -74,7 +74,7 @@ const ChatSummarizer = {
         const convo = messages
             .filter(m => m.role !== 'system')
             .map(m => {
-                const who = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : m.role;
+                const who = m.role === 'user' ? 'User' : 'Assistant';
                 const text = (typeof m.content === 'string'
                     ? m.content : JSON.stringify(m.content)).slice(0, 500);
                 return `${who}: ${text}`;
@@ -244,16 +244,20 @@ function initChat(containerEl, inputEl) {
 function setupInputHandlers() {
     if (!inputElement) return;
 
-    // Use keydown to detect Enter, but defer reading value until after the key is processed
+    // Capture value immediately on Enter press, before any preventDefault
+    // Store in closure to avoid reading from input after it's cleared
     inputElement.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             
-            // Defer execution to next tick to ensure the final character is committed
-            // This works even if the Enter key was what triggered composition
-            setTimeout(() => {
-                handleUserInput();
-            }, 0);
+            // Capture value SYNCHRONOUSLY before any async operations
+            const capturedValue = inputElement.value;
+            
+            // Clear input immediately
+            inputElement.value = '';
+            
+            // Process with the captured value
+            handleUserInputDirect(capturedValue);
         }
     });
 }
@@ -263,6 +267,9 @@ function setupInputHandlers() {
 // ============================================
 
 function addMessage(role, content, meta = {}) {
+    // DEBUG: Log what we're about to save
+    console.log(`[addMessage] role=${role}, content length=${content?.length}, content="${content}"`);
+    
     const message = {
         role,
         content,
@@ -344,6 +351,9 @@ function finalizeStreamingMessage(content, meta = {}) {
         }
     }
 
+    // DEBUG: Log what we're saving to history
+    console.log(`[finalizeStreamingMessage] content length=${content?.length}, first 100 chars="${content?.substring(0, 100)}"`);
+
     // Add to history with FULL content (including think blocks for LLM context)
     State.chatHistory.push({
         role: 'assistant',
@@ -355,6 +365,9 @@ function finalizeStreamingMessage(content, meta = {}) {
 }
 
 function renderMessage(message) {
+    // DEBUG: Log what we're rendering
+    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}, content="${message.content}"`);
+    
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${message.role}`;
     
@@ -362,23 +375,23 @@ function renderMessage(message) {
         user: '👤',
         assistant: '🤖',
         system: 'ℹ️',
-        error: '❌',
-        tool: '🔧'
+        error: '❌'
     }[message.role] || '💬';
 
     const roleName = {
         user: 'You',
         assistant: 'Assistant',
         system: 'System',
-        error: 'Error',
-        tool: 'Tool Result'
+        error: 'Error'
     }[message.role] || message.role;
 
     const time = new Date(message.timestamp).toLocaleTimeString();
 
-    // For tool messages, don't strip anything - just format as-is
-    // For other messages, strip think blocks for display only
-    const displayContent = message.role === 'tool' ? message.content : stripThinkBlocks(message.content);
+    // Strip think blocks for display only
+    const displayContent = stripThinkBlocks(message.content);
+    
+    // DEBUG: Log after stripThinkBlocks
+    console.log(`[renderMessage] After stripThinkBlocks: length=${displayContent?.length}, content="${displayContent}"`);
 
     messageEl.innerHTML = `
         <div class="message-header">
@@ -598,8 +611,56 @@ function scrollToBottom() {
 // USER INPUT HANDLING
 // ============================================
 
+/**
+ * NEW: Direct handler that receives pre-captured value
+ * Avoids re-reading from input element which may have been cleared
+ */
+async function handleUserInputDirect(input) {
+    const trimmed = input.trim();
+    
+    // DEBUG: Log captured input
+    console.log(`[handleUserInputDirect] Received input="${input}", trimmed="${trimmed}", length=${trimmed.length}`);
+    
+    if (!trimmed || State.isGenerating) return;
+    
+    // Add user message with the PRE-CAPTURED value
+    addMessage('user', trimmed);
+
+    // Determine intent
+    const intent = detectIntent(trimmed);
+
+    try {
+        switch (intent) {
+            case 'edit':
+                await handleEditRequest(trimmed);
+                break;
+            case 'explain':
+                await handleExplainRequest(trimmed);
+                break;
+            case 'commit':
+                await handleCommitRequest();
+                break;
+            case 'issue':
+                await handleIssueRequest(trimmed);
+                break;
+            default:
+                await handleGeneralRequest(trimmed);
+        }
+    } catch (error) {
+        console.error('Chat error:', error);
+        addMessage('error', `Error: ${error.message}`);
+    }
+}
+
+/**
+ * DEPRECATED: Old handler that re-reads from input element
+ * Kept for backwards compatibility but should not be used
+ */
 async function handleUserInput() {
     const input = inputElement.value.trim();
+    
+    console.warn('[handleUserInput] DEPRECATED - use handleUserInputDirect instead');
+    
     if (!input || State.isGenerating) return;
 
     inputElement.value = '';
@@ -759,6 +820,13 @@ async function handleGeneralRequest(input) {
     
     // Build initial message thread (summary-aware context).
     const contextMessages = ChatSummarizer.getContextMessages();
+    
+    // DEBUG: Log context messages
+    console.log(`[handleGeneralRequest] Input="${input}", context messages count=${contextMessages.length}`);
+    contextMessages.forEach((m, i) => {
+        console.log(`  [${i}] role=${m.role}, content length=${m.content?.length || 0}, preview="${(m.content || '').substring(0, 60)}"`);
+    });
+    
     const lastCtx = contextMessages[contextMessages.length - 1];
     const alreadyInContext = lastCtx && lastCtx.role === 'user' && lastCtx.content === input;
 
@@ -915,54 +983,32 @@ async function handleGeneralRequest(input) {
 
             if (_cancelToolLoop) break;
 
-            // === PERSIST ASSISTANT RESPONSE + TOOL RESULTS TO HISTORY ===
-            // This is critical for conversation continuity across user messages
-            
+            // === BUILD THREAD FOR NEXT ROUND ===
+
+            // Save assistant message with tool_calls to history BEFORE adding tool results
+            const assistantMsg = {
+                role: 'assistant',
+                content: cleanContent || '',
+                timestamp: Date.now()
+            };
             if (toolCallSource === 'structured') {
-                // Save assistant message with tool_calls
-                State.chatHistory.push({
-                    role: 'assistant',
-                    content: cleanContent || '',
-                    tool_calls: toolCalls,
-                    timestamp: Date.now()
-                });
-                
-                // Save each tool result as a separate message
+                assistantMsg.tool_calls = toolCalls;
+            }
+            State.chatHistory.push(assistantMsg);
+            Storage.set('chatHistory', State.chatHistory.slice(-100));
+
+            // Save tool results to history
+            if (toolCallSource === 'structured') {
                 for (const tr of structuredResults) {
                     State.chatHistory.push({
-                        ...tr,
+                        role: 'tool',
+                        content: tr.content,
+                        tool_call_id: tr.tool_call_id,
                         timestamp: Date.now()
                     });
                 }
-            } else {
-                // Text-based tool calls: save assistant message
-                State.chatHistory.push({
-                    role: 'assistant',
-                    content: cleanContent || '',
-                    timestamp: Date.now()
-                });
-                
-                // Save synthesized tool results message
-                const summary = textResults.map(tr => {
-                    let resultStr = JSON.stringify(tr.result, null, 2);
-                    if (resultStr.length > 1500) {
-                        resultStr = resultStr.slice(0, 1500) + '\n... (truncated)';
-                    }
-                    return `[Tool: ${tr.name}]\n${resultStr}`;
-                }).join('\n\n');
-                
-                State.chatHistory.push({
-                    role: 'user',
-                    content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`,
-                    timestamp: Date.now(),
-                    isToolResults: true
-                });
+                Storage.set('chatHistory', State.chatHistory.slice(-100));
             }
-            
-            // Persist to localStorage after each tool round
-            Storage.set('chatHistory', State.chatHistory.slice(-100));
-
-            // === BUILD THREAD FOR NEXT ROUND ===
 
             // Compress old tool results to prevent token explosion.
             for (let i = 0; i < messages.length; i++) {
@@ -1215,7 +1261,7 @@ function stopGeneration() {
 function sendMessage(content) {
     if (inputElement) {
         inputElement.value = content;
-        handleUserInput();
+        handleUserInputDirect(content);
     }
 }
 
