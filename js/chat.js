@@ -9,6 +9,7 @@ import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from '
 import { GiteaAPI, loadFile } from './gitea.js';
 import { ToolRegistry } from './tools/registry.js';
 import { registerFileTools } from './tools/file-tools.js';
+import { registerScanTools } from './tools/scan-tools.js';
 import { registerEditTools } from './tools/edit-tools.js';
 import { registerProjectTools } from './tools/project-tools.js';
 import { registerSearchTools } from './tools/search-tools.js';
@@ -20,6 +21,7 @@ import { registerIssueTools } from './tools/issue-tools.js';
 
 // Initialize tools on module load
 registerFileTools(ToolRegistry);
+registerScanTools(ToolRegistry);
 registerEditTools(ToolRegistry);
 registerProjectTools(ToolRegistry);
 registerSearchTools(ToolRegistry);

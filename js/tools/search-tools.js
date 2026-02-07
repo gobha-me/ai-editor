@@ -15,7 +15,7 @@ export function registerSearchTools(registry) {
     // ========================================
     // search_in_files
     // ========================================
-    registry.register('search_in_files', async ({ query, path = '', max_results = 20 }) => {
+    registry.register('search_in_files', async ({ query, path = '', max_results = 20, compact = true }) => {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
@@ -47,7 +47,9 @@ export function registerSearchTools(registry) {
                     const matches = [];
                     for (let i = 0; i < lines.length; i++) {
                         if (lines[i].toLowerCase().includes(queryLower)) {
-                            matches.push({ line: i + 1, text: lines[i].trim().substring(0, 200) });
+                            const maxLength = compact ? 80 : 200;
+                            const snippet = lines[i].trim().substring(0, maxLength);
+                            matches.push({ line: i + 1, snippet });
                             if (matches.length >= 5) break;
                         }
                     }
@@ -70,7 +72,7 @@ export function registerSearchTools(registry) {
         type: 'function',
         function: {
             name: 'search_in_files',
-            description: 'Search for text across project files. Returns matching lines with file paths and line numbers. Use to find functions, variables, strings, or patterns in the codebase.',
+            description: 'Search for text across project files. Returns compact snippets with line numbers. Use read_lines to see full context around matches. Efficient for finding functions, variables, strings, or patterns.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -85,6 +87,10 @@ export function registerSearchTools(registry) {
                     max_results: {
                         type: 'integer',
                         description: 'Max files to return (default: 20)'
+                    },
+                    compact: {
+                        type: 'boolean',
+                        description: 'Return 80-char snippets instead of 200-char (default: true, saves tokens)'
                     }
                 },
                 required: ['query']
