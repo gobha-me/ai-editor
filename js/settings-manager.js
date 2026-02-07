@@ -4,6 +4,7 @@
 
 import { State, Storage, Providers, Roles, saveSettings as coreSaveSettings } from './core.js';
 import { LLM } from './llm.js';
+import { ToolRegistry } from './tools/registry.js';
 
 export function openSettings() {
     populateSettingsForm();
@@ -104,30 +105,37 @@ function updateRoleToolsList(roleId) {
     
     label.textContent = role.name;
     
-    // Import LLMTools to get all tool names
-    const allTools = window._LLMTools ? window._LLMTools.definitions : [];
-    const isFullAccess = role.id === 'full';
+    // Get all tool definitions from registry
+    const allTools = ToolRegistry.getDefinitions();
     
     if (allTools.length === 0) {
-        list.innerHTML = '<div style="color: var(--text-muted); padding: 0.5rem 0;">Load models first to see tool details.</div>';
+        list.innerHTML = '<div style="color: var(--text-muted); padding: 0.5rem 0;">No tools loaded yet. Tools register when chat initializes.</div>';
         return;
     }
+    
+    // Get tools filtered for this role
+    const roleTools = ToolRegistry.getToolsForRole(roleId);
+    const roleToolNames = new Set(roleTools.map(t => t.function?.name || t.name));
     
     list.innerHTML = allTools.map(tool => {
         const name = tool.function?.name || tool.name;
         const desc = tool.function?.description || '';
-        const enabled = isFullAccess || role.tools.includes(name);
+        const enabled = roleToolNames.has(name);
+        const roles = tool._registeredRoles || ['unknown'];
+        
         return `<div class="role-tool-item ${enabled ? 'enabled' : 'disabled'}">
             <span>${enabled ? '✅' : '⬜'}</span>
             <span><strong>${name}</strong> — ${desc.slice(0, 60)}${desc.length > 60 ? '…' : ''}</span>
+            <span style="font-size: 10px; color: var(--text-muted); margin-left: auto;">[${roles.join(', ')}]</span>
         </div>`;
     }).join('');
 
     // Show count
-    const enabledCount = isFullAccess ? allTools.length : allTools.filter(t => role.tools.includes(t.function?.name)).length;
+    const enabledCount = roleTools.length;
+    const tokenSavings = (allTools.length - enabledCount) * 120;
     list.insertAdjacentHTML('beforeend', `
         <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 11px;">
-            ${enabledCount} of ${allTools.length} tools active · ~${(enabledCount * 120).toLocaleString()} fewer prompt tokens vs full
+            ${enabledCount} of ${allTools.length} tools active${tokenSavings > 0 ? ` · ~${tokenSavings.toLocaleString()} fewer prompt tokens vs full` : ''}
         </div>
     `);
 }
