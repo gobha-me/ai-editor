@@ -19,23 +19,18 @@ import {
     getInputElement
 } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
-import { executeToolCall } from './tools.js';
 import { 
     addMessage, 
-    addStreamingMessage, 
-    updateStreamingMessage, 
-    finalizeStreamingMessage,
-    renderMessages,
-    clearChat,
-    scrollToBottom
+    renderMessages
 } from './messages.js';
-import { setupInputHandlers, sendMessage, stopGeneration } from './input.js';
+import { setupInputHandlers, stopGeneration } from './input.js';
 import { exportChat } from './export.js';
 import { 
     handleUserInputDirect,
     applyPendingEdit,
     rejectPendingEdit
 } from './handlers.js';
+import { executeToolCall } from './tools.js';
 
 // ============================================
 // TOOL REGISTRATION
@@ -72,17 +67,10 @@ function initChat(containerEl, inputEl) {
         State.chatHistory = savedHistory.slice(-50);
     }
 
-    // Render filtered history on page load
     renderMessages(displayHistory.slice(-50));
-    
-    // Setup input handlers with correct parameters
     setupInputHandlers(inputEl, handleUserInputDirect);
 
     // Listen for LLM events
-    EventBus.on('llm:token', ({ token, content }) => {
-        updateStreamingMessage(content);
-    });
-
     EventBus.on('llm:generating', (isGenerating) => {
         const input = getInputElement();
         if (input) {
@@ -100,6 +88,32 @@ function initChat(containerEl, inputEl) {
 }
 
 // ============================================
+// PUBLIC API WRAPPERS
+// ============================================
+
+/**
+ * Send a message to the chat
+ */
+function sendMessage(content) {
+    const input = getInputElement();
+    if (input) {
+        input.value = content;
+    }
+    handleUserInputDirect(content);
+}
+
+/**
+ * Clear chat history
+ */
+function clearChat() {
+    State.chatHistory = [];
+    Storage.set('chatHistory', []);
+    ChatSummarizer.clear();
+    renderMessages();
+    EventBus.emit('chat:cleared');
+}
+
+// ============================================
 // EXPOSE TO GLOBAL (for onclick handlers)
 // ============================================
 
@@ -108,7 +122,7 @@ window.Chat = {
     rejectPendingEdit,
     stopGeneration,
     clearChat,
-    sendMessage: (content) => sendMessage(content, handleUserInputDirect),
+    sendMessage,
     executeToolCall,
     exportChat
 };
