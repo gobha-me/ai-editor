@@ -64,78 +64,7 @@ export function registerFileTools(registry) {
         roles: 'all'  // All roles can read files
     });
 
-    // ========================================
-    // read_lines
-    // ========================================
-    registry.register('read_lines', async ({ path, start_line, end_line }) => {
-        // Read from the currently open file if path matches, otherwise fetch from Gitea
-        let content;
-        let filePath;
-
-        if (State.currentFile && (!path || path === State.currentFile.path)) {
-            content = State.editorContent;
-            filePath = State.currentFile.path;
-        } else if (path) {
-            if (!State.currentProject) {
-                return { error: 'No project is currently loaded' };
-            }
-            const { owner, repo } = State.currentProject;
-            try {
-                const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
-                content = file.content;
-                filePath = file.path;
-            } catch (error) {
-                return { error: `Failed to read file: ${error.message}` };
-            }
-        } else {
-            return { error: 'No file specified and no file is currently open.' };
-        }
-
-        const lines = content.split('\n');
-        const totalLines = lines.length;
-        const start = Math.max(1, start_line || 1);
-        const end = Math.min(totalLines, end_line || totalLines);
-
-        if (start > totalLines) {
-            return { error: `start_line ${start} exceeds file length (${totalLines} lines)` };
-        }
-
-        const slice = lines.slice(start - 1, end);
-        const numbered = slice.map((l, i) => `${start + i}: ${l}`).join('\n');
-
-        return {
-            path: filePath,
-            start_line: start,
-            end_line: end,
-            line_count: totalLines,
-            content: numbered
-        };
-    }, {
-        type: 'function',
-        function: {
-            name: 'read_lines',
-            description: 'Read specific line range from a file. Use this instead of read_file when you only need to see a section of a large file. Lines are returned with line numbers for easy reference.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    path: {
-                        type: 'string',
-                        description: 'File path to read from (omit to read from currently open file)'
-                    },
-                    start_line: {
-                        type: 'integer',
-                        description: 'First line to read (1-indexed, inclusive). Default: 1'
-                    },
-                    end_line: {
-                        type: 'integer',
-                        description: 'Last line to read (1-indexed, inclusive). Default: end of file'
-                    }
-                },
-                required: []
-            }
-        },
-        roles: 'all'  // All roles can read specific lines
-    });
+    // NOTE: read_lines is now in scan-tools.js with enhanced features (context_lines parameter)
 
     // ========================================
     // read_file
