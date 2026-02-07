@@ -11,16 +11,16 @@ import { ToolRegistry } from './tools/registry.js';
 // ============================================
 
 /**
- * Strip </think> blocks from text content.
+ * Strip <think> blocks from text content.
  * Handles multiple blocks, nested whitespace, and partial/unclosed tags.
  * Used for non-streaming responses where think blocks arrive intact.
  */
 function stripThinkBlocks(text) {
     if (!text) return text;
-    // Strip all </think> blocks (non-greedy, handles multiple)
-    let result = text.replace(/[\s\S]*?<\/think>/gi, '');
+    // Strip all <think>...</think> blocks (non-greedy, handles multiple)
+    let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     // Also strip unclosed block at end (model cut off mid-thought)
-    result = result.replace(/\S]*$/gi, '');
+    result = result.replace(/<think>[\s\S]*$/gi, '');
     return result.trim();
 }
 
@@ -566,10 +566,31 @@ WORKFLOW — Follow these steps for investigation and editing tasks:
 6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 7. create_file — if a new file is needed
 
+🚨 CRITICAL TOOL USAGE RULES:
+1. **ALWAYS provide ALL required parameters for every tool call**
+   - create_file: MUST include path, content, AND message (all 3 required)
+   - replace_lines: MUST include start_line, end_line, AND new_content
+   - insert_lines: MUST include after_line AND content
+   - read_file/open_file: MUST include path
+   - NEVER leave parameters empty, undefined, or incomplete
+
+2. **ALWAYS call open_file BEFORE using edit tools**
+   - replace_lines, insert_lines, delete_lines REQUIRE a file to be open first
+   - You will get an error if you try to edit without opening a file
+   - Workflow: open_file → read_current_file → replace_lines
+
+3. **If you hit token limits while generating large files:**
+   - Create file with MINIMAL working content first (10-20 lines skeleton)
+   - Then use replace_lines or insert_lines to add sections incrementally
+   - Example: create_file with imports + empty function → open_file → insert_lines to add body
+   - NEVER try to generate 100+ lines in one create_file call
+
+4. **For large code implementations:**
+   - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
+   - Implement each phase separately with its own tool calls
+   - Verify each phase works before moving to the next
+
 IMPORTANT RULES:
-- You MUST call open_file before using replace_lines, insert_lines, or delete_lines
-- ALWAYS use read_current_file or read_lines to see line numbers before editing
-- Prefer read_lines over read_file for files over 100 lines — only read the section you need
 - Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
 - After editing, explain what you changed and which lines
 - You can use multiple tools in sequence — use as many rounds as needed
