@@ -3,8 +3,10 @@
 // ============================================
 
 import { State, EventBus } from './core.js';
+import { renderUnifiedView, renderSideBySideView, getViewMode, initDiffKeyboardShortcuts, initScrollSync } from './diff-viewer.js';
 
 let secondaryPaneMode = null; // 'preview' | 'diff' | null
+let diffViewerInitialized = false;
 
 export function isPreviewable(path) {
     if (!path) return false;
@@ -39,6 +41,13 @@ export function toggleDiffPane() {
     document.getElementById('secondaryPane').style.display = 'flex';
     document.getElementById('secondaryPaneTitle').textContent = '± Diff';
     document.getElementById('editorSplit').classList.add('split-active');
+    
+    // Initialize diff keyboard shortcuts once
+    if (!diffViewerInitialized) {
+        initDiffKeyboardShortcuts();
+        diffViewerInitialized = true;
+    }
+    
     renderDiff();
     updateToolbarButtons();
 }
@@ -77,56 +86,29 @@ function renderDiff() {
     const current = State.editorContent || '';
     if (original === current) { pane.innerHTML = '<div class="diff-empty">No changes detected</div>'; return; }
 
-    const diffHtml = buildDiffView(original.split('\n'), current.split('\n'));
-    pane.innerHTML = `<div class="diff-view">${diffHtml}</div>`;
+    const originalLines = original.split('\n');
+    const currentLines = current.split('\n');
+    
+    // Use new diff viewer
+    const viewMode = getViewMode();
+    let diffHtml;
+    
+    if (viewMode === 'side-by-side') {
+        diffHtml = renderSideBySideView(originalLines, currentLines);
+    } else {
+        diffHtml = renderUnifiedView(originalLines, currentLines);
+    }
+    
+    pane.innerHTML = `<div class="diff-view diff-view-${viewMode}">${diffHtml}</div>`;
+    
+    // Initialize scroll sync for side-by-side view
+    if (viewMode === 'side-by-side') {
+        setTimeout(initScrollSync, 100);
+    }
 }
 
-function buildDiffView(origLines, currLines) {
-    const ops = computeLCS(origLines, currLines);
-    let html = '', oi = 0, ci = 0;
-    for (const op of ops) {
-        if (op === 'equal') {
-            html += `<div class="diff-line diff-equal"><span class="diff-ln">${oi+1}</span><span class="diff-ln">${ci+1}</span><span class="diff-text"> ${escapeHtml(origLines[oi])}</span></div>`;
-            oi++; ci++;
-        } else if (op === 'delete') {
-            html += `<div class="diff-line diff-removed"><span class="diff-ln">${oi+1}</span><span class="diff-ln"></span><span class="diff-text">-${escapeHtml(origLines[oi])}</span></div>`;
-            oi++;
-        } else if (op === 'insert') {
-            html += `<div class="diff-line diff-added"><span class="diff-ln"></span><span class="diff-ln">${ci+1}</span><span class="diff-text">+${escapeHtml(currLines[ci])}</span></div>`;
-            ci++;
-        }
-    }
-    return html;
-}
-
-function computeLCS(a, b) {
-    const m = a.length, n = b.length;
-    if (m + n > 10000) return computeSimpleOps(a, b);
-    const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
-    for (let i = 1; i <= m; i++)
-        for (let j = 1; j <= n; j++)
-            dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
-    const ops = [];
-    let i = m, j = n;
-    while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && a[i-1] === b[j-1]) { ops.push('equal'); i--; j--; }
-        else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) { ops.push('insert'); j--; }
-        else { ops.push('delete'); i--; }
-    }
-    return ops.reverse();
-}
-
-function computeSimpleOps(a, b) {
-    const ops = [];
-    const max = Math.max(a.length, b.length);
-    for (let i = 0; i < max; i++) {
-        if (i >= a.length) ops.push('insert');
-        else if (i >= b.length) ops.push('delete');
-        else if (a[i] === b[i]) ops.push('equal');
-        else { ops.push('delete'); ops.push('insert'); }
-    }
-    return ops;
-}
+// Listen for view mode changes
+window.addEventListener('diff:refresh', renderDiff);
 
 function escapeAttr(text) {
     return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
