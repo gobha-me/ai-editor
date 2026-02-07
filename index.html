@@ -341,7 +341,7 @@
                 <div class="settings-tab-content" id="tabContext">
                     <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">💡 Smart Context Management</h4>
                     <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
-                        Use client-side embeddings to intelligently select relevant files, reducing token usage by 90%+ on large projects.
+                        Use embeddings to intelligently select relevant files, reducing token usage by 90%+ on large projects.
                     </p>
 
                     <div class="form-group">
@@ -354,12 +354,19 @@
                     <div id="embeddingsSettings" style="margin-top: 1rem; opacity: 0.5; pointer-events: none;">
                         <div class="form-group">
                             <label for="settingEmbeddingModel">Embedding Model</label>
-                            <select id="settingEmbeddingModel">
-                                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Recommended, ~23MB)</option>
-                                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (~33MB)</option>
-                                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (~130MB, better quality)</option>
-                            </select>
-                            <small>Smaller models = faster load, lower quality. Cached after first download.</small>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="settingEmbeddingModel" list="embeddingModelsList" 
+                                       placeholder="Enter model ID or fetch from API..." style="flex: 1;">
+                                <button class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" 
+                                        title="Fetch embedding models from API">🔄 Fetch</button>
+                            </div>
+                            <datalist id="embeddingModelsList">
+                                <!-- Client-side (Transformers.js) options as defaults -->
+                                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Client-side, ~23MB)</option>
+                                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Client-side, ~33MB)</option>
+                                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Client-side, ~130MB)</option>
+                            </datalist>
+                            <small>API-based (e.g., Venice.ai) or client-side (Transformers.js). Fetch to see available API models.</small>
                         </div>
 
                         <div class="form-group">
