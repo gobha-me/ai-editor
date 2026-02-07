@@ -160,7 +160,6 @@
                 <!-- Status Bar -->
                 <div class="editor-status">
                     <div class="status-left">
-                <button class=\"settings-tab\" data-tab=\"tabContext\">Context</button>
                         <span class="status-item" id="statusFile">No file open</span>
                         <span class="status-item" id="statusModified"></span>
                     </div>
@@ -230,6 +229,7 @@
             <div class="settings-tabs">
                 <button class="settings-tab active" data-tab="tabGeneral">General</button>
                 <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
+                <button class="settings-tab" data-tab="tabContext">Context</button>
                 <button class="settings-tab" data-tab="tabRoles">Roles</button>
             </div>
 
@@ -270,60 +270,6 @@
 
                     <div class="form-group">
                         <label for="settingLlmApiKey">API Key</label>
-                <!-- TAB: Context Management -->
-                <div class=\"settings-tab-content\" id=\"tabContext\">
-                    <h4 style=\"margin-bottom: 0.5rem; color: var(--text-secondary);\">💡 Smart Context Management</h4>
-                    <p style=\"font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;\">
-                        Use client-side embeddings to intelligently select relevant files, reducing token usage by 90%+ on large projects.
-                    </p>
-
-                    <div class=\"form-group\">
-                        <label style=\"display: flex; align-items: center; gap: 0.5rem; font-size: 14px; color: var(--text-primary); cursor: pointer;\">
-                            <input type=\"checkbox\" id=\"settingUseEmbeddings\"> Enable Embeddings
-                        </label>
-                        <small>Enables semantic file search for intelligent context reduction</small>
-                    </div>
-
-                    <div id=\"embeddingsSettings\" style=\"margin-top: 1rem; opacity: 0.5; pointer-events: none;\">
-                        <div class=\"form-group\">
-                            <label for=\"settingEmbeddingModel\">Embedding Model</label>
-                            <select id=\"settingEmbeddingModel\">
-                                <option value=\"Xenova/all-MiniLM-L6-v2\">all-MiniLM-L6-v2 (Recommended, ~23MB)</option>
-                                <option value=\"Xenova/bge-small-en-v1.5\">bge-small-en-v1.5 (~33MB)</option>
-                                <option value=\"Xenova/bge-base-en-v1.5\">bge-base-en-v1.5 (~130MB, better quality)</option>
-                            </select>
-                            <small>Smaller models = faster load, lower quality. Cached after first download.</small>
-                        </div>
-
-                        <div class=\"form-group\">
-                            <label for=\"settingMaxRelevantFiles\">Max Relevant Files</label>
-                            <div style=\"display: flex; gap: 0.75rem; align-items: center;\">
-                                <input type=\"range\" id=\"settingMaxRelevantFiles\" min=\"3\" max=\"10\" step=\"1\" value=\"5\" style=\"flex: 1;\">
-                                <span id=\"maxRelevantFilesValue\" style=\"font-size: 12px; color: var(--text-secondary); min-width: 20px; text-align: right;\">5</span>
-                            </div>
-                            <small>Number of semantically relevant files to include in LLM context</small>
-                        </div>
-
-                        <div class=\"form-group\">
-                            <label style=\"display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;\">
-                                <input type=\"checkbox\" id=\"settingAutoReindex\" checked> Auto-reindex on file changes
-                            </label>
-                            <small>Automatically update embeddings when files are created/modified/deleted</small>
-                        </div>
-
-                        <div class=\"form-group\">
-                            <label for=\"settingEmbeddingCacheExpiry\">Cache Expiry (days)</label>
-                            <input type=\"number\" id=\"settingEmbeddingCacheExpiry\" min=\"1\" max=\"30\" value=\"7\">
-                            <small>How long to keep embeddings before re-indexing the project</small>
-                        </div>
-
-                        <div id=\"embeddingsStatus\" style=\"padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; font-size: 12px; color: var(--text-muted);\">
-                            <div id=\"embeddingsStatusText\">Not initialized</div>
-                            <button class=\"btn btn-secondary\" id=\"btnClearEmbeddingsCache\" style=\"margin-top: 0.5rem; font-size: 11px;\">🗑️ Clear Cache</button>
-                        </div>
-                    </div>
-                </div>
-
                         <input type="password" id="settingLlmApiKey" placeholder="sk-...">
                     </div>
 
@@ -387,6 +333,60 @@
                             <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
                                 <input type="checkbox" id="settingShowWorkflows" checked> Show Workflows panel
                             </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Context Management -->
+                <div class="settings-tab-content" id="tabContext">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">💡 Smart Context Management</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Use client-side embeddings to intelligently select relevant files, reducing token usage by 90%+ on large projects.
+                    </p>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 14px; color: var(--text-primary); cursor: pointer;">
+                            <input type="checkbox" id="settingUseEmbeddings"> Enable Embeddings
+                        </label>
+                        <small>Enables semantic file search for intelligent context reduction</small>
+                    </div>
+
+                    <div id="embeddingsSettings" style="margin-top: 1rem; opacity: 0.5; pointer-events: none;">
+                        <div class="form-group">
+                            <label for="settingEmbeddingModel">Embedding Model</label>
+                            <select id="settingEmbeddingModel">
+                                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Recommended, ~23MB)</option>
+                                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (~33MB)</option>
+                                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (~130MB, better quality)</option>
+                            </select>
+                            <small>Smaller models = faster load, lower quality. Cached after first download.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingMaxRelevantFiles">Max Relevant Files</label>
+                            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                <input type="range" id="settingMaxRelevantFiles" min="3" max="10" step="1" value="5" style="flex: 1;">
+                                <span id="maxRelevantFilesValue" style="font-size: 12px; color: var(--text-secondary); min-width: 20px; text-align: right;">5</span>
+                            </div>
+                            <small>Number of semantically relevant files to include in LLM context</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                                <input type="checkbox" id="settingAutoReindex" checked> Auto-reindex on file changes
+                            </label>
+                            <small>Automatically update embeddings when files are created/modified/deleted</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingEmbeddingCacheExpiry">Cache Expiry (days)</label>
+                            <input type="number" id="settingEmbeddingCacheExpiry" min="1" max="30" value="7">
+                            <small>How long to keep embeddings before re-indexing the project</small>
+                        </div>
+
+                        <div id="embeddingsStatus" style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; font-size: 12px; color: var(--text-muted);">
+                            <div id="embeddingsStatusText">Not initialized</div>
+                            <button class="btn btn-secondary" id="btnClearEmbeddingsCache" style="margin-top: 0.5rem; font-size: 11px;">🗑️ Clear Cache</button>
                         </div>
                     </div>
                 </div>
