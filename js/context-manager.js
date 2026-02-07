@@ -195,7 +195,8 @@ const ContextManager = {
                     try {
                         // Fetch file content
                         const { owner, repo } = State.currentProject;
-                        const content = await GiteaAPI.getFileContent(owner, repo, file.path, State.currentBranch);
+                        const fileData = await GiteaAPI.getFile(owner, repo, file.path, State.currentBranch);
+                        const content = fileData.content;
                         
                         // Skip binary files and very large files
                         if (content.length > 500000) { // Skip files > 500KB
