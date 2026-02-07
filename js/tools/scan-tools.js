@@ -6,6 +6,7 @@
 
 import { State } from '../core.js';
 import { GiteaAPI } from '../gitea.js';
+import { EditTracker } from './edit-tracker.js';
 
 /**
  * Find the end of a function by matching braces
@@ -494,6 +495,9 @@ export function registerScanTools(registry) {
             // Extract lines (convert to 0-indexed)
             const extractedLines = lines.slice(start - 1, end);
             const content = extractedLines.join('\n');
+            
+            // Track this read for drift detection
+            EditTracker.recordRead(path, start, end, lines.length);
             
             return {
                 path,

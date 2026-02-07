@@ -5,6 +5,7 @@
 
 import { State } from '../core.js';
 import { replaceRange, insertAtLine, deleteRange } from '../editor.js';
+import { EditTracker } from './edit-tracker.js';
 
 /**
  * Return a few lines of surrounding context after an edit so the model
@@ -37,12 +38,26 @@ export function registerEditTools(registry) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
+        // CHECK FOR STALE LINE NUMBERS
+        const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
+        if (staleCheck.stale) {
+            return { 
+                error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
+                       (staleCheck.suggestedStartLine 
+                           ? `💡 Suggested fix: The content you want may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}. Call read_lines to verify before editing.`
+                           : '')
+            };
+        }
+        
         // Use the replaceRange function from editor.js
         const result = replaceRange(start_line, end_line, new_content);
         
         if (result.error) {
             return result;
         }
+        
+        // Record this edit for future drift detection
+        EditTracker.recordEdit(State.currentFile.path, 'replace', start_line, end_line, result.lineDelta);
         
         // Return surrounding context so the model can verify placement
         // and know correct line numbers for subsequent edits
@@ -96,12 +111,26 @@ export function registerEditTools(registry) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
         }
         
+        // CHECK FOR STALE LINE NUMBERS
+        const staleCheck = EditTracker.checkStale(State.currentFile.path, after_line);
+        if (staleCheck.stale) {
+            return { 
+                error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
+                       (staleCheck.suggestedStartLine 
+                           ? `💡 Suggested fix: The insertion point may now be at line ${staleCheck.suggestedStartLine}. Call read_lines to verify.`
+                           : '')
+            };
+        }
+        
         // Use the insertAtLine function from editor.js
         const result = insertAtLine(after_line, content);
         
         if (result.error) {
             return result;
         }
+        
+        // Record this edit for future drift detection
+        EditTracker.recordEdit(State.currentFile.path, 'insert', after_line, after_line, result.newLineCount);
         
         const ctx = _getEditContext(after_line + 1, result.newLineCount, result.totalLines);
         
@@ -146,12 +175,26 @@ export function registerEditTools(registry) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
         
+        // CHECK FOR STALE LINE NUMBERS
+        const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
+        if (staleCheck.stale) {
+            return { 
+                error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
+                       (staleCheck.suggestedStartLine 
+                           ? `💡 Suggested fix: The lines you want may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}. Call read_lines to verify.`
+                           : '')
+            };
+        }
+        
         // Use the deleteRange function from editor.js
         const result = deleteRange(start_line, end_line);
         
         if (result.error) {
             return result;
         }
+        
+        // Record this edit for future drift detection  
+        EditTracker.recordEdit(State.currentFile.path, 'delete', start_line, end_line, -result.deletedCount);
         
         const ctx = _getEditContext(start_line, 0, result.totalLines);
         

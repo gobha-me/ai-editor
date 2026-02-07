@@ -5,6 +5,7 @@
 
 import { State } from '../core.js';
 import { GiteaAPI } from '../gitea.js';
+import { EditTracker } from './edit-tracker.js';
 
 /**
  * Register all file-related tools.
@@ -19,9 +20,14 @@ export function registerFileTools(registry) {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
+        
         const content = State.editorContent;
         const lines = content.split('\n');
         const lineCount = lines.length;
+        
+        // Track this read for drift detection
+        EditTracker.recordRead(State.currentFile.path, 1, lineCount, lineCount);
+        
         const MAX_LINES = 200;
 
         // For large files, return first + last sections with line numbers
@@ -73,6 +79,8 @@ export function registerFileTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
+        
+        // Note: read_file doesn't track for editing since it doesn't open in editor
         const { owner, repo } = State.currentProject;
         try {
             const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
@@ -132,6 +140,7 @@ export function registerFileTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
+        
         const file = State.fileTree.find(f => f.path === path);
         if (!file) {
             return { error: `File not found: ${path}` };
@@ -144,6 +153,15 @@ export function registerFileTools(registry) {
         if (window.onTreeItemClick) {
             await window.onTreeItemClick(path, 'file', true); // true = pin as non-preview
         }
+        
+        // Track this as a read operation (opening = reading)
+        // Use setTimeout to ensure State is updated after file loads
+        setTimeout(() => {
+            if (State.currentFile?.path === path && State.editorContent) {
+                const lineCount = State.editorContent.split('\n').length;
+                EditTracker.recordRead(path, 1, lineCount, lineCount);
+            }
+        }, 100);
         
         return {
             success: true,
