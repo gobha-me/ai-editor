@@ -3,7 +3,7 @@
  * Compresses older chat messages into LLM-generated summaries
  */
 
-import { State, Storage, EventBus } from '../core.js';
+import { State, EventBus, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 
 /**
@@ -16,7 +16,6 @@ export const ChatSummarizer = {
     SUMMARY_THRESHOLD: 20,      // min messages before first summary
     SUMMARY_INTERVAL: 15,       // new messages between re-summarizations
     SUMMARY_MAX_CHARS: 2000,
-    SUMMARY_TIMEOUT_MS: 30000,
 
     /** @returns {boolean} true when enough new messages have accumulated */
     shouldSummarize() {
@@ -94,13 +93,16 @@ SUMMARY:`;
         let summary;
         try {
             const model = this._pickModel();
+            // Use configurable summary timeout (default 60s)
+            const summaryTimeout = State.settings.summaryTimeout || 60000;
+            
             const result = await Promise.race([
                 LLM.chat(
                     [{ role: 'user', content: this._buildPrompt(older) }],
                     { model, stream: false, temperature: 0.3, maxTokens: 500 }
                 ),
                 new Promise((_, rej) =>
-                    setTimeout(() => rej(new Error('summary timeout')), this.SUMMARY_TIMEOUT_MS)
+                    setTimeout(() => rej(new Error('summary timeout')), summaryTimeout)
                 )
             ]);
             summary = (result.content || '').trim();
