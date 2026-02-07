@@ -42,21 +42,21 @@ const LLMDebug = {
     startExchange(requestBody) {
         const exchange = {
             id: Date.now(),
-            timestamp: new Date().toISOString(),
+            ts: new Date().toISOString(),  // Changed from 'timestamp' to match render
             model: requestBody.model,
             stream: requestBody.stream,
-            toolCount: requestBody.tools?.length || 0,
-            messageCount: requestBody.messages?.length || 0,
+            toolsSent: requestBody.tools?.length || 0,  // Changed from 'toolCount' to match render
+            msgCount: requestBody.messages?.length || 0,  // Changed from 'messageCount' to match render
             messages: requestBody.messages?.map(m => ({
                 role: m.role,
-                contentPreview: typeof m.content === 'string'
+                preview: typeof m.content === 'string'  // Changed from 'contentPreview' to match render
                     ? m.content.slice(0, 150) + (m.content.length > 150 ? '…' : '')
                     : (m.content === null ? '<null>' : '<array>'),
                 hasToolCalls: !!m.tool_calls,
                 toolCallId: m.tool_call_id || null
             })),
             chunks: [],         // { raw, parsed } for each SSE data line
-            thinkEvents: [],    // Think-block filter decisions
+            thinkEvents: [],    // Think-block filter decisions (with atChunk instead of chunkIndex)
             result: null,       // Final { content, toolCalls, finishReason }
             error: null,
             durationMs: null
@@ -86,14 +86,18 @@ const LLMDebug = {
     /** Log a think-block filter event. */
     logThink(event, detail) {
         if (!this._current) return;
-        this._current.thinkEvents.push({ event, detail, chunkIndex: this._current.chunks.length });
+        this._current.thinkEvents.push({ 
+            event, 
+            detail, 
+            atChunk: this._current.chunks.length  // Changed from 'chunkIndex' to match render
+        });
     },
 
     /** Finalize the current exchange with the result. */
     endExchange(result) {
         if (!this._current) return;
         this._current.result = {
-            contentLength: result.content?.length || 0,
+            contentLen: result.content?.length || 0,  // Changed from 'contentLength' to match render
             contentPreview: (result.content || '').slice(0, 300),
             toolCalls: result.toolCalls ? result.toolCalls.map(tc => ({
                 id: tc.id,
@@ -128,8 +132,8 @@ const LLMDebug = {
     exportText() {
         return this.exchanges.map(ex => {
             const lines = [];
-            lines.push(`=== Exchange ${ex.timestamp} | ${ex.model} | ${ex.stream ? 'stream' : 'non-stream'} ===`);
-            lines.push(`Messages: ${ex.messageCount} | Tools: ${ex.toolCount} | Duration: ${ex.durationMs}ms`);
+            lines.push(`=== Exchange ${ex.ts} | ${ex.model} | ${ex.stream ? 'stream' : 'non-stream'} ===`);
+            lines.push(`Messages: ${ex.msgCount} | Tools: ${ex.toolsSent} | Duration: ${ex.durationMs}ms`);
             lines.push('');
             
             // Messages summary
@@ -138,7 +142,7 @@ const LLMDebug = {
                 let desc = `[${m.role}]`;
                 if (m.hasToolCalls) desc += ' (has tool_calls)';
                 if (m.toolCallId) desc += ` (tool_call_id: ${m.toolCallId})`;
-                desc += ` ${m.contentPreview}`;
+                desc += ` ${m.preview}`;
                 lines.push(desc);
             }
             lines.push('');
@@ -155,7 +159,7 @@ const LLMDebug = {
             if (ex.thinkEvents.length > 0) {
                 lines.push(`--- THINK BLOCK EVENTS (${ex.thinkEvents.length}) ---`);
                 for (const t of ex.thinkEvents) {
-                    lines.push(`  [chunk ${t.chunkIndex}] ${t.event}: ${t.detail}`);
+                    lines.push(`  [chunk ${t.atChunk}] ${t.event}: ${t.detail}`);
                 }
                 lines.push('');
             }
@@ -165,7 +169,7 @@ const LLMDebug = {
             if (ex.error) {
                 lines.push(`ERROR: ${ex.error}`);
             } else if (ex.result) {
-                lines.push(`Content: ${ex.result.contentLength} chars | finishReason: ${ex.result.finishReason}`);
+                lines.push(`Content: ${ex.result.contentLen} chars | finishReason: ${ex.result.finishReason}`);
                 if (ex.result.contentPreview) lines.push(`Preview: ${ex.result.contentPreview}`);
                 if (ex.result.toolCalls) {
                     lines.push(`Tool calls: ${ex.result.toolCalls.length}`);
@@ -277,7 +281,7 @@ const LLM = {
                 requestBody.stream_options = { include_usage: true };
             }
 
-            if (tools) {
+            if (tools && Array.isArray(tools) && tools.length > 0) {
                 requestBody.tools = tools;
                 requestBody.tool_choice = 'auto';
             }
@@ -287,9 +291,14 @@ const LLM = {
             // Extra diagnostic: WHY are tools missing?
             if (!requestBody.tools || requestBody.tools.length === 0) {
                 LLMDebug.logThink('tool-diagnostic', 
-                    `tools param type=${typeof tools}, isArray=${Array.isArray(tools)}, ` +
-                    `length=${tools?.length}, truthy=${!!tools}, ` +
-                    `requestBody.tools=${JSON.stringify(requestBody.tools)?.slice(0, 100)}`
+                    `tools param: type=${typeof tools}, isArray=${Array.isArray(tools)}, ` +
+                    `length=${tools?.length}, truthy=${!!tools} | ` +
+                    `requestBody.tools: type=${typeof requestBody.tools}, isArray=${Array.isArray(requestBody.tools)}, ` +
+                    `length=${requestBody.tools?.length}`
+                );
+            } else {
+                LLMDebug.logThink('tool-success', 
+                    `✅ Sending ${requestBody.tools.length} tools: ${requestBody.tools.map(t => t.function?.name || t.name).join(', ')}`
                 );
             }
 
@@ -413,8 +422,8 @@ const LLM = {
                         const errMsg = parsed.error_message || parsed.error?.message || JSON.stringify(parsed);
                         console.error('[LLM] SSE error response:', errMsg);
                         LLMDebug.logChunk(data.slice(0, 500), {
-                            hasContent: false, contentChunk: null,
-                            hasToolCalls: false, toolCallsDelta: null,
+                            hasContent: false, contentSnip: null,
+                            hasToolCalls: false, toolCallDelta: null,
                             finishReason: null, hasUsage: false
                         });
                         throw new Error(`LLM stream error: ${errMsg}`);
@@ -425,9 +434,9 @@ const LLM = {
                     const chunkFinish = parsed.choices?.[0]?.finish_reason;
                     LLMDebug.logChunk(data.slice(0, 500), {
                         hasContent: !!delta?.content,
-                        contentChunk: delta?.content ? delta.content.slice(0, 80) : null,
+                        contentSnip: delta?.content ? delta.content.slice(0, 80) : null,  // Changed from contentChunk
                         hasToolCalls: !!delta?.tool_calls,
-                        toolCallsDelta: delta?.tool_calls || null,
+                        toolCallDelta: delta?.tool_calls || null,  // Changed from toolCallsDelta
                         finishReason: chunkFinish || null,
                         hasUsage: !!parsed.usage
                     });
@@ -729,7 +738,9 @@ const LLMTools = {
      * @returns {Array} Array of tool definitions
      */
     get definitions() {
-        return ToolRegistry.getDefinitions();
+        const defs = ToolRegistry.getDefinitions();
+        console.log('[LLMTools] Fetching definitions from registry, count:', defs.length);
+        return defs;
     },
 
     /**
@@ -738,7 +749,16 @@ const LLMTools = {
      */
     getToolsForRole() {
         const defs = ToolRegistry.getDefinitions();
-        return Roles.filterTools(defs);
+        console.log('[LLMTools] getToolsForRole: registry has', defs.length, 'tools');
+        
+        if (defs.length === 0) {
+            console.warn('[LLMTools] ⚠️ ToolRegistry is empty! Tools may not be registered yet.');
+            return [];
+        }
+        
+        const filtered = Roles.filterTools(defs);
+        console.log('[LLMTools] After role filtering:', filtered.length, 'tools for role', State.settings.role);
+        return filtered;
     }
 };
 
