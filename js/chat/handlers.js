@@ -457,16 +457,23 @@ export async function handleGeneralRequest(input) {
                     }
                 }
 
-                // Save assistant response with tool_calls to State.chatHistory
-                // CRITICAL: Use null for content when empty (OpenAI spec compliance)
+                // CRITICAL BUG FIX: Omit content field entirely when empty with tool_calls
+                // Setting content to null or '' causes "zero-length document" API errors
                 const assistantMsg = {
                     role: 'assistant',
-                    content: cleanContent.trim() ? cleanContent : null,
                     timestamp: Date.now()
                 };
+                
+                // Only add content if there's actual text
+                if (cleanContent.trim()) {
+                    assistantMsg.content = cleanContent;
+                }
+                
+                // Add tool_calls if present
                 if (toolCallSource === 'structured') {
                     assistantMsg.tool_calls = toolCalls;
                 }
+                
                 State.chatHistory.push(assistantMsg);
                 Storage.set('chatHistory', State.chatHistory.slice(-100));
 
