@@ -65,7 +65,13 @@ function populateSettingsForm() {
 
     // --- Context Tab ---
     document.getElementById('settingUseEmbeddings').checked = State.settings.useEmbeddings || false;
-    document.getElementById('settingEmbeddingModel').value = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    
+    // Populate embedding model - handle both input and select elements
+    const embeddingModelInput = document.getElementById('settingEmbeddingModel');
+    if (embeddingModelInput) {
+        embeddingModelInput.value = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    }
+    
     document.getElementById('settingMaxRelevantFiles').value = State.settings.maxRelevantFiles || 5;
     document.getElementById('maxRelevantFilesValue').textContent = State.settings.maxRelevantFiles || 5;
     document.getElementById('settingAutoReindex').checked = State.settings.autoReindex !== false;
@@ -304,7 +310,7 @@ export function saveSettings() {
 
     // Context
     State.settings.useEmbeddings = document.getElementById('settingUseEmbeddings').checked;
-    State.settings.embeddingModel = document.getElementById('settingEmbeddingModel').value;
+    State.settings.embeddingModel = document.getElementById('settingEmbeddingModel').value.trim();
     State.settings.maxRelevantFiles = parseInt(document.getElementById('settingMaxRelevantFiles').value) || 5;
     State.settings.autoReindex = document.getElementById('settingAutoReindex').checked;
     State.settings.embeddingCacheExpiry = parseInt(document.getElementById('settingEmbeddingCacheExpiry').value) || 7;
@@ -387,5 +393,51 @@ export async function fetchModelsForSettings() {
     } catch (error) {
         console.error('Failed to fetch models:', error);
         window.showToast('Failed to fetch models: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Fetch embedding models from API and populate the embedding model input/datalist
+ */
+export async function fetchEmbeddingModelsForSettings() {
+    const endpoint = document.getElementById('settingLlmEndpoint').value.trim();
+    const apiKey = document.getElementById('settingLlmApiKey').value.trim();
+    
+    if (!endpoint || !apiKey) {
+        window.showToast('Please enter API endpoint and key first', 'warning');
+        return;
+    }
+    
+    try {
+        // Temporarily set the values for the API call
+        const origEndpoint = State.settings.llmEndpoint;
+        const origApiKey = State.settings.llmApiKey;
+        
+        State.settings.llmEndpoint = endpoint;
+        State.settings.llmApiKey = apiKey;
+        
+        const embeddingModels = await LLM.listEmbeddingModels();
+        
+        // Restore original values (user hasn't saved yet)
+        State.settings.llmEndpoint = origEndpoint;
+        State.settings.llmApiKey = origApiKey;
+        
+        if (embeddingModels.length === 0) {
+            window.showToast('No embedding models found. You can still enter a model ID manually.', 'warning');
+            return;
+        }
+        
+        // Populate the datalist
+        const datalist = document.getElementById('embeddingModelsList');
+        if (datalist) {
+            datalist.innerHTML = embeddingModels.map(m => 
+                `<option value="${m.id}">${m.name || m.id}</option>`
+            ).join('');
+        }
+        
+        window.showToast(`Found ${embeddingModels.length} embedding model(s)`, 'success');
+    } catch (error) {
+        console.error('Failed to fetch embedding models:', error);
+        window.showToast('Failed to fetch embedding models: ' + error.message, 'error');
     }
 }
