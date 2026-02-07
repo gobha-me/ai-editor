@@ -413,96 +413,133 @@ Providers.register({
 // ============================================
 
 /**
- * Roles restrict which tools are sent to the LLM.
- * Each tool definition gets a `roles` array; when a role is active,
- * only tools tagged with that role (or 'full') are included.
- *
- * Role shape: { id, name, icon, description, tools: string[] }
- *   tools: array of tool names this role can access
+ * Roles control which tools are available to the LLM.
+ * Tools declare which roles can access them at registration time.
+ * 
+ * Role shape: { id, name, icon, description }
+ * 
+ * Special considerations:
+ * - Roles can be registered dynamically by plugins
+ * - Tools reference roles by ID and are validated at registration
+ * - Role 'full' is special: gets all tools regardless of their role declarations
  */
 
 const Roles = {
     _registered: {},
 
+    /**
+     * Register a role.
+     * @param {Object} role - { id, name, icon, description }
+     */
     register(role) {
         if (!role.id || !role.name) {
             console.error('Role missing id or name:', role);
             return false;
         }
-        this._registered[role.id] = role;
+        
+        // Prevent duplicate registration
+        if (this._registered[role.id]) {
+            console.warn(`Role ${role.id} already registered, skipping`);
+            return false;
+        }
+        
+        this._registered[role.id] = {
+            id: role.id,
+            name: role.name,
+            icon: role.icon || '🔧',
+            description: role.description || ''
+        };
+        
+        console.log(`Role registered: ${role.name} (${role.id})`);
+        EventBus.emit('role:registered', role);
         return true;
     },
 
+    /**
+     * Get a role by ID.
+     */
     get(id) {
         return this._registered[id] || this._registered['full'];
     },
 
+    /**
+     * List all registered roles.
+     */
     list() {
         return Object.values(this._registered);
     },
 
     /**
-     * Filter tool definitions to only those allowed by the active role.
-     * If role is 'full' or unknown, returns all tools.
+     * Check if a role exists.
+     */
+    exists(id) {
+        return !!this._registered[id];
+    },
+
+    /**
+     * Filter tool definitions based on the active role.
+     * Tools must explicitly declare which roles can access them.
+     * The 'full' role gets all tools regardless of their declarations.
+     * Tools with roles: 'all' are available to every role.
+     * 
+     * @param {Array} toolDefinitions - Array of tool definition objects
+     * @returns {Array} Filtered tool definitions
      */
     filterTools(toolDefinitions) {
-        const role = this.get(State.settings.role);
-        if (!role || role.id === 'full') return toolDefinitions;
+        const activeRole = State.settings.role;
+        
+        // 'full' role gets everything
+        if (activeRole === 'full') {
+            return toolDefinitions;
+        }
 
         return toolDefinitions.filter(tool => {
-            const toolName = tool.function?.name || tool.name;
-            return role.tools.includes(toolName);
+            const toolRoles = tool._registeredRoles || [];
+            
+            // Tools marked as 'all' are available to everyone
+            if (toolRoles.includes('all')) {
+                return true;
+            }
+            
+            // Check if active role is in the tool's allowed roles
+            return toolRoles.includes(activeRole);
         });
     }
 };
 
-// ---- Built-in Roles ----
+// ============================================
+// BUILT-IN ROLE DEFINITIONS
+// ============================================
 
-Roles.register({
-    id: 'full',
-    name: 'Full Access',
-    icon: '🔓',
-    description: 'All tools enabled. Maximum capability, highest token overhead.',
-    tools: [] // Empty = all tools (special case)
-});
+const BUILTIN_ROLES = [
+    {
+        id: 'full',
+        name: 'Full Access',
+        icon: '🔓',
+        description: 'All tools enabled. Maximum capability, highest token overhead.'
+    },
+    {
+        id: 'coder',
+        name: 'Coder',
+        icon: '💻',
+        description: 'Read/edit/create code, search the codebase, navigate project tree, read issues for context. No issue creation.'
+    },
+    {
+        id: 'pm',
+        name: 'Project Manager',
+        icon: '📋',
+        description: 'Create/manage issues, search and read code for context. No code editing.'
+    },
+    {
+        id: 'reviewer',
+        name: 'Reviewer',
+        icon: '🔍',
+        description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.'
+    }
+];
 
-Roles.register({
-    id: 'coder',
-    name: 'Coder',
-    icon: '💻',
-    description: 'Read/edit/create code, search the codebase, navigate project tree, read issues for context. No issue creation.',
-    tools: [
-        'read_current_file', 'read_lines', 'replace_lines', 'insert_lines', 'delete_lines',
-        'get_project_tree', 'open_file', 'read_file', 'list_open_tabs',
-        'create_file', 'search_in_files',
-        'read_issue', 'list_issues'
-    ]
-});
-
-Roles.register({
-    id: 'pm',
-    name: 'Project Manager',
-    icon: '📋',
-    description: 'Create/manage issues, search and read code for context. No code editing.',
-    tools: [
-        'read_current_file', 'read_lines', 'get_project_tree', 'read_file', 'list_open_tabs',
-        'search_in_files',
-        'create_issue', 'update_issue', 'list_issues', 'read_issue',
-        'add_issue_comment'
-    ]
-});
-
-Roles.register({
-    id: 'reviewer',
-    name: 'Reviewer',
-    icon: '🔍',
-    description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.',
-    tools: [
-        'read_current_file', 'read_lines', 'get_project_tree', 'read_file', 'list_open_tabs',
-        'search_in_files',
-        'list_issues', 'read_issue', 'add_issue_comment'
-    ]
-});
+// Register built-in roles
+BUILTIN_ROLES.forEach(role => Roles.register(role));
 
 // ============================================
 // INITIALIZATION
