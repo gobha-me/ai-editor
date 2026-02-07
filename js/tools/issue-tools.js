@@ -63,7 +63,8 @@ export function registerIssueTools(registry) {
                 },
                 required: []
             }
-        }
+        },
+        roles: 'all'  // All roles can list issues
     });
 
     // ========================================
@@ -121,7 +122,8 @@ export function registerIssueTools(registry) {
                 },
                 required: ['number']
             }
-        }
+        },
+        roles: 'all'  // All roles can read issue details
     });
 
     // ========================================
@@ -182,7 +184,8 @@ export function registerIssueTools(registry) {
                 },
                 required: ['title']
             }
-        }
+        },
+        roles: ['pm']  // Only PMs can create issues
     });
 
     // ========================================
@@ -248,7 +251,8 @@ export function registerIssueTools(registry) {
                 },
                 required: ['number']
             }
-        }
+        },
+        roles: ['pm']  // Only PMs can update issues
     });
 
     // ========================================
@@ -299,6 +303,7 @@ export function registerIssueTools(registry) {
                 },
                 required: ['number', 'body']
             }
-        }
+        },
+        roles: ['pm', 'reviewer']  // PMs and reviewers can comment on issues
     });
 }
