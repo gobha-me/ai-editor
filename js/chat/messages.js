@@ -12,7 +12,7 @@ import { ChatSummarizer } from './summarizer.js';
  * Add a message to chat history and render it
  */
 export function addMessage(role, content, meta = {}) {
-    console.log(`[addMessage] role=${role}, content length=${content?.length}, content="${content}"`);
+    console.log(`[addMessage] role=${role}, content length=${content?.length}`);
     
     const message = {
         role,
@@ -56,7 +56,7 @@ export function addStreamingMessage() {
     messageEl.innerHTML = `
         <div class="message-header">
             <span class="message-role">🤖 Assistant</span>
-            <span class="message-time">now</span>
+            <span class="message-time" id="streaming-elapsed">⏱️ 00:00</span>
         </div>
         <div class="message-content">
             <span class="typing-indicator">●●●</span>
@@ -68,15 +68,33 @@ export function addStreamingMessage() {
 }
 
 /**
- * Update streaming message content
+ * Format elapsed time as MM:SS
  */
-export function updateStreamingMessage(content) {
+function formatElapsedTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Update streaming message content with elapsed time
+ */
+export function updateStreamingMessage(content, elapsedSeconds = null) {
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
         const contentEl = messageEl.querySelector('.message-content');
         // Strip think blocks for display only
         const displayContent = stripThinkBlocks(content);
         contentEl.innerHTML = formatMessageContent(displayContent);
+        
+        // Update elapsed timer if provided
+        if (elapsedSeconds !== null) {
+            const timerEl = messageEl.querySelector('#streaming-elapsed');
+            if (timerEl) {
+                timerEl.textContent = `⏱️ ${formatElapsedTime(elapsedSeconds)}`;
+            }
+        }
+        
         scrollToBottom();
     }
 }
@@ -85,7 +103,7 @@ export function updateStreamingMessage(content) {
  * Finalize streaming message and add to history
  */
 export function finalizeStreamingMessage(content, meta = {}) {
-    console.log(`[finalizeStreamingMessage] content length=${content?.length}, first 100 chars="${content?.slice(0, 100)}"`);
+    console.log(`[finalizeStreamingMessage] content length=${content?.length}, elapsedTime=${meta.elapsedTime}s`);
     
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
@@ -96,6 +114,16 @@ export function finalizeStreamingMessage(content, meta = {}) {
         // Strip think blocks for display only
         const displayContent = stripThinkBlocks(content);
         contentEl.innerHTML = formatMessageContent(displayContent);
+        
+        // Update time to show elapsed duration instead of clock
+        const timeEl = messageEl.querySelector('.message-time');
+        if (timeEl && meta.elapsedTime) {
+            timeEl.textContent = `${formatElapsedTime(meta.elapsedTime)} ⏱️`;
+            timeEl.title = `Response time: ${meta.elapsedTime} seconds`;
+        } else if (timeEl) {
+            // Fallback to regular timestamp
+            timeEl.textContent = new Date().toLocaleTimeString();
+        }
         
         // Add action buttons if there's code
         if (meta.hasCode) {
@@ -123,7 +151,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
  * Render a single message
  */
 export function renderMessage(message) {
-    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}, content="${message.content}"`);
+    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}`);
     
     // Skip rendering tool messages entirely
     if (message.role === 'tool') {
@@ -151,7 +179,13 @@ export function renderMessage(message) {
         error: 'Error'
     }[message.role] || message.role;
 
-    const time = new Date(message.timestamp).toLocaleTimeString();
+    // Show elapsed time for assistant messages if available, otherwise timestamp
+    let timeDisplay;
+    if (message.role === 'assistant' && message.elapsedTime) {
+        timeDisplay = `${formatElapsedTime(message.elapsedTime)} ⏱️`;
+    } else {
+        timeDisplay = new Date(message.timestamp).toLocaleTimeString();
+    }
 
     // CRITICAL FIX: Only strip think blocks from assistant messages, NEVER from user/system/tool messages
     let displayContent = (message.role === 'assistant') 
@@ -162,13 +196,11 @@ export function renderMessage(message) {
     if (typeof displayContent !== 'string') {
         displayContent = JSON.stringify(displayContent, null, 2);
     }
-    
-    console.log(`[renderMessage] After stripThinkBlocks: length=${displayContent?.length}, content="${displayContent}"`);
 
     messageEl.innerHTML = `
         <div class="message-header">
             <span class="message-role">${roleIcon} ${roleName}</span>
-            <span class="message-time">${time}</span>
+            <span class="message-time">${timeDisplay}</span>
         </div>
         <div class="message-content">${formatMessageContent(displayContent)}</div>
     `;
@@ -365,7 +397,6 @@ export function clearChat() {
 
 /**
  * Format message content with markdown-like formatting
- * EXPORTED for use in handlers.js
  */
 export function formatMessageContent(content) {
     if (!content) return '';
@@ -395,7 +426,6 @@ export function formatMessageContent(content) {
 
 /**
  * Escape HTML special characters
- * EXPORTED for use in handlers.js
  */
 export function escapeHtml(text) {
     if (!text) return '';
