@@ -458,9 +458,10 @@ export async function handleGeneralRequest(input) {
                 }
 
                 // Save assistant response with tool_calls to State.chatHistory
+                // CRITICAL: Use null for content when empty (OpenAI spec compliance)
                 const assistantMsg = {
                     role: 'assistant',
-                    content: cleanContent || '',
+                    content: cleanContent.trim() ? cleanContent : null,
                     timestamp: Date.now()
                 };
                 if (toolCallSource === 'structured') {
