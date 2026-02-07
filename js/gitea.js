@@ -6,6 +6,41 @@
 import { State, EventBus, Storage } from './core.js';
 
 // ============================================
+// ENCODING UTILITIES
+// ============================================
+
+/**
+ * UTF-8 safe base64 encoding
+ * Handles Unicode characters that btoa() cannot (e.g., ✓, ▼, emoji, non-Latin alphabets)
+ * @param {string} str - String to encode
+ * @returns {string} Base64 encoded string
+ */
+function utf8ToBase64(str) {
+    try {
+        // Convert string to UTF-8 bytes, then to base64
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        console.error('UTF-8 base64 encoding failed:', e);
+        throw new Error(`Failed to encode content: ${e.message}`);
+    }
+}
+
+/**
+ * UTF-8 safe base64 decoding
+ * @param {string} str - Base64 string to decode
+ * @returns {string} Decoded UTF-8 string
+ */
+function base64ToUtf8(str) {
+    try {
+        return decodeURIComponent(escape(atob(str)));
+    } catch (e) {
+        // Fallback to regular atob for non-UTF8 content
+        console.warn('UTF-8 base64 decoding failed, using atob fallback:', e);
+        return atob(str);
+    }
+}
+
+// ============================================
 // API CLIENT
 // ============================================
 
@@ -159,8 +194,8 @@ const GiteaAPI = {
         const endpoint = `/repos/${owner}/${repo}/contents/${path}?ref=${ref}`;
         const file = await this.request('GET', endpoint);
         
-        // Gitea returns base64 encoded content
-        const content = file.content ? atob(file.content) : '';
+        // Gitea returns base64 encoded content - use UTF-8 safe decoding
+        const content = file.content ? base64ToUtf8(file.content) : '';
         
         return {
             name: file.name,
@@ -178,7 +213,7 @@ const GiteaAPI = {
 
     async createFile(owner, repo, path, content, message, branch = 'main') {
         const data = {
-            content: btoa(content), // base64 encode
+            content: utf8ToBase64(content), // UTF-8 safe base64 encode
             message: message,
             branch: branch
         };
@@ -190,7 +225,7 @@ const GiteaAPI = {
 
     async updateFile(owner, repo, path, content, message, sha, branch = 'main') {
         const data = {
-            content: btoa(content), // base64 encode
+            content: utf8ToBase64(content), // UTF-8 safe base64 encode
             message: message,
             sha: sha, // Required for updates
             branch: branch
@@ -677,5 +712,7 @@ export {
     loadProject,
     loadFile,
     saveFile,
-    batchSaveFiles
+    batchSaveFiles,
+    utf8ToBase64,
+    base64ToUtf8
 };
