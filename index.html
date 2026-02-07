@@ -736,6 +736,13 @@
         import { LLM, LLMDebug, generateCommitMessage } from './editor/js/llm.js';
         import { createEditor, setContent, getContent, applyEdit, getFileIcon, isTextFile, loadCodeMirror } from './editor/js/editor.js';
         import { initChat, addMessage, stopGeneration, clearChat } from './editor/js/chat.js';
+        // Import tool modules (loaded before chat.js to ensure registry is ready)
+        import './editor/js/tools/registry.js';
+        import './editor/js/tools/file-tools.js';
+        import './editor/js/tools/edit-tools.js';
+        import './editor/js/tools/project-tools.js';
+        import './editor/js/tools/search-tools.js';
+        import './editor/js/tools/issue-tools.js';
 
         // ============================================
         // FILE OPERATION LOCK (FIX FOR #23)
@@ -760,13 +767,6 @@
                     return await operation();
                 } finally {
 
-        // Import tool modules (loaded before chat.js to ensure registry is ready)
-        import './editor/js/tools/registry.js';
-        import './editor/js/tools/file-tools.js';
-        import './editor/js/tools/edit-tools.js';
-        import './editor/js/tools/project-tools.js';
-        import './editor/js/tools/search-tools.js';
-        import './editor/js/tools/issue-tools.js';
                     this._loading = false;
                     console.log('[LOCK] Released lock');
                     const next = this._queue.shift();
@@ -904,13 +904,6 @@
                     const c = ex.chunks[i];
                     const bg = c.parsed?.hasToolCalls ? 'rgba(0,255,0,0.08)' : (c.parsed?.finishReason ? 'rgba(255,200,0,0.08)' : 'transparent');
                     html += `<div style="padding: 1px 0.5rem; background: ${bg}; border-bottom: 1px solid rgba(128,128,128,0.1);">`;
-        // Import tool modules (now loaded by chat.js, but exposed for reference)
-        import './editor/js/tools/registry.js';
-        import './editor/js/tools/file-tools.js';
-        import './editor/js/tools/edit-tools.js';
-        import './editor/js/tools/project-tools.js';
-        import './editor/js/tools/search-tools.js';
-        import './editor/js/tools/issue-tools.js';
                     html += `<span style="color: #888; min-width: 30px; display: inline-block;">${i}</span> `;
                     if (c.parsed) {
                         if (c.parsed.hasToolCalls) html += `<span style="color: #6f6; font-weight: bold;">🔧TC </span>`;
