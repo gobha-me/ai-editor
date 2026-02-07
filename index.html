@@ -296,6 +296,21 @@
                     <div id="modelCapabilitiesInfo" style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 0.5rem; display: none;">
                         <!-- Populated when a model is selected -->
                     </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Settings Management</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Export your settings to backup API keys and preferences. Import to restore on another device or after clearing browser data.
+                    </p>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-secondary" onclick="window.exportSettings()" title="Download settings as JSON file">
+                            📥 Export Settings
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.importSettings()" title="Load settings from JSON file">
+                            📤 Import Settings
+                        </button>
+                    </div>
                 </div>
 
                 <!-- TAB: Appearance -->
