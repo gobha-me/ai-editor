@@ -30,8 +30,8 @@ let editorInstance = null;
 async function loadCodeMirror() {
     // Try multiple CDNs in order of preference
     const CDN_PROVIDERS = [
-        'https://cdn.jsdelivr.net/npm',
-        'https://unpkg.com',
+//        'https://cdn.jsdelivr.net/npm',
+//        'https://unpkg.com',
         'https://esm.sh'
     ];
 
