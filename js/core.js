@@ -59,6 +59,19 @@ const State = {
         commitModel: '',           // Optional small/fast model for commit messages
         apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
         
+        // Venice.ai-specific parameters (only used when apiProvider === 'venice')
+        veniceParameters: {
+            stripThinking: false,              // Strip thinking blocks from response
+            disableThinking: false,            // Disable thinking entirely
+            enableWebSearch: 'off',            // 'off' | 'auto' | 'always'
+            enableWebScraping: false,          // Enable web scraping for searches
+            enableWebCitations: false,         // Include citations for web results
+            includeSearchResultsInStream: false, // Stream search results
+            returnSearchResultsAsDocuments: true, // Format search results as documents
+            includeSystemPrompt: true,         // Include Venice system prompt
+            reasoningEffort: null              // 'low' | 'medium' | 'high' for reasoning models
+        },
+        
         // Timeout Configuration (in milliseconds)
         llmTimeout: 180000,        // 3 minutes - Main LLM response timeout (for reasoning models like Kimi K2.5)
         toolTimeout: 30000,        // 30 seconds - Individual tool execution timeout

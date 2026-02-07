@@ -25,6 +25,107 @@ function stripThinkBlocks(text) {
 }
 
 // ============================================
+// MESSAGE SANITIZATION
+// ============================================
+
+/**
+ * Strip internal tracking fields from messages before API submission.
+ * OpenAI API spec only allows: role, content, name, tool_calls, tool_call_id
+ * Internal fields like timestamp, isSummary cause "zero-length document" errors.
+ */
+function sanitizeMessages(messages) {
+    return messages.map(msg => {
+        const { timestamp, isSummary, ...apiMsg } = msg;
+        return apiMsg;
+    });
+}
+
+// ============================================
+// REQUEST BODY BUILDER
+// ============================================
+
+/**
+ * Build request body with provider-specific extensions.
+ * Handles OpenAI-compatible base + Venice.ai extensions.
+ */
+function buildRequestBody(model, messages, options = {}) {
+    const {
+        stream = true,
+        maxTokens = 4096,
+        temperature = 0.7,
+        tools = null
+    } = options;
+
+    // Sanitize messages - strip internal fields before API submission
+    const sanitizedMessages = sanitizeMessages(messages);
+
+    // Base OpenAI-compatible payload
+    const requestBody = {
+        model,
+        messages: sanitizedMessages,
+        max_tokens: maxTokens,
+        temperature,
+        stream
+    };
+
+    // Add streaming usage stats (OpenAI extension, Venice supports it)
+    if (stream) {
+        requestBody.stream_options = { include_usage: true };
+    }
+
+    // Add tools if provided
+    if (tools && Array.isArray(tools) && tools.length > 0) {
+        requestBody.tools = tools;
+        requestBody.tool_choice = 'auto';
+    }
+
+    // Venice.ai-specific extensions
+    const provider = State.settings.apiProvider || 'openai';
+    
+    if (provider === 'venice') {
+        const veniceParams = State.settings.veniceParameters || {};
+        
+        // Only add venice_parameters if user has configured any
+        if (Object.keys(veniceParams).length > 0) {
+            requestBody.venice_parameters = {};
+            
+            // Add configured Venice parameters
+            if (veniceParams.stripThinking !== undefined) {
+                requestBody.venice_parameters.strip_thinking_response = veniceParams.stripThinking;
+            }
+            if (veniceParams.disableThinking !== undefined) {
+                requestBody.venice_parameters.disable_thinking = veniceParams.disableThinking;
+            }
+            if (veniceParams.enableWebSearch !== undefined) {
+                requestBody.venice_parameters.enable_web_search = veniceParams.enableWebSearch;
+            }
+            if (veniceParams.enableWebScraping !== undefined) {
+                requestBody.venice_parameters.enable_web_scraping = veniceParams.enableWebScraping;
+            }
+            if (veniceParams.enableWebCitations !== undefined) {
+                requestBody.venice_parameters.enable_web_citations = veniceParams.enableWebCitations;
+            }
+            if (veniceParams.includeSearchResultsInStream !== undefined) {
+                requestBody.venice_parameters.include_search_results_in_stream = veniceParams.includeSearchResultsInStream;
+            }
+            if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
+                requestBody.venice_parameters.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
+            }
+            if (veniceParams.includeSystemPrompt !== undefined) {
+                requestBody.venice_parameters.include_venice_system_prompt = veniceParams.includeSystemPrompt;
+            }
+        }
+
+        // Add reasoning effort for reasoning models (top-level parameter)
+        if (veniceParams.reasoningEffort) {
+            requestBody.reasoning_effort = veniceParams.reasoningEffort;
+        }
+    }
+
+    return requestBody;
+}
+
+// ============================================
 // LLM DEBUG LOGGER
 // ============================================
 
@@ -346,23 +447,13 @@ const LLM = {
         EventBus.emit('llm:generating', true);
 
         try {
-            const requestBody = {
-                model,
-                messages,
-                max_tokens: maxTokens,
+            // Build request with message sanitization and provider-specific extensions
+            const requestBody = buildRequestBody(model, messages, {
+                stream,
+                maxTokens,
                 temperature,
-                stream
-            };
-
-            // Request usage stats in streaming mode (OpenAI extension, Venice supports it)
-            if (stream) {
-                requestBody.stream_options = { include_usage: true };
-            }
-
-            if (tools && Array.isArray(tools) && tools.length > 0) {
-                requestBody.tools = tools;
-                requestBody.tool_choice = 'auto';
-            }
+                tools
+            });
 
             // === DEBUG: Start exchange logging with tool diagnostic ===
             LLMDebug.startExchange(requestBody);
