@@ -3,7 +3,7 @@
  * Dynamic tool registration system for LLM function calling with role-based access control
  */
 
-import { Roles } from '../core.js';
+import { Roles, State } from '../core.js';
 
 export const ToolRegistry = {
     handlers: new Map(),
@@ -98,12 +98,18 @@ export const ToolRegistry = {
      * @returns {Array} Filtered tool definitions
      */
     getToolsForRole(roleId) {
-        // Import here to avoid circular dependency issues
-        const { State } = await import('../core.js');
         const activeRole = roleId || State.settings.role;
         
-        // Delegate filtering to the Roles module
-        return Roles.filterTools(this.definitions);
+        // If 'full' role, return everything
+        if (activeRole === 'full') {
+            return this.definitions;
+        }
+        
+        // Filter based on tool's registered roles
+        return this.definitions.filter(tool => {
+            const toolRoles = tool._registeredRoles || [];
+            return toolRoles.includes('all') || toolRoles.includes(activeRole);
+        });
     },
     
     /**
@@ -119,7 +125,12 @@ export const ToolRegistry = {
         // Count tools per role
         const allRoles = Roles.list();
         for (const role of allRoles) {
-            const filtered = Roles.filterTools(this.definitions);
+            // Temporarily set role and filter
+            const filtered = this.definitions.filter(tool => {
+                const toolRoles = tool._registeredRoles || [];
+                if (role.id === 'full') return true;
+                return toolRoles.includes('all') || toolRoles.includes(role.id);
+            });
             stats.byRole[role.id] = filtered.length;
         }
         
