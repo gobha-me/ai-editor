@@ -5,8 +5,25 @@
 
 import { State, EventBus, Storage } from './core.js';
 import { LLM, LLMDebug, LLMTools, generateEdit, generateCommitMessage, analyzeIssue, buildSystemPrompt, stripThinkBlocks } from './llm.js';
-import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay, replaceRange, insertAtLine, deleteRange } from './editor.js';
+import { applyEdit, getContent, computeSimpleDiff, formatDiffForDisplay } from './editor.js';
 import { GiteaAPI, loadFile } from './gitea.js';
+import { ToolRegistry } from './tools/registry.js';
+import { registerFileTools } from './tools/file-tools.js';
+import { registerEditTools } from './tools/edit-tools.js';
+import { registerProjectTools } from './tools/project-tools.js';
+import { registerSearchTools } from './tools/search-tools.js';
+import { registerIssueTools } from './tools/issue-tools.js';
+
+// ============================================
+// TOOL REGISTRATION
+// ============================================
+
+// Initialize tools on module load
+registerFileTools(ToolRegistry);
+registerEditTools(ToolRegistry);
+registerProjectTools(ToolRegistry);
+registerSearchTools(ToolRegistry);
+registerIssueTools(ToolRegistry);
 
 // ============================================
 // CHAT HISTORY SUMMARIZER
@@ -165,546 +182,17 @@ SUMMARY:`;
 let chatContainer = null;
 let inputElement = null;
 let pendingEdit = null;  // { code, explanation } waiting for user approval
-
-// ============================================
-// LLM TOOL HANDLERS
-// ============================================
-
-// Register tool handlers for LLM function calling
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 
-/**
- * Return a few lines of surrounding context after an edit so the model
- * can verify placement and know current line numbers for subsequent edits.
- * Keeps the context small (5 lines before + edited region + 5 lines after)
- * to avoid bloating tool results.
- */
-function _getEditContext(editStart, editLineCount, totalLines) {
-    const content = State.editorContent;
-    if (!content) return null;
-    const lines = content.split('\n');
-    const CONTEXT = 3;
-    const ctxStart = Math.max(1, editStart - CONTEXT);
-    const ctxEnd = Math.min(totalLines, editStart + editLineCount + CONTEXT);
-    const slice = lines.slice(ctxStart - 1, ctxEnd);
-    return slice.map((l, i) => `${ctxStart + i}: ${l}`).join('\n');
-}
+// ============================================
+// TOOL EXECUTION
+// ============================================
 
-LLMTools.handlers = {
-    read_current_file: async () => {
-        if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
-        }
-        const content = State.editorContent;
-        const lines = content.split('\n');
-        const lineCount = lines.length;
-        const MAX_LINES = 200;
-
-        // For large files, return first + last sections with line numbers
-        // so the model can target read_lines for specific regions
-        if (lineCount > MAX_LINES) {
-            const headCount = 120;
-            const tailCount = 60;
-            const head = lines.slice(0, headCount)
-                .map((l, i) => `${i + 1}: ${l}`).join('\n');
-            const tail = lines.slice(-tailCount)
-                .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
-            return {
-                path: State.currentFile.path,
-                content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
-                line_count: lineCount,
-                truncated: true,
-                language: State.currentFile.path.split('.').pop()
-            };
-        }
-
-        // Small files: return with line numbers for easy reference
-        const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
-        return {
-            path: State.currentFile.path,
-            content: numbered,
-            line_count: lineCount,
-            language: State.currentFile.path.split('.').pop()
-        };
-    },
-
-    read_lines: async ({ path, start_line, end_line }) => {
-        // Read from the currently open file if path matches, otherwise fetch from Gitea
-        let content;
-        let filePath;
-
-        if (State.currentFile && (!path || path === State.currentFile.path)) {
-            content = State.editorContent;
-            filePath = State.currentFile.path;
-        } else if (path) {
-            if (!State.currentProject) {
-                return { error: 'No project is currently loaded' };
-            }
-            const { owner, repo } = State.currentProject;
-            try {
-                const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
-                content = file.content;
-                filePath = file.path;
-            } catch (error) {
-                return { error: `Failed to read file: ${error.message}` };
-            }
-        } else {
-            return { error: 'No file specified and no file is currently open.' };
-        }
-
-        const lines = content.split('\n');
-        const totalLines = lines.length;
-        const start = Math.max(1, start_line || 1);
-        const end = Math.min(totalLines, end_line || totalLines);
-
-        if (start > totalLines) {
-            return { error: `start_line ${start} exceeds file length (${totalLines} lines)` };
-        }
-
-        const slice = lines.slice(start - 1, end);
-        const numbered = slice.map((l, i) => `${start + i}: ${l}`).join('\n');
-
-        return {
-            path: filePath,
-            start_line: start,
-            end_line: end,
-            line_count: totalLines,
-            content: numbered
-        };
-    },
-
-    replace_lines: async ({ start_line, end_line, new_content }) => {
-        if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
-        }
-        
-        // Use the new replaceRange function from editor.js
-        const result = replaceRange(start_line, end_line, new_content);
-        
-        if (result.error) {
-            return result;
-        }
-        
-        // Return surrounding context so the model can verify placement
-        // and know correct line numbers for subsequent edits
-        const ctx = _getEditContext(start_line, result.newLineCount, result.totalLines);
-        
-        return {
-            success: true,
-            path: State.currentFile.path,
-            replaced_lines: `${start_line}-${end_line}`,
-            original_line_count: result.originalLineCount,
-            new_line_count: result.newLineCount,
-            line_delta: result.lineDelta,
-            total_lines: result.totalLines,
-            context: ctx,
-            message: `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
-                     `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). ` +
-                     `IMPORTANT: Line numbers have shifted by ${result.lineDelta}. Use read_current_file or read_lines before your next edit.`
-        };
-    },
-
-    insert_lines: async ({ after_line, content }) => {
-        if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
-        }
-        
-        // Use the new insertAtLine function from editor.js
-        const result = insertAtLine(after_line, content);
-        
-        if (result.error) {
-            return result;
-        }
-        
-        const ctx = _getEditContext(after_line + 1, result.newLineCount, result.totalLines);
-        
-        return {
-            success: true,
-            path: State.currentFile.path,
-            inserted_after: result.insertedAfter,
-            lines_inserted: result.newLineCount,
-            total_lines: result.totalLines,
-            context: ctx,
-            message: `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. ` +
-                     `IMPORTANT: All lines after ${after_line} shifted by +${result.newLineCount}. Use read_lines before your next edit.`
-        };
-    },
-
-    delete_lines: async ({ start_line, end_line }) => {
-        if (!State.currentFile) {
-            return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
-        }
-        
-        // Use the new deleteRange function from editor.js
-        const result = deleteRange(start_line, end_line);
-        
-        if (result.error) {
-            return result;
-        }
-        
-        const ctx = _getEditContext(start_line, 0, result.totalLines);
-        
-        return {
-            success: true,
-            path: State.currentFile.path,
-            deleted_lines: `${start_line}-${end_line}`,
-            lines_deleted: result.deletedCount,
-            total_lines: result.totalLines,
-            context: ctx,
-            message: `Deleted ${result.deletedCount} lines (${start_line}-${end_line}). File now has ${result.totalLines} lines. ` +
-                     `IMPORTANT: All lines after ${start_line} shifted by -${result.deletedCount}. Use read_lines before your next edit.`
-        };
-    },
-
-    get_project_tree: async ({ path = '' }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        let files = State.fileTree;
-        if (path) {
-            files = files.filter(f => f.path.startsWith(path));
-        }
-        return {
-            project: `${State.currentProject.owner}/${State.currentProject.repo}`,
-            branch: State.currentBranch,
-            files: files.map(f => ({
-                path: f.path,
-                type: f.type,
-                name: f.name
-            }))
-        };
-    },
-
-    open_file: async ({ path }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const file = State.fileTree.find(f => f.path === path);
-        if (!file) {
-            return { error: `File not found: ${path}` };
-        }
-        if (file.type === 'dir') {
-            return { error: `Cannot open directory: ${path}` };
-        }
-        
-        // Trigger file open through the global handler
-        if (window.onTreeItemClick) {
-            await window.onTreeItemClick(path, 'file', true); // true = pin as non-preview
-        }
-        
-        return {
-            success: true,
-            path: path,
-            message: `Opened ${path} in editor`
-        };
-    },
-
-    read_file: async ({ path }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
-            const lines = file.content.split('\n');
-            const lineCount = lines.length;
-            const MAX_LINES = 200;
-
-            if (lineCount > MAX_LINES) {
-                const headCount = 120;
-                const tailCount = 60;
-                const head = lines.slice(0, headCount)
-                    .map((l, i) => `${i + 1}: ${l}`).join('\n');
-                const tail = lines.slice(-tailCount)
-                    .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
-                return {
-                    path: file.path,
-                    content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
-                    line_count: lineCount,
-                    truncated: true,
-                    language: path.split('.').pop()
-                };
-            }
-
-            const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
-            return {
-                path: file.path,
-                content: numbered,
-                line_count: lineCount,
-                language: path.split('.').pop()
-            };
-        } catch (error) {
-            return { error: `Failed to read file: ${error.message}` };
-        }
-    },
-
-    list_open_tabs: async () => {
-        return {
-            tabs: State.openTabs.map((tab, index) => ({
-                path: tab.path,
-                dirty: tab.dirty,
-                isPreview: tab.isPreview,
-                isActive: index === State.activeTabIndex
-            })),
-            activeTab: State.activeTabIndex >= 0 ? State.openTabs[State.activeTabIndex]?.path : null
-        };
-    },
-
-    // === FILE CREATION ===
-
-    create_file: async ({ path, content = '', message = '' }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        const branch = State.currentBranch || 'main';
-        const commitMsg = message || `Create ${path}`;
-        try {
-            const result = await GiteaAPI.createFile(owner, repo, path, content, commitMsg, branch);
-            EventBus.emit('tree:refresh');
-            return {
-                success: true,
-                path: path,
-                message: `Created ${path} on branch ${branch}`
-            };
-        } catch (error) {
-            return { error: `Failed to create file ${path}: ${error.message}` };
-        }
-    },
-
-    // === SEARCH ===
-
-    search_in_files: async ({ query, path = '', max_results = 20 }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        const branch = State.currentBranch || 'main';
-        try {
-            let files = State.fileTree.filter(f => f.type !== 'dir');
-            if (path) files = files.filter(f => f.path.startsWith(path));
-
-            const textExts = new Set([
-                'js','ts','jsx','tsx','py','go','rs','c','cpp','h','hpp',
-                'java','rb','php','css','scss','html','htm','xml','json',
-                'yaml','yml','toml','md','txt','sh','bash','sql','vue',
-                'svelte','conf','cfg','ini','pl','pm'
-            ]);
-            files = files.filter(f => {
-                const ext = f.path.split('.').pop().toLowerCase();
-                const name = f.path.split('/').pop().toLowerCase();
-                return textExts.has(ext) || textExts.has(name);
-            });
-
-            const results = [];
-            const queryLower = query.toLowerCase();
-            for (const file of files.slice(0, 50)) {
-                if (results.length >= max_results) break;
-                try {
-                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
-                    const lines = fileData.content.split('\n');
-                    const matches = [];
-                    for (let i = 0; i < lines.length; i++) {
-                        if (lines[i].toLowerCase().includes(queryLower)) {
-                            matches.push({ line: i + 1, text: lines[i].trim().substring(0, 200) });
-                            if (matches.length >= 5) break;
-                        }
-                    }
-                    if (matches.length > 0) {
-                        results.push({ path: file.path, matches });
-                    }
-                } catch (e) { /* skip unreadable files */ }
-            }
-            return {
-                query, files_searched: Math.min(files.length, 50),
-                results,
-                message: results.length > 0
-                    ? `Found "${query}" in ${results.length} file(s)`
-                    : `No matches for "${query}"`
-            };
-        } catch (error) {
-            return { error: `Search failed: ${error.message}` };
-        }
-    },
-
-    // === ISSUE TOOL HANDLERS ===
-
-    list_issues: async ({ state = 'open', labels = '' } = {}) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const params = new URLSearchParams({ state, type: 'issues', limit: '50' });
-            if (labels) params.append('labels', labels);
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issues = await response.json();
-            return {
-                project: `${owner}/${repo}`,
-                count: issues.length,
-                issues: issues.map(i => ({
-                    number: i.number,
-                    title: i.title,
-                    state: i.state,
-                    labels: (i.labels || []).map(l => l.name),
-                    created: i.created_at,
-                    assignee: i.assignee?.login || null
-                }))
-            };
-        } catch (error) {
-            return { error: `Failed to list issues: ${error.message}` };
-        }
-    },
-
-    read_issue: async ({ number }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
-
-            // Also fetch comments
-            const commentsUrl = `${url}/comments`;
-            const commentsResp = await fetch(commentsUrl, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            const comments = commentsResp.ok ? await commentsResp.json() : [];
-
-            return {
-                number: issue.number,
-                title: issue.title,
-                body: issue.body,
-                state: issue.state,
-                labels: (issue.labels || []).map(l => l.name),
-                assignee: issue.assignee?.login || null,
-                created: issue.created_at,
-                comments: comments.slice(0, 20).map(c => ({
-                    user: c.user?.login,
-                    body: c.body,
-                    created: c.created_at
-                }))
-            };
-        } catch (error) {
-            return { error: `Failed to read issue #${number}: ${error.message}` };
-        }
-    },
-
-    create_issue: async ({ title, body = '', labels = [] }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues`;
-            const payload = { title, body };
-            if (labels.length > 0) payload.labels = labels; // Gitea expects label IDs for creation; names might not work
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
-            // Refresh issues list
-            EventBus.emit('issues:refresh');
-            return {
-                success: true,
-                number: issue.number,
-                title: issue.title,
-                url: issue.html_url,
-                message: `Created issue #${issue.number}: ${issue.title}`
-            };
-        } catch (error) {
-            return { error: `Failed to create issue: ${error.message}` };
-        }
-    },
-
-    update_issue: async ({ number, title, body, state }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
-            const payload = {};
-            if (title !== undefined) payload.title = title;
-            if (body !== undefined) payload.body = body;
-            if (state !== undefined) payload.state = state;
-            const response = await fetch(url, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
-            EventBus.emit('issues:refresh');
-            return {
-                success: true,
-                number: issue.number,
-                title: issue.title,
-                state: issue.state,
-                message: `Updated issue #${issue.number}`
-            };
-        } catch (error) {
-            return { error: `Failed to update issue #${number}: ${error.message}` };
-        }
-    },
-
-    add_issue_comment: async ({ number, body }) => {
-        if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
-        }
-        const { owner, repo } = State.currentProject;
-        try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}/comments`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ body })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const comment = await response.json();
-            return {
-                success: true,
-                issue_number: number,
-                comment_id: comment.id,
-                message: `Added comment to issue #${number}`
-            };
-        } catch (error) {
-            return { error: `Failed to add comment to issue #${number}: ${error.message}` };
-        }
-    }
-};
-
-// Execute a tool call from the LLM
+// Execute a tool call using the registry
 async function executeToolCall(toolCall) {
-    const handler = LLMTools.handlers[toolCall.function.name];
-    if (!handler) {
-        return { error: `Unknown tool: ${toolCall.function.name}` };
-    }
-    
     try {
         const args = JSON.parse(toolCall.function.arguments || '{}');
-        const result = await handler(args);
+        const result = await ToolRegistry.execute(toolCall.function.name, args);
         return result;
     } catch (error) {
         return { error: `Tool execution failed: ${error.message}` };
@@ -1258,19 +746,7 @@ async function handleGeneralRequest(input) {
     const systemPrompt = buildSystemPrompt();
     const roleTools = LLMTools.getToolsForRole();
     
-    // DEBUG: Why are tools empty?
-    if (!roleTools || roleTools.length === 0) {
-        const allDefs = LLMTools.definitions?.length || 0;
-        const role = State.settings.role || 'undefined';
-        console.error(`[TOOL-DEBUG] roleTools empty! definitions=${allDefs}, role="${role}"`);
-        addMessage('system', `⚠️ Tool debug: roleTools=${roleTools?.length || 0}, definitions=${allDefs}, role="${role}"`);
-    }
-
     // Build initial message thread (summary-aware context).
-    // NOTE: The caller (handleUserInput) already pushed the user message into
-    // State.chatHistory via addMessage(), so getContextMessages() will include it.
-    // We must NOT append `input` again or the API sees a duplicate user turn,
-    // which confuses the model into restarting its plan from scratch.
     const contextMessages = ChatSummarizer.getContextMessages();
     const lastCtx = contextMessages[contextMessages.length - 1];
     const alreadyInContext = lastCtx && lastCtx.role === 'user' && lastCtx.content === input;
@@ -1309,9 +785,6 @@ async function handleGeneralRequest(input) {
                 tools: roleTools,
                 onToken: (token, fullContent) => {
                     content = fullContent;
-                    // Always show only THIS round's content in the streaming element.
-                    // finalContent accumulation is handled after the round completes,
-                    // and each round gets its own finalized DOM element.
                     updateStreamingMessage(fullContent);
                 }
             };
@@ -1341,8 +814,7 @@ async function handleGeneralRequest(input) {
             if (_cancelToolLoop) break;
             
             if (toolActions.length > 0) {
-                // Show what tools did accomplish — but only the error message,
-                // not previously accumulated content (already committed to DOM)
+                // Show what tools did accomplish
                 const summaryLines = toolActions.map(a => {
                     const status = a.error ? '❌' : '✅';
                     const detail = a.result?.message || a.result?.error || '';
@@ -1435,8 +907,6 @@ async function handleGeneralRequest(input) {
             // === BUILD THREAD FOR NEXT ROUND ===
 
             // Compress old tool results to prevent token explosion.
-            // The model has already seen and processed these results.
-            // Replace large content with summaries for subsequent rounds.
             for (let i = 0; i < messages.length; i++) {
                 const msg = messages[i];
                 if (msg.role === 'tool' && msg.content) {
@@ -1541,9 +1011,7 @@ async function handleGeneralRequest(input) {
         }
     }
 
-    // Use last round's content for the final DOM element (avoids duplication
-    // with text already committed to previous elements between tool rounds).
-    // Fall back to finalContent for error/empty paths where lastRoundContent is blank.
+    // Use last round's content for the final DOM element
     finalizeStreamingMessage(lastRoundContent.trim() ? lastRoundContent : finalContent, { hasCode: false });
 }
 
@@ -1694,7 +1162,7 @@ function sendMessage(content) {
 }
 
 // ============================================
-// EXPOSE TO GLOBAL (for onclick handlers)
+// EXPORT CHAT
 // ============================================
 
 /**
@@ -1818,6 +1286,10 @@ function exportChat() {
     });
 }
 
+// ============================================
+// EXPOSE TO GLOBAL (for onclick handlers)
+// ============================================
+
 window.Chat = {
     applyPendingEdit,
     rejectPendingEdit,
@@ -1840,6 +1312,5 @@ export {
     sendMessage,
     applyPendingEdit,
     rejectPendingEdit,
-    executeToolCall,
-    LLMTools
+    executeToolCall
 };

@@ -4,6 +4,7 @@
  */
 
 import { State, EventBus, Storage, Providers, Roles } from './core.js';
+import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
 // THINK-BLOCK STRIPPING
@@ -15,7 +16,8 @@ import { State, EventBus, Storage, Providers, Roles } from './core.js';
  * Used for non-streaming responses where think blocks arrive intact.
  */
 function stripThinkBlocks(text) {
-    if (!text) return text;// Strip all</think> blocks (non-greedy, handles multiple)
+    if (!text) return text;
+    // Strip all </think> blocks (non-greedy, handles multiple)
     let result = text.replace(/[\s\S]*?<\/think>/gi, '');
     // Also strip unclosed block at end (model cut off mid-thought)
     result = result.replace(/\S]*$/gi, '');
@@ -465,7 +467,7 @@ const LLM = {
                                 }
                             }
 
-                            const startIdx = chunk.indexOf('');
+                            const startIdx = chunk.indexOf('<think>');
                             if (startIdx >= 0) {
                                 const before = chunk.slice(0, startIdx);
                                 const afterStart = chunk.slice(startIdx + 7);
@@ -718,359 +720,25 @@ function getLanguageFromPath(path) {
 }
 
 // ============================================
-// LLM TOOLS DEFINITIONS
+// LLM TOOLS - Now managed by ToolRegistry
 // ============================================
 
 const LLMTools = {
-    // Tool definitions for function calling
-    definitions: [
-        // === CODE TOOLS ===
-        {
-            type: 'function',
-            function: {
-                name: 'read_current_file',
-                description: 'Read the content of the currently open file in the editor. Returns line-numbered content. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
-                parameters: {
-                    type: 'object',
-                    properties: {},
-                    required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'replace_lines',
-                description: 'Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed. Do NOT include a trailing newline in new_content.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        start_line: {
-                            type: 'integer',
-                            description: 'First line to replace (1-indexed, inclusive)'
-                        },
-                        end_line: {
-                            type: 'integer', 
-                            description: 'Last line to replace (1-indexed, inclusive). Use same as start_line to replace single line.'
-                        },
-                        new_content: {
-                            type: 'string',
-                            description: 'The new content to insert (can be multiple lines)'
-                        }
-                    },
-                    required: ['start_line', 'end_line', 'new_content']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'insert_lines',
-                description: 'Insert new lines at a specific position in the current file without replacing existing content.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        after_line: {
-                            type: 'integer',
-                            description: 'Insert after this line number (0 to insert at beginning, 1-indexed)'
-                        },
-                        content: {
-                            type: 'string',
-                            description: 'The content to insert (can be multiple lines)'
-                        }
-                    },
-                    required: ['after_line', 'content']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'delete_lines',
-                description: 'Delete specific lines from the current file.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        start_line: {
-                            type: 'integer',
-                            description: 'First line to delete (1-indexed, inclusive)'
-                        },
-                        end_line: {
-                            type: 'integer',
-                            description: 'Last line to delete (1-indexed, inclusive)'
-                        }
-                    },
-                    required: ['start_line', 'end_line']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'get_project_tree',
-                description: 'Get the file tree structure of the current project',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'Optional path to filter files (e.g., "src/" to only list files in src directory)'
-                        }
-                    },
-                    required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'open_file',
-                description: 'Open a specific file from the project in the editor',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'The path to the file to open (e.g., "src/main.js")'
-                        }
-                    },
-                    required: ['path']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'read_file',
-                description: 'Read the content of a specific file without opening it in the editor. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'The path to the file to read'
-                        }
-                    },
-                    required: ['path']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'read_lines',
-                description: 'Read specific line range from a file. Use this instead of read_file when you only need to see a section of a large file. Lines are returned with line numbers for easy reference.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'File path to read from (omit to read from currently open file)'
-                        },
-                        start_line: {
-                            type: 'integer',
-                            description: 'First line to read (1-indexed, inclusive). Default: 1'
-                        },
-                        end_line: {
-                            type: 'integer',
-                            description: 'Last line to read (1-indexed, inclusive). Default: end of file'
-                        }
-                    },
-                    required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'list_open_tabs',
-                description: 'List all currently open tabs in the editor',
-                parameters: {
-                    type: 'object',
-                    properties: {},
-                    required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'create_file',
-                description: 'Create a new file in the project repository. Commits directly to the current branch via Gitea API. Intermediate directories are created automatically.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        path: {
-                            type: 'string',
-                            description: 'File path relative to repo root (e.g., "src/utils/helpers.js")'
-                        },
-                        content: {
-                            type: 'string',
-                            description: 'File content to write'
-                        },
-                        message: {
-                            type: 'string',
-                            description: 'Git commit message (optional, defaults to "Create <path>")'
-                        }
-                    },
-                    required: ['path', 'content']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'search_in_files',
-                description: 'Search for text across project files. Returns matching lines with file paths and line numbers. Use to find functions, variables, strings, or patterns in the codebase.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: 'Text to search for (case-insensitive)'
-                        },
-                        path: {
-                            type: 'string',
-                            description: 'Optional directory prefix to limit scope (e.g., "js/")'
-                        },
-                        max_results: {
-                            type: 'integer',
-                            description: 'Max files to return (default: 20)'
-                        }
-                    },
-                    required: ['query']
-                }
-            }
-        },
-
-        // === ISSUE TOOLS ===
-        {
-            type: 'function',
-            function: {
-                name: 'list_issues',
-                description: 'List issues for the current project. Returns open issues by default.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        state: {
-                            type: 'string',
-                            enum: ['open', 'closed', 'all'],
-                            description: 'Filter by issue state (default: open)'
-                        },
-                        labels: {
-                            type: 'string',
-                            description: 'Comma-separated label names to filter by'
-                        }
-                    },
-                    required: []
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'read_issue',
-                description: 'Read a specific issue by number, including its body, labels, and comments.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        number: {
-                            type: 'integer',
-                            description: 'The issue number'
-                        }
-                    },
-                    required: ['number']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'create_issue',
-                description: 'Create a new issue in the current project.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        title: {
-                            type: 'string',
-                            description: 'Issue title'
-                        },
-                        body: {
-                            type: 'string',
-                            description: 'Issue body/description (markdown supported)'
-                        },
-                        labels: {
-                            type: 'array',
-                            items: { type: 'string' },
-                            description: 'Array of label names to apply'
-                        }
-                    },
-                    required: ['title']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'update_issue',
-                description: 'Update an existing issue (title, body, state, or labels).',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        number: {
-                            type: 'integer',
-                            description: 'The issue number to update'
-                        },
-                        title: {
-                            type: 'string',
-                            description: 'New title (optional)'
-                        },
-                        body: {
-                            type: 'string',
-                            description: 'New body (optional)'
-                        },
-                        state: {
-                            type: 'string',
-                            enum: ['open', 'closed'],
-                            description: 'Set issue state (optional)'
-                        }
-                    },
-                    required: ['number']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'add_issue_comment',
-                description: 'Add a comment to an existing issue.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        number: {
-                            type: 'integer',
-                            description: 'The issue number'
-                        },
-                        body: {
-                            type: 'string',
-                            description: 'Comment text (markdown supported)'
-                        }
-                    },
-                    required: ['number', 'body']
-                }
-            }
-        }
-    ],
-
-    // Tool execution handlers - these will be connected to the actual implementations
-    handlers: {},
+    /**
+     * Get all tool definitions from the registry.
+     * @returns {Array} Array of tool definitions
+     */
+    get definitions() {
+        return ToolRegistry.getDefinitions();
+    },
 
     /**
      * Get tool definitions filtered by the active role.
-     * Uses Roles.filterTools() to strip tools the current role shouldn't access.
+     * First gets tools from registry, then filters by role permissions.
      */
     getToolsForRole() {
-        return Roles.filterTools(this.definitions);
+        const defs = ToolRegistry.getDefinitions();
+        return Roles.filterTools(defs);
     }
 };
 
