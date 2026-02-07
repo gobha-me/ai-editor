@@ -1,0 +1,132 @@
+<!-- Search Panel UI Components -->
+<div id="search-panel" class="search-panel">
+    <div class="search-panel-header">
+        <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" placeholder="Search in files... (Enter to search)" autocomplete="off">
+        </div>
+        
+        <div class="search-options">
+            <div class="search-option">
+                <input type="checkbox" id="search-regex">
+                <label for="search-regex">.*</label>
+            </div>
+            
+            <div class="search-option">
+                <input type="checkbox" id="search-case-sensitive">
+                <label for="search-case-sensitive">Aa</label>
+            </div>
+            
+            <div class="search-option">
+                <select id="search-file-type">
+                    <option value="">All Files</option>
+                    <option value="js">JavaScript (.js)</option>
+                    <option value="ts">TypeScript (.ts)</option>
+                    <option value="html">HTML (.html)</option>
+                    <option value="css">CSS (.css)</option>
+                    <option value="json">JSON (.json)</option>
+                    <option value="md">Markdown (.md)</option>
+                </select>
+            </div>
+            
+            <div class="search-option">
+                <select id="search-directory">
+                    <option value="">All Directories</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="search-actions">
+            <button id="search-btn" class="btn btn-primary">Search</button>
+            <button id="replace-mode-btn" class="btn btn-secondary">Replace</button>
+            <button id="close-search-btn" class="btn btn-secondary">✕</button>
+        </div>
+    </div>
+    
+    <div class="search-status" id="search-status" style="display: none;">
+        <div class="search-spinner"></div>
+        <span id="search-status-text">Searching...</span>
+    </div>
+    
+    <div id="replace-bar" style="display: none; display: flex; gap: 12px; align-items: center;">
+        <input type="text" id="replace-input" placeholder="Replace with..." style="flex: 1; padding: 8px 12px; background: #2d2d2d; border: 1px solid #404040; border-radius: 4px; color: #e0e0e0; font-size: 14px;">
+        
+        <div class="search-actions">
+            <button id="replace-all-btn" class="btn btn-danger">Replace All</button>
+            <button id="cancel-replace-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+    
+    <div id="search-results" class="search-results" style="display: none;">
+        <!-- Results will be populated dynamically -->
+    </div>
+</div>
+
+<!-- Replace Dialog -->
+<div id="replace-dialog-overlay" class="replace-dialog-overlay"></div>
+<div id="replace-dialog" class="replace-dialog">
+    <h3>Replace in File</h3>
+    
+    <div class="replace-field">
+        <label>Search Pattern</label>
+        <input type="text" id="replace-search-pattern" readonly>
+    </div>
+    
+    <div class="replace-field">
+        <label>Replace With (use $1, $2 for regex groups)</label>
+        <input type="text" id="replace-with-pattern" placeholder="Enter replacement pattern...">
+    </div>
+    
+    <div class="replace-preview">
+        <div class="replace-preview-label">Preview (first 5 matches):</div>
+        <div id="replace-preview-content" class="replace-preview-content"></div>
+    </div>
+    
+    <div class="replace-all-confirm" id="replace-all-warning" style="display: none;">
+        <strong>Warning:</strong> This will replace <span id="replace-count">0</span> occurrences across <span id="replace-files">0</span> files.
+    </div>
+    
+    <div class="replace-dialog-actions">
+        <button id="cancel-replace-dialog-btn" class="btn btn-secondary">Cancel</button>
+        <button id="preview-replace-btn" class="btn btn-secondary">Preview</button>
+        <button id="confirm-replace-btn" class="btn btn-primary">Replace All</button>
+    </div>
+</div>
+
+<!-- Search Keyboard Shortcut Hint Modal -->
+<template id="search-hint-template">
+    <div class="modal-overlay">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>⌨️ Keyboard Shortcuts</h3>
+            <div class="shortcut-list">
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">Ctrl + Shift + F</span>
+                    <span class="shortcut-desc">Open Search Panel</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">Enter</span>
+                    <span class="shortcut-desc">Search</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">Ctrl + Enter</span>
+                    <span class="shortcut-desc">Replace All</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">Esc</span>
+                    <span class="shortcut-desc">Close Panel</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">↑ / ↓</span>
+                    <span class="shortcut-desc">Navigate Results</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-keys">→</span>
+                    <span class="shortcut-desc">Replace & Next</span>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 16px;">
+                <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Got it!</button>
+            </div>
+        </div>
+    </div>
+</template>
