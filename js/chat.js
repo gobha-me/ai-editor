@@ -199,13 +199,46 @@ SUMMARY:`;
     /**
      * Build the message array to send to the LLM.
      * Prepends stored summary as a system message, then appends recent messages.
+     * 
+     * CRITICAL: Ensures tool call sequences remain intact.
+     * If recent messages include 'tool' role messages, we MUST include their
+     * corresponding 'assistant' message with tool_calls, even if it falls
+     * outside the RECENT_COUNT window.
      */
     getContextMessages() {
         const history = State.chatHistory;
         if (history.length === 0) return [];
 
         const info = Storage.get('chatSummaryInfo', null);
-        const recent = history.slice(-this.RECENT_COUNT).filter(m => !m.isSummary);
+        
+        // Start with the naive slice of recent messages
+        let startIndex = Math.max(0, history.length - this.RECENT_COUNT);
+        let recent = history.slice(startIndex);
+        
+        // CRITICAL FIX: Scan backwards from startIndex to find any assistant message
+        // with tool_calls that has corresponding tool results in our recent window
+        for (let i = startIndex - 1; i >= 0; i--) {
+            const msg = history[i];
+            
+            // Found an assistant message with tool_calls
+            if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+                // Check if any of the subsequent messages in our recent window are tool results
+                const hasToolResultsInRecent = recent.some(m => m.role === 'tool');
+                
+                if (hasToolResultsInRecent) {
+                    // Include this assistant message and everything after it
+                    startIndex = i;
+                    recent = history.slice(startIndex);
+                    console.log(`[ChatSummarizer] Expanded context to include assistant+tool_calls at index ${i}`);
+                }
+                
+                // Stop searching - we found the most recent tool call sequence
+                break;
+            }
+        }
+        
+        // Filter out summary markers and system messages (but keep tool messages)
+        recent = recent.filter(m => !m.isSummary && m.role !== 'system');
 
         if (info?.summary && history.length > this.RECENT_COUNT) {
             return [
@@ -214,11 +247,11 @@ SUMMARY:`;
                     content: `CONVERSATION SUMMARY (earlier messages):\n\n${info.summary}\n\n---\nRecent messages follow.`,
                     isSummary: true
                 },
-                ...recent.filter(m => m.role !== 'system')
+                ...recent
             ];
         }
 
-        return recent.filter(m => m.role !== 'system');
+        return recent;
     },
 
     clear() {
