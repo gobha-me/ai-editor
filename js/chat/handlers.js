@@ -11,7 +11,9 @@ import {
     addStreamingMessage, 
     updateStreamingMessage, 
     finalizeStreamingMessage,
-    addToolCallMessage
+    addToolCallMessage,
+    formatMessageContent,
+    escapeHtml
 } from './messages.js';
 import { 
     getPendingEdit, 
@@ -541,38 +543,4 @@ export function rejectPendingEdit() {
 
     // Remove action buttons
     document.querySelectorAll('.message-actions').forEach(el => el.remove());
-}
-
-// Helper to format message content (used in tool loop)
-function formatMessageContent(content) {
-    if (!content) return '';
-    
-    let html = escapeHtml(content);
-    
-    // Code blocks with syntax highlighting hint
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-        const langClass = lang ? `language-${lang}` : '';
-        return `<pre class="code-block ${langClass}"><code>${code.trim()}</code></pre>`;
-    });
-    
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Italic
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
-    // Line breaks
-    html = html.replace(/\n/g, '<br>');
-    
-    return html;
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
 }
