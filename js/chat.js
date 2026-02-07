@@ -302,14 +302,20 @@ function initChat(containerEl, inputEl) {
     // Load chat history from storage (summary-aware)
     const savedHistory = Storage.get('chatHistory', []);
     const summaryInfo = Storage.get('chatSummaryInfo', null);
-    if (summaryInfo?.summary && savedHistory.length > ChatSummarizer.RECENT_COUNT) {
+    
+    // CRITICAL FIX: Filter out tool messages from display on page load
+    // Tool messages should only be rendered in real-time as collapsible tool call widgets
+    // When loading from cache, we skip rendering tool messages to avoid showing raw JSON
+    const displayHistory = savedHistory.filter(msg => msg.role !== 'tool');
+    
+    if (summaryInfo?.summary && displayHistory.length > ChatSummarizer.RECENT_COUNT) {
         // Keep recent messages + prepend summary reference
         State.chatHistory = savedHistory.slice(-ChatSummarizer.RECENT_COUNT);
     } else {
         State.chatHistory = savedHistory.slice(-50);
     }
 
-    renderMessages();
+    renderMessages(displayHistory.slice(-50));
     setupInputHandlers();
 
     // Listen for LLM events
@@ -452,7 +458,15 @@ function finalizeStreamingMessage(content, meta = {}) {
 }
 
 function renderMessage(message) {
-    console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}, content="${message.content}"`);
+    console.log(`[renderMessage] role=${message.role}, content type=${typeof message.content}`);
+    
+    // CRITICAL FIX: Skip rendering tool messages entirely
+    // Tool messages contain raw JSON that should not be displayed as chat messages
+    // They're only shown as collapsible tool call widgets during real-time execution
+    if (message.role === 'tool') {
+        console.log('[renderMessage] Skipping tool message (not meant for display)');
+        return;
+    }
     
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${message.role}`;
@@ -473,12 +487,20 @@ function renderMessage(message) {
 
     const time = new Date(message.timestamp).toLocaleTimeString();
 
-    // CRITICAL FIX: Only strip think blocks from assistant messages, NEVER from user/system/tool messages
-    const displayContent = (message.role === 'assistant') 
-        ? stripThinkBlocks(message.content)
-        : message.content;
+    // CRITICAL FIX: Ensure content is always a string
+    let displayContent = message.content;
     
-    console.log(`[renderMessage] After stripThinkBlocks: length=${displayContent?.length}, content="${displayContent}"`);
+    // If content is an object or array, stringify it for display
+    if (typeof displayContent !== 'string') {
+        displayContent = JSON.stringify(displayContent, null, 2);
+    }
+    
+    // Only strip think blocks from assistant messages
+    if (message.role === 'assistant') {
+        displayContent = stripThinkBlocks(displayContent);
+    }
+    
+    console.log(`[renderMessage] Final displayContent length=${displayContent?.length}`);
 
     messageEl.innerHTML = `
         <div class="message-header">
@@ -629,12 +651,14 @@ function summarizeToolResult(toolName, result) {
     }
 }
 
-function renderMessages() {
+function renderMessages(historyOverride = null) {
     if (!chatContainer) return;
     
     chatContainer.innerHTML = '';
     
-    if (State.chatHistory.length === 0) {
+    const history = historyOverride || State.chatHistory;
+    
+    if (history.length === 0) {
         chatContainer.innerHTML = `
             <div class="chat-welcome">
                 <h3>👋 Welcome to AI Editor</h3>
@@ -651,7 +675,7 @@ function renderMessages() {
         return;
     }
 
-    State.chatHistory.forEach(msg => renderMessage(msg));
+    history.forEach(msg => renderMessage(msg));
     scrollToBottom();
 }
 
