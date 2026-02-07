@@ -8,7 +8,7 @@ import { loadCodeMirror } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
-import { openSettings, closeSettings, saveSettings, fetchModelsForSettings } from './settings-manager.js';
+import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
 import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile } from './file-tree.js';
 import { togglePreviewPane, toggleDiffPane, closeSecondaryPane, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
@@ -87,6 +87,7 @@ window.openSettings = openSettings;
 window.closeSettings = closeSettings;
 window.saveSettings = saveSettings;
 window.fetchModelsForSettings = fetchModelsForSettings;
+window.fetchEmbeddingModelsForSettings = fetchEmbeddingModelsForSettings;
 
 window.switchToTab = switchToTab;
 window.closeTab = closeTab;
