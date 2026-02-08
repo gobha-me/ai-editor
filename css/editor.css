@@ -1290,6 +1290,54 @@ body {
    RESPONSIVE
    ============================================ */
 
+/* --- Desktop panel visibility toggles --- */
+
+.sidebar.hidden {
+    display: none;
+}
+
+.chat-panel.hidden {
+    display: none;
+}
+
+/* --- Resize handles --- */
+
+.resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--border);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+    background: var(--accent);
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    right: -3px;
+}
+
+/* Prevent text selection and iframe capture during drag */
+body.resizing {
+    cursor: col-resize !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+body.resizing iframe,
+body.resizing .cm-editor {
+    pointer-events: none;
+}
+
 @media (max-width: 1200px) {
     :root {
         --sidebar-width: 220px;
@@ -1307,8 +1355,10 @@ body {
         transition: left 0.3s ease;
     }
     
+    /* On mobile: .hidden is overridden by .open */
     .sidebar.open {
         left: 0;
+        display: flex;
     }
     
     .chat-panel {
@@ -1322,6 +1372,12 @@ body {
     
     .chat-panel.open {
         right: 0;
+        display: flex;
+    }
+
+    /* Hide resize handles on mobile */
+    .resize-handle {
+        display: none;
     }
 }
 

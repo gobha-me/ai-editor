@@ -53,6 +53,7 @@ import {
     resetSessionCost,
     initCostTrackerListener
 } from './model-manager.js';
+import { initPanelResize } from './resize-manager.js';
 
 // Import tool modules (loaded before chat.js to ensure registry is ready)
 import './tools/registry.js';
@@ -351,6 +352,7 @@ async function init() {
     exposeLLMTools();
     populateRoleSelector();
     initCostTracker();
+    initPanelResize();
     
     // Initialize components
     initChat(

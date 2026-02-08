@@ -9,11 +9,33 @@ import { getFileIcon } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
 
 export function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
+    const sidebar = document.getElementById('sidebar');
+    const handle = document.getElementById('resizeHandleSidebar');
+    const isMobile = window.innerWidth <= 900;
+    
+    if (isMobile) {
+        sidebar.classList.toggle('open');
+    } else {
+        const hiding = !sidebar.classList.contains('hidden');
+        sidebar.classList.toggle('hidden');
+        if (handle) handle.style.display = hiding ? 'none' : '';
+        Storage.set('sidebarHidden', hiding);
+    }
 }
 
 export function toggleChat() {
-    document.getElementById('chatPanel').classList.toggle('open');
+    const chatPanel = document.getElementById('chatPanel');
+    const handle = document.getElementById('resizeHandleChat');
+    const isMobile = window.innerWidth <= 900;
+    
+    if (isMobile) {
+        chatPanel.classList.toggle('open');
+    } else {
+        const hiding = !chatPanel.classList.contains('hidden');
+        chatPanel.classList.toggle('hidden');
+        if (handle) handle.style.display = hiding ? 'none' : '';
+        Storage.set('chatHidden', hiding);
+    }
 }
 
 export function updateStatusBar() {
