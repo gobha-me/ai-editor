@@ -1,0 +1,44 @@
+<!-- Chat Panel (Right) -->
+<aside class="chat-panel" id="chatPanel">
+    <div class="chat-header">
+        <h3>💬 AI Assistant</h3>
+        <div class="chat-header-actions">
+            <button class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard">📋</button>
+            <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
+            <div class="model-selector">
+                <select id="roleSelect" title="Active role — controls tool access">
+                    <!-- Populated dynamically -->
+                </select>
+                <select id="modelSelect">
+                    <option value="">Select model...</option>
+                </select>
+                <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+            </div>
+        </div>
+    </div>
+    <div class="model-status-bar" id="modelStatusBar" style="display: none;">
+        <!-- Populated dynamically when model changes -->
+    </div>
+    <div class="cost-tracker-bar" id="costTrackerBar">
+        <span id="costTrackerText">Session: 0 tokens · $0.00</span>
+        <button id="btnResetCost" title="Reset session cost" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:10px;padding:0 2px;">✕</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+        <!-- Messages rendered here -->
+    </div>
+
+    <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+            <textarea 
+                id="chatInput" 
+                placeholder="Ask me to edit code, explain something, or help with an issue..."
+                rows="3"
+            ></textarea>
+            <div class="chat-input-actions">
+                <button id="btnSend" title="Send (Enter)">📤</button>
+                <button id="btnStop" class="btn-stop" title="Stop" style="display: none;">⏹</button>
+            </div>
+        </div>
+    </div>
+</aside>

@@ -1,0 +1,54 @@
+<!-- Editor Panel (Center) -->
+<section class="editor-panel">
+    <!-- Tabs -->
+    <div class="editor-tabs-bar">
+        <div class="editor-tabs" id="editorTabs">
+            <div class="editor-tab active">
+                <span>Welcome</span>
+            </div>
+        </div>
+        <div class="editor-toolbar">
+            <button class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)">🔢</button>
+            <button class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" disabled>👁 Preview</button>
+            <button class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" disabled>± Diff</button>
+        </div>
+    </div>
+
+    <!-- Editor + Secondary Pane Container -->
+    <div class="editor-split" id="editorSplit">
+        <!-- Editor Container -->
+        <div class="editor-container" id="editorContainer">
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                <div style="text-align: center;">
+                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <p>Configure your Gitea and LLM settings to get started.</p>
+                    <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
+                        ⚙️ Open Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Pane (Preview / Diff) -->
+        <div class="secondary-pane" id="secondaryPane" style="display: none;">
+            <div class="secondary-pane-header">
+                <span id="secondaryPaneTitle">Preview</span>
+                <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close">✕</button>
+            </div>
+            <div class="secondary-pane-content" id="secondaryPaneContent">
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="editor-status">
+        <div class="status-left">
+            <span class="status-item" id="statusFile">No file open</span>
+            <span class="status-item" id="statusModified"></span>
+        </div>
+        <div class="status-right">
+            <span class="status-item" id="statusBranch">main</span>
+            <span class="status-item" id="statusConnection">●</span>
+        </div>
+    </div>
+</section>
