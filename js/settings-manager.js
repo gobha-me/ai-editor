@@ -82,12 +82,27 @@ function populateSettingsForm() {
         document.documentElement.style.setProperty('--editor-font-size', editorFontSlider.value + 'px');
     };
 
-    document.getElementById('settingShowIssues').checked = State.settings.showIssues !== false;
-    document.getElementById('settingShowWorkflows').checked = State.settings.showWorkflows !== false;
-    document.getElementById('settingShowLineNumbers').checked = State.settings.showLineNumbers !== false;
+    // Add null checks for checkbox elements
+    const showLineNumbersEl = document.getElementById('settingShowLineNumbers');
+    if (showLineNumbersEl) {
+        showLineNumbersEl.checked = State.settings.showLineNumbers !== false;
+    }
+    
+    const showIssuesEl = document.getElementById('settingShowIssues');
+    if (showIssuesEl) {
+        showIssuesEl.checked = State.settings.showIssues !== false;
+    }
+    
+    const showWorkflowsEl = document.getElementById('settingShowWorkflows');
+    if (showWorkflowsEl) {
+        showWorkflowsEl.checked = State.settings.showWorkflows !== false;
+    }
 
     // --- Context Tab ---
-    document.getElementById('settingUseEmbeddings').checked = State.settings.useEmbeddings || false;
+    const useEmbeddingsEl = document.getElementById('settingUseEmbeddings');
+    if (useEmbeddingsEl) {
+        useEmbeddingsEl.checked = State.settings.useEmbeddings || false;
+    }
     
     // Populate embedding model - handle both input and select elements
     const embeddingModelInput = document.getElementById('settingEmbeddingModel');
@@ -95,25 +110,47 @@ function populateSettingsForm() {
         embeddingModelInput.value = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
     }
     
-    document.getElementById('settingMaxRelevantFiles').value = State.settings.maxRelevantFiles || 5;
-    document.getElementById('maxRelevantFilesValue').textContent = State.settings.maxRelevantFiles || 5;
-    document.getElementById('settingAutoReindex').checked = State.settings.autoReindex !== false;
-    document.getElementById('settingEmbeddingCacheExpiry').value = State.settings.embeddingCacheExpiry || 7;
+    const maxRelevantFilesEl = document.getElementById('settingMaxRelevantFiles');
+    if (maxRelevantFilesEl) {
+        maxRelevantFilesEl.value = State.settings.maxRelevantFiles || 5;
+    }
+    
+    const maxRelevantFilesValueEl = document.getElementById('maxRelevantFilesValue');
+    if (maxRelevantFilesValueEl) {
+        maxRelevantFilesValueEl.textContent = State.settings.maxRelevantFiles || 5;
+    }
+    
+    const autoReindexEl = document.getElementById('settingAutoReindex');
+    if (autoReindexEl) {
+        autoReindexEl.checked = State.settings.autoReindex !== false;
+    }
+    
+    const embeddingCacheExpiryEl = document.getElementById('settingEmbeddingCacheExpiry');
+    if (embeddingCacheExpiryEl) {
+        embeddingCacheExpiryEl.value = State.settings.embeddingCacheExpiry || 7;
+    }
 
     // Max files slider
     const maxFilesSlider = document.getElementById('settingMaxRelevantFiles');
-    maxFilesSlider.oninput = () => {
-        document.getElementById('maxRelevantFilesValue').textContent = maxFilesSlider.value;
-    };
+    if (maxFilesSlider) {
+        maxFilesSlider.oninput = () => {
+            const valueEl = document.getElementById('maxRelevantFilesValue');
+            if (valueEl) {
+                valueEl.textContent = maxFilesSlider.value;
+            }
+        };
+    }
 
     // Embeddings toggle
     const embeddingsToggle = document.getElementById('settingUseEmbeddings');
     const embeddingsSettings = document.getElementById('embeddingsSettings');
-    embeddingsToggle.onchange = () => {
-        embeddingsSettings.style.opacity = embeddingsToggle.checked ? '1' : '0.5';
-        embeddingsSettings.style.pointerEvents = embeddingsToggle.checked ? 'auto' : 'none';
-    };
-    embeddingsToggle.onchange(); // Initialize state
+    if (embeddingsToggle && embeddingsSettings) {
+        embeddingsToggle.onchange = () => {
+            embeddingsSettings.style.opacity = embeddingsToggle.checked ? '1' : '0.5';
+            embeddingsSettings.style.pointerEvents = embeddingsToggle.checked ? 'auto' : 'none';
+        };
+        embeddingsToggle.onchange(); // Initialize state
+    }
 
     // Clear cache button
     const clearCacheBtn = document.getElementById('btnClearEmbeddingsCache');
@@ -432,19 +469,34 @@ export function saveSettings() {
     State.settings.toolTimeout = parseInt(document.getElementById('settingToolTimeout').value) * 1000 || 30000;
     State.settings.summaryTimeout = parseInt(document.getElementById('settingSummaryTimeout').value) * 1000 || 60000;
 
-    // Appearance
+    // Appearance - with null checks
     State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
     State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
-    State.settings.showLineNumbers = document.getElementById('settingShowLineNumbers').checked;
-    State.settings.showIssues = document.getElementById('settingShowIssues').checked;
-    State.settings.showWorkflows = document.getElementById('settingShowWorkflows').checked;
+    
+    const showLineNumbersEl = document.getElementById('settingShowLineNumbers');
+    State.settings.showLineNumbers = showLineNumbersEl ? showLineNumbersEl.checked : false;
+    
+    const showIssuesEl = document.getElementById('settingShowIssues');
+    State.settings.showIssues = showIssuesEl ? showIssuesEl.checked : false;
+    
+    const showWorkflowsEl = document.getElementById('settingShowWorkflows');
+    State.settings.showWorkflows = showWorkflowsEl ? showWorkflowsEl.checked : false;
 
-    // Context
-    State.settings.useEmbeddings = document.getElementById('settingUseEmbeddings').checked;
-    State.settings.embeddingModel = document.getElementById('settingEmbeddingModel').value.trim();
-    State.settings.maxRelevantFiles = parseInt(document.getElementById('settingMaxRelevantFiles').value) || 5;
-    State.settings.autoReindex = document.getElementById('settingAutoReindex').checked;
-    State.settings.embeddingCacheExpiry = parseInt(document.getElementById('settingEmbeddingCacheExpiry').value) || 7;
+    // Context - with null checks
+    const useEmbeddingsEl = document.getElementById('settingUseEmbeddings');
+    State.settings.useEmbeddings = useEmbeddingsEl ? useEmbeddingsEl.checked : false;
+    
+    const embeddingModelEl = document.getElementById('settingEmbeddingModel');
+    State.settings.embeddingModel = embeddingModelEl ? embeddingModelEl.value.trim() : 'Xenova/all-MiniLM-L6-v2';
+    
+    const maxRelevantFilesEl = document.getElementById('settingMaxRelevantFiles');
+    State.settings.maxRelevantFiles = maxRelevantFilesEl ? parseInt(maxRelevantFilesEl.value) || 5 : 5;
+    
+    const autoReindexEl = document.getElementById('settingAutoReindex');
+    State.settings.autoReindex = autoReindexEl ? autoReindexEl.checked : false;
+    
+    const embeddingCacheExpiryEl = document.getElementById('settingEmbeddingCacheExpiry');
+    State.settings.embeddingCacheExpiry = embeddingCacheExpiryEl ? parseInt(embeddingCacheExpiryEl.value) || 7 : 7;
 
     // Roles
     const activeRoleCard = document.querySelector('.role-card.active');
@@ -518,7 +570,10 @@ export function saveSettings() {
     State.settings.advancedParams = advancedParams;
 
     // Sync main page role selector
-    document.getElementById('roleSelect').value = State.settings.role;
+    const roleSelectEl = document.getElementById('roleSelect');
+    if (roleSelectEl) {
+        roleSelectEl.value = State.settings.role;
+    }
 
     coreSaveSettings();
     closeSettings();
