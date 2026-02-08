@@ -83,24 +83,17 @@ function detectIntent(input) {
     // Edit intent — ONLY if a file is already open.
     // Without a file, the general handler uses tools to find the right file.
     if (State.currentFile) {
-        // Strong signal: explicit "open <path>" means user wants tool-based workflow
-        const hasOpenPath = /\bopen\s+\S+\.\w+/i.test(lower);
-        // Strong signal: line-level operations → use tools
-        const hasLineOps = /\b(insert|after line|before line|after the|at line)\b/i.test(lower);
-        
-        if (!hasOpenPath && !hasLineOps) {
-            if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-                lower.includes('refactor') || lower.includes('rewrite')) {
-                return 'edit';
-            }
-            // Weaker signals — only edit if clearly about current file
-            if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
-                && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
-                && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
-                && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')
-                && !lower.includes('review') && !lower.includes('which')) {
-                return 'edit';
-            }
+        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+            lower.includes('refactor') || lower.includes('rewrite')) {
+            return 'edit';
+        }
+        // Weaker signals — only edit if clearly about current file
+        if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
+            && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
+            && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
+            && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')
+            && !lower.includes('review') && !lower.includes('which')) {
+            return 'edit';
         }
     }
     
@@ -237,9 +230,6 @@ export async function handleGeneralRequest(input) {
     State.isGenerating = true;
     EventBus.emit('llm:generating', true);
 
-    // Start elapsed time tracking
-    const requestStartTime = Date.now();
-
     try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             // Check cancellation before each round
@@ -259,15 +249,12 @@ export async function handleGeneralRequest(input) {
                     tools: roleTools,
                     onToken: (token, fullContent) => {
                         content = fullContent;
-                        // Update with elapsed time
-                        const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
-                        updateStreamingMessage(fullContent, elapsed);
+                        updateStreamingMessage(fullContent);
                     }
                 };
 
                 if (round > 0) {
-                    const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
-                    updateStreamingMessage('*(processing tool results…)*', elapsed);
+                    updateStreamingMessage('*(processing tool results…)*');
                 }
 
                 result = await Promise.race([
@@ -341,8 +328,7 @@ export async function handleGeneralRequest(input) {
                     toolCallSource = 'text';
                     console.log(`[TOOL-LOOP] Text-parsed ${toolCalls.length} tool calls:`, 
                         toolCalls.map(tc => tc.function?.name));
-                    const elapsed = Math.floor((Date.now() - requestStartTime) / 1000);
-                    updateStreamingMessage(cleanContent || finalContent || '', elapsed);
+                    updateStreamingMessage(cleanContent || finalContent || '');
                 }
             }
 
@@ -610,9 +596,6 @@ export async function handleGeneralRequest(input) {
         EventBus.emit('llm:generating', false);
     }
 
-    // Calculate total elapsed time
-    const totalElapsed = Math.floor((Date.now() - requestStartTime) / 1000);
-
     // Handle empty responses
     if (!finalContent.trim()) {
         if (toolActions.length > 0) {
@@ -627,10 +610,10 @@ export async function handleGeneralRequest(input) {
         }
     }
 
-    // Use last round's content for the final DOM element, add elapsed time metadata
+    // Use last round's content for the final DOM element
     finalizeStreamingMessage(
         lastRoundContent.trim() ? lastRoundContent : finalContent, 
-        { hasCode: false, elapsedTime: totalElapsed }
+        { hasCode: false }
     );
 }
 

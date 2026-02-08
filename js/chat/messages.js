@@ -50,13 +50,19 @@ export function addStreamingMessage() {
     const chatContainer = getChatContainer();
     if (!chatContainer) return null;
 
+    // Start the response timer on first call; subsequent calls (tool loop rounds)
+    // preserve the running timer so elapsed time spans the entire response.
+    if (!_streamingTimerInterval) {
+        startStreamingTimer();
+    }
+
     const messageEl = document.createElement('div');
     messageEl.className = 'chat-message assistant streaming';
     messageEl.id = 'streaming-message';
     messageEl.innerHTML = `
         <div class="message-header">
             <span class="message-role">🤖 Assistant</span>
-            <span class="message-time" id="streaming-elapsed">⏱️ 00:00</span>
+            <span class="message-time" id="streaming-elapsed">⏱️ ${formatElapsedTime(getStreamingElapsed())}</span>
         </div>
         <div class="message-content">
             <span class="typing-indicator">●●●</span>
@@ -76,24 +82,48 @@ function formatElapsedTime(seconds) {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+// === RESPONSE TIMER ===
+// Interval-based timer that ticks independently of token delivery.
+// Prevents the clock from freezing during tool execution or slow responses.
+let _streamingTimerInterval = null;
+let _streamingTimerStart = null;
+
+function startStreamingTimer() {
+    stopStreamingTimer(); // Clean up any leftover
+    _streamingTimerStart = Date.now();
+    _streamingTimerInterval = setInterval(() => {
+        const timerEl = document.getElementById('streaming-elapsed');
+        if (timerEl && _streamingTimerStart) {
+            const elapsed = Math.floor((Date.now() - _streamingTimerStart) / 1000);
+            timerEl.textContent = `⏱️ ${formatElapsedTime(elapsed)}`;
+        }
+    }, 1000);
+}
+
+function stopStreamingTimer() {
+    if (_streamingTimerInterval) {
+        clearInterval(_streamingTimerInterval);
+        _streamingTimerInterval = null;
+    }
+}
+
+/** Get elapsed seconds since timer started (for finalizing) */
+export function getStreamingElapsed() {
+    if (!_streamingTimerStart) return 0;
+    return Math.floor((Date.now() - _streamingTimerStart) / 1000);
+}
+
 /**
- * Update streaming message content with elapsed time
+ * Update streaming message content.
+ * Timer is handled by the interval started in addStreamingMessage().
  */
-export function updateStreamingMessage(content, elapsedSeconds = null) {
+export function updateStreamingMessage(content) {
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
         const contentEl = messageEl.querySelector('.message-content');
         // Strip think blocks for display only
         const displayContent = stripThinkBlocks(content);
         contentEl.innerHTML = formatMessageContent(displayContent);
-        
-        // Update elapsed timer if provided
-        if (elapsedSeconds !== null) {
-            const timerEl = messageEl.querySelector('#streaming-elapsed');
-            if (timerEl) {
-                timerEl.textContent = `⏱️ ${formatElapsedTime(elapsedSeconds)}`;
-            }
-        }
         
         scrollToBottom();
     }
@@ -103,7 +133,13 @@ export function updateStreamingMessage(content, elapsedSeconds = null) {
  * Finalize streaming message and add to history
  */
 export function finalizeStreamingMessage(content, meta = {}) {
-    console.log(`[finalizeStreamingMessage] content length=${content?.length}, elapsedTime=${meta.elapsedTime}s`);
+    // Stop the interval timer and capture final elapsed time
+    const timerElapsed = getStreamingElapsed();
+    stopStreamingTimer();
+    _streamingTimerStart = null; // Reset so next addStreamingMessage starts fresh
+    
+    const elapsedTime = timerElapsed || meta.elapsedTime || 0;
+    console.log(`[finalizeStreamingMessage] content length=${content?.length}, elapsedTime=${elapsedTime}s`);
     
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
@@ -115,11 +151,11 @@ export function finalizeStreamingMessage(content, meta = {}) {
         const displayContent = stripThinkBlocks(content);
         contentEl.innerHTML = formatMessageContent(displayContent);
         
-        // Update time to show elapsed duration instead of clock
+        // Update time to show elapsed duration
         const timeEl = messageEl.querySelector('.message-time');
-        if (timeEl && meta.elapsedTime) {
-            timeEl.textContent = `${formatElapsedTime(meta.elapsedTime)} ⏱️`;
-            timeEl.title = `Response time: ${meta.elapsedTime} seconds`;
+        if (timeEl && elapsedTime) {
+            timeEl.textContent = `${formatElapsedTime(elapsedTime)} ⏱️`;
+            timeEl.title = `Response time: ${elapsedTime} seconds`;
         } else if (timeEl) {
             // Fallback to regular timestamp
             timeEl.textContent = new Date().toLocaleTimeString();
@@ -319,8 +355,6 @@ function summarizeToolArgs(toolName, args) {
             return `L${args.start_line}-${args.end_line}`;
         case 'create_file':
             return args.path || '';
-        case 'delete_file':
-            return args.path || '';
         case 'search_in_files':
             return `"${args.query}"${args.path ? ` in ${args.path}` : ''}`;
         case 'read_issue':
@@ -369,8 +403,6 @@ function summarizeToolResult(toolName, result) {
             return result.message || 'edited';
         case 'create_file':
             return result.message || 'created';
-        case 'delete_file':
-            return result.message || 'deleted';
         case 'search_in_files':
             return `${result.results?.length || 0} matches in ${result.files_searched || 0} files`;
         case 'list_issues':

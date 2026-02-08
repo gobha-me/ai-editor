@@ -3,7 +3,7 @@
  * OpenAI-compatible API for chat completions
  */
 
-import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from './core.js';
+import { State, EventBus, Storage, Providers, Roles } from './core.js';
 import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
@@ -88,42 +88,14 @@ function buildRequestBody(model, messages, options = {}) {
     // Sanitize messages - strip internal fields before API submission
     const sanitizedMessages = sanitizeMessages(messages);
 
-    // Merge advanced params from settings (user overrides)
-    const adv = State.settings.advancedParams || {};
-
     // Base OpenAI-compatible payload
     const requestBody = {
         model,
         messages: sanitizedMessages,
-        max_tokens: adv.max_tokens || adv.max_completion_tokens || maxTokens,
-        temperature: adv.temperature !== undefined ? adv.temperature : temperature,
+        max_tokens: maxTokens,
+        temperature,
         stream
     };
-
-    // Apply optional advanced parameters (only if user set them)
-    if (adv.top_p !== undefined) requestBody.top_p = adv.top_p;
-    if (adv.top_k !== undefined) requestBody.top_k = adv.top_k;
-    if (adv.min_p !== undefined) requestBody.min_p = adv.min_p;
-    if (adv.min_temp !== undefined) requestBody.min_temp = adv.min_temp;
-    if (adv.max_temp !== undefined) requestBody.max_temp = adv.max_temp;
-    if (adv.frequency_penalty !== undefined) requestBody.frequency_penalty = adv.frequency_penalty;
-    if (adv.presence_penalty !== undefined) requestBody.presence_penalty = adv.presence_penalty;
-    if (adv.repetition_penalty !== undefined) requestBody.repetition_penalty = adv.repetition_penalty;
-    if (adv.seed !== undefined) requestBody.seed = adv.seed;
-    if (adv.n !== undefined) requestBody.n = adv.n;
-    if (adv.stop) requestBody.stop = adv.stop;
-    if (adv.logprobs) requestBody.logprobs = adv.logprobs;
-
-    // Use max_completion_tokens instead of max_tokens if provider prefers it
-    if (adv.max_completion_tokens && !adv.max_tokens) {
-        delete requestBody.max_tokens;
-        requestBody.max_completion_tokens = adv.max_completion_tokens;
-    }
-
-    // Reasoning effort (OpenAI o1, Venice reasoning models)
-    if (adv.reasoning_effort) {
-        requestBody.reasoning_effort = adv.reasoning_effort;
-    }
 
     // Add streaming usage stats (OpenAI extension, Venice supports it)
     if (stream) {
@@ -136,25 +108,50 @@ function buildRequestBody(model, messages, options = {}) {
         requestBody.tool_choice = 'auto';
     }
 
-    // Provider-specific extensions (Venice, OpenRouter, etc.)
-    // Each provider's transformRequest is self-contained in js/providers/*.js
-    return ProviderRegistry.transformRequest(requestBody, State.settings);
-}
+    // Venice.ai-specific extensions
+    const provider = State.settings.apiProvider || 'openai';
+    
+    if (provider === 'venice') {
+        const veniceParams = State.settings.veniceParameters || {};
+        
+        // Only add venice_parameters if user has configured any
+        if (Object.keys(veniceParams).length > 0) {
+            requestBody.venice_parameters = {};
+            
+            // Add configured Venice parameters
+            if (veniceParams.stripThinking !== undefined) {
+                requestBody.venice_parameters.strip_thinking_response = veniceParams.stripThinking;
+            }
+            if (veniceParams.disableThinking !== undefined) {
+                requestBody.venice_parameters.disable_thinking = veniceParams.disableThinking;
+            }
+            if (veniceParams.enableWebSearch !== undefined) {
+                requestBody.venice_parameters.enable_web_search = veniceParams.enableWebSearch;
+            }
+            if (veniceParams.enableWebScraping !== undefined) {
+                requestBody.venice_parameters.enable_web_scraping = veniceParams.enableWebScraping;
+            }
+            if (veniceParams.enableWebCitations !== undefined) {
+                requestBody.venice_parameters.enable_web_citations = veniceParams.enableWebCitations;
+            }
+            if (veniceParams.includeSearchResultsInStream !== undefined) {
+                requestBody.venice_parameters.include_search_results_in_stream = veniceParams.includeSearchResultsInStream;
+            }
+            if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
+                requestBody.venice_parameters.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
+            }
+            if (veniceParams.includeSystemPrompt !== undefined) {
+                requestBody.venice_parameters.include_venice_system_prompt = veniceParams.includeSystemPrompt;
+            }
+        }
 
-/**
- * Build HTTP headers for API requests.
- * Merges base auth headers with provider-specific headers.
- */
-function buildHeaders(contentType = true) {
-    const base = {
-        'Authorization': `Bearer ${State.settings.llmApiKey}`
-    };
-    if (contentType) {
-        base['Content-Type'] = 'application/json';
+        // Add reasoning effort for reasoning models (top-level parameter)
+        if (veniceParams.reasoningEffort) {
+            requestBody.reasoning_effort = veniceParams.reasoningEffort;
+        }
     }
-    // Merge provider-specific headers (e.g. OpenRouter's HTTP-Referer, X-Title)
-    const providerHeaders = ProviderRegistry.getHeaders(State.settings);
-    return { ...base, ...providerHeaders };
+
+    return requestBody;
 }
 
 // ============================================
@@ -332,7 +329,10 @@ const LLM = {
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: buildHeaders(),
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.settings.llmApiKey}`
+            },
             body: JSON.stringify(data)
         });
 
@@ -352,7 +352,9 @@ const LLM = {
         const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/models`;
         
         const response = await fetch(url, {
-            headers: buildHeaders(false)
+            headers: {
+                'Authorization': `Bearer ${State.settings.llmApiKey}`
+            }
         });
 
         if (!response.ok) {
@@ -388,7 +390,9 @@ const LLM = {
         // Try fetching with type=embedding parameter (Venice.ai style)
         try {
             const response = await fetch(`${baseUrl}/models?type=embedding`, {
-                headers: buildHeaders(false)
+                headers: {
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                }
             });
 
             if (response.ok) {
@@ -412,7 +416,9 @@ const LLM = {
         // Fallback: fetch all models and filter by type
         try {
             const response = await fetch(`${baseUrl}/models`, {
-                headers: buildHeaders(false)
+                headers: {
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                }
             });
 
             if (!response.ok) {
@@ -498,7 +504,10 @@ const LLM = {
                 `${State.settings.llmEndpoint.replace(/\/$/, '')}/chat/completions`,
                 {
                     method: 'POST',
-                    headers: buildHeaders(),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${State.settings.llmApiKey}`
+                    },
                     body: JSON.stringify(requestBody),
                     signal: this.abortController.signal
                 }
@@ -585,6 +594,7 @@ const LLM = {
         let inThinkBlock = false;
         let thinkBuffer = '';  // Buffer for detecting split </think> tags
         let hasToolCallsInResponse = false;  // Track if this response includes tool calls
+        let streamError = null; // Captured from SSE error responses
 
         while (true) {
             const { done, value } = await reader.read();
@@ -603,111 +613,139 @@ const LLM = {
                     continue;
                 }
 
+                // --- Parse SSE chunk ---
+                let parsed;
                 try {
-                    const parsed = JSON.parse(data);
-
-                    // === Detect error responses embedded in SSE stream ===
-                    if (parsed.error_type || parsed.error) {
-                        const errMsg = parsed.error_message || parsed.error?.message || JSON.stringify(parsed);
-                        console.error('[LLM] SSE error response:', errMsg);
-                        LLMDebug.logChunk(data.slice(0, 500), {
-                            hasContent: false, contentSnip: null,
-                            hasToolCalls: false, toolCallDelta: null,
-                            finishReason: null, hasUsage: false
-                        });
-                        throw new Error(`LLM stream error: ${errMsg}`);
-                    }
-
-                    // === DEBUG: Log raw chunk with parsed summary ===
-                    const delta = parsed.choices?.[0]?.delta;
-                    const chunkFinish = parsed.choices?.[0]?.finish_reason;
-                    LLMDebug.logChunk(data.slice(0, 500), {
-                        hasContent: !!delta?.content,
-                        contentSnip: delta?.content ? delta.content.slice(0, 80) : null,  // Changed from contentChunk
-                        hasToolCalls: !!delta?.tool_calls,
-                        toolCallDelta: delta?.tool_calls || null,  // Changed from toolCallsDelta
-                        finishReason: chunkFinish || null,
-                        hasUsage: !!parsed.usage
-                    });
-
-                    // Capture usage from the final chunk (stream_options.include_usage)
-                    if (parsed.usage) {
-                        usage = parsed.usage;
-                    }
-
-                    // Capture finish_reason
-                    if (chunkFinish) {
-                        finishReason = chunkFinish;
-                    }
-
-                    if (!delta) continue;
-
-                    if (delta.content) {
-                        let chunk = delta.content;
-
-                        // Only apply think-block stripping if NO tool calls in response
-                        // When tools are present, preserve full content for context
-                        if (!hasToolCallsInResponse && !hasTools) {
-                            // --- Think-block stripping (handles split tags) ---
-                            if (inThinkBlock) {
-                                thinkBuffer += chunk;
-                                const endIdx = thinkBuffer.indexOf('</think>');
-                                if (endIdx >= 0) {
-                                    chunk = thinkBuffer.slice(endIdx + 8);
-                                    inThinkBlock = false;
-                                    LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
-                                    thinkBuffer = '';
-                                } else {
-                                    if (thinkBuffer.length > 8) {
-                                        thinkBuffer = thinkBuffer.slice(-7);
-                                    }
-                                    continue; // Skip this chunk entirely
-                                }
-                            }
-
-                            const startIdx = chunk.indexOf('<think>');
-                            if (startIdx >= 0) {
-                                const before = chunk.slice(0, startIdx);
-                                const afterStart = chunk.slice(startIdx + 7);
-                                const endIdx = afterStart.indexOf('</think>');
-                                if (endIdx >= 0) {
-                                    chunk = before + afterStart.slice(endIdx + 8);
-                                    LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
-                                } else {
-                                    chunk = before;
-                                    thinkBuffer = afterStart;
-                                    inThinkBlock = true;
-                                    LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
-                                }
-                            }
-                            // --- End think-block stripping ---
-                        }
-
-                        if (chunk) {
-                            content += chunk;
-                            if (onToken) onToken(chunk, content);
-                            EventBus.emit('llm:token', { token: chunk, content });
-                        }
-                    }
-
-                    if (delta.tool_calls) {
-                        hasToolCallsInResponse = true;
-                        LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
-                        for (const tc of delta.tool_calls) {
-                            if (tc.index !== undefined) {
-                                if (!toolCalls[tc.index]) {
-                                    toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-                                }
-                                if (tc.id) toolCalls[tc.index].id = tc.id;
-                                if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-                                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
-                            }
-                        }
-                    }
+                    parsed = JSON.parse(data);
                 } catch (e) {
-                    // Skip invalid JSON
+                    // Not valid JSON — skip (partial line, keepalive, etc.)
+                    continue;
+                }
+
+                // === Detect error responses embedded in SSE stream ===
+                // Providers use varying error shapes:
+                //   OpenAI:  { "error": { "message": "...", "type": "...", "code": ... } }
+                //   Venice:  { "error": "ConnectionError: ...", "error_type": "..." }
+                //   Generic: { "object": "error", "message": "...", "code": 400 }
+                const isErrorResponse = 
+                    parsed.error_type ||
+                    parsed.error ||
+                    (parsed.object === 'error' && parsed.message) ||
+                    (parsed.code && parsed.code >= 400 && !parsed.choices);
+                
+                if (isErrorResponse) {
+                    const errMsg = 
+                        parsed.error_message ||
+                        parsed.error?.message ||
+                        (typeof parsed.error === 'string' ? parsed.error : null) ||
+                        parsed.message ||
+                        JSON.stringify(parsed);
+                    console.error('[LLM] SSE error response:', errMsg);
+                    LLMDebug.logChunk(data.slice(0, 500), {
+                        hasContent: false, contentSnip: null,
+                        hasToolCalls: false, toolCallDelta: null,
+                        finishReason: null, hasUsage: false
+                    });
+                    // Store error and break out of stream — do NOT throw inside
+                    // the line-parsing loop (it would be silently swallowed)
+                    streamError = new Error(`LLM stream error: ${errMsg}`);
+                    break;
+                }
+
+                // === DEBUG: Log raw chunk with parsed summary ===
+                const delta = parsed.choices?.[0]?.delta;
+                const chunkFinish = parsed.choices?.[0]?.finish_reason;
+                LLMDebug.logChunk(data.slice(0, 500), {
+                    hasContent: !!delta?.content,
+                    contentSnip: delta?.content ? delta.content.slice(0, 80) : null,
+                    hasToolCalls: !!delta?.tool_calls,
+                    toolCallDelta: delta?.tool_calls || null,
+                    finishReason: chunkFinish || null,
+                    hasUsage: !!parsed.usage
+                });
+
+                // Capture usage from the final chunk (stream_options.include_usage)
+                if (parsed.usage) {
+                    usage = parsed.usage;
+                }
+
+                // Capture finish_reason
+                if (chunkFinish) {
+                    finishReason = chunkFinish;
+                }
+
+                if (!delta) continue;
+
+                if (delta.content) {
+                    let chunk = delta.content;
+
+                    // Only apply think-block stripping if NO tool calls in response
+                    // When tools are present, preserve full content for context
+                    if (!hasToolCallsInResponse && !hasTools) {
+                        // --- Think-block stripping (handles split tags) ---
+                        if (inThinkBlock) {
+                            thinkBuffer += chunk;
+                            const endIdx = thinkBuffer.indexOf('</think>');
+                            if (endIdx >= 0) {
+                                chunk = thinkBuffer.slice(endIdx + 8);
+                                inThinkBlock = false;
+                                LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
+                                thinkBuffer = '';
+                            } else {
+                                if (thinkBuffer.length > 8) {
+                                    thinkBuffer = thinkBuffer.slice(-7);
+                                }
+                                continue; // Skip this chunk entirely
+                            }
+                        }
+
+                        const startIdx = chunk.indexOf('<think>');
+                        if (startIdx >= 0) {
+                            const before = chunk.slice(0, startIdx);
+                            const afterStart = chunk.slice(startIdx + 7);
+                            const endIdx = afterStart.indexOf('</think>');
+                            if (endIdx >= 0) {
+                                chunk = before + afterStart.slice(endIdx + 8);
+                                LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
+                            } else {
+                                chunk = before;
+                                thinkBuffer = afterStart;
+                                inThinkBlock = true;
+                                LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
+                            }
+                        }
+                        // --- End think-block stripping ---
+                    }
+
+                    if (chunk) {
+                        content += chunk;
+                        if (onToken) onToken(chunk, content);
+                        EventBus.emit('llm:token', { token: chunk, content });
+                    }
+                }
+
+                if (delta.tool_calls) {
+                    hasToolCallsInResponse = true;
+                    LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
+                    for (const tc of delta.tool_calls) {
+                        if (tc.index !== undefined) {
+                            if (!toolCalls[tc.index]) {
+                                toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                            }
+                            if (tc.id) toolCalls[tc.index].id = tc.id;
+                            if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                            if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+                        }
+                    }
                 }
             }
+            // If an error was captured inside the SSE line loop, stop reading
+            if (streamError) break;
+        }
+
+        // Propagate stream errors — caller (handlers.js) has proper error recovery
+        if (streamError) {
+            throw streamError;
         }
 
         return {
