@@ -393,7 +393,263 @@
                     </div>
                 </div>
 
-                <!-- ... rest of tabs omitted for brevity, no changes ... -->
+                <!-- TAB: Context -->
+                <div class="settings-tab-content" id="tabContext">
+                    <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">🧠 Context & Embeddings</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Enable semantic search across your codebase using embeddings. The AI can automatically find relevant files when answering questions.
+                    </p>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="settingUseEmbeddings">
+                            <span>Enable Embeddings (Semantic Search)</span>
+                        </label>
+                        <small>Use AI embeddings to find relevant code when answering questions</small>
+                    </div>
+
+                    <div id="embeddingsSettings" style="opacity: 0.5; pointer-events: none;">
+                        <div class="form-group">
+                            <label for="settingEmbeddingModel">Embedding Model</label>
+                            <input type="text" id="settingEmbeddingModel" list="embeddingModelsList" placeholder="Xenova/all-MiniLM-L6-v2">
+                            <datalist id="embeddingModelsList">
+                                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Local, ~23MB)</option>
+                                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Local, ~33MB)</option>
+                                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Local, ~130MB)</option>
+                            </datalist>
+                            <small>
+                                Local models (Xenova/*) run in your browser. API models require compatible endpoint.
+                                <button class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 11px;">
+                                    🔄 Fetch API Models
+                                </button>
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingMaxRelevantFiles">Max Relevant Files</label>
+                            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                                <input type="range" id="settingMaxRelevantFiles" min="1" max="20" step="1" value="5" style="flex: 1;">
+                                <span id="maxRelevantFilesValue" style="font-size: 12px; color: var(--text-secondary); min-width: 30px; text-align: right;">5</span>
+                            </div>
+                            <small>Maximum number of relevant files to include in context (1-20)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="settingAutoReindex" checked>
+                                <span>Auto-reindex on project change</span>
+                            </label>
+                            <small>Automatically rebuild embeddings when switching projects</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingEmbeddingCacheExpiry">Cache Expiry (days)</label>
+                            <input type="number" id="settingEmbeddingCacheExpiry" min="1" max="90" value="7" style="width: 100px;">
+                            <small>How long to cache embeddings before re-indexing (1-90 days)</small>
+                        </div>
+
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; border-left: 3px solid var(--primary);">
+                            <div style="font-size: 12px; font-weight: 600; margin-bottom: 0.5rem;">📊 Status</div>
+                            <div id="embeddingsStatusText" style="font-size: 11px; color: var(--text-muted);">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1rem;">
+                            <button class="btn btn-secondary" id="btnClearEmbeddingsCache" style="width: 100%;">
+                                🗑️ Clear Embeddings Cache
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Roles -->
+                <div class="settings-tab-content" id="tabRoles">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">🎭 AI Roles</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Select a role to control which tools the AI can access. Lighter roles use fewer tokens and respond faster.
+                    </p>
+
+                    <div id="roleCards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
+                        <!-- Populated dynamically by settings-manager.js -->
+                    </div>
+
+                    <div style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; border-left: 3px solid var(--primary);">
+                        <div style="font-size: 12px; font-weight: 600; margin-bottom: 0.5rem;" id="roleToolsLabel">Full Access</div>
+                        <div id="roleToolsList" style="font-size: 11px; color: var(--text-muted);">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Advanced -->
+                <div class="settings-tab-content" id="tabAdvanced">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">⚙️ Advanced Parameters</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Fine-tune LLM behavior. Leave blank to use provider defaults. Changes apply to new conversations.
+                    </p>
+
+                    <!-- Reasoning / Thinking -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">🧠 Reasoning & Thinking</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingReasoningEffort">Reasoning Effort</label>
+                        <select id="settingReasoningEffort">
+                            <option value="">Default</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                        <small>Control reasoning depth for models that support it (e.g., o1, DeepSeek R1)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="settingStripThinkingResponse">
+                            <span>Strip thinking from response</span>
+                        </label>
+                        <small>Remove &lt;think&gt; tags from output (DeepSeek R1)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="settingDisableThinking">
+                            <span>Disable thinking entirely</span>
+                        </label>
+                        <small>Force model to skip internal reasoning (faster, less accurate)</small>
+                    </div>
+
+                    <!-- Temperature -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">🌡️ Temperature</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingTemperature">Temperature</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingTemperature" min="0" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingTemperatureValue" min="0" max="2" step="0.01" placeholder="0.7" style="width: 70px;">
+                        </div>
+                        <small>Randomness (0 = focused, 2 = creative). Default: 0.7</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMinTemperature">Min Temperature</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingMinTemperature" min="0" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingMinTemperatureValue" min="0" max="2" step="0.01" placeholder="" style="width: 70px;">
+                        </div>
+                        <small>Minimum temperature for dynamic sampling</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMaxTemperature">Max Temperature</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingMaxTemperature" min="0" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingMaxTemperatureValue" min="0" max="2" step="0.01" placeholder="" style="width: 70px;">
+                        </div>
+                        <small>Maximum temperature for dynamic sampling</small>
+                    </div>
+
+                    <!-- Sampling -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">🎲 Sampling</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingTopP">Top P (Nucleus)</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingTopP" min="0" max="1" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingTopPValue" min="0" max="1" step="0.01" placeholder="0.9" style="width: 70px;">
+                        </div>
+                        <small>Cumulative probability threshold (0-1). Default: 0.9</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingTopK">Top K</label>
+                        <input type="number" id="settingTopK" min="1" max="100" placeholder="40" style="width: 100px;">
+                        <small>Limit to top K tokens. Leave blank for no limit.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMinP">Min P</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingMinP" min="0" max="1" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingMinPValue" min="0" max="1" step="0.01" placeholder="" style="width: 70px;">
+                        </div>
+                        <small>Minimum probability threshold (0-1). Alternative to Top P.</small>
+                    </div>
+
+                    <!-- Token Control -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">📏 Token Control</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingMaxTokens">Max Tokens (Total)</label>
+                        <input type="number" id="settingMaxTokens" min="1" placeholder="Model default" style="width: 150px;">
+                        <small>Maximum total tokens (prompt + completion). Leave blank for model default.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMaxCompletionTokens">Max Completion Tokens</label>
+                        <input type="number" id="settingMaxCompletionTokens" min="1" placeholder="Model default" style="width: 150px;">
+                        <small>Maximum tokens in completion only. Overrides Max Tokens.</small>
+                    </div>
+
+                    <!-- Penalties -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">⚖️ Penalties</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingFrequencyPenalty">Frequency Penalty</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingFrequencyPenalty" min="-2" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingFrequencyPenaltyValue" min="-2" max="2" step="0.01" placeholder="0" style="width: 70px;">
+                        </div>
+                        <small>Reduce repetition based on frequency (-2 to 2). Default: 0</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingPresencePenalty">Presence Penalty</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingPresencePenalty" min="-2" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingPresencePenaltyValue" min="-2" max="2" step="0.01" placeholder="0" style="width: 70px;">
+                        </div>
+                        <small>Reduce repetition based on presence (-2 to 2). Default: 0</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingRepetitionPenalty">Repetition Penalty</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="settingRepetitionPenalty" min="0" max="2" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingRepetitionPenaltyValue" min="0" max="2" step="0.01" placeholder="1" style="width: 70px;">
+                        </div>
+                        <small>Alternative repetition penalty (0-2). Default: 1 (disabled)</small>
+                    </div>
+
+                    <!-- Other Options -->
+                    <h5 style="font-size: 13px; margin: 1rem 0 0.5rem 0; color: var(--text-secondary);">🔧 Other Options</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingSeed">Seed</label>
+                        <input type="number" id="settingSeed" placeholder="Random" style="width: 150px;">
+                        <small>Fixed seed for reproducible outputs. Leave blank for random.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingN">N (Completions)</label>
+                        <input type="number" id="settingN" min="1" max="10" placeholder="1" style="width: 100px;">
+                        <small>Number of completions to generate (1-10). Default: 1</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingStopSequences">Stop Sequences</label>
+                        <input type="text" id="settingStopSequences" placeholder='e.g., "\n\n", "END"'>
+                        <small>Comma-separated stop sequences. Generation stops when encountered.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="settingLogprobs">
+                            <span>Enable Logprobs</span>
+                        </label>
+                        <small>Return log probabilities of tokens (for supported models)</small>
+                    </div>
+                </div>
             </div>
             
             <div class="modal-footer">
