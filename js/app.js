@@ -31,6 +31,11 @@ import {
     updateCommitButton,
     updateRevertButton,
     revertCurrentFile,
+    clearAllDrafts,
+    clearProjectDrafts,
+    closeRevertModal,
+    revertAllFiles,
+    revertOnlyCurrentFile,
     initStatusBarListener
 } from './ui-helpers.js';
 import { 
@@ -114,7 +119,15 @@ window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;
 window.createNewFile = createNewFile;
 
+// Revert functions
 window.revertCurrentFile = revertCurrentFile;
+window.closeRevertModal = closeRevertModal;
+window.revertAllFiles = revertAllFiles;
+window.revertOnlyCurrentFile = revertOnlyCurrentFile;
+
+// Draft management functions
+window.clearAllDrafts = clearAllDrafts;
+window.clearProjectDrafts = clearProjectDrafts;
 
 // ============================================
 // VISUAL SETTINGS
