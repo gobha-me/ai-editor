@@ -296,6 +296,11 @@ function updateEmbeddingsStatus() {
 
 function populateRoleCards() {
     const container = document.getElementById('roleCards');
+    if (!container) {
+        console.warn('[Settings] roleCards container not found, skipping role cards population');
+        return;
+    }
+    
     const currentRole = State.settings.role || 'full';
     
     container.innerHTML = Roles.list().map(role => `
@@ -322,6 +327,11 @@ function updateRoleToolsList(roleId) {
     const role = Roles.get(roleId);
     const label = document.getElementById('roleToolsLabel');
     const list = document.getElementById('roleToolsList');
+    
+    if (!label || !list) {
+        console.warn('[Settings] roleToolsLabel or roleToolsList not found, skipping tools list update');
+        return;
+    }
     
     label.textContent = role.name;
     
