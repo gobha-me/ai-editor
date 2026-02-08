@@ -75,7 +75,10 @@
 
 .diff-view-side-by-side .diff-side-by-side-container {
     display: flex;
-    height: 100%;
+    /* CRITICAL: flex:1 fills remaining height after diff-header,
+       allowing each pane to scroll independently (vimdiff behavior) */
+    flex: 1;
+    min-height: 0; /* Allow flex child to shrink below content height */
     overflow: hidden;
 }
 
@@ -84,6 +87,7 @@
     overflow-y: auto;
     overflow-x: auto;
     border-right: 1px solid var(--border);
+    min-height: 0; /* Allow flex child to shrink below content height */
 }
 
 .diff-pane:last-child {

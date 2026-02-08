@@ -39,6 +39,9 @@ function myersDiff(a, b) {
     const v = {};
     const trace = [];
 
+    // CRITICAL: Seed the frontier — standard Myers requires V[1]=0
+    v[1] = 0;
+
     for (let d = 0; d <= max; d++) {
         trace.push({...v});
         
@@ -113,43 +116,50 @@ function backtrackChanges(trace, a, b, d) {
 function groupIntoHunks(changes, originalLines, modifiedLines, contextLines) {
     if (changes.length === 0) return [];
     
-    const hunks = [];
-    let currentHunk = null;
+    // Find indices of all non-equal changes
+    const changeIndices = [];
+    changes.forEach((c, i) => { if (c.type !== 'equal') changeIndices.push(i); });
+    if (changeIndices.length === 0) return [];
     
-    changes.forEach((change, index) => {
-        const isChange = change.type !== 'equal';
-        
-        if (isChange) {
-            if (!currentHunk) {
-                // Start new hunk
-                const startIndex = Math.max(0, index - contextLines);
-                currentHunk = {
-                    oldStart: changes[startIndex].oldLine !== undefined ? changes[startIndex].oldLine + 1 : 1,
-                    newStart: changes[startIndex].newLine !== undefined ? changes[startIndex].newLine + 1 : 1,
-                    changes: changes.slice(startIndex, index + 1)
-                };
-            } else {
-                currentHunk.changes.push(change);
-            }
-        } else if (currentHunk) {
-            // Add context after change
-            currentHunk.changes.push(change);
-            
-            // Check if we should close this hunk
-            const nextChangeIndex = changes.findIndex((c, i) => i > index && c.type !== 'equal');
-            if (nextChangeIndex === -1 || nextChangeIndex - index > contextLines * 2) {
-                // Close hunk
-                hunks.push(currentHunk);
-                currentHunk = null;
-            }
+    // Group change indices into hunk ranges (merge when gap <= 2*contextLines)
+    const groups = [];
+    let groupStart = changeIndices[0];
+    let groupEnd = changeIndices[0];
+    
+    for (let i = 1; i < changeIndices.length; i++) {
+        if (changeIndices[i] - groupEnd <= contextLines * 2 + 1) {
+            groupEnd = changeIndices[i]; // merge into current group
+        } else {
+            groups.push([groupStart, groupEnd]);
+            groupStart = changeIndices[i];
+            groupEnd = changeIndices[i];
         }
-    });
-    
-    if (currentHunk) {
-        hunks.push(currentHunk);
     }
+    groups.push([groupStart, groupEnd]);
     
-    return hunks;
+    // Build hunks from groups with context
+    return groups.map(([gStart, gEnd]) => {
+        const from = Math.max(0, gStart - contextLines);
+        const to = Math.min(changes.length - 1, gEnd + contextLines);
+        const hunkChanges = changes.slice(from, to + 1);
+        
+        // Compute start positions — find the first valid line number in the range
+        let oldStart = 1, newStart = 1;
+        let foundOld = false, foundNew = false;
+        for (let i = from; i <= to; i++) {
+            if (!foundOld && changes[i].oldLine !== undefined && changes[i].oldLine >= 0) {
+                oldStart = changes[i].oldLine + 1;
+                foundOld = true;
+            }
+            if (!foundNew && changes[i].newLine !== undefined && changes[i].newLine >= 0) {
+                newStart = changes[i].newLine + 1;
+                foundNew = true;
+            }
+            if (foundOld && foundNew) break;
+        }
+        
+        return { oldStart, newStart, changes: hunkChanges };
+    });
 }
 
 // ============================================
@@ -208,9 +218,13 @@ function renderHunkHeader(hunk, hunkIndex) {
     const oldCount = hunk.changes.filter(c => c.oldLine !== undefined).length;
     const newCount = hunk.changes.filter(c => c.newLine !== undefined).length;
     
+    // Safety: ensure start positions are positive
+    const oldStart = Math.max(1, hunk.oldStart);
+    const newStart = Math.max(1, hunk.newStart);
+    
     return `
         <div class="diff-hunk-header" data-hunk="${hunkIndex}">
-            <span class="diff-hunk-info">@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@</span>
+            <span class="diff-hunk-info">@@ old:${oldStart},${oldCount}  new:${newStart},${newCount} @@</span>
         </div>
     `;
 }
@@ -218,35 +232,37 @@ function renderHunkHeader(hunk, hunkIndex) {
 function renderHunkContent(hunk, originalLines, modifiedLines, mode) {
     let html = '';
     
-    hunk.changes.forEach((change, index) => {
-        const lineNum = hunk.changes.indexOf(change);
-        
+    hunk.changes.forEach((change) => {
         if (change.type === 'equal') {
-            const line = originalLines[change.oldLine];
+            const oldLn = change.oldLine >= 0 ? change.oldLine + 1 : '';
+            const newLn = change.newLine >= 0 ? change.newLine + 1 : '';
+            const line = originalLines[change.oldLine] ?? '';
             html += `
-                <div class="diff-line diff-equal" data-old-line="${change.oldLine + 1}" data-new-line="${change.newLine + 1}">
-                    <span class="diff-ln">${change.oldLine + 1}</span>
-                    <span class="diff-ln">${change.newLine + 1}</span>
+                <div class="diff-line diff-equal" data-old-line="${oldLn}" data-new-line="${newLn}">
+                    <span class="diff-ln">${oldLn}</span>
+                    <span class="diff-ln">${newLn}</span>
                     <span class="diff-text"> ${escapeHtml(line)}</span>
                 </div>
             `;
         } else if (change.type === 'delete') {
-            const line = originalLines[change.oldLine];
-            changePositions.push({ index: changePositions.length, oldLine: change.oldLine + 1, newLine: null });
+            const oldLn = change.oldLine >= 0 ? change.oldLine + 1 : '';
+            const line = originalLines[change.oldLine] ?? '';
+            changePositions.push({ index: changePositions.length, oldLine: oldLn || null, newLine: null });
             html += `
-                <div class="diff-line diff-removed" data-change-index="${changePositions.length - 1}" data-old-line="${change.oldLine + 1}">
-                    <span class="diff-ln">${change.oldLine + 1}</span>
+                <div class="diff-line diff-removed" data-change-index="${changePositions.length - 1}" data-old-line="${oldLn}">
+                    <span class="diff-ln">${oldLn}</span>
                     <span class="diff-ln"></span>
                     <span class="diff-text">-${escapeHtml(line)}</span>
                 </div>
             `;
         } else if (change.type === 'insert') {
-            const line = modifiedLines[change.newLine];
-            changePositions.push({ index: changePositions.length, oldLine: null, newLine: change.newLine + 1 });
+            const newLn = change.newLine >= 0 ? change.newLine + 1 : '';
+            const line = modifiedLines[change.newLine] ?? '';
+            changePositions.push({ index: changePositions.length, oldLine: null, newLine: newLn || null });
             html += `
-                <div class="diff-line diff-added" data-change-index="${changePositions.length - 1}" data-new-line="${change.newLine + 1}">
+                <div class="diff-line diff-added" data-change-index="${changePositions.length - 1}" data-new-line="${newLn}">
                     <span class="diff-ln"></span>
-                    <span class="diff-ln">${change.newLine + 1}</span>
+                    <span class="diff-ln">${newLn}</span>
                     <span class="diff-text">+${escapeHtml(line)}</span>
                 </div>
             `;
@@ -282,40 +298,42 @@ export function renderSideBySideView(originalLines, modifiedLines) {
 
 function renderSideBySidePane(changes, lines, side) {
     let html = '';
-    let lineIndex = 0;
     
     changes.forEach(change => {
         if (change.type === 'equal') {
             const lineNum = side === 'left' ? change.oldLine : change.newLine;
-            const line = lines[lineNum];
+            const displayNum = (lineNum !== undefined && lineNum >= 0) ? lineNum + 1 : '';
+            const line = lines[lineNum] ?? '';
             html += `
-                <div class="diff-line diff-equal" data-${side === 'left' ? 'old' : 'new'}-line="${lineNum + 1}">
-                    <span class="diff-ln">${lineNum + 1}</span>
+                <div class="diff-line diff-equal" data-${side === 'left' ? 'old' : 'new'}-line="${displayNum}">
+                    <span class="diff-ln">${displayNum}</span>
                     <span class="diff-text"> ${escapeHtml(line)}</span>
                 </div>
             `;
         } else if (change.type === 'delete' && side === 'left') {
-            const line = lines[change.oldLine];
+            const displayNum = (change.oldLine !== undefined && change.oldLine >= 0) ? change.oldLine + 1 : '';
+            const line = lines[change.oldLine] ?? '';
             html += `
-                <div class="diff-line diff-removed" data-old-line="${change.oldLine + 1}">
-                    <span class="diff-ln">${change.oldLine + 1}</span>
+                <div class="diff-line diff-removed" data-old-line="${displayNum}">
+                    <span class="diff-ln">${displayNum}</span>
                     <span class="diff-text">-${escapeHtml(line)}</span>
                 </div>
             `;
         } else if (change.type === 'insert' && side === 'right') {
-            const line = lines[change.newLine];
+            const displayNum = (change.newLine !== undefined && change.newLine >= 0) ? change.newLine + 1 : '';
+            const line = lines[change.newLine] ?? '';
             html += `
-                <div class="diff-line diff-added" data-new-line="${change.newLine + 1}">
-                    <span class="diff-ln">${change.newLine + 1}</span>
+                <div class="diff-line diff-added" data-new-line="${displayNum}">
+                    <span class="diff-ln">${displayNum}</span>
                     <span class="diff-text">+${escapeHtml(line)}</span>
                 </div>
             `;
         } else if (change.type === 'delete' && side === 'right') {
             // Empty line on right side for deleted line
-            html += '<div class="diff-line diff-empty"></div>';
+            html += '<div class="diff-line diff-empty"><span class="diff-ln"></span><span class="diff-text"></span></div>';
         } else if (change.type === 'insert' && side === 'left') {
             // Empty line on left side for added line
-            html += '<div class="diff-line diff-empty"></div>';
+            html += '<div class="diff-line diff-empty"><span class="diff-ln"></span><span class="diff-text"></span></div>';
         }
     });
     
@@ -434,31 +452,32 @@ export function getViewMode() {
 
 /**
  * Initialize bidirectional scroll sync:
- * 1. Between left/right diff panes (side-by-side mode)
+ * 1. Between left/right diff panes (side-by-side mode) — LOCKED like vimdiff
  * 2. Between editor and diff pane (both modes)
  */
 export function initScrollSync() {
-    // Side-by-side pane sync
+    // Side-by-side pane sync — vimdiff locked scrolling
     const leftPane = document.querySelector('.diff-pane-left');
     const rightPane = document.querySelector('.diff-pane-right');
     
     if (leftPane && rightPane) {
-        let syncingLeft = false;
-        let syncingRight = false;
+        // Use a single "source" flag to prevent infinite scroll loops
+        let scrollSource = null;
         
-        leftPane.addEventListener('scroll', () => {
-            if (syncingLeft) return;
-            syncingRight = true;
-            rightPane.scrollTop = leftPane.scrollTop;
-            setTimeout(() => syncingRight = false, 10);
-        });
+        const syncScroll = (source, target) => {
+            if (scrollSource && scrollSource !== source) return;
+            scrollSource = source;
+            
+            // Directly lock scrollTop — no setTimeout delay
+            target.scrollTop = source.scrollTop;
+            target.scrollLeft = source.scrollLeft;
+            
+            // Release lock on next frame
+            requestAnimationFrame(() => { scrollSource = null; });
+        };
         
-        rightPane.addEventListener('scroll', () => {
-            if (syncingRight) return;
-            syncingLeft = true;
-            leftPane.scrollTop = rightPane.scrollTop;
-            setTimeout(() => syncingLeft = false, 10);
-        });
+        leftPane.addEventListener('scroll', () => syncScroll(leftPane, rightPane), { passive: true });
+        rightPane.addEventListener('scroll', () => syncScroll(rightPane, leftPane), { passive: true });
     }
     
     // Editor-to-diff sync

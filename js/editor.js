@@ -10,9 +10,12 @@ import { getLanguageFromPath } from './llm.js';
 // CODEMIRROR IMPORTS (from CDN)
 // ============================================
 
-let EditorView, EditorState, basicSetup, keymap, javascript, python, go, rust, markdown, json, html, css, sql, xml;
+let EditorView, EditorState, Compartment, basicSetup, keymap, javascript, python, go, rust, markdown, json, html, css, sql, xml;
 let oneDark, indentWithTab, defaultKeymap, historyKeymap, history, indentOnInput;
 let lineNumbers, highlightActiveLineGutter, highlightActiveLine, bracketMatching, foldGutter, lineWrapping;
+
+// Compartment for dynamic line number toggling (CM6 best practice)
+let lineNumberCompartment = null;
 
 // Language support mapping
 const languageModules = {};
@@ -59,6 +62,7 @@ async function loadCodeMirror() {
 
             EditorView = cmView.EditorView;
             EditorState = cmState.EditorState;
+            Compartment = cmState.Compartment;
             basicSetup = cmBasicSetup?.basicSetup;
             keymap = cmView?.keymap;
             lineNumbers = cmView?.lineNumbers;
@@ -224,11 +228,32 @@ async function createEditor(container, content, filename) {
     // Build extensions array with defensive checks
     const extensions = [];
     
+    // Create fresh compartment for line number visibility
+    lineNumberCompartment = Compartment ? new Compartment() : null;
+    
     // Add basicSetup if available (it's actually an array of extensions)
     if (Array.isArray(basicSetup)) {
         extensions.push(...basicSetup);
     } else if (basicSetup) {
         extensions.push(basicSetup);
+    }
+    
+    // Add line number visibility compartment (uses CM6 theme override to hide)
+    if (lineNumberCompartment) {
+        const { State: AppState } = await import('./core.js');
+        const showNumbers = AppState.settings.showLineNumbers !== false;
+        if (showNumbers) {
+            extensions.push(lineNumberCompartment.of([])); // no override — numbers visible
+        } else {
+            extensions.push(lineNumberCompartment.of(
+                EditorView.theme({
+                    '.cm-lineNumbers': { display: 'none !important' },
+                    '.cm-activeLineGutter': { display: 'none !important' },
+                    '.cm-foldGutter': { display: 'none !important' },
+                    '.cm-gutters': { 'border-right': 'none', 'min-width': '0' }
+                })
+            ));
+        }
     }
     
     // Add theme
@@ -671,6 +696,43 @@ function applyEdit(newContent) {
 }
 
 // ============================================
+// LINE NUMBER TOGGLE (CM6 Compartment)
+// ============================================
+
+function setLineNumbersVisible(visible) {
+    if (!editorInstance || !lineNumberCompartment || !EditorView) {
+        console.warn('[Editor] Cannot toggle line numbers — editor or compartment not ready');
+        return false;
+    }
+    
+    try {
+        if (visible) {
+            // Remove override — basicSetup's lineNumbers become visible
+            editorInstance.dispatch({
+                effects: lineNumberCompartment.reconfigure([])
+            });
+        } else {
+            // Add theme override to hide gutter elements
+            editorInstance.dispatch({
+                effects: lineNumberCompartment.reconfigure(
+                    EditorView.theme({
+                        '.cm-lineNumbers': { display: 'none !important' },
+                        '.cm-activeLineGutter': { display: 'none !important' },
+                        '.cm-foldGutter': { display: 'none !important' },
+                        '.cm-gutters': { 'border-right': 'none', 'min-width': '0' }
+                    })
+                )
+            });
+        }
+        console.log(`[Editor] Line numbers ${visible ? 'shown' : 'hidden'} via compartment`);
+        return true;
+    } catch (e) {
+        console.error('[Editor] Failed to toggle line numbers:', e);
+        return false;
+    }
+}
+
+// ============================================
 // DIFF UTILITIES
 // ============================================
 
@@ -797,6 +859,7 @@ export {
     isTextFile,
     getFileIcon,
     editorInstance,
+    setLineNumbersVisible,
     // Section-based editing (for LLM tools)
     getLineInfo,
     getLineRange,

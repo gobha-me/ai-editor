@@ -6,7 +6,7 @@ import { VERSION_DISPLAY } from './version.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
-import { loadCodeMirror } from './editor.js';
+import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
@@ -174,10 +174,16 @@ function toggleLineNumbers() {
 }
 
 function applyLineNumbersVisibility() {
-    const container = document.getElementById('editorContainer');
-    if (!container) return; // Guard: DOM not ready yet
+    const show = State.settings.showLineNumbers !== false;
     
-    if (State.settings.showLineNumbers !== false) {
+    // Primary: CM6 compartment-based toggle (works reliably with CM6 layout system)
+    setLineNumbersVisible(show);
+    
+    // Fallback: CSS class on container (in case compartment isn't ready yet)
+    const container = document.getElementById('editorContainer');
+    if (!container) return;
+    
+    if (show) {
         container.classList.remove('hide-line-numbers');
     } else {
         container.classList.add('hide-line-numbers');
