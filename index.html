@@ -403,7 +403,87 @@
         </div>
     </div>
 
-    <!-- ... rest of modals omitted for brevity, no changes ... -->
+    <!-- Commit Modal -->
+    <div class="modal-overlay" id="commitModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>📦 Commit Changes</h2>
+                <button class="modal-close" onclick="window.closeCommitModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Files to commit:</label>
+                    <div id="commitFileList" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="commitMessage">Commit message:</label>
+                    <textarea id="commitMessage" rows="4" placeholder="Describe your changes..."></textarea>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                        <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
+                            ✨ Generate with AI
+                        </button>
+                    </div>
+                    <small id="commitModelInfo" style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
+                        <!-- Populated with model info -->
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
+                <button class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Branch Modal -->
+    <div class="modal-overlay" id="newBranchModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>🌿 Create New Branch</h2>
+                <button class="modal-close" onclick="window.closeNewBranchModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newBranchName">Branch name:</label>
+                    <input type="text" id="newBranchName" placeholder="feature/my-new-feature">
+                    <small>Use lowercase, hyphens, and forward slashes (e.g., feature/login-page)</small>
+                </div>
+                <div class="form-group">
+                    <label for="newBranchFrom">Create from:</label>
+                    <select id="newBranchFrom">
+                        <!-- Populated dynamically with available branches -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.createNewBranch()">✅ Create Branch</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div class="modal-overlay" id="newFileModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>📄 Create New File</h2>
+                <button class="modal-close" onclick="window.closeNewFileModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newFileName">File path:</label>
+                    <input type="text" id="newFileName" placeholder="src/components/MyComponent.js">
+                    <small>Include directory path if needed (e.g., docs/api/endpoints.md)</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.createNewFile()">✅ Create File</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Error Log Modal -->
     <div class="modal-overlay" id="errorLogModal">
