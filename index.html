@@ -340,6 +340,21 @@
 
                     <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
 
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">💾 Draft Management</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Clear stale drafts from localStorage. Drafts are local edits saved automatically for crash recovery.
+                    </p>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="window.clearProjectDrafts()" title="Clear drafts for current project only">
+                            🗑️ Clear Project Drafts
+                        </button>
+                        <button class="btn btn-danger" onclick="window.clearAllDrafts()" title="Nuclear option: clear ALL drafts" style="background: var(--danger); color: white;">
+                            ☢️ Clear ALL Drafts
+                        </button>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+
                     <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Settings Management</h4>
                     <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 0.75rem;">
                         Export your settings to backup API keys and preferences. Import to restore on another device or after clearing browser data.
@@ -655,6 +670,35 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
                 <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revert Modal - Choose: Current File or All Files -->
+    <div class="modal-overlay" id="revertModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>↩️ Revert Changes</h2>
+                <button class="modal-close" onclick="window.closeRevertModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+                    You have multiple files with unsaved changes. Choose what to revert:
+                </p>
+                <div id="revertFileList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; margin-bottom: 1.5rem; background: var(--bg-primary);">
+                    <!-- Populated dynamically -->
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <button class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
+                        📄 Revert Current File Only
+                    </button>
+                    <button class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
+                        🔥 Revert ALL Files
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="window.closeRevertModal()">Cancel</button>
             </div>
         </div>
     </div>
