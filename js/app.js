@@ -5,6 +5,7 @@
 import { VERSION_DISPLAY } from './version.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
+import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
@@ -371,7 +372,7 @@ function setupSettingsSavedListener() {
         updateModelStatusBar();
         
         // Refresh data with new settings
-        if (State.settings.giteaUrl && State.settings.giteaToken) {
+        if (GitProviderRegistry.listConnections(true).length > 0) {
             refreshProjects();
         }
         if (State.settings.llmEndpoint && State.settings.llmApiKey) {
@@ -410,6 +411,7 @@ async function init() {
     
     // Load settings
     loadSettings();
+    initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
     applyVisualSettings();
     applyLineNumbersVisibility();
     initSidebarCollapse();
@@ -440,8 +442,8 @@ async function init() {
     initProjectListeners();
     initCostTrackerListener();
 
-    // Load projects if configured
-    if (State.settings.giteaUrl && State.settings.giteaToken) {
+    // Load projects if any connections configured
+    if (GitProviderRegistry.listConnections(true).length > 0) {
         await refreshProjects();
     }
 

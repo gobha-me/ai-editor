@@ -158,7 +158,7 @@ const BASE_GIT_PROVIDER = {
     // ISSUES
     // ========================================
 
-    async listIssues(connection, owner, repo, state = 'open') {
+    async listIssues(connection, owner, repo, state = 'open', labels = '') {
         notSupported(this.name, 'listIssues');
     },
 
@@ -168,6 +168,18 @@ const BASE_GIT_PROVIDER = {
 
     async createIssue(connection, owner, repo, title, body, labels = []) {
         notSupported(this.name, 'createIssue');
+    },
+
+    /**
+     * General-purpose issue update (title, body, state, labels, etc.)
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number - Issue number
+     * @param {Object} fields - { title?, body?, state?, labels? }
+     */
+    async updateIssue(connection, owner, repo, number, fields) {
+        notSupported(this.name, 'updateIssue');
     },
 
     async getIssueComments(connection, owner, repo, number) {

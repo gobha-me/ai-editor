@@ -3,26 +3,59 @@
 // ============================================
 
 import { State, EventBus } from './core.js';
-import { GiteaAPI, loadProject } from './gitea.js';
+import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
 
 export async function refreshProjects() {
     try {
-        const repos = await GiteaAPI.listUserRepos();
+        const { repos, errors } = await Git.listAllRepos();
         const select = document.getElementById('projectSelect');
         select.innerHTML = '<option value="">Select a project...</option>';
         
+        // Group repos by connection for the optgroup UI
+        const grouped = new Map();
         repos.forEach(repo => {
-            const option = document.createElement('option');
-            option.value = `${repo.owner}/${repo.name}`;
-            option.textContent = repo.fullName;
-            select.appendChild(option);
+            const key = repo.connectionId;
+            if (!grouped.has(key)) {
+                grouped.set(key, {
+                    label: `${repo.providerIcon} ${repo.connectionLabel}`,
+                    repos: []
+                });
+            }
+            grouped.get(key).repos.push(repo);
         });
+
+        // Single connection: flat list. Multiple: optgroups.
+        if (grouped.size <= 1) {
+            repos.forEach(repo => {
+                const option = document.createElement('option');
+                // Encode connectionId into the value so onProjectChange can extract it
+                option.value = `${repo.connectionId}/${repo.owner}/${repo.name}`;
+                option.textContent = repo.fullName;
+                select.appendChild(option);
+            });
+        } else {
+            for (const [connId, group] of grouped) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = group.label;
+                group.repos.forEach(repo => {
+                    const option = document.createElement('option');
+                    option.value = `${repo.connectionId}/${repo.owner}/${repo.name}`;
+                    option.textContent = repo.fullName;
+                    optgroup.appendChild(option);
+                });
+                select.appendChild(optgroup);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.warn('Some connections failed to load repos:', errors);
+        }
 
         window.showToast(`Loaded ${repos.length} projects`, 'success');
     } catch (error) {
         console.error('Failed to load projects:', error);
-        window.showToast('Failed to load projects. Check Gitea settings.', 'error');
+        window.showToast('Failed to load projects. Check connection settings.', 'error');
     }
 }
 
@@ -30,7 +63,15 @@ export async function onProjectChange(e) {
     const value = e.target.value;
     if (!value) return;
 
-    const [owner, repo] = value.split('/');
+    // Value format: "connectionId/owner/repo"
+    const parts = value.split('/');
+    if (parts.length < 3) {
+        console.error('Invalid project selector value:', value);
+        return;
+    }
+    const connectionId = parts[0];
+    const owner = parts[1];
+    const repo = parts.slice(2).join('/');  // Handle repos with slashes in name
     
     try {
         // Clear open tabs when switching projects
@@ -53,7 +94,7 @@ export async function onProjectChange(e) {
         const { renderEditorTabs } = await import('./tab-manager.js');
         renderEditorTabs();
         
-        await loadProject(owner, repo);
+        await loadProject(connectionId, owner, repo);
         
         // Update branch selector
         const branchSelect = document.getElementById('branchSelect');
@@ -67,7 +108,7 @@ export async function onProjectChange(e) {
         branchSelect.value = State.currentBranch;
 
         // Trigger refresh events for other modules
-        EventBus.emit('project:loaded', { owner, repo });
+        EventBus.emit('project:loaded', { connectionId, owner, repo });
 
         window.showToast(`Loaded ${owner}/${repo}`, 'success');
 
@@ -104,7 +145,7 @@ export async function onBranchChange(e) {
         const { closeSecondaryPane } = await import('./secondary-pane.js');
         closeSecondaryPane();
         
-        // Reload file tree for new branch (tree:refresh handler fetches from Gitea)
+        // Reload file tree for new branch
         EventBus.emit('tree:refresh');
     }
 
@@ -152,7 +193,7 @@ export async function refreshIssues() {
     if (!State.currentProject) return;
     
     const { owner, repo } = State.currentProject;
-    State.issues = await GiteaAPI.listIssues(owner, repo);
+    State.issues = await Git.listIssues(owner, repo);
     renderIssues();
 }
 
@@ -185,7 +226,7 @@ export async function refreshWorkflows() {
     if (!State.currentProject) return;
     
     const { owner, repo } = State.currentProject;
-    State.workflowRuns = await GiteaAPI.listWorkflowRuns(owner, repo);
+    State.workflowRuns = await Git.listWorkflowRuns(owner, repo);
     renderWorkflows();
 }
 
@@ -207,7 +248,7 @@ export function initProjectListeners() {
         if (State.currentProject) {
             const { owner, repo } = State.currentProject;
             try {
-                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+                State.fileTree = await Git.getFileTree(owner, repo, State.currentBranch);
             } catch (e) {
                 console.error('[tree:refresh] Failed to fetch file tree:', e);
             }

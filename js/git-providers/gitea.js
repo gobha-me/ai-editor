@@ -216,7 +216,7 @@ const giteaProvider = {
             message,
             branch
         });
-        EventBus.emit('git:fileCreated', { connectionId: connection.id, owner, repo, path, branch });
+        EventBus.emit('git:fileCreated', { connectionId: connection.id, owner, repo, path, branch, content });
         return result;
     },
 
@@ -227,7 +227,7 @@ const giteaProvider = {
             sha,
             branch
         });
-        EventBus.emit('git:fileUpdated', { connectionId: connection.id, owner, repo, path, branch });
+        EventBus.emit('git:fileUpdated', { connectionId: connection.id, owner, repo, path, branch, content });
         return result;
     },
 
@@ -276,10 +276,10 @@ const giteaProvider = {
     // ISSUES
     // ========================================
 
-    async listIssues(connection, owner, repo, state = 'open') {
-        const issues = await this.request(connection, 'GET',
-            `/repos/${owner}/${repo}/issues?state=${state}&limit=50`
-        );
+    async listIssues(connection, owner, repo, state = 'open', labels = '') {
+        let endpoint = `/repos/${owner}/${repo}/issues?state=${state}&type=issues&limit=50`;
+        if (labels) endpoint += `&labels=${encodeURIComponent(labels)}`;
+        const issues = await this.request(connection, 'GET', endpoint);
         return (issues || []).map(i => {
             // Parse dependencies from body
             const depPattern = /(?:depends\s+on|blocked\s+by|requires|after|prerequisite[s]?:?)\s*#(\d+)/gi;
@@ -350,6 +350,22 @@ const giteaProvider = {
         const result = await this.request(connection, 'PATCH', `/repos/${owner}/${repo}/issues/${number}`, { state });
         EventBus.emit('git:issueUpdated', { connectionId: connection.id, owner, repo, number, state });
         return result;
+    },
+
+    async updateIssue(connection, owner, repo, number, fields) {
+        const payload = {};
+        if (fields.title !== undefined) payload.title = fields.title;
+        if (fields.body !== undefined) payload.body = fields.body;
+        if (fields.state !== undefined) payload.state = fields.state;
+        if (fields.labels !== undefined) payload.labels = fields.labels;
+        const result = await this.request(connection, 'PATCH', `/repos/${owner}/${repo}/issues/${number}`, payload);
+        EventBus.emit('git:issueUpdated', { connectionId: connection.id, owner, repo, number, fields });
+        return {
+            number: result.number,
+            title: result.title,
+            state: result.state,
+            url: result.html_url
+        };
     },
 
     // ========================================

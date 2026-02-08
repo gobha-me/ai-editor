@@ -1,9 +1,10 @@
 /**
  * AI Editor - Issue Tools
- * Tools for managing Gitea issues
+ * Tools for managing issues (provider-agnostic via Git facade)
  */
 
 import { State, EventBus } from '../core.js';
+import { Git } from '../git.js';
 
 /**
  * Register all issue-related tools.
@@ -20,14 +21,7 @@ export function registerIssueTools(registry) {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const params = new URLSearchParams({ state, type: 'issues', limit: '50' });
-            if (labels) params.append('labels', labels);
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues?${params}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issues = await response.json();
+            const issues = await Git.listIssues(owner, repo, state, labels);
             return {
                 project: `${owner}/${repo}`,
                 count: issues.length,
@@ -35,9 +29,9 @@ export function registerIssueTools(registry) {
                     number: i.number,
                     title: i.title,
                     state: i.state,
-                    labels: (i.labels || []).map(l => l.name),
-                    created: i.created_at,
-                    assignee: i.assignee?.login || null
+                    labels: i.labels || [],
+                    created: i.createdAt,
+                    assignee: i.assignees?.[0] || null
                 }))
             };
         } catch (error) {
@@ -64,7 +58,7 @@ export function registerIssueTools(registry) {
                 required: []
             }
         },
-        roles: 'all'  // All roles can list issues
+        roles: 'all'
     });
 
     // ========================================
@@ -76,32 +70,28 @@ export function registerIssueTools(registry) {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
+            const issue = await Git.getIssue(owner, repo, number);
 
             // Also fetch comments
-            const commentsUrl = `${url}/comments`;
-            const commentsResp = await fetch(commentsUrl, {
-                headers: { 'Authorization': `token ${State.settings.giteaToken}` }
-            });
-            const comments = commentsResp.ok ? await commentsResp.json() : [];
+            let comments = [];
+            try {
+                comments = await Git.getIssueComments(owner, repo, number);
+            } catch (e) {
+                console.warn(`Could not fetch comments for issue #${number}:`, e.message);
+            }
 
             return {
                 number: issue.number,
                 title: issue.title,
                 body: issue.body,
                 state: issue.state,
-                labels: (issue.labels || []).map(l => l.name),
-                assignee: issue.assignee?.login || null,
-                created: issue.created_at,
+                labels: issue.labels || [],
+                assignee: issue.assignees?.[0] || null,
+                created: issue.createdAt,
                 comments: comments.slice(0, 20).map(c => ({
-                    user: c.user?.login,
+                    user: c.user,
                     body: c.body,
-                    created: c.created_at
+                    created: c.createdAt
                 }))
             };
         } catch (error) {
@@ -123,7 +113,7 @@ export function registerIssueTools(registry) {
                 required: ['number']
             }
         },
-        roles: 'all'  // All roles can read issue details
+        roles: 'all'
     });
 
     // ========================================
@@ -135,20 +125,7 @@ export function registerIssueTools(registry) {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues`;
-            const payload = { title, body };
-            if (labels.length > 0) payload.labels = labels; // Gitea expects label IDs for creation; names might not work
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
-            // Refresh issues list
+            const issue = await Git.createIssue(owner, repo, title, body, labels);
             EventBus.emit('issues:refresh');
             return {
                 success: true,
@@ -185,7 +162,7 @@ export function registerIssueTools(registry) {
                 required: ['title']
             }
         },
-        roles: ['pm']  // Only PMs can create issues
+        roles: ['pm']
     });
 
     // ========================================
@@ -197,28 +174,19 @@ export function registerIssueTools(registry) {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}`;
-            const payload = {};
-            if (title !== undefined) payload.title = title;
-            if (body !== undefined) payload.body = body;
-            if (state !== undefined) payload.state = state;
-            const response = await fetch(url, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const issue = await response.json();
+            const fields = {};
+            if (title !== undefined) fields.title = title;
+            if (body !== undefined) fields.body = body;
+            if (state !== undefined) fields.state = state;
+
+            const result = await Git.updateIssue(owner, repo, number, fields);
             EventBus.emit('issues:refresh');
             return {
                 success: true,
-                number: issue.number,
-                title: issue.title,
-                state: issue.state,
-                message: `Updated issue #${issue.number}`
+                number: result.number,
+                title: result.title,
+                state: result.state,
+                message: `Updated issue #${result.number}`
             };
         } catch (error) {
             return { error: `Failed to update issue #${number}: ${error.message}` };
@@ -252,7 +220,7 @@ export function registerIssueTools(registry) {
                 required: ['number']
             }
         },
-        roles: ['pm']  // Only PMs can update issues
+        roles: ['pm']
     });
 
     // ========================================
@@ -264,17 +232,7 @@ export function registerIssueTools(registry) {
         }
         const { owner, repo } = State.currentProject;
         try {
-            const url = `${State.settings.giteaUrl}/api/v1/repos/${owner}/${repo}/issues/${number}/comments`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${State.settings.giteaToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ body })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const comment = await response.json();
+            const comment = await Git.createIssueComment(owner, repo, number, body);
             return {
                 success: true,
                 issue_number: number,
@@ -304,6 +262,6 @@ export function registerIssueTools(registry) {
                 required: ['number', 'body']
             }
         },
-        roles: ['pm', 'reviewer']  // PMs and reviewers can comment on issues
+        roles: ['pm', 'reviewer']
     });
 }
