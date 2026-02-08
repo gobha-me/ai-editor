@@ -470,9 +470,10 @@ export function initScrollSync() {
  * Intelligently handles line additions/deletions
  */
 function initEditorDiffSync() {
-    // Clean up old listener
+    // Clean up old listener - FIX: Use clearInterval instead of removeEventListener
     if (editorScrollListener) {
-        window.removeEventListener('editor:scroll', editorScrollListener);
+        clearInterval(editorScrollListener);
+        editorScrollListener = null;
     }
     
     // Get editor and diff containers
