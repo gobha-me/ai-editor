@@ -22,7 +22,9 @@ const EditTracker = {
     
     // Configuration
     MAX_EDITS_PER_FILE: 50,           // Keep last 50 edits per file
-    STALE_READ_THRESHOLD_MS: 30000,   // Reads older than 30s considered stale
+    STALE_READ_THRESHOLD_MS: 300000,  // Reads older than 5 minutes (300s) considered stale
+                                      // Increased from 30s to accommodate LLM analysis workflows
+                                      // that involve multiple tool calls, searches, and planning
     
     /**
      * Record a file read operation.
