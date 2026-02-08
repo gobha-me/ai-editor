@@ -129,6 +129,9 @@ function populateSettingsForm() {
     // --- Roles Tab ---
     populateRoleCards();
 
+    // --- Advanced Tab ---
+    populateAdvancedParams();
+
     // --- Settings tab switching ---
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.onclick = () => {
@@ -143,6 +146,89 @@ function populateSettingsForm() {
             }
         };
     });
+}
+
+function populateAdvancedParams() {
+    const adv = State.settings.advancedParams || {};
+
+    // Reasoning / Thinking
+    const reasoningSelect = document.getElementById('settingReasoningEffort');
+    if (reasoningSelect) reasoningSelect.value = adv.reasoning_effort || '';
+    
+    const stripThinking = document.getElementById('settingStripThinkingResponse');
+    if (stripThinking) stripThinking.checked = adv.strip_thinking_response || false;
+    
+    const disableThinking = document.getElementById('settingDisableThinking');
+    if (disableThinking) disableThinking.checked = adv.disable_thinking || false;
+
+    // Temperature controls with bidirectional sync
+    setupSliderSync('settingTemperature', 'settingTemperatureValue', adv.temperature);
+    setupSliderSync('settingMinTemperature', 'settingMinTemperatureValue', adv.min_temp);
+    setupSliderSync('settingMaxTemperature', 'settingMaxTemperatureValue', adv.max_temp);
+
+    // Sampling parameters
+    setupSliderSync('settingTopP', 'settingTopPValue', adv.top_p);
+    setupSliderSync('settingMinP', 'settingMinPValue', adv.min_p);
+    
+    const topK = document.getElementById('settingTopK');
+    if (topK) topK.value = adv.top_k !== undefined ? adv.top_k : '';
+
+    // Token control
+    const maxTokens = document.getElementById('settingMaxTokens');
+    if (maxTokens) maxTokens.value = adv.max_tokens !== undefined ? adv.max_tokens : '';
+    
+    const maxCompletionTokens = document.getElementById('settingMaxCompletionTokens');
+    if (maxCompletionTokens) maxCompletionTokens.value = adv.max_completion_tokens !== undefined ? adv.max_completion_tokens : '';
+
+    // Penalty parameters
+    setupSliderSync('settingFrequencyPenalty', 'settingFrequencyPenaltyValue', adv.frequency_penalty);
+    setupSliderSync('settingPresencePenalty', 'settingPresencePenaltyValue', adv.presence_penalty);
+    setupSliderSync('settingRepetitionPenalty', 'settingRepetitionPenaltyValue', adv.repetition_penalty);
+
+    // Other options
+    const seed = document.getElementById('settingSeed');
+    if (seed) seed.value = adv.seed !== undefined ? adv.seed : '';
+    
+    const n = document.getElementById('settingN');
+    if (n) n.value = adv.n !== undefined ? adv.n : '';
+    
+    const stopSequences = document.getElementById('settingStopSequences');
+    if (stopSequences) stopSequences.value = adv.stop ? (Array.isArray(adv.stop) ? adv.stop.join(', ') : adv.stop) : '';
+    
+    const logprobs = document.getElementById('settingLogprobs');
+    if (logprobs) logprobs.checked = adv.logprobs || false;
+}
+
+/**
+ * Setup bidirectional sync between slider and number input
+ */
+function setupSliderSync(sliderId, inputId, value) {
+    const slider = document.getElementById(sliderId);
+    const input = document.getElementById(inputId);
+    
+    if (!slider || !input) return;
+
+    // Set initial values
+    if (value !== undefined && value !== null && value !== '') {
+        slider.value = value;
+        input.value = value;
+    } else {
+        slider.value = slider.min;
+        input.value = '';
+    }
+
+    // Sync slider -> input
+    slider.oninput = () => {
+        input.value = slider.value;
+    };
+
+    // Sync input -> slider
+    input.oninput = () => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val)) {
+            slider.value = Math.max(slider.min, Math.min(slider.max, val));
+        }
+    };
 }
 
 function updateEmbeddingsStatus() {
@@ -319,6 +405,18 @@ function showModelCapabilities() {
     container.innerHTML = html;
 }
 
+/**
+ * Helper to get numeric value from input (returns undefined if empty)
+ */
+function getNumericValue(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return undefined;
+    const val = el.value.trim();
+    if (val === '') return undefined;
+    const num = parseFloat(val);
+    return isNaN(num) ? undefined : num;
+}
+
 export function saveSettings() {
     // General
     State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
@@ -351,6 +449,73 @@ export function saveSettings() {
     // Roles
     const activeRoleCard = document.querySelector('.role-card.active');
     State.settings.role = activeRoleCard ? activeRoleCard.dataset.role : 'full';
+
+    // Advanced Parameters
+    const advancedParams = {};
+    
+    // Reasoning / Thinking
+    const reasoningEffort = document.getElementById('settingReasoningEffort')?.value;
+    if (reasoningEffort) advancedParams.reasoning_effort = reasoningEffort;
+    
+    const stripThinking = document.getElementById('settingStripThinkingResponse');
+    if (stripThinking?.checked) advancedParams.strip_thinking_response = true;
+    
+    const disableThinking = document.getElementById('settingDisableThinking');
+    if (disableThinking?.checked) advancedParams.disable_thinking = true;
+
+    // Temperature
+    const temp = getNumericValue('settingTemperatureValue');
+    if (temp !== undefined) advancedParams.temperature = temp;
+    
+    const minTemp = getNumericValue('settingMinTemperatureValue');
+    if (minTemp !== undefined) advancedParams.min_temp = minTemp;
+    
+    const maxTemp = getNumericValue('settingMaxTemperatureValue');
+    if (maxTemp !== undefined) advancedParams.max_temp = maxTemp;
+
+    // Sampling
+    const topP = getNumericValue('settingTopPValue');
+    if (topP !== undefined) advancedParams.top_p = topP;
+    
+    const topK = getNumericValue('settingTopK');
+    if (topK !== undefined) advancedParams.top_k = Math.floor(topK);
+    
+    const minP = getNumericValue('settingMinPValue');
+    if (minP !== undefined) advancedParams.min_p = minP;
+
+    // Token control
+    const maxTokens = getNumericValue('settingMaxTokens');
+    if (maxTokens !== undefined) advancedParams.max_tokens = Math.floor(maxTokens);
+    
+    const maxCompletionTokens = getNumericValue('settingMaxCompletionTokens');
+    if (maxCompletionTokens !== undefined) advancedParams.max_completion_tokens = Math.floor(maxCompletionTokens);
+
+    // Penalties
+    const freqPenalty = getNumericValue('settingFrequencyPenaltyValue');
+    if (freqPenalty !== undefined) advancedParams.frequency_penalty = freqPenalty;
+    
+    const presPenalty = getNumericValue('settingPresencePenaltyValue');
+    if (presPenalty !== undefined) advancedParams.presence_penalty = presPenalty;
+    
+    const repPenalty = getNumericValue('settingRepetitionPenaltyValue');
+    if (repPenalty !== undefined) advancedParams.repetition_penalty = repPenalty;
+
+    // Other options
+    const seed = getNumericValue('settingSeed');
+    if (seed !== undefined) advancedParams.seed = Math.floor(seed);
+    
+    const n = getNumericValue('settingN');
+    if (n !== undefined) advancedParams.n = Math.floor(n);
+    
+    const stopSeqInput = document.getElementById('settingStopSequences')?.value.trim();
+    if (stopSeqInput) {
+        advancedParams.stop = stopSeqInput.split(',').map(s => s.trim()).filter(s => s);
+    }
+    
+    const logprobs = document.getElementById('settingLogprobs');
+    if (logprobs?.checked) advancedParams.logprobs = true;
+
+    State.settings.advancedParams = advancedParams;
 
     // Sync main page role selector
     document.getElementById('roleSelect').value = State.settings.role;
@@ -523,6 +688,9 @@ export function exportSettings() {
         showLineNumbers: State.settings.showLineNumbers,
         showIssues: State.settings.showIssues,
         showWorkflows: State.settings.showWorkflows,
+        
+        // Advanced Parameters
+        advancedParams: State.settings.advancedParams,
         
         // Other
         role: State.settings.role,

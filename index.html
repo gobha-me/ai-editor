@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Editor v0.6.3</title>
+    <title>AI Editor v0.6.4</title>
     <link rel="stylesheet" href="editor/css/editor.css">
     <link rel="stylesheet" href="editor/css/diff-enhancements.css">
 </head>
@@ -31,7 +31,7 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1>⚡ AI Editor <span class="version">v0.6.3</span></h1>
+            <h1>⚡ AI Editor <span class="version">v0.6.4</span></h1>
             <div class="header-actions">
                 <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
                 <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>
@@ -231,6 +231,7 @@
                 <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
                 <button class="settings-tab" data-tab="tabContext">Context</button>
                 <button class="settings-tab" data-tab="tabRoles">Roles</button>
+                <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
             </div>
 
             <div class="modal-body">
@@ -469,6 +470,181 @@
                     <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">Active Tools for <span id="roleToolsLabel">current role</span></h4>
                     <div id="roleToolsList" style="font-size: 12px;">
                         <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- TAB: Advanced -->
+                <div class="settings-tab-content" id="tabAdvanced">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-secondary);">🎛️ Advanced LLM Parameters</h4>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;">
+                        Fine-tune LLM behavior with advanced sampling and reasoning parameters. Leave empty to use model defaults.
+                    </p>
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">🧠 Reasoning / Thinking</h5>
+                    
+                    <div class="form-group">
+                        <label for="settingReasoningEffort">Thinking Level</label>
+                        <select id="settingReasoningEffort">
+                            <option value="">Default</option>
+                            <option value="low">Low - Fast, less thorough</option>
+                            <option value="medium">Medium - Balanced</option>
+                            <option value="high">High - Thorough, slower</option>
+                        </select>
+                        <small>Controls reasoning depth for models that support thinking/reasoning (o1, o3, DeepSeek R1, etc.)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                            <input type="checkbox" id="settingStripThinkingResponse"> Strip thinking from response
+                        </label>
+                        <small>Remove reasoning tokens from the final response (saves tokens, reduces output length)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                            <input type="checkbox" id="settingDisableThinking"> Disable thinking entirely
+                        </label>
+                        <small>Prevent model from using reasoning mode (faster, cheaper, but potentially less accurate)</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">🌡️ Temperature Control</h5>
+
+                    <div class="form-group">
+                        <label for="settingTemperature">Temperature</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingTemperature" min="0" max="2" step="0.1" style="flex: 1;">
+                            <input type="number" id="settingTemperatureValue" min="0" max="2" step="0.1" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Controls randomness (0 = deterministic, 2 = very creative). Leave empty for default.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMinTemperature">Min Temperature</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingMinTemperature" min="0" max="1" step="0.05" style="flex: 1;">
+                            <input type="number" id="settingMinTemperatureValue" min="0" max="1" step="0.05" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Minimum temperature for dynamic sampling (Venice AI, some providers)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMaxTemperature">Max Temperature</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingMaxTemperature" min="1" max="2" step="0.05" style="flex: 1;">
+                            <input type="number" id="settingMaxTemperatureValue" min="1" max="2" step="0.05" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Maximum temperature for dynamic sampling (Venice AI, some providers)</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">🎲 Sampling Parameters</h5>
+
+                    <div class="form-group">
+                        <label for="settingTopP">Top P (Nucleus Sampling)</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingTopP" min="0" max="1" step="0.05" style="flex: 1;">
+                            <input type="number" id="settingTopP Value" min="0" max="1" step="0.05" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Probability mass to consider (0.95 = top 95% probable tokens)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingTopK">Top K</label>
+                        <input type="number" id="settingTopK" min="1" max="100" placeholder="Default (e.g., 40)">
+                        <small>Consider only top K most probable tokens</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMinP">Min P</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingMinP" min="0" max="0.5" step="0.01" style="flex: 1;">
+                            <input type="number" id="settingMinPValue" min="0" max="0.5" step="0.01" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Minimum probability threshold for token selection</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">🎯 Token Control</h5>
+
+                    <div class="form-group">
+                        <label for="settingMaxTokens">Max Tokens</label>
+                        <input type="number" id="settingMaxTokens" min="1" placeholder="Default (model-specific)">
+                        <small>Maximum total tokens in response (legacy parameter)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingMaxCompletionTokens">Max Completion Tokens</label>
+                        <input type="number" id="settingMaxCompletionTokens" min="1" placeholder="Default (model-specific)">
+                        <small>Maximum completion tokens (newer parameter, preferred over max_tokens)</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">⚖️ Penalty Parameters</h5>
+
+                    <div class="form-group">
+                        <label for="settingFrequencyPenalty">Frequency Penalty</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingFrequencyPenalty" min="-2" max="2" step="0.1" style="flex: 1;">
+                            <input type="number" id="settingFrequencyPenaltyValue" min="-2" max="2" step="0.1" placeholder="0" style="width: 80px;">
+                        </div>
+                        <small>Penalize tokens based on frequency in text (-2 to 2)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingPresencePenalty">Presence Penalty</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingPresencePenalty" min="-2" max="2" step="0.1" style="flex: 1;">
+                            <input type="number" id="settingPresencePenaltyValue" min="-2" max="2" step="0.1" placeholder="0" style="width: 80px;">
+                        </div>
+                        <small>Penalize tokens that have appeared at all (-2 to 2)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingRepetitionPenalty">Repetition Penalty</label>
+                        <div style="display: flex; gap: 0.75rem; align-items: center;">
+                            <input type="range" id="settingRepetitionPenalty" min="0" max="2" step="0.1" style="flex: 1;">
+                            <input type="number" id="settingRepetitionPenaltyValue" min="0" max="2" step="0.1" placeholder="Default" style="width: 80px;">
+                        </div>
+                        <small>Alternative repetition control (0 to 2, some providers)</small>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                    <h5 style="margin: 1rem 0 0.5rem; color: var(--text-secondary); font-size: 13px;">🔧 Other Options</h5>
+
+                    <div class="form-group">
+                        <label for="settingSeed">Seed</label>
+                        <input type="number" id="settingSeed" placeholder="Random">
+                        <small>Random seed for reproducible outputs (integer)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingN">Number of Completions (n)</label>
+                        <input type="number" id="settingN" min="1" max="10" placeholder="1">
+                        <small>Generate multiple responses per request (costs n× tokens)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settingStopSequences">Stop Sequences</label>
+                        <input type="text" id="settingStopSequences" placeholder="e.g., \n\n, END">
+                        <small>Comma-separated sequences that stop generation</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 13px; color: var(--text-primary); cursor: pointer;">
+                            <input type="checkbox" id="settingLogprobs"> Return log probabilities
+                        </label>
+                        <small>Include token probabilities in response (debugging/analysis)</small>
+                    </div>
+
+                    <div style="padding: 0.75rem; background: var(--bg-primary); border-radius: 4px; margin-top: 1rem; font-size: 11px; color: var(--text-muted);">
+                        ⚠️ <strong>Note:</strong> Not all providers support all parameters. Unsupported parameters will be ignored by the API.
+                        Empty fields use model defaults. Changes apply to new messages only.
                     </div>
                 </div>
             </div>
