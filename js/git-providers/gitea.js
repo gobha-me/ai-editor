@@ -1,0 +1,501 @@
+/**
+ * Gitea Git Provider
+ * 
+ * Implements the git provider interface for Gitea instances.
+ * Extracted from the original monolithic js/gitea.js.
+ * 
+ * All methods receive a `connection` object:
+ *   { id, provider, label, url, token, enabled }
+ * 
+ * Return shapes are normalized to match BASE_GIT_PROVIDER contracts.
+ */
+
+import { EventBus } from '../core.js';
+
+// ============================================
+// ENCODING UTILITIES (shared)
+// ============================================
+
+function utf8ToBase64(str) {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        throw new Error(`Failed to encode content: ${e.message}`);
+    }
+}
+
+function base64ToUtf8(str) {
+    try {
+        return decodeURIComponent(escape(atob(str)));
+    } catch (e) {
+        console.warn('UTF-8 base64 decoding failed, using atob fallback:', e);
+        return atob(str);
+    }
+}
+
+// ============================================
+// PROVIDER DEFINITION
+// ============================================
+
+const giteaProvider = {
+    id: 'gitea',
+    name: 'Gitea',
+    icon: '🍵',
+    description: 'Self-hosted Gitea / Forgejo instance',
+    fixedUrl: null,  // User configures their instance URL
+
+    // ========================================
+    // AUTH / HTTP
+    // ========================================
+
+    getHeaders(connection) {
+        return {
+            'Authorization': `token ${connection.token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+    },
+
+    getBaseUrl(connection) {
+        return `${connection.url.replace(/\/$/, '')}/api/v1`;
+    },
+
+    async request(connection, method, endpoint, data = null) {
+        const url = `${this.getBaseUrl(connection)}${endpoint}`;
+        const options = {
+            method,
+            headers: this.getHeaders(connection)
+        };
+
+        if (data && method !== 'GET') {
+            options.body = JSON.stringify(data);
+        }
+
+        try {
+            const response = await fetch(url, options);
+
+            if (!response.ok) {
+                const error = await response.text();
+                const err = new Error(`Gitea API Error: ${response.status} - ${error}`);
+                err.status = response.status;
+                err.url = url;
+                err.endpoint = endpoint;
+                throw err;
+            }
+
+            const text = await response.text();
+            return text ? JSON.parse(text) : null;
+        } catch (error) {
+            if (!error.status) {
+                error.url = url;
+                error.endpoint = endpoint;
+            }
+            throw error;
+        }
+    },
+
+    // ========================================
+    // REPOSITORIES
+    // ========================================
+
+    async listRepos(connection) {
+        const repos = await this.request(connection, 'GET', '/user/repos');
+        return repos.map(r => ({
+            id: r.id,
+            owner: r.owner.login,
+            name: r.name,
+            fullName: r.full_name,
+            description: r.description,
+            defaultBranch: r.default_branch,
+            private: r.private,
+            url: r.html_url
+        }));
+    },
+
+    async getRepo(connection, owner, repo) {
+        const r = await this.request(connection, 'GET', `/repos/${owner}/${repo}`);
+        return {
+            id: r.id,
+            owner: r.owner.login,
+            name: r.name,
+            fullName: r.full_name,
+            description: r.description,
+            defaultBranch: r.default_branch,
+            private: r.private,
+            url: r.html_url
+        };
+    },
+
+    // ========================================
+    // BRANCHES
+    // ========================================
+
+    async listBranches(connection, owner, repo) {
+        const branches = await this.request(connection, 'GET', `/repos/${owner}/${repo}/branches`);
+        return branches.map(b => ({
+            name: b.name,
+            protected: b.protected,
+            sha: b.commit.id
+        }));
+    },
+
+    async createBranch(connection, owner, repo, name, from = 'main') {
+        await this.request(connection, 'POST', `/repos/${owner}/${repo}/branches`, {
+            new_branch_name: name,
+            old_branch_name: from
+        });
+        EventBus.emit('git:branchCreated', { connectionId: connection.id, owner, repo, name });
+        return name;
+    },
+
+    async deleteBranch(connection, owner, repo, name) {
+        await this.request(connection, 'DELETE', `/repos/${owner}/${repo}/branches/${name}`);
+        EventBus.emit('git:branchDeleted', { connectionId: connection.id, owner, repo, name });
+    },
+
+    // ========================================
+    // FILE TREE / CONTENTS
+    // ========================================
+
+    async getContents(connection, owner, repo, path = '', ref = 'main') {
+        const endpoint = `/repos/${owner}/${repo}/contents/${path}?ref=${ref}`;
+        const contents = await this.request(connection, 'GET', endpoint);
+        const items = Array.isArray(contents) ? contents : [contents];
+        return items.map(item => ({
+            name: item.name,
+            path: item.path,
+            type: item.type,
+            sha: item.sha,
+            size: item.size,
+            url: item.html_url
+        }));
+    },
+
+    async getFileTree(connection, owner, repo, ref = 'main', path = '') {
+        const tree = [];
+        const self = this;
+
+        async function walk(currentPath) {
+            const contents = await self.getContents(connection, owner, repo, currentPath, ref);
+            for (const item of contents) {
+                tree.push(item);
+                if (item.type === 'dir') {
+                    await walk(item.path);
+                }
+            }
+        }
+
+        await walk(path);
+        return tree.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+            return a.path.localeCompare(b.path);
+        });
+    },
+
+    async getFile(connection, owner, repo, path, ref = 'main') {
+        const endpoint = `/repos/${owner}/${repo}/contents/${path}?ref=${ref}`;
+        const file = await this.request(connection, 'GET', endpoint);
+        const content = file.content ? base64ToUtf8(file.content) : '';
+        return {
+            name: file.name,
+            path: file.path,
+            sha: file.sha,
+            size: file.size,
+            content,
+            encoding: file.encoding
+        };
+    },
+
+    // ========================================
+    // FILE CRUD
+    // ========================================
+
+    async createFile(connection, owner, repo, path, content, message, branch = 'main') {
+        const result = await this.request(connection, 'POST', `/repos/${owner}/${repo}/contents/${path}`, {
+            content: utf8ToBase64(content),
+            message,
+            branch
+        });
+        EventBus.emit('git:fileCreated', { connectionId: connection.id, owner, repo, path, branch });
+        return result;
+    },
+
+    async updateFile(connection, owner, repo, path, content, message, sha, branch = 'main') {
+        const result = await this.request(connection, 'PUT', `/repos/${owner}/${repo}/contents/${path}`, {
+            content: utf8ToBase64(content),
+            message,
+            sha,
+            branch
+        });
+        EventBus.emit('git:fileUpdated', { connectionId: connection.id, owner, repo, path, branch });
+        return result;
+    },
+
+    async deleteFile(connection, owner, repo, path, message, sha, branch = 'main') {
+        await this.request(connection, 'DELETE', `/repos/${owner}/${repo}/contents/${path}`, {
+            message,
+            sha,
+            branch
+        });
+        EventBus.emit('git:fileDeleted', { connectionId: connection.id, owner, repo, path, branch });
+    },
+
+    async renameFile(connection, owner, repo, oldPath, newPath, message, branch = 'main') {
+        // Gitea has no rename API — read, create new, delete old
+        const file = await this.getFile(connection, owner, repo, oldPath, branch);
+        await this.createFile(connection, owner, repo, newPath, file.content, message, branch);
+        await this.deleteFile(connection, owner, repo, oldPath, `${message} (removed old path)`, file.sha, branch);
+        EventBus.emit('git:fileRenamed', { connectionId: connection.id, owner, repo, oldPath, newPath, branch });
+    },
+
+    async batchUpdateFiles(connection, owner, repo, files, message, branch = 'main') {
+        const results = [];
+        const errors = [];
+
+        for (const file of files) {
+            try {
+                const result = await this.updateFile(
+                    connection, owner, repo,
+                    file.path, file.content, message, file.sha, branch
+                );
+                results.push({ path: file.path, success: true, newSha: result.content.sha });
+            } catch (error) {
+                errors.push({ path: file.path, success: false, error: error.message });
+            }
+        }
+
+        EventBus.emit('git:batchCommitted', {
+            connectionId: connection.id, owner, repo, branch, message,
+            succeeded: results.length, failed: errors.length
+        });
+
+        return { results, errors };
+    },
+
+    // ========================================
+    // ISSUES
+    // ========================================
+
+    async listIssues(connection, owner, repo, state = 'open') {
+        const issues = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/issues?state=${state}&limit=50`
+        );
+        return (issues || []).map(i => {
+            // Parse dependencies from body
+            const depPattern = /(?:depends\s+on|blocked\s+by|requires|after|prerequisite[s]?:?)\s*#(\d+)/gi;
+            const body = i.body || '';
+            const deps = [];
+            let match;
+            while ((match = depPattern.exec(body)) !== null) {
+                const depNum = parseInt(match[1]);
+                if (!deps.includes(depNum)) deps.push(depNum);
+            }
+
+            return {
+                number: i.number,
+                title: i.title,
+                body,
+                state: i.state,
+                labels: (i.labels || []).map(l => l.name),
+                assignees: (i.assignees || []).map(a => a.login),
+                dependencies: deps,
+                createdAt: i.created_at,
+                updatedAt: i.updated_at,
+                url: i.html_url
+            };
+        });
+    },
+
+    async getIssue(connection, owner, repo, number) {
+        const i = await this.request(connection, 'GET', `/repos/${owner}/${repo}/issues/${number}`);
+        return {
+            number: i.number,
+            title: i.title,
+            body: i.body || '',
+            state: i.state,
+            labels: (i.labels || []).map(l => l.name),
+            assignees: (i.assignees || []).map(a => a.login),
+            comments: i.comments,
+            createdAt: i.created_at,
+            updatedAt: i.updated_at,
+            url: i.html_url
+        };
+    },
+
+    async createIssue(connection, owner, repo, title, body, labels = []) {
+        const result = await this.request(connection, 'POST', `/repos/${owner}/${repo}/issues`, {
+            title, body, labels
+        });
+        EventBus.emit('git:issueCreated', { connectionId: connection.id, owner, repo, number: result.number });
+        return result;
+    },
+
+    async getIssueComments(connection, owner, repo, number) {
+        const comments = await this.request(connection, 'GET', `/repos/${owner}/${repo}/issues/${number}/comments`);
+        return comments.map(c => ({
+            id: c.id,
+            body: c.body,
+            user: c.user.login,
+            createdAt: c.created_at
+        }));
+    },
+
+    async createIssueComment(connection, owner, repo, number, body) {
+        const result = await this.request(connection, 'POST', `/repos/${owner}/${repo}/issues/${number}/comments`, { body });
+        EventBus.emit('git:issueCommented', { connectionId: connection.id, owner, repo, number });
+        return result;
+    },
+
+    async updateIssueState(connection, owner, repo, number, state) {
+        const result = await this.request(connection, 'PATCH', `/repos/${owner}/${repo}/issues/${number}`, { state });
+        EventBus.emit('git:issueUpdated', { connectionId: connection.id, owner, repo, number, state });
+        return result;
+    },
+
+    // ========================================
+    // MERGE REQUESTS (Gitea calls them Pull Requests)
+    // ========================================
+
+    async listMergeRequests(connection, owner, repo, state = 'open') {
+        const prs = await this.request(connection, 'GET', `/repos/${owner}/${repo}/pulls?state=${state}`);
+        return prs.map(pr => ({
+            number: pr.number,
+            title: pr.title,
+            body: pr.body,
+            state: pr.state,
+            head: pr.head.ref,
+            base: pr.base.ref,
+            mergeable: pr.mergeable,
+            url: pr.html_url
+        }));
+    },
+
+    async createMergeRequest(connection, owner, repo, title, body, head, base = 'main') {
+        const pr = await this.request(connection, 'POST', `/repos/${owner}/${repo}/pulls`, {
+            title, body, head, base
+        });
+        EventBus.emit('git:mrCreated', { connectionId: connection.id, owner, repo, number: pr.number });
+        return {
+            number: pr.number,
+            title: pr.title,
+            url: pr.html_url
+        };
+    },
+
+    // ========================================
+    // CI/CD (Gitea Actions)
+    // ========================================
+
+    async listWorkflowRuns(connection, owner, repo) {
+        try {
+            const response = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/actions/runs?limit=20`
+            );
+
+            let runs = [];
+            if (Array.isArray(response)) runs = response;
+            else if (response?.workflow_runs) runs = response.workflow_runs;
+            else if (response?.runs) runs = response.runs;
+
+            return runs.map(r => ({
+                id: r.id,
+                name: r.name || r.workflow_name || 'Workflow',
+                status: r.status,
+                conclusion: r.conclusion,
+                branch: r.head_branch || r.branch,
+                event: r.event,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+                url: r.html_url || `${connection.url}/${owner}/${repo}/actions/runs/${r.id}`
+            }));
+        } catch (e) {
+            console.warn(`[Gitea] Could not fetch workflow runs for ${owner}/${repo}:`, e.message);
+            return [];
+        }
+    },
+
+    async getWorkflowRun(connection, owner, repo, runId) {
+        const r = await this.request(connection, 'GET', `/repos/${owner}/${repo}/actions/runs/${runId}`);
+        return {
+            id: r.id,
+            name: r.name,
+            status: r.status,
+            conclusion: r.conclusion,
+            branch: r.head_branch,
+            event: r.event,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            url: r.html_url,
+            logsUrl: r.logs_url
+        };
+    },
+
+    async getWorkflowRunLogs(connection, owner, repo, runId) {
+        try {
+            return await this.request(connection, 'GET', `/repos/${owner}/${repo}/actions/runs/${runId}/logs`);
+        } catch (e) {
+            console.warn(`[Gitea] Could not fetch workflow logs:`, e.message);
+            return null;
+        }
+    },
+
+    // ========================================
+    // UI EXTENSIONS
+    // ========================================
+
+    contributes: {
+        panels: [
+            {
+                id: 'gitea-issues',
+                slot: 'sidebar-panels',
+                title: 'Issues',
+                icon: '📋',
+                collapsible: true,
+                refreshEvent: 'issues:refresh',
+                priority: 10
+            },
+            {
+                id: 'gitea-workflows',
+                slot: 'sidebar-panels',
+                title: 'Workflows',
+                icon: '⚙️',
+                collapsible: true,
+                refreshEvent: 'workflows:refresh',
+                priority: 20
+            },
+            {
+                id: 'gitea-prs',
+                slot: 'sidebar-panels',
+                title: 'Pull Requests',
+                icon: '🔀',
+                collapsible: true,
+                refreshEvent: 'prs:refresh',
+                priority: 15
+            }
+        ],
+
+        settings: [
+            {
+                id: 'url',
+                type: 'text',
+                label: 'Instance URL',
+                placeholder: 'https://git.example.com',
+                field: 'url',
+                required: true
+            },
+            {
+                id: 'token',
+                type: 'password',
+                label: 'API Token',
+                placeholder: 'Your Gitea API token',
+                field: 'token',
+                required: true
+            }
+        ],
+
+        tools: []  // LLM tools contributed by this provider (populated at init)
+    }
+};
+
+export default giteaProvider;
+export { utf8ToBase64, base64ToUtf8 };
