@@ -3,7 +3,7 @@
 // ============================================
 
 import { State, EventBus, Storage } from './core.js';
-import { GiteaAPI, batchSaveFiles } from './gitea.js';
+import { Git, batchSaveFiles } from './git.js';
 import { generateCommitMessage } from './llm.js';
 import { getFileIcon } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
@@ -313,10 +313,10 @@ export async function createNewBranch() {
     const { owner, repo } = State.currentProject;
     
     try {
-        await GiteaAPI.createBranch(owner, repo, name, from);
+        await Git.createBranch(owner, repo, name, from);
         
         // Refresh branches and switch to new one
-        State.branches = await GiteaAPI.listBranches(owner, repo);
+        State.branches = await Git.listBranches(owner, repo);
         State.currentBranch = name;
         
         const branchSelect = document.getElementById('branchSelect');
@@ -356,9 +356,9 @@ export async function createNewFile() {
     const { owner, repo } = State.currentProject;
     
     try {
-        await GiteaAPI.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
+        await Git.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
         
-        // Refresh file tree (tree:refresh handler fetches from Gitea)
+        // Refresh file tree
         EventBus.emit('tree:refresh');
         
         closeNewFileModal();
@@ -601,7 +601,7 @@ export function initStatusBarListener() {
         updateCommitButton();
         updateRevertButton();
     });
-    EventBus.on('gitea:saved', () => {
+    EventBus.on('git:saved', () => {
         updateCommitButton();
         updateRevertButton();
         // Update tab dirty state
@@ -614,12 +614,12 @@ export function initStatusBarListener() {
         }
         showToast('File saved successfully', 'success');
     });
-    EventBus.on('gitea:batchSaved', ({ results, errors }) => {
+    EventBus.on('git:batchSaved', ({ results, errors }) => {
         updateCommitButton();
         updateRevertButton();
         renderEditorTabs();
     });
-    EventBus.on('gitea:error', (error) => {
+    EventBus.on('git:error', (error) => {
         showToast(error.message, 'error');
     });
 }

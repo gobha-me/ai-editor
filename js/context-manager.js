@@ -5,7 +5,7 @@
 
 import { State, EventBus, Storage } from './core.js';
 import { EmbeddingsClient } from './embeddings-client.js';
-import { GiteaAPI } from './gitea.js';
+import { Git } from './git.js';
 
 const ContextManager = {
     _fileIndex: new Map(), // path -> { path, summary, embedding, lastIndexed }
@@ -196,7 +196,7 @@ const ContextManager = {
                     try {
                         // Fetch file content
                         const { owner, repo } = State.currentProject;
-                        const fileData = await GiteaAPI.getFile(owner, repo, file.path, State.currentBranch);
+                        const fileData = await Git.getFile(owner, repo, file.path, State.currentBranch);
                         const content = fileData.content;
                         
                         // Skip binary files and very large files
@@ -386,19 +386,19 @@ EventBus.on('project:loaded', async () => {
     }
 });
 
-EventBus.on('gitea:fileCreated', async ({ path, content }) => {
+EventBus.on('git:fileCreated', async ({ path, content }) => {
     if (!ContextManager.isEnabled()) return;
     console.log(`[Context] File created: ${path}, updating index`);
     await ContextManager.updateFileIndex(path, content);
 });
 
-EventBus.on('gitea:fileUpdated', async ({ path, content }) => {
+EventBus.on('git:fileUpdated', async ({ path, content }) => {
     if (!ContextManager.isEnabled()) return;
     console.log(`[Context] File updated: ${path}, updating index`);
     await ContextManager.updateFileIndex(path, content);
 });
 
-EventBus.on('gitea:fileDeleted', ({ path }) => {
+EventBus.on('git:fileDeleted', ({ path }) => {
     if (!ContextManager.isEnabled()) return;
     console.log(`[Context] File deleted: ${path}, removing from index`);
     ContextManager.removeFileIndex(path);

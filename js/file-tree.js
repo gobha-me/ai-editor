@@ -4,8 +4,7 @@
 
 import { State } from './core.js';
 import { getFileIcon, isTextFile } from './editor.js';
-import { loadFile } from './gitea.js';
-import { GiteaAPI } from './gitea.js';
+import { loadFile, Git } from './git.js';
 import { createEditor } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
 
@@ -197,8 +196,8 @@ export async function onTreeItemClick(path, type, isDoubleClick = false) {
                 return;
             }
 
-            // Load the file from Gitea (async operation)
-            console.log('[LOAD] Loading file from Gitea...');
+            // Load the file from remote (async operation)
+            console.log('[LOAD] Loading file from remote...');
             await loadFile(path);
             
             // Store the original (server) content for revert — NOT the draft
@@ -296,7 +295,7 @@ export async function deleteFile(path) {
     const file = State.fileTree.find(f => f.path === path);
     
     try {
-        await GiteaAPI.deleteFile(owner, repo, path, `Delete ${path}`, file.sha, State.currentBranch);
+        await Git.deleteFile(owner, repo, path, `Delete ${path}`, file.sha, State.currentBranch);
         
         // Close tab if open
         const tabIndex = State.openTabs.findIndex(t => t.path === path);
@@ -311,7 +310,7 @@ export async function deleteFile(path) {
             }
         }
         
-        // Refresh file tree (tree:refresh handler fetches from Gitea)
+        // Refresh file tree
         const { EventBus } = await import('./core.js');
         EventBus.emit('tree:refresh');
         
