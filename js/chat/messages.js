@@ -125,16 +125,25 @@ export function finalizeStreamingMessage(content, meta = {}) {
             timeEl.textContent = new Date().toLocaleTimeString();
         }
         
-        // Add action buttons if there's code
+        // Add action buttons
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'message-actions';
+        
         if (meta.hasCode) {
-            const actionsEl = document.createElement('div');
-            actionsEl.className = 'message-actions';
+            // Code-specific buttons (apply/reject)
             actionsEl.innerHTML = `
                 <button class="btn-apply" onclick="window.Chat.applyPendingEdit()">✅ Apply to Editor</button>
                 <button class="btn-reject" onclick="window.Chat.rejectPendingEdit()">❌ Reject</button>
             `;
-            messageEl.appendChild(actionsEl);
+        } else {
+            // Standard assistant message buttons (continue/copy)
+            actionsEl.innerHTML = `
+                <button class="btn-action btn-continue" onclick="window.Chat.continueResponse()" title="Continue generating">🔄 Continue</button>
+                <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard">📋 Copy</button>
+            `;
         }
+        
+        messageEl.appendChild(actionsEl);
     }
 
     // Add to history with FULL content (including think blocks for LLM context)
@@ -150,7 +159,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
 /**
  * Render a single message
  */
-export function renderMessage(message) {
+export function renderMessage(message, isLastUserMessage = false) {
     console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}`);
     
     // Skip rendering tool messages entirely
@@ -204,6 +213,24 @@ export function renderMessage(message) {
         </div>
         <div class="message-content">${formatMessageContent(displayContent)}</div>
     `;
+
+    // Add action buttons to appropriate message types
+    if (message.role === 'assistant') {
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'message-actions';
+        actionsEl.innerHTML = `
+            <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard">📋 Copy</button>
+        `;
+        messageEl.appendChild(actionsEl);
+    } else if (message.role === 'user' && isLastUserMessage) {
+        // Only show retry on the most recent user message
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'message-actions';
+        actionsEl.innerHTML = `
+            <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request">🔁 Retry</button>
+        `;
+        messageEl.appendChild(actionsEl);
+    }
 
     chatContainer.appendChild(messageEl);
 }
@@ -380,7 +407,20 @@ export function renderMessages(historyOverride = null) {
         return;
     }
 
-    history.forEach(msg => renderMessage(msg));
+    // Find the last user message index for retry button placement
+    let lastUserMessageIndex = -1;
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'user') {
+            lastUserMessageIndex = i;
+            break;
+        }
+    }
+
+    history.forEach((msg, idx) => {
+        const isLastUserMessage = msg.role === 'user' && idx === lastUserMessageIndex;
+        renderMessage(msg, isLastUserMessage);
+    });
+    
     scrollToBottom();
 }
 

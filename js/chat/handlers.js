@@ -457,21 +457,28 @@ export async function handleGeneralRequest(input) {
                     }
                 }
 
-                // CRITICAL BUG FIX: Omit content field entirely when empty with tool_calls
-                // Setting content to null or '' causes "zero-length document" API errors
+                // CRITICAL BUG FIX: Always provide content field (even if empty string) when no tool_calls
+                // Omit content entirely when tool_calls are present and there's no actual text
+                // This prevents "zero-length document" errors from malformed API payloads
                 const assistantMsg = {
                     role: 'assistant',
                     timestamp: Date.now()
                 };
                 
-                // Only add content if there's actual text
-                if (cleanContent.trim()) {
-                    assistantMsg.content = cleanContent;
-                }
-                
-                // Add tool_calls if present
+                // Logic for setting content field:
+                // 1. If we have tool calls AND content: include both
+                // 2. If we have tool calls but NO content: omit content field entirely (CRITICAL)
+                // 3. If we have NO tool calls: always include content (even if empty string to avoid zero-length)
                 if (toolCallSource === 'structured') {
+                    // Has tool calls - only add content if there's actual text
+                    if (cleanContent.trim()) {
+                        assistantMsg.content = cleanContent;
+                    }
+                    // CRITICAL: Do NOT add empty content field when tool_calls exist
                     assistantMsg.tool_calls = toolCalls;
+                } else {
+                    // No tool calls - always include content to prevent empty message
+                    assistantMsg.content = cleanContent || '';
                 }
                 
                 State.chatHistory.push(assistantMsg);

@@ -113,6 +113,89 @@ function clearChat() {
     EventBus.emit('chat:cleared');
 }
 
+/**
+ * Continue the last response - prompt LLM to keep working
+ */
+function continueResponse() {
+    if (State.isGenerating) {
+        showToast('⚠️ Already generating a response', 'warning');
+        return;
+    }
+    handleUserInputDirect('Please continue.');
+}
+
+/**
+ * Retry the last user message
+ */
+function retryLastMessage() {
+    if (State.isGenerating) {
+        showToast('⚠️ Already generating a response', 'warning');
+        return;
+    }
+    
+    // Find the last user message in history
+    const lastUserMessage = [...State.chatHistory].reverse().find(msg => msg.role === 'user');
+    
+    if (!lastUserMessage) {
+        showToast('⚠️ No previous message to retry', 'warning');
+        return;
+    }
+    
+    // Remove the last assistant response if it exists (to retry fresh)
+    const lastMsg = State.chatHistory[State.chatHistory.length - 1];
+    if (lastMsg && lastMsg.role === 'assistant') {
+        State.chatHistory.pop();
+        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        renderMessages();
+    }
+    
+    // Resend the last user message
+    handleUserInputDirect(lastUserMessage.content);
+}
+
+/**
+ * Copy message content to clipboard
+ * @param {HTMLElement} buttonEl - The button that was clicked (to find parent message)
+ */
+function copyMessage(buttonEl) {
+    const messageEl = buttonEl.closest('.chat-message');
+    if (!messageEl) return;
+    
+    const contentEl = messageEl.querySelector('.message-content');
+    if (!contentEl) return;
+    
+    // Get text content (strip HTML formatting)
+    const text = contentEl.innerText || contentEl.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('📋 Copied to clipboard', 'success');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showToast('❌ Failed to copy', 'error');
+    });
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - Toast message
+ * @param {string} type - Toast type: success, error, warning
+ */
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // ============================================
 // EXPOSE TO GLOBAL (for onclick handlers)
 // ============================================
@@ -124,7 +207,10 @@ window.Chat = {
     clearChat,
     sendMessage,
     executeToolCall,
-    exportChat
+    exportChat,
+    continueResponse,
+    retryLastMessage,
+    copyMessage
 };
 
 // ============================================
@@ -139,5 +225,8 @@ export {
     sendMessage,
     applyPendingEdit,
     rejectPendingEdit,
-    executeToolCall
+    executeToolCall,
+    continueResponse,
+    retryLastMessage,
+    copyMessage
 };

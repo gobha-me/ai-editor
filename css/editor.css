@@ -878,6 +878,48 @@ body {
     background: var(--error);
 }
 
+/* ============================================
+   CHAT ACTION BUTTONS (Continue, Retry, Copy)
+   ============================================ */
+
+.chat-message .btn-action {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.chat-message .btn-action:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
+.chat-message .btn-continue:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.chat-message .btn-retry:hover {
+    background: var(--warning);
+    color: var(--bg-primary);
+    border-color: var(--warning);
+}
+
+.chat-message .btn-copy:hover {
+    background: var(--success);
+    color: var(--bg-primary);
+    border-color: var(--success);
+}
+
 .chat-message.streaming .typing-indicator {
     display: inline-block;
     animation: pulse 1s infinite;
