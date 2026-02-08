@@ -127,7 +127,9 @@ export const ErrorLogger = {
 
         if (!container) return;
 
-        countEl.textContent = this.logs.length;
+        if (countEl) {
+            countEl.textContent = this.logs.length;
+        }
 
         if (this.logs.length === 0) {
             container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 2rem;">No errors logged yet</div>';
@@ -181,13 +183,25 @@ export const ErrorLogger = {
 
 // Window functions for modal controls
 export function openErrorLog() {
+    const errorLogModal = document.getElementById('errorLogModal');
+    if (!errorLogModal) {
+        console.error('[ErrorLogger] Error log modal element not found - cannot open error log');
+        alert('Error: Error log modal not found in the page. The page may not have loaded correctly.');
+        return;
+    }
+    
     ErrorLogger.render();
-    document.getElementById('errorLogModal').classList.add('active');
+    errorLogModal.classList.add('active');
 }
 
 export function closeErrorLog() {
-    ErrorLogger.render();
-    document.getElementById('errorLogModal').classList.remove('active');
+    const errorLogModal = document.getElementById('errorLogModal');
+    if (!errorLogModal) {
+        console.error('[ErrorLogger] Error log modal element not found - cannot close error log');
+        return;
+    }
+    
+    errorLogModal.classList.remove('active');
 }
 
 export function clearErrorLog() {
@@ -200,9 +214,18 @@ export function clearErrorLog() {
 export function copyErrorLog() {
     const text = ErrorLogger.exportText();
     navigator.clipboard.writeText(text).then(() => {
-        alert('Error log copied to clipboard!');
+        if (window.showToast) {
+            window.showToast('Error log copied to clipboard', 'success');
+        } else {
+            alert('Error log copied to clipboard!');
+        }
     }).catch(err => {
         console.error('Failed to copy:', err);
+        if (window.showToast) {
+            window.showToast('Failed to copy error log', 'error');
+        } else {
+            alert('Failed to copy error log to clipboard');
+        }
     });
 }
 
