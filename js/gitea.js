@@ -219,7 +219,7 @@ const GiteaAPI = {
         };
 
         const result = await this.request('POST', `/repos/${owner}/${repo}/contents/${path}`, data);
-        EventBus.emit('gitea:fileCreated', { owner, repo, path, branch });
+        EventBus.emit('gitea:fileCreated', { owner, repo, path, branch, content });
         return result;
     },
 
@@ -236,7 +236,7 @@ const GiteaAPI = {
         // Clear draft after successful save
         Storage.clearDraft(owner, repo, branch, path);
         
-        EventBus.emit('gitea:fileUpdated', { owner, repo, path, branch });
+        EventBus.emit('gitea:fileUpdated', { owner, repo, path, branch, content });
         return result;
     },
 

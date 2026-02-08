@@ -26,6 +26,7 @@ const ContextManager = {
      * @returns {string} Summary text optimized for embedding
      */
     summarizeFile(path, content) {
+        if (!content) return `File: ${path}`;
         const ext = path.split('.').pop()?.toLowerCase();
         const lines = content.split('\n');
         const summary = [];

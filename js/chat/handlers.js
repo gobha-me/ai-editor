@@ -83,17 +83,24 @@ function detectIntent(input) {
     // Edit intent — ONLY if a file is already open.
     // Without a file, the general handler uses tools to find the right file.
     if (State.currentFile) {
-        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-            lower.includes('refactor') || lower.includes('rewrite')) {
-            return 'edit';
-        }
-        // Weaker signals — only edit if clearly about current file
-        if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
-            && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
-            && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
-            && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')
-            && !lower.includes('review') && !lower.includes('which')) {
-            return 'edit';
+        // Strong signal: explicit "open <path>" means user wants tool-based workflow
+        const hasOpenPath = /\bopen\s+\S+\.\w+/i.test(lower);
+        // Strong signal: line-level operations → use tools
+        const hasLineOps = /\b(insert|after line|before line|after the|at line)\b/i.test(lower);
+        
+        if (!hasOpenPath && !hasLineOps) {
+            if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+                lower.includes('refactor') || lower.includes('rewrite')) {
+                return 'edit';
+            }
+            // Weaker signals — only edit if clearly about current file
+            if ((lower.includes('fix') || lower.includes('add') || lower.includes('remove') || lower.includes('update'))
+                && !lower.includes('find') && !lower.includes('search') && !lower.includes('file')
+                && !lower.includes('create') && !lower.includes('new file') && !lower.includes('project')
+                && !lower.includes('think') && !lower.includes('can you') && !lower.includes('where')
+                && !lower.includes('review') && !lower.includes('which')) {
+                return 'edit';
+            }
         }
     }
     
@@ -365,7 +372,7 @@ export async function handleGeneralRequest(input) {
                     const cachedResult = toolCallCache.get(cacheKey);
                     
                     let toolResult;
-                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'delete_file',
+                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
                                           'update_issue', 'add_issue_comment'].includes(toolName)) {
                         // Return cached result for read-only tools with a note
                         toolResult = {
@@ -390,7 +397,7 @@ export async function handleGeneralRequest(input) {
                         
                         // Invalidate cached reads when a write tool modifies a file
                         // or when open_file changes the active file (stales read_current_file)
-                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'delete_file', 'open_file'].includes(toolName)) {
+                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'open_file'].includes(toolName)) {
                             const affectedPath = args.path || State.currentFile?.path;
                             if (affectedPath) {
                                 for (const [key] of toolCallCache) {
@@ -406,7 +413,7 @@ export async function handleGeneralRequest(input) {
                         
                         // Cache successful read-only results (skip write tools)
                         if (!toolResult?.error && !['replace_lines', 'insert_lines', 'delete_lines', 
-                             'create_file', 'delete_file', 'update_issue', 'add_issue_comment'].includes(toolName)) {
+                             'create_file', 'update_issue', 'add_issue_comment'].includes(toolName)) {
                             toolCallCache.set(cacheKey, toolResult);
                         }
                     }
