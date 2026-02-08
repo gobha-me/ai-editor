@@ -3,7 +3,7 @@
 // ============================================
 
 import { State, EventBus } from './core.js';
-import { renderUnifiedView, renderSideBySideView, getViewMode, initDiffKeyboardShortcuts, initScrollSync } from './diff-viewer.js';
+import { renderUnifiedView, renderSideBySideView, getViewMode, initDiffKeyboardShortcuts, initScrollSync, cleanupScrollSync } from './diff-viewer.js';
 
 let secondaryPaneMode = null; // 'preview' | 'diff' | null
 let diffViewerInitialized = false;
@@ -53,6 +53,9 @@ export function toggleDiffPane() {
 }
 
 export function closeSecondaryPane() {
+    // Cleanup scroll sync listeners
+    cleanupScrollSync();
+    
     secondaryPaneMode = null;
     document.getElementById('secondaryPane').style.display = 'none';
     document.getElementById('secondaryPaneContent').innerHTML = '';
@@ -101,10 +104,8 @@ function renderDiff() {
     
     pane.innerHTML = `<div class="diff-view diff-view-${viewMode}">${diffHtml}</div>`;
     
-    // Initialize scroll sync for side-by-side view
-    if (viewMode === 'side-by-side') {
-        setTimeout(initScrollSync, 100);
-    }
+    // Initialize scroll sync (handles both side-by-side and editor sync)
+    setTimeout(initScrollSync, 100);
 }
 
 // Listen for view mode changes

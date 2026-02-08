@@ -1,5 +1,6 @@
 /**
  * AI Editor - Styles
+ * ALL font sizes now scale with --ui-font-size and --editor-font-size variables
  */
 
 /* ============================================
@@ -33,8 +34,19 @@
     
     --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    
+    /* Base font sizes - controlled by settings sliders */
     --ui-font-size: 13px;
     --editor-font-size: 14px;
+    
+    /* Derived font sizes - scale proportionally with UI font size */
+    --font-xs: calc(var(--ui-font-size) - 3px);   /* ~10px at default */
+    --font-sm: calc(var(--ui-font-size) - 2px);   /* ~11px at default */
+    --font-md: calc(var(--ui-font-size) - 1px);   /* ~12px at default */
+    --font-base: var(--ui-font-size);              /* ~13px at default */
+    --font-lg: calc(var(--ui-font-size) + 1px);   /* ~14px at default */
+    --font-xl: calc(var(--ui-font-size) + 3px);   /* ~16px at default */
+    --font-2xl: calc(var(--ui-font-size) + 7px);  /* ~20px at default */
 }
 
 /* ============================================
@@ -54,7 +66,7 @@ html, body {
 
 body {
     font-family: var(--font-sans);
-    font-size: var(--ui-font-size);
+    font-size: var(--font-base);
     background: var(--bg-primary);
     color: var(--text-primary);
 }
@@ -81,7 +93,7 @@ body {
 }
 
 .app-header h1 {
-    font-size: 14px;
+    font-size: var(--font-lg);
     font-weight: 500;
     color: var(--text-primary);
     display: flex;
@@ -141,7 +153,7 @@ body {
 
 .sidebar-header {
     padding: 0.5rem 1rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     font-weight: 600;
     text-transform: uppercase;
     color: var(--text-secondary);
@@ -203,7 +215,7 @@ body {
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.5rem;
-    font-size: 12px;
+    font-size: var(--font-md);
     cursor: pointer;
 }
 
@@ -227,7 +239,7 @@ body {
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.35rem 0.5rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     text-overflow: ellipsis;
 }
 
@@ -243,7 +255,7 @@ body {
     padding: 0.25rem 0.5rem 0.25rem 0.75rem;
     cursor: pointer;
     user-select: none;
-    font-size: 13px;
+    font-size: var(--font-base);
 }
 
 .tree-item:hover {
@@ -287,7 +299,7 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     padding: 2px 4px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     border-radius: 2px;
 }
 
@@ -306,7 +318,7 @@ body {
 /* Collapsible tree folders */
 .tree-item .chevron {
     width: 12px;
-    font-size: 8px;
+    font-size: calc(var(--font-xs) - 2px);
     color: var(--text-muted);
     transition: transform 0.15s ease;
     flex-shrink: 0;
@@ -392,11 +404,11 @@ body {
 
 .issue-item .issue-number {
     color: var(--accent);
-    font-size: 11px;
+    font-size: var(--font-sm);
 }
 
 .issue-item .issue-title {
-    font-size: 12px;
+    font-size: var(--font-md);
     line-height: 1.3;
     /* Allow wrapping instead of truncating */
     word-wrap: break-word;
@@ -411,7 +423,7 @@ body {
 }
 
 .issue-label {
-    font-size: 10px;
+    font-size: var(--font-xs);
     padding: 1px 4px;
     border-radius: 3px;
     background: var(--bg-tertiary);
@@ -419,7 +431,7 @@ body {
 }
 
 .issue-item .issue-deps {
-    font-size: 10px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     margin-top: 0.25rem;
 }
@@ -471,7 +483,7 @@ body {
     padding: 0.5rem 1rem;
     border-right: 1px solid var(--border);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-md);
     color: var(--text-secondary);
     background: var(--bg-tertiary);
     white-space: nowrap;
@@ -547,7 +559,7 @@ body {
     padding: 0.25rem 1rem;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }
 
@@ -594,7 +606,7 @@ body {
 }
 
 .chat-header h3 {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 500;
 }
 
@@ -616,7 +628,7 @@ body {
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.25rem 0.5rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     max-width: 150px;
 }
 
@@ -633,7 +645,7 @@ body {
 }
 
 .chat-welcome h3 {
-    font-size: 16px;
+    font-size: var(--font-xl);
     margin-bottom: 1rem;
     color: var(--text-primary);
 }
@@ -658,7 +670,7 @@ body {
 }
 
 .chat-welcome .hint {
-    font-size: 11px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     margin-top: 1rem;
 }
@@ -677,7 +689,7 @@ body {
     display: flex;
     justify-content: space-between;
     margin-bottom: 0.25rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
 }
 
 .chat-message .message-role {
@@ -693,7 +705,7 @@ body {
     background: var(--bg-tertiary);
     padding: 0.75rem;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--font-base);
     line-height: 1.5;
 }
 
@@ -709,7 +721,7 @@ body {
 .chat-message.system .message-content {
     background: var(--bg-primary);
     border: 1px solid var(--border);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 /* Tool call messages — compact, collapsible */
@@ -722,7 +734,7 @@ body {
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--bg-primary);
-    font-size: 11px;
+    font-size: var(--font-sm);
     overflow: hidden;
 }
 
@@ -744,7 +756,7 @@ body {
 
 .tool-call-summary::before {
     content: '▸';
-    font-size: 9px;
+    font-size: calc(var(--font-xs) - 1px);
     transition: transform 0.15s;
     flex-shrink: 0;
 }
@@ -800,7 +812,7 @@ body {
 }
 
 .tool-call-label {
-    font-size: 10px;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -810,7 +822,7 @@ body {
 
 .tool-call-json {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--font-xs);
     background: var(--bg-secondary);
     padding: 4px 6px;
     border-radius: 3px;
@@ -832,7 +844,7 @@ body {
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .chat-message .message-content pre.code-block {
@@ -842,7 +854,7 @@ body {
     overflow-x: auto;
     margin: 0.5rem 0;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .chat-message .message-actions {
@@ -855,7 +867,7 @@ body {
     padding: 0.35rem 0.75rem;
     border-radius: 4px;
     border: none;
-    font-size: 12px;
+    font-size: var(--font-md);
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -886,7 +898,7 @@ body {
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     border: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-sm);
     background: var(--bg-primary);
     color: var(--text-secondary);
     cursor: pointer;
@@ -950,7 +962,7 @@ body {
     color: var(--text-primary);
     padding: 0.5rem 0.75rem;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: var(--font-base);
     resize: none;
     min-height: 60px;
     max-height: 120px;
@@ -978,7 +990,7 @@ body {
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .chat-input-actions button:hover {
@@ -1003,7 +1015,7 @@ body {
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 500;
     transition: all 0.2s;
     display: inline-flex;
@@ -1073,7 +1085,7 @@ body {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--border);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .commit-file-item:last-child {
@@ -1147,7 +1159,7 @@ body {
 }
 
 .modal-header h2 {
-    font-size: 14px;
+    font-size: var(--font-lg);
     font-weight: 500;
 }
 
@@ -1185,7 +1197,7 @@ body {
 .form-group label {
     display: block;
     margin-bottom: 0.35rem;
-    font-size: 12px;
+    font-size: var(--font-md);
     color: var(--text-secondary);
 }
 
@@ -1198,7 +1210,7 @@ body {
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.5rem 0.75rem;
-    font-size: 13px;
+    font-size: var(--font-base);
     font-family: inherit;
 }
 
@@ -1212,7 +1224,7 @@ body {
 .form-group small {
     display: block;
     margin-top: 0.25rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
 }
 
@@ -1238,7 +1250,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 13px;
+    font-size: var(--font-base);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     animation: slideIn 0.3s ease;
 }
@@ -1321,7 +1333,7 @@ body {
     display: inline-block;
     padding: 1px 6px;
     border-radius: 3px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     font-weight: 500;
     white-space: nowrap;
     line-height: 1.5;
@@ -1354,7 +1366,7 @@ body {
 }
 
 .model-badges-inline {
-    font-size: 10px;
+    font-size: var(--font-xs);
     opacity: 0.7;
 }
 
@@ -1365,7 +1377,7 @@ body {
     padding: 2px 8px;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border);
-    font-size: 10px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     overflow-x: auto;
     flex-wrap: wrap;
@@ -1379,7 +1391,7 @@ body {
     padding: 2px 8px;
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border);
-    font-size: 10px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     font-family: var(--font-mono);
 }
@@ -1395,7 +1407,7 @@ body {
     min-width: 0;
     max-width: 90px;
     padding: 0.2rem 0.3rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 3px;
@@ -1426,7 +1438,7 @@ body {
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -1480,19 +1492,19 @@ body {
 }
 
 .role-card-icon {
-    font-size: 20px;
+    font-size: var(--font-2xl);
     margin-bottom: 0.25rem;
 }
 
 .role-card-name {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 0.15rem;
 }
 
 .role-card-desc {
-    font-size: 10px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     line-height: 1.3;
 }
@@ -1504,7 +1516,7 @@ body {
     gap: 0.5rem;
     padding: 0.3rem 0;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .role-tool-item.enabled {
@@ -1516,6 +1528,7 @@ body {
     text-decoration: line-through;
     opacity: 0.5;
 }
+
 /* ============================================
    v0.3.6 - EDITOR TABS BAR (tabs + toolbar)
    ============================================ */
@@ -1545,7 +1558,7 @@ body {
 
 .btn-toolbar {
     padding: 2px 6px !important;
-    font-size: 11px !important;
+    font-size: var(--font-sm) !important;
     border: none !important;
     background: transparent !important;
     color: var(--text-muted) !important;
@@ -1607,7 +1620,7 @@ body {
     padding: 4px 8px;
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -1632,7 +1645,7 @@ body {
 .preview-markdown {
     padding: 1rem 1.5rem;
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: var(--font-lg);
     line-height: 1.6;
     color: var(--text-primary);
 }
@@ -1673,7 +1686,7 @@ body {
     justify-content: center;
     height: 100%;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-base);
 }
 
 /* ============================================
@@ -1682,7 +1695,7 @@ body {
 
 .diff-view {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--font-md);
     line-height: 1.5;
     padding: 0;
     overflow-x: auto;
@@ -1704,7 +1717,7 @@ body {
     background: var(--bg-secondary);
     user-select: none;
     border-right: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-sm);
 }
 
 .diff-text {
@@ -1744,7 +1757,7 @@ body {
     justify-content: center;
     height: 100%;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-base);
     padding: 2rem;
 }
 
@@ -1777,7 +1790,7 @@ body {
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.25rem 0.3rem;
-    font-size: 11px;
+    font-size: var(--font-sm);
     max-width: 130px;
     min-width: 0;
 }
@@ -1816,7 +1829,7 @@ body {
 /* Version badge */
 .version {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-sm);
     font-weight: 400;
 }
 
@@ -1856,7 +1869,7 @@ body {
     border: none;
     border-bottom: 1px solid var(--border);
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: var(--font-lg);
     font-family: inherit;
     outline: none;
     box-sizing: border-box;
@@ -1878,7 +1891,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -1901,7 +1914,7 @@ body {
 
 .quick-open-item .qo-path {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--font-md);
     margin-left: auto;
     white-space: nowrap;
     overflow: hidden;
@@ -1918,13 +1931,13 @@ body {
     padding: 16px;
     text-align: center;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-base);
 }
 
 .quick-open-hint {
     padding: 6px 16px;
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     display: flex;
     gap: 12px;
@@ -1935,6 +1948,6 @@ body {
     border: 1px solid var(--border);
     border-radius: 3px;
     padding: 1px 5px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     font-family: inherit;
 }

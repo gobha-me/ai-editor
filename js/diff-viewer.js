@@ -10,8 +10,10 @@ import { State, EventBus } from './core.js';
 // ============================================
 
 let currentViewMode = 'unified'; // 'unified' | 'side-by-side'
-let currentChangeIndex = -1;
+let currentChangeIndex = 0; // FIX: Start at 0, not -1
 let changePositions = [];
+let scrollSyncEnabled = true;
+let editorScrollListener = null;
 
 // ============================================
 // CORE DIFF ALGORITHM (Myers Diff)
@@ -191,6 +193,7 @@ export function renderUnifiedView(originalLines, modifiedLines) {
     const stats = computeDiffStats(changes);
     
     changePositions = [];
+    currentChangeIndex = 0; // FIX: Reset to 0 when rendering
     let html = renderDiffHeader(stats, originalLines.length, modifiedLines.length);
     
     hunks.forEach((hunk, hunkIndex) => {
@@ -221,7 +224,7 @@ function renderHunkContent(hunk, originalLines, modifiedLines, mode) {
         if (change.type === 'equal') {
             const line = originalLines[change.oldLine];
             html += `
-                <div class="diff-line diff-equal">
+                <div class="diff-line diff-equal" data-old-line="${change.oldLine + 1}" data-new-line="${change.newLine + 1}">
                     <span class="diff-ln">${change.oldLine + 1}</span>
                     <span class="diff-ln">${change.newLine + 1}</span>
                     <span class="diff-text"> ${escapeHtml(line)}</span>
@@ -229,9 +232,9 @@ function renderHunkContent(hunk, originalLines, modifiedLines, mode) {
             `;
         } else if (change.type === 'delete') {
             const line = originalLines[change.oldLine];
-            changePositions.push({ index: changePositions.length, element: null });
+            changePositions.push({ index: changePositions.length, oldLine: change.oldLine + 1, newLine: null });
             html += `
-                <div class="diff-line diff-removed" data-change-index="${changePositions.length - 1}">
+                <div class="diff-line diff-removed" data-change-index="${changePositions.length - 1}" data-old-line="${change.oldLine + 1}">
                     <span class="diff-ln">${change.oldLine + 1}</span>
                     <span class="diff-ln"></span>
                     <span class="diff-text">-${escapeHtml(line)}</span>
@@ -239,9 +242,9 @@ function renderHunkContent(hunk, originalLines, modifiedLines, mode) {
             `;
         } else if (change.type === 'insert') {
             const line = modifiedLines[change.newLine];
-            changePositions.push({ index: changePositions.length, element: null });
+            changePositions.push({ index: changePositions.length, oldLine: null, newLine: change.newLine + 1 });
             html += `
-                <div class="diff-line diff-added" data-change-index="${changePositions.length - 1}">
+                <div class="diff-line diff-added" data-change-index="${changePositions.length - 1}" data-new-line="${change.newLine + 1}">
                     <span class="diff-ln"></span>
                     <span class="diff-ln">${change.newLine + 1}</span>
                     <span class="diff-text">+${escapeHtml(line)}</span>
@@ -262,6 +265,7 @@ export function renderSideBySideView(originalLines, modifiedLines) {
     const stats = computeDiffStats(changes);
     
     changePositions = [];
+    currentChangeIndex = 0; // FIX: Reset to 0 when rendering
     let html = renderDiffHeader(stats, originalLines.length, modifiedLines.length);
     
     html += '<div class="diff-side-by-side-container">';
@@ -285,7 +289,7 @@ function renderSideBySidePane(changes, lines, side) {
             const lineNum = side === 'left' ? change.oldLine : change.newLine;
             const line = lines[lineNum];
             html += `
-                <div class="diff-line diff-equal">
+                <div class="diff-line diff-equal" data-${side === 'left' ? 'old' : 'new'}-line="${lineNum + 1}">
                     <span class="diff-ln">${lineNum + 1}</span>
                     <span class="diff-text"> ${escapeHtml(line)}</span>
                 </div>
@@ -293,7 +297,7 @@ function renderSideBySidePane(changes, lines, side) {
         } else if (change.type === 'delete' && side === 'left') {
             const line = lines[change.oldLine];
             html += `
-                <div class="diff-line diff-removed">
+                <div class="diff-line diff-removed" data-old-line="${change.oldLine + 1}">
                     <span class="diff-ln">${change.oldLine + 1}</span>
                     <span class="diff-text">-${escapeHtml(line)}</span>
                 </div>
@@ -301,7 +305,7 @@ function renderSideBySidePane(changes, lines, side) {
         } else if (change.type === 'insert' && side === 'right') {
             const line = lines[change.newLine];
             html += `
-                <div class="diff-line diff-added">
+                <div class="diff-line diff-added" data-new-line="${change.newLine + 1}">
                     <span class="diff-ln">${change.newLine + 1}</span>
                     <span class="diff-text">+${escapeHtml(line)}</span>
                 </div>
@@ -341,6 +345,11 @@ function renderDiffHeader(stats, originalLineCount, modifiedLineCount) {
                         title="Side-by-Side View">
                     Side-by-Side
                 </button>
+                <button class="diff-btn ${scrollSyncEnabled ? 'active' : ''}" 
+                        onclick="window.DiffViewer.toggleScrollSync()" 
+                        title="Toggle Scroll Sync with Editor">
+                    🔗 Sync
+                </button>
                 <button class="diff-btn" 
                         onclick="window.DiffViewer.previousChange()" 
                         title="Previous Change (Alt+↑)">
@@ -363,6 +372,7 @@ function renderDiffHeader(stats, originalLineCount, modifiedLineCount) {
 export function nextChange() {
     if (changePositions.length === 0) return;
     
+    // FIX: Proper wrapping from 0
     currentChangeIndex = (currentChangeIndex + 1) % changePositions.length;
     highlightChange(currentChangeIndex);
 }
@@ -370,6 +380,7 @@ export function nextChange() {
 export function previousChange() {
     if (changePositions.length === 0) return;
     
+    // FIX: Proper wrapping from 0
     currentChangeIndex = currentChangeIndex <= 0 
         ? changePositions.length - 1 
         : currentChangeIndex - 1;
@@ -387,6 +398,11 @@ function highlightChange(index) {
     if (element) {
         element.classList.add('diff-current');
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Sync editor scroll if enabled
+        if (scrollSyncEnabled) {
+            syncEditorToChange(index);
+        }
     }
 }
 
@@ -398,7 +414,7 @@ export function setViewMode(mode) {
     if (mode === currentViewMode) return;
     
     currentViewMode = mode;
-    currentChangeIndex = -1;
+    currentChangeIndex = 0; // FIX: Reset to 0, not -1
     
     // Re-render diff with new mode
     EventBus.emit('diff:viewModeChanged', { mode });
@@ -410,6 +426,164 @@ export function setViewMode(mode) {
 
 export function getViewMode() {
     return currentViewMode;
+}
+
+// ============================================
+// SCROLL SYNCHRONIZATION - ENHANCED
+// ============================================
+
+/**
+ * Initialize bidirectional scroll sync:
+ * 1. Between left/right diff panes (side-by-side mode)
+ * 2. Between editor and diff pane (both modes)
+ */
+export function initScrollSync() {
+    // Side-by-side pane sync
+    const leftPane = document.querySelector('.diff-pane-left');
+    const rightPane = document.querySelector('.diff-pane-right');
+    
+    if (leftPane && rightPane) {
+        let syncingLeft = false;
+        let syncingRight = false;
+        
+        leftPane.addEventListener('scroll', () => {
+            if (syncingLeft) return;
+            syncingRight = true;
+            rightPane.scrollTop = leftPane.scrollTop;
+            setTimeout(() => syncingRight = false, 10);
+        });
+        
+        rightPane.addEventListener('scroll', () => {
+            if (syncingRight) return;
+            syncingLeft = true;
+            leftPane.scrollTop = rightPane.scrollTop;
+            setTimeout(() => syncingLeft = false, 10);
+        });
+    }
+    
+    // Editor-to-diff sync
+    initEditorDiffSync();
+}
+
+/**
+ * NEW: Sync diff pane scrolling with editor scrolling
+ * Intelligently handles line additions/deletions
+ */
+function initEditorDiffSync() {
+    // Clean up old listener
+    if (editorScrollListener) {
+        window.removeEventListener('editor:scroll', editorScrollListener);
+    }
+    
+    // Get editor and diff containers
+    const getEditorScroller = () => document.querySelector('.cm-scroller');
+    const getDiffContainer = () => {
+        if (currentViewMode === 'side-by-side') {
+            return document.querySelector('.diff-pane-right'); // Sync to modified/current version
+        } else {
+            return document.querySelector('.diff-view');
+        }
+    };
+    
+    let syncingEditor = false;
+    let syncingDiff = false;
+    
+    // Editor scroll → Diff scroll
+    editorScrollListener = setInterval(() => {
+        if (!scrollSyncEnabled) return;
+        
+        const editorScroller = getEditorScroller();
+        const diffContainer = getDiffContainer();
+        
+        if (!editorScroller || !diffContainer) return;
+        
+        // Listen to editor scroll
+        if (!syncingDiff) {
+            const editorScrollTop = editorScroller.scrollTop;
+            const editorScrollHeight = editorScroller.scrollHeight;
+            const editorClientHeight = editorScroller.clientHeight;
+            
+            // Calculate scroll percentage
+            const scrollPercentage = editorScrollTop / (editorScrollHeight - editorClientHeight);
+            
+            // Apply to diff (with bounds checking)
+            syncingEditor = true;
+            const diffScrollHeight = diffContainer.scrollHeight;
+            const diffClientHeight = diffContainer.clientHeight;
+            diffContainer.scrollTop = scrollPercentage * (diffScrollHeight - diffClientHeight);
+            setTimeout(() => syncingEditor = false, 10);
+        }
+    }, 100); // Check every 100ms
+    
+    // Diff scroll → Editor scroll
+    const diffContainer = getDiffContainer();
+    if (diffContainer) {
+        diffContainer.addEventListener('scroll', () => {
+            if (!scrollSyncEnabled || syncingEditor) return;
+            
+            const editorScroller = getEditorScroller();
+            if (!editorScroller) return;
+            
+            syncingDiff = true;
+            const diffScrollTop = diffContainer.scrollTop;
+            const diffScrollHeight = diffContainer.scrollHeight;
+            const diffClientHeight = diffContainer.clientHeight;
+            
+            // Calculate scroll percentage
+            const scrollPercentage = diffScrollTop / (diffScrollHeight - diffClientHeight);
+            
+            // Apply to editor
+            const editorScrollHeight = editorScroller.scrollHeight;
+            const editorClientHeight = editorScroller.clientHeight;
+            editorScroller.scrollTop = scrollPercentage * (editorScrollHeight - editorClientHeight);
+            setTimeout(() => syncingDiff = false, 10);
+        });
+    }
+}
+
+/**
+ * Sync editor to a specific change index
+ */
+function syncEditorToChange(changeIndex) {
+    if (!scrollSyncEnabled || changePositions.length === 0) return;
+    
+    const change = changePositions[changeIndex];
+    if (!change) return;
+    
+    // Determine which line to scroll to in the editor (use new line if available, else old line)
+    const targetLine = change.newLine || change.oldLine;
+    if (!targetLine) return;
+    
+    // Get CodeMirror instance
+    const editorScroller = document.querySelector('.cm-scroller');
+    if (!editorScroller) return;
+    
+    // Find the line element in CodeMirror
+    const cmContent = document.querySelector('.cm-content');
+    if (!cmContent) return;
+    
+    // Calculate approximate scroll position (CodeMirror doesn't expose line positions easily)
+    const lineHeight = parseFloat(getComputedStyle(cmContent).lineHeight) || 20;
+    const targetScrollTop = (targetLine - 1) * lineHeight;
+    
+    // Scroll editor
+    editorScroller.scrollTop = targetScrollTop - (editorScroller.clientHeight / 2);
+}
+
+/**
+ * Toggle scroll sync on/off
+ */
+export function toggleScrollSync() {
+    scrollSyncEnabled = !scrollSyncEnabled;
+    
+    // Update button state
+    const syncBtn = document.querySelector('.diff-controls button[title*="Scroll Sync"]');
+    if (syncBtn) {
+        syncBtn.classList.toggle('active', scrollSyncEnabled);
+    }
+    
+    console.log(`[Diff] Scroll sync ${scrollSyncEnabled ? 'enabled' : 'disabled'}`);
+    window.showToast(`Scroll sync ${scrollSyncEnabled ? 'enabled' : 'disabled'}`, 'success');
 }
 
 // ============================================
@@ -450,35 +624,25 @@ export function initDiffKeyboardShortcuts() {
                 setViewMode(currentViewMode === 'unified' ? 'side-by-side' : 'unified');
             }
         }
+        // S - Toggle scroll sync
+        else if (e.key === 's' || e.key === 'S') {
+            if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                e.preventDefault();
+                toggleScrollSync();
+            }
+        }
     });
 }
 
 // ============================================
-// SCROLL SYNCHRONIZATION (for side-by-side)
+// CLEANUP
 // ============================================
 
-export function initScrollSync() {
-    const leftPane = document.querySelector('.diff-pane-left');
-    const rightPane = document.querySelector('.diff-pane-right');
-    
-    if (!leftPane || !rightPane) return;
-    
-    let syncingLeft = false;
-    let syncingRight = false;
-    
-    leftPane.addEventListener('scroll', () => {
-        if (syncingLeft) return;
-        syncingRight = true;
-        rightPane.scrollTop = leftPane.scrollTop;
-        setTimeout(() => syncingRight = false, 10);
-    });
-    
-    rightPane.addEventListener('scroll', () => {
-        if (syncingRight) return;
-        syncingLeft = true;
-        leftPane.scrollTop = rightPane.scrollTop;
-        setTimeout(() => syncingLeft = false, 10);
-    });
+export function cleanupScrollSync() {
+    if (editorScrollListener) {
+        clearInterval(editorScrollListener);
+        editorScrollListener = null;
+    }
 }
 
 // ============================================
@@ -490,7 +654,8 @@ window.DiffViewer = {
     setViewMode,
     nextChange,
     previousChange,
-    getViewMode
+    getViewMode,
+    toggleScrollSync
 };
 
 // ============================================

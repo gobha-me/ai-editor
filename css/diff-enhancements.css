@@ -1,6 +1,7 @@
 /**
  * Enhanced Diff Viewer Styles for Issue #18
  * Side-by-side and unified diff views with navigation
+ * ALL font sizes now scale with --ui-font-size variable
  */
 
 /* ============================================
@@ -21,7 +22,7 @@
     display: flex;
     gap: 0.75rem;
     align-items: center;
-    font-size: 12px;
+    font-size: var(--font-md);
     font-family: var(--font-mono);
 }
 
@@ -37,7 +38,7 @@
 
 .diff-stat-info {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-sm);
 }
 
 .diff-controls {
@@ -51,7 +52,7 @@
     border: 1px solid var(--border);
     border-radius: 3px;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--font-sm);
     cursor: pointer;
     transition: all 0.15s;
 }
@@ -136,7 +137,7 @@
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-sm);
     color: var(--accent);
     font-weight: 600;
     position: sticky;
@@ -198,7 +199,7 @@
 
 @media (max-width: 1200px) {
     .diff-view-side-by-side .diff-pane {
-        font-size: 11px;
+        font-size: var(--font-sm);
     }
     
     .diff-view-side-by-side .diff-ln {
@@ -230,7 +231,7 @@
     justify-content: center;
     height: 100%;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-base);
 }
 
 .diff-loading::after {

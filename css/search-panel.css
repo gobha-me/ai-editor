@@ -1,4 +1,5 @@
-/* Search Panel Styles */
+/* Search Panel Styles - ALL font sizes scale with CSS variables */
+
 .search-panel {
     position: fixed;
     top: 0;
@@ -40,7 +41,7 @@
     border: 1px solid #404040;
     border-radius: 4px;
     color: #e0e0e0;
-    font-size: 14px;
+    font-size: var(--font-lg);
 }
 
 .search-input-wrapper input:focus {
@@ -67,7 +68,7 @@
     align-items: center;
     gap: 6px;
     color: #aaa;
-    font-size: 13px;
+    font-size: var(--font-base);
     cursor: pointer;
 }
 
@@ -88,7 +89,7 @@
     border: 1px solid #404040;
     border-radius: 3px;
     color: #e0e0e0;
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .search-actions {
@@ -100,7 +101,7 @@
     padding: 6px 14px;
     border: none;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: var(--font-base);
     cursor: pointer;
     transition: background 0.15s;
 }
@@ -137,6 +138,28 @@
     cursor: not-allowed;
 }
 
+/* Replace Bar (moved from inline styles) */
+.replace-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.replace-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: var(--font-lg);
+}
+
+.replace-input:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
 /* Results Panel */
 .search-results {
     background: #1a1a1a;
@@ -169,13 +192,13 @@
 
 .file-path {
     color: #79c0ff;
-    font-size: 13px;
+    font-size: var(--font-base);
     font-weight: 500;
 }
 
 .file-stats {
     color: #888;
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .search-result-matches {
@@ -202,14 +225,14 @@
 
 .match-line-number {
     color: #79c0ff;
-    font-size: 12px;
+    font-size: var(--font-md);
     min-width: 40px;
     text-align: right;
 }
 
 .match-content {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--font-base);
     font-family: 'Consolas', 'Monaco', monospace;
     white-space: pre-wrap;
     word-break: break-all;
@@ -243,7 +266,7 @@
 
 .match-action-btn {
     padding: 2px 6px;
-    font-size: 11px;
+    font-size: var(--font-sm);
     border-radius: 3px;
     background: #333;
     color: #aaa;
@@ -285,7 +308,7 @@
 
 .file-action-btn {
     padding: 4px 10px;
-    font-size: 12px;
+    font-size: var(--font-md);
     border-radius: 3px;
     background: #333;
     color: #ccc;
@@ -344,7 +367,7 @@
 .replace-dialog h3 {
     margin: 0 0 16px 0;
     color: #e0e0e0;
-    font-size: 16px;
+    font-size: var(--font-xl);
 }
 
 .replace-field {
@@ -354,7 +377,7 @@
 .replace-field label {
     display: block;
     color: #aaa;
-    font-size: 12px;
+    font-size: var(--font-md);
     margin-bottom: 4px;
 }
 
@@ -365,7 +388,7 @@
     border: 1px solid #404040;
     border-radius: 4px;
     color: #e0e0e0;
-    font-size: 14px;
+    font-size: var(--font-lg);
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
@@ -386,12 +409,12 @@
 
 .replace-preview-label {
     color: #888;
-    font-size: 11px;
+    font-size: var(--font-sm);
     margin-bottom: 8px;
 }
 
 .replace-preview-content {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-family: 'Consolas', 'Monaco', monospace;
     color: #ccc;
     white-space: pre-wrap;
@@ -422,7 +445,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: var(--font-md);
     color: #888;
 }
 
@@ -447,13 +470,13 @@
 }
 
 .search-empty-icon {
-    font-size: 48px;
+    font-size: calc(var(--ui-font-size) * 3.5);
     margin-bottom: 12px;
     opacity: 0.5;
 }
 
 .search-empty-text {
-    font-size: 14px;
+    font-size: var(--font-lg);
 }
 
 /* Responsive */
