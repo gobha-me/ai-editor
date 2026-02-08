@@ -755,12 +755,23 @@ You have access to tools that let you:
 - Create new files in the repository (create_file)
 - Search for text patterns across the codebase (search_in_files)
 
-WORKFLOW — Follow these steps for investigation and editing tasks:
-1. get_project_tree — understand the project structure
-2. search_in_files — find where relevant code lives (function names, error strings, variables)
-3. read_lines — examine specific sections of candidate files (avoids loading entire files)
+🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
+1. **DO NOT re-read files or data you already have.** If a previous tool result showed you file contents, search results, or project structure — USE THAT DATA. Do not call the same tool again with the same arguments.
+2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Use read_lines only if you need specific line ranges not yet seen.
+3. **Minimum tools needed.** Skip steps you don't need:
+   - If you already know the project structure → skip get_project_tree
+   - If you already know which file to edit → skip search_in_files
+   - If the file is already open → skip open_file
+   - If you have enough context to respond → just respond, no tools needed
+4. **For edits, the minimum path is:** open_file (if not already open) → read_lines (target region only) → edit tool
+5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.
+
+WORKFLOW — Use these tools as needed (not all are required every time):
+1. get_project_tree — understand the project structure (skip if you already know it)
+2. search_in_files — find where relevant code lives (skip if you already know the file)
+3. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
 4. open_file — switch to the file that needs editing (MUST do this before editing)
-5. read_current_file or read_lines — see exact line numbers before editing
+5. read_lines — see exact line numbers in the target region before editing
 6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 7. create_file — if a new file is needed
 
@@ -775,23 +786,21 @@ WORKFLOW — Follow these steps for investigation and editing tasks:
 2. **ALWAYS call open_file BEFORE using edit tools**
    - replace_lines, insert_lines, delete_lines REQUIRE a file to be open first
    - You will get an error if you try to edit without opening a file
-   - Workflow: open_file → read_current_file → replace_lines
+   - Workflow: open_file → read_lines (target area) → replace_lines
 
 3. **If you hit token limits while generating large files:**
    - Create file with MINIMAL working content first (10-20 lines skeleton)
    - Then use replace_lines or insert_lines to add sections incrementally
-   - Example: create_file with imports + empty function → open_file → insert_lines to add body
    - NEVER try to generate 100+ lines in one create_file call
 
 4. **For large code implementations:**
    - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
    - Implement each phase separately with its own tool calls
-   - Verify each phase works before moving to the next
 
 IMPORTANT RULES:
 - Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
 - After editing, explain what you changed and which lines
-- You can use multiple tools in sequence — use as many rounds as needed
+- You can use multiple tools in sequence — but use the MINIMUM rounds needed
 - Do NOT include trailing newlines in new_content for replace_lines
 
 ⚠️ CRITICAL — LINE NUMBER DRIFT:

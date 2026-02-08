@@ -12,10 +12,22 @@ import { LLM } from '../llm.js';
  * Uses lightweight model (commitModel fallback) to avoid burning tokens.
  */
 export const ChatSummarizer = {
-    RECENT_COUNT: 10,           // messages kept verbatim
-    SUMMARY_THRESHOLD: 20,      // min messages before first summary
+    RECENT_COUNT_BASE: 10,      // messages kept verbatim (no tool calls)
+    RECENT_COUNT_TOOLS: 24,     // messages kept when tool calls are active
+    SUMMARY_THRESHOLD: 30,      // min messages before first summary (raised from 20)
     SUMMARY_INTERVAL: 15,       // new messages between re-summarizations
     SUMMARY_MAX_CHARS: 2000,
+
+    /** Dynamic recent count — expand window when tool calls are in recent history */
+    get RECENT_COUNT() {
+        const history = State.chatHistory;
+        // Check if any of the last 15 messages are tool-related
+        const recentSlice = history.slice(-15);
+        const hasToolActivity = recentSlice.some(m => 
+            m.role === 'tool' || (m.role === 'assistant' && m.tool_calls?.length > 0)
+        );
+        return hasToolActivity ? this.RECENT_COUNT_TOOLS : this.RECENT_COUNT_BASE;
+    },
 
     /** @returns {boolean} true when enough new messages have accumulated */
     shouldSummarize() {

@@ -221,6 +221,10 @@ export async function handleGeneralRequest(input) {
     let finalContent = '';          // Accumulated across rounds (used for error fallback)
     let lastRoundContent = '';      // Only the current round's text (used for DOM + history)
     const toolActions = []; // Track all tool executions for fallback summary
+    
+    // === DUPLICATE TOOL CALL DETECTION ===
+    // Track tool+args combinations to prevent re-fetching the same data
+    const toolCallCache = new Map(); // key: "toolName|canonicalArgs" → result
 
     // Keep isGenerating true for the entire tool loop
     State.isGenerating = true;
@@ -355,18 +359,56 @@ export async function handleGeneralRequest(input) {
                         args = JSON.parse(toolCall.function?.arguments || '{}');
                     } catch (e) { /* malformed args */ }
 
-                    // Execute with configurable timeout (default 30s)
-                    const toolTimeout = State.settings.toolTimeout || 30000;
+                    // === DUPLICATE DETECTION ===
+                    // Build a canonical cache key from tool name + sorted args
+                    const cacheKey = toolName + '|' + JSON.stringify(args, Object.keys(args).sort());
+                    const cachedResult = toolCallCache.get(cacheKey);
+                    
                     let toolResult;
-                    try {
-                        toolResult = await Promise.race([
-                            executeToolCall(toolCall),
-                            new Promise((_, reject) =>
-                                setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
-                            )
-                        ]);
-                    } catch (e) {
-                        toolResult = { error: e.message };
+                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
+                                          'update_issue', 'add_issue_comment'].includes(toolName)) {
+                        // Return cached result for read-only tools with a note
+                        toolResult = {
+                            ...cachedResult,
+                            _cached: true,
+                            _cache_note: `[Cached from earlier in this conversation — same ${toolName} call with identical arguments. Data is still current.]`
+                        };
+                        console.log(`[TOOL-LOOP] Cache hit for ${toolName}(${JSON.stringify(args).slice(0, 80)})`);
+                    } else {
+                        // Execute with configurable timeout (default 30s)
+                        const toolTimeout = State.settings.toolTimeout || 30000;
+                        try {
+                            toolResult = await Promise.race([
+                                executeToolCall(toolCall),
+                                new Promise((_, reject) =>
+                                    setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
+                                )
+                            ]);
+                        } catch (e) {
+                            toolResult = { error: e.message };
+                        }
+                        
+                        // Invalidate cached reads when a write tool modifies a file
+                        // or when open_file changes the active file (stales read_current_file)
+                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'open_file'].includes(toolName)) {
+                            const affectedPath = args.path || State.currentFile?.path;
+                            if (affectedPath) {
+                                for (const [key] of toolCallCache) {
+                                    // Evict reads that reference this path OR read_current_file
+                                    // (which implicitly reads the active file without a path arg)
+                                    if (key.includes(affectedPath) || key.startsWith('read_current_file|')) {
+                                        toolCallCache.delete(key);
+                                        console.log(`[TOOL-LOOP] Cache invalidated: ${key.slice(0, 60)}…`);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Cache successful read-only results (skip write tools)
+                        if (!toolResult?.error && !['replace_lines', 'insert_lines', 'delete_lines', 
+                             'create_file', 'update_issue', 'add_issue_comment'].includes(toolName)) {
+                            toolCallCache.set(cacheKey, toolResult);
+                        }
                     }
 
                     // Show collapsible tool call detail
@@ -380,12 +422,12 @@ export async function handleGeneralRequest(input) {
                     });
 
                     if (toolCallSource === 'structured') {
-                        // CRITICAL FIX: Truncate large tool results BEFORE sending to API
-                        // This prevents "zero-length document" errors when minimax receives massive payloads
+                        // Truncate large tool results BEFORE sending to API
+                        // Raised from 2000→4000 to reduce secondary read_lines cascades
                         let toolContent = JSON.stringify(toolResult);
                         
-                        // Truncate if over 2000 chars to prevent request bloat
-                        if (toolContent.length > 2000) {
+                        // Truncate if over 4000 chars to prevent request bloat
+                        if (toolContent.length > 4000) {
                             try {
                                 const truncated = JSON.parse(toolContent);
                                 if (truncated.content) {
@@ -421,6 +463,7 @@ export async function handleGeneralRequest(input) {
                 // === BUILD THREAD FOR NEXT ROUND ===
 
                 // Compress old tool results to prevent token explosion.
+                // KEY CHANGE: Preserve actionable summaries instead of just "[already processed]"
                 for (let i = 0; i < messages.length; i++) {
                     const msg = messages[i];
                     if (msg.role === 'tool' && msg.content) {
@@ -428,20 +471,35 @@ export async function handleGeneralRequest(input) {
                             const parsed = JSON.parse(msg.content);
                             let compressed = false;
 
-                            // Compress file contents
-                            if (parsed.content && parsed.content.length > 500) {
-                                parsed.content = `[Content of ${parsed.path || 'file'} — ${parsed.line_count || '?'} lines — already processed]`;
+                            // Compress file contents — keep path + line count + function signatures
+                            if (parsed.content && parsed.content.length > 800) {
+                                const lines = parsed.content.split('\n');
+                                // Extract function/class names from the content for a useful summary
+                                const signatures = lines
+                                    .filter(l => /^\s*\d+:\s*(export\s+)?(async\s+)?function\s+\w+|^\s*\d+:\s*(export\s+)?const\s+\w+\s*=|^\s*\d+:\s*(export\s+)?class\s+\w+|^\s*\d+:\s*def\s+\w+|^\s*\d+:\s*func\s+\w+/.test(l))
+                                    .map(l => l.replace(/^\s*\d+:\s*/, '').trim())
+                                    .slice(0, 15)
+                                    .join(', ');
+                                const summary = signatures 
+                                    ? `Key symbols: ${signatures}`
+                                    : `${Math.min(lines.length, 5)} sample lines: ${lines.slice(0, 5).map(l => l.trim()).join(' | ')}`;
+                                parsed.content = `[File: ${parsed.path || 'unknown'} — ${parsed.line_count || lines.length} lines. ${summary}. Use read_lines if you need specific sections.]`;
                                 compressed = true;
                             }
-                            // Compress search results
+                            // Compress search results — keep file paths and match counts
                             if (parsed.results && Array.isArray(parsed.results) && parsed.results.length > 0) {
                                 const matchCount = parsed.results.reduce((sum, r) => sum + (r.matches?.length || 0), 0);
-                                parsed.results = `[${matchCount} matches in ${parsed.results.length} files — already processed]`;
+                                const filePaths = parsed.results.map(r => r.path || r.file).filter(Boolean).slice(0, 8);
+                                parsed.results = `[${matchCount} matches in ${parsed.results.length} files: ${filePaths.join(', ')}${parsed.results.length > 8 ? '...' : ''}. Use read_lines to examine specific matches.]`;
                                 compressed = true;
                             }
-                            // Compress project tree
+                            // Compress project tree — keep directory structure
                             if (parsed.files && Array.isArray(parsed.files) && parsed.files.length > 20) {
-                                parsed.files = `[${parsed.files.length} files — already processed]`;
+                                const dirs = [...new Set(parsed.files.map(f => {
+                                    const p = (f.path || f);
+                                    return p.includes('/') ? p.split('/').slice(0, 2).join('/') : p;
+                                }))].slice(0, 15);
+                                parsed.files = `[${parsed.files.length} files in dirs: ${dirs.join(', ')}. Tree already known — use search_in_files or read_lines for specifics.]`;
                                 compressed = true;
                             }
                             // Compress edit context (already consumed)
@@ -505,14 +563,14 @@ export async function handleGeneralRequest(input) {
                     const summary = textResults.map(tr => {
                         // Truncate large results to prevent token explosion
                         let resultStr = JSON.stringify(tr.result, null, 2);
-                        if (resultStr.length > 1500) {
-                            resultStr = resultStr.slice(0, 1500) + '\n... (truncated)';
+                        if (resultStr.length > 3000) {
+                            resultStr = resultStr.slice(0, 3000) + '\n... (truncated)';
                         }
                         return `[Tool: ${tr.name}]\n${resultStr}`;
                     }).join('\n\n');
                     messages.push({
                         role: 'user',
-                        content: `Tool results:\n${summary}\n\nContinue using these results. Use additional tools if needed, otherwise provide your final response.`
+                        content: `Tool results:\n${summary}\n\nUse these results to continue. Only call additional tools if you are MISSING information needed to complete the task — do not re-read data you already have.`
                     });
                 }
 
