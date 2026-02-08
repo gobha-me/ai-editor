@@ -16,7 +16,7 @@ export function registerFileTools(registry) {
     // ========================================
     // read_current_file
     // ========================================
-    registry.register('read_current_file', async () => {
+    registry.register('read_current_file', async ({ full = false }) => {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
@@ -30,9 +30,8 @@ export function registerFileTools(registry) {
         
         const MAX_LINES = 200;
 
-        // For large files, return first + last sections with line numbers
-        // so the model can target read_lines for specific regions
-        if (lineCount > MAX_LINES) {
+        // For large files, truncate UNLESS full=true is explicitly requested
+        if (!full && lineCount > MAX_LINES) {
             const headCount = 120;
             const tailCount = 60;
             const head = lines.slice(0, headCount)
@@ -41,29 +40,35 @@ export function registerFileTools(registry) {
                 .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
             return {
                 path: State.currentFile.path,
-                content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
+                content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines for ranges OR read_current_file with full=true) ...\n\n` + tail,
                 line_count: lineCount,
                 truncated: true,
                 language: State.currentFile.path.split('.').pop()
             };
         }
 
-        // Small files: return with line numbers for easy reference
+        // Small files OR full=true: return complete with line numbers
         const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
         return {
             path: State.currentFile.path,
             content: numbered,
             line_count: lineCount,
+            truncated: false,
             language: State.currentFile.path.split('.').pop()
         };
     }, {
         type: 'function',
         function: {
             name: 'read_current_file',
-            description: 'Read the content of the currently open file in the editor. Returns line-numbered content. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
+            description: 'Read the content of the currently open file in the editor. Returns line-numbered content. Large files (200+ lines) are truncated by default — use full=true to read complete file, or use read_lines for specific sections.',
             parameters: {
                 type: 'object',
-                properties: {},
+                properties: {
+                    full: {
+                        type: 'boolean',
+                        description: 'If true, return complete file content even if large (default: false)'
+                    }
+                },
                 required: []
             }
         },
@@ -75,7 +80,7 @@ export function registerFileTools(registry) {
     // ========================================
     // read_file
     // ========================================
-    registry.register('read_file', async ({ path }) => {
+    registry.register('read_file', async ({ path, full = false }) => {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
@@ -88,7 +93,8 @@ export function registerFileTools(registry) {
             const lineCount = lines.length;
             const MAX_LINES = 200;
 
-            if (lineCount > MAX_LINES) {
+            // For large files, truncate UNLESS full=true is explicitly requested
+            if (!full && lineCount > MAX_LINES) {
                 const headCount = 120;
                 const tailCount = 60;
                 const head = lines.slice(0, headCount)
@@ -97,18 +103,20 @@ export function registerFileTools(registry) {
                     .map((l, i) => `${lineCount - tailCount + i + 1}: ${l}`).join('\n');
                 return {
                     path: file.path,
-                    content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines to see specific ranges) ...\n\n` + tail,
+                    content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines for ranges OR read_file with full=true) ...\n\n` + tail,
                     line_count: lineCount,
                     truncated: true,
                     language: path.split('.').pop()
                 };
             }
 
+            // Small files OR full=true: return complete with line numbers
             const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
             return {
                 path: file.path,
                 content: numbered,
                 line_count: lineCount,
+                truncated: false,
                 language: path.split('.').pop()
             };
         } catch (error) {
@@ -118,13 +126,17 @@ export function registerFileTools(registry) {
         type: 'function',
         function: {
             name: 'read_file',
-            description: 'Read the content of a specific file without opening it in the editor. Large files (200+ lines) are automatically truncated — use read_lines for specific sections.',
+            description: 'Read the content of a specific file without opening it in the editor. Large files (200+ lines) are truncated by default — use full=true to read complete file, or use read_lines for specific sections.',
             parameters: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
                         description: 'The path to the file to read'
+                    },
+                    full: {
+                        type: 'boolean',
+                        description: 'If true, return complete file content even if large (default: false)'
                     }
                 },
                 required: ['path']

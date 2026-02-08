@@ -357,7 +357,7 @@ export function registerScanTools(registry) {
     // ========================================
     // find_references - Locate symbol usage
     // ========================================
-    registry.register('find_references', async ({ symbol, scope = '' }) => {
+    registry.register('find_references', async ({ symbol, scope = '', max_files = 30, max_references = 100 }) => {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
@@ -384,6 +384,7 @@ export function registerScanTools(registry) {
                 return textExts.has(ext);
             });
             
+            const totalFiles = files.length;
             const definitions = [];
             const references = [];
             
@@ -400,11 +401,15 @@ export function registerScanTools(registry) {
                 new RegExp(`^\\s*def\\s+${symbol}\\s*\\(`)  // Python
             ];
             
-            // Search up to 30 files
-            for (const file of files.slice(0, 30)) {
+            let totalReferences = 0;
+            let filesSearched = 0;
+            
+            // Search up to max_files
+            for (const file of files.slice(0, max_files)) {
                 try {
                     const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
                     const lines = fileData.content.split('\n');
+                    filesSearched++;
                     
                     for (let i = 0; i < lines.length; i++) {
                         const line = lines[i];
@@ -424,7 +429,10 @@ export function registerScanTools(registry) {
                         if (isDef) {
                             definitions.push(entry);
                         } else {
-                            references.push(entry);
+                            totalReferences++;
+                            if (references.length < max_references) {
+                                references.push(entry);
+                            }
                         }
                     }
                 } catch (e) {
@@ -432,13 +440,27 @@ export function registerScanTools(registry) {
                 }
             }
             
-            return {
+            const result = {
                 symbol,
                 scope: scope || '(all files)',
-                files_searched: Math.min(files.length, 30),
+                total_files_in_scope: totalFiles,
+                files_searched: filesSearched,
                 definitions,
-                references: references.slice(0, 50)  // Limit references
+                references,
+                total_references: totalReferences
             };
+            
+            // Add truncation warnings if applicable
+            if (filesSearched < totalFiles) {
+                result.warning = `Only searched ${filesSearched} of ${totalFiles} files. Use 'scope' parameter to narrow search or increase max_files.`;
+            }
+            
+            if (totalReferences > max_references) {
+                result.references_truncated = true;
+                result.warning = (result.warning || '') + ` Found ${totalReferences} references but only showing ${max_references}. Use 'scope' to narrow search or increase max_references.`;
+            }
+            
+            return result;
         } catch (error) {
             return { error: `Failed to find references: ${error.message}` };
         }
@@ -446,7 +468,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'find_references',
-            description: 'Find all definitions and usages of a function/variable/class. Returns line numbers only. Use read_lines or read_function to see details. Much faster than searching full file contents.',
+            description: 'Find all definitions and usages of a function/variable/class. Returns line numbers and context. Searches up to max_files (default 30) and returns up to max_references (default 100). Use scope parameter to narrow search.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -457,6 +479,14 @@ export function registerScanTools(registry) {
                     scope: {
                         type: 'string',
                         description: 'Optional directory prefix to limit search (e.g., "js/")'
+                    },
+                    max_files: {
+                        type: 'integer',
+                        description: 'Maximum files to search (default: 30)'
+                    },
+                    max_references: {
+                        type: 'integer',
+                        description: 'Maximum references to return (default: 100)'
                     }
                 },
                 required: ['symbol']

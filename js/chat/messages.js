@@ -253,9 +253,20 @@ export function addToolCallMessage(toolName, args, result) {
     // Format full args and result for the expandable section
     const argsJson = JSON.stringify(args, null, 2);
     const resultJson = JSON.stringify(result, null, 2);
-    // Truncate very long results (e.g., file contents)
-    const truncatedResult = resultJson.length > 2000 
-        ? resultJson.substring(0, 2000) + '\n... (truncated)'
+    
+    // CRITICAL TOOLS MUST NEVER TRUNCATE - they are foundational for navigation
+    const criticalTools = new Set([
+        'get_project_tree',    // Project structure
+        'list_open_tabs',      // Editor state
+        'scan_file',           // File outline
+        'find_references',     // Symbol search
+        'search_in_files',     // Text search
+        'list_issues'          // Issue list
+    ]);
+    
+    // Truncate very long results (e.g., file contents) EXCEPT for critical tools
+    const truncatedResult = !criticalTools.has(toolName) && resultJson.length > 2000 
+        ? resultJson.substring(0, 2000) + '\n... (truncated, expand to see full result)'
         : resultJson;
 
     const messageEl = document.createElement('div');
