@@ -569,19 +569,39 @@ async function loadFile(path) {
     try {
         EventBus.emit('gitea:loadingFile', { path });
 
-        // Check for draft first
-        const draft = Storage.getDraft(owner, repo, State.currentBranch, path);
-        
-        // Get file from Gitea
+        // *** CRITICAL BUG FIX: Always fetch fresh from Gitea first ***
+        // Get file from Gitea (ALWAYS fetch latest)
         const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
         
+        // Check if there's a local draft AFTER loading from Gitea
+        const draft = Storage.getDraft(owner, repo, State.currentBranch, path);
+        
         State.currentFile = file;
-        State.editorContent = draft || file.content;
-        State.editorDirty = !!draft;
+        
+        // If there's a draft AND it's different from server content, use draft but mark as dirty
+        if (draft && draft !== file.content) {
+            console.warn(`[DRAFT] Local draft exists for ${path}, using draft but file is marked dirty`);
+            State.editorContent = draft;
+            State.editorDirty = true;
+            
+            // Show a toast to inform the user
+            if (window.showToast) {
+                window.showToast(`📝 Loaded local draft for ${path.split('/').pop()}`, 'info');
+            }
+        } else {
+            // No draft or draft matches server - use server content
+            State.editorContent = file.content;
+            State.editorDirty = false;
+            
+            // Clear the draft if it matches (cleanup)
+            if (draft && draft === file.content) {
+                Storage.clearDraft(owner, repo, State.currentBranch, path);
+            }
+        }
 
         EventBus.emit('gitea:fileLoaded', { 
             file, 
-            hasDraft: !!draft,
+            hasDraft: draft && draft !== file.content,
             content: State.editorContent 
         });
 
