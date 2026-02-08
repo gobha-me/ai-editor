@@ -552,24 +552,19 @@ function insertAtLine(afterLine, content) {
         insertPos = line.to;
     }
     
-    // Ensure proper newline handling at insertion boundaries.
-    // insertPos is at line(afterLine).to, which is BEFORE the newline separator.
-    // We need to prepend \n to separate from the existing line.
-    let insertContent = content;
+    // FIX: Simplified and consistent newline handling
+    // Normalize: strip trailing newline from content (we'll add separators explicitly)
+    let insertContent = content.endsWith('\n') ? content.slice(0, -1) : content;
+    
     if (afterLine === 0) {
-        // Insert at beginning — append \n to separate from existing first line
-        if (!content.endsWith('\n')) {
-            insertContent = content + '\n';
-        }
+        // Insert at beginning — append newline to separate from first line
+        insertContent = insertContent + '\n';
     } else {
-        // Insert after an existing line — prepend \n as separator.
-        // Strip trailing \n from content to avoid double-newline with
-        // the existing separator after the current line (same issue as replaceRange).
-        const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content;
-        insertContent = '\n' + trimmed;
+        // Insert after a line — prepend newline as separator
+        insertContent = '\n' + insertContent;
     }
     
-    // Count new lines
+    // Count new lines from original content (before normalization)
     const newLines = content.split('\n');
     const newLineCount = newLines.length;
     
@@ -578,7 +573,7 @@ function insertAtLine(afterLine, content) {
         changes: { from: insertPos, insert: insertContent }
     });
     
-    // Update state
+    // Update state - force synchronization
     State.editorContent = editorInstance.state.doc.toString();
     State.editorDirty = true;
     

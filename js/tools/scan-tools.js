@@ -507,8 +507,20 @@ export function registerScanTools(registry) {
         const branch = State.currentBranch || 'main';
         
         try {
-            const file = await GiteaAPI.getFile(owner, repo, path, branch);
-            const lines = file.content.split('\n');
+            // FIX: Check if reading from currently open file in editor
+            let content;
+            let source = 'gitea';
+            if (State.currentFile && State.currentFile.path === path) {
+                // Read from editor buffer (includes unsaved changes)
+                content = State.editorContent || '';
+                source = 'editor';
+            } else {
+                // Read from Gitea (original/committed version)
+                const file = await GiteaAPI.getFile(owner, repo, path, branch);
+                content = file.content;
+            }
+            
+            const lines = content.split('\n');
             
             // Validate line numbers
             const start = Math.max(1, start_line - context_lines);
@@ -524,7 +536,7 @@ export function registerScanTools(registry) {
             
             // Extract lines (convert to 0-indexed)
             const extractedLines = lines.slice(start - 1, end);
-            const content = extractedLines.join('\n');
+            const resultContent = extractedLines.join('\n');
             
             // Track this read for drift detection
             EditTracker.recordRead(path, start, end, lines.length);
@@ -537,7 +549,8 @@ export function registerScanTools(registry) {
                 requested_end: end_line,
                 context_lines,
                 line_count: lines.length,
-                content
+                content: resultContent,
+                source  // 'editor' or 'gitea' - helps debug state issues
             };
         } catch (error) {
             return { error: `Failed to read lines: ${error.message}` };
@@ -546,7 +559,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'read_lines',
-            description: 'Read specific line range from a file. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
+            description: 'Read specific line range from a file. If the file is currently open in the editor, reads from the editor buffer (including unsaved changes). Otherwise reads from Gitea. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
             parameters: {
                 type: 'object',
                 properties: {
