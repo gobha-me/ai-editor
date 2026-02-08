@@ -23,6 +23,7 @@
     --success: #4ec9b0;
     --warning: #dcdcaa;
     --error: #f14c4c;
+    --danger: #c93a3a;
     
     --border: #3c3c3c;
     --border-light: #474747;
@@ -1043,8 +1044,12 @@ body {
 }
 
 .btn-danger {
-    background: var(--error);
+    background: var(--danger);
     color: white;
+}
+
+.btn-danger:hover {
+    background: #d64545;
 }
 
 .btn-success {
@@ -1110,6 +1115,56 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ============================================
+   REVERT MODAL - FILE LIST STYLING
+   ============================================ */
+
+.revert-file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-md);
+    transition: background 0.15s;
+}
+
+.revert-file-item:last-child {
+    border-bottom: none;
+}
+
+.revert-file-item:hover {
+    background: var(--bg-hover);
+}
+
+.revert-file-item.current {
+    background: rgba(14, 125, 202, 0.1);
+    border-left: 3px solid var(--accent);
+}
+
+.revert-file-icon {
+    flex-shrink: 0;
+    font-size: var(--font-lg);
+}
+
+.revert-file-path {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.revert-current-badge {
+    background: var(--accent);
+    color: white;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    flex-shrink: 0;
 }
 
 .btn:disabled {
@@ -1263,6 +1318,7 @@ body {
 .toast.success { border-left: 3px solid var(--success); }
 .toast.error { border-left: 3px solid var(--error); }
 .toast.warning { border-left: 3px solid var(--warning); }
+.toast.info { border-left: 3px solid var(--accent); }
 
 /* ============================================
    SCROLLBARS
