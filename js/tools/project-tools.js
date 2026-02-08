@@ -4,7 +4,7 @@
  */
 
 import { State, EventBus } from '../core.js';
-import { GiteaAPI } from '../gitea.js';
+import { Git } from '../git.js';
 
 /**
  * Register all project-related tools.
@@ -62,7 +62,7 @@ export function registerProjectTools(registry) {
         const branch = State.currentBranch || 'main';
         const commitMsg = message || `Create ${path}`;
         try {
-            const result = await GiteaAPI.createFile(owner, repo, path, content, commitMsg, branch);
+            const result = await Git.createFile(owner, repo, path, content, commitMsg, branch);
             EventBus.emit('tree:refresh');
             return {
                 success: true,
@@ -76,7 +76,7 @@ export function registerProjectTools(registry) {
         type: 'function',
         function: {
             name: 'create_file',
-            description: 'Create a new file in the project repository. Commits directly to the current branch via Gitea API. Intermediate directories are created automatically.',
+            description: 'Create a new file in the project repository. Commits directly to the current branch. Intermediate directories are created automatically.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -120,7 +120,7 @@ export function registerProjectTools(registry) {
         
         const commitMsg = message || `Delete ${path}`;
         try {
-            await GiteaAPI.deleteFile(owner, repo, path, commitMsg, file.sha, branch);
+            await Git.deleteFile(owner, repo, path, commitMsg, file.sha, branch);
             
             // Close tab if open
             const tabIndex = State.openTabs.findIndex(t => t.path === path);
@@ -138,7 +138,7 @@ export function registerProjectTools(registry) {
                 }
             }
             
-            // Refresh file tree (handler fetches from Gitea)
+            // Refresh file tree
             EventBus.emit('tree:refresh');
             
             return {
@@ -153,7 +153,7 @@ export function registerProjectTools(registry) {
         type: 'function',
         function: {
             name: 'delete_file',
-            description: 'Delete a file from the project repository. Commits the deletion directly to the current branch via Gitea API.',
+            description: 'Delete a file from the project repository. Commits the deletion directly to the current branch.',
             parameters: {
                 type: 'object',
                 properties: {

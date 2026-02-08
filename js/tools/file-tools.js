@@ -4,7 +4,7 @@
  */
 
 import { State } from '../core.js';
-import { GiteaAPI } from '../gitea.js';
+import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
 
 /**
@@ -88,7 +88,7 @@ export function registerFileTools(registry) {
         // Note: read_file doesn't track for editing since it doesn't open in editor
         const { owner, repo } = State.currentProject;
         try {
-            const file = await GiteaAPI.getFile(owner, repo, path, State.currentBranch);
+            const file = await Git.getFile(owner, repo, path, State.currentBranch);
             const lines = file.content.split('\n');
             const lineCount = lines.length;
             const MAX_LINES = 200;

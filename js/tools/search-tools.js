@@ -4,7 +4,7 @@
  */
 
 import { State } from '../core.js';
-import { GiteaAPI } from '../gitea.js';
+import { Git } from '../git.js';
 
 /**
  * Register all search-related tools.
@@ -42,7 +42,7 @@ export function registerSearchTools(registry) {
             for (const file of files.slice(0, 50)) {
                 if (results.length >= max_results) break;
                 try {
-                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
+                    const fileData = await Git.getFile(owner, repo, file.path, branch);
                     const lines = fileData.content.split('\n');
                     const matches = [];
                     for (let i = 0; i < lines.length; i++) {

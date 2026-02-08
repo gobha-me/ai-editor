@@ -5,7 +5,7 @@
  */
 
 import { State } from '../core.js';
-import { GiteaAPI } from '../gitea.js';
+import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
 
 /**
@@ -90,7 +90,7 @@ export function registerScanTools(registry) {
         const branch = State.currentBranch || 'main';
         
         try {
-            const file = await GiteaAPI.getFile(owner, repo, path, branch);
+            const file = await Git.getFile(owner, repo, path, branch);
             const content = file.content;
             const lines = content.split('\n');
             
@@ -275,7 +275,7 @@ export function registerScanTools(registry) {
         const branch = State.currentBranch || 'main';
         
         try {
-            const file = await GiteaAPI.getFile(owner, repo, path, branch);
+            const file = await Git.getFile(owner, repo, path, branch);
             const lines = file.content.split('\n');
             
             // Search for function by name (case-sensitive)
@@ -407,7 +407,7 @@ export function registerScanTools(registry) {
             // Search up to max_files
             for (const file of files.slice(0, max_files)) {
                 try {
-                    const fileData = await GiteaAPI.getFile(owner, repo, file.path, branch);
+                    const fileData = await Git.getFile(owner, repo, file.path, branch);
                     const lines = fileData.content.split('\n');
                     filesSearched++;
                     
@@ -509,14 +509,14 @@ export function registerScanTools(registry) {
         try {
             // FIX: Check if reading from currently open file in editor
             let content;
-            let source = 'gitea';
+            let source = 'remote';
             if (State.currentFile && State.currentFile.path === path) {
                 // Read from editor buffer (includes unsaved changes)
                 content = State.editorContent || '';
                 source = 'editor';
             } else {
-                // Read from Gitea (original/committed version)
-                const file = await GiteaAPI.getFile(owner, repo, path, branch);
+                // Read from remote (original/committed version)
+                const file = await Git.getFile(owner, repo, path, branch);
                 content = file.content;
             }
             
@@ -550,7 +550,7 @@ export function registerScanTools(registry) {
                 context_lines,
                 line_count: lines.length,
                 content: resultContent,
-                source  // 'editor' or 'gitea' - helps debug state issues
+                source  // 'editor' or 'remote' - helps debug state issues
             };
         } catch (error) {
             return { error: `Failed to read lines: ${error.message}` };
@@ -559,7 +559,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'read_lines',
-            description: 'Read specific line range from a file. If the file is currently open in the editor, reads from the editor buffer (including unsaved changes). Otherwise reads from Gitea. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
+            description: 'Read specific line range from a file. If the file is currently open in the editor, reads from the editor buffer (including unsaved changes). Otherwise reads from the remote repository. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
             parameters: {
                 type: 'object',
                 properties: {
