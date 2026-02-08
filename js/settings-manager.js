@@ -391,6 +391,13 @@ function updateProviderDescription() {
 
 function populateCommitModelSelect() {
     const select = document.getElementById('settingCommitModel');
+    
+    // Guard: Settings modal not open yet, skip population
+    if (!select) {
+        console.log('[Settings] Commit model select not in DOM yet, skipping population');
+        return;
+    }
+    
     const current = State.settings.commitModel || '';
     select.innerHTML = '<option value="">Same as default model</option>';
     
@@ -408,9 +415,16 @@ function populateCommitModelSelect() {
 }
 
 function showModelCapabilities() {
-    const modelId = document.getElementById('settingLlmModel').value;
-    const model = State.models.find(m => m.id === modelId);
+    const modelSelect = document.getElementById('settingLlmModel');
     const container = document.getElementById('modelCapabilitiesInfo');
+    
+    // Guard: Settings modal not open yet
+    if (!modelSelect || !container) {
+        return;
+    }
+    
+    const modelId = modelSelect.value;
+    const model = State.models.find(m => m.id === modelId);
     
     if (!model || !model.capabilities) {
         container.style.display = 'none';
@@ -627,7 +641,7 @@ export function populateSettingsModelSelects(models) {
         });
     }
 
-    // Commit model select
+    // Commit model select - now with null check
     populateCommitModelSelect();
 }
 
