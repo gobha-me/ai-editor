@@ -3,7 +3,7 @@
  * OpenAI-compatible API for chat completions
  */
 
-import { State, EventBus, Storage, Providers, Roles } from './core.js';
+import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from './core.js';
 import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
@@ -136,47 +136,25 @@ function buildRequestBody(model, messages, options = {}) {
         requestBody.tool_choice = 'auto';
     }
 
-    // Venice.ai-specific extensions
-    const provider = State.settings.apiProvider || 'openai';
-    
-    if (provider === 'venice') {
-        const veniceParams = State.settings.veniceParameters || {};
-        
-        // Build venice_parameters from both veniceParameters and advancedParams
-        const vp = {};
-        
-        // Venice-specific params (web search, scraping, citations, system prompt)
-        if (veniceParams.enableWebSearch && veniceParams.enableWebSearch !== 'off') {
-            vp.enable_web_search = veniceParams.enableWebSearch;
-        }
-        if (veniceParams.enableWebScraping) vp.enable_web_scraping = true;
-        if (veniceParams.enableWebCitations) vp.enable_web_citations = true;
-        if (veniceParams.includeSearchResultsInStream) vp.include_search_results_in_stream = true;
-        if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
-            vp.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
-        }
-        if (veniceParams.includeSystemPrompt !== undefined) {
-            vp.include_venice_system_prompt = veniceParams.includeSystemPrompt;
-        }
-        
-        // Thinking params — bridge from advancedParams OR veniceParameters
-        const stripThinking = adv.strip_thinking_response || veniceParams.stripThinking;
-        const disableThinking = adv.disable_thinking || veniceParams.disableThinking;
-        if (stripThinking) vp.strip_thinking_response = true;
-        if (disableThinking) vp.disable_thinking = true;
-        
-        // Only add if we have anything
-        if (Object.keys(vp).length > 0) {
-            requestBody.venice_parameters = vp;
-        }
+    // Provider-specific extensions (Venice, OpenRouter, etc.)
+    // Each provider's transformRequest is self-contained in js/providers/*.js
+    return ProviderRegistry.transformRequest(requestBody, State.settings);
+}
 
-        // Reasoning effort (Venice-specific top-level param)
-        if (veniceParams.reasoningEffort && !adv.reasoning_effort) {
-            requestBody.reasoning_effort = veniceParams.reasoningEffort;
-        }
+/**
+ * Build HTTP headers for API requests.
+ * Merges base auth headers with provider-specific headers.
+ */
+function buildHeaders(contentType = true) {
+    const base = {
+        'Authorization': `Bearer ${State.settings.llmApiKey}`
+    };
+    if (contentType) {
+        base['Content-Type'] = 'application/json';
     }
-
-    return requestBody;
+    // Merge provider-specific headers (e.g. OpenRouter's HTTP-Referer, X-Title)
+    const providerHeaders = ProviderRegistry.getHeaders(State.settings);
+    return { ...base, ...providerHeaders };
 }
 
 // ============================================
@@ -354,10 +332,7 @@ const LLM = {
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${State.settings.llmApiKey}`
-            },
+            headers: buildHeaders(),
             body: JSON.stringify(data)
         });
 
@@ -377,9 +352,7 @@ const LLM = {
         const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/models`;
         
         const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${State.settings.llmApiKey}`
-            }
+            headers: buildHeaders(false)
         });
 
         if (!response.ok) {
@@ -415,9 +388,7 @@ const LLM = {
         // Try fetching with type=embedding parameter (Venice.ai style)
         try {
             const response = await fetch(`${baseUrl}/models?type=embedding`, {
-                headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`
-                }
+                headers: buildHeaders(false)
             });
 
             if (response.ok) {
@@ -441,9 +412,7 @@ const LLM = {
         // Fallback: fetch all models and filter by type
         try {
             const response = await fetch(`${baseUrl}/models`, {
-                headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`
-                }
+                headers: buildHeaders(false)
             });
 
             if (!response.ok) {
@@ -529,10 +498,7 @@ const LLM = {
                 `${State.settings.llmEndpoint.replace(/\/$/, '')}/chat/completions`,
                 {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${State.settings.llmApiKey}`
-                    },
+                    headers: buildHeaders(),
                     body: JSON.stringify(requestBody),
                     signal: this.abortController.signal
                 }

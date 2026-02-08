@@ -338,55 +338,10 @@
         </div>
     </div>
 
-    <!-- Venice.ai Parameters (shown only when Venice provider selected) -->
-    <div id="veniceParamsSection" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; display: none;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">🏖️ Venice.ai Parameters</h4>
-        <small style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);">
-            These only apply when API Provider is set to Venice
-        </small>
-        
-        <div class="form-group">
-            <label for="settingVeniceWebSearch">Web Search:</label>
-            <select id="settingVeniceWebSearch">
-                <option value="off">Off</option>
-                <option value="auto">Auto</option>
-                <option value="always">Always</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingVeniceWebScraping">
-                Enable web scraping
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingVeniceWebCitations">
-                Include web citations
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingVeniceSearchInStream">
-                Stream search results
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingVeniceSearchAsDocs">
-                Return search results as documents
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingVeniceSystemPrompt">
-                Include Venice system prompt
-            </label>
-        </div>
+    <!-- Provider-specific Parameters (dynamically populated from provider settingsSchema) -->
+    <div id="providerParamsSection" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; display: none;">
+        <h4 id="providerParamsTitle" style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;"></h4>
+        <small id="providerParamsSubtitle" style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);"></small>
+        <div id="providerParamsFields"></div>
     </div>
 </div>

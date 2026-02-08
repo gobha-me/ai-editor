@@ -2,7 +2,7 @@
 // SETTINGS MANAGER
 // ============================================
 
-import { State, Storage, Providers, Roles, saveSettings as coreSaveSettings } from './core.js';
+import { State, Storage, Providers, ProviderRegistry, Roles, saveSettings as coreSaveSettings } from './core.js';
 import { LLM } from './llm.js';
 import { ToolRegistry } from './tools/registry.js';
 import { ContextManager } from './context-manager.js';
@@ -52,7 +52,13 @@ function populateSettingsForm() {
     
     providerSelect.onchange = () => {
         updateProviderDescription();
-        updateVeniceParamsVisibility();
+        renderProviderSettings();
+        // Auto-fill endpoint when provider changes (if endpoint is empty)
+        const endpointInput = document.getElementById('settingLlmEndpoint');
+        const defaultEndpoint = ProviderRegistry.getDefaultEndpoint(providerSelect.value);
+        if (endpointInput && !endpointInput.value && defaultEndpoint) {
+            endpointInput.value = defaultEndpoint;
+        }
     };
     modelSelect.onchange = showModelCapabilities;
     showModelCapabilities();
@@ -251,9 +257,8 @@ function populateAdvancedParams() {
     const logprobs = document.getElementById('settingLogprobs');
     if (logprobs) logprobs.checked = adv.logprobs || false;
 
-    // Venice.ai-specific parameters
-    populateVeniceParams();
-    updateVeniceParamsVisibility();
+    // Provider-specific parameters (dynamic from settingsSchema)
+    renderProviderSettings();
 }
 
 /**
@@ -289,79 +294,150 @@ function setupSliderSync(sliderId, inputId, value) {
 }
 
 /**
- * Populate Venice.ai-specific parameter fields from State
+ * Render provider-specific settings fields dynamically from settingsSchema.
+ * Called on provider change and initial load.
  */
-function populateVeniceParams() {
-    const vp = State.settings.veniceParameters || {};
-    
-    const webSearch = document.getElementById('settingVeniceWebSearch');
-    if (webSearch) webSearch.value = vp.enableWebSearch || 'off';
-    
-    const webScraping = document.getElementById('settingVeniceWebScraping');
-    if (webScraping) webScraping.checked = vp.enableWebScraping || false;
-    
-    const webCitations = document.getElementById('settingVeniceWebCitations');
-    if (webCitations) webCitations.checked = vp.enableWebCitations || false;
-    
-    const searchInStream = document.getElementById('settingVeniceSearchInStream');
-    if (searchInStream) searchInStream.checked = vp.includeSearchResultsInStream || false;
-    
-    const searchAsDocs = document.getElementById('settingVeniceSearchAsDocs');
-    if (searchAsDocs) searchAsDocs.checked = vp.returnSearchResultsAsDocuments !== false; // default true
-    
-    const systemPrompt = document.getElementById('settingVeniceSystemPrompt');
-    if (systemPrompt) systemPrompt.checked = vp.includeSystemPrompt !== false; // default true
-}
+function renderProviderSettings() {
+    const section = document.getElementById('providerParamsSection');
+    const title = document.getElementById('providerParamsTitle');
+    const subtitle = document.getElementById('providerParamsSubtitle');
+    const container = document.getElementById('providerParamsFields');
+    if (!section || !container) return;
 
-/**
- * Show Venice params section only when Venice provider is selected
- */
-function updateVeniceParamsVisibility() {
-    const section = document.getElementById('veniceParamsSection');
-    if (!section) return;
-    
     const providerSelect = document.getElementById('settingApiProvider');
-    const isVenice = providerSelect && providerSelect.value === 'venice';
-    section.style.display = isVenice ? 'block' : 'none';
+    const providerId = providerSelect?.value || State.settings.apiProvider || 'openai';
+    const provider = ProviderRegistry.get(providerId);
+    const schema = provider.settingsSchema || {};
+
+    // Hide section if provider has no settings schema (e.g. base OpenAI)
+    if (Object.keys(schema).length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    // Show section with provider name
+    section.style.display = 'block';
+    if (title) title.textContent = `${provider.name} Parameters`;
+    if (subtitle) subtitle.textContent = `These only apply when API Provider is set to ${provider.name}`;
+
+    // Get current values from the provider's settings key
+    const settingsKey = provider.settingsKey;
+    const currentValues = settingsKey ? (State.settings[settingsKey] || {}) : {};
+
+    // Generate form fields from schema
+    const html = [];
+    for (const [key, field] of Object.entries(schema)) {
+        const fieldId = `settingProvider_${providerId}_${key}`;
+        const value = currentValues[key] !== undefined ? currentValues[key] : field.default;
+
+        switch (field.type) {
+            case 'boolean':
+                html.push(`
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="${fieldId}" 
+                                data-provider-key="${key}"
+                                ${value ? 'checked' : ''}>
+                            ${field.label}
+                        </label>
+                        ${field.description ? `<small style="display: block; color: var(--text-muted); margin-top: 2px;">${field.description}</small>` : ''}
+                    </div>
+                `);
+                break;
+
+            case 'select':
+                const options = (field.options || []).map(opt => {
+                    const optValue = typeof opt === 'object' ? opt.value : opt;
+                    const optLabel = typeof opt === 'object' ? opt.label : opt;
+                    const selected = String(value) === String(optValue) ? 'selected' : '';
+                    return `<option value="${optValue}" ${selected}>${optLabel}</option>`;
+                }).join('');
+                html.push(`
+                    <div class="form-group">
+                        <label for="${fieldId}">${field.label}:</label>
+                        <select id="${fieldId}" data-provider-key="${key}">
+                            ${options}
+                        </select>
+                        ${field.description ? `<small style="display: block; color: var(--text-muted); margin-top: 2px;">${field.description}</small>` : ''}
+                    </div>
+                `);
+                break;
+
+            case 'text':
+                html.push(`
+                    <div class="form-group">
+                        <label for="${fieldId}">${field.label}:</label>
+                        <input type="text" id="${fieldId}" 
+                            data-provider-key="${key}"
+                            value="${value || ''}" 
+                            placeholder="${field.placeholder || ''}">
+                        ${field.description ? `<small style="display: block; color: var(--text-muted); margin-top: 2px;">${field.description}</small>` : ''}
+                    </div>
+                `);
+                break;
+
+            case 'number':
+                html.push(`
+                    <div class="form-group">
+                        <label for="${fieldId}">${field.label}:</label>
+                        <input type="number" id="${fieldId}" 
+                            data-provider-key="${key}"
+                            value="${value || ''}" 
+                            ${field.min !== undefined ? `min="${field.min}"` : ''}
+                            ${field.max !== undefined ? `max="${field.max}"` : ''}
+                            ${field.step !== undefined ? `step="${field.step}"` : ''}
+                            placeholder="${field.placeholder || ''}">
+                        ${field.description ? `<small style="display: block; color: var(--text-muted); margin-top: 2px;">${field.description}</small>` : ''}
+                    </div>
+                `);
+                break;
+        }
+    }
+
+    container.innerHTML = html.join('');
 }
 
 /**
- * Collect Venice params from the form into State.settings.veniceParameters
+ * Collect provider-specific settings from the dynamically rendered form.
+ * Returns the collected object and the settings key to store it under.
  */
-function collectVeniceParams() {
-    const vp = {};
-    
-    const webSearch = document.getElementById('settingVeniceWebSearch');
-    if (webSearch) vp.enableWebSearch = webSearch.value;
-    
-    const webScraping = document.getElementById('settingVeniceWebScraping');
-    if (webScraping) vp.enableWebScraping = webScraping.checked;
-    
-    const webCitations = document.getElementById('settingVeniceWebCitations');
-    if (webCitations) vp.enableWebCitations = webCitations.checked;
-    
-    const searchInStream = document.getElementById('settingVeniceSearchInStream');
-    if (searchInStream) vp.includeSearchResultsInStream = searchInStream.checked;
-    
-    const searchAsDocs = document.getElementById('settingVeniceSearchAsDocs');
-    if (searchAsDocs) vp.returnSearchResultsAsDocuments = searchAsDocs.checked;
-    
-    const systemPrompt = document.getElementById('settingVeniceSystemPrompt');
-    if (systemPrompt) vp.includeSystemPrompt = systemPrompt.checked;
-    
-    // Thinking params are bridged from advancedParams in buildRequestBody,
-    // but keep them in veniceParameters too for backward compat
-    const stripThinking = document.getElementById('settingStripThinkingResponse');
-    if (stripThinking) vp.stripThinking = stripThinking.checked;
-    
-    const disableThinking = document.getElementById('settingDisableThinking');
-    if (disableThinking) vp.disableThinking = disableThinking.checked;
-    
-    // Reasoning effort (use advancedParams value if set, else keep existing)
-    const reasoningEffort = document.getElementById('settingReasoningEffort')?.value;
-    vp.reasoningEffort = reasoningEffort || null;
-    
-    return vp;
+function collectProviderSettings() {
+    const providerSelect = document.getElementById('settingApiProvider');
+    const providerId = providerSelect?.value || State.settings.apiProvider || 'openai';
+    const provider = ProviderRegistry.get(providerId);
+    const schema = provider.settingsSchema || {};
+    const settingsKey = provider.settingsKey;
+
+    if (!settingsKey || Object.keys(schema).length === 0) {
+        return { settingsKey: null, values: {} };
+    }
+
+    const values = {};
+    const container = document.getElementById('providerParamsFields');
+    if (!container) return { settingsKey, values };
+
+    for (const [key, field] of Object.entries(schema)) {
+        const fieldId = `settingProvider_${providerId}_${key}`;
+        const el = document.getElementById(fieldId);
+        if (!el) continue;
+
+        switch (field.type) {
+            case 'boolean':
+                values[key] = el.checked;
+                break;
+            case 'select':
+                values[key] = el.value;
+                break;
+            case 'text':
+                values[key] = el.value;
+                break;
+            case 'number':
+                values[key] = el.value ? parseFloat(el.value) : null;
+                break;
+        }
+    }
+
+    return { settingsKey, values };
 }
 
 function updateEmbeddingsStatus() {
@@ -689,8 +765,11 @@ export function saveSettings() {
 
     State.settings.advancedParams = advancedParams;
 
-    // Venice.ai-specific parameters
-    State.settings.veniceParameters = collectVeniceParams();
+    // Provider-specific parameters (dynamic from settingsSchema)
+    const { settingsKey, values } = collectProviderSettings();
+    if (settingsKey) {
+        State.settings[settingsKey] = values;
+    }
 
     // Sync main page role selector
     const roleSelectEl = document.getElementById('roleSelect');
@@ -870,8 +949,9 @@ export function exportSettings() {
         // Advanced Parameters
         advancedParams: State.settings.advancedParams,
         
-        // Venice.ai Parameters
+        // Provider-specific parameters (all registered providers)
         veniceParameters: State.settings.veniceParameters,
+        openRouterParameters: State.settings.openRouterParameters,
         
         // Other
         role: State.settings.role,
