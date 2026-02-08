@@ -8,6 +8,7 @@ import { ToolRegistry } from './tools/registry.js';
 import { ContextManager } from './context-manager.js';
 import { EmbeddingsClient } from './embeddings-client.js';
 import { injectTemplate } from './template-loader.js';
+import { GitProviderRegistry } from './git-providers/index.js';
 
 export async function openSettings() {
     // Load settings tabs template if not already loaded
@@ -23,6 +24,7 @@ export async function openSettings() {
     }
     
     populateSettingsForm();
+    initConnectionsTab();
     updateEmbeddingsStatus(); // Update status when opening
     document.getElementById('settingsModal').classList.add('active');
 }
@@ -32,9 +34,7 @@ export function closeSettings() {
 }
 
 function populateSettingsForm() {
-    // --- General Tab ---
-    document.getElementById('settingGiteaUrl').value = State.settings.giteaUrl || '';
-    document.getElementById('settingGiteaToken').value = State.settings.giteaToken || '';
+    // --- LLM Tab ---
     document.getElementById('settingLlmEndpoint').value = State.settings.llmEndpoint || '';
     document.getElementById('settingLlmApiKey').value = State.settings.llmApiKey || '';
 
@@ -466,6 +466,298 @@ function updateEmbeddingsStatus() {
     }
 }
 
+// ============================================
+// CONNECTIONS TAB
+// ============================================
+
+/** Currently editing connection ID (null = new) */
+let _editingConnectionId = null;
+
+/**
+ * Initialize the Connections tab: render list, wire up buttons.
+ */
+function initConnectionsTab() {
+    renderConnectionsList();
+
+    const addBtn = document.getElementById('btnAddConnection');
+    if (addBtn) addBtn.onclick = () => showConnectionEditor(null);
+
+    const cancelBtn = document.getElementById('btnCancelConnection');
+    if (cancelBtn) cancelBtn.onclick = hideConnectionEditor;
+
+    const saveBtn = document.getElementById('btnSaveConnection');
+    if (saveBtn) saveBtn.onclick = saveConnectionFromEditor;
+
+    const testBtn = document.getElementById('btnTestConnection');
+    if (testBtn) testBtn.onclick = testConnectionFromEditor;
+
+    // Hide URL field when provider has a fixed URL
+    const providerSelect = document.getElementById('connEditProvider');
+    if (providerSelect) {
+        providerSelect.onchange = () => {
+            const provider = GitProviderRegistry.get(providerSelect.value);
+            const urlGroup = document.getElementById('connEditUrlGroup');
+            if (urlGroup && provider) {
+                if (provider.fixedUrl) {
+                    urlGroup.style.display = 'none';
+                    document.getElementById('connEditUrl').value = provider.fixedUrl;
+                } else {
+                    urlGroup.style.display = '';
+                }
+            }
+        };
+    }
+}
+
+/**
+ * Render the connections list from the GitProviderRegistry.
+ */
+function renderConnectionsList() {
+    const container = document.getElementById('connectionsList');
+    if (!container) return;
+
+    const connections = GitProviderRegistry.listConnections();
+
+    if (connections.length === 0) {
+        container.innerHTML = `
+            <div class="connections-empty">
+                <div class="connections-empty-icon">🔌</div>
+                <div>No connections configured yet.</div>
+                <div style="margin-top: 0.25rem; font-size: 11px;">Add a git provider to get started.</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = connections.map(conn => {
+        const provider = GitProviderRegistry.get(conn.provider);
+        const icon = provider ? provider.icon : '📦';
+        const providerName = provider ? provider.name : conn.provider;
+        const disabledClass = conn.enabled ? '' : ' disabled';
+        const statusDot = conn.enabled
+            ? '<span style="color: var(--success);" title="Enabled">●</span>'
+            : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
+
+        return `
+            <div class="connection-card${disabledClass}" data-conn-id="${conn.id}">
+                <div class="connection-card-icon">${icon}</div>
+                <div class="connection-card-info">
+                    <div class="connection-card-label">${statusDot} ${escapeHtml(conn.label)}</div>
+                    <div class="connection-card-meta">${providerName} · ${escapeHtml(conn.url || '—')}</div>
+                </div>
+                <div class="connection-card-actions">
+                    <button onclick="window._editConnection('${conn.id}')" title="Edit">✏️</button>
+                    <button class="danger" onclick="window._removeConnection('${conn.id}')" title="Remove">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+}
+
+/**
+ * Show the connection editor form for adding or editing.
+ * @param {string|null} connId - null = new connection
+ */
+function showConnectionEditor(connId) {
+    _editingConnectionId = connId;
+    const editor = document.getElementById('connectionEditor');
+    const title = document.getElementById('connectionEditorTitle');
+    const result = document.getElementById('connectionTestResult');
+    if (!editor) return;
+
+    // Populate provider dropdown
+    const providerSelect = document.getElementById('connEditProvider');
+    const providers = GitProviderRegistry.list();
+    providerSelect.innerHTML = providers.map(p =>
+        `<option value="${p.id}">${p.icon} ${p.name}</option>`
+    ).join('');
+
+    if (connId) {
+        // Edit existing
+        const conn = GitProviderRegistry.getConnection(connId);
+        if (!conn) return;
+        title.textContent = `Edit: ${conn.label}`;
+        document.getElementById('connEditId').value = conn.id;
+        providerSelect.value = conn.provider;
+        document.getElementById('connEditLabel').value = conn.label;
+        document.getElementById('connEditUrl').value = conn.url;
+        document.getElementById('connEditToken').value = conn.token;
+        document.getElementById('connEditEnabled').checked = conn.enabled;
+        providerSelect.disabled = true; // Don't allow changing provider of existing connection
+    } else {
+        // New connection
+        title.textContent = 'New Connection';
+        document.getElementById('connEditId').value = '';
+        document.getElementById('connEditLabel').value = '';
+        document.getElementById('connEditUrl').value = '';
+        document.getElementById('connEditToken').value = '';
+        document.getElementById('connEditEnabled').checked = true;
+        providerSelect.disabled = false;
+    }
+
+    // Trigger provider change to show/hide URL field
+    providerSelect.dispatchEvent(new Event('change'));
+
+    // Reset test result
+    if (result) result.style.display = 'none';
+
+    editor.style.display = 'block';
+    document.getElementById('btnAddConnection').style.display = 'none';
+
+    // Focus the label field
+    setTimeout(() => document.getElementById('connEditLabel').focus(), 50);
+}
+
+function hideConnectionEditor() {
+    const editor = document.getElementById('connectionEditor');
+    if (editor) editor.style.display = 'none';
+    document.getElementById('btnAddConnection').style.display = '';
+    _editingConnectionId = null;
+}
+
+/**
+ * Save the connection being edited (add or update).
+ */
+function saveConnectionFromEditor() {
+    const providerId = document.getElementById('connEditProvider').value;
+    const label = document.getElementById('connEditLabel').value.trim();
+    const url = document.getElementById('connEditUrl').value.trim();
+    const token = document.getElementById('connEditToken').value.trim();
+    const enabled = document.getElementById('connEditEnabled').checked;
+
+    if (!label) {
+        window.showToast('Connection label is required', 'warning');
+        return;
+    }
+    if (!token) {
+        window.showToast('API token is required', 'warning');
+        return;
+    }
+
+    const provider = GitProviderRegistry.get(providerId);
+    const finalUrl = provider?.fixedUrl || url;
+    if (!finalUrl) {
+        window.showToast('URL is required for this provider', 'warning');
+        return;
+    }
+
+    try {
+        if (_editingConnectionId) {
+            // Update existing
+            GitProviderRegistry.updateConnection(_editingConnectionId, {
+                label, url: finalUrl, token, enabled
+            });
+            window.showToast(`Updated: ${label}`, 'success');
+        } else {
+            // Generate a slug ID from label
+            const id = label.toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                || `conn-${Date.now()}`;
+
+            // Check for duplicate ID
+            if (GitProviderRegistry.getConnection(id)) {
+                GitProviderRegistry.addConnection({
+                    id: `${id}-${Date.now()}`,
+                    provider: providerId,
+                    label, url: finalUrl, token, enabled
+                });
+            } else {
+                GitProviderRegistry.addConnection({
+                    id, provider: providerId,
+                    label, url: finalUrl, token, enabled
+                });
+            }
+            window.showToast(`Added: ${label}`, 'success');
+        }
+
+        // Persist immediately
+        State.settings.connections = GitProviderRegistry.listConnections();
+        coreSaveSettings();
+
+        hideConnectionEditor();
+        renderConnectionsList();
+    } catch (err) {
+        console.error('[Settings] Connection save error:', err);
+        window.showToast(`Error: ${err.message}`, 'error');
+    }
+}
+
+/**
+ * Test the connection configured in the editor form.
+ */
+async function testConnectionFromEditor() {
+    const providerId = document.getElementById('connEditProvider').value;
+    const url = document.getElementById('connEditUrl').value.trim();
+    const token = document.getElementById('connEditToken').value.trim();
+    const result = document.getElementById('connectionTestResult');
+
+    const provider = GitProviderRegistry.get(providerId);
+    if (!provider) {
+        showTestResult(result, 'error', '❌ Unknown provider');
+        return;
+    }
+
+    const finalUrl = provider.fixedUrl || url;
+    if (!finalUrl || !token) {
+        showTestResult(result, 'error', '❌ URL and token are required');
+        return;
+    }
+
+    showTestResult(result, 'info', '⏳ Testing connection…');
+
+    try {
+        const testConn = { url: finalUrl, token };
+        const repos = await provider.listRepos(testConn);
+        showTestResult(result, 'success',
+            `✅ Connected! Found ${repos.length} repo${repos.length !== 1 ? 's' : ''}.`
+        );
+    } catch (err) {
+        const status = err.status ? ` (HTTP ${err.status})` : '';
+        showTestResult(result, 'error', `❌ Failed${status}: ${err.message}`);
+    }
+}
+
+function showTestResult(el, type, message) {
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = message;
+    el.style.background = type === 'success' ? 'rgba(78, 201, 176, 0.12)'
+        : type === 'error' ? 'rgba(201, 58, 58, 0.12)'
+        : 'var(--bg-tertiary)';
+    el.style.color = type === 'success' ? 'var(--success)'
+        : type === 'error' ? 'var(--danger)'
+        : 'var(--text-secondary)';
+}
+
+/**
+ * Remove a connection (with confirmation).
+ */
+function removeConnection(connId) {
+    const conn = GitProviderRegistry.getConnection(connId);
+    if (!conn) return;
+
+    if (!confirm(`Remove connection "${conn.label}"?\n\nProjects using this connection will need to be reassigned.`)) {
+        return;
+    }
+
+    GitProviderRegistry.removeConnection(connId);
+    State.settings.connections = GitProviderRegistry.listConnections();
+    coreSaveSettings();
+    renderConnectionsList();
+    window.showToast(`Removed: ${conn.label}`, 'success');
+}
+
+// Expose to window for onclick handlers in rendered HTML
+window._editConnection = showConnectionEditor;
+window._removeConnection = removeConnection;
+
 function populateRoleCards() {
     const container = document.getElementById('roleCards');
     if (!container) {
@@ -651,14 +943,15 @@ function getNumericValue(elementId) {
 }
 
 export function saveSettings() {
-    // General
-    State.settings.giteaUrl = document.getElementById('settingGiteaUrl').value.trim();
-    State.settings.giteaToken = document.getElementById('settingGiteaToken').value.trim();
+    // LLM settings
     State.settings.llmEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
     State.settings.llmApiKey = document.getElementById('settingLlmApiKey').value.trim();
     State.settings.llmModel = document.getElementById('settingLlmModel').value.trim();
     State.settings.commitModel = document.getElementById('settingCommitModel').value.trim();
     State.settings.apiProvider = document.getElementById('settingApiProvider').value;
+
+    // Persist connections from registry into State
+    State.settings.connections = GitProviderRegistry.listConnections();
 
     // Timeouts (convert seconds to milliseconds)
     State.settings.llmTimeout = parseInt(document.getElementById('settingLlmTimeout').value) * 1000 || 180000;
@@ -916,9 +1209,10 @@ export async function fetchEmbeddingModelsForSettings() {
  */
 export function exportSettings() {
     const settings = {
-        // API Configuration
-        giteaUrl: State.settings.giteaUrl,
-        giteaToken: State.settings.giteaToken,
+        // Git Connections
+        connections: State.settings.connections || [],
+        
+        // LLM Configuration
         llmEndpoint: State.settings.llmEndpoint,
         llmApiKey: State.settings.llmApiKey,
         llmModel: State.settings.llmModel,
@@ -997,7 +1291,7 @@ export async function importSettings() {
                 const imported = JSON.parse(text);
 
                 // Validate it looks like a settings file (has at least one recognizable key)
-                const knownKeys = ['giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams'];
+                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams'];
                 const hasValidKey = knownKeys.some(k => k in imported);
                 if (!hasValidKey) {
                     throw new Error('Invalid settings file: no recognized settings keys found');

@@ -1642,6 +1642,111 @@ body.resizing .cm-editor {
 }
 
 /* ============================================
+   CONNECTION CARDS
+   ============================================ */
+
+.connection-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s;
+}
+
+.connection-card:hover {
+    border-color: var(--border-light);
+}
+
+.connection-card.disabled {
+    opacity: 0.5;
+}
+
+.connection-card-icon {
+    font-size: var(--font-2xl);
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.connection-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.connection-card-label {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.connection-card-meta {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.connection-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.connection-card-actions button {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: var(--font-sm);
+    line-height: 1;
+    transition: all 0.15s;
+}
+
+.connection-card-actions button:hover {
+    background: var(--bg-hover);
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.connection-card-actions button.danger:hover {
+    background: rgba(201, 58, 58, 0.15);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.connection-editor {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.connections-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    font-size: var(--font-md);
+}
+
+.connections-empty-icon {
+    font-size: 32px;
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+/* ============================================
    v0.3.6 - EDITOR TABS BAR (tabs + toolbar)
    ============================================ */
 

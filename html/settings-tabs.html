@@ -1,16 +1,64 @@
-<!-- General Tab -->
-<div class="settings-tab-content active" id="tabGeneral">
-    <div class="form-group">
-        <label for="settingGiteaUrl">Gitea URL:</label>
-        <input type="text" id="settingGiteaUrl" placeholder="https://git.example.com">
-    </div>
-    <div class="form-group">
-        <label for="settingGiteaToken">Gitea Token:</label>
-        <input type="password" id="settingGiteaToken" placeholder="Your Gitea API token">
+<!-- Connections Tab -->
+<div class="settings-tab-content active" id="tabConnections">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+        Configure git provider connections. Multiple connections can be active simultaneously.
+    </p>
+
+    <div id="connectionsList">
+        <!-- Populated dynamically by settings-manager.js -->
     </div>
 
-    <hr>
+    <button type="button" class="btn btn-secondary" id="btnAddConnection" style="width: 100%; margin-top: 0.75rem;">
+        ＋ Add Connection
+    </button>
 
+    <!-- Connection Editor (hidden by default, shown on Add/Edit) -->
+    <div id="connectionEditor" class="connection-editor" style="display: none;">
+        <h4 id="connectionEditorTitle" style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">New Connection</h4>
+        <input type="hidden" id="connEditId">
+
+        <div class="form-group">
+            <label for="connEditProvider">Provider:</label>
+            <select id="connEditProvider">
+                <!-- Populated dynamically from GitProviderRegistry -->
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="connEditLabel">Label:</label>
+            <input type="text" id="connEditLabel" placeholder="e.g. Home Gitea, Work GitHub">
+        </div>
+
+        <div class="form-group" id="connEditUrlGroup">
+            <label for="connEditUrl">URL:</label>
+            <input type="text" id="connEditUrl" placeholder="https://git.example.com">
+        </div>
+
+        <div class="form-group">
+            <label for="connEditToken">API Token:</label>
+            <input type="password" id="connEditToken" placeholder="Your API token">
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="connEditEnabled" checked>
+                Enabled
+            </label>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+            <button type="button" class="btn btn-secondary" id="btnTestConnection">🔌 Test</button>
+            <div style="flex: 1;"></div>
+            <button type="button" class="btn btn-secondary" id="btnCancelConnection">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSaveConnection">💾 Save Connection</button>
+        </div>
+
+        <div id="connectionTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 12px; display: none;"></div>
+    </div>
+</div>
+
+<!-- LLM Tab (formerly General) -->
+<div class="settings-tab-content" id="tabGeneral">
     <div class="form-group">
         <label for="settingApiProvider">API Provider:</label>
         <select id="settingApiProvider">

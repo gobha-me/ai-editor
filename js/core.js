@@ -45,7 +45,8 @@ const EventBus = {
 const State = {
     // Settings (persisted)
     settings: {
-        giteaUrl: '',
+        giteaUrl: '',     // Legacy — migrated to connections[] on first run
+        connections: [],  // Git provider connections: [{ id, provider, label, url, token, enabled }]
         theme: 'dark',
         
         // Embeddings / Context Management
