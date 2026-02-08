@@ -309,7 +309,7 @@
     </div>
 
     <!-- Other Options -->
-    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Other Options</h4>
         
         <div class="form-group">
@@ -334,6 +334,58 @@
             <label>
                 <input type="checkbox" id="settingLogprobs">
                 Include log probabilities
+            </label>
+        </div>
+    </div>
+
+    <!-- Venice.ai Parameters (shown only when Venice provider selected) -->
+    <div id="veniceParamsSection" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; display: none;">
+        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">🏖️ Venice.ai Parameters</h4>
+        <small style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);">
+            These only apply when API Provider is set to Venice
+        </small>
+        
+        <div class="form-group">
+            <label for="settingVeniceWebSearch">Web Search:</label>
+            <select id="settingVeniceWebSearch">
+                <option value="off">Off</option>
+                <option value="auto">Auto</option>
+                <option value="always">Always</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingVeniceWebScraping">
+                Enable web scraping
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingVeniceWebCitations">
+                Include web citations
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingVeniceSearchInStream">
+                Stream search results
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingVeniceSearchAsDocs">
+                Return search results as documents
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingVeniceSystemPrompt">
+                Include Venice system prompt
             </label>
         </div>
     </div>

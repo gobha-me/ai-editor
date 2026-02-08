@@ -88,14 +88,42 @@ function buildRequestBody(model, messages, options = {}) {
     // Sanitize messages - strip internal fields before API submission
     const sanitizedMessages = sanitizeMessages(messages);
 
+    // Merge advanced params from settings (user overrides)
+    const adv = State.settings.advancedParams || {};
+
     // Base OpenAI-compatible payload
     const requestBody = {
         model,
         messages: sanitizedMessages,
-        max_tokens: maxTokens,
-        temperature,
+        max_tokens: adv.max_tokens || adv.max_completion_tokens || maxTokens,
+        temperature: adv.temperature !== undefined ? adv.temperature : temperature,
         stream
     };
+
+    // Apply optional advanced parameters (only if user set them)
+    if (adv.top_p !== undefined) requestBody.top_p = adv.top_p;
+    if (adv.top_k !== undefined) requestBody.top_k = adv.top_k;
+    if (adv.min_p !== undefined) requestBody.min_p = adv.min_p;
+    if (adv.min_temp !== undefined) requestBody.min_temp = adv.min_temp;
+    if (adv.max_temp !== undefined) requestBody.max_temp = adv.max_temp;
+    if (adv.frequency_penalty !== undefined) requestBody.frequency_penalty = adv.frequency_penalty;
+    if (adv.presence_penalty !== undefined) requestBody.presence_penalty = adv.presence_penalty;
+    if (adv.repetition_penalty !== undefined) requestBody.repetition_penalty = adv.repetition_penalty;
+    if (adv.seed !== undefined) requestBody.seed = adv.seed;
+    if (adv.n !== undefined) requestBody.n = adv.n;
+    if (adv.stop) requestBody.stop = adv.stop;
+    if (adv.logprobs) requestBody.logprobs = adv.logprobs;
+
+    // Use max_completion_tokens instead of max_tokens if provider prefers it
+    if (adv.max_completion_tokens && !adv.max_tokens) {
+        delete requestBody.max_tokens;
+        requestBody.max_completion_tokens = adv.max_completion_tokens;
+    }
+
+    // Reasoning effort (OpenAI o1, Venice reasoning models)
+    if (adv.reasoning_effort) {
+        requestBody.reasoning_effort = adv.reasoning_effort;
+    }
 
     // Add streaming usage stats (OpenAI extension, Venice supports it)
     if (stream) {
@@ -114,39 +142,36 @@ function buildRequestBody(model, messages, options = {}) {
     if (provider === 'venice') {
         const veniceParams = State.settings.veniceParameters || {};
         
-        // Only add venice_parameters if user has configured any
-        if (Object.keys(veniceParams).length > 0) {
-            requestBody.venice_parameters = {};
-            
-            // Add configured Venice parameters
-            if (veniceParams.stripThinking !== undefined) {
-                requestBody.venice_parameters.strip_thinking_response = veniceParams.stripThinking;
-            }
-            if (veniceParams.disableThinking !== undefined) {
-                requestBody.venice_parameters.disable_thinking = veniceParams.disableThinking;
-            }
-            if (veniceParams.enableWebSearch !== undefined) {
-                requestBody.venice_parameters.enable_web_search = veniceParams.enableWebSearch;
-            }
-            if (veniceParams.enableWebScraping !== undefined) {
-                requestBody.venice_parameters.enable_web_scraping = veniceParams.enableWebScraping;
-            }
-            if (veniceParams.enableWebCitations !== undefined) {
-                requestBody.venice_parameters.enable_web_citations = veniceParams.enableWebCitations;
-            }
-            if (veniceParams.includeSearchResultsInStream !== undefined) {
-                requestBody.venice_parameters.include_search_results_in_stream = veniceParams.includeSearchResultsInStream;
-            }
-            if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
-                requestBody.venice_parameters.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
-            }
-            if (veniceParams.includeSystemPrompt !== undefined) {
-                requestBody.venice_parameters.include_venice_system_prompt = veniceParams.includeSystemPrompt;
-            }
+        // Build venice_parameters from both veniceParameters and advancedParams
+        const vp = {};
+        
+        // Venice-specific params (web search, scraping, citations, system prompt)
+        if (veniceParams.enableWebSearch && veniceParams.enableWebSearch !== 'off') {
+            vp.enable_web_search = veniceParams.enableWebSearch;
+        }
+        if (veniceParams.enableWebScraping) vp.enable_web_scraping = true;
+        if (veniceParams.enableWebCitations) vp.enable_web_citations = true;
+        if (veniceParams.includeSearchResultsInStream) vp.include_search_results_in_stream = true;
+        if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
+            vp.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
+        }
+        if (veniceParams.includeSystemPrompt !== undefined) {
+            vp.include_venice_system_prompt = veniceParams.includeSystemPrompt;
+        }
+        
+        // Thinking params — bridge from advancedParams OR veniceParameters
+        const stripThinking = adv.strip_thinking_response || veniceParams.stripThinking;
+        const disableThinking = adv.disable_thinking || veniceParams.disableThinking;
+        if (stripThinking) vp.strip_thinking_response = true;
+        if (disableThinking) vp.disable_thinking = true;
+        
+        // Only add if we have anything
+        if (Object.keys(vp).length > 0) {
+            requestBody.venice_parameters = vp;
         }
 
-        // Add reasoning effort for reasoning models (top-level parameter)
-        if (veniceParams.reasoningEffort) {
+        // Reasoning effort (Venice-specific top-level param)
+        if (veniceParams.reasoningEffort && !adv.reasoning_effort) {
             requestBody.reasoning_effort = veniceParams.reasoningEffort;
         }
     }
@@ -753,7 +778,6 @@ You have access to tools that let you:
 - Read any file's content without opening it (read_file) — auto-truncates large files
 - List all open tabs (list_open_tabs)
 - Create new files in the repository (create_file)
-- Delete files from the repository (delete_file)
 - Search for text patterns across the codebase (search_in_files)
 
 🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
@@ -775,12 +799,10 @@ WORKFLOW — Use these tools as needed (not all are required every time):
 5. read_lines — see exact line numbers in the target region before editing
 6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 7. create_file — if a new file is needed
-8. delete_file — if a file needs to be removed (e.g., after rename or cleanup)
 
 🚨 CRITICAL TOOL USAGE RULES:
 1. **ALWAYS provide ALL required parameters for every tool call**
    - create_file: MUST include path, content, AND message (all 3 required)
-   - delete_file: MUST include path
    - replace_lines: MUST include start_line, end_line, AND new_content
    - insert_lines: MUST include after_line AND content
    - read_file/open_file: MUST include path

@@ -50,7 +50,10 @@ function populateSettingsForm() {
     const modelSelect = document.getElementById('settingLlmModel');
     if (State.settings.llmModel) modelSelect.value = State.settings.llmModel;
     
-    providerSelect.onchange = updateProviderDescription;
+    providerSelect.onchange = () => {
+        updateProviderDescription();
+        updateVeniceParamsVisibility();
+    };
     modelSelect.onchange = showModelCapabilities;
     showModelCapabilities();
 
@@ -247,6 +250,10 @@ function populateAdvancedParams() {
     
     const logprobs = document.getElementById('settingLogprobs');
     if (logprobs) logprobs.checked = adv.logprobs || false;
+
+    // Venice.ai-specific parameters
+    populateVeniceParams();
+    updateVeniceParamsVisibility();
 }
 
 /**
@@ -279,6 +286,82 @@ function setupSliderSync(sliderId, inputId, value) {
             slider.value = Math.max(slider.min, Math.min(slider.max, val));
         }
     };
+}
+
+/**
+ * Populate Venice.ai-specific parameter fields from State
+ */
+function populateVeniceParams() {
+    const vp = State.settings.veniceParameters || {};
+    
+    const webSearch = document.getElementById('settingVeniceWebSearch');
+    if (webSearch) webSearch.value = vp.enableWebSearch || 'off';
+    
+    const webScraping = document.getElementById('settingVeniceWebScraping');
+    if (webScraping) webScraping.checked = vp.enableWebScraping || false;
+    
+    const webCitations = document.getElementById('settingVeniceWebCitations');
+    if (webCitations) webCitations.checked = vp.enableWebCitations || false;
+    
+    const searchInStream = document.getElementById('settingVeniceSearchInStream');
+    if (searchInStream) searchInStream.checked = vp.includeSearchResultsInStream || false;
+    
+    const searchAsDocs = document.getElementById('settingVeniceSearchAsDocs');
+    if (searchAsDocs) searchAsDocs.checked = vp.returnSearchResultsAsDocuments !== false; // default true
+    
+    const systemPrompt = document.getElementById('settingVeniceSystemPrompt');
+    if (systemPrompt) systemPrompt.checked = vp.includeSystemPrompt !== false; // default true
+}
+
+/**
+ * Show Venice params section only when Venice provider is selected
+ */
+function updateVeniceParamsVisibility() {
+    const section = document.getElementById('veniceParamsSection');
+    if (!section) return;
+    
+    const providerSelect = document.getElementById('settingApiProvider');
+    const isVenice = providerSelect && providerSelect.value === 'venice';
+    section.style.display = isVenice ? 'block' : 'none';
+}
+
+/**
+ * Collect Venice params from the form into State.settings.veniceParameters
+ */
+function collectVeniceParams() {
+    const vp = {};
+    
+    const webSearch = document.getElementById('settingVeniceWebSearch');
+    if (webSearch) vp.enableWebSearch = webSearch.value;
+    
+    const webScraping = document.getElementById('settingVeniceWebScraping');
+    if (webScraping) vp.enableWebScraping = webScraping.checked;
+    
+    const webCitations = document.getElementById('settingVeniceWebCitations');
+    if (webCitations) vp.enableWebCitations = webCitations.checked;
+    
+    const searchInStream = document.getElementById('settingVeniceSearchInStream');
+    if (searchInStream) vp.includeSearchResultsInStream = searchInStream.checked;
+    
+    const searchAsDocs = document.getElementById('settingVeniceSearchAsDocs');
+    if (searchAsDocs) vp.returnSearchResultsAsDocuments = searchAsDocs.checked;
+    
+    const systemPrompt = document.getElementById('settingVeniceSystemPrompt');
+    if (systemPrompt) vp.includeSystemPrompt = systemPrompt.checked;
+    
+    // Thinking params are bridged from advancedParams in buildRequestBody,
+    // but keep them in veniceParameters too for backward compat
+    const stripThinking = document.getElementById('settingStripThinkingResponse');
+    if (stripThinking) vp.stripThinking = stripThinking.checked;
+    
+    const disableThinking = document.getElementById('settingDisableThinking');
+    if (disableThinking) vp.disableThinking = disableThinking.checked;
+    
+    // Reasoning effort (use advancedParams value if set, else keep existing)
+    const reasoningEffort = document.getElementById('settingReasoningEffort')?.value;
+    vp.reasoningEffort = reasoningEffort || null;
+    
+    return vp;
 }
 
 function updateEmbeddingsStatus() {
@@ -606,6 +689,9 @@ export function saveSettings() {
 
     State.settings.advancedParams = advancedParams;
 
+    // Venice.ai-specific parameters
+    State.settings.veniceParameters = collectVeniceParams();
+
     // Sync main page role selector
     const roleSelectEl = document.getElementById('roleSelect');
     if (roleSelectEl) {
@@ -784,6 +870,9 @@ export function exportSettings() {
         // Advanced Parameters
         advancedParams: State.settings.advancedParams,
         
+        // Venice.ai Parameters
+        veniceParameters: State.settings.veniceParameters,
+        
         // Other
         role: State.settings.role,
         
@@ -827,9 +916,11 @@ export async function importSettings() {
                 const text = await file.text();
                 const imported = JSON.parse(text);
 
-                // Validate required fields
-                if (!imported.giteaUrl || !imported.llmEndpoint) {
-                    throw new Error('Invalid settings file: missing required fields (giteaUrl, llmEndpoint)');
+                // Validate it looks like a settings file (has at least one recognizable key)
+                const knownKeys = ['giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams'];
+                const hasValidKey = knownKeys.some(k => k in imported);
+                if (!hasValidKey) {
+                    throw new Error('Invalid settings file: no recognized settings keys found');
                 }
 
                 // Apply settings (excluding metadata)

@@ -20,9 +20,15 @@
             <div id="settingsTabsContainer"></div>
         </div>
         
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
-            <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">📤 Export</button>
+                <button class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">📥 Import</button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+            </div>
         </div>
     </div>
 </div>
