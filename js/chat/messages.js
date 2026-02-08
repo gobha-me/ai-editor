@@ -475,11 +475,64 @@ export function escapeHtml(text) {
 }
 
 /**
- * Scroll chat container to bottom
+/**
+ * Scroll chat container to bottom with smart behavior
+ * Only auto-scrolls if user is already at the bottom
+ * Preserves user's scroll position when reading older messages
  */
-function scrollToBottom() {
-    const chatContainer = getChatContainer();
-    if (chatContainer) {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+export function scrollToBottom(smooth = false) {
+    const container = getChatContainer();
+    if (!container) return;
+
+    // Check if user is currently at the bottom (within threshold)
+    const isAtBottom = isUserAtBottom();
+
+    // Only auto-scroll if user is already at bottom
+    if (isAtBottom) {
+        const scrollHeight = container.scrollHeight;
+        container.scrollTo({
+            top: scrollHeight,
+            behavior: smooth ? 'smooth' : 'auto'
+        });
     }
+}
+
+/**
+ * Force scroll to bottom regardless of user position
+ * Use this for critical updates that must be visible
+ */
+export function scrollToBottomForced(smooth = false) {
+    const container = getChatContainer();
+    if (!container) return;
+
+    const scrollHeight = container.scrollHeight;
+    container.scrollTo({
+        top: scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+    });
+}
+
+/**
+ * Check if user is currently at the bottom of the chat (within threshold)
+ */
+export function isUserAtBottom() {
+    const container = getChatContainer();
+    if (!container) return true;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const threshold = 50; // pixels from bottom to consider "at bottom"
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+
+    return distanceToBottom <= threshold;
+}
+
+/**
+ * Get distance from current scroll position to bottom
+ */
+export function getDistanceToBottom() {
+    const container = getChatContainer();
+    if (!container) return 0;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    return scrollHeight - scrollTop - clientHeight;
 }
