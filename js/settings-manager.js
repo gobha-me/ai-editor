@@ -7,8 +7,21 @@ import { LLM } from './llm.js';
 import { ToolRegistry } from './tools/registry.js';
 import { ContextManager } from './context-manager.js';
 import { EmbeddingsClient } from './embeddings-client.js';
+import { injectTemplate } from './template-loader.js';
 
-export function openSettings() {
+export async function openSettings() {
+    // Load settings tabs template if not already loaded
+    const container = document.getElementById('settingsTabsContainer');
+    if (container && !container.hasChildNodes()) {
+        try {
+            await injectTemplate('settings-tabs', container);
+        } catch (error) {
+            console.error('Failed to load settings tabs template:', error);
+            window.showToast('Failed to load settings form', 'error');
+            return;
+        }
+    }
+    
     populateSettingsForm();
     updateEmbeddingsStatus(); // Update status when opening
     document.getElementById('settingsModal').classList.add('active');
