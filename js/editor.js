@@ -13,6 +13,11 @@ import { getLanguageFromPath } from './llm.js';
 let EditorView, EditorState, Compartment, basicSetup, keymap, javascript, python, go, rust, markdown, json, html, css, sql, xml;
 let oneDark, indentWithTab, defaultKeymap, historyKeymap, history, indentOnInput;
 let lineNumbers, highlightActiveLineGutter, highlightActiveLine, bracketMatching, foldGutter, lineWrapping;
+// Additional extensions for basicSetup fallback
+let drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSelectionMatches;
+let closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap;
+let searchKeymap, highlightSpecialChars, foldKeymap;
+let syntaxHighlighting, defaultHighlightStyle;
 
 // Compartment for dynamic line number toggling (CM6 best practice)
 let lineNumberCompartment = null;
@@ -50,25 +55,43 @@ async function loadCodeMirror() {
                 cmBasicSetup,
                 cmCommands,
                 cmLanguage,
-                cmLint
+                cmLint,
+                cmAutocomplete,
+                cmSearch
             ] = await Promise.all([
                 import(`${CDN}/@codemirror/view@6`),
                 import(`${CDN}/@codemirror/state@6`),
                 import(`${CDN}/codemirror@6`),
                 import(`${CDN}/@codemirror/commands@6`),
                 import(`${CDN}/@codemirror/language@6`),
-                import(`${CDN}/@codemirror/lint@6`)
+                import(`${CDN}/@codemirror/lint@6`),
+                import(`${CDN}/@codemirror/autocomplete@6`),
+                import(`${CDN}/@codemirror/search@6`)
             ]);
 
             EditorView = cmView.EditorView;
             EditorState = cmState.EditorState;
             Compartment = cmState.Compartment;
-            basicSetup = cmBasicSetup?.basicSetup;
             keymap = cmView?.keymap;
             lineNumbers = cmView?.lineNumbers;
             highlightActiveLineGutter = cmView?.highlightActiveLineGutter;
             highlightActiveLine = cmView?.highlightActiveLine;
-            lineWrapping = cmView?.lineWrapping;
+            
+            // lineWrapping is a static property of EditorView, NOT a module export
+            lineWrapping = EditorView?.lineWrapping;
+
+            // basicSetup: try named export, then default, then explicit sub-import
+            basicSetup = cmBasicSetup?.basicSetup;
+            if (!basicSetup) {
+                basicSetup = cmBasicSetup?.default?.basicSetup;
+            }
+            if (!basicSetup) {
+                try {
+                    // Some esm.sh versions need the explicit sub-path
+                    const setupModule = await import(`${CDN}/codemirror@6/dist/index.js`);
+                    basicSetup = setupModule?.basicSetup;
+                } catch (_) { /* will use fallback */ }
+            }
             
             // Commands
             indentWithTab = cmCommands?.indentWithTab;
@@ -78,6 +101,66 @@ async function loadCodeMirror() {
             indentOnInput = cmLanguage?.indentOnInput;
             bracketMatching = cmLanguage?.bracketMatching;
             foldGutter = cmLanguage?.foldGutter;
+            foldKeymap = cmLanguage?.foldKeymap;
+            syntaxHighlighting = cmLanguage?.syntaxHighlighting;
+            defaultHighlightStyle = cmLanguage?.defaultHighlightStyle;
+
+            // View extensions for fallback basicSetup
+            drawSelection = cmView?.drawSelection;
+            dropCursor = cmView?.dropCursor;
+            rectangularSelection = cmView?.rectangularSelection;
+            crosshairCursor = cmView?.crosshairCursor;
+            highlightSpecialChars = cmView?.highlightSpecialChars;
+
+            // Autocomplete & bracket closing
+            closeBrackets = cmAutocomplete?.closeBrackets;
+            closeBracketsKeymap = cmAutocomplete?.closeBracketsKeymap;
+            autocompletion = cmAutocomplete?.autocompletion;
+            completionKeymap = cmAutocomplete?.completionKeymap;
+
+            // Search & selection
+            highlightSelectionMatches = cmSearch?.highlightSelectionMatches;
+            searchKeymap = cmSearch?.searchKeymap;
+
+            // Build fallback basicSetup from individual extensions if meta-package failed
+            if (!basicSetup) {
+                console.warn('[Editor] codemirror@6 basicSetup not available, building from individual extensions');
+                const fallback = [];
+                if (lineNumbers) fallback.push(lineNumbers());
+                if (highlightActiveLineGutter) fallback.push(highlightActiveLineGutter());
+                if (highlightSpecialChars) fallback.push(highlightSpecialChars());
+                if (history) fallback.push(history());
+                if (foldGutter) fallback.push(foldGutter());
+                if (drawSelection) fallback.push(drawSelection());
+                if (dropCursor) fallback.push(dropCursor());
+                if (indentOnInput) fallback.push(indentOnInput());
+                if (syntaxHighlighting && defaultHighlightStyle) {
+                    fallback.push(syntaxHighlighting(defaultHighlightStyle, { fallback: true }));
+                }
+                if (bracketMatching) fallback.push(bracketMatching());
+                if (closeBrackets) fallback.push(closeBrackets());
+                if (autocompletion) fallback.push(autocompletion());
+                if (rectangularSelection) fallback.push(rectangularSelection());
+                if (crosshairCursor) fallback.push(crosshairCursor());
+                if (highlightActiveLine) fallback.push(highlightActiveLine());
+                if (highlightSelectionMatches) fallback.push(highlightSelectionMatches());
+                // Keymaps
+                const fallbackKeymaps = [];
+                if (closeBracketsKeymap) fallbackKeymaps.push(...closeBracketsKeymap);
+                if (defaultKeymap) fallbackKeymaps.push(...defaultKeymap);
+                if (searchKeymap) fallbackKeymaps.push(...searchKeymap);
+                if (historyKeymap) fallbackKeymaps.push(...historyKeymap);
+                if (foldKeymap) fallbackKeymaps.push(...foldKeymap);
+                if (completionKeymap) fallbackKeymaps.push(...completionKeymap);
+                if (keymap && fallbackKeymaps.length > 0) {
+                    fallback.push(keymap.of(fallbackKeymaps));
+                }
+                
+                if (fallback.length > 0) {
+                    basicSetup = fallback;
+                    console.log(`[Editor] Built fallback basicSetup with ${fallback.length} extensions`);
+                }
+            }
 
             // Theme
             const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
@@ -88,8 +171,12 @@ async function loadCodeMirror() {
                 EditorView: !!EditorView,
                 EditorState: !!EditorState,
                 basicSetup: !!basicSetup,
+                basicSetupType: Array.isArray(basicSetup) ? `array[${basicSetup.length}]` : typeof basicSetup,
                 keymap: !!keymap,
                 lineWrapping: !!lineWrapping,
+                bracketMatching: !!bracketMatching,
+                autocompletion: !!autocompletion,
+                searchKeymap: !!searchKeymap,
                 oneDark: !!oneDark
             });
 
@@ -701,7 +788,8 @@ function applyEdit(newContent) {
 
 function setLineNumbersVisible(visible) {
     if (!editorInstance || !lineNumberCompartment || !EditorView) {
-        console.warn('[Editor] Cannot toggle line numbers — editor or compartment not ready');
+        // Expected at startup before any file is opened — not an error
+        console.debug('[Editor] Cannot toggle line numbers — editor or compartment not ready');
         return false;
     }
     
