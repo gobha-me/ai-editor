@@ -31,12 +31,41 @@ function stripThinkBlocks(text) {
 /**
  * Strip internal tracking fields from messages before API submission.
  * OpenAI API spec only allows: role, content, name, tool_calls, tool_call_id
- * Internal fields like timestamp, isSummary cause "zero-length document" errors.
+ * Internal fields like timestamp, isSummary can cause API errors if included.
+ * 
+ * CRITICAL: This function MUST properly handle all message types:
+ * - user/assistant messages with content
+ * - assistant messages with tool_calls (content may be null)
+ * - tool messages with tool_call_id and content (JSON string)
+ * 
+ * Uses explicit field copying instead of destructuring to avoid corruption.
  */
 function sanitizeMessages(messages) {
     return messages.map(msg => {
-        const { timestamp, isSummary, ...apiMsg } = msg;
-        return apiMsg;
+        // Build clean message with only OpenAI-spec fields
+        const cleanMsg = {
+            role: msg.role
+        };
+        
+        // Add content if present (handle null explicitly)
+        if (msg.content !== undefined) {
+            cleanMsg.content = msg.content;
+        }
+        
+        // Add optional fields if present
+        if (msg.name !== undefined) {
+            cleanMsg.name = msg.name;
+        }
+        
+        if (msg.tool_calls !== undefined) {
+            cleanMsg.tool_calls = msg.tool_calls;
+        }
+        
+        if (msg.tool_call_id !== undefined) {
+            cleanMsg.tool_call_id = msg.tool_call_id;
+        }
+        
+        return cleanMsg;
     });
 }
 
