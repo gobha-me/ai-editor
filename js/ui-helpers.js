@@ -65,6 +65,86 @@ export function closeAllModals() {
 }
 
 // ============================================
+// DRAFT MANAGEMENT - CLEAR ALL STALE DRAFTS
+// ============================================
+
+/**
+ * Clear ALL drafts from localStorage
+ * Use this to fix stale draft issues
+ */
+export function clearAllDrafts() {
+    const drafts = Storage.listDrafts();
+    const count = drafts.length;
+    
+    if (count === 0) {
+        showToast('No drafts to clear', 'info');
+        return;
+    }
+    
+    if (!confirm(`Clear ALL ${count} draft(s) from localStorage? This cannot be undone.\n\nThis will remove any unsaved changes stored locally.`)) {
+        return;
+    }
+    
+    // Clear each draft
+    drafts.forEach(draft => {
+        const path = draft.path;
+        // Extract owner/repo/branch/file from the path
+        const parts = path.split('/');
+        if (parts.length >= 4) {
+            const owner = parts[0];
+            const repo = parts[1];
+            const branch = parts[2];
+            const filePath = parts.slice(3).join('/');
+            Storage.clearDraft(owner, repo, branch, filePath);
+        }
+    });
+    
+    // Also clear the in-memory drafts object
+    State.drafts = {};
+    
+    showToast(`Cleared ${count} draft(s) from localStorage`, 'success');
+    console.log(`[DRAFTS] Cleared ${count} drafts from localStorage`);
+}
+
+/**
+ * Clear drafts for current project only
+ */
+export function clearProjectDrafts() {
+    if (!State.currentProject) {
+        showToast('No project selected', 'warning');
+        return;
+    }
+    
+    const { owner, repo } = State.currentProject;
+    const allDrafts = Storage.listDrafts();
+    const projectPrefix = `${owner}/${repo}/`;
+    const projectDrafts = allDrafts.filter(d => d.path.startsWith(projectPrefix));
+    const count = projectDrafts.length;
+    
+    if (count === 0) {
+        showToast('No drafts for this project', 'info');
+        return;
+    }
+    
+    if (!confirm(`Clear ${count} draft(s) for ${owner}/${repo}? This cannot be undone.`)) {
+        return;
+    }
+    
+    projectDrafts.forEach(draft => {
+        const path = draft.path;
+        const parts = path.split('/');
+        if (parts.length >= 4) {
+            const branch = parts[2];
+            const filePath = parts.slice(3).join('/');
+            Storage.clearDraft(owner, repo, branch, filePath);
+        }
+    });
+    
+    showToast(`Cleared ${count} draft(s) for current project`, 'success');
+    console.log(`[DRAFTS] Cleared ${count} project drafts`);
+}
+
+// ============================================
 // COMMIT MODAL
 // ============================================
 
@@ -313,20 +393,53 @@ export function updateCommitButton() {
 }
 
 // ============================================
-// REVERT BUTTON
+// REVERT FUNCTIONALITY - SINGLE & MULTIPLE
 // ============================================
 
 export function updateRevertButton() {
     const btn = document.getElementById('btnRevert');
-    btn.disabled = !(State.currentFile && State.editorDirty);
+    const dirtyCount = State.openTabs.filter(t => t.dirty).length;
+    
+    if (dirtyCount === 0) {
+        btn.disabled = true;
+        btn.textContent = '↩️ Revert';
+        btn.title = 'Revert to last commit';
+    } else if (dirtyCount === 1) {
+        btn.disabled = false;
+        btn.textContent = '↩️ Revert';
+        btn.title = 'Revert current file to last commit';
+    } else {
+        btn.disabled = false;
+        btn.textContent = `↩️ Revert (${dirtyCount})`;
+        btn.title = `Revert ${dirtyCount} modified files to last commit`;
+    }
 }
 
+/**
+ * Revert current file OR all dirty tabs if multiple are modified
+ */
 export async function revertCurrentFile() {
-    if (!State.currentFile) return;
+    const dirtyTabs = State.openTabs.filter(t => t.dirty);
     
-    const tab = State.openTabs[State.activeTabIndex];
-    if (!tab) return;
+    if (dirtyTabs.length === 0) {
+        showToast('No changes to revert', 'info');
+        return;
+    }
+    
+    // If only one dirty file, revert just that
+    if (dirtyTabs.length === 1) {
+        await revertSingleTab(dirtyTabs[0]);
+        return;
+    }
+    
+    // Multiple dirty files - show choice modal
+    openRevertModal(dirtyTabs);
+}
 
+/**
+ * Revert a single tab to its original content
+ */
+async function revertSingleTab(tab) {
     const originalContent = tab.originalContent;
     if (originalContent === undefined || originalContent === null) {
         showToast('No original content to revert to', 'warning');
@@ -337,10 +450,7 @@ export async function revertCurrentFile() {
         return;
     }
 
-    // Reset editor to original content
-    const { createEditor } = await import('./editor.js');
-    State.editorContent = originalContent;
-    State.editorDirty = false;
+    // Reset tab to original content
     tab.content = originalContent;
     tab.dirty = false;
 
@@ -350,17 +460,127 @@ export async function revertCurrentFile() {
         Storage.clearDraft(owner, repo, State.currentBranch, tab.path);
     }
 
-    await createEditor(
-        document.getElementById('editorContainer'),
-        originalContent,
-        tab.path
-    );
+    // If this is the active tab, update editor
+    const tabIndex = State.openTabs.indexOf(tab);
+    if (tabIndex === State.activeTabIndex) {
+        const { createEditor } = await import('./editor.js');
+        State.editorContent = originalContent;
+        State.editorDirty = false;
+
+        await createEditor(
+            document.getElementById('editorContainer'),
+            originalContent,
+            tab.path
+        );
+    }
 
     renderEditorTabs();
     updateStatusBar();
     updateCommitButton();
     updateRevertButton();
     showToast(`Reverted ${tab.path.split('/').pop()}`, 'success');
+}
+
+/**
+ * Open modal to choose: revert current, revert all, or cancel
+ */
+function openRevertModal(dirtyTabs) {
+    const modal = document.getElementById('revertModal');
+    const fileListEl = document.getElementById('revertFileList');
+    const currentTab = State.openTabs[State.activeTabIndex];
+    
+    // Show list of dirty files
+    fileListEl.innerHTML = dirtyTabs.map(tab => {
+        const fileName = tab.path.split('/').pop();
+        const icon = getFileIcon(fileName);
+        const isCurrent = tab === currentTab;
+        return `
+            <div class="revert-file-item ${isCurrent ? 'current' : ''}">
+                <span class="revert-file-icon">${icon}</span>
+                <span class="revert-file-path">${tab.path}</span>
+                ${isCurrent ? '<span class="revert-current-badge">● Current</span>' : ''}
+            </div>
+        `;
+    }).join('');
+    
+    modal.classList.add('active');
+}
+
+export function closeRevertModal() {
+    document.getElementById('revertModal').classList.remove('active');
+}
+
+/**
+ * Revert all dirty tabs to their original content
+ */
+export async function revertAllFiles() {
+    const dirtyTabs = State.openTabs.filter(t => t.dirty);
+    
+    if (dirtyTabs.length === 0) {
+        showToast('No changes to revert', 'info');
+        closeRevertModal();
+        return;
+    }
+    
+    if (!confirm(`Revert ALL ${dirtyTabs.length} file(s) to last committed version? This cannot be undone.`)) {
+        return;
+    }
+    
+    let revertedCount = 0;
+    const { owner, repo } = State.currentProject;
+    
+    // Revert each dirty tab
+    for (const tab of dirtyTabs) {
+        if (tab.originalContent !== undefined && tab.originalContent !== null) {
+            tab.content = tab.originalContent;
+            tab.dirty = false;
+            
+            // Clear draft from localStorage
+            if (State.currentProject) {
+                Storage.clearDraft(owner, repo, State.currentBranch, tab.path);
+            }
+            
+            revertedCount++;
+        }
+    }
+    
+    // Update editor if current tab was reverted
+    const currentTab = State.openTabs[State.activeTabIndex];
+    if (currentTab && !currentTab.dirty) {
+        const { createEditor } = await import('./editor.js');
+        State.editorContent = currentTab.originalContent;
+        State.editorDirty = false;
+
+        await createEditor(
+            document.getElementById('editorContainer'),
+            State.editorContent,
+            currentTab.path
+        );
+    }
+    
+    renderEditorTabs();
+    updateStatusBar();
+    updateCommitButton();
+    updateRevertButton();
+    closeRevertModal();
+    
+    showToast(`Reverted ${revertedCount} file(s)`, 'success');
+    console.log(`[REVERT] Reverted ${revertedCount} files to original content`);
+}
+
+/**
+ * Revert only the current tab
+ */
+export async function revertOnlyCurrentFile() {
+    const currentTab = State.openTabs[State.activeTabIndex];
+    if (!currentTab) {
+        showToast('No file open', 'warning');
+        closeRevertModal();
+        return;
+    }
+    
+    closeRevertModal();
+    await revertSingleTab(currentTab);
 }
 
 // ============================================
