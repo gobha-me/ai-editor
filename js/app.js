@@ -2,6 +2,7 @@
 // MAIN APPLICATION
 // ============================================
 
+import { VERSION_DISPLAY } from './version.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
@@ -71,6 +72,9 @@ import './tools/issue-tools.js';
 import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tools
 import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 
+// Log version on startup
+console.log(`Starting ${VERSION_DISPLAY}`);
+
 // ============================================
 // EXPOSE WINDOW FUNCTIONS
 // ============================================
@@ -139,15 +143,21 @@ function applyVisualSettings() {
     document.documentElement.style.setProperty('--ui-font-size', (State.settings.fontSize || 13) + 'px');
     document.documentElement.style.setProperty('--editor-font-size', (State.settings.editorFontSize || 14) + 'px');
 
-    // Panel visibility
+    // Panel visibility - with null checks
     const issuesSections = document.querySelectorAll('[data-collapse="issuesPanelBody"]');
     const workflowsSections = document.querySelectorAll('[data-collapse="workflowsPanelBody"]');
     
     issuesSections.forEach(el => {
-        el.closest('.sidebar-section').style.display = State.settings.showIssues !== false ? '' : 'none';
+        const section = el.closest('.sidebar-section');
+        if (section) {
+            section.style.display = State.settings.showIssues !== false ? '' : 'none';
+        }
     });
     workflowsSections.forEach(el => {
-        el.closest('.sidebar-section').style.display = State.settings.showWorkflows !== false ? '' : 'none';
+        const section = el.closest('.sidebar-section');
+        if (section) {
+            section.style.display = State.settings.showWorkflows !== false ? '' : 'none';
+        }
     });
 }
 
@@ -165,6 +175,8 @@ function toggleLineNumbers() {
 
 function applyLineNumbersVisibility() {
     const container = document.getElementById('editorContainer');
+    if (!container) return; // Guard: DOM not ready yet
+    
     if (State.settings.showLineNumbers !== false) {
         container.classList.remove('hide-line-numbers');
     } else {
@@ -235,7 +247,8 @@ function setupKeyboardShortcuts() {
         // Ctrl+Shift+P - Toggle preview
         if (e.ctrlKey && e.shiftKey && e.key === 'P') {
             e.preventDefault();
-            if (!document.getElementById('btnTogglePreview').disabled) {
+            const btn = document.getElementById('btnTogglePreview');
+            if (btn && !btn.disabled) {
                 togglePreviewPane();
             }
         }
@@ -243,7 +256,8 @@ function setupKeyboardShortcuts() {
         // Ctrl+Shift+D - Toggle diff
         if (e.ctrlKey && e.shiftKey && e.key === 'D') {
             e.preventDefault();
-            if (!document.getElementById('btnToggleDiff').disabled) {
+            const btn = document.getElementById('btnToggleDiff');
+            if (btn && !btn.disabled) {
                 toggleDiffPane();
             }
         }
@@ -272,50 +286,60 @@ function setupKeyboardShortcuts() {
 // ============================================
 
 function setupEventListeners() {
+    // Helper to safely add event listener
+    const safeAdd = (id, event, handler) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener(event, handler);
+        } else {
+            console.warn(`Element #${id} not found during event listener setup`);
+        }
+    };
+
     // Header buttons
-    document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
-    document.getElementById('btnCommit').addEventListener('click', openCommitModal);
-    document.getElementById('btnRevert').addEventListener('click', revertCurrentFile);
-    document.getElementById('btnSettings').addEventListener('click', openSettings);
-    document.getElementById('btnErrorLog').addEventListener('click', openErrorLog);
-    document.getElementById('btnLLMDebug').addEventListener('click', openLLMDebug);
-    document.getElementById('btnToggleChat').addEventListener('click', toggleChat);
+    safeAdd('btnToggleSidebar', 'click', toggleSidebar);
+    safeAdd('btnCommit', 'click', openCommitModal);
+    safeAdd('btnRevert', 'click', revertCurrentFile);
+    safeAdd('btnSettings', 'click', openSettings);
+    safeAdd('btnErrorLog', 'click', openErrorLog);
+    safeAdd('btnLLMDebug', 'click', openLLMDebug);
+    safeAdd('btnToggleChat', 'click', toggleChat);
 
     // Sidebar buttons
-    document.getElementById('btnRefreshProjects').addEventListener('click', refreshProjects);
-    document.getElementById('btnNewBranch').addEventListener('click', openNewBranchModal);
-    document.getElementById('btnNewFile').addEventListener('click', openNewFileModal);
-    document.getElementById('btnRefreshIssues').addEventListener('click', refreshIssues);
-    document.getElementById('btnRefreshWorkflows').addEventListener('click', refreshWorkflows);
+    safeAdd('btnRefreshProjects', 'click', refreshProjects);
+    safeAdd('btnNewBranch', 'click', openNewBranchModal);
+    safeAdd('btnNewFile', 'click', openNewFileModal);
+    safeAdd('btnRefreshIssues', 'click', refreshIssues);
+    safeAdd('btnRefreshWorkflows', 'click', refreshWorkflows);
 
     // Selectors
-    document.getElementById('projectSelect').addEventListener('change', onProjectChange);
-    document.getElementById('branchSelect').addEventListener('change', onBranchChange);
-    document.getElementById('modelSelect').addEventListener('change', onModelChange);
-    document.getElementById('roleSelect').addEventListener('change', onRoleChange);
-    document.getElementById('btnResetCost').addEventListener('click', resetSessionCost);
+    safeAdd('projectSelect', 'change', onProjectChange);
+    safeAdd('branchSelect', 'change', onBranchChange);
+    safeAdd('modelSelect', 'change', onModelChange);
+    safeAdd('roleSelect', 'change', onRoleChange);
+    safeAdd('btnResetCost', 'click', resetSessionCost);
 
     // Editor toolbar
-    document.getElementById('btnToggleLineNumbers').addEventListener('click', toggleLineNumbers);
-    document.getElementById('btnTogglePreview').addEventListener('click', togglePreviewPane);
-    document.getElementById('btnToggleDiff').addEventListener('click', toggleDiffPane);
+    safeAdd('btnToggleLineNumbers', 'click', toggleLineNumbers);
+    safeAdd('btnTogglePreview', 'click', togglePreviewPane);
+    safeAdd('btnToggleDiff', 'click', toggleDiffPane);
 
     // Chat
-    document.getElementById('btnSend').addEventListener('click', () => {
+    safeAdd('btnSend', 'click', () => {
         const input = document.getElementById('chatInput');
-        if (input.value.trim()) {
+        if (input && input.value.trim()) {
             window.Chat.sendMessage(input.value.trim());
             input.value = '';
         }
     });
-    document.getElementById('btnStop').addEventListener('click', stopGeneration);
-    document.getElementById('btnFetchModels').addEventListener('click', fetchModels);
-    document.getElementById('btnNewChat').addEventListener('click', () => {
+    safeAdd('btnStop', 'click', stopGeneration);
+    safeAdd('btnFetchModels', 'click', fetchModels);
+    safeAdd('btnNewChat', 'click', () => {
         clearChat();
         resetSessionCost();
         showToast('Chat cleared', 'success');
     });
-    document.getElementById('btnExportChat').addEventListener('click', () => {
+    safeAdd('btnExportChat', 'click', () => {
         if (window.Chat && window.Chat.exportChat) {
             window.Chat.exportChat();
         }
@@ -323,8 +347,10 @@ function setupEventListeners() {
 
     // EventBus listeners
     EventBus.on('llm:generating', (isGenerating) => {
-        document.getElementById('btnSend').style.display = isGenerating ? 'none' : 'block';
-        document.getElementById('btnStop').style.display = isGenerating ? 'block' : 'none';
+        const btnSend = document.getElementById('btnSend');
+        const btnStop = document.getElementById('btnStop');
+        if (btnSend) btnSend.style.display = isGenerating ? 'none' : 'block';
+        if (btnStop) btnStop.style.display = isGenerating ? 'block' : 'none';
     });
 }
 
@@ -353,11 +379,12 @@ function setupSettingsSavedListener() {
 // ============================================
 
 async function init() {
-    console.log('Initializing AI Editor...');
+    console.log(`Initializing ${VERSION_DISPLAY}...`);
     
     // **CRITICAL: Load templates FIRST before anything else**
     try {
         await buildAppLayout();
+        console.log('✓ Templates loaded');
     } catch (error) {
         console.error('Failed to load application templates:', error);
         document.getElementById('app').innerHTML = `
@@ -386,10 +413,13 @@ async function init() {
     initPanelResize();
     
     // Initialize components
-    initChat(
-        document.getElementById('chatMessages'),
-        document.getElementById('chatInput')
-    );
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    if (chatMessages && chatInput) {
+        initChat(chatMessages, chatInput);
+    } else {
+        console.error('Chat elements not found');
+    }
 
     // Setup event listeners
     setupEventListeners();
@@ -424,7 +454,7 @@ async function init() {
         initQuickOpen();
     }
 
-    console.log('AI Editor initialized');
+    console.log(`✓ ${VERSION_DISPLAY} initialized`);
 }
 
 // Start the application

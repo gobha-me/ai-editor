@@ -3,6 +3,8 @@
  * Loads HTML templates from separate files to keep index.html thin
  */
 
+import { VERSION, APP_NAME } from './version.js';
+
 // Cache loaded templates to avoid redundant fetches
 const templateCache = new Map();
 
@@ -145,5 +147,15 @@ export async function buildAppLayout() {
     `;
     
     appContainer.innerHTML = html;
+    
+    // Inject dynamic values after DOM is ready
+    const appNameEl = document.getElementById('appName');
+    const versionEl = document.getElementById('appVersion');
+    const welcomeAppNameEl = document.getElementById('welcomeAppName');
+    
+    if (appNameEl) appNameEl.textContent = APP_NAME;
+    if (versionEl) versionEl.textContent = `v${VERSION}`;
+    if (welcomeAppNameEl) welcomeAppNameEl.textContent = APP_NAME;
+    
     console.log('Application layout loaded');
 }

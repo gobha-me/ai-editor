@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Editor v0.7.0-beta</title>
+    <title></title>
     <link rel="stylesheet" href="editor/css/editor.css">
     <link rel="stylesheet" href="editor/css/diff-enhancements.css">
+    <script type="module">
+        // Set page title with version from central config
+        import { VERSION_DISPLAY } from './editor/js/version.js';
+        document.title = VERSION_DISPLAY;
+    </script>
 </head>
 <body>
     <!-- Boot Error Diagnostic -->
@@ -35,7 +40,7 @@
         <div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: var(--text-muted);">
             <div style="text-align: center;">
                 <h2 style="font-size: 32px; margin-bottom: 0.5rem;">⚡</h2>
-                <p>Loading AI Editor...</p>
+                <p>Loading...</p>
             </div>
         </div>
     </div>
