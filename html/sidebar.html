@@ -1,0 +1,69 @@
+<!-- Sidebar (Left) -->
+<aside class="sidebar" id="sidebar">
+    <!-- Project Selector -->
+    <div class="sidebar-section">
+        <div class="sidebar-header">
+            Projects
+            <button id="btnRefreshProjects" title="Refresh">🔄</button>
+        </div>
+        <div class="project-selector">
+            <select id="projectSelect">
+                <option value="">Select a project...</option>
+            </select>
+        </div>
+        <div class="branch-selector">
+            <select id="branchSelect">
+                <option value="main">main</option>
+            </select>
+            <button class="btn btn-secondary" id="btnNewBranch" title="New Branch">+</button>
+        </div>
+    </div>
+
+    <!-- File Tree -->
+    <div class="sidebar-section sidebar-section-flex">
+        <div class="sidebar-header sidebar-header-collapsible" data-collapse="fileTreeBody">
+            <span>▾ Files</span>
+            <div>
+                <button id="btnNewFile" title="New File" onclick="event.stopPropagation()">📄</button>
+                <button id="btnNewFolder" title="New Folder" onclick="event.stopPropagation()">📁</button>
+            </div>
+        </div>
+        <div class="sidebar-collapse-body" id="fileTreeBody">
+            <div class="file-tree" id="fileTree">
+                <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
+                    Select a project to browse files
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues Panel -->
+    <div class="sidebar-section sidebar-section-bottom">
+        <div class="sidebar-header sidebar-header-collapsible" data-collapse="issuesPanelBody">
+            <span>▾ Issues</span>
+            <button id="btnRefreshIssues" title="Refresh" onclick="event.stopPropagation()">🔄</button>
+        </div>
+        <div class="sidebar-collapse-body" id="issuesPanelBody">
+            <div class="issues-panel" id="issuesPanel">
+                <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                    No issues loaded
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Runs -->
+    <div class="sidebar-section sidebar-section-bottom">
+        <div class="sidebar-header sidebar-header-collapsible" data-collapse="workflowsPanelBody">
+            <span>▾ Workflows</span>
+            <button id="btnRefreshWorkflows" title="Refresh" onclick="event.stopPropagation()">🔄</button>
+        </div>
+        <div class="sidebar-collapse-body" id="workflowsPanelBody">
+            <div class="workflows-panel" id="workflowsPanel">
+                <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                    No workflow runs
+                </div>
+            </div>
+        </div>
+    </div>
+</aside>

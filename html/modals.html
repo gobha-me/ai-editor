@@ -1,0 +1,182 @@
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal" style="max-width: 560px;">
+        <div class="modal-header">
+            <h2>⚙️ Settings</h2>
+            <button class="modal-close" onclick="window.closeSettings()">×</button>
+        </div>
+
+        <!-- Settings Tabs -->
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="tabGeneral">General</button>
+            <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
+            <button class="settings-tab" data-tab="tabContext">Context</button>
+            <button class="settings-tab" data-tab="tabRoles">Roles</button>
+            <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Content loaded from settings-tabs.html -->
+            <div id="settingsTabsContainer"></div>
+        </div>
+        
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
+            <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Revert Modal -->
+<div class="modal-overlay" id="revertModal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>↩️ Revert Changes</h2>
+            <button class="modal-close" onclick="window.closeRevertModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+                You have multiple files with unsaved changes. Choose what to revert:
+            </p>
+            <div id="revertFileList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; margin-bottom: 1.5rem; background: var(--bg-primary);">
+                <!-- Populated dynamically -->
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <button class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
+                    📄 Revert Current File Only
+                </button>
+                <button class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
+                    🔥 Revert ALL Files
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeRevertModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Commit Modal -->
+<div class="modal-overlay" id="commitModal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>📦 Commit Changes</h2>
+            <button class="modal-close" onclick="window.closeCommitModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Files to commit:</label>
+                <div id="commitFileList" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem;">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="commitMessage">Commit message:</label>
+                <textarea id="commitMessage" rows="4" placeholder="Describe your changes..."></textarea>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
+                        ✨ Generate with AI
+                    </button>
+                </div>
+                <small id="commitModelInfo" style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
+                    <!-- Populated with model info -->
+                </small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
+            <button class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit</button>
+        </div>
+    </div>
+</div>
+
+<!-- New Branch Modal -->
+<div class="modal-overlay" id="newBranchModal">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>🌿 Create New Branch</h2>
+            <button class="modal-close" onclick="window.closeNewBranchModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="newBranchName">Branch name:</label>
+                <input type="text" id="newBranchName" placeholder="feature/my-new-feature">
+                <small>Use lowercase, hyphens, and forward slashes (e.g., feature/login-page)</small>
+            </div>
+            <div class="form-group">
+                <label for="newBranchFrom">Create from:</label>
+                <select id="newBranchFrom">
+                    <!-- Populated dynamically with available branches -->
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="window.createNewBranch()">✅ Create Branch</button>
+        </div>
+    </div>
+</div>
+
+<!-- New File Modal -->
+<div class="modal-overlay" id="newFileModal">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>📄 Create New File</h2>
+            <button class="modal-close" onclick="window.closeNewFileModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="newFileName">File path:</label>
+                <input type="text" id="newFileName" placeholder="src/components/MyComponent.js">
+                <small>Include directory path if needed (e.g., docs/api/endpoints.md)</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="window.createNewFile()">✅ Create File</button>
+        </div>
+    </div>
+</div>
+
+<!-- Error Log Modal -->
+<div class="modal-overlay" id="errorLogModal">
+    <div class="modal" style="max-width: 800px;">
+        <div class="modal-header">
+            <h2>🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
+            <button class="modal-close" onclick="window.closeErrorLog()">×</button>
+        </div>
+        <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+            <div id="errorLogContent">
+                <!-- Error logs rendered here by error-logger.js -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
+            <button class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
+            <button class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
+        </div>
+    </div>
+</div>
+
+<!-- LLM Debug Modal -->
+<div class="modal-overlay" id="llmDebugModal">
+    <div class="modal" style="max-width: 900px;">
+        <div class="modal-header">
+            <h2>🔬 LLM Debug (<span id="llmDebugCount">0</span> exchanges)</h2>
+            <button class="modal-close" onclick="window.closeLLMDebug()">×</button>
+        </div>
+        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div id="llmDebugContent">
+                <!-- Debug exchanges rendered here by llm-debug-modal.js -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: 12px; margin-right: auto;">
+                <input type="checkbox" id="llmDebugAutoScroll" checked> Auto-scroll
+            </label>
+            <button class="btn btn-secondary" onclick="window.clearLLMDebug()">🗑️ Clear</button>
+            <button class="btn btn-secondary" onclick="window.copyLLMDebug()">📋 Copy</button>
+            <button class="btn btn-primary" onclick="window.exportLLMDebug()">📥 Export</button>
+        </div>
+    </div>
+</div>

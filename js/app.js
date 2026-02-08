@@ -2,6 +2,7 @@
 // MAIN APPLICATION
 // ============================================
 
+import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror } from './editor.js';
@@ -354,7 +355,24 @@ function setupSettingsSavedListener() {
 async function init() {
     console.log('Initializing AI Editor...');
     
-    // Initialize error logger first
+    // **CRITICAL: Load templates FIRST before anything else**
+    try {
+        await buildAppLayout();
+    } catch (error) {
+        console.error('Failed to load application templates:', error);
+        document.getElementById('app').innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #f88;">
+                <div style="text-align: center;">
+                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚠️ Template Load Error</h2>
+                    <p>Failed to load application layout.</p>
+                    <pre style="margin-top: 1rem; text-align: left; background: #222; padding: 1rem; border-radius: 4px; font-size: 11px;">${error.message}\n${error.stack}</pre>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Initialize error logger
     ErrorLogger.init();
     
     // Load settings
