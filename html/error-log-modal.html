@@ -1,0 +1,19 @@
+<!-- Error Log Modal -->
+<div class="modal-overlay" id="errorLogModal">
+    <div class="modal" style="max-width: 800px;">
+        <div class="modal-header">
+            <h2>🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
+            <button class="modal-close" onclick="window.closeErrorLog()">×</button>
+        </div>
+        <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+            <div id="errorLogContent">
+                <!-- Error logs will be rendered here by error-logger.js -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
+            <button class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
+            <button class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
+        </div>
+    </div>
+</div>
