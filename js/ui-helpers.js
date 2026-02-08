@@ -358,8 +358,7 @@ export async function createNewFile() {
     try {
         await GiteaAPI.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
         
-        // Refresh file tree
-        State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+        // Refresh file tree (tree:refresh handler fetches from Gitea)
         EventBus.emit('tree:refresh');
         
         closeNewFileModal();
@@ -472,6 +471,10 @@ async function revertSingleTab(tab) {
             originalContent,
             tab.path
         );
+        
+        // Notify listeners that file was reverted (NOT editor:change,
+        // which would re-dirty the tab via core.js and tab-manager.js)
+        EventBus.emit('file:reverted', { path: tab.path });
     }
 
     renderEditorTabs();
@@ -556,6 +559,10 @@ export async function revertAllFiles() {
             State.editorContent,
             currentTab.path
         );
+        
+        // Notify listeners that file was reverted (NOT editor:change,
+        // which would re-dirty the tab via core.js and tab-manager.js)
+        EventBus.emit('file:reverted', { path: currentTab.path });
     }
     
     renderEditorTabs();

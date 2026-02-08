@@ -17,12 +17,17 @@ export function isPreviewable(path) {
 export function updateToolbarButtons() {
     const path = State.currentFile?.path || '';
     
-    document.getElementById('btnTogglePreview').disabled = !isPreviewable(path);
-    document.getElementById('btnToggleDiff').disabled = !(State.activeTabIndex >= 0 && State.openTabs[State.activeTabIndex]);
+    const btnPreview = document.getElementById('btnTogglePreview');
+    const btnDiff = document.getElementById('btnToggleDiff');
+    const btnLineNumbers = document.getElementById('btnToggleLineNumbers');
+    if (!btnPreview || !btnDiff || !btnLineNumbers) return;
     
-    document.getElementById('btnTogglePreview').classList.toggle('active', secondaryPaneMode === 'preview');
-    document.getElementById('btnToggleDiff').classList.toggle('active', secondaryPaneMode === 'diff');
-    document.getElementById('btnToggleLineNumbers').classList.toggle('active', State.settings.showLineNumbers !== false);
+    btnPreview.disabled = !isPreviewable(path);
+    btnDiff.disabled = !(State.activeTabIndex >= 0 && State.openTabs[State.activeTabIndex]);
+    
+    btnPreview.classList.toggle('active', secondaryPaneMode === 'preview');
+    btnDiff.classList.toggle('active', secondaryPaneMode === 'diff');
+    btnLineNumbers.classList.toggle('active', State.settings.showLineNumbers !== false);
 }
 
 export function togglePreviewPane() {
@@ -165,6 +170,19 @@ export function initSecondaryPaneAutoRefresh() {
     // Refresh on file opened
     EventBus.on('file:opened', () => {
         updateToolbarButtons();
+    });
+    
+    // Refresh diff after commit (originalContent now matches current)
+    EventBus.on('gitea:saved', () => {
+        if (secondaryPaneMode === 'diff') renderDiff();
+    });
+    EventBus.on('gitea:batchSaved', () => {
+        if (secondaryPaneMode === 'diff') renderDiff();
+    });
+    
+    // Refresh diff after revert (content reset to original)
+    EventBus.on('file:reverted', () => {
+        if (secondaryPaneMode === 'diff') renderDiff();
     });
 }
 

@@ -98,4 +98,77 @@ export function registerProjectTools(registry) {
         },
         roles: ['coder']  // Only coders can create new files
     });
+
+    // ========================================
+    // delete_file
+    // ========================================
+    registry.register('delete_file', async ({ path, message = '' }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+        
+        // Find the file in the tree to get its SHA
+        const file = State.fileTree.find(f => f.path === path);
+        if (!file) {
+            return { error: `File not found in project tree: ${path}` };
+        }
+        if (file.type === 'dir') {
+            return { error: `Cannot delete directory: ${path}. Delete individual files instead.` };
+        }
+        
+        const commitMsg = message || `Delete ${path}`;
+        try {
+            await GiteaAPI.deleteFile(owner, repo, path, commitMsg, file.sha, branch);
+            
+            // Close tab if open
+            const tabIndex = State.openTabs.findIndex(t => t.path === path);
+            if (tabIndex >= 0) {
+                State.openTabs.splice(tabIndex, 1);
+                if (State.activeTabIndex >= tabIndex) {
+                    State.activeTabIndex = Math.max(0, State.activeTabIndex - 1);
+                }
+                if (State.openTabs.length > 0 && State.activeTabIndex >= 0) {
+                    // Trigger tab switch to update editor
+                    EventBus.emit('tab:switched', { 
+                        index: State.activeTabIndex, 
+                        tab: State.openTabs[State.activeTabIndex] 
+                    });
+                }
+            }
+            
+            // Refresh file tree (handler fetches from Gitea)
+            EventBus.emit('tree:refresh');
+            
+            return {
+                success: true,
+                path: path,
+                message: `Deleted ${path} from branch ${branch}`
+            };
+        } catch (error) {
+            return { error: `Failed to delete file ${path}: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'delete_file',
+            description: 'Delete a file from the project repository. Commits the deletion directly to the current branch via Gitea API.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'File path relative to repo root (e.g., "src/old-module.js")'
+                    },
+                    message: {
+                        type: 'string',
+                        description: 'Git commit message (optional, defaults to "Delete <path>")'
+                    }
+                },
+                required: ['path']
+            }
+        },
+        roles: ['coder']  // Only coders can delete files
+    });
 }

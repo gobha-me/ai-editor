@@ -72,6 +72,10 @@ export function closeTab(index, event) {
         State.currentFile = null;
         State.editorContent = '';
         State.editorDirty = false;
+        
+        // Close secondary pane (diff/preview are invalid with no file open)
+        import('./secondary-pane.js').then(({ closeSecondaryPane }) => closeSecondaryPane());
+        
         // Show welcome screen
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">

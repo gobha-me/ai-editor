@@ -13,6 +13,7 @@ export function validateToolParameters(toolName, args) {
     // Define required parameters for each tool
     const requiredParams = {
         'create_file': ['path', 'content', 'message'],
+        'delete_file': ['path'],
         'replace_lines': ['start_line', 'end_line', 'new_content'],
         'insert_lines': ['after_line', 'content'],
         'delete_lines': ['start_line', 'end_line'],

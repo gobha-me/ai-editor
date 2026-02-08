@@ -753,6 +753,7 @@ You have access to tools that let you:
 - Read any file's content without opening it (read_file) — auto-truncates large files
 - List all open tabs (list_open_tabs)
 - Create new files in the repository (create_file)
+- Delete files from the repository (delete_file)
 - Search for text patterns across the codebase (search_in_files)
 
 🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
@@ -774,10 +775,12 @@ WORKFLOW — Use these tools as needed (not all are required every time):
 5. read_lines — see exact line numbers in the target region before editing
 6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 7. create_file — if a new file is needed
+8. delete_file — if a file needs to be removed (e.g., after rename or cleanup)
 
 🚨 CRITICAL TOOL USAGE RULES:
 1. **ALWAYS provide ALL required parameters for every tool call**
    - create_file: MUST include path, content, AND message (all 3 required)
+   - delete_file: MUST include path
    - replace_lines: MUST include start_line, end_line, AND new_content
    - insert_lines: MUST include after_line AND content
    - read_file/open_file: MUST include path

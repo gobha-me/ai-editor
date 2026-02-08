@@ -311,9 +311,9 @@ export async function deleteFile(path) {
             }
         }
         
-        // Refresh file tree
-        State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
-        renderFileTree();
+        // Refresh file tree (tree:refresh handler fetches from Gitea)
+        const { EventBus } = await import('./core.js');
+        EventBus.emit('tree:refresh');
         
         window.showToast('File deleted', 'success');
     } catch (error) {

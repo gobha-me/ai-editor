@@ -365,7 +365,7 @@ export async function handleGeneralRequest(input) {
                     const cachedResult = toolCallCache.get(cacheKey);
                     
                     let toolResult;
-                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
+                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'delete_file',
                                           'update_issue', 'add_issue_comment'].includes(toolName)) {
                         // Return cached result for read-only tools with a note
                         toolResult = {
@@ -390,7 +390,7 @@ export async function handleGeneralRequest(input) {
                         
                         // Invalidate cached reads when a write tool modifies a file
                         // or when open_file changes the active file (stales read_current_file)
-                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'open_file'].includes(toolName)) {
+                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'delete_file', 'open_file'].includes(toolName)) {
                             const affectedPath = args.path || State.currentFile?.path;
                             if (affectedPath) {
                                 for (const [key] of toolCallCache) {
@@ -406,7 +406,7 @@ export async function handleGeneralRequest(input) {
                         
                         // Cache successful read-only results (skip write tools)
                         if (!toolResult?.error && !['replace_lines', 'insert_lines', 'delete_lines', 
-                             'create_file', 'update_issue', 'add_issue_comment'].includes(toolName)) {
+                             'create_file', 'delete_file', 'update_issue', 'add_issue_comment'].includes(toolName)) {
                             toolCallCache.set(cacheKey, toolResult);
                         }
                     }

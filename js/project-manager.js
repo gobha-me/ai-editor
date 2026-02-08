@@ -100,9 +100,11 @@ export async function onBranchChange(e) {
         const { renderEditorTabs } = await import('./tab-manager.js');
         renderEditorTabs();
         
-        // Reload file tree for new branch
-        const { owner, repo } = State.currentProject;
-        State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+        // Close secondary pane (diff/preview are invalid after branch switch)
+        const { closeSecondaryPane } = await import('./secondary-pane.js');
+        closeSecondaryPane();
+        
+        // Reload file tree for new branch (tree:refresh handler fetches from Gitea)
         EventBus.emit('tree:refresh');
     }
 
@@ -202,6 +204,14 @@ export function initProjectListeners() {
     });
     
     EventBus.on('tree:refresh', async () => {
+        if (State.currentProject) {
+            const { owner, repo } = State.currentProject;
+            try {
+                State.fileTree = await GiteaAPI.getFileTree(owner, repo, State.currentBranch);
+            } catch (e) {
+                console.error('[tree:refresh] Failed to fetch file tree:', e);
+            }
+        }
         renderFileTree();
     });
     

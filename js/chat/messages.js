@@ -319,6 +319,8 @@ function summarizeToolArgs(toolName, args) {
             return `L${args.start_line}-${args.end_line}`;
         case 'create_file':
             return args.path || '';
+        case 'delete_file':
+            return args.path || '';
         case 'search_in_files':
             return `"${args.query}"${args.path ? ` in ${args.path}` : ''}`;
         case 'read_issue':
@@ -367,6 +369,8 @@ function summarizeToolResult(toolName, result) {
             return result.message || 'edited';
         case 'create_file':
             return result.message || 'created';
+        case 'delete_file':
+            return result.message || 'deleted';
         case 'search_in_files':
             return `${result.results?.length || 0} matches in ${result.files_searched || 0} files`;
         case 'list_issues':
