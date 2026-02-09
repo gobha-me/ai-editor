@@ -3,7 +3,7 @@
 // ============================================
 
 import { VERSION_DISPLAY } from './version.js';
-import { buildAppLayout } from './template-loader.js';
+import { FaviconManager } from './favicon-manager.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
@@ -437,6 +437,9 @@ function setupSettingsSavedListener() {
 async function init() {
     console.log(`Initializing ${VERSION_DISPLAY}...`);
     
+    // Initialize FaviconManager first (before templates load for error state support)
+    FaviconManager.init();
+    
     // **CRITICAL: Load templates FIRST before anything else**
     try {
         await buildAppLayout();
@@ -452,6 +455,7 @@ async function init() {
                 </div>
             </div>
         `;
+        FaviconManager.setError();
         return;
     }
     
@@ -462,12 +466,12 @@ async function init() {
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
     applyVisualSettings();
-    applyLineNumbersVisibility();
-    initSidebarCollapse();
-    exposeLLMTools();
+    initPanelResize();
+    
+    
+    // Initialize components
     populateRoleSelector();
     initCostTracker();
-    initPanelResize();
     
     // Initialize components
     const chatMessages = document.getElementById('chatMessages');
