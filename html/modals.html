@@ -187,3 +187,66 @@
         </div>
     </div>
 </div>
+
+<!-- Quick Open Overlay (Ctrl+P) -->
+<div class="quick-open-overlay" id="quickOpenOverlay">
+    <div class="quick-open-panel">
+        <input type="text" class="quick-open-input" id="quickOpenInput"
+               placeholder="Type to search files..." autocomplete="off" spellcheck="false">
+        <div class="quick-open-results" id="quickOpenResults">
+            <div class="quick-open-empty">Start typing to find files</div>
+        </div>
+        <div class="quick-open-hint">
+            <kbd>↑↓</kbd> navigate &nbsp; <kbd>Enter</kbd> open &nbsp; <kbd>Shift+Enter</kbd> pin tab &nbsp; <kbd>Esc</kbd> close
+        </div>
+    </div>
+</div>
+
+<!-- Keyboard Shortcuts Help (F1 / Ctrl+?) -->
+<div class="modal-overlay" id="helpModal">
+    <div class="modal" style="max-width: 580px;">
+        <div class="modal-header">
+            <h2>⌨️ Keyboard Shortcuts</h2>
+            <button class="modal-close" onclick="window.closeHelpModal()">×</button>
+        </div>
+        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="help-shortcuts">
+                <div class="help-group">
+                    <h3>General</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>F1</kbd></span><span>Show this help</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></span><span>Open settings</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></span><span>Toggle sidebar</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>J</kbd></span><span>Toggle chat panel</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Esc</kbd></span><span>Close modal / panel</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Files</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>P</kbd></span><span>Quick open file</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></span><span>Search in project</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></span><span>Commit changes</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></span><span>Revert file(s)</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Editor</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Toggle preview pane</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span><span>Toggle diff view</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></span><span>Toggle line numbers</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Chat</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Send message</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>New line in chat</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Quick Open</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate results</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file (preview)</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>Open file (pinned tab)</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeHelpModal()">Close</button>
+        </div>
+    </div>
+</div>

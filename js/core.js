@@ -47,7 +47,6 @@ const State = {
     settings: {
         giteaUrl: '',     // Legacy — migrated to connections[] on first run
         connections: [],  // Git provider connections: [{ id, provider, label, url, token, enabled }]
-        theme: 'dark',
         
         // Embeddings / Context Management
         useEmbeddings: false,      // Enable client-side embeddings
@@ -450,7 +449,16 @@ BUILTIN_ROLES.forEach(role => Roles.register(role));
 function loadSettings() {
     const saved = Storage.get('settings');
     if (saved) {
-        State.settings = { ...State.settings, ...saved };
+        // Deep-merge known nested objects so new defaults aren't lost on upgrade.
+        // Top-level keys are spread first, then nested objects are merged individually.
+        const nestedKeys = ['veniceParameters', 'openRouterParameters', 'advancedParams'];
+        const merged = { ...State.settings, ...saved };
+        for (const key of nestedKeys) {
+            if (State.settings[key] && typeof State.settings[key] === 'object' && !Array.isArray(State.settings[key])) {
+                merged[key] = { ...State.settings[key], ...(saved[key] || {}) };
+            }
+        }
+        State.settings = merged;
     }
     // Sync active provider with registry
     ProviderRegistry.setActiveProvider(State.settings.apiProvider || 'openai');

@@ -11,6 +11,7 @@ import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
+import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
 import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile } from './file-tree.js';
@@ -95,6 +96,16 @@ window.copyLLMDebug = copyLLMDebug;
 window.exportLLMDebug = exportLLMDebug;
 
 window.QuickOpen = QuickOpen;
+
+// Help modal
+function openHelpModal() {
+    document.getElementById('helpModal')?.classList.add('active');
+}
+function closeHelpModal() {
+    document.getElementById('helpModal')?.classList.remove('active');
+}
+window.openHelpModal = openHelpModal;
+window.closeHelpModal = closeHelpModal;
 
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
@@ -282,8 +293,37 @@ function setupKeyboardShortcuts() {
             QuickOpen.open();
         }
 
+        // Ctrl+Shift+F - Project search
+        if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+            e.preventDefault();
+            openSearchPanel();
+        }
+
+        // Ctrl+J - Toggle chat panel
+        if (e.ctrlKey && !e.shiftKey && e.key === 'j') {
+            e.preventDefault();
+            toggleChat();
+        }
+
+        // F1 - Keyboard shortcuts help
+        if (e.key === 'F1') {
+            e.preventDefault();
+            openHelpModal();
+        }
+
         // Escape - Close modals
         if (e.key === 'Escape') {
+            // Close in priority order: search panel → quick open → modals
+            const searchPanel = document.getElementById('searchPanel');
+            if (searchPanel?.classList.contains('active')) {
+                closeSearchPanel();
+                return;
+            }
+            const quickOpen = document.getElementById('quickOpenOverlay');
+            if (quickOpen?.classList.contains('active')) {
+                QuickOpen.close();
+                return;
+            }
             closeAllModals();
         }
     });
@@ -312,6 +352,7 @@ function setupEventListeners() {
     safeAdd('btnErrorLog', 'click', openErrorLog);
     safeAdd('btnLLMDebug', 'click', openLLMDebug);
     safeAdd('btnToggleChat', 'click', toggleChat);
+    safeAdd('btnHelp', 'click', openHelpModal);
 
     // Sidebar buttons
     safeAdd('btnRefreshProjects', 'click', refreshProjects);
@@ -456,12 +497,9 @@ async function init() {
     // Pre-load CodeMirror
     await loadCodeMirror();
     
-    // Initialize quick open on DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initQuickOpen);
-    } else {
-        initQuickOpen();
-    }
+    // Initialize quick open and search panel (DOM is ready after buildAppLayout)
+    initQuickOpen();
+    initSearchPanel();
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);
 }

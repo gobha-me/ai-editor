@@ -62,6 +62,7 @@ export function showToast(message, type = 'success') {
 export function closeAllModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
     document.getElementById('quickOpenOverlay')?.classList.remove('active');
+    document.getElementById('searchPanel')?.classList.remove('active');
 }
 
 // ============================================

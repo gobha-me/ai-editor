@@ -130,12 +130,14 @@ export async function buildAppLayout() {
         'sidebar', 
         'editor-panel',
         'chat-panel',
+        'search-panel',
         'modals'
     ]);
     
     // Build the main layout structure
     const html = `
         ${templates.get('header')}
+        ${templates.get('search-panel')}
         <main class="main-content">
             ${templates.get('sidebar')}
             <div class="resize-handle resize-handle-sidebar" id="resizeHandleSidebar" title="Drag to resize sidebar"></div>

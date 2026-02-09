@@ -232,6 +232,10 @@ function _formatResetTime(isoTimestamp) {
 
 /** Fetch and display provider account balance. */
 export async function fetchProviderBalance() {
+    if (!State.settings.llmApiKey) {
+        State.providerBalance = null;
+        return null;
+    }
     try {
         const balance = await ProviderRegistry.fetchBalance(State.settings);
         State.providerBalance = balance;
@@ -287,7 +291,12 @@ export function initCostTrackerListener() {
     // Re-fetch balance when settings change (provider/key may have changed)
     window.addEventListener('settings:saved', () => {
         State.providerBalance = null;
-        fetchProviderBalance();
+        if (State.settings.llmApiKey) {
+            startBalancePolling();
+        } else {
+            stopBalancePolling();
+            updateCostTracker();
+        }
     });
 
     // Start balance polling if we have an API key

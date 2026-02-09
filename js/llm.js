@@ -283,26 +283,6 @@ const LLMDebug = {
 const LLM = {
     abortController: null,
 
-    async request(endpoint, data) {
-        const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}${endpoint}`;
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${State.settings.llmApiKey}`
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`LLM API Error: ${response.status} - ${error}`);
-        }
-
-        return response;
-    },
-
     // ========================================
     // MODELS
     // ========================================
@@ -312,7 +292,8 @@ const LLM = {
         
         const response = await fetch(url, {
             headers: {
-                'Authorization': `Bearer ${State.settings.llmApiKey}`
+                'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                ...ProviderRegistry.getHeaders(State.settings)
             }
         });
 
@@ -350,7 +331,8 @@ const LLM = {
         try {
             const response = await fetch(`${baseUrl}/models?type=embedding`, {
                 headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                    ...ProviderRegistry.getHeaders(State.settings)
                 }
             });
 
@@ -376,7 +358,8 @@ const LLM = {
         try {
             const response = await fetch(`${baseUrl}/models`, {
                 headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`
+                    'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                    ...ProviderRegistry.getHeaders(State.settings)
                 }
             });
 
