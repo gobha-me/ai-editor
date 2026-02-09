@@ -41,7 +41,17 @@ function stripThinkBlocks(text) {
  * Uses explicit field copying instead of destructuring to avoid corruption.
  */
 function sanitizeMessages(messages) {
-    return messages.map(msg => {
+    const VALID_ROLES = new Set(['system', 'user', 'assistant', 'tool']);
+    
+    return messages
+        .filter(msg => {
+            if (!VALID_ROLES.has(msg.role)) {
+                console.warn(`[sanitizeMessages] Dropping message with invalid role: "${msg.role}"`);
+                return false;
+            }
+            return true;
+        })
+        .map(msg => {
         // Build clean message with only OpenAI-spec fields
         const cleanMsg = {
             role: msg.role

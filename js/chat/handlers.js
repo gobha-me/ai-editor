@@ -225,6 +225,7 @@ export async function handleGeneralRequest(input) {
     // === DUPLICATE TOOL CALL DETECTION ===
     // Track tool+args combinations to prevent re-fetching the same data
     const toolCallCache = new Map(); // key: "toolName|canonicalArgs" → result
+    let _hasRetried = false;  // One transient-error retry per request
 
     // Keep isGenerating true for the entire tool loop
     State.isGenerating = true;
@@ -276,6 +277,24 @@ export async function handleGeneralRequest(input) {
                 lastRoundContent = '';  // Ensure error paths use finalContent fallback
                 
                 if (isToolLoopCancelled()) break;
+
+                // === RETRY LOGIC for transient API errors ===
+                // On round 0 with no tool state to lose, retry once after a brief pause.
+                // Catches Venice "zero-length empty document", transient 5xx, etc.
+                const isTransient = round === 0 && toolActions.length === 0 && !content &&
+                    (err.message.includes('zero-length') || err.message.includes('empty document') ||
+                     err.message.includes('ConnectionError') || err.message.includes('502') ||
+                     err.message.includes('503') || err.message.includes('504') ||
+                     err.message.includes('timeout'));
+                
+                if (isTransient && !_hasRetried) {
+                    _hasRetried = true;
+                    console.warn(`[TOOL-LOOP] Transient error on round 0, retrying after 1.5s: ${err.message}`);
+                    updateStreamingMessage('*(API error — retrying…)*');
+                    await new Promise(r => setTimeout(r, 1500));
+                    round--; // Don't consume a round for the retry
+                    continue;
+                }
                 
                 if (toolActions.length > 0) {
                     // Show what tools did accomplish
