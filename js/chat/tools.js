@@ -89,24 +89,24 @@ export function parseTextToolCalls(text) {
     let match;
 
     // Kimi K2: <|tool_calls_section_begin|>...<|tool_calls_section_end|>
-    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
-    while ((match = kimiSectionPattern.exec(text)) !== null) {
-        const sectionBlock = match[1];
-        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
-        let kimiMatch;
-        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
-            const fnName = kimiMatch[1].trim();
-            const argsStr = kimiMatch[2].trim();
-            let args = {};
-            try { args = JSON.parse(argsStr); } catch (e) { args = { _raw: argsStr }; }
-            toolCalls.push({
-                id: `text_call_${toolCalls.length}`,
-                type: 'function',
-                function: { name: fnName, arguments: JSON.stringify(args) }
-            });
-        }
-        cleanContent = cleanContent.replace(match[0], '');
-    }
+//    const kimiSectionPattern = /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/gi;
+//    while ((match = kimiSectionPattern.exec(text)) !== null) {
+//        const sectionBlock = match[1];
+//        const kimiCallPattern = /<\|tool_call_begin\|>\s*(?:functions\.)?(\S+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
+//        let kimiMatch;
+//        while ((kimiMatch = kimiCallPattern.exec(sectionBlock)) !== null) {
+//            const fnName = kimiMatch[1].trim();
+//            const argsStr = kimiMatch[2].trim();
+//            let args = {};
+//            try { args = JSON.parse(argsStr); } catch (e) { args = { _raw: argsStr }; }
+//            toolCalls.push({
+//                id: `text_call_${toolCalls.length}`,
+//                type: 'function',
+//                function: { name: fnName, arguments: JSON.stringify(args) }
+//            });
+//        }
+//        cleanContent = cleanContent.replace(match[0], '');
+//    }
 
     // JSON in tags: <tool_call>{"name":"fn","arguments":{...}}</tool_call> or <function_call>
     const jsonToolPattern = /<(?:tool_call|function_call)>\s*(\{[\s\S]*?\})\s*<\/(?:tool_call|function_call)>/gi;
@@ -128,26 +128,26 @@ export function parseTextToolCalls(text) {
     }
 
     // MiniMax XML: <minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>
-    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
-    while ((match = minimaxPattern.exec(text)) !== null) {
-        const invokeBlock = match[1];
-        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
-        let invokeMatch;
-        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
-            const args = {};
-            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
-            let paramMatch;
-            while ((paramMatch = paramPattern.exec(invokeMatch[2])) !== null) {
-                args[paramMatch[1]] = paramMatch[2].trim();
-            }
-            toolCalls.push({
-                id: `text_call_${toolCalls.length}`,
-                type: 'function',
-                function: { name: invokeMatch[1], arguments: JSON.stringify(args) }
-            });
-        }
-        cleanContent = cleanContent.replace(match[0], '');
-    }
+//    const minimaxPattern = /<minimax:tool_call>([\s\S]*?)<\/minimax:tool_call>/gi;
+//    while ((match = minimaxPattern.exec(text)) !== null) {
+//        const invokeBlock = match[1];
+//        const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/gi;
+//        let invokeMatch;
+//        while ((invokeMatch = invokePattern.exec(invokeBlock)) !== null) {
+//            const args = {};
+//            const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/gi;
+//            let paramMatch;
+//            while ((paramMatch = paramPattern.exec(invokeMatch[2])) !== null) {
+//                args[paramMatch[1]] = paramMatch[2].trim();
+//            }
+//            toolCalls.push({
+//                id: `text_call_${toolCalls.length}`,
+//                type: 'function',
+//                function: { name: invokeMatch[1], arguments: JSON.stringify(args) }
+//            });
+//        }
+//        cleanContent = cleanContent.replace(match[0], '');
+//    }
 
     // Generic XML: <tool_call><name>fn</name><arguments>{...}</arguments></tool_call>
     const genericPattern = /<tool_call>\s*<name>([^<]+)<\/name>\s*<arguments>([\s\S]*?)<\/arguments>\s*<\/tool_call>/gi;
