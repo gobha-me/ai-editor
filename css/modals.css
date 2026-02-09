@@ -84,8 +84,9 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     width: 90%;
-    max-width: 500px;
-    max-height: 80vh;
+    max-width: calc(var(--ui-font-size) * 40);  /* ~520px at 13, ~640px at 16, ~800px at 20 */
+    min-width: 320px;
+    max-height: 85vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -272,10 +273,12 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-tertiary);
     flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
 }
 
 .settings-tab {
-    flex: 1;
     padding: 0.6rem 0.75rem;
     background: none;
     border: none;
@@ -285,6 +288,8 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .settings-tab:hover {
