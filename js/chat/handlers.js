@@ -11,6 +11,7 @@ import {
     addStreamingMessage, 
     updateStreamingMessage, 
     finalizeStreamingMessage,
+    cleanupStreamingMessage,
     addToolCallMessage,
     formatMessageContent,
     escapeHtml
@@ -25,22 +26,36 @@ import {
 import { executeToolCall } from './tools.js';
 import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
+import { withRetry } from '../retry.js';
 
 /**
  * Main entry point for user input
+ * 
+ * On transient API failures, automatically retries the handler (not the user
+ * message) up to MAX_INPUT_RETRIES times with exponential backoff.
+ * The user message is added to history exactly once — retries re-attempt
+ * the handler only, so the conversation is never forked.
  */
+const MAX_INPUT_RETRIES = 2;   // 3 total attempts (1 original + 2 retries)
+const INPUT_RETRY_BASE_MS = 2000;
+
 export async function handleUserInputDirect(input) {
     console.log(`[handleUserInputDirect] Received input="${input}"`);
     
     if (!input || State.isGenerating) return;
     
-    // Add user message
+    // Add user message ONCE — retries must not duplicate this
     addMessage('user', input);
 
     // Determine intent
     const intent = detectIntent(input);
 
-    try {
+    /**
+     * Build the handler thunk.  On retry this is re-invoked, but the user
+     * message is already in history so the handler picks it up via
+     * getContextMessages().
+     */
+    const runHandler = async () => {
         switch (intent) {
             case 'edit':
                 await handleEditRequest(input);
@@ -57,10 +72,42 @@ export async function handleUserInputDirect(input) {
             default:
                 await handleGeneralRequest(input);
         }
+    };
+
+    try {
+        await withRetry(runHandler, {
+            maxRetries: MAX_INPUT_RETRIES,
+            baseDelay: INPUT_RETRY_BASE_MS,
+            maxDelay: 8000,
+            onRetry: (attempt, delayMs, err) => {
+                // Clean up any orphaned streaming state from the failed attempt
+                cleanupStreamingMessage();
+                console.warn(
+                    `[handleUserInputDirect] Auto-retry ${attempt}/${MAX_INPUT_RETRIES} ` +
+                    `in ${Math.round(delayMs)}ms: ${err.message}`
+                );
+                addMessage('system', `⚠️ Request failed (${_briefError(err)}). Retrying… (attempt ${attempt + 1})`);
+            }
+        });
     } catch (error) {
-        console.error('Chat error:', error);
+        // All retries exhausted — clean up and show error
+        cleanupStreamingMessage();
+        console.error('Chat error (after retries):', error);
         addMessage('error', `Error: ${error.message}`);
     }
+}
+
+/**
+ * Shorten an error message for user-facing display.
+ * Strips JSON noise from provider error payloads.
+ */
+function _briefError(err) {
+    const msg = err.message || String(err);
+    // Strip JSON wrapper from "LLM stream error: ConnectionError: {...}" style messages
+    const match = msg.match(/"message"\s*:\s*"([^"]+)"/);
+    if (match) return match[1];
+    // Truncate long messages
+    return msg.length > 120 ? msg.slice(0, 117) + '…' : msg;
 }
 
 /**
@@ -193,9 +240,18 @@ async function handleIssueRequest(input) {
 
 /**
  * Handle general request with full tool access and iterative tool loop
+ * 
+ * History safety: Snapshots chatHistory length on entry. If the request
+ * fails catastrophically (all retries exhausted), intermediate assistant
+ * and tool messages pushed mid-loop are rolled back so the history isn't
+ * poisoned with orphaned tool-call sequences.
  */
 export async function handleGeneralRequest(input) {
     console.log(`[handleGeneralRequest] Starting with input="${input}"`);
+    
+    // === HISTORY SNAPSHOT ===
+    // Capture current history length so we can rollback mid-loop writes on failure
+    const historySnapshot = State.chatHistory.length;
     
     addStreamingMessage();
     resetToolLoopCancel();  // Reset cancel flag
@@ -308,6 +364,11 @@ export async function handleGeneralRequest(input) {
                 } else if (content) {
                     finalContent = content;
                 } else {
+                    // === HISTORY ROLLBACK ===
+                    // Total failure with no content and no tool progress.
+                    // Roll back any mid-loop history writes so the caller
+                    // (withRetry in handleUserInputDirect) can retry cleanly.
+                    _rollbackHistory(historySnapshot);
                     throw err;
                 }
                 break;
@@ -652,6 +713,29 @@ export async function handleGeneralRequest(input) {
         lastRoundContent.trim() ? lastRoundContent : finalContent, 
         { hasCode: false }
     );
+}
+
+// ============================================
+// HISTORY SAFETY HELPERS
+// ============================================
+
+/**
+ * Roll back chatHistory to a previous length and re-persist.
+ * 
+ * Called when handleGeneralRequest fails catastrophically mid-tool-loop.
+ * Removes any assistant/tool messages that were pushed during the loop
+ * so the history doesn't contain orphaned tool-call sequences that would
+ * confuse the LLM context on the next request.
+ * 
+ * @param {number} snapshotLength - State.chatHistory.length at request start
+ */
+function _rollbackHistory(snapshotLength) {
+    const removed = State.chatHistory.length - snapshotLength;
+    if (removed > 0) {
+        State.chatHistory.length = snapshotLength;
+        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        console.warn(`[_rollbackHistory] Rolled back ${removed} message(s) from failed request`);
+    }
 }
 
 /**

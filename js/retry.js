@@ -40,6 +40,10 @@ const RETRYABLE_CHECKS = [
     (err) => err.message?.includes('ECONNRESET'),
     (err) => err.message?.includes('ETIMEDOUT'),
     (err) => err.name === 'AbortError' && !err._userAborted,  // Not user-initiated abort
+
+    // Provider-specific wrappers (Venice wraps transient failures as ConnectionError)
+    (err) => err.message?.includes('ConnectionError') && 
+             (err.message?.includes('zero-length') || err.message?.includes('empty document')),
 ];
 
 /**

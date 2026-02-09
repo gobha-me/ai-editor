@@ -114,6 +114,26 @@ export function getStreamingElapsed() {
 }
 
 /**
+ * Clean up an orphaned streaming message element and stop its timer.
+ * Safe to call multiple times or when no streaming message exists.
+ * 
+ * Use this on error paths where finalizeStreamingMessage() was never reached,
+ * to prevent:
+ *   - Dangling DOM elements with id="streaming-message"
+ *   - Timer intervals that tick forever
+ *   - Duplicate streaming elements on the next request
+ */
+export function cleanupStreamingMessage() {
+    stopStreamingTimer();
+    _streamingTimerStart = null;
+    const el = document.getElementById('streaming-message');
+    if (el) {
+        el.remove();
+        console.log('[cleanupStreamingMessage] Removed orphaned streaming element');
+    }
+}
+
+/**
  * Update streaming message content.
  * Timer is handled by the interval started in addStreamingMessage().
  */
