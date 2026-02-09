@@ -1269,6 +1269,35 @@ body {
     font-family: inherit;
 }
 
+/* Checkboxes: reset full-width text-input styling */
+.form-group input[type="checkbox"],
+.form-group input[type="range"] {
+    width: auto;
+    padding: 0;
+    border: revert;
+    border-radius: revert;
+    background: revert;
+}
+
+.form-group input[type="checkbox"] {
+    vertical-align: middle;
+    margin-right: 0.4rem;
+    cursor: pointer;
+}
+
+/* Checkbox labels: inline so text sits next to the box */
+.form-group label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Fallback for browsers without :has() — match the pattern used in HTML */
+.form-group label > input[type="checkbox"] {
+    flex-shrink: 0;
+}
+
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {

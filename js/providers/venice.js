@@ -99,11 +99,9 @@ export default {
             veniceParams.include_venice_system_prompt = vp.includeSystemPrompt;
         }
 
-        // Thinking controls — bridge from advancedParams OR veniceParameters
-        const stripThinking = adv.strip_thinking_response || vp.stripThinking;
-        const disableThinking = adv.disable_thinking || vp.disableThinking;
-        if (stripThinking) veniceParams.strip_thinking_response = true;
-        if (disableThinking) veniceParams.disable_thinking = true;
+        // Thinking controls — from generic advancedParams
+        if (adv.strip_thinking_response) veniceParams.strip_thinking_response = true;
+        if (adv.disable_thinking) veniceParams.disable_thinking = true;
 
         // Only add venice_parameters if we have any
         if (Object.keys(veniceParams).length > 0) {
@@ -111,8 +109,8 @@ export default {
         }
 
         // Reasoning effort (top-level param for Venice reasoning models)
-        if (vp.reasoningEffort && !adv.reasoning_effort) {
-            requestBody.reasoning_effort = vp.reasoningEffort;
+        if (adv.reasoning_effort) {
+            requestBody.reasoning_effort = adv.reasoning_effort;
         }
 
         return requestBody;
@@ -247,30 +245,6 @@ export default {
             label: 'Venice System Prompt',
             default: true,
             description: 'Include Venice default system prompt'
-        },
-        stripThinking: {
-            type: 'boolean',
-            label: 'Strip Thinking',
-            default: false,
-            description: 'Remove <thinking> blocks from response'
-        },
-        disableThinking: {
-            type: 'boolean',
-            label: 'Disable Thinking',
-            default: false,
-            description: 'Prevent model from using thinking tokens'
-        },
-        reasoningEffort: {
-            type: 'select',
-            label: 'Reasoning Effort',
-            options: [
-                { value: '', label: 'Default' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' }
-            ],
-            default: '',
-            description: 'Extended thinking effort for reasoning models'
         }
     }
 };
