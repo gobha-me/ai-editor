@@ -146,46 +146,54 @@ export default {
         if (!endpoint || !apiKey) return null;
 
         try {
-            const resp = await fetch(`${endpoint}/api_keys/rate_limits`, {
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
-            if (!resp.ok) return null;
+            // Fetch both endpoints in parallel:
+            //   /api_keys/rate_limits → balances (remaining DIEM/USD) + nextEpochBegins
+            //   /api_keys             → consumptionLimits (max DIEM/USD per epoch)
+            const [rateLimitsResp, keysResp] = await Promise.all([
+                fetch(`${endpoint}/api_keys/rate_limits`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                }),
+                fetch(`${endpoint}/api_keys`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                })
+            ]);
 
-            const json = await resp.json();
-            const data = json.data || {};
-            const balances = data.balances || {};
+            if (!rateLimitsResp.ok) return null;
+
+            const rateLimitsJson = await rateLimitsResp.json();
+            const rlData = rateLimitsJson.data || {};
+            const balances = rlData.balances || {};
             const usd = balances.USD ?? null;
             const diemBalance = balances.DIEM ?? null;
-            const nextEpoch = data.nextEpochBegins || null;
+            const nextEpoch = rlData.nextEpochBegins || null;
 
-            // Track DIEM max: the highest value we see for this epoch is the daily max.
-            // When epoch rolls over (nextEpochBegins changes), reset.
-            if (diemBalance !== null) {
-                const storedEpoch = this._diemEpoch || null;
-                if (!storedEpoch || storedEpoch !== nextEpoch) {
-                    // New epoch or first fetch — current balance IS the max
-                    this._diemMax = diemBalance;
-                    this._diemEpoch = nextEpoch;
-                } else if (diemBalance > (this._diemMax || 0)) {
-                    // Balance went up (shouldn't happen mid-epoch, but be safe)
-                    this._diemMax = diemBalance;
+            // Extract per-epoch DIEM limit from the api_keys response
+            let diemMax = null;
+            if (keysResp.ok) {
+                const keysJson = await keysResp.json();
+                const keys = keysJson.data || [];
+                // Find first INFERENCE key with a diem consumption limit
+                for (const k of keys) {
+                    const limit = k.consumptionLimits?.diem;
+                    if (limit !== null && limit !== undefined) {
+                        diemMax = limit;
+                        break;
+                    }
                 }
             }
 
             return {
                 provider: 'venice',
                 usd: usd,
-                diem: {
+                diem: diemBalance !== null ? {
                     balance: diemBalance,
-                    max: this._diemMax || diemBalance,
-                    nextEpoch: nextEpoch    // ISO timestamp
-                },
+                    max: diemMax,           // Per-epoch limit from consumptionLimits
+                    nextEpoch: nextEpoch    // ISO timestamp for epoch reset
+                } : null,
                 label: usd !== null ? `$${usd.toFixed(2)}` : 'N/A',
                 raw: {
-                    usd, diemBalance,
-                    diemMax: this._diemMax,
-                    nextEpoch,
-                    tier: data.apiTier?.id || null
+                    usd, diemBalance, diemMax, nextEpoch,
+                    tier: rlData.apiTier?.id || null
                 }
             };
         } catch (err) {
@@ -193,10 +201,6 @@ export default {
             return null;
         }
     },
-
-    // Internal DIEM tracking (persists across polls within same provider instance)
-    _diemMax: null,
-    _diemEpoch: null,
 
     // ========================================
     // SETTINGS SCHEMA (drives dynamic UI)

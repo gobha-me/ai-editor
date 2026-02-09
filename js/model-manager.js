@@ -179,9 +179,14 @@ export function updateCostTracker() {
         // DIEM with balance/max and reset countdown
         if (bal.diem) {
             const d = bal.diem;
-            const pct = d.max > 0 ? (d.balance / d.max) * 100 : 100;
-            const colorClass = pct < 10 ? 'cost-diem-crit' : pct < 25 ? 'cost-diem-warn' : 'cost-diem';
-            let diemStr = `<span class="${colorClass}">${d.balance.toFixed(1)}/${d.max.toFixed(1)} DIEM</span>`;
+            let diemStr;
+            if (d.max !== null && d.max !== undefined) {
+                const pct = d.max > 0 ? (d.balance / d.max) * 100 : 100;
+                const colorClass = pct < 10 ? 'cost-diem-crit' : pct < 25 ? 'cost-diem-warn' : 'cost-diem';
+                diemStr = `<span class="${colorClass}">${d.balance.toFixed(2)}/${d.max.toFixed(1)} DIEM</span>`;
+            } else {
+                diemStr = `<span class="cost-diem">${d.balance.toFixed(2)} DIEM</span>`;
+            }
 
             // Reset countdown
             if (d.nextEpoch) {
