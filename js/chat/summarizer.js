@@ -177,8 +177,14 @@ SUMMARY:`;
             }
         }
         
-        // Filter out summary markers and system messages (but keep tool messages)
-        recent = recent.filter(m => !m.isSummary && m.role !== 'system');
+        // Filter out summary markers, system messages, and remap 'error' role
+        // (which is UI-only and not a valid API role) to prevent 400 errors.
+        recent = recent
+            .filter(m => !m.isSummary && m.role !== 'system')
+            .map(m => m.role === 'error' 
+                ? { ...m, role: 'user', content: `[Error from editor]: ${m.content}` }
+                : m
+            );
 
         if (info?.summary && history.length > this.RECENT_COUNT) {
             return [

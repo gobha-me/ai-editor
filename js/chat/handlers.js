@@ -416,28 +416,42 @@ export async function handleGeneralRequest(input) {
 
                     if (toolCallSource === 'structured') {
                         // Truncate large tool results BEFORE sending to API
-                        // Raised from 2000→4000 to reduce secondary read_lines cascades
+                        // 12K chars ≈ 300 lines of code — enough for most single-file reads.
+                        // For truly massive results, keep head+tail so the model has actionable data.
                         let toolContent = JSON.stringify(toolResult);
+                        const TOOL_RESULT_LIMIT = 12000;
                         
-                        // Truncate if over 4000 chars to prevent request bloat
-                        if (toolContent.length > 4000) {
+                        if (toolContent.length > TOOL_RESULT_LIMIT) {
                             try {
                                 const truncated = JSON.parse(toolContent);
-                                if (truncated.content) {
-                                    const lineCount = (truncated.content.match(/\n/g) || []).length + 1;
-                                    truncated.content = `[Content truncated: ${lineCount} lines, ${toolContent.length} bytes]`;
+                                if (truncated.content && truncated.content.length > TOOL_RESULT_LIMIT) {
+                                    // Smart truncation: keep head + tail of file content
+                                    const lines = truncated.content.split('\n');
+                                    const headLines = Math.min(150, Math.floor(lines.length * 0.6));
+                                    const tailLines = Math.min(60, Math.floor(lines.length * 0.25));
+                                    const head = lines.slice(0, headLines).join('\n');
+                                    const tail = lines.slice(-tailLines).join('\n');
+                                    truncated.content = head + 
+                                        `\n\n... [${lines.length - headLines - tailLines} lines omitted — use read_lines for specific sections] ...\n\n` + 
+                                        tail;
+                                    truncated.truncated = true;
                                 }
-                                if (truncated.results && Array.isArray(truncated.results)) {
+                                if (truncated.results && Array.isArray(truncated.results) && JSON.stringify(truncated.results).length > TOOL_RESULT_LIMIT) {
                                     const matchCount = truncated.results.reduce((sum, r) => sum + (r.matches?.length || 0), 0);
-                                    truncated.results = [`[${matchCount} matches in ${truncated.results.length} files]`];
+                                    // Keep first 8 file results with paths
+                                    const kept = truncated.results.slice(0, 8).map(r => ({
+                                        path: r.path, matchCount: r.matches?.length || 0,
+                                        firstMatch: r.matches?.[0]?.snippet || r.matches?.[0]?.lineContent || ''
+                                    }));
+                                    truncated.results = kept;
+                                    truncated._note = `${matchCount} total matches, showing first 8 files`;
                                 }
-                                if (truncated.files && Array.isArray(truncated.files)) {
+                                if (truncated.files && Array.isArray(truncated.files) && JSON.stringify(truncated.files).length > TOOL_RESULT_LIMIT) {
                                     truncated.files = [`[${truncated.files.length} files]`];
                                 }
                                 toolContent = JSON.stringify(truncated);
                             } catch (e) {
-                                // If parse fails, just truncate the string
-                                toolContent = toolContent.substring(0, 2000) + '... [truncated]';
+                                toolContent = toolContent.substring(0, TOOL_RESULT_LIMIT) + '... [truncated]';
                             }
                         }
                         
@@ -456,8 +470,12 @@ export async function handleGeneralRequest(input) {
                 // === BUILD THREAD FOR NEXT ROUND ===
 
                 // Compress old tool results to prevent token explosion.
-                // KEY CHANGE: Preserve actionable summaries instead of just "[already processed]"
-                for (let i = 0; i < messages.length; i++) {
+                // Only compress results older than the LAST 2 rounds (preserve recent context).
+                // Threshold: 4000 chars before compression kicks in.
+                const recentToolMsgCount = structuredResults.length;
+                const compressUpTo = messages.length - recentToolMsgCount;
+                
+                for (let i = 0; i < compressUpTo; i++) {
                     const msg = messages[i];
                     if (msg.role === 'tool' && msg.content) {
                         try {
@@ -465,17 +483,17 @@ export async function handleGeneralRequest(input) {
                             let compressed = false;
 
                             // Compress file contents — keep path + line count + function signatures
-                            if (parsed.content && parsed.content.length > 800) {
+                            if (parsed.content && parsed.content.length > 4000) {
                                 const lines = parsed.content.split('\n');
                                 // Extract function/class names from the content for a useful summary
                                 const signatures = lines
                                     .filter(l => /^\s*\d+:\s*(export\s+)?(async\s+)?function\s+\w+|^\s*\d+:\s*(export\s+)?const\s+\w+\s*=|^\s*\d+:\s*(export\s+)?class\s+\w+|^\s*\d+:\s*def\s+\w+|^\s*\d+:\s*func\s+\w+/.test(l))
                                     .map(l => l.replace(/^\s*\d+:\s*/, '').trim())
-                                    .slice(0, 15)
-                                    .join(', ');
+                                    .slice(0, 20)
+                                    .join('\n  ');
                                 const summary = signatures 
-                                    ? `Key symbols: ${signatures}`
-                                    : `${Math.min(lines.length, 5)} sample lines: ${lines.slice(0, 5).map(l => l.trim()).join(' | ')}`;
+                                    ? `Key symbols:\n  ${signatures}`
+                                    : `${Math.min(lines.length, 8)} sample lines:\n${lines.slice(0, 8).join('\n')}`;
                                 parsed.content = `[File: ${parsed.path || 'unknown'} — ${parsed.line_count || lines.length} lines. ${summary}. Use read_lines if you need specific sections.]`;
                                 compressed = true;
                             }
@@ -556,8 +574,8 @@ export async function handleGeneralRequest(input) {
                     const summary = textResults.map(tr => {
                         // Truncate large results to prevent token explosion
                         let resultStr = JSON.stringify(tr.result, null, 2);
-                        if (resultStr.length > 3000) {
-                            resultStr = resultStr.slice(0, 3000) + '\n... (truncated)';
+                        if (resultStr.length > 8000) {
+                            resultStr = resultStr.slice(0, 8000) + '\n... (truncated)';
                         }
                         return `[Tool: ${tr.name}]\n${resultStr}`;
                     }).join('\n\n');
