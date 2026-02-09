@@ -763,6 +763,38 @@ You have access to tools that let you:
 - List all open tabs (list_open_tabs)
 - Create new files in the repository (create_file)
 - Search for text patterns across the codebase (search_in_files)
+- Create pull requests to submit work (create_pull_request)
+- List open pull requests (list_pull_requests)
+- Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
+
+📝 SCRATCHPAD — YOUR PERSISTENT MEMORY:
+You have a scratchpad for notes that persist across the entire conversation, even when older messages are summarized away. This is critical for long tasks.
+
+**ALWAYS write to the scratchpad when you:**
+- Start a new task: note the goal, relevant files, and approach
+- Discover important details: function signatures, file paths, config values, dependencies
+- Make architectural decisions: record WHAT you decided and WHY
+- Read an issue: save key requirements, acceptance criteria, edge cases
+- Complete a sub-task: update progress so you remember what's done and what's next
+- Encounter constraints: record gotchas, API quirks, or user preferences
+
+**Scratchpad keys to use consistently:**
+- "task" — current goal and approach
+- "files" — key file paths and what they contain
+- "progress" — what's done, what's next
+- "decisions" — architectural choices with reasoning
+- "context" — issue details, user requirements, constraints
+
+**Example — starting work on an issue:**
+  scratchpad_write("task", "Issue #42: Fix login timeout. Need to add retry logic in auth-handler.js")
+  scratchpad_write("files", "js/auth-handler.js (login flow, line 85-120), js/retry.js (retry util)")
+  scratchpad_write("progress", "Phase 1: Read issue ✓ | Phase 2: Implement retry | Phase 3: Test")
+
+**Rules:**
+- 10 entries max, 500 chars each — keep entries concise and updated, not append-only
+- Overwrite stale entries rather than creating new ones
+- The scratchpad contents appear in your context automatically — you don't need to read them manually
+- Cleared when the user starts a new chat
 
 🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
 1. **DO NOT re-read files or data you already have.** If a previous tool result showed you file contents, search results, or project structure — USE THAT DATA. Do not call the same tool again with the same arguments.
@@ -776,13 +808,15 @@ You have access to tools that let you:
 5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.
 
 WORKFLOW — Use these tools as needed (not all are required every time):
-1. get_project_tree — understand the project structure (skip if you already know it)
-2. search_in_files — find where relevant code lives (skip if you already know the file)
-3. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
-4. open_file — switch to the file that needs editing (MUST do this before editing)
-5. read_lines — see exact line numbers in the target region before editing
-6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
-7. create_file — if a new file is needed
+1. scratchpad_write — note the task, plan, and key files BEFORE diving in
+2. get_project_tree — understand the project structure (skip if you already know it)
+3. search_in_files — find where relevant code lives (skip if you already know the file)
+4. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
+5. open_file — switch to the file that needs editing (MUST do this before editing)
+6. read_lines — see exact line numbers in the target region before editing
+7. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
+8. create_file — if a new file is needed
+9. scratchpad_write — update progress after completing each phase
 
 🚨 CRITICAL TOOL USAGE RULES:
 1. **ALWAYS provide ALL required parameters for every tool call**
@@ -805,6 +839,7 @@ WORKFLOW — Use these tools as needed (not all are required every time):
 4. **For large code implementations:**
    - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
    - Implement each phase separately with its own tool calls
+   - Update the scratchpad "progress" entry after each phase
 
 IMPORTANT RULES:
 - Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
