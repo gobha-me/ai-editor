@@ -152,26 +152,51 @@ export default {
             if (!resp.ok) return null;
 
             const json = await resp.json();
-            const balances = json.data?.balances || {};
+            const data = json.data || {};
+            const balances = data.balances || {};
             const usd = balances.USD ?? null;
-            const diem = balances.DIEM ?? null;
+            const diemBalance = balances.DIEM ?? null;
+            const nextEpoch = data.nextEpochBegins || null;
 
-            // Build a display label
-            const parts = [];
-            if (usd !== null) parts.push(`$${usd.toFixed(2)}`);
-            if (diem !== null && diem > 0) parts.push(`${diem.toFixed(1)} DIEM`);
+            // Track DIEM max: the highest value we see for this epoch is the daily max.
+            // When epoch rolls over (nextEpochBegins changes), reset.
+            if (diemBalance !== null) {
+                const storedEpoch = this._diemEpoch || null;
+                if (!storedEpoch || storedEpoch !== nextEpoch) {
+                    // New epoch or first fetch — current balance IS the max
+                    this._diemMax = diemBalance;
+                    this._diemEpoch = nextEpoch;
+                } else if (diemBalance > (this._diemMax || 0)) {
+                    // Balance went up (shouldn't happen mid-epoch, but be safe)
+                    this._diemMax = diemBalance;
+                }
+            }
 
             return {
                 provider: 'venice',
                 usd: usd,
-                label: parts.join(' + ') || 'Unknown',
-                raw: { usd, diem, tier: json.data?.apiTier?.id || null }
+                diem: {
+                    balance: diemBalance,
+                    max: this._diemMax || diemBalance,
+                    nextEpoch: nextEpoch    // ISO timestamp
+                },
+                label: usd !== null ? `$${usd.toFixed(2)}` : 'N/A',
+                raw: {
+                    usd, diemBalance,
+                    diemMax: this._diemMax,
+                    nextEpoch,
+                    tier: data.apiTier?.id || null
+                }
             };
         } catch (err) {
             console.warn('[Venice] Failed to fetch balance:', err.message);
             return null;
         }
     },
+
+    // Internal DIEM tracking (persists across polls within same provider instance)
+    _diemMax: null,
+    _diemEpoch: null,
 
     // ========================================
     // SETTINGS SCHEMA (drives dynamic UI)

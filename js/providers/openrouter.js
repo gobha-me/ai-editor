@@ -116,21 +116,40 @@ export default {
         if (!endpoint || !apiKey) return null;
 
         try {
-            const resp = await fetch(`${endpoint}/credits`, {
+            // /key endpoint works with regular API keys (not just management keys)
+            const resp = await fetch(`${endpoint}/key`, {
                 headers: { 'Authorization': `Bearer ${apiKey}` }
             });
             if (!resp.ok) return null;
 
             const json = await resp.json();
-            const totalCredits = json.data?.total_credits ?? 0;
-            const totalUsage = json.data?.total_usage ?? 0;
-            const remaining = totalCredits - totalUsage;
+            const d = json.data || {};
+
+            // limit_remaining is null if unlimited
+            const remaining = d.limit_remaining;
+            const limit = d.limit;
+            const usage = d.usage || 0;
+
+            // Build label
+            let label;
+            if (remaining !== null && remaining !== undefined) {
+                label = `$${remaining.toFixed(2)} remaining`;
+            } else {
+                label = `$${usage.toFixed(2)} used`;
+            }
 
             return {
                 provider: 'openrouter',
-                usd: remaining,
-                label: `$${remaining.toFixed(2)} remaining`,
-                raw: { totalCredits, totalUsage, remaining }
+                usd: remaining ?? null,
+                label,
+                raw: {
+                    limit,
+                    limitRemaining: remaining,
+                    usage,
+                    usageDaily: d.usage_daily || 0,
+                    usageMonthly: d.usage_monthly || 0,
+                    isFreeTier: d.is_free_tier || false
+                }
             };
         } catch (err) {
             console.warn('[OpenRouter] Failed to fetch balance:', err.message);

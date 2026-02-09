@@ -1,6 +1,10 @@
 <!-- Header -->
 <header class="app-header">
     <h1>⚡ <span id="appName"></span> <span class="version" id="appVersion"></span></h1>
+    <div class="header-cost-tracker" id="costTrackerBar">
+        <span id="costTrackerText">0 tok · 0 req</span>
+        <button id="btnResetCost" title="Reset session cost" class="cost-reset-btn">✕</button>
+    </div>
     <div class="header-actions">
         <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar">📁</button>
         <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" disabled>↩️ Revert</button>

@@ -167,12 +167,62 @@ export function updateCostTracker() {
     parts.push(`${sc.requests} req`);
 
     // Provider balance
-    if (State.providerBalance?.usd !== null && State.providerBalance?.usd !== undefined) {
-        const bal = State.providerBalance;
-        parts.push(`<span class="cost-balance" title="Provider balance (${bal.provider})">${bal.label}</span>`);
+    const bal = State.providerBalance;
+    if (bal) {
+        let balParts = [];
+
+        // USD balance
+        if (bal.usd !== null && bal.usd !== undefined) {
+            balParts.push(`$${bal.usd.toFixed(2)}`);
+        }
+
+        // DIEM with balance/max and reset countdown
+        if (bal.diem) {
+            const d = bal.diem;
+            const pct = d.max > 0 ? (d.balance / d.max) * 100 : 100;
+            const colorClass = pct < 10 ? 'cost-diem-crit' : pct < 25 ? 'cost-diem-warn' : 'cost-diem';
+            let diemStr = `<span class="${colorClass}">${d.balance.toFixed(1)}/${d.max.toFixed(1)} DIEM</span>`;
+
+            // Reset countdown
+            if (d.nextEpoch) {
+                const resetStr = _formatResetTime(d.nextEpoch);
+                diemStr += ` <span class="cost-diem" title="Epoch resets at ${new Date(d.nextEpoch).toUTCString()}">⟳${resetStr}</span>`;
+            }
+            balParts.push(diemStr);
+        }
+
+        if (balParts.length > 0) {
+            parts.push(`<span class="cost-balance" title="Provider balance (${bal.provider})">${balParts.join(' · ')}</span>`);
+        }
     }
 
     el.innerHTML = parts.join(' · ');
+}
+
+/**
+ * Format a reset timestamp as a human-readable countdown or time.
+ * Shows "Xh Ym" when > 1h, "Xm" when < 1h, or "HH:MM UTC" if > 24h.
+ */
+function _formatResetTime(isoTimestamp) {
+    const now = Date.now();
+    const reset = new Date(isoTimestamp).getTime();
+    const diffMs = reset - now;
+
+    if (diffMs <= 0) return 'now';
+
+    const mins = Math.floor(diffMs / 60_000);
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+
+    if (hrs >= 24) {
+        // Far away — show absolute time
+        const d = new Date(isoTimestamp);
+        return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')} UTC`;
+    } else if (hrs > 0) {
+        return `${hrs}h${remMins > 0 ? remMins + 'm' : ''}`;
+    } else {
+        return `${mins}m`;
+    }
 }
 
 /** Fetch and display provider account balance. */
