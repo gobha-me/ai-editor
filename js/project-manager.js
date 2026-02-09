@@ -86,7 +86,7 @@ export async function onProjectChange(e) {
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
                     <p>Select a file to edit</p>
                 </div>
             </div>
@@ -139,7 +139,7 @@ export async function onBranchChange(e) {
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
                     <p>Select a file to edit</p>
                 </div>
             </div>
@@ -167,7 +167,7 @@ export function renderIssues() {
     const container = document.getElementById('issuesPanel');
     
     if (State.issues.length === 0) {
-        container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">No open issues</div>';
+        container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">No open issues</div>';
         return;
     }
 
@@ -212,7 +212,7 @@ export function renderWorkflows() {
     const container = document.getElementById('workflowsPanel');
     
     if (State.workflowRuns.length === 0) {
-        container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">No workflow runs</div>';
+        container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">No workflow runs</div>';
         return;
     }
 
@@ -228,7 +228,7 @@ export function renderWorkflows() {
     container.innerHTML = State.workflowRuns.slice(0, 5).map(run => `
         <div class="issue-item" onclick="window.open('${run.url}', '_blank')">
             <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${run.name}</div>
-            <div class="issue-title" style="font-size: 11px; color: var(--text-muted);">${run.branch} · ${run.event}</div>
+            <div class="issue-title" style="font-size: var(--font-sm); color: var(--text-muted);">${run.branch} · ${run.event}</div>
         </div>
     `).join('');
 }
@@ -337,11 +337,11 @@ export async function openIssueDetailModal(issueNumber) {
         if (comments.length > 0) {
             const shown = comments.slice(-5);
             commentsEl.innerHTML = `
-                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem;">
+                <div style="font-size: var(--font-md); font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem;">
                     Comments (${comments.length})
                 </div>
                 ${shown.map(c => `
-                    <div style="font-size: 12px; border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
+                    <div style="font-size: var(--font-md); border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
                         <div style="color: var(--text-muted);">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
                         <div style="white-space: pre-wrap; max-height: 80px; overflow-y: auto;">${escapeHtml((c.body || '').slice(0, 300))}</div>
                     </div>
@@ -444,9 +444,9 @@ export async function startWorkOnIssue(issue) {
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
                     <p>Working on #${issue.number}: ${escapeHtml(issue.title)}</p>
-                    <p style="font-size: 12px; margin-top: 0.5rem;">Branch: ${branchName}</p>
+                    <p style="font-size: var(--font-md); margin-top: 0.5rem;">Branch: ${branchName}</p>
                 </div>
             </div>
         `;

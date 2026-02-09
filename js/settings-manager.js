@@ -88,16 +88,23 @@ function populateSettingsForm() {
 
     // --- Appearance Tab ---
     const fontSlider = document.getElementById('settingFontSize');
+    const chatFontSlider = document.getElementById('settingChatFontSize');
     const editorFontSlider = document.getElementById('settingEditorFontSize');
     fontSlider.value = State.settings.fontSize || 13;
+    chatFontSlider.value = State.settings.chatFontSize || 13;
     editorFontSlider.value = State.settings.editorFontSize || 14;
     document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
+    document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
     document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
 
     fontSlider.oninput = () => {
         document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
         // Live preview
         document.documentElement.style.setProperty('--ui-font-size', fontSlider.value + 'px');
+    };
+    chatFontSlider.oninput = () => {
+        document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
+        document.documentElement.style.setProperty('--chat-font-size', chatFontSlider.value + 'px');
     };
     editorFontSlider.oninput = () => {
         document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
@@ -563,7 +570,7 @@ function renderConnectionsList() {
             <div class="connections-empty">
                 <div class="connections-empty-icon">🔌</div>
                 <div>No connections configured yet.</div>
-                <div style="margin-top: 0.25rem; font-size: 11px;">Add a git provider to get started.</div>
+                <div style="margin-top: 0.25rem; font-size: var(--font-sm);">Add a git provider to get started.</div>
             </div>
         `;
         return;
@@ -860,7 +867,7 @@ function updateRoleToolsList(roleId) {
         return `<div class="role-tool-item ${enabled ? 'enabled' : 'disabled'}">
             <span>${enabled ? '✅' : '⬜'}</span>
             <span><strong>${name}</strong> — ${desc.slice(0, 60)}${desc.length > 60 ? '…' : ''}</span>
-            <span style="font-size: 10px; color: var(--text-muted); margin-left: auto;">[${roles.join(', ')}]</span>
+            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">[${roles.join(', ')}]</span>
         </div>`;
     }).join('');
 
@@ -868,7 +875,7 @@ function updateRoleToolsList(roleId) {
     const enabledCount = roleTools.length;
     const tokenSavings = (allTools.length - enabledCount) * 120;
     list.insertAdjacentHTML('beforeend', `
-        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 11px;">
+        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--font-sm);">
             ${enabledCount} of ${allTools.length} tools active${tokenSavings > 0 ? ` · ~${tokenSavings.toLocaleString()} fewer prompt tokens vs full` : ''}
         </div>
     `);
@@ -928,7 +935,7 @@ function showModelCapabilities() {
     if (!hasAnyCap && !model.pricing) {
         // Generic provider with no capability data
         container.style.display = 'block';
-        container.innerHTML = `<div style="font-size: 11px; color: var(--text-muted);">
+        container.innerHTML = `<div style="font-size: var(--font-sm); color: var(--text-muted);">
             ℹ️ No capability metadata available for this provider. Tool calling will be attempted and will fall back gracefully if unsupported.
         </div>`;
         return;
@@ -946,7 +953,7 @@ function showModelCapabilities() {
     
     if (!caps.supportsFunctionCalling) capBadges.push('<span class="cap-badge cap-no">🚫 No Tools</span>');
     
-    let html = `<div style="font-size: 11px;">
+    let html = `<div style="font-size: var(--font-sm);">
         <div style="margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 600;">${model.name}</div>
         <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem;">${capBadges.join('')}</div>`;
     
@@ -1041,15 +1048,15 @@ function populateModelsTab() {
             </td>
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border);">
                 <div style="font-weight: 500;">${model.name || model.id}</div>
-                ${model.name !== model.id ? `<div style="font-size: 10px; color: var(--text-muted); word-break: break-all;">${model.id}</div>` : ''}
+                ${model.name !== model.id ? `<div style="font-size: var(--font-xs); color: var(--text-muted); word-break: break-all;">${model.id}</div>` : ''}
             </td>
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: center;">
                 <div style="display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;">${badges.join('')}</div>
             </td>
-            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: 11px;">
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: var(--font-sm);">
                 ${priceCell}
             </td>
-            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: 11px;">
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: var(--font-sm);">
                 ${ctxCell}
             </td>
         </tr>`);
@@ -1164,6 +1171,7 @@ export function saveSettings() {
 
     // Appearance - with null checks
     State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
+    State.settings.chatFontSize = parseInt(document.getElementById('settingChatFontSize').value) || 13;
     State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
     
     const showLineNumbersEl = document.getElementById('settingShowLineNumbers');

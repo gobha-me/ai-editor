@@ -162,6 +162,7 @@ window.clearProjectDrafts = clearProjectDrafts;
 function applyVisualSettings() {
     // Font sizes
     document.documentElement.style.setProperty('--ui-font-size', (State.settings.fontSize || 13) + 'px');
+    document.documentElement.style.setProperty('--chat-font-size', (State.settings.chatFontSize || 13) + 'px');
     document.documentElement.style.setProperty('--editor-font-size', (State.settings.editorFontSize || 14) + 'px');
 
     // Panel visibility - with null checks

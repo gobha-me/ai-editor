@@ -1,6 +1,6 @@
 <!-- Connections Tab -->
 <div class="settings-tab-content active" id="tabConnections">
-    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Configure git provider connections. Multiple connections can be active simultaneously.
     </p>
 
@@ -14,7 +14,7 @@
 
     <!-- Connection Editor (hidden by default, shown on Add/Edit) -->
     <div id="connectionEditor" class="connection-editor" style="display: none;">
-        <h4 id="connectionEditorTitle" style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">New Connection</h4>
+        <h4 id="connectionEditorTitle" style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">New Connection</h4>
         <input type="hidden" id="connEditId">
 
         <div class="form-group">
@@ -53,7 +53,7 @@
             <button type="button" class="btn btn-primary" id="btnSaveConnection">💾 Save Connection</button>
         </div>
 
-        <div id="connectionTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 12px; display: none;"></div>
+        <div id="connectionTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); display: none;"></div>
     </div>
 </div>
 
@@ -121,22 +121,22 @@
 <!-- Models Tab -->
 <div class="settings-tab-content" id="tabModels">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+        <p style="font-size: var(--font-base); color: var(--text-secondary); margin: 0;">
             Enable or disable models for the chat selector. Tool support (🔧) is required for full editor functionality.
         </p>
     </div>
 
     <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center;">
-        <label style="font-size: 12px; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; user-select: none;">
+        <label style="font-size: var(--font-md); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; user-select: none;">
             <input type="checkbox" id="modelFilterTools"> Only tool-capable
         </label>
         <input type="text" id="modelSearchInput" placeholder="Search models…"
-            style="flex: 1; min-width: 120px; padding: 0.3rem 0.6rem; font-size: 12px;">
-        <span id="modelCountLabel" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;"></span>
+            style="flex: 1; min-width: 120px; padding: 0.3rem 0.6rem; font-size: var(--font-md);">
+        <span id="modelCountLabel" style="font-size: var(--font-sm); color: var(--text-muted); white-space: nowrap;"></span>
     </div>
 
     <div id="modelsListContainer" style="max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: var(--font-md);">
             <thead>
                 <tr style="position: sticky; top: 0; background: var(--bg-secondary); z-index: 1;">
                     <th style="padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); width: 30px;">On</th>
@@ -164,14 +164,20 @@
 <!-- Appearance Tab -->
 <div class="settings-tab-content" id="tabAppearance">
     <div class="form-group">
-        <label for="settingFontSize">UI Font Size:</label>
-        <input type="range" id="settingFontSize" min="10" max="18" step="1">
+        <label for="settingFontSize">UI Font Size (header, sidebar, modals):</label>
+        <input type="range" id="settingFontSize" min="8" max="28" step="1">
         <span id="fontSizeValue">13px</span>
     </div>
 
     <div class="form-group">
-        <label for="settingEditorFontSize">Editor Font Size:</label>
-        <input type="range" id="settingEditorFontSize" min="10" max="20" step="1">
+        <label for="settingChatFontSize">Chat Font Size (messages, tools):</label>
+        <input type="range" id="settingChatFontSize" min="8" max="28" step="1">
+        <span id="chatFontSizeValue">13px</span>
+    </div>
+
+    <div class="form-group">
+        <label for="settingEditorFontSize">Editor Font Size (code):</label>
+        <input type="range" id="settingEditorFontSize" min="8" max="32" step="1">
         <span id="editorFontSizeValue">14px</span>
     </div>
 
@@ -252,14 +258,14 @@
             </button>
         </div>
 
-        <div id="embeddingsStatusText" style="padding: 0.75rem; background: var(--bg-secondary); border-radius: 4px; font-size: 12px; margin-top: 1rem;">
+        <div id="embeddingsStatusText" style="padding: 0.75rem; background: var(--bg-secondary); border-radius: 4px; font-size: var(--font-md); margin-top: 1rem;">
             Loading status...
         </div>
     </div>
 
     <!-- Summarizer Settings -->
     <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
-        <h3 style="font-size: 14px; margin-bottom: 0.75rem;">📋 Chat Summarizer</h3>
+        <h3 style="font-size: var(--font-lg); margin-bottom: 0.75rem;">📋 Chat Summarizer</h3>
         <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
             Controls how aggressively older messages are compressed into summaries.
             Lower values = more aggressive (less context kept). Higher values = more context but higher token cost.
@@ -304,14 +310,14 @@
 
 <!-- Roles Tab -->
 <div class="settings-tab-content" id="tabRoles">
-    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Choose a role to control which tools the AI can use. Limiting tools reduces prompt token usage and can improve response quality.
     </p>
     <div id="roleCards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
         <!-- Populated dynamically -->
     </div>
     <div style="border-top: 1px solid var(--border); padding-top: 1rem;">
-        <label style="font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+        <label style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
             Tools for <span id="roleToolsLabel">...</span>
         </label>
         <div id="roleToolsList">
@@ -322,13 +328,13 @@
 
 <!-- Advanced Tab -->
 <div class="settings-tab-content" id="tabAdvanced">
-    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Advanced LLM parameters. Leave empty to use provider defaults.
     </p>
 
     <!-- Reasoning / Thinking -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Reasoning & Thinking</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Reasoning & Thinking</h4>
         
         <div class="form-group">
             <label for="settingReasoningEffort">Reasoning Effort:</label>
@@ -360,7 +366,7 @@
 
     <!-- Temperature -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Temperature</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Temperature</h4>
         
         <div class="form-group">
             <label for="settingTemperature">Temperature:</label>
@@ -383,7 +389,7 @@
 
     <!-- Sampling -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Sampling</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Sampling</h4>
         
         <div class="form-group">
             <label for="settingTopP">Top P:</label>
@@ -405,7 +411,7 @@
 
     <!-- Token Control -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Token Control</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Token Control</h4>
         
         <div class="form-group">
             <label for="settingMaxTokens">Max Tokens:</label>
@@ -422,7 +428,7 @@
 
     <!-- Penalties -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Penalties</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Penalties</h4>
         
         <div class="form-group">
             <label for="settingFrequencyPenalty">Frequency Penalty:</label>
@@ -445,7 +451,7 @@
 
     <!-- Other Options -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;">Other Options</h4>
+        <h4 style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">Other Options</h4>
         
         <div class="form-group">
             <label for="settingSeed">Seed:</label>
@@ -475,7 +481,7 @@
 
     <!-- Provider-specific Parameters (dynamically populated from provider settingsSchema) -->
     <div id="providerParamsSection" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; display: none;">
-        <h4 id="providerParamsTitle" style="margin: 0 0 0.75rem 0; font-size: 13px; font-weight: 600;"></h4>
+        <h4 id="providerParamsTitle" style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;"></h4>
         <small id="providerParamsSubtitle" style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);"></small>
         <div id="providerParamsFields"></div>
     </div>

@@ -93,6 +93,7 @@ const State = {
         // UI Configuration
         role: 'full',              // Active role: full | coder | pm | reviewer
         fontSize: 13,              // UI font size in px
+        chatFontSize: 13,          // Chat panel font size in px
         editorFontSize: 14,        // Editor font size in px
         showIssues: true,          // Show issues panel in sidebar
         showWorkflows: true,       // Show workflows panel in sidebar

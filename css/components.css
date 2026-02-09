@@ -181,7 +181,7 @@
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 10px;
+    font-size: var(--font-xs);
     padding: 1px 3px;
     border-radius: 2px;
     flex-shrink: 0;
@@ -421,7 +421,7 @@
     left: 10px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 14px;
+    font-size: var(--font-lg);
 }
 
 .search-options {

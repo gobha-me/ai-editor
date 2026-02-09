@@ -25,7 +25,7 @@
 }
 
 .chat-header h3 {
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
     font-weight: 500;
 }
 
@@ -47,7 +47,7 @@
     border-radius: 4px;
     color: var(--text-primary);
     padding: 0.25rem 0.5rem;
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     max-width: 150px;
 }
 
@@ -64,7 +64,7 @@
 }
 
 .chat-welcome h3 {
-    font-size: var(--font-xl);
+    font-size: var(--chat-xl);
     margin-bottom: 1rem;
     color: var(--text-primary);
 }
@@ -89,7 +89,7 @@
 }
 
 .chat-welcome .hint {
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     color: var(--text-muted);
     margin-top: 1rem;
 }
@@ -108,7 +108,7 @@
     display: flex;
     justify-content: space-between;
     margin-bottom: 0.25rem;
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
 }
 
 .chat-message .message-role {
@@ -124,7 +124,7 @@
     background: var(--bg-tertiary);
     padding: 0.75rem;
     border-radius: 6px;
-    font-size: var(--font-base);
+    font-size: var(--chat-base);
     line-height: 1.5;
 }
 
@@ -140,7 +140,7 @@
 .chat-message.system .message-content {
     background: var(--bg-primary);
     border: 1px solid var(--border);
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
 }
 
 /* Summary notification — collapsible bar showing context compression */
@@ -150,7 +150,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
     background: var(--bg-primary);
-    font-size: 12px;
+    font-size: var(--chat-md);
 }
 
 .summary-bar {
@@ -168,7 +168,7 @@
     background: color-mix(in srgb, var(--bg-secondary) 75%, var(--accent) 25%);
 }
 
-.summary-icon { font-size: 14px; }
+.summary-icon { font-size: var(--chat-lg); }
 
 .summary-label {
     flex: 1;
@@ -177,7 +177,7 @@
 
 .summary-chevron {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--chat-xs);
     transition: transform 0.2s;
 }
 
@@ -220,7 +220,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--bg-primary);
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     overflow: hidden;
 }
 
@@ -242,7 +242,7 @@
 
 .tool-call-summary::before {
     content: '▸';
-    font-size: calc(var(--font-xs) - 1px);
+    font-size: calc(var(--chat-xs) - 1px);
     transition: transform 0.15s;
     flex-shrink: 0;
 }
@@ -298,7 +298,7 @@
 }
 
 .tool-call-label {
-    font-size: var(--font-xs);
+    font-size: var(--chat-xs);
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -308,7 +308,7 @@
 
 .tool-call-json {
     font-family: var(--font-mono);
-    font-size: var(--font-xs);
+    font-size: var(--chat-xs);
     background: var(--bg-secondary);
     padding: 4px 6px;
     border-radius: 3px;
@@ -330,7 +330,7 @@
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-family: var(--font-mono);
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
 }
 
 .chat-message .message-content pre.code-block {
@@ -340,7 +340,7 @@
     overflow-x: auto;
     margin: 0.5rem 0;
     font-family: var(--font-mono);
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
 }
 
 .chat-message .message-actions {
@@ -353,7 +353,7 @@
     padding: 0.35rem 0.75rem;
     border-radius: 4px;
     border: none;
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -384,7 +384,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     border: 1px solid var(--border);
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     background: var(--bg-primary);
     color: var(--text-secondary);
     cursor: pointer;
@@ -448,7 +448,7 @@
     color: var(--text-primary);
     padding: 0.5rem 0.75rem;
     font-family: var(--font-sans);
-    font-size: var(--font-base);
+    font-size: var(--chat-base);
     resize: none;
     min-height: 60px;
     max-height: 120px;
@@ -476,7 +476,7 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
 }
 
 .chat-input-actions button:hover {

@@ -43,7 +43,7 @@
             <button class="modal-close" onclick="window.closeRevertModal()">×</button>
         </div>
         <div class="modal-body">
-            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 1rem;">
+            <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
                 You have multiple files with unsaved changes. Choose what to revert:
             </p>
             <div id="revertFileList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; margin-bottom: 1.5rem; background: var(--bg-primary);">
@@ -179,7 +179,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: 12px; margin-right: auto;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: var(--font-md); margin-right: auto;">
                 <input type="checkbox" id="llmDebugAutoScroll" checked> Auto-scroll
             </label>
             <button class="btn btn-secondary" onclick="window.clearLLMDebug()">🗑️ Clear</button>
@@ -264,16 +264,16 @@
             <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;"></div>
 
             <!-- Meta row -->
-            <div id="issueDetailMeta" style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;"></div>
+            <div id="issueDetailMeta" style="font-size: var(--font-md); color: var(--text-muted); margin-bottom: 1rem;"></div>
 
             <!-- Body (markdown-rendered) -->
-            <div id="issueDetailBody" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); max-height: 200px; overflow-y: auto;"></div>
+            <div id="issueDetailBody" style="font-size: var(--font-base); line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); max-height: 200px; overflow-y: auto;"></div>
 
             <!-- Comments preview -->
             <div id="issueDetailComments" style="margin-top: 0.75rem;"></div>
 
             <!-- Active branch indicator (shown when branch already exists) -->
-            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 12px; background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50);"></div>
+            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50);"></div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
             <button class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
