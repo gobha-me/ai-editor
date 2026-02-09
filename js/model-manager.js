@@ -2,7 +2,7 @@
 // MODEL MANAGER
 // ============================================
 
-import { State, Storage, Roles, EventBus } from './core.js';
+import { State, Storage, Roles, EventBus, ProviderRegistry } from './core.js';
 import { LLM } from './llm.js';
 import { populateSettingsModelSelects } from './settings-manager.js';
 
@@ -125,29 +125,100 @@ export function updateCostTracker() {
     const sc = State.sessionCost;
     const totalTokens = sc.totalInputTokens + sc.totalOutputTokens;
 
-    let text = `${totalTokens.toLocaleString()} tok`;
-    if (sc.totalInputTokens > 0) {
-        text += ` (${sc.totalInputTokens.toLocaleString()}↓ ${sc.totalOutputTokens.toLocaleString()}↑)`;
+    const parts = [];
+
+    // Token counts
+    if (totalTokens > 0) {
+        let tokStr = `${totalTokens.toLocaleString()} tok`;
+        const details = [];
+        details.push(`${sc.totalInputTokens.toLocaleString()}↓`);
+        details.push(`${sc.totalOutputTokens.toLocaleString()}↑`);
+        if (sc.cachedInputTokens > 0) {
+            details.push(`${sc.cachedInputTokens.toLocaleString()} cached`);
+        }
+        if (sc.reasoningTokens > 0) {
+            details.push(`${sc.reasoningTokens.toLocaleString()} reasoning`);
+        }
+        tokStr += ` (${details.join(' · ')})`;
+        parts.push(tokStr);
+    } else {
+        parts.push('0 tok');
     }
 
+    // Cost
     if (sc.totalCost > 0) {
         const costStr = sc.totalCost < 0.01
             ? `$${sc.totalCost.toFixed(4)}`
             : `$${sc.totalCost.toFixed(3)}`;
-        text += ` · <span class="cost-highlight">${costStr}</span>`;
+        let costPart = `<span class="cost-highlight">${costStr}</span>`;
+        // Show cache savings
+        if (sc.cacheSavings > 0) {
+            const savedStr = sc.cacheSavings < 0.01
+                ? `$${sc.cacheSavings.toFixed(4)}`
+                : `$${sc.cacheSavings.toFixed(3)}`;
+            costPart += ` <span class="cost-saved" title="Saved from prompt caching">(-${savedStr})</span>`;
+        }
+        parts.push(costPart);
     } else if (totalTokens > 0) {
-        text += ' · pricing N/A';
+        parts.push('pricing N/A');
     }
 
-    text += ` · ${sc.requests} req`;
-    el.innerHTML = text;
+    // Request count
+    parts.push(`${sc.requests} req`);
+
+    // Provider balance
+    if (State.providerBalance?.usd !== null && State.providerBalance?.usd !== undefined) {
+        const bal = State.providerBalance;
+        parts.push(`<span class="cost-balance" title="Provider balance (${bal.provider})">${bal.label}</span>`);
+    }
+
+    el.innerHTML = parts.join(' · ');
+}
+
+/** Fetch and display provider account balance. */
+export async function fetchProviderBalance() {
+    try {
+        const balance = await ProviderRegistry.fetchBalance(State.settings);
+        State.providerBalance = balance;
+        if (balance) {
+            console.log(`[Balance] ${balance.provider}: ${balance.label}`);
+        }
+        updateCostTracker();
+        return balance;
+    } catch (err) {
+        console.warn('[Balance] Failed to fetch:', err.message);
+        return null;
+    }
+}
+
+/** Balance polling interval ID */
+let _balanceInterval = null;
+
+/**
+ * Start periodic balance polling.
+ * Fetches immediately, then every intervalMs (default 60s).
+ */
+export function startBalancePolling(intervalMs = 60_000) {
+    stopBalancePolling();
+    fetchProviderBalance(); // Fetch immediately
+    _balanceInterval = setInterval(fetchProviderBalance, intervalMs);
+}
+
+export function stopBalancePolling() {
+    if (_balanceInterval) {
+        clearInterval(_balanceInterval);
+        _balanceInterval = null;
+    }
 }
 
 export function resetSessionCost() {
     State.sessionCost = {
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningTokens: 0,
         totalCost: 0,
+        cacheSavings: 0,
         requests: 0
     };
     updateCostTracker();
@@ -157,4 +228,15 @@ export function resetSessionCost() {
 // Setup event listener
 export function initCostTrackerListener() {
     EventBus.on('cost:updated', updateCostTracker);
+
+    // Re-fetch balance when settings change (provider/key may have changed)
+    window.addEventListener('settings:saved', () => {
+        State.providerBalance = null;
+        fetchProviderBalance();
+    });
+
+    // Start balance polling if we have an API key
+    if (State.settings.llmApiKey) {
+        startBalancePolling();
+    }
 }

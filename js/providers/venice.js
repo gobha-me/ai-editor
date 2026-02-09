@@ -137,6 +137,43 @@ export default {
     },
 
     // ========================================
+    // ACCOUNT BALANCE
+    // ========================================
+
+    async fetchBalance(settings) {
+        const endpoint = (settings.llmEndpoint || 'https://api.venice.ai/api/v1').replace(/\/+$/, '');
+        const apiKey = settings.llmApiKey;
+        if (!endpoint || !apiKey) return null;
+
+        try {
+            const resp = await fetch(`${endpoint}/api_keys/rate_limits`, {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            if (!resp.ok) return null;
+
+            const json = await resp.json();
+            const balances = json.data?.balances || {};
+            const usd = balances.USD ?? null;
+            const diem = balances.DIEM ?? null;
+
+            // Build a display label
+            const parts = [];
+            if (usd !== null) parts.push(`$${usd.toFixed(2)}`);
+            if (diem !== null && diem > 0) parts.push(`${diem.toFixed(1)} DIEM`);
+
+            return {
+                provider: 'venice',
+                usd: usd,
+                label: parts.join(' + ') || 'Unknown',
+                raw: { usd, diem, tier: json.data?.apiTier?.id || null }
+            };
+        } catch (err) {
+            console.warn('[Venice] Failed to fetch balance:', err.message);
+            return null;
+        }
+    },
+
+    // ========================================
     // SETTINGS SCHEMA (drives dynamic UI)
     // ========================================
 

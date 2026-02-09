@@ -3,7 +3,7 @@
  * OpenAI-compatible API for chat completions
  */
 
-import { State, EventBus, Storage, Providers, Roles } from './core.js';
+import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from './core.js';
 import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
@@ -108,50 +108,9 @@ function buildRequestBody(model, messages, options = {}) {
         requestBody.tool_choice = 'auto';
     }
 
-    // Venice.ai-specific extensions
-    const provider = State.settings.apiProvider || 'openai';
-    
-    if (provider === 'venice') {
-        const veniceParams = State.settings.veniceParameters || {};
-        
-        // Only add venice_parameters if user has configured any
-        if (Object.keys(veniceParams).length > 0) {
-            requestBody.venice_parameters = {};
-            
-            // Add configured Venice parameters
-            if (veniceParams.stripThinking !== undefined) {
-                requestBody.venice_parameters.strip_thinking_response = veniceParams.stripThinking;
-            }
-            if (veniceParams.disableThinking !== undefined) {
-                requestBody.venice_parameters.disable_thinking = veniceParams.disableThinking;
-            }
-            if (veniceParams.enableWebSearch !== undefined) {
-                requestBody.venice_parameters.enable_web_search = veniceParams.enableWebSearch;
-            }
-            if (veniceParams.enableWebScraping !== undefined) {
-                requestBody.venice_parameters.enable_web_scraping = veniceParams.enableWebScraping;
-            }
-            if (veniceParams.enableWebCitations !== undefined) {
-                requestBody.venice_parameters.enable_web_citations = veniceParams.enableWebCitations;
-            }
-            if (veniceParams.includeSearchResultsInStream !== undefined) {
-                requestBody.venice_parameters.include_search_results_in_stream = veniceParams.includeSearchResultsInStream;
-            }
-            if (veniceParams.returnSearchResultsAsDocuments !== undefined) {
-                requestBody.venice_parameters.return_search_results_as_documents = veniceParams.returnSearchResultsAsDocuments;
-            }
-            if (veniceParams.includeSystemPrompt !== undefined) {
-                requestBody.venice_parameters.include_venice_system_prompt = veniceParams.includeSystemPrompt;
-            }
-        }
-
-        // Add reasoning effort for reasoning models (top-level parameter)
-        if (veniceParams.reasoningEffort) {
-            requestBody.reasoning_effort = veniceParams.reasoningEffort;
-        }
-    }
-
-    return requestBody;
+    // Provider-specific request transforms (Venice params, OpenRouter routing, etc.)
+    // This replaces the old hardcoded Venice block — providers handle their own extensions.
+    return ProviderRegistry.transformRequest(requestBody, State.settings);
 }
 
 // ============================================
@@ -506,7 +465,8 @@ const LLM = {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${State.settings.llmApiKey}`
+                        'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                        ...ProviderRegistry.getHeaders(State.settings)
                     },
                     body: JSON.stringify(requestBody),
                     signal: this.abortController.signal
@@ -557,6 +517,9 @@ const LLM = {
 
     /**
      * Track token usage and estimated cost for the session.
+     * Parses the full OpenAI usage shape including:
+     *   - prompt_tokens_details.cached_tokens (cache hits)
+     *   - completion_tokens_details.reasoning_tokens (thinking)
      */
     _trackUsage(usage, modelId) {
         if (!usage) {
@@ -567,17 +530,40 @@ const LLM = {
         const inputTokens = usage.prompt_tokens || 0;
         const outputTokens = usage.completion_tokens || 0;
 
+        // Extract detailed token breakdown (OpenAI / Venice / OpenRouter)
+        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
+        const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+
         State.sessionCost.totalInputTokens += inputTokens;
         State.sessionCost.totalOutputTokens += outputTokens;
+        State.sessionCost.cachedInputTokens += cachedTokens;
+        State.sessionCost.reasoningTokens += reasoningTokens;
         State.sessionCost.requests += 1;
 
         // Calculate cost from model pricing
         const model = State.models.find(m => m.id === modelId);
         if (model?.pricing) {
-            // pricing is per 1M tokens
-            const inputCost = (inputTokens / 1_000_000) * (model.pricing.input || 0);
-            const outputCost = (outputTokens / 1_000_000) * (model.pricing.output || 0);
-            State.sessionCost.totalCost += inputCost + outputCost;
+            const inputPrice = model.pricing.input || 0;    // per 1M tokens
+            const outputPrice = model.pricing.output || 0;
+            const cachePrice = model.pricing.cacheInput ?? null;
+
+            // Non-cached input tokens pay full price; cached tokens pay cache price (or 0)
+            const uncachedInput = inputTokens - cachedTokens;
+            const inputCost = (uncachedInput / 1_000_000) * inputPrice;
+            const cacheCost = cachePrice !== null
+                ? (cachedTokens / 1_000_000) * cachePrice
+                : 0; // If no cache price in metadata, cached tokens are free
+            const outputCost = (outputTokens / 1_000_000) * outputPrice;
+
+            const totalCost = inputCost + cacheCost + outputCost;
+            State.sessionCost.totalCost += totalCost;
+
+            // Calculate cache savings (what we would have paid at full input price)
+            if (cachedTokens > 0) {
+                const savedPerToken = inputPrice - (cachePrice || 0);
+                const savings = (cachedTokens / 1_000_000) * savedPerToken;
+                State.sessionCost.cacheSavings += savings;
+            }
         }
 
         EventBus.emit('cost:updated', { usage, sessionCost: State.sessionCost });

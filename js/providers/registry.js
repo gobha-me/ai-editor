@@ -68,6 +68,16 @@ const BASE_PROVIDER = {
         return {};
     },
 
+    /**
+     * Fetch account balance / remaining credits from the provider.
+     * Returns null if the provider doesn't support balance queries.
+     * @param {Object} settings - { llmEndpoint, llmApiKey, ... }
+     * @returns {Promise<{provider: string, usd: number, label: string, raw: Object}|null>}
+     */
+    async fetchBalance(_settings) {
+        return null; // Not supported by base provider
+    },
+
     settingsSchema: {}
 };
 
@@ -188,6 +198,16 @@ const ProviderRegistry = {
     getDefaultEndpoint(providerId) {
         const provider = this.get(providerId);
         return provider.defaultEndpoint || '';
+    },
+
+    /**
+     * Fetch account balance from the active provider.
+     * @param {Object} settings - Full State.settings object
+     * @returns {Promise<Object|null>} Balance info or null
+     */
+    async fetchBalance(settings) {
+        const provider = this.get(settings.apiProvider);
+        return provider.fetchBalance(settings);
     }
 };
 

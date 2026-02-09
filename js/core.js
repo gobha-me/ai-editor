@@ -123,9 +123,15 @@ const State = {
     sessionCost: {
         totalInputTokens: 0,
         totalOutputTokens: 0,
-        totalCost: 0,          // USD estimate
+        cachedInputTokens: 0,   // Tokens served from prompt cache
+        reasoningTokens: 0,     // Thinking/reasoning tokens consumed
+        totalCost: 0,           // USD estimate
+        cacheSavings: 0,        // USD saved from cache hits
         requests: 0
     },
+
+    // Provider account balance (fetched from API)
+    providerBalance: null,      // { provider, usd, label, raw } or null
 
     // Issues (bonus feature)
     issues: [],                // [{ number, title, body, state }]

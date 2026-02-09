@@ -107,6 +107,38 @@ export default {
     },
 
     // ========================================
+    // ACCOUNT BALANCE
+    // ========================================
+
+    async fetchBalance(settings) {
+        const endpoint = (settings.llmEndpoint || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+        const apiKey = settings.llmApiKey;
+        if (!endpoint || !apiKey) return null;
+
+        try {
+            const resp = await fetch(`${endpoint}/credits`, {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            if (!resp.ok) return null;
+
+            const json = await resp.json();
+            const totalCredits = json.data?.total_credits ?? 0;
+            const totalUsage = json.data?.total_usage ?? 0;
+            const remaining = totalCredits - totalUsage;
+
+            return {
+                provider: 'openrouter',
+                usd: remaining,
+                label: `$${remaining.toFixed(2)} remaining`,
+                raw: { totalCredits, totalUsage, remaining }
+            };
+        } catch (err) {
+            console.warn('[OpenRouter] Failed to fetch balance:', err.message);
+            return null;
+        }
+    },
+
+    // ========================================
     // SETTINGS SCHEMA (drives dynamic UI)
     // ========================================
 

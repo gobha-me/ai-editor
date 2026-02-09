@@ -104,9 +104,17 @@ export function exportChat() {
 
     // Cost summary
     if (State.sessionCost.requests > 0) {
+        const sc = State.sessionCost;
+        const totalTok = sc.totalInputTokens + sc.totalOutputTokens;
+        let summary = `**Session:** ${totalTok} tokens (${sc.totalInputTokens}↓ ${sc.totalOutputTokens}↑`;
+        if (sc.cachedInputTokens > 0) summary += ` · ${sc.cachedInputTokens} cached`;
+        if (sc.reasoningTokens > 0) summary += ` · ${sc.reasoningTokens} reasoning`;
+        summary += `) · $${sc.totalCost.toFixed(4)}`;
+        if (sc.cacheSavings > 0) summary += ` (-$${sc.cacheSavings.toFixed(4)} saved)`;
+        summary += ` · ${sc.requests} requests`;
         lines.push('---');
         lines.push('');
-        lines.push(`**Session:** ${State.sessionCost.totalInputTokens + State.sessionCost.totalOutputTokens} tokens (${State.sessionCost.totalInputTokens}↓ ${State.sessionCost.totalOutputTokens}↑) · ${State.sessionCost.totalCost.toFixed(4)} · ${State.sessionCost.requests} requests`);
+        lines.push(summary);
     }
 
     const text = lines.join('\n');

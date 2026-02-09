@@ -59,7 +59,8 @@ import {
     onRoleChange,
     initCostTracker,
     resetSessionCost,
-    initCostTrackerListener
+    initCostTrackerListener,
+    fetchProviderBalance
 } from './model-manager.js';
 import { initPanelResize } from './resize-manager.js';
 

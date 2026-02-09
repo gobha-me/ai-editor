@@ -1513,6 +1513,20 @@ body.resizing .cm-editor {
     font-weight: 600;
 }
 
+.cost-tracker-bar .cost-saved {
+    color: var(--success);
+    font-weight: 500;
+    font-size: calc(var(--font-xs) - 1px);
+}
+
+.cost-tracker-bar .cost-balance {
+    color: var(--accent);
+    font-weight: 600;
+    padding-left: 4px;
+    border-left: 1px solid var(--border);
+    margin-left: 2px;
+}
+
 /* Role selector in chat header */
 #roleSelect {
     width: auto;
