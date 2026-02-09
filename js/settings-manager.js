@@ -97,18 +97,26 @@ function populateSettingsForm() {
     document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
     document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
 
+    // Debounced live preview — label updates instantly, CSS var applies after 200ms settle
+    let _fontDebounce = null;
+    const debouncedFontPreview = (prop, value) => {
+        clearTimeout(_fontDebounce);
+        _fontDebounce = setTimeout(() => {
+            document.documentElement.style.setProperty(prop, value + 'px');
+        }, 200);
+    };
+
     fontSlider.oninput = () => {
         document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
-        // Live preview
-        document.documentElement.style.setProperty('--ui-font-size', fontSlider.value + 'px');
+        debouncedFontPreview('--ui-font-size', fontSlider.value);
     };
     chatFontSlider.oninput = () => {
         document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
-        document.documentElement.style.setProperty('--chat-font-size', chatFontSlider.value + 'px');
+        debouncedFontPreview('--chat-font-size', chatFontSlider.value);
     };
     editorFontSlider.oninput = () => {
         document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
-        document.documentElement.style.setProperty('--editor-font-size', editorFontSlider.value + 'px');
+        debouncedFontPreview('--editor-font-size', editorFontSlider.value);
     };
 
     // Add null checks for checkbox elements
