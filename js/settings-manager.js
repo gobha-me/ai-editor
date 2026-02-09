@@ -245,7 +245,14 @@ function initTabArrows() {
     container.addEventListener('scroll', updateTabArrows);
 
     // Also update on resize (font changes can trigger reflow)
-    const observer = new ResizeObserver(() => updateTabArrows());
+    let arrowRafId = null;
+    const observer = new ResizeObserver(() => {
+        if (arrowRafId) return;
+        arrowRafId = requestAnimationFrame(() => {
+            updateTabArrows();
+            arrowRafId = null;
+        });
+    });
     observer.observe(container);
 
     // Initial state
