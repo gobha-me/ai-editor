@@ -191,6 +191,9 @@ function populateSettingsForm() {
     // --- Advanced Tab ---
     populateAdvancedParams();
 
+    // --- Models Tab ---
+    _initModelsTabEvents();
+
     // --- Settings tab switching ---
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.onclick = () => {
@@ -202,6 +205,10 @@ function populateSettingsForm() {
             // Update embeddings status when switching to Context tab
             if (tab.dataset.tab === 'tabContext') {
                 updateEmbeddingsStatus();
+            }
+            // Populate Models tab when switching to it
+            if (tab.dataset.tab === 'tabModels') {
+                populateModelsTab();
             }
         };
     });
@@ -930,6 +937,170 @@ function showModelCapabilities() {
     container.innerHTML = html;
 }
 
+// ============================================
+// MODELS TAB
+// ============================================
+
+/**
+ * Populate the Models tab with all fetched models.
+ * Shows capabilities, pricing, context, and enable/disable toggles.
+ */
+function populateModelsTab() {
+    const tbody = document.getElementById('modelsTableBody');
+    if (!tbody) return;
+
+    const models = State.models || [];
+    if (models.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            No models loaded. Fetch models from the LLM tab first.
+        </td></tr>`;
+        _updateModelCount();
+        return;
+    }
+
+    const disabled = new Set(State.settings.disabledModels || []);
+    const filterTools = document.getElementById('modelFilterTools')?.checked || false;
+    const search = (document.getElementById('modelSearchInput')?.value || '').toLowerCase().trim();
+
+    const rows = [];
+    let visibleCount = 0;
+
+    for (const model of models) {
+        const caps = model.capabilities || {};
+        const hasTools = !!caps.supportsFunctionCalling;
+        const isEnabled = !disabled.has(model.id);
+
+        // Apply filters
+        if (filterTools && !hasTools) continue;
+        if (search && !model.id.toLowerCase().includes(search) && 
+            !(model.name || '').toLowerCase().includes(search)) continue;
+
+        visibleCount++;
+
+        // Build capability badges
+        const badges = [];
+        if (hasTools) badges.push('<span class="cap-badge cap-yes" title="Tool/function calling">🔧</span>');
+        else badges.push('<span class="cap-badge cap-no" title="No tool support — limited editor functionality">🚫</span>');
+        if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes" title="Extended thinking">🧠</span>');
+        if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes" title="Vision">👁</span>');
+        if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes" title="Code-optimized">💻</span>');
+        if (caps.supportsWebSearch) badges.push('<span class="cap-badge cap-yes" title="Web search">🔍</span>');
+
+        // Pricing
+        let priceCell = '<span style="color: var(--text-muted);">—</span>';
+        if (model.pricing) {
+            priceCell = `$${model.pricing.input ?? '?'} / $${model.pricing.output ?? '?'}`;
+        }
+
+        // Context
+        let ctxCell = '<span style="color: var(--text-muted);">—</span>';
+        if (model.meta?.contextTokens) {
+            ctxCell = `${(model.meta.contextTokens / 1000).toFixed(0)}K`;
+        }
+
+        const rowStyle = isEnabled ? '' : 'opacity: 0.5;';
+        const rowBg = !hasTools ? 'background: color-mix(in srgb, var(--bg-primary) 95%, #ff6b35);' : '';
+
+        rows.push(`<tr style="${rowStyle} ${rowBg}" data-model-id="${model.id}">
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border);">
+                <input type="checkbox" class="model-toggle" data-model-id="${model.id}" 
+                    ${isEnabled ? 'checked' : ''}>
+            </td>
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border);">
+                <div style="font-weight: 500;">${model.name || model.id}</div>
+                ${model.name !== model.id ? `<div style="font-size: 10px; color: var(--text-muted); word-break: break-all;">${model.id}</div>` : ''}
+            </td>
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: center;">
+                <div style="display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;">${badges.join('')}</div>
+            </td>
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: 11px;">
+                ${priceCell}
+            </td>
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: 11px;">
+                ${ctxCell}
+            </td>
+        </tr>`);
+    }
+
+    tbody.innerHTML = rows.length > 0 ? rows.join('') : 
+        `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            No models match the current filters.
+        </td></tr>`;
+
+    _updateModelCount(visibleCount, models.length, disabled.size);
+}
+
+function _updateModelCount(visible, total, disabledCount) {
+    const label = document.getElementById('modelCountLabel');
+    if (!label) return;
+    if (!total) { label.textContent = ''; return; }
+    const enabled = total - disabledCount;
+    label.textContent = `${enabled}/${total} enabled` + (visible < total ? ` · ${visible} shown` : '');
+}
+
+function _onModelToggle(e) {
+    const checkbox = e.target;
+    if (!checkbox.classList.contains('model-toggle')) return;
+    
+    const modelId = checkbox.dataset.modelId;
+    const disabled = State.settings.disabledModels || [];
+    
+    if (checkbox.checked) {
+        State.settings.disabledModels = disabled.filter(id => id !== modelId);
+    } else {
+        if (!disabled.includes(modelId)) {
+            State.settings.disabledModels = [...disabled, modelId];
+        }
+    }
+    
+    // Update row opacity
+    const row = checkbox.closest('tr');
+    if (row) row.style.opacity = checkbox.checked ? '' : '0.5';
+    
+    _updateModelCount(
+        document.querySelectorAll('.model-toggle').length,
+        (State.models || []).length,
+        (State.settings.disabledModels || []).length
+    );
+}
+
+function _initModelsTabEvents() {
+    const container = document.getElementById('modelsListContainer');
+    if (container) container.addEventListener('change', _onModelToggle);
+
+    const filterTools = document.getElementById('modelFilterTools');
+    if (filterTools) filterTools.addEventListener('change', populateModelsTab);
+
+    const searchInput = document.getElementById('modelSearchInput');
+    if (searchInput) {
+        let debounce;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounce);
+            debounce = setTimeout(populateModelsTab, 200);
+        });
+    }
+
+    const btnEnableAll = document.getElementById('btnEnableAllModels');
+    if (btnEnableAll) btnEnableAll.addEventListener('click', () => {
+        State.settings.disabledModels = [];
+        populateModelsTab();
+    });
+
+    const btnDisableAll = document.getElementById('btnDisableAllModels');
+    if (btnDisableAll) btnDisableAll.addEventListener('click', () => {
+        State.settings.disabledModels = (State.models || []).map(m => m.id);
+        populateModelsTab();
+    });
+
+    const btnToolOnly = document.getElementById('btnEnableToolModels');
+    if (btnToolOnly) btnToolOnly.addEventListener('click', () => {
+        State.settings.disabledModels = (State.models || [])
+            .filter(m => !m.capabilities?.supportsFunctionCalling)
+            .map(m => m.id);
+        populateModelsTab();
+    });
+}
+
 /**
  * Helper to get numeric value from input (returns undefined if empty)
  */
@@ -1080,13 +1251,15 @@ export function saveSettings() {
 
 export function populateSettingsModelSelects(models) {
     models = models || State.models;
+    const disabled = new Set(State.settings.disabledModels || []);
+    const enabledModels = models.filter(m => !disabled.has(m.id));
     
-    // Default model select
+    // Default model select — show only enabled models
     const defaultSelect = document.getElementById('settingLlmModel');
     if (defaultSelect) {
         const currentVal = defaultSelect.value || State.settings.llmModel;
         defaultSelect.innerHTML = '<option value="">Select model...</option>';
-        models.forEach(m => {
+        enabledModels.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.id;
             opt.selected = m.id === currentVal;
@@ -1136,6 +1309,9 @@ export async function fetchModelsForSettings() {
         
         // Trigger capabilities display
         showModelCapabilities();
+        
+        // Refresh Models tab if it's visible
+        populateModelsTab();
         
         window.showToast(`Found ${models.length} models`, 'success');
     } catch (error) {
@@ -1249,6 +1425,7 @@ export function exportSettings() {
         
         // Other
         role: State.settings.role,
+        disabledModels: State.settings.disabledModels || [],
         
         // Metadata
         exportedAt: new Date().toISOString(),

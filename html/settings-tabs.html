@@ -88,12 +88,12 @@
     </div>
 
     <div class="form-group">
-        <label for="settingCommitModel">Commit Message Model:</label>
+        <label for="settingCommitModel">Utility Model:</label>
         <select id="settingCommitModel">
             <option value="">Same as default model</option>
         </select>
         <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
-            Use a faster/cheaper model for commit message generation
+            Lighter model for commit messages, chat summarization, and other auxiliary tasks
         </small>
     </div>
 
@@ -115,6 +115,49 @@
         <label for="settingSummaryTimeout">Summary Timeout:</label>
         <input type="range" id="settingSummaryTimeout" min="10" max="180" step="10">
         <span id="summaryTimeoutValue">60s</span>
+    </div>
+</div>
+
+<!-- Models Tab -->
+<div class="settings-tab-content" id="tabModels">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+            Enable or disable models for the chat selector. Tool support (🔧) is required for full editor functionality.
+        </p>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center;">
+        <label style="font-size: 12px; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="modelFilterTools"> Only tool-capable
+        </label>
+        <input type="text" id="modelSearchInput" placeholder="Search models…"
+            style="flex: 1; min-width: 120px; padding: 0.3rem 0.6rem; font-size: 12px;">
+        <span id="modelCountLabel" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;"></span>
+    </div>
+
+    <div id="modelsListContainer" style="max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="position: sticky; top: 0; background: var(--bg-secondary); z-index: 1;">
+                    <th style="padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); width: 30px;">On</th>
+                    <th style="padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border);">Model</th>
+                    <th style="padding: 0.4rem 0.5rem; text-align: center; border-bottom: 1px solid var(--border);">Capabilities</th>
+                    <th style="padding: 0.4rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border);">Price ($/M)</th>
+                    <th style="padding: 0.4rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border);">Context</th>
+                </tr>
+            </thead>
+            <tbody id="modelsTableBody">
+                <tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                    No models loaded. Fetch models from the LLM tab first.
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+        <button type="button" class="btn btn-secondary" id="btnEnableAllModels">Enable All</button>
+        <button type="button" class="btn btn-secondary" id="btnDisableAllModels">Disable All</button>
+        <button type="button" class="btn btn-secondary" id="btnEnableToolModels">Enable Tool-Capable Only</button>
     </div>
 </div>
 

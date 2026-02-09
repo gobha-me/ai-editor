@@ -184,7 +184,7 @@ export function openCommitModal() {
     const commitModel = State.settings.commitModel || State.settings.llmModel;
     document.getElementById('commitModelInfo').textContent = 
         State.settings.commitModel 
-            ? `Commit model: ${commitModel}` 
+            ? `Utility model: ${commitModel}` 
             : `Using default model: ${commitModel}`;
 
     document.getElementById('commitModal').classList.add('active');

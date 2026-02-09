@@ -59,7 +59,8 @@ const State = {
         llmEndpoint: '',
         llmApiKey: '',
         llmModel: 'gpt-4',
-        commitModel: '',           // Optional small/fast model for commit messages
+        commitModel: '',           // Optional small/fast model for utility tasks (commit msgs, summaries)
+        disabledModels: [],        // Model IDs hidden from chat selector (blacklist)
         apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
         
         // Venice.ai-specific parameters (only used when apiProvider === 'venice')

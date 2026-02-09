@@ -10,9 +10,11 @@ export async function fetchModels() {
     try {
         const models = await LLM.listModels();
         const select = document.getElementById('modelSelect');
+        const disabled = new Set(State.settings.disabledModels || []);
+        const enabledModels = models.filter(m => !disabled.has(m.id));
         
         select.innerHTML = '<option value="">Select model...</option>';
-        models.forEach(model => {
+        enabledModels.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
             // Show friendly name + key capability hints
@@ -27,11 +29,11 @@ export async function fetchModels() {
         });
 
         // Set the selected model
-        if (State.settings.llmModel && models.find(m => m.id === State.settings.llmModel)) {
+        if (State.settings.llmModel && enabledModels.find(m => m.id === State.settings.llmModel)) {
             select.value = State.settings.llmModel;
-        } else if (models.length > 0) {
-            select.value = models[0].id;
-            State.settings.llmModel = models[0].id;
+        } else if (enabledModels.length > 0) {
+            select.value = enabledModels[0].id;
+            State.settings.llmModel = enabledModels[0].id;
             Storage.set('settings', State.settings);
         }
         
@@ -95,6 +97,43 @@ export function populateRoleSelector() {
     select.innerHTML = Roles.list().map(role =>
         `<option value="${role.id}" ${role.id === State.settings.role ? 'selected' : ''}>${role.icon} ${role.name}</option>`
     ).join('');
+}
+
+/**
+ * Re-populate the main page model dropdown from State.models,
+ * filtering out disabled models. Called after settings save.
+ */
+function _repopulateMainModelSelect() {
+    const select = document.getElementById('modelSelect');
+    if (!select || !State.models?.length) return;
+
+    const disabled = new Set(State.settings.disabledModels || []);
+    const enabledModels = State.models.filter(m => !disabled.has(m.id));
+    const currentVal = select.value || State.settings.llmModel;
+
+    select.innerHTML = '<option value="">Select model...</option>';
+    enabledModels.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        const hints = [];
+        if (model.capabilities?.supportsFunctionCalling) hints.push('🔧');
+        if (model.capabilities?.supportsReasoning) hints.push('🧠');
+        if (model.capabilities?.supportsVision) hints.push('👁');
+        if (model.capabilities?.optimizedForCode) hints.push('💻');
+        const suffix = hints.length ? ' ' + hints.join('') : '';
+        option.textContent = (model.name || model.id) + suffix;
+        select.appendChild(option);
+    });
+
+    // Restore selection if still enabled, else pick first available
+    if (enabledModels.find(m => m.id === currentVal)) {
+        select.value = currentVal;
+    } else if (enabledModels.length > 0) {
+        select.value = enabledModels[0].id;
+        State.settings.llmModel = enabledModels[0].id;
+        Storage.set('settings', State.settings);
+    }
+    updateModelStatusBar();
 }
 
 export function onRoleChange(e) {
@@ -297,6 +336,8 @@ export function initCostTrackerListener() {
             stopBalancePolling();
             updateCostTracker();
         }
+        // Re-populate main model dropdown (disabledModels may have changed)
+        _repopulateMainModelSelect();
     });
 
     // Start balance polling if we have an API key

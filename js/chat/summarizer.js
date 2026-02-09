@@ -9,7 +9,7 @@ import { LLM } from '../llm.js';
 /**
  * Compresses older chat messages into LLM-generated summaries.
  * Keeps last N messages in full, summarizes everything older.
- * Uses lightweight model (commitModel fallback) to avoid burning tokens.
+ * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
     RECENT_COUNT_BASE: 10,      // messages kept verbatim (no tool calls)
@@ -40,9 +40,9 @@ export const ChatSummarizer = {
         return (total - (info.coveredCount || 0)) >= this.SUMMARY_INTERVAL;
     },
 
-    /** Pick cheapest available model */
+    /** Pick cheapest available model (utility model → auto-detect cheap → fallback to primary) */
     _pickModel() {
-        // Prefer dedicated commit/light model
+        // Prefer dedicated utility model
         if (State.settings.commitModel) return State.settings.commitModel;
 
         // Scan State.models for known cheap models
