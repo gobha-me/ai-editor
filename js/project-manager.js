@@ -375,12 +375,7 @@ export async function openIssueDetailModal(issueNumber) {
             document.getElementById('btnIssueStartWork').disabled = false;
         }
 
-        // Wire up buttons
-        document.getElementById('btnIssueChat').onclick = () => {
-            closeIssueDetailModal();
-            window.Chat?.sendMessage(`Tell me about issue #${issue.number}`);
-        };
-
+        // Wire up Start Work button
         document.getElementById('btnIssueStartWork').onclick = () => {
             startWorkOnIssue(issue);
         };
@@ -485,6 +480,10 @@ export async function startWorkOnIssue(issue) {
                 : `Created & switched to: ${branchName}`,
             'success'
         );
+
+        // Kick off the LLM — it will see the active issue in the system prompt
+        // and can read_issue for full details
+        window.Chat?.sendMessage(`Start work on issue #${issue.number}`);
 
     } catch (error) {
         console.error('Failed to start work on issue:', error);
