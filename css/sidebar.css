@@ -1,0 +1,353 @@
+/**
+ * AI Editor - Sidebar Styles
+ * File tree, issues panel, workflows, branch selector
+ */
+
+/* ============================================
+   SIDEBAR (Left Panel)
+   ============================================ */
+
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.sidebar-section {
+    border-bottom: 1px solid var(--border);
+}
+
+/* File tree section takes remaining space */
+.sidebar-section-flex {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;   /* Critical: allows flex child to shrink below content size */
+    overflow: hidden;
+}
+
+/* Issues/workflows pinned at bottom with max heights */
+.sidebar-section-bottom {
+    flex-shrink: 0;
+}
+
+.sidebar-section-bottom .issues-panel,
+.sidebar-section-bottom .workflows-panel {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    padding: 0.5rem 1rem;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.sidebar-header-collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sidebar-header-collapsible:hover {
+    background: var(--bg-hover);
+}
+
+.sidebar-header-collapsible.collapsed span::first-letter {
+    /* Chevron rotates via text replacement in JS */
+}
+
+.sidebar-collapse-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar-collapse-body.collapsed {
+    display: none;
+}
+
+.sidebar-header button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.sidebar-header button:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* Project Selector */
+.project-selector {
+    padding: 0.5rem;
+}
+
+.project-selector select {
+    width: 100%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.5rem;
+    font-size: var(--font-md);
+    cursor: pointer;
+}
+
+.project-selector select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.branch-selector {
+    padding: 0 0.5rem 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.branch-selector select {
+    flex: 1;
+    min-width: 0; /* Allow shrinking below content width */
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.35rem 0.5rem;
+    font-size: var(--font-sm);
+    text-overflow: ellipsis;
+}
+
+.branch-selector button {
+    flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+/* File Tree - see scrollbar styling section below */
+
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: var(--font-base);
+}
+
+.tree-item:hover {
+    background: var(--bg-hover);
+}
+
+.tree-item.active {
+    background: var(--bg-active);
+}
+
+.tree-item.dir {
+    font-weight: 500;
+}
+
+.tree-item .icon {
+    margin-right: 0.5rem;
+    width: 16px;
+    text-align: center;
+}
+
+.tree-item .name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-item .actions {
+    opacity: 0;
+    display: flex;
+    gap: 2px;
+}
+
+.tree-item:hover .actions {
+    opacity: 1;
+}
+
+.tree-item .actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: var(--font-xs);
+    border-radius: 2px;
+}
+
+.tree-item .actions button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Indent for nested items */
+.tree-item[data-depth="1"] { padding-left: 1.25rem; }
+.tree-item[data-depth="2"] { padding-left: 1.75rem; }
+.tree-item[data-depth="3"] { padding-left: 2.25rem; }
+.tree-item[data-depth="4"] { padding-left: 2.75rem; }
+.tree-item[data-depth="5"] { padding-left: 3.25rem; }
+
+/* Collapsible tree folders */
+.tree-item .chevron {
+    width: 12px;
+    font-size: calc(var(--font-xs) - 2px);
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+.tree-item .chevron.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-item .chevron-spacer {
+    width: 12px;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+.tree-children {
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.tree-children.collapsed {
+    display: none;
+}
+
+/* File tree scroll */
+.file-tree {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.5rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-hover) transparent;
+}
+
+.file-tree::-webkit-scrollbar {
+    width: 6px;
+}
+
+.file-tree::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-tree::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 3px;
+}
+
+.file-tree::-webkit-scrollbar-thumb:hover {
+    background: var(--border-light);
+}
+
+/* Issues Panel */
+.issues-panel {
+    max-height: 250px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-hover) transparent;
+}
+
+.issues-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.issues-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.issues-panel::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 3px;
+}
+
+.issue-item {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+}
+
+.issue-item:hover {
+    background: var(--bg-hover);
+}
+
+.issue-item .issue-number {
+    color: var(--accent);
+    font-size: var(--font-sm);
+}
+
+.issue-item .issue-title {
+    font-size: var(--font-md);
+    line-height: 1.3;
+    /* Allow wrapping instead of truncating */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.issue-item .issue-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+.issue-label {
+    font-size: var(--font-xs);
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.issue-item .issue-deps {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.issue-item .issue-deps .dep-link {
+    color: var(--warning);
+    cursor: pointer;
+}
+
+.issue-item .issue-deps .dep-link:hover {
+    text-decoration: underline;
+}
+
+.issue-item-active {
+    border-left: 3px solid var(--accent);
+    background: color-mix(in srgb, var(--bg-hover) 60%, var(--accent) 8%);
+}
+
+.issue-item-active .issue-number {
+    font-weight: 700;
+}
+
+.issue-item-active .issue-number::after {
+    content: ' ●';
+    font-size: 8px;
+    vertical-align: middle;
+}
+
+/* ============================================

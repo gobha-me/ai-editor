@@ -1,0 +1,542 @@
+/**
+ * AI Editor - Modal Styles
+ * Modals, settings tabs, role cards, connection cards, capability badges, help
+ */
+
+   REVERT MODAL - FILE LIST STYLING
+   ============================================ */
+
+.revert-file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-md);
+    transition: background 0.15s;
+}
+
+.revert-file-item:last-child {
+    border-bottom: none;
+}
+
+.revert-file-item:hover {
+    background: var(--bg-hover);
+}
+
+.revert-file-item.current {
+    background: rgba(14, 125, 202, 0.1);
+    border-left: 3px solid var(--accent);
+}
+
+.revert-file-icon {
+    flex-shrink: 0;
+    font-size: var(--font-lg);
+}
+
+.revert-file-path {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.revert-current-badge {
+    background: var(--accent);
+    color: white;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================
+   MODALS
+   ============================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    font-size: var(--font-lg);
+    font-weight: 500;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0.25rem;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Form elements in modals */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: var(--font-md);
+    color: var(--text-secondary);
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--font-base);
+    font-family: inherit;
+}
+
+/* Checkboxes: reset full-width text-input styling */
+.form-group input[type="checkbox"],
+.form-group input[type="range"] {
+    width: auto;
+    padding: 0;
+    border: revert;
+    border-radius: revert;
+    background: revert;
+}
+
+.form-group input[type="checkbox"] {
+    vertical-align: middle;
+    margin-right: 0.4rem;
+    cursor: pointer;
+}
+
+/* Checkbox labels: inline so text sits next to the box */
+.form-group label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Fallback for browsers without :has() — match the pattern used in HTML */
+.form-group label > input[type="checkbox"] {
+    flex-shrink: 0;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+/* ============================================
+
+
+/* ============================================
+   CAPABILITY BADGES
+   ============================================ */
+
+.cap-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1.5;
+}
+
+.cap-badge.cap-yes {
+    background: rgba(78, 201, 176, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(78, 201, 176, 0.25);
+}
+
+.cap-badge.cap-no {
+    background: rgba(241, 76, 76, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(241, 76, 76, 0.2);
+}
+
+.cap-badge.cap-neutral {
+    background: rgba(133, 133, 133, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid rgba(133, 133, 133, 0.2);
+}
+
+/* Model selector enrichment */
+.model-option-rich {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.model-badges-inline {
+    font-size: var(--font-xs);
+    opacity: 0.7;
+}
+
+/* Status indicator for tool support in chat panel */
+.model-status-bar {
+    display: flex;
+    gap: 0.35rem;
+    padding: 2px 8px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    overflow-x: auto;
+    flex-wrap: wrap;
+}
+
+/* Cost tracker bar */
+/* ============================================
+
+
+/* ============================================
+   SETTINGS TABS
+   ============================================ */
+
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+}
+
+.settings-tab {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.settings-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.settings-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.settings-tab-content {
+    display: none;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+/* ============================================
+   ROLE CARDS
+   ============================================ */
+
+.role-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.role-card {
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.role-card:hover {
+    border-color: var(--border-light);
+    background: var(--bg-tertiary);
+}
+
+.role-card.active {
+    border-color: var(--accent);
+    background: rgba(14, 125, 202, 0.08);
+}
+
+.role-card-icon {
+    font-size: var(--font-2xl);
+    margin-bottom: 0.25rem;
+}
+
+.role-card-name {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.role-card-desc {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+/* Role tool list */
+.role-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    color: var(--text-secondary);
+    font-size: var(--font-md);
+}
+
+.role-tool-item.enabled {
+    color: var(--text-primary);
+}
+
+.role-tool-item.disabled {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    opacity: 0.5;
+}
+
+/* ============================================
+   CONNECTION CARDS
+   ============================================ */
+
+.connection-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s;
+}
+
+.connection-card:hover {
+    border-color: var(--border-light);
+}
+
+.connection-card.disabled {
+    opacity: 0.5;
+}
+
+.connection-card-icon {
+    font-size: var(--font-2xl);
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.connection-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.connection-card-label {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.connection-card-meta {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.connection-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.connection-card-actions button {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: var(--font-sm);
+    line-height: 1;
+    transition: all 0.15s;
+}
+
+.connection-card-actions button:hover {
+    background: var(--bg-hover);
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.connection-card-actions button.danger:hover {
+    background: rgba(201, 58, 58, 0.15);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.connection-editor {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.connections-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    font-size: var(--font-md);
+}
+
+.connections-empty-icon {
+    font-size: 32px;
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+
+/* ============================================
+   HELP / KEYBOARD SHORTCUTS MODAL
+   ============================================ */
+
+.help-shortcuts {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.help-group h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #888);
+    margin: 0 0 0.5rem 0;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border, #333);
+}
+
+.help-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0;
+    font-size: 13px;
+    color: var(--text-primary, #e0e0e0);
+}
+
+.help-keys {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.help-keys kbd {
+    display: inline-block;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--text-primary, #e0e0e0);
+    background: var(--bg-secondary, #2d2d2d);
+    border: 1px solid var(--border, #444);
+    border-radius: 3px;
+    box-shadow: 0 1px 0 var(--border, #333);
+    min-width: 20px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .search-panel {
+        padding: 10px;
+    }
+    .search-input-wrapper {
+        min-width: 100%;
+    }
+    .search-options {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+}

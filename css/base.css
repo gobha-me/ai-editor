@@ -1,0 +1,236 @@
+/**
+ * AI Editor - Base Styles
+ * Variables, resets, typography, layout grid, scrollbars, responsive
+ */
+
+/* ============================================
+   CSS VARIABLES
+   ============================================ */
+
+:root {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #252526;
+    --bg-tertiary: #2d2d30;
+    --bg-hover: #3c3c3c;
+    --bg-active: #094771;
+    
+    --text-primary: #cccccc;
+    --text-secondary: #858585;
+    --text-muted: #6e6e6e;
+    
+    --accent: #0e7dca;
+    --accent-hover: #1a8fe0;
+    --success: #4ec9b0;
+    --warning: #dcdcaa;
+    --error: #f14c4c;
+    --danger: #c93a3a;
+    
+    --border: #3c3c3c;
+    --border-light: #474747;
+    
+    --sidebar-width: 260px;
+    --chat-width: 350px;
+    --header-height: 40px;
+    --input-height: 120px;
+    
+    --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    
+    /* Base font sizes - controlled by settings sliders */
+    --ui-font-size: 13px;
+    --editor-font-size: 14px;
+    
+    /* Derived font sizes - scale proportionally with UI font size */
+    --font-xs: calc(var(--ui-font-size) - 3px);   /* ~10px at default */
+    --font-sm: calc(var(--ui-font-size) - 2px);   /* ~11px at default */
+    --font-md: calc(var(--ui-font-size) - 1px);   /* ~12px at default */
+    --font-base: var(--ui-font-size);              /* ~13px at default */
+    --font-lg: calc(var(--ui-font-size) + 1px);   /* ~14px at default */
+    --font-xl: calc(var(--ui-font-size) + 3px);   /* ~16px at default */
+    --font-2xl: calc(var(--ui-font-size) + 7px);  /* ~20px at default */
+}
+
+/* ============================================
+   RESET & BASE
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: var(--font-base);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* ============================================
+   LAYOUT
+   ============================================ */
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.app-header {
+    height: var(--header-height);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1rem;
+    flex-shrink: 0;
+}
+
+.app-header h1 {
+    font-size: var(--font-lg);
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+
+
+/* ============================================
+   SCROLLBARS
+   ============================================ */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--border-light);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+/* --- Desktop panel visibility toggles --- */
+
+.sidebar.hidden {
+    display: none;
+}
+
+.chat-panel.hidden {
+    display: none;
+}
+
+/* --- Resize handles --- */
+
+.resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--border);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+    background: var(--accent);
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    right: -3px;
+}
+
+/* Prevent text selection and iframe capture during drag */
+body.resizing {
+    cursor: col-resize !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+body.resizing iframe,
+body.resizing .cm-editor {
+    pointer-events: none;
+}
+
+@media (max-width: 1200px) {
+    :root {
+        --sidebar-width: 220px;
+        --chat-width: 300px;
+    }
+}
+
+@media (max-width: 900px) {
+    .sidebar {
+        position: fixed;
+        left: -100%;
+        top: var(--header-height);
+        bottom: 0;
+        z-index: 100;
+        transition: left 0.3s ease;
+    }
+    
+    /* On mobile: .hidden is overridden by .open */
+    .sidebar.open {
+        left: 0;
+        display: flex;
+    }
+    
+    .chat-panel {
+        position: fixed;
+        right: -100%;
+        top: var(--header-height);
+        bottom: 0;
+        z-index: 100;
+        transition: right 0.3s ease;
+    }
+    
+    .chat-panel.open {
+        right: 0;
+        display: flex;
+    }
+
+    /* Hide resize handles on mobile */
+    .resize-handle {
+        display: none;
+    }
+}
+
+/* ============================================
