@@ -185,6 +185,9 @@ function populateSettingsForm() {
         };
     }
 
+    // --- Summarizer Settings ---
+    populateSummarizerSliders();
+
     // --- Roles Tab ---
     populateRoleCards();
 
@@ -212,6 +215,36 @@ function populateSettingsForm() {
             }
         };
     });
+}
+
+/**
+ * Populate and wire summarizer slider controls in the Context tab.
+ */
+function populateSummarizerSliders() {
+    const sum = State.settings.summarizer || {};
+    const defaults = { recentCountBase: 10, recentCountTools: 24, threshold: 30, interval: 15, maxChars: 2000 };
+
+    const sliders = [
+        { id: 'settingSumRecentBase', valueId: 'sumRecentBaseValue', key: 'recentCountBase' },
+        { id: 'settingSumRecentTools', valueId: 'sumRecentToolsValue', key: 'recentCountTools' },
+        { id: 'settingSumThreshold', valueId: 'sumThresholdValue', key: 'threshold' },
+        { id: 'settingSumInterval', valueId: 'sumIntervalValue', key: 'interval' },
+        { id: 'settingSumMaxChars', valueId: 'sumMaxCharsValue', key: 'maxChars' },
+    ];
+
+    for (const s of sliders) {
+        const el = document.getElementById(s.id);
+        const valEl = document.getElementById(s.valueId);
+        if (!el) continue;
+
+        const val = sum[s.key] != null ? sum[s.key] : defaults[s.key];
+        el.value = val;
+        if (valEl) valEl.textContent = val;
+
+        el.oninput = () => {
+            if (valEl) valEl.textContent = el.value;
+        };
+    }
 }
 
 function populateAdvancedParams() {
@@ -1157,6 +1190,15 @@ export function saveSettings() {
     
     const embeddingCacheExpiryEl = document.getElementById('settingEmbeddingCacheExpiry');
     State.settings.embeddingCacheExpiry = embeddingCacheExpiryEl ? parseInt(embeddingCacheExpiryEl.value) || 7 : 7;
+
+    // Summarizer
+    State.settings.summarizer = {
+        recentCountBase:  parseInt(document.getElementById('settingSumRecentBase')?.value)  || 10,
+        recentCountTools: parseInt(document.getElementById('settingSumRecentTools')?.value) || 24,
+        threshold:        parseInt(document.getElementById('settingSumThreshold')?.value)   || 30,
+        interval:         parseInt(document.getElementById('settingSumInterval')?.value)    || 15,
+        maxChars:         parseInt(document.getElementById('settingSumMaxChars')?.value)    || 2000,
+    };
 
     // Roles
     const activeRoleCard = document.querySelector('.role-card.active');

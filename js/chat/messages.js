@@ -603,3 +603,40 @@ export function getDistanceToBottom() {
     const { scrollTop, scrollHeight, clientHeight } = container;
     return scrollHeight - scrollTop - clientHeight;
 }
+
+/**
+ * Render a summary notification in the chat.
+ * Shows a collapsible bar so the user can see what was compressed.
+ * 
+ * @param {Object} info - Summary info from ChatSummarizer
+ * @param {string} info.summary - The generated summary text
+ * @param {number} info.compressedMessages - Number of messages that were compressed
+ * @param {number} info.keptMessages - Number of messages kept verbatim
+ */
+export function renderSummaryNotification(info) {
+    const chatContainer = getChatContainer();
+    if (!chatContainer) return;
+
+    const id = `summary-${Date.now()}`;
+    const el = document.createElement('div');
+    el.className = 'chat-summary-notification';
+    el.innerHTML = `
+        <div class="summary-bar" onclick="document.getElementById('${id}').classList.toggle('expanded')">
+            <span class="summary-icon">📋</span>
+            <span class="summary-label">Context compressed — ${info.compressedMessages} messages → summary (${info.keptMessages} kept)</span>
+            <span class="summary-chevron">▸</span>
+        </div>
+        <div class="summary-detail" id="${id}">
+            <div class="summary-text">${_escapeHtml(info.summary)}</div>
+        </div>
+    `;
+
+    chatContainer.appendChild(el);
+    scrollToBottom();
+}
+
+function _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}

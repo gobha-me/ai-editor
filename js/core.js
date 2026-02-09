@@ -97,7 +97,16 @@ const State = {
         showIssues: true,          // Show issues panel in sidebar
         showWorkflows: true,       // Show workflows panel in sidebar
         showLineNumbers: true,     // Show line numbers in editor
-        theme: 'dark'
+        theme: 'dark',
+
+        // Summarizer Configuration
+        summarizer: {
+            recentCountBase: 10,   // Messages kept verbatim (no tool calls active)
+            recentCountTools: 24,  // Messages kept when tool calls are in recent history
+            threshold: 30,         // Min messages before first summary triggers
+            interval: 15,          // New messages between re-summarizations
+            maxChars: 2000         // Max summary output length (chars)
+        }
     },
 
     // Runtime state

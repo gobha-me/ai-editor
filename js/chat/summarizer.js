@@ -12,11 +12,26 @@ import { LLM } from '../llm.js';
  * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
-    RECENT_COUNT_BASE: 10,      // messages kept verbatim (no tool calls)
-    RECENT_COUNT_TOOLS: 24,     // messages kept when tool calls are active
-    SUMMARY_THRESHOLD: 30,      // min messages before first summary (raised from 20)
-    SUMMARY_INTERVAL: 15,       // new messages between re-summarizations
-    SUMMARY_MAX_CHARS: 2000,
+    // Defaults — overridden by State.settings.summarizer when present
+    _defaults: {
+        recentCountBase: 10,
+        recentCountTools: 24,
+        threshold: 30,
+        interval: 15,
+        maxChars: 2000
+    },
+
+    /** Read a summarizer setting with fallback to defaults */
+    _cfg(key) {
+        const s = State.settings.summarizer;
+        return (s && s[key] != null) ? s[key] : this._defaults[key];
+    },
+
+    get RECENT_COUNT_BASE()  { return this._cfg('recentCountBase'); },
+    get RECENT_COUNT_TOOLS() { return this._cfg('recentCountTools'); },
+    get SUMMARY_THRESHOLD()  { return this._cfg('threshold'); },
+    get SUMMARY_INTERVAL()   { return this._cfg('interval'); },
+    get SUMMARY_MAX_CHARS()  { return this._cfg('maxChars'); },
 
     /** Dynamic recent count — expand window when tool calls are in recent history */
     get RECENT_COUNT() {
@@ -129,6 +144,8 @@ SUMMARY:`;
         const info = {
             summary,
             coveredCount: history.length,
+            compressedMessages: older.length,
+            keptMessages: this.RECENT_COUNT,
             timestamp: Date.now()
         };
         Storage.set('chatSummaryInfo', info);

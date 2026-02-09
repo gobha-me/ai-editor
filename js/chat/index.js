@@ -23,7 +23,8 @@ import {
 import { ChatSummarizer } from './summarizer.js';
 import { 
     addMessage, 
-    renderMessages
+    renderMessages,
+    renderSummaryNotification
 } from './messages.js';
 import { setupInputHandlers, stopGeneration } from './input.js';
 import { exportChat } from './export.js';
@@ -88,6 +89,11 @@ function initChat(containerEl, inputEl) {
         if (diff.length > 0) {
             addMessage('system', `✅ Applied ${diff.length} change(s) to editor.`);
         }
+    });
+
+    // Show summary notification when context is compressed
+    EventBus.on('chat:summaryGenerated', (info) => {
+        renderSummaryNotification(info);
     });
 }
 

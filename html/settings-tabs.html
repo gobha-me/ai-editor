@@ -256,6 +256,50 @@
             Loading status...
         </div>
     </div>
+
+    <!-- Summarizer Settings -->
+    <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+        <h3 style="font-size: 14px; margin-bottom: 0.75rem;">📋 Chat Summarizer</h3>
+        <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
+            Controls how aggressively older messages are compressed into summaries.
+            Lower values = more aggressive (less context kept). Higher values = more context but higher token cost.
+        </small>
+
+        <div class="form-group">
+            <label for="settingSumRecentBase">Messages kept (no tools):</label>
+            <input type="range" id="settingSumRecentBase" min="4" max="30" step="2">
+            <span id="sumRecentBaseValue" style="min-width: 2em; text-align: right;">10</span>
+            <small style="display: block; color: var(--text-muted);">Recent messages kept verbatim when no tool calls are active</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingSumRecentTools">Messages kept (with tools):</label>
+            <input type="range" id="settingSumRecentTools" min="8" max="50" step="2">
+            <span id="sumRecentToolsValue" style="min-width: 2em; text-align: right;">24</span>
+            <small style="display: block; color: var(--text-muted);">Expanded window when tool calls are in recent history</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingSumThreshold">Summary trigger threshold:</label>
+            <input type="range" id="settingSumThreshold" min="10" max="80" step="5">
+            <span id="sumThresholdValue" style="min-width: 2em; text-align: right;">30</span>
+            <small style="display: block; color: var(--text-muted);">Minimum total messages before first summary is generated</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingSumInterval">Re-summarize interval:</label>
+            <input type="range" id="settingSumInterval" min="5" max="40" step="5">
+            <span id="sumIntervalValue" style="min-width: 2em; text-align: right;">15</span>
+            <small style="display: block; color: var(--text-muted);">New messages before next summary cycle</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingSumMaxChars">Max summary length (chars):</label>
+            <input type="range" id="settingSumMaxChars" min="500" max="5000" step="250">
+            <span id="sumMaxCharsValue" style="min-width: 3em; text-align: right;">2000</span>
+            <small style="display: block; color: var(--text-muted);">Longer summaries preserve more detail but use more tokens</small>
+        </div>
+    </div>
 </div>
 
 <!-- Roles Tab -->

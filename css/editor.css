@@ -740,6 +740,73 @@ body {
     font-size: var(--font-md);
 }
 
+/* Summary notification — collapsible bar showing context compression */
+.chat-summary-notification {
+    margin: 0.5rem 0;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+    background: var(--bg-primary);
+    font-size: 12px;
+}
+
+.summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--accent) 15%);
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.summary-bar:hover {
+    background: color-mix(in srgb, var(--bg-secondary) 75%, var(--accent) 25%);
+}
+
+.summary-icon { font-size: 14px; }
+
+.summary-label {
+    flex: 1;
+    color: var(--text-secondary);
+}
+
+.summary-chevron {
+    color: var(--text-muted);
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.summary-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.summary-detail.expanded {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.summary-detail.expanded + .summary-bar .summary-chevron,
+.summary-detail.expanded ~ .summary-bar .summary-chevron {
+    transform: rotate(90deg);
+}
+
+/* Chevron rotation when sibling is expanded — use parent state */
+.chat-summary-notification:has(.summary-detail.expanded) .summary-chevron {
+    transform: rotate(90deg);
+}
+
+.summary-text {
+    padding: 0.75rem;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+}
+
 /* Tool call messages — compact, collapsible */
 .chat-message.tool-call {
     padding: 0;
