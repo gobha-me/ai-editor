@@ -4,6 +4,7 @@
  */
 
 import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from './core.js';
+import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
@@ -903,6 +904,9 @@ function buildSystemPrompt() {
         const ci = State.currentIssue;
         prompt += `\n\n--- ACTIVE ISSUE ---\nCurrently working on issue #${ci.number}: ${ci.title}\nBranch: ${ci.branch}\nUse the read_issue tool with number ${ci.number} to get full issue details, body, and comments.\nWhen work is complete, use create_pull_request to submit changes for review.`;
     }
+
+    // Inject scratchpad (persistent LLM notes)
+    prompt += buildScratchpadPrompt();
     
     return prompt;
 }

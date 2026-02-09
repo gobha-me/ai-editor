@@ -12,6 +12,7 @@ import { registerProjectTools } from '../tools/project-tools.js';
 import { registerSearchTools } from '../tools/search-tools.js';
 import { registerIssueTools } from '../tools/issue-tools.js';
 import { registerPRTools } from '../tools/pr-tools.js';
+import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
 
 // Import submodules
 import { 
@@ -45,6 +46,7 @@ registerProjectTools(ToolRegistry);
 registerSearchTools(ToolRegistry);
 registerIssueTools(ToolRegistry);
 registerPRTools(ToolRegistry);
+registerScratchpadTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION
@@ -110,6 +112,7 @@ function sendMessage(content) {
 function clearChat() {
     State.chatHistory = [];
     Storage.set('chatHistory', []);
+    State.scratchpad = {};
     ChatSummarizer.clear();
     renderMessages();
     EventBus.emit('chat:cleared');

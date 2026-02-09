@@ -137,6 +137,9 @@ const State = {
     issues: [],                // [{ number, title, body, state }]
     currentIssue: null,
 
+    // Scratchpad — LLM-managed persistent notes (survives summarization, cleared on new chat)
+    scratchpad: {},            // { key: value } — max 10 keys, 500 chars each
+
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]
 };
