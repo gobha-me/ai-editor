@@ -32,60 +32,49 @@ function stripThinkBlocks(text) {
  * Strip internal tracking fields from messages before API submission.
  * OpenAI API spec only allows: role, content, name, tool_calls, tool_call_id
  * Internal fields like timestamp, isSummary can cause API errors if included.
- *
+ * 
  * CRITICAL: This function MUST properly handle all message types:
  * - user/assistant messages with content
  * - assistant messages with tool_calls (content may be null)
  * - tool messages with tool_call_id and content (JSON string)
- *
+ * 
  * Uses explicit field copying instead of destructuring to avoid corruption.
  */
 function sanitizeMessages(messages) {
     const VALID_ROLES = new Set(['system', 'user', 'assistant', 'tool']);
-
+    
     return messages
-    .filter(msg => {
-        if (!VALID_ROLES.has(msg.role)) {
-            console.warn(`[sanitizeMessages] Dropping message with invalid role: "${msg.role}"`);
-            return false;
-        }
-        return true;
-    })
-    .map(msg => {
+        .filter(msg => {
+            if (!VALID_ROLES.has(msg.role)) {
+                console.warn(`[sanitizeMessages] Dropping message with invalid role: "${msg.role}"`);
+                return false;
+            }
+            return true;
+        })
+        .map(msg => {
         // Build clean message with only OpenAI-spec fields
         const cleanMsg = {
             role: msg.role
         };
-
+        
         // Add content if present (handle null explicitly)
         if (msg.content !== undefined) {
             cleanMsg.content = msg.content;
         }
-
+        
         // Add optional fields if present
         if (msg.name !== undefined) {
             cleanMsg.name = msg.name;
         }
-
+        
         if (msg.tool_calls !== undefined) {
-            // Normalize tool_calls: ensure arguments is always valid JSON.
-            // Some models (e.g. MiniMax M21) emit arguments:"" for no-param tools,
-            // then reject that same format on replay as "zero-length, empty document".
-            cleanMsg.tool_calls = msg.tool_calls.map(tc => {
-                if (tc.function) {
-                    const args = tc.function.arguments;
-                    if (!args || args === '' || args === 'null') {
-                        return { ...tc, function: { ...tc.function, arguments: '{}' } };
-                    }
-                }
-                return tc;
-            });
+            cleanMsg.tool_calls = msg.tool_calls;
         }
-
+        
         if (msg.tool_call_id !== undefined) {
             cleanMsg.tool_call_id = msg.tool_call_id;
         }
-
+        
         return cleanMsg;
     });
 }
@@ -160,10 +149,10 @@ const LLMDebug = {
             messages: requestBody.messages?.map(m => ({
                 role: m.role,
                 preview: typeof m.content === 'string'  // Changed from 'contentPreview' to match render
-                ? m.content.slice(0, 150) + (m.content.length > 150 ? '…' : '')
-                : (m.content === null ? '<null>' : '<array>'),
-                                                      hasToolCalls: !!m.tool_calls,
-                                                      toolCallId: m.tool_call_id || null
+                    ? m.content.slice(0, 150) + (m.content.length > 150 ? '…' : '')
+                    : (m.content === null ? '<null>' : '<array>'),
+                hasToolCalls: !!m.tool_calls,
+                toolCallId: m.tool_call_id || null
             })),
             chunks: [],         // { raw, parsed } for each SSE data line
             thinkEvents: [],    // Think-block filter decisions (with atChunk instead of chunkIndex)
@@ -196,9 +185,9 @@ const LLMDebug = {
     /** Log a think-block filter event. */
     logThink(event, detail) {
         if (!this._current) return;
-        this._current.thinkEvents.push({
-            event,
-            detail,
+        this._current.thinkEvents.push({ 
+            event, 
+            detail, 
             atChunk: this._current.chunks.length  // Changed from 'chunkIndex' to match render
         });
     },
@@ -245,7 +234,7 @@ const LLMDebug = {
             lines.push(`=== Exchange ${ex.ts} | ${ex.model} | ${ex.stream ? 'stream' : 'non-stream'} ===`);
             lines.push(`Messages: ${ex.msgCount} | Tools: ${ex.toolsSent} | Duration: ${ex.durationMs}ms`);
             lines.push('');
-
+            
             // Messages summary
             lines.push('--- MESSAGES ---');
             for (const m of (ex.messages || [])) {
@@ -310,7 +299,7 @@ const LLM = {
 
     async listModels() {
         const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/models`;
-
+        
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${State.settings.llmApiKey}`,
@@ -332,8 +321,8 @@ const LLM = {
 
         // Parse through the active provider to get normalized + enriched models
         State.models = Providers.parseModels(rawModels)
-        .filter(m => m.type === 'text' || !m.type)  // Only text models by default
-        .sort((a, b) => a.id.localeCompare(b.id));
+            .filter(m => m.type === 'text' || !m.type)  // Only text models by default
+            .sort((a, b) => a.id.localeCompare(b.id));
 
         Storage.set('models', State.models);
         EventBus.emit('llm:modelsLoaded', State.models);
@@ -347,7 +336,7 @@ const LLM = {
      */
     async listEmbeddingModels() {
         const baseUrl = State.settings.llmEndpoint.replace(/\/$/, '');
-
+        
         // Try fetching with type=embedding parameter (Venice.ai style)
         try {
             const response = await fetch(`${baseUrl}/models?type=embedding`, {
@@ -360,14 +349,14 @@ const LLM = {
             if (response.ok) {
                 const data = await response.json();
                 const rawModels = data.data || data.models || data || [];
-
+                
                 if (Array.isArray(rawModels) && rawModels.length > 0) {
                     console.log(`[LLM] Found ${rawModels.length} embedding models via ?type=embedding`);
                     return rawModels.map(m => ({
                         id: m.id || m.name || String(m),
-                                               name: m.id || m.name || String(m),
-                                               type: 'embedding',
-                                               owned_by: m.owned_by || null
+                        name: m.id || m.name || String(m),
+                        type: 'embedding',
+                        owned_by: m.owned_by || null
                     }));
                 }
             }
@@ -397,19 +386,19 @@ const LLM = {
 
             // Filter for embedding models
             const embeddingModels = rawModels
-            .filter(m => {
-                const type = m.type || m.model_type || '';
-                const id = m.id || m.name || '';
-                return type === 'embedding' ||
-                type.toLowerCase().includes('embedding') ||
-                id.toLowerCase().includes('embedding');
-            })
-            .map(m => ({
-                id: m.id || m.name || String(m),
-                       name: m.id || m.name || String(m),
-                       type: 'embedding',
-                       owned_by: m.owned_by || null
-            }));
+                .filter(m => {
+                    const type = m.type || m.model_type || '';
+                    const id = m.id || m.name || '';
+                    return type === 'embedding' || 
+                           type.toLowerCase().includes('embedding') ||
+                           id.toLowerCase().includes('embedding');
+                })
+                .map(m => ({
+                    id: m.id || m.name || String(m),
+                    name: m.id || m.name || String(m),
+                    type: 'embedding',
+                    owned_by: m.owned_by || null
+                }));
 
             console.log(`[LLM] Found ${embeddingModels.length} embedding models via filtering`);
             return embeddingModels;
@@ -451,30 +440,30 @@ const LLM = {
             LLMDebug.startExchange(requestBody);
             // Extra diagnostic: WHY are tools missing?
             if (!requestBody.tools || requestBody.tools.length === 0) {
-                LLMDebug.logThink('tool-diagnostic',
-                                  `tools param: type=${typeof tools}, isArray=${Array.isArray(tools)}, ` +
-                                  `length=${tools?.length}, truthy=${!!tools} | ` +
-                                  `requestBody.tools: type=${typeof requestBody.tools}, isArray=${Array.isArray(requestBody.tools)}, ` +
-                                  `length=${requestBody.tools?.length}`
+                LLMDebug.logThink('tool-diagnostic', 
+                    `tools param: type=${typeof tools}, isArray=${Array.isArray(tools)}, ` +
+                    `length=${tools?.length}, truthy=${!!tools} | ` +
+                    `requestBody.tools: type=${typeof requestBody.tools}, isArray=${Array.isArray(requestBody.tools)}, ` +
+                    `length=${requestBody.tools?.length}`
                 );
             } else {
-                LLMDebug.logThink('tool-success',
-                                  `✅ Sending ${requestBody.tools.length} tools: ${requestBody.tools.map(t => t.function?.name || t.name).join(', ')}`
+                LLMDebug.logThink('tool-success', 
+                    `✅ Sending ${requestBody.tools.length} tools: ${requestBody.tools.map(t => t.function?.name || t.name).join(', ')}`
                 );
             }
 
             const response = await fetch(
                 `${State.settings.llmEndpoint.replace(/\/$/, '')}/chat/completions`,
-                                         {
-                                             method: 'POST',
-                                             headers: {
-                                                 'Content-Type': 'application/json',
-                                                 'Authorization': `Bearer ${State.settings.llmApiKey}`,
-                                                 ...ProviderRegistry.getHeaders(State.settings)
-                                             },
-                                             body: JSON.stringify(requestBody),
-                                         signal: this.abortController.signal
-                                         }
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                        ...ProviderRegistry.getHeaders(State.settings)
+                    },
+                    body: JSON.stringify(requestBody),
+                    signal: this.abortController.signal
+                }
             );
 
             if (!response.ok) {
@@ -555,8 +544,8 @@ const LLM = {
             const uncachedInput = inputTokens - cachedTokens;
             const inputCost = (uncachedInput / 1_000_000) * inputPrice;
             const cacheCost = cachePrice !== null
-            ? (cachedTokens / 1_000_000) * cachePrice
-            : 0; // If no cache price in metadata, cached tokens are free
+                ? (cachedTokens / 1_000_000) * cachePrice
+                : 0; // If no cache price in metadata, cached tokens are free
             const outputCost = (outputTokens / 1_000_000) * outputPrice;
 
             const totalCost = inputCost + cacheCost + outputCost;
@@ -617,19 +606,19 @@ const LLM = {
                 //   OpenAI:  { "error": { "message": "...", "type": "...", "code": ... } }
                 //   Venice:  { "error": "ConnectionError: ...", "error_type": "..." }
                 //   Generic: { "object": "error", "message": "...", "code": 400 }
-                const isErrorResponse =
-                parsed.error_type ||
-                parsed.error ||
-                (parsed.object === 'error' && parsed.message) ||
-                (parsed.code && parsed.code >= 400 && !parsed.choices);
-
+                const isErrorResponse = 
+                    parsed.error_type ||
+                    parsed.error ||
+                    (parsed.object === 'error' && parsed.message) ||
+                    (parsed.code && parsed.code >= 400 && !parsed.choices);
+                
                 if (isErrorResponse) {
-                    const errMsg =
-                    parsed.error_message ||
-                    parsed.error?.message ||
-                    (typeof parsed.error === 'string' ? parsed.error : null) ||
-                    parsed.message ||
-                    JSON.stringify(parsed);
+                    const errMsg = 
+                        parsed.error_message ||
+                        parsed.error?.message ||
+                        (typeof parsed.error === 'string' ? parsed.error : null) ||
+                        parsed.message ||
+                        JSON.stringify(parsed);
                     console.error('[LLM] SSE error response:', errMsg);
                     LLMDebug.logChunk(data.slice(0, 500), {
                         hasContent: false, contentSnip: null,
@@ -648,10 +637,10 @@ const LLM = {
                 LLMDebug.logChunk(data.slice(0, 500), {
                     hasContent: !!delta?.content,
                     contentSnip: delta?.content ? delta.content.slice(0, 80) : null,
-                                  hasToolCalls: !!delta?.tool_calls,
-                                  toolCallDelta: delta?.tool_calls || null,
-                                  finishReason: chunkFinish || null,
-                                  hasUsage: !!parsed.usage
+                    hasToolCalls: !!delta?.tool_calls,
+                    toolCallDelta: delta?.tool_calls || null,
+                    finishReason: chunkFinish || null,
+                    hasUsage: !!parsed.usage
                 });
 
                 // Capture usage from the final chunk (stream_options.include_usage)
@@ -724,10 +713,7 @@ const LLM = {
                             }
                             if (tc.id) toolCalls[tc.index].id = tc.id;
                             if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-                            if (tc.function?.arguments !== undefined && tc.function?.arguments !== null) {
-                                // Append argument deltas; empty string from init is fine as base for concatenation
-                                toolCalls[tc.index].function.arguments += tc.function.arguments;
-                            }
+                            if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
                         }
                     }
                 }
@@ -766,140 +752,140 @@ const LLM = {
 const EditorPrompts = {
     systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
 
-    You have access to tools that let you:
-    - Read the current file open in the editor (read_current_file)
-    - Read specific line ranges efficiently (read_lines) — PREFERRED for large files
-    - Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
-    - Query the project file tree (get_project_tree)
-    - Open specific files in the editor (open_file) — REQUIRED before using replace_lines/insert_lines/delete_lines
-    - Read any file's content without opening it (read_file) — auto-truncates large files
-    - List all open tabs (list_open_tabs)
-    - Create new files in the repository (create_file)
-    - Search for text patterns across the codebase (search_in_files)
+You have access to tools that let you:
+- Read the current file open in the editor (read_current_file)
+- Read specific line ranges efficiently (read_lines) — PREFERRED for large files
+- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
+- Query the project file tree (get_project_tree)
+- Open specific files in the editor (open_file) — REQUIRED before using replace_lines/insert_lines/delete_lines
+- Read any file's content without opening it (read_file) — auto-truncates large files
+- List all open tabs (list_open_tabs)
+- Create new files in the repository (create_file)
+- Search for text patterns across the codebase (search_in_files)
 
-    🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
-    1. **DO NOT re-read files or data you already have.** If a previous tool result showed you file contents, search results, or project structure — USE THAT DATA. Do not call the same tool again with the same arguments.
-    2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Use read_lines only if you need specific line ranges not yet seen.
-    3. **Minimum tools needed.** Skip steps you don't need:
-    - If you already know the project structure → skip get_project_tree
-    - If you already know which file to edit → skip search_in_files
-    - If the file is already open → skip open_file
-    - If you have enough context to respond → just respond, no tools needed
-    4. **For edits, the minimum path is:** open_file (if not already open) → read_lines (target region only) → edit tool
-    5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.
+🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
+1. **DO NOT re-read files or data you already have.** If a previous tool result showed you file contents, search results, or project structure — USE THAT DATA. Do not call the same tool again with the same arguments.
+2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Use read_lines only if you need specific line ranges not yet seen.
+3. **Minimum tools needed.** Skip steps you don't need:
+   - If you already know the project structure → skip get_project_tree
+   - If you already know which file to edit → skip search_in_files
+   - If the file is already open → skip open_file
+   - If you have enough context to respond → just respond, no tools needed
+4. **For edits, the minimum path is:** open_file (if not already open) → read_lines (target region only) → edit tool
+5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.
 
-    WORKFLOW — Use these tools as needed (not all are required every time):
-    1. get_project_tree — understand the project structure (skip if you already know it)
-    2. search_in_files — find where relevant code lives (skip if you already know the file)
-    3. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
-    4. open_file — switch to the file that needs editing (MUST do this before editing)
-    5. read_lines — see exact line numbers in the target region before editing
-    6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
-    7. create_file — if a new file is needed
+WORKFLOW — Use these tools as needed (not all are required every time):
+1. get_project_tree — understand the project structure (skip if you already know it)
+2. search_in_files — find where relevant code lives (skip if you already know the file)
+3. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
+4. open_file — switch to the file that needs editing (MUST do this before editing)
+5. read_lines — see exact line numbers in the target region before editing
+6. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
+7. create_file — if a new file is needed
 
-    🚨 CRITICAL TOOL USAGE RULES:
-    1. **ALWAYS provide ALL required parameters for every tool call**
-    - create_file: MUST include path, content, AND message (all 3 required)
-    - replace_lines: MUST include start_line, end_line, AND new_content
-    - insert_lines: MUST include after_line AND content
-    - read_file/open_file: MUST include path
-    - NEVER leave parameters empty, undefined, or incomplete
+🚨 CRITICAL TOOL USAGE RULES:
+1. **ALWAYS provide ALL required parameters for every tool call**
+   - create_file: MUST include path, content, AND message (all 3 required)
+   - replace_lines: MUST include start_line, end_line, AND new_content
+   - insert_lines: MUST include after_line AND content
+   - read_file/open_file: MUST include path
+   - NEVER leave parameters empty, undefined, or incomplete
 
-    2. **ALWAYS call open_file BEFORE using edit tools**
-    - replace_lines, insert_lines, delete_lines REQUIRE a file to be open first
-    - You will get an error if you try to edit without opening a file
-    - Workflow: open_file → read_lines (target area) → replace_lines
+2. **ALWAYS call open_file BEFORE using edit tools**
+   - replace_lines, insert_lines, delete_lines REQUIRE a file to be open first
+   - You will get an error if you try to edit without opening a file
+   - Workflow: open_file → read_lines (target area) → replace_lines
 
-    3. **If you hit token limits while generating large files:**
-    - Create file with MINIMAL working content first (10-20 lines skeleton)
-    - Then use replace_lines or insert_lines to add sections incrementally
-    - NEVER try to generate 100+ lines in one create_file call
+3. **If you hit token limits while generating large files:**
+   - Create file with MINIMAL working content first (10-20 lines skeleton)
+   - Then use replace_lines or insert_lines to add sections incrementally
+   - NEVER try to generate 100+ lines in one create_file call
 
-    4. **For large code implementations:**
-    - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
-    - Implement each phase separately with its own tool calls
+4. **For large code implementations:**
+   - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
+   - Implement each phase separately with its own tool calls
 
-    IMPORTANT RULES:
-    - Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
-    - After editing, explain what you changed and which lines
-    - You can use multiple tools in sequence — but use the MINIMUM rounds needed
-    - Do NOT include trailing newlines in new_content for replace_lines
+IMPORTANT RULES:
+- Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
+- After editing, explain what you changed and which lines
+- You can use multiple tools in sequence — but use the MINIMUM rounds needed
+- Do NOT include trailing newlines in new_content for replace_lines
 
-    ⚠️ CRITICAL — LINE NUMBER DRIFT:
-    Every edit changes line numbers for all subsequent lines in the file.
-    - After replace_lines or insert_lines, ALL line numbers below the edit shift
-    - You MUST call read_lines on the target region BEFORE each subsequent edit
-    - NEVER make a second edit using line numbers from before a previous edit
-    - The tool result includes surrounding context — verify your edit landed correctly
-    - Work TOP-DOWN (edit higher line numbers first) to minimize drift impact
+⚠️ CRITICAL — LINE NUMBER DRIFT:
+Every edit changes line numbers for all subsequent lines in the file.
+- After replace_lines or insert_lines, ALL line numbers below the edit shift
+- You MUST call read_lines on the target region BEFORE each subsequent edit
+- NEVER make a second edit using line numbers from before a previous edit
+- The tool result includes surrounding context — verify your edit landed correctly
+- Work TOP-DOWN (edit higher line numbers first) to minimize drift impact
 
-    Current context:
-    - Project: {{project}}
-    - File: {{file}}
-    - Branch: {{branch}}
-    {{issues}}`,
+Current context:
+- Project: {{project}}
+- File: {{file}}
+- Branch: {{branch}}
+{{issues}}`,
 
     editPrompt: `The user wants you to edit the following file.
 
-    File: {{file}}
-    \`\`\`{{language}}
-    {{content}}
-    \`\`\`
+File: {{file}}
+\`\`\`{{language}}
+{{content}}
+\`\`\`
 
-    User request: {{request}}
+User request: {{request}}
 
-    Respond with the complete updated file content in a code block, followed by a brief explanation of your changes.`,
+Respond with the complete updated file content in a code block, followed by a brief explanation of your changes.`,
 
     commitMessagePrompt: `Generate a concise git commit message for the following changes.
 
-    File: {{file}}
+File: {{file}}
 
-    Original content:
-    \`\`\`
-    {{original}}
-    \`\`\`
+Original content:
+\`\`\`
+{{original}}
+\`\`\`
 
-    New content:
-    \`\`\`
-    {{updated}}
-    \`\`\`
+New content:
+\`\`\`
+{{updated}}
+\`\`\`
 
-    Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc).`,
+Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc).`,
 
     issueAnalysisPrompt: `Analyze this issue and suggest an implementation approach.
 
-    Issue #{{number}}: {{title}}
+Issue #{{number}}: {{title}}
 
-    {{body}}
+{{body}}
 
-    Consider:
-    1. Which files might need to be modified
-    2. A high-level implementation approach
-    3. Potential edge cases or concerns
-    4. Estimated complexity (simple/medium/complex)`
+Consider:
+1. Which files might need to be modified
+2. A high-level implementation approach
+3. Potential edge cases or concerns
+4. Estimated complexity (simple/medium/complex)`
 };
 
 function buildSystemPrompt() {
     let prompt = EditorPrompts.systemPrompt;
-
+    
     if (State.currentProject) {
         prompt = prompt.replace('{{project}}', `${State.currentProject.owner}/${State.currentProject.repo}`);
     } else {
         prompt = prompt.replace('{{project}}', 'None selected');
     }
-
+    
     if (State.currentFile) {
         prompt = prompt.replace('{{file}}', State.currentFile.path);
     } else {
         prompt = prompt.replace('{{file}}', 'None');
     }
-
+    
     prompt = prompt.replace('{{branch}}', State.currentBranch || 'main');
-
+    
     // Add open issues context if available
     if (State.issues && State.issues.length > 0) {
-        const issuesSummary = State.issues.map(i =>
-        `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
+        const issuesSummary = State.issues.map(i => 
+            `  #${i.number}: ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''}`
         ).join('\n');
         prompt = prompt.replace('{{issues}}', `\nOpen issues (${State.issues.length}):\n${issuesSummary}`);
     } else {
@@ -912,6 +898,12 @@ function buildSystemPrompt() {
         prompt += `\n\nActive role: ${role.name}. ${role.description}`;
     }
 
+    // Inject active issue context
+    if (State.currentIssue) {
+        const ci = State.currentIssue;
+        prompt += `\n\n--- ACTIVE ISSUE ---\nCurrently working on issue #${ci.number}: ${ci.title}\nBranch: ${ci.branch}\nUse the read_issue tool with number ${ci.number} to get full issue details, body, and comments.\nWhen work is complete, use create_pull_request to submit changes for review.`;
+    }
+    
     return prompt;
 }
 
@@ -921,19 +913,19 @@ function buildEditPrompt(request) {
     }
 
     const language = getLanguageFromPath(State.currentFile.path);
-
+    
     return EditorPrompts.editPrompt
-    .replace('{{file}}', State.currentFile.path)
-    .replace('{{language}}', language)
-    .replace('{{content}}', State.editorContent)
-    .replace('{{request}}', request);
+        .replace('{{file}}', State.currentFile.path)
+        .replace('{{language}}', language)
+        .replace('{{content}}', State.editorContent)
+        .replace('{{request}}', request);
 }
 
 function buildCommitMessagePrompt(original, updated) {
     return EditorPrompts.commitMessagePrompt
-    .replace('{{file}}', State.currentFile?.path || 'unknown')
-    .replace('{{original}}', original)
-    .replace('{{updated}}', updated);
+        .replace('{{file}}', State.currentFile?.path || 'unknown')
+        .replace('{{original}}', original)
+        .replace('{{updated}}', updated);
 }
 
 function getLanguageFromPath(path) {
@@ -1000,12 +992,12 @@ const LLMTools = {
     getToolsForRole() {
         const defs = ToolRegistry.getDefinitions();
         console.log('[LLMTools] getToolsForRole: registry has', defs.length, 'tools');
-
+        
         if (defs.length === 0) {
             console.warn('[LLMTools] ⚠️ ToolRegistry is empty! Tools may not be registered yet.');
             return [];
         }
-
+        
         const filtered = Roles.filterTools(defs);
         console.log('[LLMTools] After role filtering:', filtered.length, 'tools for role', State.settings.role);
         return filtered;
@@ -1026,9 +1018,9 @@ async function generateEdit(request, onToken = null) {
         { role: 'user', content: editPrompt }
     ];
 
-    const result = await LLM.chat(messages, {
-        stream: true,
-        onToken
+    const result = await LLM.chat(messages, { 
+        stream: true, 
+        onToken 
     });
 
     // Try to extract code from response
@@ -1051,7 +1043,7 @@ async function generateEdit(request, onToken = null) {
 async function generateCommitMessage(changedFiles = null) {
     // Build a prompt that covers all changed files
     let prompt;
-
+    
     if (changedFiles && changedFiles.length > 0) {
         // Multi-file commit message
         const fileDiffs = changedFiles.map(f => {
@@ -1059,7 +1051,7 @@ async function generateCommitMessage(changedFiles = null) {
             const updated = (f.content || '').slice(0, 2000);
             return `File: ${f.path}\n\nOriginal (truncated):\n\`\`\`\n${original}\n\`\`\`\n\nUpdated (truncated):\n\`\`\`\n${updated}\n\`\`\``;
         }).join('\n\n---\n\n');
-
+        
         prompt = `Generate a concise git commit message for the following changes across ${changedFiles.length} file(s).\n\n${fileDiffs}\n\nRespond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc). If multiple files changed, summarize the overall change.`;
     } else if (State.currentFile) {
         prompt = buildCommitMessagePrompt(
@@ -1075,7 +1067,7 @@ async function generateCommitMessage(changedFiles = null) {
 
     const result = await LLM.chat([
         { role: 'user', content: prompt }
-    ], {
+    ], { 
         stream: false,
         temperature: 0.3,
         maxTokens: 150,
@@ -1087,9 +1079,9 @@ async function generateCommitMessage(changedFiles = null) {
 
 async function analyzeIssue(issue, onToken = null) {
     const prompt = EditorPrompts.issueAnalysisPrompt
-    .replace('{{number}}', issue.number)
-    .replace('{{title}}', issue.title)
-    .replace('{{body}}', issue.body);
+        .replace('{{number}}', issue.number)
+        .replace('{{title}}', issue.title)
+        .replace('{{body}}', issue.body);
 
     const systemPrompt = buildSystemPrompt();
 

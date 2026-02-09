@@ -11,6 +11,7 @@ import { registerEditTools } from '../tools/edit-tools.js';
 import { registerProjectTools } from '../tools/project-tools.js';
 import { registerSearchTools } from '../tools/search-tools.js';
 import { registerIssueTools } from '../tools/issue-tools.js';
+import { registerPRTools } from '../tools/pr-tools.js';
 
 // Import submodules
 import { 
@@ -43,6 +44,7 @@ registerEditTools(ToolRegistry);
 registerProjectTools(ToolRegistry);
 registerSearchTools(ToolRegistry);
 registerIssueTools(ToolRegistry);
+registerPRTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION

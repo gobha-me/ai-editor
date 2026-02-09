@@ -50,7 +50,9 @@ import {
     refreshIssues, 
     renderWorkflows, 
     refreshWorkflows,
-    initProjectListeners
+    initProjectListeners,
+    openIssueDetailModal,
+    closeIssueDetailModal
 } from './project-manager.js';
 import { 
     fetchModels, 
@@ -72,6 +74,7 @@ import './tools/edit-tools.js';
 import './tools/project-tools.js';
 import './tools/search-tools.js';
 import './tools/issue-tools.js';
+import './tools/pr-tools.js';        // PR/MR management tools
 import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tools
 import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 
@@ -132,6 +135,9 @@ window.commitAndPush = commitAndPush;
 window.openNewBranchModal = openNewBranchModal;
 window.closeNewBranchModal = closeNewBranchModal;
 window.createNewBranch = createNewBranch;
+
+window.openIssueDetailModal = openIssueDetailModal;
+window.closeIssueDetailModal = closeIssueDetailModal;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;

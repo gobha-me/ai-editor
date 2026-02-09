@@ -251,3 +251,36 @@
         </div>
     </div>
 </div>
+
+<!-- Issue Detail Modal -->
+<div class="modal-overlay" id="issueDetailModal">
+    <div class="modal" style="max-width: 620px;">
+        <div class="modal-header">
+            <h2 id="issueDetailTitle">Issue</h2>
+            <button class="modal-close" onclick="window.closeIssueDetailModal()">×</button>
+        </div>
+        <div class="modal-body" style="max-height: 450px; overflow-y: auto;">
+            <!-- Labels -->
+            <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;"></div>
+
+            <!-- Meta row -->
+            <div id="issueDetailMeta" style="font-size: 12px; color: var(--text-muted); margin-bottom: 1rem;"></div>
+
+            <!-- Body (markdown-rendered) -->
+            <div id="issueDetailBody" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); max-height: 200px; overflow-y: auto;"></div>
+
+            <!-- Comments preview -->
+            <div id="issueDetailComments" style="margin-top: 0.75rem;"></div>
+
+            <!-- Active branch indicator (shown when branch already exists) -->
+            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 12px; background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50);"></div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <button class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-secondary" id="btnIssueChat" title="Ask the LLM about this issue">💬 Discuss</button>
+                <button class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">🚀 Start Work</button>
+            </div>
+        </div>
+    </div>
+</div>

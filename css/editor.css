@@ -446,6 +446,21 @@ body {
     text-decoration: underline;
 }
 
+.issue-item-active {
+    border-left: 3px solid var(--accent);
+    background: color-mix(in srgb, var(--bg-hover) 60%, var(--accent) 8%);
+}
+
+.issue-item-active .issue-number {
+    font-weight: 700;
+}
+
+.issue-item-active .issue-number::after {
+    content: ' ●';
+    font-size: 8px;
+    vertical-align: middle;
+}
+
 /* ============================================
    EDITOR PANEL (Center)
    ============================================ */
