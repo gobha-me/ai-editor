@@ -4,6 +4,7 @@
 
 import { VERSION_DISPLAY } from './version.js';
 import { FaviconManager } from './favicon-manager.js';
+import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, loadSettings } from './core.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
