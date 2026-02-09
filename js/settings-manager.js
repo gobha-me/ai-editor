@@ -212,6 +212,9 @@ function populateSettingsForm() {
             tab.classList.add('active');
             document.getElementById(tab.dataset.tab).classList.add('active');
             
+            // Scroll clicked tab into view
+            tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            
             // Update embeddings status when switching to Context tab
             if (tab.dataset.tab === 'tabContext') {
                 updateEmbeddingsStatus();
@@ -220,9 +223,62 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabModels') {
                 populateModelsTab();
             }
+            
+            // Re-check arrow visibility after scroll settles
+            setTimeout(updateTabArrows, 100);
         };
     });
+
+    // --- Settings tab arrow buttons ---
+    initTabArrows();
 }
+
+/**
+ * Initialize tab arrow navigation buttons.
+ * Shows/hides ‹ › arrows based on whether tabs overflow their container.
+ */
+function initTabArrows() {
+    const container = document.querySelector('.settings-tabs');
+    if (!container) return;
+
+    // Update arrows whenever the container scrolls
+    container.addEventListener('scroll', updateTabArrows);
+
+    // Also update on resize (font changes can trigger reflow)
+    const observer = new ResizeObserver(() => updateTabArrows());
+    observer.observe(container);
+
+    // Initial state
+    updateTabArrows();
+}
+
+function updateTabArrows() {
+    const container = document.querySelector('.settings-tabs');
+    if (!container) return;
+
+    const leftBtn = document.querySelector('.settings-tabs-arrow-left');
+    const rightBtn = document.querySelector('.settings-tabs-arrow-right');
+    if (!leftBtn || !rightBtn) return;
+
+    const canScrollLeft = container.scrollLeft > 1;
+    const canScrollRight = container.scrollLeft < (container.scrollWidth - container.clientWidth - 1);
+
+    leftBtn.classList.toggle('visible', canScrollLeft);
+    rightBtn.classList.toggle('visible', canScrollRight);
+}
+
+/**
+ * Scroll settings tabs left (-1) or right (+1).
+ * Scrolls by roughly 2 tab widths per click.
+ */
+window.scrollSettingsTabs = function(direction) {
+    const container = document.querySelector('.settings-tabs');
+    if (!container) return;
+
+    // Scroll by ~2 tab widths
+    const step = container.clientWidth * 0.6;
+    container.scrollBy({ left: direction * step, behavior: 'smooth' });
+};
 
 /**
  * Populate and wire summarizer slider controls in the Context tab.

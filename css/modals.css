@@ -268,14 +268,56 @@
    SETTINGS TABS
    ============================================ */
 
-.settings-tabs {
+.settings-tabs-nav {
     display: flex;
+    align-items: stretch;
     border-bottom: 1px solid var(--border);
     background: var(--bg-tertiary);
     flex-shrink: 0;
-    overflow-x: auto;
+    position: relative;
+}
+
+.settings-tabs-arrow {
+    display: none;          /* hidden until JS shows them */
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--font-base) * 2);
+    min-width: 24px;
+    padding: 0;
+    background: var(--bg-tertiary);
+    border: none;
+    color: var(--text-secondary);
+    font-size: var(--font-xl);
+    cursor: pointer;
+    flex-shrink: 0;
+    z-index: 1;
+    transition: color 0.15s, background 0.15s;
+}
+
+.settings-tabs-arrow:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.settings-tabs-arrow.visible {
+    display: flex;
+}
+
+/* Left arrow gets a right-side fade hint */
+.settings-tabs-arrow-left {
+    border-right: 1px solid var(--border);
+}
+
+.settings-tabs-arrow-right {
+    border-left: 1px solid var(--border);
+}
+
+.settings-tabs {
+    display: flex;
+    flex: 1;
+    overflow-x: hidden;     /* JS handles scrolling via buttons */
     overflow-y: hidden;
-    scrollbar-width: thin;
+    scroll-behavior: smooth;
 }
 
 .settings-tab {

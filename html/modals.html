@@ -1,20 +1,24 @@
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settingsModal">
-    <div class="modal" style="max-width: 560px;">
+    <div class="modal" id="settingsModalInner">
         <div class="modal-header">
             <h2>⚙️ Settings</h2>
             <button class="modal-close" onclick="window.closeSettings()">×</button>
         </div>
 
         <!-- Settings Tabs -->
-        <div class="settings-tabs">
-            <button class="settings-tab active" data-tab="tabConnections">Connections</button>
-            <button class="settings-tab" data-tab="tabGeneral">LLM</button>
-            <button class="settings-tab" data-tab="tabModels">Models</button>
-            <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
-            <button class="settings-tab" data-tab="tabContext">Context</button>
-            <button class="settings-tab" data-tab="tabRoles">Roles</button>
-            <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
+        <div class="settings-tabs-nav">
+            <button class="settings-tabs-arrow settings-tabs-arrow-left" onclick="window.scrollSettingsTabs(-1)" aria-label="Scroll tabs left">‹</button>
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="tabConnections">Connections</button>
+                <button class="settings-tab" data-tab="tabGeneral">LLM</button>
+                <button class="settings-tab" data-tab="tabModels">Models</button>
+                <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
+                <button class="settings-tab" data-tab="tabContext">Context</button>
+                <button class="settings-tab" data-tab="tabRoles">Roles</button>
+                <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
+            </div>
+            <button class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollSettingsTabs(1)" aria-label="Scroll tabs right">›</button>
         </div>
 
         <div class="modal-body">
