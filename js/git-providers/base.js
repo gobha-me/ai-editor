@@ -74,11 +74,24 @@ const BASE_GIT_PROVIDER = {
         const response = await fetch(url, options);
 
         if (!response.ok) {
-            const error = await response.text();
-            const err = new Error(`${this.name} API Error: ${response.status} - ${error}`);
+            const rawBody = await response.text();
+            
+            // Parse error body for a clean message
+            let friendlyMsg = `${response.status}`;
+            try {
+                const parsed = JSON.parse(rawBody);
+                // Most Git APIs return { message: "..." } or { error: "..." }
+                friendlyMsg = parsed.message || parsed.error || parsed.errors?.[0] || friendlyMsg;
+            } catch {
+                // Not JSON — use raw text if short, otherwise just status
+                if (rawBody.length < 200) friendlyMsg = rawBody;
+            }
+            
+            const err = new Error(`${this.name}: ${friendlyMsg}`);
             err.status = response.status;
             err.url = url;
             err.endpoint = endpoint;
+            err.rawBody = rawBody;
             throw err;
         }
 

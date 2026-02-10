@@ -5,6 +5,13 @@
 
 import { ToolRegistry } from '../tools/registry.js';
 
+// Lazy reference to ErrorLogger (avoid circular imports)
+let _errorLogger = null;
+function getErrorLogger() {
+    if (!_errorLogger && window.ErrorLogger) _errorLogger = window.ErrorLogger;
+    return _errorLogger;
+}
+
 /**
  * Validate that required parameters are present and non-empty.
  * Prevents bugs where AI hits token limits and sends incomplete tool calls.
@@ -55,21 +62,49 @@ export function validateToolParameters(toolName, args) {
  * Execute a tool call using the registry
  */
 export async function executeToolCall(toolCall) {
+    const toolName = toolCall.function.name;
     try {
         const args = JSON.parse(toolCall.function.arguments || '{}');
 
         // VALIDATE PARAMETERS BEFORE EXECUTION
-        const validationError = validateToolParameters(toolCall.function.name, args);
+        const validationError = validateToolParameters(toolName, args);
         if (validationError) {
-            console.error(`[Tool Validation] ${toolCall.function.name} failed:`, validationError);
+            console.error(`[Tool Validation] ${toolName} failed:`, validationError);
+            _logToolError(toolName, args, validationError.error);
             return validationError;
         }
 
-        const result = await ToolRegistry.execute(toolCall.function.name, args);
+        const result = await ToolRegistry.execute(toolName, args);
+        
+        // Log any tool-level errors for debugging
+        if (result?.error) {
+            console.warn(`[Tool Error] ${toolName}:`, result.error);
+            _logToolError(toolName, args, result.error);
+        }
+        
         return result;
     } catch (error) {
-        return { error: `Tool execution failed: ${error.message}` };
+        const msg = `Tool execution failed: ${error.message}`;
+        console.error(`[Tool Crash] ${toolName}:`, error);
+        _logToolError(toolName, null, msg);
+        return { error: msg };
     }
+}
+
+/**
+ * Log a tool error to the ErrorLogger (visible in 🐛 panel)
+ */
+function _logToolError(toolName, args, message) {
+    const logger = getErrorLogger();
+    if (!logger) return;
+    logger.log({
+        type: 'ERROR',
+        message: `Tool ${toolName}: ${message}`,
+        file: args ? JSON.stringify(args).substring(0, 200) : '',
+        line: '',
+        col: '',
+        stack: ''
+    });
 }
 
 /**

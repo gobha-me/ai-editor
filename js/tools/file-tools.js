@@ -120,7 +120,10 @@ export function registerFileTools(registry) {
                 language: path.split('.').pop()
             };
         } catch (error) {
-            return { error: `Failed to read file: ${error.message}` };
+            if (error.status === 404) {
+                return { error: `File not found: '${path}' does not exist on branch '${State.currentBranch}'. Use get_project_tree to see available files.` };
+            }
+            return { error: `Failed to read file '${path}': ${error.message}` };
         }
     }, {
         type: 'function',

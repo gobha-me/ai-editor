@@ -114,6 +114,9 @@ export const ErrorLogger = {
             if (errorCount > 0) {
                 btn.style.backgroundColor = '#dc3545';
                 btn.style.color = 'white';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
             }
         }
     },

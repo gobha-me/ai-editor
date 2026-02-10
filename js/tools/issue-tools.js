@@ -95,6 +95,9 @@ export function registerIssueTools(registry) {
                 }))
             };
         } catch (error) {
+            if (error.status === 404) {
+                return { error: `Issue #${number} not found. Use list_issues to see available issues.` };
+            }
             return { error: `Failed to read issue #${number}: ${error.message}` };
         }
     }, {

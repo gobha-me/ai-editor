@@ -238,7 +238,10 @@ export function registerScanTools(registry) {
                 outline
             };
         } catch (error) {
-            return { error: `Failed to scan file: ${error.message}` };
+            if (error.status === 404) {
+                return { error: `File not found: '${path}' does not exist on branch '${branch}'. Use get_project_tree to see available files.` };
+            }
+            return { error: `Failed to scan file '${path}': ${error.message}` };
         }
     }, {
         type: 'function',
@@ -329,7 +332,10 @@ export function registerScanTools(registry) {
                 content
             };
         } catch (error) {
-            return { error: `Failed to read function: ${error.message}` };
+            if (error.status === 404) {
+                return { error: `File not found: '${path}' does not exist on branch '${branch}'. Use get_project_tree to see available files.` };
+            }
+            return { error: `Failed to read function '${name}' from '${path}': ${error.message}` };
         }
     }, {
         type: 'function',
@@ -462,7 +468,7 @@ export function registerScanTools(registry) {
             
             return result;
         } catch (error) {
-            return { error: `Failed to find references: ${error.message}` };
+            return { error: `Failed to find references for '${symbol}': ${error.message}` };
         }
     }, {
         type: 'function',
@@ -553,7 +559,10 @@ export function registerScanTools(registry) {
                 source  // 'editor' or 'remote' - helps debug state issues
             };
         } catch (error) {
-            return { error: `Failed to read lines: ${error.message}` };
+            if (error.status === 404) {
+                return { error: `File not found: '${path}' does not exist on branch '${branch}'. Use get_project_tree to see available files.` };
+            }
+            return { error: `Failed to read lines from '${path}': ${error.message}` };
         }
     }, {
         type: 'function',
