@@ -66,6 +66,11 @@ export async function executeToolCall(toolCall) {
     try {
         const args = JSON.parse(toolCall.function.arguments || '{}');
 
+        // Normalize file paths — LLMs often add leading slashes
+        if (typeof args.path === 'string') {
+            args.path = args.path.replace(/^\/+/, '');
+        }
+
         // VALIDATE PARAMETERS BEFORE EXECUTION
         const validationError = validateToolParameters(toolName, args);
         if (validationError) {
@@ -97,14 +102,8 @@ export async function executeToolCall(toolCall) {
 function _logToolError(toolName, args, message) {
     const logger = getErrorLogger();
     if (!logger) return;
-    logger.log({
-        type: 'ERROR',
-        message: `Tool ${toolName}: ${message}`,
-        file: args ? JSON.stringify(args).substring(0, 200) : '',
-        line: '',
-        col: '',
-        stack: ''
-    });
+    const argsStr = args ? JSON.stringify(args).substring(0, 200) : '';
+    logger.logError('ERROR', `Tool ${toolName}: ${message}`, '', argsStr, 0, 0);
 }
 
 /**

@@ -175,7 +175,34 @@ const Storage = {
         try {
             localStorage.setItem(this._prefix + key, JSON.stringify(value));
         } catch (e) {
-            console.error('Storage set error:', e);
+            if (e.name === 'QuotaExceededError') {
+                // Try to recover by pruning chat history (largest consumer)
+                const chatKey = this._prefix + 'chatHistory';
+                try {
+                    const raw = localStorage.getItem(chatKey);
+                    if (raw) {
+                        const history = JSON.parse(raw);
+                        if (Array.isArray(history) && history.length > 20) {
+                            // Keep only last 20 messages
+                            const pruned = history.slice(-20);
+                            localStorage.setItem(chatKey, JSON.stringify(pruned));
+                            console.warn(`[Storage] Quota exceeded — pruned chat history from ${history.length} to ${pruned.length} messages`);
+                            // Retry the original write
+                            try {
+                                localStorage.setItem(this._prefix + key, JSON.stringify(value));
+                                return;
+                            } catch {
+                                // Still full — give up gracefully
+                            }
+                        }
+                    }
+                } catch {
+                    // Pruning failed — fall through
+                }
+                console.warn('[Storage] localStorage quota exceeded. Data not saved for key:', key);
+            } else {
+                console.error('Storage set error:', e);
+            }
         }
     },
 
