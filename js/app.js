@@ -69,7 +69,7 @@ import {
 import { initPanelResize } from './resize-manager.js';
 import { 
     openZipUpload, closeZipUpload, 
-    handleZipFileSelect, zipToggleFile, zipSelectAll,
+    handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
     uploadExtractedFiles, initZipDragDrop
 } from './zip-upload.js';
 
@@ -163,6 +163,7 @@ window.closeZipUpload = closeZipUpload;
 window.handleZipFileSelect = handleZipFileSelect;
 window.zipToggleFile = zipToggleFile;
 window.zipSelectAll = zipSelectAll;
+window.scanForDiffs = scanForDiffs;
 window.uploadExtractedFiles = uploadExtractedFiles;
 
 // Draft management functions
