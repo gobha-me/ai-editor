@@ -59,13 +59,13 @@ WORKDIR /app
 COPY . .
 
 # Copy vendor bundles into the served directory
-RUN mkdir -p /app/editor/vendor
-COPY --from=vendor-build /build/codemirror-bundle.js /app/editor/vendor/
-COPY --from=vendor-build /build/marked.min.js        /app/editor/vendor/
-COPY --from=vendor-build /build/purify.min.js         /app/editor/vendor/
+#UN mkdir -p /app/editor/vendor
+COPY --from=vendor-build /build/codemirror-bundle.js /app/vendor/
+COPY --from=vendor-build /build/marked.min.js        /app/vendor/
+COPY --from=vendor-build /build/purify.min.js         /app/vendor/
 
 # Remove build-only files from final image
-RUN rm -rf /app/vendor/node_modules /app/vendor/package-lock.json
+# RUN rm -rf /app/vendor/node_modules /app/vendor/package-lock.json
 
 EXPOSE 8000
 
