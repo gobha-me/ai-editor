@@ -131,6 +131,8 @@ export function cleanupStreamingMessage() {
         el.remove();
         console.log('[cleanupStreamingMessage] Removed orphaned streaming element');
     }
+    // Ensure the last user message gets edit/retry buttons after an error
+    _injectUserEditButtons();
 }
 
 /**
@@ -201,6 +203,9 @@ export function finalizeStreamingMessage(content, meta = {}) {
         
         messageEl.appendChild(actionsEl);
     }
+
+    // Inject edit/retry buttons on the last user message now that response is complete
+    _injectUserEditButtons();
 
     // Add to history with FULL content (including think blocks for LLM context)
     State.chatHistory.push({
@@ -644,6 +649,33 @@ function _escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Inject edit/retry buttons onto the last user message in the DOM.
+ * Called after an assistant response completes (finalize or error).
+ * Safe to call multiple times — skips if buttons already exist.
+ */
+function _injectUserEditButtons() {
+    const chatContainer = getChatContainer();
+    if (!chatContainer) return;
+
+    // Find the last user message element in the DOM
+    const userMessages = chatContainer.querySelectorAll('.chat-message.user');
+    if (userMessages.length === 0) return;
+
+    const lastUserEl = userMessages[userMessages.length - 1];
+
+    // Skip if buttons already exist
+    if (lastUserEl.querySelector('.message-actions')) return;
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'message-actions';
+    actionsEl.innerHTML = `
+        <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend">✏️ Edit</button>
+        <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request">🔁 Retry</button>
+    `;
+    lastUserEl.appendChild(actionsEl);
 }
 
 /**
