@@ -213,12 +213,32 @@ const Git = {
         return provider.createMergeRequest(connection, owner, repo, title, body, head, base);
     },
 
+    async getPullRequest(owner, repo, number) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getPullRequest(connection, owner, repo, number);
+    },
+
+    async getPullRequestFiles(owner, repo, number) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getPullRequestFiles(connection, owner, repo, number);
+    },
+
+    async getPullRequestComments(owner, repo, number) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getPullRequestComments(connection, owner, repo, number);
+    },
+
+    async addPullRequestComment(owner, repo, number, body) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.addPullRequestComment(connection, owner, repo, number, body);
+    },
+
     // ========================================
     // CI/CD
     // ========================================
 
     async getCommitStatus(owner, repo, ref) {
-        const { provider, connection } = this._resolve();
+        const { provider, connection } = resolveCurrentConnection();
         return provider.getCommitStatus(connection, owner, repo, ref);
     },
 

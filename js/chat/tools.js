@@ -32,6 +32,8 @@ export function validateToolParameters(toolName, args) {
         'update_issue': ['number'],
         'add_issue_comment': ['number', 'body'],
         'read_issue': ['number'],
+        'read_pull_request': ['number'],
+        'add_pr_review': ['number', 'body'],
         'scan_file': ['path'],
         'read_function': ['name', 'path'],
         'find_references': ['symbol']

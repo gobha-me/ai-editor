@@ -2,6 +2,19 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.3-2] - 2025-02-10
+
+### Added
+- **`read_pull_request` tool**: LLMs can now read full PR details — description, per-file diffs, CI status, and all comments (review + general) in a single call. Patches auto-truncated at ~8K chars to stay within tool result limits. Available to all roles.
+- **`add_pr_review` tool**: Post review feedback on a PR as a general comment. Available to reviewer, coder, and pm roles. Triggers sidebar PR refresh.
+- **`get_ci_status` tool**: Check CI/CD pipeline status for any branch or commit SHA. Defaults to current branch. Available to all roles.
+- **Provider methods**: `getPullRequest()`, `getPullRequestFiles()`, `getPullRequestComments()`, `addPullRequestComment()` — implemented on both GitHub and Gitea providers with normalized return shapes
+- **Git facade**: Five new methods wiring provider PR operations to the tool layer
+
+### Changed
+- **PR tools now enable full review loop**: Coder creates PR → Reviewer reads diff + CI → Reviewer posts feedback → Coder resolves → repeat
+- Tool count: 25 → 28
+
 ## [0.8.3-1] - 2025-02-10
 
 ### Changed

@@ -398,6 +398,81 @@ const giteaProvider = {
         };
     },
 
+    async getPullRequest(connection, owner, repo, number) {
+        const pr = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/pulls/${number}`
+        );
+        return {
+            number: pr.number,
+            title: pr.title,
+            body: pr.body || '',
+            state: pr.state,
+            head: pr.head.ref,
+            base: pr.base.ref,
+            mergeable: pr.mergeable,
+            merged: pr.merged,
+            user: pr.user.login,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            changed_files: pr.changed_files,
+            createdAt: pr.created_at,
+            updatedAt: pr.updated_at,
+            url: pr.html_url
+        };
+    },
+
+    async getPullRequestFiles(connection, owner, repo, number) {
+        const files = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/pulls/${number}/files`
+        );
+        return (files || []).map(f => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes,
+            patch: f.patch || null,
+            previousFilename: f.previous_filename || null
+        }));
+    },
+
+    async getPullRequestComments(connection, owner, repo, number) {
+        // Gitea has review comments on /pulls/{number}/comments
+        let reviewComments = [];
+        try {
+            const comments = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/pulls/${number}/comments`
+            );
+            reviewComments = (comments || []).map(c => ({
+                id: c.id,
+                body: c.body,
+                user: c.user.login,
+                createdAt: c.created_at,
+                path: c.path,
+                line: c.line || c.old_position,
+                type: 'review'
+            }));
+        } catch { /* no review comments */ }
+
+        // General comments via issues API
+        let generalComments = [];
+        try {
+            const comments = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/issues/${number}/comments`
+            );
+            generalComments = (comments || []).map(c => ({
+                id: c.id,
+                body: c.body,
+                user: c.user.login,
+                createdAt: c.created_at,
+                type: 'general'
+            }));
+        } catch { /* no general comments */ }
+
+        return [...reviewComments, ...generalComments]
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

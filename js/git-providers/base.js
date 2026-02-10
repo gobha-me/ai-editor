@@ -219,6 +219,39 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'createMergeRequest');
     },
 
+    /**
+     * Get full details of a single PR/MR.
+     * Returns: { number, title, body, state, head, base, mergeable, url, user, createdAt, updatedAt }
+     */
+    async getPullRequest(connection, owner, repo, number) {
+        notSupported(this.name, 'getPullRequest');
+    },
+
+    /**
+     * Get files changed in a PR/MR with per-file patches.
+     * Returns: [{ filename, status, additions, deletions, patch }]
+     */
+    async getPullRequestFiles(connection, owner, repo, number) {
+        notSupported(this.name, 'getPullRequestFiles');
+    },
+
+    /**
+     * Get review comments on a PR/MR.
+     * Returns: [{ id, body, user, createdAt, path?, line? }]
+     */
+    async getPullRequestComments(connection, owner, repo, number) {
+        notSupported(this.name, 'getPullRequestComments');
+    },
+
+    /**
+     * Add a general comment to a PR/MR (not line-level).
+     * Uses the issues comment API since PRs are issues on both GitHub and Gitea.
+     */
+    async addPullRequestComment(connection, owner, repo, number, body) {
+        // Default: delegate to issue comment API (works for both GitHub and Gitea)
+        return this.createIssueComment(connection, owner, repo, number, body);
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

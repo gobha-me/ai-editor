@@ -519,6 +519,81 @@ const githubProvider = {
         };
     },
 
+    async getPullRequest(connection, owner, repo, number) {
+        const pr = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/pulls/${number}`
+        );
+        return {
+            number: pr.number,
+            title: pr.title,
+            body: pr.body || '',
+            state: pr.state,
+            head: pr.head.ref,
+            base: pr.base.ref,
+            mergeable: pr.mergeable,
+            merged: pr.merged,
+            user: pr.user.login,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            changed_files: pr.changed_files,
+            createdAt: pr.created_at,
+            updatedAt: pr.updated_at,
+            url: pr.html_url
+        };
+    },
+
+    async getPullRequestFiles(connection, owner, repo, number) {
+        const files = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`
+        );
+        return (files || []).map(f => ({
+            filename: f.filename,
+            status: f.status,        // added, removed, modified, renamed
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes,
+            patch: f.patch || null,   // unified diff for this file (null for binary)
+            previousFilename: f.previous_filename || null
+        }));
+    },
+
+    async getPullRequestComments(connection, owner, repo, number) {
+        // PR review comments (line-level)
+        let reviewComments = [];
+        try {
+            const comments = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/pulls/${number}/comments?per_page=100`
+            );
+            reviewComments = (comments || []).map(c => ({
+                id: c.id,
+                body: c.body,
+                user: c.user.login,
+                createdAt: c.created_at,
+                path: c.path,
+                line: c.line || c.original_line,
+                type: 'review'
+            }));
+        } catch { /* no review comments */ }
+
+        // General PR comments (issue comments API)
+        let generalComments = [];
+        try {
+            const comments = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/issues/${number}/comments?per_page=100`
+            );
+            generalComments = (comments || []).map(c => ({
+                id: c.id,
+                body: c.body,
+                user: c.user.login,
+                createdAt: c.created_at,
+                type: 'general'
+            }));
+        } catch { /* no general comments */ }
+
+        return [...reviewComments, ...generalComments]
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

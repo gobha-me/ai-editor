@@ -1,7 +1,13 @@
 /**
  * AI Editor - Pull Request / Merge Request Tools
  * Provider-agnostic PR/MR management via Git facade.
- * Allows the LLM to document completed work and request reviews.
+ * 
+ * Enables the full review loop:
+ *   1. Coder creates PR after pushing code
+ *   2. Reviewer reads PR (diff + CI status + comments)
+ *   3. Reviewer posts feedback via add_pr_review
+ *   4. Coder reads feedback, fixes, pushes
+ *   5. Repeat until merged
  */
 
 import { State, EventBus } from '../core.js';
@@ -116,6 +122,194 @@ export function registerPRTools(registry) {
                         type: 'string',
                         enum: ['open', 'closed', 'all'],
                         description: 'Filter by PR state (default: open)'
+                    }
+                },
+                required: []
+            }
+        },
+        roles: 'all'
+    });
+
+    // ========================================
+    // read_pull_request
+    // ========================================
+    registry.register('read_pull_request', async ({ number }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const prNum = parseInt(number);
+        if (isNaN(prNum)) {
+            return { error: 'PR number must be an integer' };
+        }
+
+        try {
+            // Fetch PR details, changed files, CI status, and comments in parallel
+            const [pr, files, comments] = await Promise.all([
+                Git.getPullRequest(owner, repo, prNum),
+                Git.getPullRequestFiles(owner, repo, prNum).catch(() => []),
+                Git.getPullRequestComments(owner, repo, prNum).catch(() => [])
+            ]);
+
+            // Fetch CI status for head branch
+            let ci = { state: 'unknown', statuses: [] };
+            try {
+                ci = await Git.getCommitStatus(owner, repo, pr.head);
+            } catch { /* no CI */ }
+
+            // Truncate patches if total is too large (keep it under ~8K chars for tool results)
+            let totalPatchLen = 0;
+            const truncatedFiles = files.map(f => {
+                const patch = f.patch || '';
+                totalPatchLen += patch.length;
+                if (totalPatchLen > 8000) {
+                    return { ...f, patch: `[truncated — ${patch.length} chars, ${f.additions}+ ${f.deletions}-]` };
+                }
+                return f;
+            });
+
+            return {
+                pr: {
+                    number: pr.number,
+                    title: pr.title,
+                    body: pr.body,
+                    state: pr.state,
+                    merged: pr.merged,
+                    head: pr.head,
+                    base: pr.base,
+                    mergeable: pr.mergeable,
+                    author: pr.user,
+                    additions: pr.additions,
+                    deletions: pr.deletions,
+                    changed_files: pr.changed_files,
+                    url: pr.url
+                },
+                ci: {
+                    state: ci.state,
+                    checks: ci.statuses.map(s => ({
+                        name: s.context,
+                        state: s.state,
+                        description: s.description
+                    }))
+                },
+                files: truncatedFiles,
+                comments: comments.map(c => ({
+                    user: c.user,
+                    body: c.body,
+                    type: c.type,
+                    path: c.path || null,
+                    line: c.line || null,
+                    date: c.createdAt
+                }))
+            };
+        } catch (error) {
+            if (error.status === 404) {
+                return { error: `Pull request #${prNum} not found. Use list_pull_requests to see available PRs.` };
+            }
+            return { error: `Failed to read PR #${prNum}: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'read_pull_request',
+            description: 'Read full details of a pull request including: description, changed files with diffs, CI/CD status, and review comments. Use this to review code changes, check CI failures, or understand what a PR does.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    number: {
+                        type: 'integer',
+                        description: 'PR number'
+                    }
+                },
+                required: ['number']
+            }
+        },
+        roles: 'all'
+    });
+
+    // ========================================
+    // add_pr_review
+    // ========================================
+    registry.register('add_pr_review', async ({ number, body }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const prNum = parseInt(number);
+        if (isNaN(prNum)) {
+            return { error: 'PR number must be an integer' };
+        }
+
+        try {
+            await Git.addPullRequestComment(owner, repo, prNum, body);
+            EventBus.emit('prs:refresh');
+            return {
+                success: true,
+                message: `Posted review comment on PR #${prNum}`
+            };
+        } catch (error) {
+            return { error: `Failed to comment on PR #${prNum}: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'add_pr_review',
+            description: 'Post a review comment on a pull request. Use this to provide code review feedback, approve changes, or request modifications. The comment is posted as a general PR comment (not line-level).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    number: {
+                        type: 'integer',
+                        description: 'PR number'
+                    },
+                    body: {
+                        type: 'string',
+                        description: 'Review comment body (markdown supported). Include specific file references, line numbers, and actionable feedback.'
+                    }
+                },
+                required: ['number', 'body']
+            }
+        },
+        roles: ['reviewer', 'coder', 'pm']
+    });
+
+    // ========================================
+    // get_ci_status
+    // ========================================
+    registry.register('get_ci_status', async ({ ref }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = ref || State.currentBranch;
+
+        try {
+            const status = await Git.getCommitStatus(owner, repo, branch);
+            return {
+                ref: branch,
+                state: status.state,
+                total_checks: status.total,
+                checks: status.statuses.map(s => ({
+                    name: s.context,
+                    state: s.state,
+                    description: s.description,
+                    url: s.url
+                }))
+            };
+        } catch (error) {
+            return { error: `Failed to get CI status for '${branch}': ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_ci_status',
+            description: 'Get CI/CD pipeline status for a branch or commit. Shows pass/fail status for each check. Defaults to current branch if no ref specified.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    ref: {
+                        type: 'string',
+                        description: 'Branch name or commit SHA (default: current branch)'
                     }
                 },
                 required: []
