@@ -58,6 +58,7 @@ export const ToolRegistry = {
         
         // Store the normalized roles array in the definition for filtering
         const enrichedDefinition = {
+            type: 'function',  // Ensure always present
             ...definition,
             _registeredRoles: toolRoles
         };
