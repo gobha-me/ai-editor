@@ -13,8 +13,7 @@ import {
     finalizeStreamingMessage,
     cleanupStreamingMessage,
     addToolCallMessage,
-    formatMessageContent,
-    escapeHtml
+    formatMessageContent
 } from './messages.js';
 import { 
     getPendingEdit, 
