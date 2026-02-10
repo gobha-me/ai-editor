@@ -945,7 +945,7 @@ function formatDiffForDisplay(diff) {
 
 function isTextFile(filename) {
     const textExtensions = [
-        'txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'toml', 'xml',
+        'txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'toml', 'xml', 'svg',
         'html', 'htm', 'css', 'scss', 'less', 'sass',
         'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
         'py', 'pyw', 'pyi',
