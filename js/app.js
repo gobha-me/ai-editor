@@ -67,6 +67,11 @@ import {
     fetchProviderBalance
 } from './model-manager.js';
 import { initPanelResize } from './resize-manager.js';
+import { 
+    openZipUpload, closeZipUpload, 
+    handleZipFileSelect, zipToggleFile, zipSelectAll,
+    uploadExtractedFiles, initZipDragDrop
+} from './zip-upload.js';
 
 // Import tool modules (loaded before chat.js to ensure registry is ready)
 import './tools/registry.js';
@@ -151,6 +156,14 @@ window.revertCurrentFile = revertCurrentFile;
 window.closeRevertModal = closeRevertModal;
 window.revertAllFiles = revertAllFiles;
 window.revertOnlyCurrentFile = revertOnlyCurrentFile;
+
+// Zip upload functions
+window.openZipUpload = openZipUpload;
+window.closeZipUpload = closeZipUpload;
+window.handleZipFileSelect = handleZipFileSelect;
+window.zipToggleFile = zipToggleFile;
+window.zipSelectAll = zipSelectAll;
+window.uploadExtractedFiles = uploadExtractedFiles;
 
 // Draft management functions
 window.clearAllDrafts = clearAllDrafts;
@@ -514,6 +527,7 @@ async function init() {
     // Initialize quick open and search panel (DOM is ready after buildAppLayout)
     initQuickOpen();
     initSearchPanel();
+    initZipDragDrop();
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);
 }

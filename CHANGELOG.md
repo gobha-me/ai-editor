@@ -2,6 +2,45 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.2] - 2025-02-10
+
+### Added
+
+- **Zip Upload**: Upload entire zip files to the repository from the sidebar.
+  - 📦 button in Files header opens the upload modal
+  - Drag-and-drop or click to select a `.zip` file
+  - JSZip extracts in-browser — no backend needed
+  - File preview with checkboxes for selective upload
+  - Auto-strips common single-directory prefix (e.g., `project-v1/`)
+  - Detects existing files via SHA lookup for create vs. update
+  - Target directory field for uploading into subdirectories
+  - Progress bar with per-file status tracking
+  - Binary files detected and excluded by default
+  - Select all / Select none controls
+  - File tree auto-refreshes on completion
+
+### Changed
+
+- **Vendor bundle**: Added JSZip 3.10.1 (~25KB minified) with CDN fallback
+  for air-gapped deployments.
+
+## [0.8.1-2] - 2025-02-10
+
+### Fixed
+
+- **Import error**: `handlers.js` imported `escapeHtml` from `messages.js`
+  where it was no longer exported (moved to `utils/html.js` in 0.8.1).
+  Removed the unused import.
+
+## [0.8.1-1] - 2025-02-10
+
+### Fixed
+
+- **Dockerfile build failure**: Inline heredoc (`<< 'NGINX'`) requires BuildKit
+  `dockerfile:1.4+` syntax, which Gitea Actions runners don't support by default.
+  Extracted nginx config to standalone `nginx.conf` file and use `COPY` instead.
+- Clean up `nginx.conf` from served files in final image.
+
 ## [0.8.1] - 2025-02-10
 
 ### Security

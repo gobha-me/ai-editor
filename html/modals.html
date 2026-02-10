@@ -285,3 +285,62 @@
         </div>
     </div>
 </div>
+
+<!-- Zip Upload Modal -->
+<div class="modal-overlay" id="zipUploadModal">
+    <div class="modal" style="max-width: 650px;">
+        <div class="modal-header">
+            <h2>📦 Upload Zip</h2>
+            <button class="modal-close" onclick="window.closeZipUpload()">×</button>
+        </div>
+        <div class="modal-body">
+            <!-- Drop Zone -->
+            <div class="zip-drop-zone" id="zipDropZone">
+                <div class="zip-drop-icon">📦</div>
+                <div class="zip-drop-text">Drop a .zip file here</div>
+                <div class="zip-drop-hint">or click to browse</div>
+                <input type="file" id="zipFileInput" accept=".zip"
+                       onchange="window.handleZipFileSelect(event)" hidden>
+            </div>
+
+            <!-- File Preview (hidden until zip extracted) -->
+            <div id="zipFilePreview" style="display: none;">
+                <!-- Stats -->
+                <div class="zip-stats" id="zipFileStats"></div>
+                
+                <!-- Select all / none -->
+                <div class="zip-select-controls">
+                    <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
+                </div>
+
+                <!-- File List -->
+                <div class="zip-file-list" id="zipFileList"></div>
+
+                <!-- Target Directory -->
+                <div class="zip-field">
+                    <label for="zipTargetDir">Target directory <span class="zip-field-hint">(leave empty for repo root)</span></label>
+                    <input type="text" id="zipTargetDir" placeholder="e.g. src/components" spellcheck="false">
+                </div>
+
+                <!-- Commit Message -->
+                <div class="zip-field">
+                    <label for="zipCommitMessage">Commit message</label>
+                    <input type="text" id="zipCommitMessage" placeholder="Upload files from zip" spellcheck="false">
+                </div>
+            </div>
+
+            <!-- Progress Bar (hidden until upload starts) -->
+            <div class="zip-progress" id="zipProgress" style="display: none;">
+                <div class="zip-progress-bar">
+                    <div class="zip-progress-fill" id="zipProgressFill"></div>
+                </div>
+                <div class="zip-progress-text" id="zipProgressText"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
+            <button class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">📤 Upload</button>
+        </div>
+    </div>
+</div>

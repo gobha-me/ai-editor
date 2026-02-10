@@ -33,12 +33,15 @@ RUN npm install --ignore-scripts \
 RUN wget -q -O marked.min.js \
         "https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js" \
     && wget -q -O purify.min.js \
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js"
+        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" \
+    && wget -q -O jszip.min.js \
+        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
 
 # Verify downloads aren't empty
 RUN test -s codemirror-bundle.js \
     && test -s marked.min.js \
     && test -s purify.min.js \
+    && test -s jszip.min.js \
     && echo "All vendor files built successfully" \
     || (echo "ERROR: Vendor build produced empty files" && exit 1)
 
@@ -57,6 +60,7 @@ FROM nginx:1-alpine
 COPY --from=vendor-build /build/codemirror-bundle.js /tmp/vendor/
 COPY --from=vendor-build /build/marked.min.js        /tmp/vendor/
 COPY --from=vendor-build /build/purify.min.js         /tmp/vendor/
+COPY --from=vendor-build /build/jszip.min.js          /tmp/vendor/
 
 # Copy application source
 COPY . /usr/share/nginx/html/
@@ -65,6 +69,7 @@ COPY . /usr/share/nginx/html/
 COPY --from=vendor-build /build/codemirror-bundle.js /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/marked.min.js        /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/purify.min.js         /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/jszip.min.js          /usr/share/nginx/html/vendor/
 
 # Remove build-only files from final image
 RUN rm -rf /usr/share/nginx/html/vendor/node_modules \

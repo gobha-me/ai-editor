@@ -588,3 +588,184 @@
         flex-wrap: wrap;
     }
 }
+
+/* ============================================
+   ZIP UPLOAD MODAL
+   ============================================ */
+
+.zip-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1rem;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.zip-drop-zone:hover,
+.zip-drop-zone.drag-over {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.zip-drop-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.zip-drop-text {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.zip-drop-hint {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.zip-loading {
+    font-size: var(--font-base);
+    color: var(--text-secondary);
+    padding: 1rem;
+}
+
+.zip-stats {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.zip-select-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.zip-select-controls .btn-sm {
+    font-size: var(--font-sm);
+    padding: 2px 8px;
+}
+
+.zip-file-list {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+}
+
+.zip-file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 4px 8px;
+    font-size: var(--font-sm);
+    cursor: pointer;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.zip-file-item:hover {
+    background: var(--bg-secondary);
+}
+
+.zip-file-item:last-child {
+    border-bottom: none;
+}
+
+.zip-file-binary {
+    opacity: 0.5;
+}
+
+.zip-file-icon {
+    flex-shrink: 0;
+}
+
+.zip-file-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.zip-file-size {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.zip-file-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.zip-field {
+    margin-bottom: 0.75rem;
+}
+
+.zip-field label {
+    display: block;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.zip-field-hint {
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.zip-field input[type="text"] {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    font-family: inherit;
+}
+
+.zip-field input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.zip-progress {
+    margin-top: 0.75rem;
+}
+
+.zip-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.zip-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.2s;
+}
+
+.zip-progress-text {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+    text-align: center;
+}
