@@ -7,6 +7,7 @@ import { State, EventBus, Storage } from '../core.js';
 import { stripThinkBlocks } from '../llm.js';
 import { getChatContainer } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
+import { escapeHtml } from '../utils/html.js';
 
 /**
  * Add a message to chat history and render it
@@ -544,13 +545,6 @@ export function formatMessageContent(content) {
 /**
  * Escape HTML special characters
  */
-export function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
-}
-
 /**
 /**
  * Scroll chat container to bottom with smart behavior
@@ -637,18 +631,12 @@ export function renderSummaryNotification(info) {
             <span class="summary-chevron">▸</span>
         </div>
         <div class="summary-detail" id="${id}">
-            <div class="summary-text">${_escapeHtml(info.summary)}</div>
+            <div class="summary-text">${escapeHtml(info.summary)}</div>
         </div>
     `;
 
     chatContainer.appendChild(el);
     scrollToBottom();
-}
-
-function _escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 /**
@@ -696,7 +684,7 @@ export function editMessage(buttonEl) {
     // Replace content with editable textarea
     contentEl.classList.add('editing');
     contentEl.innerHTML = `
-        <textarea class="edit-message-input">${_escapeHtml(originalText)}</textarea>
+        <textarea class="edit-message-input">${escapeHtml(originalText)}</textarea>
         <div class="edit-message-actions">
             <button class="btn-action btn-edit-save" onclick="window.Chat.commitEdit(this)">💾 Send</button>
             <button class="btn-action btn-edit-cancel" onclick="window.Chat.cancelEdit(this)">✖ Cancel</button>

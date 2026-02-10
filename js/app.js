@@ -16,7 +16,7 @@ import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-pan
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
 import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile } from './file-tree.js';
-import { togglePreviewPane, toggleDiffPane, closeSecondaryPane, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
+import { togglePreviewPane, toggleDiffPane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
 import { 
     toggleSidebar, 
     toggleChat, 
@@ -127,6 +127,7 @@ window.onTreeItemClick = onTreeItemClick;
 window.deleteFile = deleteFile;
 
 window.closeSecondaryPane = closeSecondaryPane;
+window.toggleSecondaryFullscreen = toggleSecondaryFullscreen;
 
 window.showToast = showToast;
 window.openCommitModal = openCommitModal;

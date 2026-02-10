@@ -9,6 +9,8 @@ const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 500;
 const CHAT_MIN = 250;
 const CHAT_MAX = 700;
+const PREVIEW_MIN_PCT = 20;  // Minimum preview width as % of split
+const PREVIEW_MAX_PCT = 75;  // Maximum preview width as % of split
 
 /**
  * Initialize drag-to-resize for sidebar and chat panel.
@@ -67,6 +69,37 @@ export function initPanelResize() {
             Storage.set('chatWidth', Math.round(width));
         }
     });
+
+    // --- Preview/secondary pane resize ---
+    const previewHandle = document.getElementById('resizeHandlePreview');
+    const secondaryPane = document.getElementById('secondaryPane');
+    const editorSplit = document.getElementById('editorSplit');
+    
+    if (previewHandle && secondaryPane && editorSplit) {
+        setupDragHandle(previewHandle, {
+            onDrag(e) {
+                const splitRect = editorSplit.getBoundingClientRect();
+                const splitWidth = splitRect.width;
+                // Preview is on the right, so its width = splitRight - mouseX
+                const newWidth = splitRect.right - e.clientX;
+                const pct = (newWidth / splitWidth) * 100;
+                const clampedPct = Math.min(PREVIEW_MAX_PCT, Math.max(PREVIEW_MIN_PCT, pct));
+                secondaryPane.style.width = clampedPct + '%';
+            },
+            onEnd() {
+                const splitWidth = editorSplit.getBoundingClientRect().width;
+                const paneWidth = secondaryPane.getBoundingClientRect().width;
+                const pct = Math.round((paneWidth / splitWidth) * 100);
+                Storage.set('previewWidthPct', pct);
+            }
+        });
+
+        // Restore saved preview width
+        const savedPct = Storage.get('previewWidthPct');
+        if (savedPct) {
+            secondaryPane.style.width = savedPct + '%';
+        }
+    }
 }
 
 /**

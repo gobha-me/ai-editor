@@ -4,6 +4,7 @@
 
 import { State, EventBus } from './core.js';
 import { createEditor } from './editor.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 // Switch to a specific tab
 export async function switchToTab(index) {
@@ -132,8 +133,8 @@ export function renderEditorTabs() {
             <div class="editor-tab ${activeClass} ${previewClass}" 
                  onclick="window.switchToTab(${index})"
                  ondblclick="window.pinTab(${index})"
-                 title="${tab.path}">
-                <span class="tab-name">${fileName}</span>
+                 title="${escapeAttr(tab.path)}">
+                <span class="tab-name">${escapeHtml(fileName)}</span>
                 <span class="modified" style="display: ${tab.dirty ? 'inline' : 'none'}">●</span>
                 <button class="close" onclick="window.closeTab(${index}, event)" title="Close">×</button>
             </div>

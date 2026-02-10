@@ -2,6 +2,8 @@
 // ERROR LOGGER - Captures all errors
 // ============================================
 
+import { escapeHtml } from './utils/html.js';
+
 export const ErrorLogger = {
     logs: [],
     maxLogs: 500,
@@ -152,19 +154,13 @@ export const ErrorLogger = {
                     <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem;">
                         <span style="color: ${color}; font-weight: bold;">[${entry.type}]</span>
                         <span style="color: var(--text-muted);">${time}</span>
-                        ${entry.file ? `<span style="color: var(--text-muted);">${entry.file}:${entry.line}:${entry.col}</span>` : ''}
+                        ${entry.file ? `<span style="color: var(--text-muted);">${escapeHtml(entry.file)}:${escapeHtml(entry.line)}:${escapeHtml(entry.col)}</span>` : ''}
                     </div>
-                    <div style="color: var(--text-primary); margin-bottom: 0.5rem; white-space: pre-wrap;">${this.escapeHtml(entry.message)}</div>
-                    ${entry.stack ? `<details style="margin-top: 0.5rem;"><summary style="cursor: pointer; color: var(--text-muted);">Stack Trace</summary><pre style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); overflow-x: auto; font-size: 11px;">${this.escapeHtml(entry.stack)}</pre></details>` : ''}
+                    <div style="color: var(--text-primary); margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(entry.message)}</div>
+                    ${entry.stack ? `<details style="margin-top: 0.5rem;"><summary style="cursor: pointer; color: var(--text-muted);">Stack Trace</summary><pre style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); overflow-x: auto; font-size: 11px;">${escapeHtml(entry.stack)}</pre></details>` : ''}
                 </div>
             `;
         }).reverse().join('');
-    },
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     },
 
     export() {

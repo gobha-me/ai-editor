@@ -3,6 +3,7 @@
 // ============================================
 
 import { State } from './core.js';
+import { escapeHtml } from './utils/html.js';
 
 let selectedIndex = 0;
 let filteredFiles = [];
@@ -51,10 +52,6 @@ function highlightMatch(text, query) {
         }
     }
     return result;
-}
-
-function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function getFileIcon(path) {

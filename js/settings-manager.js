@@ -9,6 +9,7 @@ import { ContextManager } from './context-manager.js';
 import { EmbeddingsClient } from './embeddings-client.js';
 import { injectTemplate } from './template-loader.js';
 import { GitProviderRegistry } from './git-providers/index.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 export async function openSettings() {
     // Load settings tabs template if not already loaded
@@ -41,7 +42,7 @@ function populateSettingsForm() {
     // Provider dropdown
     const providerSelect = document.getElementById('settingApiProvider');
     providerSelect.innerHTML = Providers.list().map(p =>
-        `<option value="${p.id}" ${p.id === State.settings.apiProvider ? 'selected' : ''}>${p.name}</option>`
+        `<option value="${escapeAttr(p.id)}" ${p.id === State.settings.apiProvider ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
     ).join('');
     updateProviderDescription();
 
@@ -657,25 +658,19 @@ function renderConnectionsList() {
             : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
 
         return `
-            <div class="connection-card${disabledClass}" data-conn-id="${conn.id}">
+            <div class="connection-card${disabledClass}" data-conn-id="${escapeAttr(conn.id)}">
                 <div class="connection-card-icon">${icon}</div>
                 <div class="connection-card-info">
                     <div class="connection-card-label">${statusDot} ${escapeHtml(conn.label)}</div>
-                    <div class="connection-card-meta">${providerName} · ${escapeHtml(conn.url || '—')}</div>
+                    <div class="connection-card-meta">${escapeHtml(providerName)} · ${escapeHtml(conn.url || '—')}</div>
                 </div>
                 <div class="connection-card-actions">
-                    <button onclick="window._editConnection('${conn.id}')" title="Edit">✏️</button>
-                    <button class="danger" onclick="window._removeConnection('${conn.id}')" title="Remove">🗑️</button>
+                    <button onclick="window._editConnection('${escapeAttr(conn.id)}')" title="Edit">✏️</button>
+                    <button class="danger" onclick="window._removeConnection('${escapeAttr(conn.id)}')" title="Remove">🗑️</button>
                 </div>
             </div>
         `;
     }).join('');
-}
-
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
 }
 
 /**
@@ -693,7 +688,7 @@ function showConnectionEditor(connId) {
     const providerSelect = document.getElementById('connEditProvider');
     const providers = GitProviderRegistry.list();
     providerSelect.innerHTML = providers.map(p =>
-        `<option value="${p.id}">${p.icon} ${p.name}</option>`
+        `<option value="${escapeAttr(p.id)}">${p.icon} ${escapeHtml(p.name)}</option>`
     ).join('');
 
     if (connId) {

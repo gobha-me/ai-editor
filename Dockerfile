@@ -49,24 +49,66 @@ RUN test -s codemirror-bundle.js \
 #         "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"
 
 # --------------------------------------------------
-# Stage 2: Production image
+# Stage 2: Production image (nginx)
 # --------------------------------------------------
-FROM python:3.13-slim
+FROM nginx:1-alpine
 
-WORKDIR /app
+# Security headers and gzip configuration
+COPY --from=vendor-build /build/codemirror-bundle.js /tmp/vendor/
+COPY --from=vendor-build /build/marked.min.js        /tmp/vendor/
+COPY --from=vendor-build /build/purify.min.js         /tmp/vendor/
 
 # Copy application source
-COPY . .
+COPY . /usr/share/nginx/html/
 
 # Copy vendor bundles into the served directory
-#UN mkdir -p /app/editor/vendor
-COPY --from=vendor-build /build/codemirror-bundle.js /app/vendor/
-COPY --from=vendor-build /build/marked.min.js        /app/vendor/
-COPY --from=vendor-build /build/purify.min.js         /app/vendor/
+COPY --from=vendor-build /build/codemirror-bundle.js /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/marked.min.js        /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/purify.min.js         /usr/share/nginx/html/vendor/
 
 # Remove build-only files from final image
-# RUN rm -rf /app/vendor/node_modules /app/vendor/package-lock.json
+RUN rm -rf /usr/share/nginx/html/vendor/node_modules \
+           /usr/share/nginx/html/vendor/package-lock.json \
+           /usr/share/nginx/html/vendor/package.json \
+           /usr/share/nginx/html/vendor/codemirror-entry.mjs \
+           /usr/share/nginx/html/Dockerfile \
+           /usr/share/nginx/html/deployment.yaml \
+           /usr/share/nginx/html/dockerignore
+
+# Nginx configuration with security headers and gzip
+RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 8000;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 256;
+    gzip_vary on;
+
+    # Cache static assets (1 week for vendor, no-cache for app files)
+    location /vendor/ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        expires -1;
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+}
+NGINX
 
 EXPOSE 8000
 
-CMD ["python3", "-m", "http.server", "8000"]
+CMD ["nginx", "-g", "daemon off;"]

@@ -29,11 +29,17 @@
             </div>
         </div>
 
+        <!-- Resize Handle (Editor ↔ Preview/Diff) -->
+        <div class="resize-handle resize-handle-preview" id="resizeHandlePreview" style="display: none;"></div>
+
         <!-- Secondary Pane (Preview / Diff) -->
         <div class="secondary-pane" id="secondaryPane" style="display: none;">
             <div class="secondary-pane-header">
                 <span id="secondaryPaneTitle">Preview</span>
-                <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close">✕</button>
+                <div class="secondary-pane-actions">
+                    <button class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen">⛶</button>
+                    <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close">✕</button>
+                </div>
             </div>
             <div class="secondary-pane-content" id="secondaryPaneContent">
             </div>

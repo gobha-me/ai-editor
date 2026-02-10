@@ -4,6 +4,7 @@
  */
 
 import { State, EventBus } from './core.js';
+import { escapeHtml } from './utils/html.js';
 
 // ============================================
 // DIFF VIEW STATE
@@ -609,13 +610,6 @@ export function toggleScrollSync() {
 // ============================================
 // UTILITIES
 // ============================================
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 // ============================================
 // KEYBOARD SHORTCUTS

@@ -4,9 +4,11 @@
 
 import { State, EventBus } from './core.js';
 import { renderUnifiedView, renderSideBySideView, getViewMode, initDiffKeyboardShortcuts, initScrollSync, cleanupScrollSync } from './diff-viewer.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 let secondaryPaneMode = null; // 'preview' | 'diff' | null
 let diffViewerInitialized = false;
+let isFullscreen = false;
 
 export function isPreviewable(path) {
     if (!path) return false;
@@ -35,9 +37,13 @@ export function togglePreviewPane() {
     secondaryPaneMode = 'preview';
     document.getElementById('secondaryPane').style.display = 'flex';
     document.getElementById('secondaryPaneTitle').textContent = '👁 Preview';
+    document.getElementById('resizeHandlePreview').style.display = '';
     const split = document.getElementById('editorSplit');
     split.classList.remove('diff-overlay');  // clean up if switching from diff
+    split.classList.remove('secondary-fullscreen');
     split.classList.add('split-active');
+    isFullscreen = false;
+    _updateFullscreenButton();
     renderPreview();
     updateToolbarButtons();
 }
@@ -47,11 +53,15 @@ export function toggleDiffPane() {
     secondaryPaneMode = 'diff';
     document.getElementById('secondaryPane').style.display = 'flex';
     document.getElementById('secondaryPaneTitle').textContent = '± Diff';
+    document.getElementById('resizeHandlePreview').style.display = 'none';
     
     // Diff overlays the editor (full width, editor hidden)
     const split = document.getElementById('editorSplit');
     split.classList.remove('split-active');
+    split.classList.remove('secondary-fullscreen');
     split.classList.add('diff-overlay');
+    isFullscreen = false;
+    _updateFullscreenButton();
     
     // Initialize diff keyboard shortcuts once
     if (!diffViewerInitialized) {
@@ -68,11 +78,14 @@ export function closeSecondaryPane() {
     cleanupScrollSync();
     
     secondaryPaneMode = null;
+    isFullscreen = false;
     document.getElementById('secondaryPane').style.display = 'none';
+    document.getElementById('resizeHandlePreview').style.display = 'none';
     document.getElementById('secondaryPaneContent').innerHTML = '';
     const split = document.getElementById('editorSplit');
     split.classList.remove('split-active');
     split.classList.remove('diff-overlay');
+    split.classList.remove('secondary-fullscreen');
     updateToolbarButtons();
 }
 
@@ -87,9 +100,16 @@ function renderPreview() {
     } else if (ext === 'md' || ext === 'markdown') {
         pane.innerHTML = `<div class="preview-markdown">${renderMarkdown(content)}</div>`;
     } else if (ext === 'svg') {
-        pane.innerHTML = `<div class="preview-svg">${content}</div>`;
+        // SVG can contain <script> tags and event handlers — sanitize or sandbox
+        if (typeof DOMPurify !== 'undefined') {
+            const cleanSvg = DOMPurify.sanitize(content, { USE_PROFILES: { svg: true, svgFilters: true } });
+            pane.innerHTML = `<div class="preview-svg">${cleanSvg}</div>`;
+        } else {
+            // Fallback: render in sandboxed iframe (no script execution)
+            pane.innerHTML = `<iframe class="preview-iframe" sandbox="" srcdoc="${escapeAttr(content)}"></iframe>`;
+        }
     } else {
-        pane.innerHTML = `<div class="preview-unsupported">Preview not available for .${ext} files</div>`;
+        pane.innerHTML = `<div class="preview-unsupported">Preview not available for .${escapeHtml(ext)} files</div>`;
     }
 }
 
@@ -123,16 +143,6 @@ function renderDiff() {
 
 // Listen for view mode changes
 window.addEventListener('diff:refresh', renderDiff);
-
-function escapeAttr(text) {
-    return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 function renderMarkdown(md) {
     // Use marked.js if available (loaded via CDN), fall back to basic regex
@@ -210,4 +220,36 @@ export function initSecondaryPaneAutoRefresh() {
 
 export function getSecondaryPaneMode() {
     return secondaryPaneMode;
+}
+
+/**
+ * Toggle fullscreen mode on the secondary pane.
+ * In fullscreen, the editor is hidden and the preview/diff fills the split.
+ */
+export function toggleSecondaryFullscreen() {
+    if (!secondaryPaneMode) return;
+    
+    const split = document.getElementById('editorSplit');
+    isFullscreen = !isFullscreen;
+    
+    if (isFullscreen) {
+        split.classList.add('secondary-fullscreen');
+        document.getElementById('resizeHandlePreview').style.display = 'none';
+    } else {
+        split.classList.remove('secondary-fullscreen');
+        // Show resize handle again for preview mode (diff is always overlay)
+        if (secondaryPaneMode === 'preview') {
+            document.getElementById('resizeHandlePreview').style.display = '';
+        }
+    }
+    
+    _updateFullscreenButton();
+}
+
+function _updateFullscreenButton() {
+    const btn = document.getElementById('btnSecondaryFullscreen');
+    if (!btn) return;
+    btn.textContent = isFullscreen ? '⛶' : '⛶';
+    btn.title = isFullscreen ? 'Exit Fullscreen' : 'Toggle Fullscreen';
+    btn.classList.toggle('active', isFullscreen);
 }

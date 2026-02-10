@@ -7,6 +7,7 @@ import { getFileIcon, isTextFile } from './editor.js';
 import { loadFile, Git } from './git.js';
 import { createEditor } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 // File operation lock to prevent concurrent loads (FIX #23)
 const FileOperationLock = {
@@ -88,25 +89,25 @@ function renderTreeNodes(nodes, depth) {
             const chevron = isDir ? '<span class="chevron">▶</span>' : '<span class="chevron-spacer"></span>';
             
             // Use mousedown handler with click counting for proper single/double click detection
-            const clickHandler = `window.handleTreeClick(event, '${node.path}', '${node.type}')`;
+            const clickHandler = `window.handleTreeClick(event, '${escapeAttr(node.path)}', '${escapeAttr(node.type)}')`;
             
             let html = `
                 <div class="tree-item ${isDir ? 'dir' : ''}" 
                      data-depth="${depth}" 
-                     data-path="${node.path}"
-                     data-type="${node.type}"
+                     data-path="${escapeAttr(node.path)}"
+                     data-type="${escapeAttr(node.type)}"
                      onclick="${clickHandler}">
                     ${chevron}
                     <span class="icon">${icon}</span>
-                    <span class="name">${node.name}</span>
+                    <span class="name">${escapeHtml(node.name)}</span>
                     <div class="actions">
-                        ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${node.path}')" title="Delete">🗑</button>` : ''}
+                        ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete">🗑</button>` : ''}
                     </div>
                 </div>
             `;
 
             if (isDir && hasChildren) {
-                html += `<div class="tree-children collapsed" data-parent="${node.path}">${renderTreeNodes(node.children, depth + 1)}</div>`;
+                html += `<div class="tree-children collapsed" data-parent="${escapeAttr(node.path)}">${renderTreeNodes(node.children, depth + 1)}</div>`;
             }
 
             return html;

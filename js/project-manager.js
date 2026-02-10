@@ -5,6 +5,7 @@
 import { State, EventBus } from './core.js';
 import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 export async function refreshProjects() {
     try {
@@ -226,9 +227,9 @@ export function renderWorkflows() {
     };
 
     container.innerHTML = State.workflowRuns.slice(0, 5).map(run => `
-        <div class="issue-item" onclick="window.open('${run.url}', '_blank')">
-            <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${run.name}</div>
-            <div class="issue-title" style="font-size: var(--font-sm); color: var(--text-muted);">${run.branch} · ${run.event}</div>
+        <div class="issue-item" onclick="window.open('${escapeAttr(run.url)}', '_blank')">
+            <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${escapeHtml(run.name)}</div>
+            <div class="issue-title" style="font-size: var(--font-sm); color: var(--text-muted);">${escapeHtml(run.branch)} · ${escapeHtml(run.event)}</div>
         </div>
     `).join('');
 }
@@ -239,12 +240,6 @@ export async function refreshWorkflows() {
     const { owner, repo } = State.currentProject;
     State.workflowRuns = await Git.listWorkflowRuns(owner, repo);
     renderWorkflows();
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 // ============================================
@@ -359,18 +354,18 @@ export async function openIssueDetailModal(issueNumber) {
 
         if (isOnBranch) {
             branchInfo.style.display = 'block';
-            branchInfo.innerHTML = `🔀 Currently on branch: <strong>${branchName}</strong>`;
+            branchInfo.innerHTML = `🔀 Currently on branch: <strong>${escapeHtml(branchName)}</strong>`;
             document.getElementById('btnIssueStartWork').textContent = '✅ Already Active';
             document.getElementById('btnIssueStartWork').disabled = true;
         } else if (existingBranch) {
             branchInfo.style.display = 'block';
-            branchInfo.innerHTML = `🔀 Branch exists: <strong>${branchName}</strong> — Start Work will switch to it`;
+            branchInfo.innerHTML = `🔀 Branch exists: <strong>${escapeHtml(branchName)}</strong> — Start Work will switch to it`;
             document.getElementById('btnIssueStartWork').textContent = '🔀 Switch & Start';
             document.getElementById('btnIssueStartWork').disabled = false;
         } else {
             branchInfo.style.display = 'block';
             const baseBranch = State.currentProject.defaultBranch || 'main';
-            branchInfo.innerHTML = `🌱 Will create: <strong>${branchName}</strong> from <strong>${baseBranch}</strong>`;
+            branchInfo.innerHTML = `🌱 Will create: <strong>${escapeHtml(branchName)}</strong> from <strong>${escapeHtml(baseBranch)}</strong>`;
             document.getElementById('btnIssueStartWork').textContent = '🚀 Start Work';
             document.getElementById('btnIssueStartWork').disabled = false;
         }
@@ -429,7 +424,7 @@ export async function startWorkOnIssue(issue) {
         const branchSelect = document.getElementById('branchSelect');
         if (branchSelect) {
             branchSelect.innerHTML = State.branches.map(b =>
-                `<option value="${b.name}">${b.name}${b.protected ? ' 🔒' : ''}</option>`
+                `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
             ).join('');
             branchSelect.value = branchName;
         }

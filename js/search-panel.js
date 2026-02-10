@@ -10,6 +10,7 @@
 
 import { State, EventBus } from './core.js';
 import { SearchManager } from './managers/search-manager.js';
+import { escapeHtml as _escapeHtml } from './utils/html.js';
 
 // ============================================
 // DOM REFS (lazy — resolved after init)
@@ -277,10 +278,6 @@ function _showStatus(text) {
     const textEl = el.statusText();
     if (statusEl) statusEl.style.display = 'flex';
     if (textEl) textEl.textContent = text;
-}
-
-function _escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ============================================

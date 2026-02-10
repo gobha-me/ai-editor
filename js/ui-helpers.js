@@ -7,6 +7,7 @@ import { Git, batchSaveFiles } from './git.js';
 import { generateCommitMessage } from './llm.js';
 import { getFileIcon } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 
 export function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -170,9 +171,9 @@ export function openCommitModal() {
         const icon = getFileIcon(fileName);
         return `
             <label class="commit-file-item">
-                <input type="checkbox" checked data-path="${tab.path}">
+                <input type="checkbox" checked data-path="${escapeAttr(tab.path)}">
                 <span class="commit-file-icon">${icon}</span>
-                <span class="commit-file-path">${tab.path}</span>
+                <span class="commit-file-path">${escapeHtml(tab.path)}</span>
             </label>
         `;
     }).join('');
@@ -277,7 +278,7 @@ export async function commitAndPush() {
 export function openNewBranchModal() {
     const fromSelect = document.getElementById('newBranchFrom');
     fromSelect.innerHTML = State.branches.map(b => 
-        `<option value="${b.name}">${b.name}</option>`
+        `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}</option>`
     ).join('');
     document.getElementById('newBranchModal').classList.add('active');
 }
@@ -322,7 +323,7 @@ export async function createNewBranch() {
         
         const branchSelect = document.getElementById('branchSelect');
         branchSelect.innerHTML = State.branches.map(b => 
-            `<option value="${b.name}">${b.name}${b.protected ? ' 🔒' : ''}</option>`
+            `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
         ).join('');
         branchSelect.value = name;
 
@@ -501,7 +502,7 @@ function openRevertModal(dirtyTabs) {
         return `
             <div class="revert-file-item ${isCurrent ? 'current' : ''}">
                 <span class="revert-file-icon">${icon}</span>
-                <span class="revert-file-path">${tab.path}</span>
+                <span class="revert-file-path">${escapeHtml(tab.path)}</span>
                 ${isCurrent ? '<span class="revert-current-badge">● Current</span>' : ''}
             </div>
         `;

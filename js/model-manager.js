@@ -3,6 +3,7 @@
 // ============================================
 
 import { State, Storage, Roles, EventBus, ProviderRegistry } from './core.js';
+import { escapeHtml, escapeAttr } from './utils/html.js';
 import { LLM } from './llm.js';
 import { populateSettingsModelSelects } from './settings-manager.js';
 

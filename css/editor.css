@@ -253,6 +253,41 @@
     flex-shrink: 0;
 }
 
+.secondary-pane-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+/* Resize handle between editor and preview/diff pane */
+.resize-handle-preview {
+    width: 4px;
+    cursor: col-resize;
+    background: var(--border);
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+
+.resize-handle-preview:hover,
+.resize-handle-preview.dragging {
+    background: var(--accent);
+}
+
+/* Fullscreen mode: secondary pane fills entire editor-split */
+.editor-split.secondary-fullscreen .editor-container {
+    display: none;
+}
+
+.editor-split.secondary-fullscreen .resize-handle-preview {
+    display: none !important;
+}
+
+.editor-split.secondary-fullscreen .secondary-pane {
+    width: 100% !important;
+    max-width: 100%;
+    border-left: none;
+}
+
 .secondary-pane-content {
     flex: 1;
     overflow: auto;
