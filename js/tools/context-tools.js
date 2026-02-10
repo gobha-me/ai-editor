@@ -95,6 +95,7 @@ async function indexProject({ force }) {
 
 // Register tools
 ToolRegistry.register('find_relevant_files', findRelevantFiles, {
+    type: 'function',
     roles: ['full', 'coder', 'reviewer'], // All roles that read code
     function: {
         name: 'find_relevant_files',
@@ -118,6 +119,7 @@ ToolRegistry.register('find_relevant_files', findRelevantFiles, {
 });
 
 ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
+    type: 'function',
     roles: 'all',
     function: {
         name: 'get_embeddings_status',
@@ -130,6 +132,7 @@ ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
 });
 
 ToolRegistry.register('index_project', indexProject, {
+    type: 'function',
     roles: ['full', 'coder'],
     function: {
         name: 'index_project',
