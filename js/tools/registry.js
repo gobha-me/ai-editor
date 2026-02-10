@@ -78,9 +78,35 @@ export const ToolRegistry = {
     async execute(name, args) {
         const handler = this.handlers.get(name);
         if (!handler) {
-            throw new Error(`Unknown tool: ${name}`);
+            return { error: `Unknown tool: '${name}'. Use get_project_tree or list_issues to see what's available.` };
         }
-        return handler(args);
+        try {
+            const result = await handler(args);
+            // GUARANTEE: never return null/undefined/empty
+            if (result === null || result === undefined) {
+                return { error: `Tool '${name}' returned no result. This is a bug — please try a different approach.` };
+            }
+            return result;
+        } catch (error) {
+            // Known error types with recovery hints
+            if (error.status === 404) {
+                return { error: `Not found (404). ${args?.path ? `'${args.path}' does not exist.` : ''} Use get_project_tree to see available files.` };
+            }
+            if (error.status === 403) {
+                return { error: `Permission denied (403). Check API token permissions.` };
+            }
+            if (error.status === 409) {
+                return { error: `Conflict (409). The file may have been modified. Refresh and try again.` };
+            }
+            if (error.status === 422) {
+                return { error: `Validation error (422): ${error.message}. Check your parameters.` };
+            }
+            if (error.message?.includes('timeout')) {
+                return { error: `Tool '${name}' timed out. Try a smaller operation or retry.` };
+            }
+            // Unknown errors — stringify so the LLM always knows what happened
+            return { error: `Tool '${name}' failed: ${error.message || String(error)}` };
+        }
     },
     
     /**
