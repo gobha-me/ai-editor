@@ -250,6 +250,11 @@ const Git = {
         return provider.addPullRequestComment(connection, owner, repo, number, body);
     },
 
+    async mergePullRequest(owner, repo, number, opts = {}) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.mergePullRequest(connection, owner, repo, number, opts);
+    },
+
     // ========================================
     // CI/CD
     // ========================================

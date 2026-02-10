@@ -252,6 +252,19 @@ const BASE_GIT_PROVIDER = {
         return this.createIssueComment(connection, owner, repo, number, body);
     },
 
+    /**
+     * Merge a pull/merge request.
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @param {Object} opts - { mergeType: 'squash'|'merge'|'rebase', title, message, deleteBranch }
+     * @returns {Object} { merged, sha, message }
+     */
+    async mergePullRequest(connection, owner, repo, number, opts = {}) {
+        notSupported(this.name, 'mergePullRequest');
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

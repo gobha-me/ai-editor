@@ -634,6 +634,30 @@ const gitlabProvider = {
         );
     },
 
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+        const payload = {
+            should_remove_source_branch: deleteBranch
+        };
+        if (mergeType === 'squash') payload.squash = true;
+        if (title || message) {
+            payload.merge_commit_message = [title, message].filter(Boolean).join('\n\n');
+            if (mergeType === 'squash') {
+                payload.squash_commit_message = payload.merge_commit_message;
+            }
+        }
+
+        const result = await this.request(connection, 'PUT',
+            `/projects/${projectId(owner, repo)}/merge_requests/${number}/merge`, payload
+        );
+
+        EventBus.emit('git:prMerged', { connectionId: connection.id, owner, repo, number });
+        return {
+            merged: result.state === 'merged',
+            sha: result.merge_commit_sha || null,
+            message: `MR !${number} merged via ${mergeType}`
+        };
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

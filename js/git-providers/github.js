@@ -598,6 +598,51 @@ const githubProvider = {
     // CI/CD STATUS
     // ========================================
 
+    async addPullRequestComment(connection, owner, repo, number, body) {
+        const comment = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/issues/${number}/comments`,
+            { body }
+        );
+        return {
+            id: comment.id,
+            body: comment.body,
+            user: comment.user.login,
+            createdAt: comment.created_at
+        };
+    },
+
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+        const methodMap = { merge: 'merge', squash: 'squash', rebase: 'rebase' };
+        const payload = {
+            merge_method: methodMap[mergeType] || 'squash'
+        };
+        if (title) payload.commit_title = title;
+        if (message) payload.commit_message = message;
+
+        const result = await this.request(connection, 'PUT',
+            `/repos/${owner}/${repo}/pulls/${number}/merge`, payload
+        );
+
+        // Optionally delete branch after merge
+        if (deleteBranch) {
+            try {
+                const pr = await this.getPullRequest(connection, owner, repo, number);
+                if (pr.head) {
+                    await this.deleteBranch(connection, owner, repo, pr.head);
+                }
+            } catch (e) {
+                console.warn(`[GitHub] Could not delete branch after merge:`, e.message);
+            }
+        }
+
+        EventBus.emit('git:prMerged', { connectionId: connection.id, owner, repo, number });
+        return {
+            merged: result.merged ?? true,
+            sha: result.sha || null,
+            message: `PR #${number} merged via ${mergeType}`
+        };
+    },
+
     async getCommitStatus(connection, owner, repo, ref) {
         try {
             const status = await this.request(connection, 'GET',

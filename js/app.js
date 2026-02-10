@@ -54,6 +54,12 @@ import {
     initProjectListeners,
     openIssueDetailModal,
     closeIssueDetailModal,
+    openCreatePRModal,
+    closeCreatePRModal,
+    submitCreatePR,
+    openPRDetailModal,
+    closePRDetailModal,
+    submitMergePR,
     focusIssue,
     unfocusIssue,
     startWorkOnIssue
@@ -156,6 +162,12 @@ window.openIssueDetailModal = openIssueDetailModal;
 window.focusIssue = focusIssue;
 window.unfocusIssue = unfocusIssue;
 window.closeIssueDetailModal = closeIssueDetailModal;
+window.openCreatePRModal = openCreatePRModal;
+window.closeCreatePRModal = closeCreatePRModal;
+window.submitCreatePR = submitCreatePR;
+window.openPRDetailModal = openPRDetailModal;
+window.closePRDetailModal = closePRDetailModal;
+window.submitMergePR = submitMergePR;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;

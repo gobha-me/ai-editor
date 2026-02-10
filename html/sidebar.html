@@ -57,7 +57,10 @@
     <div class="sidebar-section sidebar-section-bottom">
         <div class="sidebar-header sidebar-header-collapsible" data-collapse="prsPanelBody">
             <span>▾ Pull Requests</span>
-            <button id="btnRefreshPRs" title="Refresh" onclick="event.stopPropagation()">🔄</button>
+            <div style="display: flex; gap: 2px;">
+                <button id="btnNewPR" title="Create Pull Request" onclick="event.stopPropagation(); window.openCreatePRModal()">➕</button>
+                <button id="btnRefreshPRs" title="Refresh" onclick="event.stopPropagation()">🔄</button>
+            </div>
         </div>
         <div class="sidebar-collapse-body" id="prsPanelBody">
             <div class="prs-panel" id="prsPanel">

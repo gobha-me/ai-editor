@@ -501,6 +501,42 @@ const giteaProvider = {
     // CI/CD (Gitea Actions)
     // ========================================
 
+    async addPullRequestComment(connection, owner, repo, number, body) {
+        // Gitea uses the issues API for general PR comments
+        const comment = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/issues/${number}/comments`,
+            { body }
+        );
+        return {
+            id: comment.id,
+            body: comment.body,
+            user: comment.user.login,
+            createdAt: comment.created_at
+        };
+    },
+
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+        // Gitea merge types: merge, rebase, rebase-merge, squash, manually-merged
+        const doMap = { merge: 'merge', squash: 'squash', rebase: 'rebase' };
+        const payload = {
+            Do: doMap[mergeType] || 'squash',
+            delete_branch_after_merge: deleteBranch
+        };
+        if (title) payload.MergeTitleField = title;
+        if (message) payload.MergeMessageField = message;
+
+        const result = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/pulls/${number}/merge`, payload
+        );
+
+        EventBus.emit('git:prMerged', { connectionId: connection.id, owner, repo, number });
+        return {
+            merged: true,
+            sha: result?.sha || null,
+            message: `PR #${number} merged via ${mergeType}`
+        };
+    },
+
     async listWorkflowRuns(connection, owner, repo) {
         try {
             const response = await this.request(connection, 'GET',

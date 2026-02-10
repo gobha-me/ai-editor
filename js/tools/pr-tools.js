@@ -274,6 +274,85 @@ export function registerPRTools(registry) {
     });
 
     // ========================================
+    // merge_pull_request
+    // ========================================
+    registry.register('merge_pull_request', async ({ number, merge_type = 'squash', title = '', message = '', delete_branch = false }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const prNum = parseInt(number);
+        if (isNaN(prNum)) {
+            return { error: 'PR number must be an integer' };
+        }
+
+        try {
+            // Verify PR is open and mergeable first
+            const pr = await Git.getPullRequest(owner, repo, prNum);
+            if (pr.merged) {
+                return { error: `PR #${prNum} is already merged` };
+            }
+            if (pr.state === 'closed') {
+                return { error: `PR #${prNum} is closed. Reopen it before merging.` };
+            }
+
+            const result = await Git.mergePullRequest(owner, repo, prNum, {
+                mergeType: merge_type,
+                title,
+                message,
+                deleteBranch: delete_branch
+            });
+
+            EventBus.emit('prs:refresh');
+            EventBus.emit('branches:refresh');
+
+            return {
+                success: true,
+                merged: result.merged,
+                sha: result.sha,
+                message: result.message,
+                deletedBranch: delete_branch
+            };
+        } catch (error) {
+            return { error: `Failed to merge PR #${prNum}: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'merge_pull_request',
+            description: 'Merge a pull request. Supports squash, merge, and rebase strategies. Optionally deletes the source branch after merge.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    number: {
+                        type: 'integer',
+                        description: 'PR number to merge'
+                    },
+                    merge_type: {
+                        type: 'string',
+                        enum: ['squash', 'merge', 'rebase'],
+                        description: 'Merge strategy (default: squash)'
+                    },
+                    title: {
+                        type: 'string',
+                        description: 'Custom merge commit title (optional)'
+                    },
+                    message: {
+                        type: 'string',
+                        description: 'Custom merge commit message body (optional)'
+                    },
+                    delete_branch: {
+                        type: 'boolean',
+                        description: 'Delete source branch after merge (default: false)'
+                    }
+                },
+                required: ['number']
+            }
+        },
+        roles: ['coder', 'pm', 'reviewer']
+    });
+
+    // ========================================
     // get_ci_status
     // ========================================
     registry.register('get_ci_status', async ({ ref }) => {

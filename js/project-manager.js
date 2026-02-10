@@ -248,7 +248,7 @@ export function renderPullRequests() {
         const branchInfo = onDefault ? `<span style="color: var(--text-muted);">${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span>` : '';
 
         return `
-            <div class="issue-item" onclick="window.open('${escapeAttr(pr.url)}', '_blank')" title="${ciTitle}">
+            <div class="issue-item" onclick="window.openPRDetailModal(${pr.number})" title="${ciTitle}" style="cursor: pointer;">
                 <div class="issue-number">
                     <span class="pr-ci-badge" title="${ciTitle}">${ciIcon}</span>
                     #${pr.number}
@@ -286,6 +286,311 @@ export async function refreshPullRequests() {
     }
 
     renderPullRequests();
+}
+
+// ============================================
+// CREATE PR MODAL
+// ============================================
+
+export function openCreatePRModal() {
+    if (!State.currentProject) return;
+
+    const modal = document.getElementById('createPRModal');
+    if (!modal) return;
+
+    const defaultBranch = State.currentProject.defaultBranch || 'main';
+
+    // Populate branch selectors
+    const headSelect = document.getElementById('prCreateHead');
+    const baseSelect = document.getElementById('prCreateBase');
+    const branches = State.branches || [];
+
+    headSelect.innerHTML = branches.map(b =>
+        `<option value="${escapeAttr(b.name)}" ${b.name === State.currentBranch ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
+    ).join('');
+
+    baseSelect.innerHTML = branches.map(b =>
+        `<option value="${escapeAttr(b.name)}" ${b.name === defaultBranch ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
+    ).join('');
+
+    // Auto-fill title from branch name: issue/42-fix-bug → Fix bug (#42)
+    const branch = State.currentBranch || '';
+    let autoTitle = '';
+    const issueMatch = branch.match(/^issue\/(\d+)-(.+)$/);
+    if (issueMatch) {
+        autoTitle = issueMatch[2].replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) + ` (#${issueMatch[1]})`;
+    } else if (branch !== defaultBranch) {
+        autoTitle = branch.replace(/[-_/]/g, ' ').replace(/^\w/, c => c.toUpperCase()).trim();
+    }
+    document.getElementById('prCreateTitle').value = autoTitle;
+    document.getElementById('prCreateBody').value = '';
+    document.getElementById('prCreateError').style.display = 'none';
+    document.getElementById('btnSubmitPR').disabled = false;
+
+    modal.classList.add('active');
+    document.getElementById('prCreateTitle').focus();
+}
+
+export function closeCreatePRModal() {
+    const modal = document.getElementById('createPRModal');
+    if (modal) modal.classList.remove('active');
+}
+
+export async function submitCreatePR() {
+    const title = document.getElementById('prCreateTitle').value.trim();
+    const body = document.getElementById('prCreateBody').value.trim();
+    const head = document.getElementById('prCreateHead').value;
+    const base = document.getElementById('prCreateBase').value;
+    const errorEl = document.getElementById('prCreateError');
+    const btn = document.getElementById('btnSubmitPR');
+
+    if (!title) {
+        errorEl.textContent = 'Title is required';
+        errorEl.style.display = '';
+        return;
+    }
+    if (head === base) {
+        errorEl.textContent = 'Head and base branches must be different';
+        errorEl.style.display = '';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Creating…';
+    errorEl.style.display = 'none';
+
+    try {
+        const { owner, repo } = State.currentProject;
+        const pr = await Git.createMergeRequest(owner, repo, title, body, head, base);
+        closeCreatePRModal();
+        await refreshPullRequests();
+        // Open the newly created PR
+        openPRDetailModal(pr.number);
+    } catch (e) {
+        errorEl.textContent = `Failed: ${e.message}`;
+        errorEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = '🚀 Create Pull Request';
+    }
+}
+
+// ============================================
+// PR DETAIL MODAL
+// ============================================
+
+let _currentPR = null;
+
+export async function openPRDetailModal(prNumber) {
+    const modal = document.getElementById('prDetailModal');
+    if (!modal || !State.currentProject) return;
+
+    modal.classList.add('active');
+
+    // Loading state
+    document.getElementById('prDetailTitle').textContent = `PR #${prNumber}`;
+    document.getElementById('prDetailMeta').innerHTML = '<span style="color: var(--text-muted);">Loading…</span>';
+    document.getElementById('prDetailBranches').textContent = '';
+    document.getElementById('prDetailBody').innerHTML = '';
+    document.getElementById('prDetailFiles').innerHTML = '';
+    document.getElementById('prDetailComments').innerHTML = '';
+    document.getElementById('prDetailFileCount').textContent = '';
+    document.getElementById('prDetailCommentCount').textContent = '';
+    document.getElementById('prDetailMergeControls').style.display = 'none';
+
+    const { owner, repo } = State.currentProject;
+
+    try {
+        // Fetch PR details, files, comments, and CI in parallel
+        const [pr, files, comments] = await Promise.all([
+            Git.getPullRequest(owner, repo, prNumber),
+            Git.getPullRequestFiles(owner, repo, prNumber).catch(() => []),
+            Git.getPullRequestComments(owner, repo, prNumber).catch(() => [])
+        ]);
+
+        let ci = { state: 'unknown', statuses: [] };
+        try {
+            ci = await Git.getCommitStatus(owner, repo, pr.head);
+        } catch { /* no CI */ }
+
+        _currentPR = { ...pr, files, comments, ci };
+
+        // Title
+        document.getElementById('prDetailTitle').textContent = `#${pr.number}: ${pr.title}`;
+
+        // External link
+        const extLink = document.getElementById('prDetailExternalLink');
+        if (pr.url) {
+            extLink.href = pr.url;
+            extLink.style.display = '';
+        } else {
+            extLink.style.display = 'none';
+        }
+
+        // Meta badges
+        const meta = document.getElementById('prDetailMeta');
+        const stateBadge = pr.merged
+            ? '<span style="background: #8957e5; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🟣 Merged</span>'
+            : pr.state === 'open'
+                ? '<span style="background: #238636; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🟢 Open</span>'
+                : '<span style="background: #da3633; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🔴 Closed</span>';
+
+        const ciIcon = CI_ICONS[ci.state] || '⚪';
+        const ciBadge = `<span title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
+
+        const mergeableBadge = pr.merged ? '' : pr.mergeable
+            ? '<span style="color: var(--success);">✅ Mergeable</span>'
+            : '<span style="color: var(--warning);">⚠️ Conflicts</span>';
+
+        const stats = `<span style="color: var(--text-muted);">+${pr.additions || 0} −${pr.deletions || 0} · ${pr.changed_files || files.length} files</span>`;
+        const author = `<span style="color: var(--text-muted);">by ${escapeHtml(pr.user || 'unknown')}</span>`;
+
+        meta.innerHTML = [stateBadge, ciBadge, mergeableBadge, stats, author].filter(Boolean).join(' ');
+
+        // Branches
+        document.getElementById('prDetailBranches').innerHTML = `<code>${escapeHtml(pr.head)}</code> → <code>${escapeHtml(pr.base)}</code>`;
+
+        // Body (markdown)
+        const bodyEl = document.getElementById('prDetailBody');
+        bodyEl.innerHTML = pr.body ? renderMarkdown(pr.body) : '<em style="color: var(--text-muted);">No description</em>';
+
+        // Changed files with expandable diffs
+        _renderPRFiles(files);
+
+        // Comments
+        _renderPRComments(comments);
+
+        // Show merge controls only if PR is open and not merged
+        const mergeControls = document.getElementById('prDetailMergeControls');
+        if (pr.state === 'open' && !pr.merged) {
+            mergeControls.style.display = '';
+        } else {
+            mergeControls.style.display = 'none';
+        }
+
+    } catch (error) {
+        console.error(`Failed to load PR #${prNumber}:`, error);
+        document.getElementById('prDetailMeta').innerHTML = `<span style="color: var(--danger);">Error: ${escapeHtml(error.message)}</span>`;
+    }
+}
+
+function _renderPRFiles(files) {
+    const container = document.getElementById('prDetailFiles');
+    const countEl = document.getElementById('prDetailFileCount');
+
+    countEl.textContent = `(${files.length})`;
+
+    if (files.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: var(--font-sm);">No changed files</div>';
+        return;
+    }
+
+    container.innerHTML = files.map((f, i) => {
+        const statusIcons = { added: '🟢', removed: '🔴', modified: '🟡', renamed: '🔵', copied: '🔵' };
+        const icon = statusIcons[f.status] || '⚪';
+        const stats = `<span style="color: var(--success);">+${f.additions}</span> <span style="color: var(--danger);">−${f.deletions}</span>`;
+        const renamed = f.previousFilename ? ` <span style="color: var(--text-muted);">← ${escapeHtml(f.previousFilename)}</span>` : '';
+
+        const hasPatch = f.patch && f.patch.length > 0;
+        const patchHtml = hasPatch ? `
+            <div class="pr-file-diff" id="prDiff-${i}" style="display: none; margin-top: 0.5rem;">
+                <pre style="background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; overflow-x: auto; font-size: var(--font-xs); line-height: 1.5; max-height: 300px; overflow-y: auto; margin: 0;">${_formatDiffPatch(f.patch)}</pre>
+            </div>` : '';
+
+        return `
+            <div class="pr-file-item" style="margin-bottom: 0.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 4px; cursor: ${hasPatch ? 'pointer' : 'default'}; font-size: var(--font-sm);"
+                     ${hasPatch ? `onclick="(function(){ var d=document.getElementById('prDiff-${i}'); d.style.display=d.style.display==='none'?'':'none'; })()"` : ''}>
+                    <span>${icon}</span>
+                    <span style="flex: 1; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.filename)}${renamed}</span>
+                    <span style="flex-shrink: 0;">${stats}</span>
+                    ${hasPatch ? '<span style="color: var(--text-muted);">▸</span>' : ''}
+                </div>
+                ${patchHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+function _formatDiffPatch(patch) {
+    // Syntax-highlight diff lines
+    return escapeHtml(patch).split('\n').map(line => {
+        if (line.startsWith('+')) return `<span style="color: var(--success);">${line}</span>`;
+        if (line.startsWith('-')) return `<span style="color: var(--danger);">${line}</span>`;
+        if (line.startsWith('@@')) return `<span style="color: var(--accent);">${line}</span>`;
+        return line;
+    }).join('\n');
+}
+
+function _renderPRComments(comments) {
+    const container = document.getElementById('prDetailComments');
+    const countEl = document.getElementById('prDetailCommentCount');
+
+    countEl.textContent = `(${comments.length})`;
+
+    if (comments.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: var(--font-sm);">No comments</div>';
+        return;
+    }
+
+    container.innerHTML = comments.map(c => {
+        const pathInfo = c.path ? `<span style="font-family: var(--font-mono); font-size: var(--font-xs);">${escapeHtml(c.path)}${c.line ? `:${c.line}` : ''}</span>` : '';
+        return `
+            <div style="border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
+                <div style="font-size: var(--font-sm); color: var(--text-muted);">
+                    ${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''} ${pathInfo}
+                </div>
+                <div class="preview-markdown" style="font-size: var(--font-sm);">${renderMarkdown(c.body || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+export function closePRDetailModal() {
+    const modal = document.getElementById('prDetailModal');
+    if (modal) modal.classList.remove('active');
+    _currentPR = null;
+}
+
+export async function submitMergePR() {
+    if (!_currentPR || !State.currentProject) return;
+
+    const btn = document.getElementById('btnMergePR');
+    const strategy = document.getElementById('prMergeStrategy').value;
+    const deleteBranch = document.getElementById('prDeleteBranch').checked;
+
+    // Confirmation
+    const msg = `Merge PR #${_currentPR.number} via ${strategy}${deleteBranch ? ' (delete branch)' : ''}?`;
+    if (!confirm(msg)) return;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Merging…';
+
+    try {
+        const { owner, repo } = State.currentProject;
+        await Git.mergePullRequest(owner, repo, _currentPR.number, {
+            mergeType: strategy,
+            deleteBranch
+        });
+
+        btn.textContent = '✅ Merged!';
+
+        // Refresh data
+        await refreshPullRequests();
+
+        // If we deleted the branch and it was our current branch, switch to default
+        if (deleteBranch && State.currentBranch === _currentPR.head) {
+            const defaultBranch = State.currentProject.defaultBranch || 'main';
+            EventBus.emit('branch:switch', { branch: defaultBranch });
+        }
+
+        // Refresh the modal to show merged state
+        setTimeout(() => openPRDetailModal(_currentPR.number), 500);
+
+    } catch (e) {
+        alert(`Merge failed: ${e.message}`);
+        btn.disabled = false;
+        btn.textContent = '✅ Merge';
+    }
 }
 
 // ============================================
