@@ -376,13 +376,14 @@ function setupKeyboardShortcuts() {
 // ============================================
 
 function openPluginModal(modalId) {
-    const modal = document.getElementById('pluginModal');
+    const overlay = document.getElementById('pluginModal');
     const def = Plugins.getModal(modalId);
-    if (!modal || !def) return;
+    if (!overlay || !def) return;
 
     document.getElementById('pluginModalTitle').textContent = def.title || 'Plugin';
-    if (def.width) {
-        document.getElementById('pluginModalContent').style.maxWidth = def.width;
+    const content = document.getElementById('pluginModalContent');
+    if (def.width && content) {
+        content.style.maxWidth = def.width;
     }
 
     const body = document.getElementById('pluginModalBody');
@@ -390,16 +391,15 @@ function openPluginModal(modalId) {
 
     if (def.render) {
         const result = def.render(body);
-        // If render returns HTML string, set it
         if (typeof result === 'string') body.innerHTML = result;
     }
 
-    modal.classList.add('active');
+    overlay.classList.add('active');
 }
 
 function closePluginModal() {
-    const modal = document.getElementById('pluginModal');
-    if (modal) modal.classList.remove('active');
+    const overlay = document.getElementById('pluginModal');
+    if (overlay) overlay.classList.remove('active');
 }
 
 /**
