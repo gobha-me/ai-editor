@@ -53,7 +53,10 @@ import {
     refreshPullRequests,
     initProjectListeners,
     openIssueDetailModal,
-    closeIssueDetailModal
+    closeIssueDetailModal,
+    focusIssue,
+    unfocusIssue,
+    startWorkOnIssue
 } from './project-manager.js';
 import { 
     fetchModels, 
@@ -145,6 +148,8 @@ window.closeNewBranchModal = closeNewBranchModal;
 window.createNewBranch = createNewBranch;
 
 window.openIssueDetailModal = openIssueDetailModal;
+window.focusIssue = focusIssue;
+window.unfocusIssue = unfocusIssue;
 window.closeIssueDetailModal = closeIssueDetailModal;
 
 window.openNewFileModal = openNewFileModal;
@@ -384,6 +389,13 @@ function setupEventListeners() {
     safeAdd('btnNewFile', 'click', openNewFileModal);
     safeAdd('btnRefreshIssues', 'click', refreshIssues);
     safeAdd('btnRefreshPRs', 'click', refreshPullRequests);
+
+    // Issue focus bar
+    safeAdd('btnIssueFocusDismiss', 'click', unfocusIssue);
+    safeAdd('btnIssueFocusExpand', 'click', () => {
+        if (State.focusedIssue) openIssueDetailModal(State.focusedIssue.number);
+    });
+    // Accept/Deny/Comment/Work wired via EventBus from project-manager
 
     // Selectors
     safeAdd('projectSelect', 'change', onProjectChange);

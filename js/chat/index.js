@@ -103,6 +103,18 @@ function initChat(containerEl, inputEl) {
     EventBus.on('chat:editAndResend', ({ newContent }) => {
         editAndResend(newContent);
     });
+
+    // Issue triage mode
+    EventBus.on('issue:focused', (issue) => {
+        const input = getInputElement();
+        if (input) input.placeholder = `Discuss issue #${issue.number}… (ask about code, impact, approach)`;
+        addMessage('system', `📋 Focused on issue #${issue.number}: ${issue.title}\nAsk me to find relevant code, assess impact, or suggest an approach.`);
+    });
+
+    EventBus.on('issue:unfocused', () => {
+        const input = getInputElement();
+        if (input) input.placeholder = 'Ask me to edit code, explain something, or help with an issue...';
+    });
 }
 
 // ============================================

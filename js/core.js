@@ -153,6 +153,7 @@ const State = {
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]
     pullRequests: [],          // [{ number, title, head, base, state, ciState }]
+    focusedIssue: null,        // Full issue data + comments for conversational triage
 };
 
 // ============================================

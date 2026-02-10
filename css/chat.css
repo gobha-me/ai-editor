@@ -655,3 +655,152 @@
 }
 
 /* ============================================
+ * ISSUE FOCUS BAR
+ * Displayed at top of chat when triaging an issue
+ * ============================================ */
+
+.issue-focus-bar {
+    border-bottom: 2px solid var(--accent);
+    background: var(--bg-secondary);
+    padding: 0.75rem;
+    flex-shrink: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.issue-focus-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.issue-focus-title {
+    font-weight: 700;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.issue-focus-controls {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.issue-focus-controls .btn-sm {
+    padding: 0.15rem 0.4rem;
+    font-size: var(--font-sm);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.issue-focus-controls .btn-sm:hover {
+    background: var(--bg-tertiary);
+}
+
+.issue-focus-meta {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+}
+
+.issue-focus-meta .issue-label {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: white;
+    margin-right: 0.25rem;
+}
+
+.issue-focus-body {
+    font-size: var(--font-md);
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+}
+
+.issue-focus-body:empty {
+    display: none;
+}
+
+.issue-focus-comments {
+    font-size: var(--font-sm);
+    margin-bottom: 0.5rem;
+}
+
+.issue-focus-comments:empty {
+    display: none;
+}
+
+.issue-focus-comment-item {
+    border-left: 2px solid var(--border);
+    padding-left: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.issue-focus-comment-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.issue-focus-comment-body {
+    white-space: pre-wrap;
+    max-height: 60px;
+    overflow-y: auto;
+    color: var(--text-secondary);
+}
+
+.issue-focus-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.issue-focus-actions .btn-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: var(--font-sm);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.issue-focus-actions .btn-accept:hover {
+    background: #22863a20;
+    border-color: #22863a;
+    color: #22863a;
+}
+
+.issue-focus-actions .btn-deny:hover {
+    background: #cb253620;
+    border-color: #cb2536;
+    color: #cb2536;
+}
+
+.issue-focus-actions .btn-comment:hover {
+    background: var(--accent-bg, rgba(79, 139, 255, 0.1));
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.issue-focus-actions .btn-work:hover {
+    background: #6f42c120;
+    border-color: #6f42c1;
+    color: #6f42c1;
+}

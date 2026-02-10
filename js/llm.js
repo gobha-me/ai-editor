@@ -940,10 +940,43 @@ function buildSystemPrompt() {
         prompt += `\n\nActive role: ${role.name}. ${role.description}`;
     }
 
-    // Inject active issue context
+    // Inject active issue context (working on a branch for this issue)
     if (State.currentIssue) {
         const ci = State.currentIssue;
         prompt += `\n\n--- ACTIVE ISSUE ---\nCurrently working on issue #${ci.number}: ${ci.title}\nBranch: ${ci.branch}\nUse the read_issue tool with number ${ci.number} to get full issue details, body, and comments.\nWhen work is complete, use create_pull_request to submit changes for review.`;
+    }
+
+    // Inject focused issue context (triaging/reviewing an issue in chat)
+    if (State.focusedIssue) {
+        const fi = State.focusedIssue;
+        let focusCtx = `\n\n--- FOCUSED ISSUE (TRIAGE MODE) ---`;
+        focusCtx += `\nIssue #${fi.number}: ${fi.title}`;
+        focusCtx += `\nState: ${fi.state || 'open'}`;
+        if (fi.labels?.length) focusCtx += `\nLabels: ${fi.labels.join(', ')}`;
+        if (fi.assignees?.length) focusCtx += `\nAssignees: ${fi.assignees.join(', ')}`;
+        if (fi.createdAt) focusCtx += `\nCreated: ${fi.createdAt}`;
+        focusCtx += `\n\nDescription:\n${fi.body || '(no description)'}`;
+
+        // Include comments
+        const comments = fi.issueComments || [];
+        if (comments.length > 0) {
+            focusCtx += `\n\nComments (${comments.length}):`;
+            // Include last 5 comments to stay within reasonable token budget
+            const shown = comments.slice(-5);
+            if (comments.length > 5) focusCtx += `\n... (${comments.length - 5} earlier comments omitted)`;
+            for (const c of shown) {
+                const date = c.createdAt ? new Date(c.createdAt).toISOString().split('T')[0] : '';
+                focusCtx += `\n\n[${c.user || 'unknown'} ${date}]\n${(c.body || '').slice(0, 500)}`;
+            }
+        }
+
+        focusCtx += `\n\nYou are helping triage this issue. The user may ask you to:`;
+        focusCtx += `\n- Find relevant code in the project using search_project, read_file, or scan tools`;
+        focusCtx += `\n- Assess the impact, complexity, or validity of the issue`;
+        focusCtx += `\n- Suggest an implementation approach`;
+        focusCtx += `\n- Help decide whether to accept or deny the issue`;
+        focusCtx += `\nBe specific and reference actual code when possible.`;
+        prompt += focusCtx;
     }
 
     // Inject scratchpad (persistent LLM notes)

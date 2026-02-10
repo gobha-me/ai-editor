@@ -20,6 +20,26 @@
         <!-- Populated dynamically when model changes -->
     </div>
 
+    <!-- Issue Focus Bar — shown when triaging an issue -->
+    <div class="issue-focus-bar" id="issueFocusBar" style="display: none;">
+        <div class="issue-focus-header">
+            <div class="issue-focus-title" id="issueFocusTitle"></div>
+            <div class="issue-focus-controls">
+                <button class="btn btn-sm" id="btnIssueFocusExpand" title="Full details">📄</button>
+                <button class="btn btn-sm" id="btnIssueFocusDismiss" title="Dismiss">✕</button>
+            </div>
+        </div>
+        <div class="issue-focus-meta" id="issueFocusMeta"></div>
+        <div class="issue-focus-body" id="issueFocusBody"></div>
+        <div class="issue-focus-comments" id="issueFocusComments"></div>
+        <div class="issue-focus-actions">
+            <button class="btn btn-sm btn-accept" id="btnIssueFocusAccept" title="Accept — close with comment">✅ Accept</button>
+            <button class="btn btn-sm btn-deny" id="btnIssueFocusDeny" title="Deny — close with comment">❌ Deny</button>
+            <button class="btn btn-sm btn-comment" id="btnIssueFocusComment" title="Add comment">💬 Comment</button>
+            <button class="btn btn-sm btn-work" id="btnIssueFocusWork" title="Create branch and start work">🚀 Start Work</button>
+        </div>
+    </div>
+
     <div class="chat-messages" id="chatMessages">
         <!-- Messages rendered here -->
     </div>

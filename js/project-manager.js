@@ -185,12 +185,13 @@ export function renderIssues() {
             depsHtml = `<div class="issue-deps">⛓️ Depends on: ${depLinks}</div>`;
         }
 
-        // Highlight if this issue is the active one
+        // Highlight if this issue is active (working) or focused (triaging)
         const isActive = State.currentIssue?.number === issue.number;
-        const activeClass = isActive ? ' issue-item-active' : '';
+        const isFocused = State.focusedIssue?.number === issue.number;
+        const activeClass = isActive ? ' issue-item-active' : isFocused ? ' issue-item-focused' : '';
         
         return `
-            <div class="issue-item${activeClass}" onclick="window.openIssueDetailModal(${issue.number})">
+            <div class="issue-item${activeClass}" onclick="window.focusIssue(${issue.number})">
                 <div class="issue-number">#${issue.number}</div>
                 <div class="issue-title">${escapeHtml(issue.title)}</div>
                 ${issue.labels.length ? `
@@ -537,6 +538,179 @@ export async function startWorkOnIssue(issue) {
 /**
  * Clear the active issue (e.g., when switching branches manually).
  */
+// ============================================
+// CONVERSATIONAL ISSUE TRIAGE
+// Focus an issue in the chat panel for discussion
+// ============================================
+
+/**
+ * Focus an issue in the chat panel for conversational triage.
+ * Fetches full issue data + comments and renders the focus bar.
+ */
+export async function focusIssue(issueNumber) {
+    if (!State.currentProject) return;
+    const { owner, repo } = State.currentProject;
+
+    // Show bar immediately with loading state
+    const bar = document.getElementById('issueFocusBar');
+    if (bar) {
+        bar.style.display = '';
+        document.getElementById('issueFocusTitle').textContent = `Loading #${issueNumber}…`;
+        document.getElementById('issueFocusMeta').textContent = '';
+        document.getElementById('issueFocusBody').textContent = '';
+        document.getElementById('issueFocusComments').innerHTML = '';
+    }
+
+    try {
+        const issue = await Git.getIssue(owner, repo, issueNumber);
+        let comments = [];
+        try {
+            comments = await Git.getIssueComments(owner, repo, issueNumber);
+        } catch (e) {
+            console.warn(`[focusIssue] Could not fetch comments for #${issueNumber}:`, e.message);
+        }
+
+        State.focusedIssue = { ...issue, issueComments: comments };
+        renderIssueFocusBar();
+
+        // Highlight in sidebar
+        renderIssues();
+
+        // Seed the chat with context about the focused issue
+        EventBus.emit('issue:focused', State.focusedIssue);
+    } catch (error) {
+        console.error(`[focusIssue] Failed to load #${issueNumber}:`, error);
+        if (bar) {
+            document.getElementById('issueFocusTitle').textContent = `Error loading #${issueNumber}`;
+            document.getElementById('issueFocusBody').textContent = error.message;
+        }
+    }
+}
+
+/**
+ * Dismiss the focused issue, return chat to normal mode.
+ */
+export function unfocusIssue() {
+    State.focusedIssue = null;
+    const bar = document.getElementById('issueFocusBar');
+    if (bar) bar.style.display = 'none';
+    renderIssues();  // Remove highlight
+    EventBus.emit('issue:unfocused');
+}
+
+/**
+ * Render the issue focus bar in the chat panel.
+ */
+function renderIssueFocusBar() {
+    const issue = State.focusedIssue;
+    const bar = document.getElementById('issueFocusBar');
+    if (!bar || !issue) return;
+
+    bar.style.display = '';
+
+    // Title
+    document.getElementById('issueFocusTitle').textContent = `#${issue.number}: ${issue.title}`;
+
+    // Meta: state, labels, assignees, date
+    const metaEl = document.getElementById('issueFocusMeta');
+    const parts = [];
+    if (issue.state) parts.push(issue.state === 'open' ? '🟢 Open' : '🔴 Closed');
+    if (issue.assignees?.length) parts.push(`👤 ${issue.assignees.join(', ')}`);
+    if (issue.createdAt) parts.push(new Date(issue.createdAt).toLocaleDateString());
+
+    let labelsHtml = '';
+    if (issue.labels?.length) {
+        labelsHtml = issue.labels.map(l => {
+            const name = typeof l === 'string' ? l : l.name || l;
+            return `<span class="issue-label">${escapeHtml(name)}</span>`;
+        }).join('');
+    }
+    metaEl.innerHTML = escapeHtml(parts.join(' · ')) + (labelsHtml ? ' ' + labelsHtml : '');
+
+    // Body
+    document.getElementById('issueFocusBody').textContent = issue.body || '(No description)';
+
+    // Comments (last 3)
+    const commentsEl = document.getElementById('issueFocusComments');
+    const comments = issue.issueComments || [];
+    if (comments.length > 0) {
+        const shown = comments.slice(-3);
+        const moreText = comments.length > 3 ? `<div style="color: var(--text-muted); margin-bottom: 0.3rem;">… ${comments.length - 3} earlier comments</div>` : '';
+        commentsEl.innerHTML = moreText + shown.map(c => `
+            <div class="issue-focus-comment-item">
+                <div class="issue-focus-comment-meta">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
+                <div class="issue-focus-comment-body">${escapeHtml((c.body || '').slice(0, 300))}</div>
+            </div>
+        `).join('');
+    } else {
+        commentsEl.innerHTML = '';
+    }
+}
+
+/**
+ * Quick action: Accept issue — post comment and close.
+ */
+async function acceptFocusedIssue() {
+    const issue = State.focusedIssue;
+    if (!issue || !State.currentProject) return;
+
+    const comment = prompt(`Accept #${issue.number}: ${issue.title}\n\nAdd a comment (optional):`);
+    if (comment === null) return;  // Cancelled
+
+    const { owner, repo } = State.currentProject;
+    try {
+        const body = comment || 'Accepted — will address this.';
+        await Git.createIssueComment(owner, repo, issue.number, `✅ **Accepted**\n\n${body}`);
+        // Don't close — accepted means "will work on". Leave open for tracking.
+        EventBus.emit('issues:refresh');
+        // Refresh focus bar with new comment
+        await focusIssue(issue.number);
+    } catch (e) {
+        alert(`Failed to comment: ${e.message}`);
+    }
+}
+
+/**
+ * Quick action: Deny issue — post comment and close.
+ */
+async function denyFocusedIssue() {
+    const issue = State.focusedIssue;
+    if (!issue || !State.currentProject) return;
+
+    const comment = prompt(`Deny #${issue.number}: ${issue.title}\n\nReason (required):`);
+    if (!comment) return;  // Cancelled or empty
+
+    const { owner, repo } = State.currentProject;
+    try {
+        await Git.createIssueComment(owner, repo, issue.number, `❌ **Denied**\n\n${comment}`);
+        await Git.updateIssueState(owner, repo, issue.number, 'closed');
+        EventBus.emit('issues:refresh');
+        unfocusIssue();
+    } catch (e) {
+        alert(`Failed to deny issue: ${e.message}`);
+    }
+}
+
+/**
+ * Quick action: Add comment without changing state.
+ */
+async function commentOnFocusedIssue() {
+    const issue = State.focusedIssue;
+    if (!issue || !State.currentProject) return;
+
+    const comment = prompt(`Comment on #${issue.number}: ${issue.title}`);
+    if (!comment) return;
+
+    const { owner, repo } = State.currentProject;
+    try {
+        await Git.createIssueComment(owner, repo, issue.number, comment);
+        EventBus.emit('issues:refresh');
+        await focusIssue(issue.number);
+    } catch (e) {
+        alert(`Failed to comment: ${e.message}`);
+    }
+}
+
 export function clearActiveIssue() {
     State.currentIssue = null;
     renderIssues();
@@ -578,4 +752,16 @@ export function initProjectListeners() {
     
     EventBus.on('issues:refresh', refreshIssues);
     EventBus.on('prs:refresh', refreshPullRequests);
+
+    // Issue focus bar action buttons
+    const safeClick = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', fn);
+    };
+    safeClick('btnIssueFocusAccept', acceptFocusedIssue);
+    safeClick('btnIssueFocusDeny', denyFocusedIssue);
+    safeClick('btnIssueFocusComment', commentOnFocusedIssue);
+    safeClick('btnIssueFocusWork', () => {
+        if (State.focusedIssue) startWorkOnIssue(State.focusedIssue);
+    });
 }

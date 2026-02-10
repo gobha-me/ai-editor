@@ -2,6 +2,34 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.5] - 2025-02-10
+
+### Added
+- **Conversational Issue Triage** — click any issue in the sidebar to focus it in the chat panel for LLM-assisted review
+  - **Issue Focus Bar**: Rendered at the top of the chat panel showing title, state, labels, assignees, description, and last 3 comments
+  - **Rich LLM context injection**: Full issue body, labels, assignees, and up to 5 comments injected into the system prompt so the LLM can find relevant code, assess impact, and suggest approaches
+  - **Quick actions**: Accept (comments, keeps open), Deny (comments + closes), Comment (adds note), Start Work (creates branch via existing workflow)
+  - **Expand button** (📄): Opens the full issue detail modal for additional info
+  - **Dismiss button** (✕): Returns chat to normal mode, clears focused state
+  - **Sidebar highlight**: Focused issue gets purple left-border highlight (distinct from blue active-work highlight)
+  - **Chat integration**: System message announces focused issue, input placeholder updates to triage-specific hint
+  - `State.focusedIssue` — new state field, separate from `State.currentIssue` (active work branch)
+  - EventBus events: `issue:focused`, `issue:unfocused`
+
+### Changed
+- Issue sidebar items now focus in chat (single click) instead of opening the modal directly
+  - Modal still accessible via expand button in the focus bar
+- System prompt now includes two distinct issue contexts:
+  - `ACTIVE ISSUE` — when on a work branch for an issue (existing behavior)
+  - `FOCUSED ISSUE (TRIAGE MODE)` — when reviewing/discussing an issue in chat (new)
+
+### Workflow
+1. Third party creates an issue/ticket
+2. Click the issue in the left sidebar → focus bar appears at top of chat
+3. Discuss with the LLM: "What code is relevant to this?", "Is this a valid bug?", "How complex is this?"
+4. LLM uses search_project, read_file, scan tools to find and reference actual code
+5. Accept → posts ✅ comment | Deny → posts ❌ comment + closes | Comment → posts note | Start Work → creates branch
+
 ## [0.8.4] - 2025-02-10
 
 ### Added
