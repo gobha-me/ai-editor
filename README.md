@@ -1,4 +1,4 @@
-# AI Editor v0.7.3
+# AI Editor
 
 A pure HTML/JS code editor with AI assistance, multi-provider Git integration, and a plugin system. Think Cursor / Windsurf, but runs entirely in the browser — no backend, no build step, no Electron.
 
