@@ -1,0 +1,21 @@
+# Build artifacts
+vendor/node_modules/
+vendor/package-lock.json
+
+# Git
+.git/
+.gitignore
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docs
+README.md
+LICENSE
+*.md
+!editor/**/*.md

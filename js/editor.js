@@ -7,7 +7,7 @@ import { State, EventBus, Storage } from './core.js';
 import { getLanguageFromPath } from './llm.js';
 
 // ============================================
-// CODEMIRROR IMPORTS (from CDN)
+// CODEMIRROR IMPORTS (vendor bundle or CDN fallback)
 // ============================================
 
 let EditorView, EditorState, Compartment, basicSetup, keymap, javascript, python, go, rust, markdown, json, html, css, sql, xml;
@@ -35,7 +35,84 @@ let editorInstance = null;
 // INITIALIZATION
 // ============================================
 
+/**
+ * Load CodeMirror from local vendor bundle (built into Docker image).
+ * Returns true if successful, false if bundle not found.
+ */
+async function loadFromVendorBundle() {
+    const bundle = await import('/editor/vendor/codemirror-bundle.js');
+
+    // Core modules
+    const { cmView, cmState, cmBasicSetup, cmCommands, cmLanguage, cmLint, cmAutocomplete, cmSearch, cmOneDark } = bundle;
+
+    EditorView = cmView.EditorView;
+    EditorState = cmState.EditorState;
+    Compartment = cmState.Compartment;
+    keymap = cmView.keymap;
+    lineNumbers = cmView.lineNumbers;
+    highlightActiveLineGutter = cmView.highlightActiveLineGutter;
+    highlightActiveLine = cmView.highlightActiveLine;
+    lineWrapping = EditorView.lineWrapping;
+    drawSelection = cmView.drawSelection;
+    dropCursor = cmView.dropCursor;
+    rectangularSelection = cmView.rectangularSelection;
+    crosshairCursor = cmView.crosshairCursor;
+    highlightSpecialChars = cmView.highlightSpecialChars;
+
+    basicSetup = cmBasicSetup.basicSetup;
+
+    indentWithTab = cmCommands.indentWithTab;
+    defaultKeymap = cmCommands.defaultKeymap;
+    historyKeymap = cmCommands.historyKeymap;
+    history = cmCommands.history;
+
+    indentOnInput = cmLanguage.indentOnInput;
+    bracketMatching = cmLanguage.bracketMatching;
+    foldGutter = cmLanguage.foldGutter;
+    foldKeymap = cmLanguage.foldKeymap;
+    syntaxHighlighting = cmLanguage.syntaxHighlighting;
+    defaultHighlightStyle = cmLanguage.defaultHighlightStyle;
+
+    closeBrackets = cmAutocomplete.closeBrackets;
+    closeBracketsKeymap = cmAutocomplete.closeBracketsKeymap;
+    autocompletion = cmAutocomplete.autocompletion;
+    completionKeymap = cmAutocomplete.completionKeymap;
+
+    highlightSelectionMatches = cmSearch.highlightSelectionMatches;
+    searchKeymap = cmSearch.searchKeymap;
+
+    oneDark = cmOneDark.oneDark;
+
+    // Language modules
+    languageModules.javascript = bundle.langJavascript;
+    languageModules.python = bundle.langPython;
+    languageModules.go = bundle.langGo;
+    languageModules.rust = bundle.langRust;
+    languageModules.markdown = bundle.langMarkdown;
+    languageModules.json = bundle.langJson;
+    languageModules.html = bundle.langHtml;
+    languageModules.css = bundle.langCss;
+    languageModules.sql = bundle.langSql;
+    languageModules.xml = bundle.langXml;
+    languageModules.cpp = bundle.langCpp;
+    languageModules.java = bundle.langJava;
+    languageModules.php = bundle.langPhp;
+
+    return true;
+}
+
 async function loadCodeMirror() {
+    // Try local vendor bundle first (air-gapped / Docker deployments)
+    try {
+        EventBus.emit('editor:loading', 'Loading CodeMirror from local vendor...');
+        await loadFromVendorBundle();
+        console.log('CodeMirror loaded from local vendor bundle');
+        EventBus.emit('editor:loaded', 'CodeMirror loaded from local vendor');
+        return true;
+    } catch (e) {
+        console.warn('Local vendor bundle not available, falling back to CDN:', e.message);
+    }
+
     // Try multiple CDNs in order of preference
     const CDN_PROVIDERS = [
 //        'https://cdn.jsdelivr.net/npm',

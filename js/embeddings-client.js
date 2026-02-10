@@ -95,8 +95,12 @@ const EmbeddingsClient = {
     async _initLocal(modelName) {
         console.log('[Embeddings] Loading Transformers.js...');
         
-        // Dynamically import Transformers.js
-        transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        // Dynamically import Transformers.js — try local vendor first, then CDN
+        try {
+            transformers = await import('/editor/vendor/transformers.min.js');
+        } catch (_) {
+            transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        }
         
         // Configure to use local models when possible
         transformers.env.allowLocalModels = true;
