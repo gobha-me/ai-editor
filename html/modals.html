@@ -308,10 +308,11 @@
                 <!-- Stats -->
                 <div class="zip-stats" id="zipFileStats"></div>
                 
-                <!-- Select all / none -->
+                <!-- Select all / none / scan -->
                 <div class="zip-select-controls">
                     <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
                     <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
+                    <button class="btn btn-secondary btn-sm" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
                 </div>
 
                 <!-- File List -->
