@@ -508,27 +508,31 @@ export function clearChat() {
  */
 export function formatMessageContent(content) {
     if (!content) return '';
-    
+
+    // Use marked.js if available, fall back to basic formatting
+    if (typeof marked !== 'undefined') {
+        try {
+            const raw = marked.parse(content, { breaks: true, gfm: true });
+            // Sanitize with DOMPurify if available
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(raw);
+            }
+            return raw;
+        } catch (e) {
+            console.warn('Marked parse error, falling back to basic formatting:', e);
+        }
+    }
+
+    // Fallback: basic regex formatting
     let html = escapeHtml(content);
-    
-    // Code blocks with syntax highlighting hint
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
         const langClass = lang ? `language-${lang}` : '';
         return `<pre class="code-block ${langClass}"><code>${code.trim()}</code></pre>`;
     });
-    
-    // Inline code
     html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    
-    // Bold
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Italic
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
-    // Line breaks
     html = html.replace(/\n/g, '<br>');
-    
     return html;
 }
 
