@@ -2,6 +2,34 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.4] - 2025-02-10
+
+### Added
+- **GitLab Provider** (`js/git-providers/gitlab.js`): Third git provider, completes the trifecta (Gitea, GitHub, GitLab)
+  - Auth: `PRIVATE-TOKEN` header
+  - API v4 with URL-encoded `owner/repo` project identifiers
+  - Full recursive tree API with pagination (capped at 10K items)
+  - **Atomic batch commits**: Uses GitLab's Commits API for multi-file operations in a single commit (unlike GitHub/Gitea's sequential approach), falls back to sequential on failure
+  - **MR terminology mapping**: `source_branch`/`target_branch` → `head`/`base`, `iid` → `number`, `opened` → `open`, `description` → `body`
+  - **Rename via Commits API**: Atomic delete + create in one commit (no intermediate state)
+  - **CI status**: Commit statuses API with pipeline fallback — fetches latest pipeline + jobs when commit statuses are empty (common with GitLab CI)
+  - Issue comments filter out system-generated notes automatically
+  - MR comments distinguish inline (position-based) from general notes
+  - Labels handled as comma-separated strings (GitLab convention)
+  - Settings: URL field (defaults to `https://gitlab.com`) + PAT token (`glpat-xxx`)
+  - Self-hosted GitLab: any URL works, `/api/v4` appended automatically
+- Registered in `js/git-providers/index.js` — previously a placeholder comment
+
+### Provider comparison
+| Feature | Gitea | GitHub | GitLab |
+|---------|-------|--------|--------|
+| Auth | `token` | `Bearer` | `PRIVATE-TOKEN` |
+| Tree | walk dirs | `git/trees?recursive` | `tree?recursive` + paginate |
+| Batch | sequential | sequential | atomic Commits API |
+| CI | commit status | status + check-runs | commit status + pipelines |
+| File path | path segment | path segment | URL-encoded |
+| MR naming | `head`/`base` | `head`/`base` | `source_branch`/`target_branch` |
+
 ## [0.8.3-2] - 2025-02-10
 
 ### Added
