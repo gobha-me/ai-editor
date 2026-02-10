@@ -34,6 +34,7 @@ export function registerPRTools(registry) {
         try {
             const pr = await Git.createMergeRequest(owner, repo, title, body, headBranch, baseBranch);
             EventBus.emit('pr:created', { owner, repo, number: pr.number });
+            EventBus.emit('prs:refresh');
             return {
                 success: true,
                 number: pr.number,

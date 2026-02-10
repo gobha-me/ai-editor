@@ -2,6 +2,25 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.3-1] - 2025-02-10
+
+### Changed
+- **Sidebar: Workflows → Pull Requests**: Replaced the Workflows panel with a PR panel showing CI status
+  - Branch-contextual: on default branch shows all open PRs, on feature branch shows only that branch's PRs
+  - Each PR displays CI status badge (✅ success, 🔄 pending, ❌ failure, ⚪ unknown)
+  - CI status fetched in parallel from combined commit status API
+  - Re-renders automatically on branch switch
+
+### Added
+- **`getCommitStatus()`**: New provider method on both GitHub and Gitea
+  - GitHub: tries `/commits/{ref}/status` first, falls back to `/commits/{ref}/check-runs` (Actions use checks API)
+  - Gitea: uses `/commits/{ref}/status`
+  - Returns normalized `{ state, total, statuses[] }` shape
+- **`State.pullRequests`**: New state property for cached PR data with CI annotations
+
+### Fixed
+- Settings toggle renamed from "Show Workflows" to "Show Pull Requests" with matching state key
+
 ## [0.8.3] - 2025-02-10
 
 ### Added

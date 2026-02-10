@@ -220,6 +220,18 @@ const BASE_GIT_PROVIDER = {
     },
 
     // ========================================
+    // CI/CD STATUS
+    // ========================================
+
+    /**
+     * Get combined commit status for a ref (branch name or SHA).
+     * Returns: { state: 'success'|'pending'|'failure'|'error', statuses: [...] }
+     */
+    async getCommitStatus(connection, owner, repo, ref) {
+        notSupported(this.name, 'getCommitStatus');
+    },
+
+    // ========================================
     // CI/CD (optional — returns empty by default)
     // ========================================
 

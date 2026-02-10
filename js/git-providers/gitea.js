@@ -399,6 +399,30 @@ const giteaProvider = {
     },
 
     // ========================================
+    // CI/CD STATUS
+    // ========================================
+
+    async getCommitStatus(connection, owner, repo, ref) {
+        try {
+            const status = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/commits/${ref}/status`
+            );
+            return {
+                state: status.state || 'unknown',
+                total: status.total_count || 0,
+                statuses: (status.statuses || []).map(s => ({
+                    context: s.context,
+                    state: s.status,
+                    description: s.description,
+                    url: s.target_url
+                }))
+            };
+        } catch {
+            return { state: 'unknown', total: 0, statuses: [] };
+        }
+    },
+
+    // ========================================
     // CI/CD (Gitea Actions)
     // ========================================
 
@@ -469,15 +493,6 @@ const giteaProvider = {
                 collapsible: true,
                 refreshEvent: 'issues:refresh',
                 priority: 10
-            },
-            {
-                id: 'gitea-workflows',
-                slot: 'sidebar-panels',
-                title: 'Workflows',
-                icon: '⚙️',
-                collapsible: true,
-                refreshEvent: 'workflows:refresh',
-                priority: 20
             },
             {
                 id: 'gitea-prs',

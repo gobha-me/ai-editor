@@ -131,9 +131,9 @@ function populateSettingsForm() {
         showIssuesEl.checked = State.settings.showIssues !== false;
     }
     
-    const showWorkflowsEl = document.getElementById('settingShowWorkflows');
-    if (showWorkflowsEl) {
-        showWorkflowsEl.checked = State.settings.showWorkflows !== false;
+    const showPRsEl = document.getElementById('settingShowPullRequests');
+    if (showPRsEl) {
+        showPRsEl.checked = State.settings.showPullRequests !== false;
     }
 
     // --- Context Tab ---
@@ -1246,8 +1246,8 @@ export function saveSettings() {
     const showIssuesEl = document.getElementById('settingShowIssues');
     State.settings.showIssues = showIssuesEl ? showIssuesEl.checked : false;
     
-    const showWorkflowsEl = document.getElementById('settingShowWorkflows');
-    State.settings.showWorkflows = showWorkflowsEl ? showWorkflowsEl.checked : false;
+    const showPRsEl = document.getElementById('settingShowPullRequests');
+    State.settings.showPullRequests = showPRsEl ? showPRsEl.checked : false;
 
     // Context - with null checks
     const useEmbeddingsEl = document.getElementById('settingUseEmbeddings');
@@ -1530,7 +1530,7 @@ export function exportSettings() {
         editorFontSize: State.settings.editorFontSize,
         showLineNumbers: State.settings.showLineNumbers,
         showIssues: State.settings.showIssues,
-        showWorkflows: State.settings.showWorkflows,
+        showPullRequests: State.settings.showPullRequests,
         
         // Advanced Parameters
         advancedParams: State.settings.advancedParams,

@@ -128,6 +128,9 @@ export async function onBranchChange(e) {
         State.currentIssue = null;
         renderIssues(); // Remove highlight
     }
+
+    // Re-render PRs with branch-contextual filtering
+    renderPullRequests();
     
     if (State.currentProject) {
         // Clear open tabs when switching branches (files may differ)
@@ -209,37 +212,78 @@ export async function refreshIssues() {
     renderIssues();
 }
 
-export function renderWorkflows() {
-    const container = document.getElementById('workflowsPanel');
-    
-    if (State.workflowRuns.length === 0) {
-        container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">No workflow runs</div>';
+const CI_ICONS = {
+    'success': '✅',
+    'pending': '🔄',
+    'failure': '❌',
+    'error': '❌',
+    'unknown': '⚪'
+};
+
+export function renderPullRequests() {
+    const container = document.getElementById('prsPanel');
+    if (!container) return;
+
+    // Branch-contextual filtering:
+    // On default branch → show all open PRs
+    // On feature branch → show only PRs where head matches current branch
+    const defaultBranch = State.currentProject?.defaultBranch || 'main';
+    const onDefault = State.currentBranch === defaultBranch;
+
+    const filtered = onDefault
+        ? State.pullRequests
+        : State.pullRequests.filter(pr => pr.head === State.currentBranch);
+
+    if (filtered.length === 0) {
+        const context = onDefault ? 'No open pull requests' : `No PRs for branch "${State.currentBranch}"`;
+        container.innerHTML = `<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">${context}</div>`;
         return;
     }
 
-    const statusIcons = {
-        'completed': '✅',
-        'success': '✅',
-        'failure': '❌',
-        'cancelled': '⚪',
-        'in_progress': '🔄',
-        'queued': '⏳'
-    };
+    container.innerHTML = filtered.slice(0, 15).map(pr => {
+        const ciIcon = CI_ICONS[pr.ciState] || '⚪';
+        const ciTitle = pr.ciState === 'unknown' ? 'No CI status' : `CI: ${pr.ciState}`;
+        const branchInfo = onDefault ? `<span style="color: var(--text-muted);">${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span>` : '';
 
-    container.innerHTML = State.workflowRuns.slice(0, 5).map(run => `
-        <div class="issue-item" onclick="window.open('${escapeAttr(run.url)}', '_blank')">
-            <div class="issue-number">${statusIcons[run.conclusion || run.status] || '❓'} ${escapeHtml(run.name)}</div>
-            <div class="issue-title" style="font-size: var(--font-sm); color: var(--text-muted);">${escapeHtml(run.branch)} · ${escapeHtml(run.event)}</div>
-        </div>
-    `).join('');
+        return `
+            <div class="issue-item" onclick="window.open('${escapeAttr(pr.url)}', '_blank')" title="${ciTitle}">
+                <div class="issue-number">
+                    <span class="pr-ci-badge" title="${ciTitle}">${ciIcon}</span>
+                    #${pr.number}
+                </div>
+                <div class="issue-title">${escapeHtml(pr.title)}</div>
+                ${branchInfo ? `<div style="font-size: var(--font-sm); margin-top: 2px;">${branchInfo}</div>` : ''}
+            </div>
+        `;
+    }).join('');
 }
 
-export async function refreshWorkflows() {
+export async function refreshPullRequests() {
     if (!State.currentProject) return;
-    
+
     const { owner, repo } = State.currentProject;
-    State.workflowRuns = await Git.listWorkflowRuns(owner, repo);
-    renderWorkflows();
+
+    try {
+        // Fetch all open PRs
+        const prs = await Git.listMergeRequests(owner, repo, 'open');
+
+        // Fetch CI status for each PR's head branch (parallel)
+        const withStatus = await Promise.all(prs.map(async (pr) => {
+            try {
+                const status = await Git.getCommitStatus(owner, repo, pr.head);
+                return { ...pr, ciState: status.state, ciStatuses: status.statuses };
+            } catch {
+                return { ...pr, ciState: 'unknown', ciStatuses: [] };
+            }
+        }));
+
+        State.pullRequests = withStatus;
+    } catch (e) {
+        console.warn('[PRs] Failed to refresh:', e.message);
+        State.pullRequests = [];
+    }
+
+    renderPullRequests();
 }
 
 // ============================================
@@ -517,7 +561,7 @@ export function initProjectListeners() {
     EventBus.on('project:loaded', () => {
         renderFileTree();
         renderIssues();
-        renderWorkflows();
+        renderPullRequests();
     });
     
     EventBus.on('tree:refresh', async () => {
@@ -533,4 +577,5 @@ export function initProjectListeners() {
     });
     
     EventBus.on('issues:refresh', refreshIssues);
+    EventBus.on('prs:refresh', refreshPullRequests);
 }

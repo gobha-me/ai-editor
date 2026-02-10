@@ -49,8 +49,8 @@ import {
     onBranchChange, 
     renderIssues, 
     refreshIssues, 
-    renderWorkflows, 
-    refreshWorkflows,
+    renderPullRequests, 
+    refreshPullRequests,
     initProjectListeners,
     openIssueDetailModal,
     closeIssueDetailModal
@@ -182,7 +182,7 @@ function applyVisualSettings() {
 
     // Panel visibility - with null checks
     const issuesSections = document.querySelectorAll('[data-collapse="issuesPanelBody"]');
-    const workflowsSections = document.querySelectorAll('[data-collapse="workflowsPanelBody"]');
+    const prsSections = document.querySelectorAll('[data-collapse="prsPanelBody"]');
     
     issuesSections.forEach(el => {
         const section = el.closest('.sidebar-section');
@@ -190,10 +190,10 @@ function applyVisualSettings() {
             section.style.display = State.settings.showIssues !== false ? '' : 'none';
         }
     });
-    workflowsSections.forEach(el => {
+    prsSections.forEach(el => {
         const section = el.closest('.sidebar-section');
         if (section) {
-            section.style.display = State.settings.showWorkflows !== false ? '' : 'none';
+            section.style.display = State.settings.showPullRequests !== false ? '' : 'none';
         }
     });
 }
@@ -383,7 +383,7 @@ function setupEventListeners() {
     safeAdd('btnNewBranch', 'click', openNewBranchModal);
     safeAdd('btnNewFile', 'click', openNewFileModal);
     safeAdd('btnRefreshIssues', 'click', refreshIssues);
-    safeAdd('btnRefreshWorkflows', 'click', refreshWorkflows);
+    safeAdd('btnRefreshPRs', 'click', refreshPullRequests);
 
     // Selectors
     safeAdd('projectSelect', 'change', onProjectChange);

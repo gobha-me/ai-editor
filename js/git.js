@@ -217,6 +217,11 @@ const Git = {
     // CI/CD
     // ========================================
 
+    async getCommitStatus(owner, repo, ref) {
+        const { provider, connection } = this._resolve();
+        return provider.getCommitStatus(connection, owner, repo, ref);
+    },
+
     async listWorkflowRuns(owner, repo) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.listWorkflowRuns(connection, owner, repo);
@@ -280,10 +285,19 @@ async function loadProject(connectionId, owner, repo) {
         }
 
         try {
-            State.workflowRuns = await provider.listWorkflowRuns(connection, owner, repo);
+            const prs = await provider.listMergeRequests(connection, owner, repo, 'open');
+            // Fetch CI status for each PR in parallel
+            State.pullRequests = await Promise.all(prs.map(async (pr) => {
+                try {
+                    const status = await provider.getCommitStatus(connection, owner, repo, pr.head);
+                    return { ...pr, ciState: status.state, ciStatuses: status.statuses };
+                } catch {
+                    return { ...pr, ciState: 'unknown', ciStatuses: [] };
+                }
+            }));
         } catch (e) {
-            console.warn('Failed to load workflow runs:', e.message);
-            State.workflowRuns = [];
+            console.warn('Failed to load pull requests:', e.message);
+            State.pullRequests = [];
         }
 
         EventBus.emit('git:projectLoaded', State.currentProject);

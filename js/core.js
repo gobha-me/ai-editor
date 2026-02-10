@@ -96,7 +96,7 @@ const State = {
         chatFontSize: 13,          // Chat panel font size in px
         editorFontSize: 14,        // Editor font size in px
         showIssues: true,          // Show issues panel in sidebar
-        showWorkflows: true,       // Show workflows panel in sidebar
+        showPullRequests: true,    // Show pull requests panel in sidebar
         showLineNumbers: true,     // Show line numbers in editor
         theme: 'dark',
 
@@ -152,6 +152,7 @@ const State = {
 
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]
+    pullRequests: [],          // [{ number, title, head, base, state, ciState }]
 };
 
 // ============================================

@@ -520,6 +520,55 @@ const githubProvider = {
     },
 
     // ========================================
+    // CI/CD STATUS
+    // ========================================
+
+    async getCommitStatus(connection, owner, repo, ref) {
+        try {
+            const status = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/commits/${ref}/status`
+            );
+            return {
+                state: status.state || 'unknown',  // success, pending, failure, error
+                total: status.total_count || 0,
+                statuses: (status.statuses || []).map(s => ({
+                    context: s.context,
+                    state: s.state,
+                    description: s.description,
+                    url: s.target_url
+                }))
+            };
+        } catch (e) {
+            // Also try check-runs API (GitHub Actions use checks, not statuses)
+            try {
+                const checks = await this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/commits/${ref}/check-runs`
+                );
+                const runs = checks.check_runs || [];
+                // Derive combined state from check runs
+                let state = 'success';
+                if (runs.some(r => r.status === 'in_progress' || r.status === 'queued')) state = 'pending';
+                if (runs.some(r => r.conclusion === 'failure')) state = 'failure';
+                if (runs.some(r => r.conclusion === 'action_required')) state = 'failure';
+                if (runs.length === 0) state = 'unknown';
+
+                return {
+                    state,
+                    total: runs.length,
+                    statuses: runs.map(r => ({
+                        context: r.name,
+                        state: r.conclusion || r.status,
+                        description: r.output?.summary || '',
+                        url: r.html_url
+                    }))
+                };
+            } catch {
+                return { state: 'unknown', total: 0, statuses: [] };
+            }
+        }
+    },
+
+    // ========================================
     // CI/CD (GitHub Actions)
     // ========================================
 
@@ -593,15 +642,6 @@ const githubProvider = {
                 collapsible: true,
                 refreshEvent: 'issues:refresh',
                 priority: 10
-            },
-            {
-                id: 'github-workflows',
-                slot: 'sidebar-panels',
-                title: 'Actions',
-                icon: '⚡',
-                collapsible: true,
-                refreshEvent: 'workflows:refresh',
-                priority: 20
             },
             {
                 id: 'github-prs',

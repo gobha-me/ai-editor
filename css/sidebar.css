@@ -1,6 +1,6 @@
 /**
  * AI Editor - Sidebar Styles
- * File tree, issues panel, workflows, branch selector
+ * File tree, issues panel, pull requests, branch selector
  */
 
 /* ============================================
@@ -30,13 +30,13 @@
     overflow: hidden;
 }
 
-/* Issues/workflows pinned at bottom with max heights */
+/* Issues/pull requests pinned at bottom with max heights */
 .sidebar-section-bottom {
     flex-shrink: 0;
 }
 
 .sidebar-section-bottom .issues-panel,
-.sidebar-section-bottom .workflows-panel {
+.sidebar-section-bottom .prs-panel {
     max-height: 180px;
     overflow-y: auto;
 }
