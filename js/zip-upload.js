@@ -8,10 +8,11 @@
  *   1. User selects/drops a .zip
  *   2. JSZip extracts in-memory
  *   3. File tree shown with checkboxes for selection
- *   4. User sets target dir + commit message
- *   5. Files created/updated one at a time via Git facade
- *   6. Progress bar tracks completion
- *   7. File tree refreshes on completion
+ *   4. Optional: "Scan for Diffs" compares against repo
+ *   5. User sets target dir + commit message
+ *   6. Files created/updated one at a time via Git facade
+ *   7. Progress bar tracks completion
+ *   8. File tree refreshes on completion
  */
 
 import { State, EventBus } from './core.js';
@@ -23,8 +24,12 @@ import { escapeHtml, escapeAttr } from './utils/html.js';
 // STATE
 // ============================================
 
-let extractedFiles = [];   // [{ path, content, isBinary, size }]
+let extractedFiles = [];   // [{ path, content, isBinary, size, selected, diffStatus }]
 let isUploading = false;
+let currentZipName = '';
+
+// Extensions that are text but not auto-selected by default
+const DEFAULT_OFF_EXTENSIONS = new Set(['svg', 'xml', 'csv', 'tsv']);
 
 // ============================================
 // MODAL LIFECYCLE
@@ -42,15 +47,21 @@ export function openZipUpload() {
     // Reset state
     extractedFiles = [];
     isUploading = false;
+    currentZipName = '';
+    
+    // Reset drop zone first (recreates #zipFileInput if it was destroyed)
+    _resetDropZone();
     
     // Reset UI
-    document.getElementById('zipDropZone').style.display = '';
     document.getElementById('zipFilePreview').style.display = 'none';
     document.getElementById('zipProgress').style.display = 'none';
-    document.getElementById('zipFileInput').value = '';
-    document.getElementById('zipTargetDir').value = '';
-    document.getElementById('zipCommitMessage').value = '';
-    document.getElementById('btnZipUpload').disabled = true;
+    
+    const targetDir = document.getElementById('zipTargetDir');
+    const commitMsg = document.getElementById('zipCommitMessage');
+    const btn = document.getElementById('btnZipUpload');
+    if (targetDir) targetDir.value = '';
+    if (commitMsg) commitMsg.value = '';
+    if (btn) btn.disabled = true;
     
     modal.classList.add('active');
 }
@@ -65,6 +76,7 @@ export function closeZipUpload() {
     
     extractedFiles = [];
     isUploading = false;
+    currentZipName = '';
 }
 
 // ============================================
@@ -84,12 +96,12 @@ export async function handleZipFile(file) {
     
     // Show loading state
     const dropZone = document.getElementById('zipDropZone');
-    const preview = document.getElementById('zipFilePreview');
     dropZone.innerHTML = '<div class="zip-loading">📦 Extracting...</div>';
     
     try {
         const zip = await JSZip.loadAsync(file);
         extractedFiles = [];
+        currentZipName = file.name;
         
         const promises = [];
         
@@ -99,7 +111,12 @@ export async function handleZipFile(file) {
             if (relativePath.startsWith('__MACOSX/')) return;
             if (relativePath.endsWith('.DS_Store')) return;
             
-            const binary = !isTextFile(relativePath.split('/').pop());
+            const fileName = relativePath.split('/').pop();
+            const ext = fileName.split('.').pop().toLowerCase();
+            const binary = !isTextFile(fileName);
+            
+            // Text files auto-select unless in default-off list
+            const autoSelect = !binary && !DEFAULT_OFF_EXTENSIONS.has(ext);
             
             const promise = (async () => {
                 try {
@@ -107,7 +124,6 @@ export async function handleZipFile(file) {
                     let size = zipEntry._data ? zipEntry._data.uncompressedSize : 0;
                     
                     if (binary) {
-                        // Read as base64 for binary files
                         content = await zipEntry.async('base64');
                     } else {
                         content = await zipEntry.async('string');
@@ -119,7 +135,8 @@ export async function handleZipFile(file) {
                         content,
                         isBinary: binary,
                         size,
-                        selected: !binary  // Auto-select text files, skip binaries
+                        selected: autoSelect,
+                        diffStatus: null  // null = not scanned, 'new'|'modified'|'unchanged'
                     });
                 } catch (e) {
                     console.warn(`Failed to extract ${relativePath}:`, e);
@@ -143,7 +160,6 @@ export async function handleZipFile(file) {
     } catch (error) {
         console.error('Zip extraction failed:', error);
         window.showToast(`Failed to extract zip: ${error.message}`, 'error');
-        // Reset drop zone
         _resetDropZone();
     }
 }
@@ -156,7 +172,7 @@ function _stripCommonPrefix() {
     if (extractedFiles.length === 0) return;
     
     const parts = extractedFiles[0].path.split('/');
-    if (parts.length < 2) return;  // No directory prefix
+    if (parts.length < 2) return;
     
     const prefix = parts[0] + '/';
     const allSharePrefix = extractedFiles.every(f => f.path.startsWith(prefix));
@@ -165,13 +181,13 @@ function _stripCommonPrefix() {
         extractedFiles.forEach(f => {
             f.path = f.path.substring(prefix.length);
         });
-        // Remove entries that are now empty (was just the directory)
         extractedFiles = extractedFiles.filter(f => f.path.length > 0);
     }
 }
 
 function _resetDropZone() {
     const dropZone = document.getElementById('zipDropZone');
+    if (!dropZone) return;
     dropZone.innerHTML = `
         <div class="zip-drop-icon">📦</div>
         <div class="zip-drop-text">Drop a .zip file here</div>
@@ -180,7 +196,6 @@ function _resetDropZone() {
                onchange="window.handleZipFileSelect(event)" hidden>
     `;
     dropZone.style.display = '';
-    document.getElementById('zipFilePreview').style.display = 'none';
 }
 
 // ============================================
@@ -190,7 +205,6 @@ function _resetDropZone() {
 function _renderFilePreview(zipName) {
     const dropZone = document.getElementById('zipDropZone');
     const preview = document.getElementById('zipFilePreview');
-    const fileList = document.getElementById('zipFileList');
     const stats = document.getElementById('zipFileStats');
     
     dropZone.style.display = 'none';
@@ -203,37 +217,55 @@ function _renderFilePreview(zipName) {
     let statsHtml = `📦 <strong>${escapeHtml(zipName)}</strong> — `;
     statsHtml += `${textFiles.length} text file${textFiles.length !== 1 ? 's' : ''}`;
     if (binaryFiles.length > 0) {
-        statsHtml += `, ${binaryFiles.length} binary (skipped)`;
+        statsHtml += `, ${binaryFiles.length} binary`;
     }
     statsHtml += ` · ${_formatSize(totalSize)}`;
     stats.innerHTML = statsHtml;
     
+    _renderFileList();
+    
+    // Auto-generate commit message
+    const commitMsg = document.getElementById('zipCommitMessage');
+    if (commitMsg && !commitMsg.value) {
+        commitMsg.value = `Upload ${textFiles.length} files from ${zipName}`;
+    }
+    
+    _updateUploadButton();
+}
+
+function _renderFileList() {
+    const fileList = document.getElementById('zipFileList');
+    if (!fileList) return;
+    
     fileList.innerHTML = extractedFiles.map((f, i) => {
         const icon = f.isBinary ? '📎' : _getIcon(f.path);
         const sizeStr = _formatSize(f.size);
-        const disabledAttr = f.isBinary ? 'disabled' : '';
         const checkedAttr = f.selected ? 'checked' : '';
         const binaryClass = f.isBinary ? ' zip-file-binary' : '';
         
+        // Diff status badge
+        let diffBadge = '';
+        if (f.isBinary) {
+            diffBadge = '<span class="zip-file-badge">binary</span>';
+        } else if (f.diffStatus === 'new') {
+            diffBadge = '<span class="zip-file-badge zip-badge-new">new</span>';
+        } else if (f.diffStatus === 'modified') {
+            diffBadge = '<span class="zip-file-badge zip-badge-modified">modified</span>';
+        } else if (f.diffStatus === 'unchanged') {
+            diffBadge = '<span class="zip-file-badge zip-badge-unchanged">unchanged</span>';
+        }
+        
         return `
             <label class="zip-file-item${binaryClass}">
-                <input type="checkbox" ${checkedAttr} ${disabledAttr}
+                <input type="checkbox" ${checkedAttr}
                        onchange="window.zipToggleFile(${i}, this.checked)">
                 <span class="zip-file-icon">${icon}</span>
                 <span class="zip-file-path">${escapeHtml(f.path)}</span>
                 <span class="zip-file-size">${sizeStr}</span>
-                ${f.isBinary ? '<span class="zip-file-badge">binary</span>' : ''}
+                ${diffBadge}
             </label>
         `;
     }).join('');
-    
-    // Auto-generate commit message
-    if (!document.getElementById('zipCommitMessage').value) {
-        document.getElementById('zipCommitMessage').value = 
-            `Upload ${textFiles.length} files from ${zipName}`;
-    }
-    
-    _updateUploadButton();
 }
 
 export function zipToggleFile(index, checked) {
@@ -245,10 +277,9 @@ export function zipToggleFile(index, checked) {
 
 export function zipSelectAll(checked) {
     extractedFiles.forEach(f => {
-        if (!f.isBinary) f.selected = checked;
+        f.selected = checked;
     });
-    // Update checkboxes in DOM
-    const checkboxes = document.querySelectorAll('#zipFileList input[type="checkbox"]:not([disabled])');
+    const checkboxes = document.querySelectorAll('#zipFileList input[type="checkbox"]');
     checkboxes.forEach(cb => { cb.checked = checked; });
     _updateUploadButton();
 }
@@ -256,10 +287,97 @@ export function zipSelectAll(checked) {
 function _updateUploadButton() {
     const selected = extractedFiles.filter(f => f.selected).length;
     const btn = document.getElementById('btnZipUpload');
+    if (!btn) return;
     btn.disabled = selected === 0 || isUploading;
     btn.textContent = selected > 0 
         ? `📤 Upload ${selected} file${selected !== 1 ? 's' : ''}`
         : '📤 Upload';
+}
+
+// ============================================
+// SCAN FOR DIFFS
+// ============================================
+
+/**
+ * Compare extracted files against the repo.
+ * Marks each file as 'new', 'modified', or 'unchanged'.
+ * Selects only new + modified files.
+ */
+export async function scanForDiffs() {
+    if (extractedFiles.length === 0) return;
+    
+    const btn = document.getElementById('btnZipScanDiffs');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Scanning...';
+    }
+    
+    const targetDir = (document.getElementById('zipTargetDir')?.value || '').trim().replace(/^\/+|\/+$/g, '');
+    const { owner, repo } = State.currentProject;
+    const branch = State.currentBranch || 'main';
+    
+    let scanned = 0;
+    
+    for (const file of extractedFiles) {
+        const fullPath = targetDir ? `${targetDir}/${file.path}` : file.path;
+        
+        try {
+            const remote = await Git.getFile(owner, repo, fullPath, branch);
+            
+            if (file.isBinary) {
+                // Binary files — compare base64 if available, otherwise mark modified
+                if (remote.content === file.content) {
+                    file.diffStatus = 'unchanged';
+                    file.selected = false;
+                } else {
+                    file.diffStatus = 'modified';
+                    file.selected = true;
+                }
+            } else if (remote.content === file.content) {
+                file.diffStatus = 'unchanged';
+                file.selected = false;
+            } else {
+                file.diffStatus = 'modified';
+                file.selected = true;
+            }
+        } catch (e) {
+            if (e.status === 404) {
+                file.diffStatus = 'new';
+                file.selected = true;
+            } else {
+                console.warn(`Diff scan failed for ${fullPath}:`, e.message);
+            }
+        }
+        
+        scanned++;
+        if (btn) btn.textContent = `⏳ ${scanned}/${extractedFiles.length}`;
+    }
+    
+    // Re-render
+    _renderFileList();
+    _updateUploadButton();
+    
+    const newCount = extractedFiles.filter(f => f.diffStatus === 'new').length;
+    const modCount = extractedFiles.filter(f => f.diffStatus === 'modified').length;
+    const sameCount = extractedFiles.filter(f => f.diffStatus === 'unchanged').length;
+    
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🔍 Scan for Diffs';
+    }
+    
+    // Update commit message to reflect diff results
+    const commitMsg = document.getElementById('zipCommitMessage');
+    if (commitMsg && currentZipName) {
+        const parts = [];
+        if (newCount > 0) parts.push(`${newCount} new`);
+        if (modCount > 0) parts.push(`${modCount} modified`);
+        commitMsg.value = parts.length > 0
+            ? `Upload ${parts.join(', ')} files from ${currentZipName}`
+            : `No changes from ${currentZipName}`;
+    }
+    
+    window.showToast(`${newCount} new, ${modCount} modified, ${sameCount} unchanged`, 'info');
 }
 
 // ============================================
@@ -276,13 +394,15 @@ export async function uploadExtractedFiles() {
     
     isUploading = true;
     const btn = document.getElementById('btnZipUpload');
-    btn.disabled = true;
-    btn.textContent = '⏳ Uploading...';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Uploading...';
+    }
     
     const progressBar = document.getElementById('zipProgress');
     const progressFill = document.getElementById('zipProgressFill');
     const progressText = document.getElementById('zipProgressText');
-    progressBar.style.display = '';
+    if (progressBar) progressBar.style.display = '';
     
     // Build a lookup of existing files for create vs update detection
     const existingFiles = new Map();
@@ -302,21 +422,19 @@ export async function uploadExtractedFiles() {
         
         // Update progress
         const pct = Math.round(((i) / selected.length) * 100);
-        progressFill.style.width = pct + '%';
-        progressText.textContent = `${i + 1}/${selected.length}: ${file.path}`;
+        if (progressFill) progressFill.style.width = pct + '%';
+        if (progressText) progressText.textContent = `${i + 1}/${selected.length}: ${file.path}`;
         
         try {
             const existingSha = existingFiles.get(fullPath);
             
             if (existingSha) {
-                // Update existing file
                 await provider.updateFile(
                     connection, owner, repo,
                     fullPath, file.content,
                     commitMsg, existingSha, branch
                 );
             } else {
-                // Create new file
                 await provider.createFile(
                     connection, owner, repo,
                     fullPath, file.content,
@@ -333,13 +451,12 @@ export async function uploadExtractedFiles() {
     }
     
     // Final progress
-    progressFill.style.width = '100%';
-    progressText.textContent = `Done: ${succeeded} uploaded${failed > 0 ? `, ${failed} failed` : ''}`;
+    if (progressFill) progressFill.style.width = '100%';
+    if (progressText) progressText.textContent = `Done: ${succeeded} uploaded${failed > 0 ? `, ${failed} failed` : ''}`;
     
     isUploading = false;
-    btn.textContent = '✅ Done';
+    if (btn) btn.textContent = '✅ Done';
     
-    // Show results
     if (failed > 0) {
         const failedPaths = errors.map(e => `  ${e.path}: ${e.error}`).join('\n');
         console.warn('Upload errors:\n' + failedPaths);
@@ -348,10 +465,8 @@ export async function uploadExtractedFiles() {
         window.showToast(`Uploaded ${succeeded} file${succeeded !== 1 ? 's' : ''}`, 'success');
     }
     
-    // Refresh file tree
     EventBus.emit('tree:refresh');
     
-    // Close modal after brief delay
     setTimeout(() => {
         closeZipUpload();
     }, 1200);
@@ -391,7 +506,6 @@ export function initZipDragDrop() {
     });
 }
 
-// Called from inline onchange on the hidden file input
 export function handleZipFileSelect(event) {
     const file = event.target?.files?.[0];
     if (file) handleZipFile(file);
