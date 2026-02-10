@@ -595,3 +595,53 @@
 }
 
 /* ============================================
+ * PLUGIN TOOLBAR
+ * ============================================ */
+
+.plugin-toolbar {
+    position: relative;
+    display: inline-block;
+}
+
+.plugin-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 180px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    padding: 0.25rem 0;
+    margin-top: 0.25rem;
+}
+
+.plugin-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.plugin-dropdown-item:hover {
+    background: var(--bg-hover);
+}
+
+.plugin-dropdown-item .plugin-btn-icon {
+    font-size: var(--font-base);
+}
+
+/* Active state for plugin range/filter buttons */
+.vb-range-btn.active {
+    background: var(--accent, #4a9eff);
+    color: white;
+    border-color: var(--accent, #4a9eff);
+}

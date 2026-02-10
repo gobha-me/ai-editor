@@ -13,7 +13,7 @@
  *   const repos = await Git.listAllRepos();
  */
 
-import { State, EventBus, Storage } from './core.js';
+import { State, EventBus, Storage, Plugins } from './core.js';
 import { GitProviderRegistry } from './git-providers/index.js';
 
 // ============================================
@@ -52,6 +52,23 @@ function resolveContext() {
     const { owner, repo } = State.currentProject;
     const branch = State.currentBranch || 'main';
     return { provider, connection, owner, repo, branch };
+}
+
+/**
+ * Resolve provider/connection for issue operations.
+ * Runs the 'resolveIssueConnection' plugin hook, allowing plugins to
+ * redirect issue operations to a different connection/repo (e.g., issues
+ * on GitHub while code lives on Gitea).
+ * 
+ * Falls back to current project connection if no plugin overrides.
+ */
+async function resolveIssueContext(owner, repo) {
+    const { provider, connection } = resolveCurrentConnection();
+    const defaultCtx = { provider, connection, owner, repo, redirected: false };
+
+    // Give plugins a chance to redirect
+    const result = await Plugins.runHook('resolveIssueConnection', defaultCtx);
+    return result || defaultCtx;
 }
 
 // ============================================
@@ -165,38 +182,38 @@ const Git = {
     // ========================================
 
     async listIssues(owner, repo, state = 'open', labels = '') {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.listIssues(connection, owner, repo, state, labels);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.listIssues(ctx.connection, ctx.owner, ctx.repo, state, labels);
     },
 
     async getIssue(owner, repo, number) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.getIssue(connection, owner, repo, number);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.getIssue(ctx.connection, ctx.owner, ctx.repo, number);
     },
 
     async createIssue(owner, repo, title, body, labels = []) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.createIssue(connection, owner, repo, title, body, labels);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.createIssue(ctx.connection, ctx.owner, ctx.repo, title, body, labels);
     },
 
     async updateIssue(owner, repo, number, fields) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.updateIssue(connection, owner, repo, number, fields);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.updateIssue(ctx.connection, ctx.owner, ctx.repo, number, fields);
     },
 
     async getIssueComments(owner, repo, number) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.getIssueComments(connection, owner, repo, number);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.getIssueComments(ctx.connection, ctx.owner, ctx.repo, number);
     },
 
     async createIssueComment(owner, repo, number, body) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.createIssueComment(connection, owner, repo, number, body);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.createIssueComment(ctx.connection, ctx.owner, ctx.repo, number, body);
     },
 
     async updateIssueState(owner, repo, number, state) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.updateIssueState(connection, owner, repo, number, state);
+        const ctx = await resolveIssueContext(owner, repo);
+        return ctx.provider.updateIssueState(ctx.connection, ctx.owner, ctx.repo, number, state);
     },
 
     // ========================================

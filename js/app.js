@@ -5,7 +5,7 @@
 import { VERSION_DISPLAY } from './version.js';
 import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
-import { State, EventBus, Storage, loadSettings } from './core.js';
+import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
@@ -88,6 +88,11 @@ import './tools/scratchpad-tools.js'; // LLM persistent notes
 import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tools
 import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 
+// --- Plugins ---
+import '../plugins/venice-ai.js';
+import '../plugins/cross-repo-issues.js';
+import '../plugins/venice-billing.js';
+
 // Log version on startup
 console.log(`Starting ${VERSION_DISPLAY}`);
 
@@ -154,6 +159,10 @@ window.closeIssueDetailModal = closeIssueDetailModal;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;
+
+// Plugin modal
+window.openPluginModal = openPluginModal;
+window.closePluginModal = closePluginModal;
 window.createNewFile = createNewFile;
 
 // Revert functions
@@ -362,6 +371,89 @@ function setupKeyboardShortcuts() {
 // EVENT LISTENERS
 // ============================================
 
+// ============================================
+// PLUGIN MODAL & TOOLBAR
+// ============================================
+
+function openPluginModal(modalId) {
+    const modal = document.getElementById('pluginModal');
+    const def = Plugins.getModal(modalId);
+    if (!modal || !def) return;
+
+    document.getElementById('pluginModalTitle').textContent = def.title || 'Plugin';
+    if (def.width) {
+        document.getElementById('pluginModalContent').style.maxWidth = def.width;
+    }
+
+    const body = document.getElementById('pluginModalBody');
+    body.innerHTML = '';
+
+    if (def.render) {
+        const result = def.render(body);
+        // If render returns HTML string, set it
+        if (typeof result === 'string') body.innerHTML = result;
+    }
+
+    modal.classList.add('active');
+}
+
+function closePluginModal() {
+    const modal = document.getElementById('pluginModal');
+    if (modal) modal.classList.remove('active');
+}
+
+/**
+ * Initialize the plugin toolbar dropdown.
+ * Shows/hides based on whether any plugins have registered buttons.
+ */
+function initPluginToolbar() {
+    const toolbar = document.getElementById('pluginToolbar');
+    const btn = document.getElementById('btnPluginMenu');
+    const dropdown = document.getElementById('pluginDropdown');
+    if (!toolbar || !btn || !dropdown) return;
+
+    function render() {
+        const buttons = Plugins.getButtons();
+        if (buttons.length === 0) {
+            toolbar.style.display = 'none';
+            return;
+        }
+
+        toolbar.style.display = '';
+        dropdown.innerHTML = buttons.map((b, i) => `
+            <button class="plugin-dropdown-item" data-plugin-btn-idx="${i}">
+                <span class="plugin-btn-icon">${b.icon || '⚡'}</span>
+                <span>${b.label || 'Action'}</span>
+            </button>
+        `).join('');
+
+        dropdown.querySelectorAll('[data-plugin-btn-idx]').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.pluginBtnIdx);
+                if (buttons[idx]?.onClick) buttons[idx].onClick();
+                dropdown.style.display = 'none';
+            });
+        });
+    }
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = dropdown.style.display !== 'none';
+        dropdown.style.display = isVisible ? 'none' : '';
+    });
+
+    // Close on outside click
+    document.addEventListener('click', () => {
+        dropdown.style.display = 'none';
+    });
+
+    // Re-render when plugins change
+    EventBus.on('plugin:buttonRegistered', render);
+    EventBus.on('plugin:enabledChanged', render);
+
+    render();
+}
+
 function setupEventListeners() {
     // Helper to safely add event listener
     const safeAdd = (id, event, handler) => {
@@ -541,6 +633,12 @@ async function init() {
     initQuickOpen();
     initSearchPanel();
     initZipDragDrop();
+
+    // Initialize plugins
+    initPluginToolbar();
+    for (const plugin of Plugins.list()) {
+        await Plugins.init(plugin.id);
+    }
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);
 }

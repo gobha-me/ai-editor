@@ -253,6 +253,8 @@ const Storage = {
 const Plugins = {
     _registered: {},
     _hooks: {},
+    _buttons: [],      // Toolbar buttons contributed by plugins
+    _modals: {},       // Modal definitions contributed by plugins
 
     register(manifest) {
         if (!manifest.id || !manifest.name) {
@@ -260,10 +262,15 @@ const Plugins = {
             return false;
         }
 
+        // Load persisted state (enabled/disabled + config)
+        const savedState = Storage.get('pluginState') || {};
+        const pluginState = savedState[manifest.id] || {};
+
         this._registered[manifest.id] = {
             manifest,
-            enabled: true,
-            instance: null
+            enabled: pluginState.enabled !== undefined ? pluginState.enabled : true,
+            instance: null,
+            config: pluginState.config || (manifest.defaultConfig ? { ...manifest.defaultConfig } : {})
         };
 
         // Register hooks
@@ -285,9 +292,14 @@ const Plugins = {
         const plugin = this._registered[pluginId];
         if (!plugin) return false;
 
+        if (!plugin.enabled) {
+            console.log(`Plugin skipped (disabled): ${pluginId}`);
+            return false;
+        }
+
         if (plugin.manifest.init) {
             try {
-                plugin.instance = await plugin.manifest.init();
+                plugin.instance = await plugin.manifest.init(plugin.config);
             } catch (e) {
                 console.error(`Plugin init failed: ${pluginId}`, e);
                 return false;
@@ -309,7 +321,7 @@ const Plugins = {
             const hookFn = plugin.manifest[hookName];
             if (hookFn) {
                 try {
-                    result = await hookFn(result, plugin.instance);
+                    result = await hookFn(result, plugin.instance, plugin.config);
                 } catch (e) {
                     console.error(`Hook ${hookName} failed in ${pluginId}:`, e);
                 }
@@ -324,7 +336,61 @@ const Plugins = {
     },
 
     list() {
-        return Object.values(this._registered).map(p => p.manifest);
+        return Object.values(this._registered).map(p => ({
+            ...p.manifest,
+            enabled: p.enabled,
+            config: p.config
+        }));
+    },
+
+    getConfig(pluginId) {
+        const plugin = this._registered[pluginId];
+        return plugin ? { ...plugin.config } : {};
+    },
+
+    setConfig(pluginId, config) {
+        const plugin = this._registered[pluginId];
+        if (!plugin) return;
+        plugin.config = { ...config };
+        this._persistState();
+        EventBus.emit('plugin:configChanged', { pluginId, config });
+    },
+
+    setEnabled(pluginId, enabled) {
+        const plugin = this._registered[pluginId];
+        if (!plugin) return;
+        plugin.enabled = enabled;
+        this._persistState();
+        EventBus.emit('plugin:enabledChanged', { pluginId, enabled });
+    },
+
+    registerButton(pluginId, { icon, label, onClick }) {
+        this._buttons.push({ pluginId, icon, label, onClick });
+        EventBus.emit('plugin:buttonRegistered', { pluginId, icon, label });
+    },
+
+    getButtons() {
+        return this._buttons.filter(b => {
+            const p = this._registered[b.pluginId];
+            return p && p.enabled;
+        });
+    },
+
+    registerModal(pluginId, { id, title, render, width }) {
+        this._modals[id] = { pluginId, id, title, render, width };
+        EventBus.emit('plugin:modalRegistered', { pluginId, id });
+    },
+
+    getModal(modalId) {
+        return this._modals[modalId];
+    },
+
+    _persistState() {
+        const state = {};
+        for (const [id, plugin] of Object.entries(this._registered)) {
+            state[id] = { enabled: plugin.enabled, config: plugin.config };
+        }
+        Storage.set('pluginState', state);
     }
 };
 

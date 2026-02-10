@@ -2,7 +2,7 @@
 // SETTINGS MANAGER
 // ============================================
 
-import { State, Storage, Providers, ProviderRegistry, Roles, saveSettings as coreSaveSettings } from './core.js';
+import { State, Storage, Providers, ProviderRegistry, Roles, Plugins, saveSettings as coreSaveSettings } from './core.js';
 import { LLM } from './llm.js';
 import { ToolRegistry } from './tools/registry.js';
 import { ContextManager } from './context-manager.js';
@@ -207,6 +207,9 @@ function populateSettingsForm() {
     // --- Roles Tab ---
     populateRoleCards();
 
+    // --- Plugins Tab ---
+    populatePluginsTab();
+
     // --- Advanced Tab ---
     populateAdvancedParams();
 
@@ -231,6 +234,10 @@ function populateSettingsForm() {
             // Populate Models tab when switching to it
             if (tab.dataset.tab === 'tabModels') {
                 populateModelsTab();
+            }
+            // Refresh Plugins tab when switching to it
+            if (tab.dataset.tab === 'tabPlugins') {
+                populatePluginsTab();
             }
             
             // Re-check arrow visibility after scroll settles
@@ -1041,6 +1048,105 @@ function showModelCapabilities() {
     html += '</div>';
     container.style.display = 'block';
     container.innerHTML = html;
+}
+
+// ============================================
+// PLUGINS TAB
+// ============================================
+
+/**
+ * Populate the Plugins tab with all registered plugins.
+ * Shows enable/disable toggles, description, and config fields.
+ */
+function populatePluginsTab() {
+    const container = document.getElementById('pluginsList');
+    if (!container) return;
+
+    const plugins = Plugins.list();
+
+    if (plugins.length === 0) {
+        container.innerHTML = `
+            <div style="padding: 1rem; text-align: center; color: var(--text-muted);">
+                No plugins registered. Place plugin files in the <code>plugins/</code> directory.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = plugins.map(p => {
+        const configFields = (p.configSchema || []).map(field => {
+            const value = p.config?.[field.key] || '';
+            const escapedValue = escapeAttr(typeof value === 'string' ? value : JSON.stringify(value));
+            const type = field.type === 'password' ? 'password' : field.type === 'textarea' ? 'textarea' : 'text';
+
+            if (type === 'textarea') {
+                return `
+                    <div class="form-group" style="margin-top: 0.5rem;">
+                        <label style="font-size: var(--font-sm);">${escapeHtml(field.label)}:</label>
+                        <textarea data-plugin-id="${escapeAttr(p.id)}" data-config-key="${escapeAttr(field.key)}"
+                            placeholder="${escapeAttr(field.placeholder || '')}"
+                            rows="3" style="width: 100%; font-size: var(--font-sm); font-family: var(--font-mono); resize: vertical;">${escapeHtml(typeof value === 'string' ? value : JSON.stringify(value, null, 2))}</textarea>
+                        ${field.help ? `<small style="color: var(--text-muted);">${escapeHtml(field.help)}</small>` : ''}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="form-group" style="margin-top: 0.5rem;">
+                    <label style="font-size: var(--font-sm);">${escapeHtml(field.label)}:</label>
+                    <input type="${type}" data-plugin-id="${escapeAttr(p.id)}" data-config-key="${escapeAttr(field.key)}"
+                        value="${escapedValue}" placeholder="${escapeAttr(field.placeholder || '')}"
+                        style="font-size: var(--font-sm);">
+                    ${field.help ? `<small style="color: var(--text-muted);">${escapeHtml(field.help)}</small>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="plugin-card" style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+                    <div>
+                        <strong style="font-size: var(--font-base);">${escapeHtml(p.name)}</strong>
+                        <span style="font-size: var(--font-sm); color: var(--text-muted); margin-left: 0.5rem;">v${escapeHtml(p.version || '1.0')}</span>
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 0.3rem; font-size: var(--font-sm); cursor: pointer;">
+                        <input type="checkbox" data-plugin-toggle="${escapeAttr(p.id)}" ${p.enabled ? 'checked' : ''}>
+                        Enabled
+                    </label>
+                </div>
+                <div style="font-size: var(--font-sm); color: var(--text-secondary); margin-bottom: 0.3rem;">
+                    ${escapeHtml(p.description || '')}
+                </div>
+                ${p.author ? `<div style="font-size: 11px; color: var(--text-muted);">by ${escapeHtml(p.author)}</div>` : ''}
+                ${configFields ? `<div class="plugin-config" style="border-top: 1px solid var(--border); margin-top: 0.5rem; padding-top: 0.5rem;">${configFields}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    // Wire up enable/disable toggles
+    container.querySelectorAll('[data-plugin-toggle]').forEach(el => {
+        el.addEventListener('change', () => {
+            Plugins.setEnabled(el.dataset.pluginToggle, el.checked);
+        });
+    });
+
+    // Wire up config field changes (save on blur)
+    container.querySelectorAll('[data-plugin-id][data-config-key]').forEach(el => {
+        const save = () => {
+            const pluginId = el.dataset.pluginId;
+            const key = el.dataset.configKey;
+            const currentConfig = Plugins.getConfig(pluginId);
+            let value = el.tagName === 'TEXTAREA' ? el.value : el.value;
+            // Try parsing JSON for textarea fields
+            if (el.tagName === 'TEXTAREA') {
+                try { value = JSON.parse(value); } catch { /* keep as string */ }
+            }
+            currentConfig[key] = value;
+            Plugins.setConfig(pluginId, currentConfig);
+        };
+        el.addEventListener('blur', save);
+        el.addEventListener('change', save);
+    });
 }
 
 // ============================================

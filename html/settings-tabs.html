@@ -327,6 +327,21 @@
 </div>
 
 <!-- Advanced Tab -->
+<!-- Plugins Tab -->
+<div class="settings-tab-content" id="tabPlugins">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
+        Manage plugins — enable/disable and configure each plugin.
+    </p>
+
+    <div id="pluginsList">
+        <!-- Populated dynamically by settings-manager.js -->
+    </div>
+
+    <!-- Plugin modal container — plugins inject their modals here -->
+    <div id="pluginModalContainer"></div>
+</div>
+
+<!-- Advanced Tab -->
 <div class="settings-tab-content" id="tabAdvanced">
     <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Advanced LLM parameters. Leave empty to use provider defaults.

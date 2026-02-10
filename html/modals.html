@@ -16,6 +16,7 @@
                 <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
                 <button class="settings-tab" data-tab="tabContext">Context</button>
                 <button class="settings-tab" data-tab="tabRoles">Roles</button>
+                <button class="settings-tab" data-tab="tabPlugins">Plugins</button>
                 <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
             </div>
             <button class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollSettingsTabs(1)" aria-label="Scroll tabs right">›</button>
@@ -342,6 +343,18 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
             <button class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">📤 Upload</button>
+        </div>
+    </div>
+</div>
+
+<!-- Plugin Modal (generic container for plugin-contributed modals) -->
+<div class="modal" id="pluginModal">
+    <div class="modal-content" id="pluginModalContent" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="pluginModalTitle">Plugin</h3>
+            <button class="modal-close" onclick="window.closePluginModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="pluginModalBody" style="max-height: 70vh; overflow-y: auto;">
         </div>
     </div>
 </div>
