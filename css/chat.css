@@ -419,6 +419,60 @@
     border-color: var(--success);
 }
 
+.chat-message .btn-edit:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* ============================================
+   INLINE MESSAGE EDITOR
+   ============================================ */
+
+.message-content.editing {
+    padding: 0;
+}
+
+.edit-message-input {
+    width: 100%;
+    min-height: 3em;
+    max-height: 50vh;
+    padding: 0.5rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--chat-base);
+    line-height: 1.5;
+    resize: none;
+    overflow-y: auto;
+}
+
+.edit-message-input:focus {
+    outline: none;
+    border-color: var(--accent-hover);
+    box-shadow: 0 0 0 1px var(--accent-hover);
+}
+
+.edit-message-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.btn-edit-save:hover {
+    background: var(--success) !important;
+    color: var(--bg-primary) !important;
+    border-color: var(--success) !important;
+}
+
+.btn-edit-cancel:hover {
+    background: var(--error) !important;
+    color: white !important;
+    border-color: var(--error) !important;
+}
+
 .chat-message.streaming .typing-indicator {
     display: inline-block;
     animation: pulse 1s infinite;

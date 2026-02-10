@@ -24,7 +24,10 @@ import { ChatSummarizer } from './summarizer.js';
 import { 
     addMessage, 
     renderMessages,
-    renderSummaryNotification
+    renderSummaryNotification,
+    editMessage,
+    cancelEdit,
+    commitEdit
 } from './messages.js';
 import { setupInputHandlers, stopGeneration } from './input.js';
 import { exportChat } from './export.js';
@@ -94,6 +97,11 @@ function initChat(containerEl, inputEl) {
     // Show summary notification when context is compressed
     EventBus.on('chat:summaryGenerated', (info) => {
         renderSummaryNotification(info);
+    });
+
+    // Handle edit-and-resend from inline message editor
+    EventBus.on('chat:editAndResend', ({ newContent }) => {
+        editAndResend(newContent);
     });
 }
 
@@ -165,6 +173,40 @@ function retryLastMessage() {
 }
 
 /**
+ * Edit the last user message and resend with new content.
+ * Truncates history from the last user message forward, then sends the edited text.
+ * @param {string} newContent - The edited message text
+ */
+function editAndResend(newContent) {
+    if (State.isGenerating) {
+        showToast('⚠️ Already generating a response', 'warning');
+        return;
+    }
+
+    // Find and remove the last user message and everything after it
+    let lastUserIdx = -1;
+    for (let i = State.chatHistory.length - 1; i >= 0; i--) {
+        if (State.chatHistory[i].role === 'user') {
+            lastUserIdx = i;
+            break;
+        }
+    }
+
+    if (lastUserIdx === -1) {
+        showToast('⚠️ No message to edit', 'warning');
+        return;
+    }
+
+    // Truncate from the user message onward
+    State.chatHistory.splice(lastUserIdx);
+    Storage.set('chatHistory', State.chatHistory.slice(-100));
+    renderMessages();
+
+    // Send the edited content as a fresh message
+    handleUserInputDirect(newContent);
+}
+
+/**
  * Copy message content to clipboard
  * @param {HTMLElement} buttonEl - The button that was clicked (to find parent message)
  */
@@ -221,7 +263,10 @@ window.Chat = {
     exportChat,
     continueResponse,
     retryLastMessage,
-    copyMessage
+    copyMessage,
+    editMessage,
+    cancelEdit,
+    commitEdit
 };
 
 // ============================================
@@ -239,5 +284,8 @@ export {
     executeToolCall,
     continueResponse,
     retryLastMessage,
-    copyMessage
+    copyMessage,
+    editMessage,
+    cancelEdit,
+    commitEdit
 };

@@ -279,10 +279,11 @@ export function renderMessage(message, isLastUserMessage = false) {
         `;
         messageEl.appendChild(actionsEl);
     } else if (message.role === 'user' && isLastUserMessage) {
-        // Only show retry on the most recent user message
+        // Only show retry/edit on the most recent user message
         const actionsEl = document.createElement('div');
         actionsEl.className = 'message-actions';
         actionsEl.innerHTML = `
+            <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend">✏️ Edit</button>
             <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request">🔁 Retry</button>
         `;
         messageEl.appendChild(actionsEl);
@@ -639,4 +640,73 @@ function _escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Replace a user message bubble with an inline editor for editing and resending.
+ * @param {HTMLElement} buttonEl - The edit button that was clicked
+ */
+export function editMessage(buttonEl) {
+    const messageEl = buttonEl.closest('.chat-message');
+    if (!messageEl) return;
+
+    const contentEl = messageEl.querySelector('.message-content');
+    const actionsEl = messageEl.querySelector('.message-actions');
+    if (!contentEl) return;
+
+    // Get the raw text content (strip any HTML formatting)
+    const originalText = contentEl.innerText || contentEl.textContent;
+
+    // Replace content with editable textarea
+    contentEl.classList.add('editing');
+    contentEl.innerHTML = `
+        <textarea class="edit-message-input">${_escapeHtml(originalText)}</textarea>
+        <div class="edit-message-actions">
+            <button class="btn-action btn-edit-save" onclick="window.Chat.commitEdit(this)">💾 Send</button>
+            <button class="btn-action btn-edit-cancel" onclick="window.Chat.cancelEdit(this)">✖ Cancel</button>
+        </div>
+    `;
+
+    // Hide the retry/edit buttons while editing
+    if (actionsEl) actionsEl.style.display = 'none';
+
+    // Focus and select the textarea
+    const textarea = contentEl.querySelector('.edit-message-input');
+    textarea.focus();
+    textarea.select();
+
+    // Auto-resize to fit content
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    });
+}
+
+/**
+ * Cancel inline edit — restore the original message content.
+ * @param {HTMLElement} buttonEl - The cancel button
+ */
+export function cancelEdit(buttonEl) {
+    // Just re-render everything to restore original state
+    renderMessages();
+}
+
+/**
+ * Commit the edited message — truncate history from this point and resend.
+ * @param {HTMLElement} buttonEl - The save button
+ */
+export function commitEdit(buttonEl) {
+    const messageEl = buttonEl.closest('.chat-message');
+    if (!messageEl) return;
+
+    const textarea = messageEl.querySelector('.edit-message-input');
+    if (!textarea) return;
+
+    const newText = textarea.value.trim();
+    if (!newText) return;
+
+    // Emit event — index.js handles the history truncation and resend
+    EventBus.emit('chat:editAndResend', { newContent: newText });
 }
