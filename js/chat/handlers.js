@@ -352,7 +352,15 @@ export async function handleGeneralRequest(input) {
                 }
                 
                 if (toolActions.length > 0) {
-                    // Show what tools did accomplish
+                    // === CRITICAL: Roll back orphaned tool-call messages ===
+                    // The tool loop pushed assistant+tool messages to chatHistory
+                    // during the `continue` at the end of the previous round.
+                    // Since this round failed, those messages are orphaned and
+                    // will poison all future requests (Venice/OpenRouter will
+                    // reject tool protocol messages they can't process).
+                    _rollbackHistory(historySnapshot);
+                    
+                    // Show what tools did accomplish (as plain text, not tool protocol)
                     const summaryLines = toolActions.map(a => {
                         const status = a.error ? '❌' : '✅';
                         const detail = a.result?.message || a.result?.error || '';
@@ -498,6 +506,12 @@ export async function handleGeneralRequest(input) {
                         // 12K chars ≈ 300 lines of code — enough for most single-file reads.
                         // For truly massive results, keep head+tail so the model has actionable data.
                         let toolContent = JSON.stringify(toolResult);
+                        
+                        // GUARANTEE: tool content is never empty
+                        if (!toolContent || toolContent === 'null' || toolContent === 'undefined' || toolContent === '""') {
+                            toolContent = JSON.stringify({ error: `Tool '${toolName}' returned empty result. Try a different approach.` });
+                        }
+                        
                         const TOOL_RESULT_LIMIT = 12000;
                         
                         if (toolContent.length > TOOL_RESULT_LIMIT) {
@@ -605,24 +619,18 @@ export async function handleGeneralRequest(input) {
                     }
                 }
 
-                // CRITICAL BUG FIX: Always provide content field (even if empty string) when no tool_calls
-                // Omit content entirely when tool_calls are present and there's no actual text
-                // This prevents "zero-length document" errors from malformed API payloads
+                // Always provide content field: non-empty string for text, null for tool-only.
+                // Prevents "zero-length document" errors from providers that reject absent content.
                 const assistantMsg = {
                     role: 'assistant',
                     timestamp: Date.now()
                 };
                 
-                // Logic for setting content field:
-                // 1. If we have tool calls AND content: include both
-                // 2. If we have tool calls but NO content: omit content field entirely (CRITICAL)
-                // 3. If we have NO tool calls: always include content (even if empty string to avoid zero-length)
                 if (toolCallSource === 'structured') {
-                    // Has tool calls - only add content if there's actual text
-                    if (cleanContent.trim()) {
-                        assistantMsg.content = cleanContent;
-                    }
-                    // CRITICAL: Do NOT add empty content field when tool_calls exist
+                    // Always include content field — null when no text content.
+                    // OpenAI spec allows null, and some providers (Venice) reject
+                    // messages where content is entirely absent.
+                    assistantMsg.content = cleanContent.trim() ? cleanContent : null;
                     assistantMsg.tool_calls = toolCalls;
                 } else {
                     // No tool calls - always include content to prevent empty message
