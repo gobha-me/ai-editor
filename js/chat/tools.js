@@ -59,12 +59,20 @@ export function validateToolParameters(toolName, args) {
 }
 
 /**
- * Execute a tool call using the registry
+ * Execute a tool call using the registry.
+ * GUARANTEE: Always returns a non-null object that JSON.stringify produces a non-empty string.
  */
 export async function executeToolCall(toolCall) {
-    const toolName = toolCall.function.name;
+    const toolName = toolCall.function?.name || 'unknown';
     try {
-        const args = JSON.parse(toolCall.function.arguments || '{}');
+        let args;
+        try {
+            args = JSON.parse(toolCall.function?.arguments || '{}');
+        } catch (parseErr) {
+            const msg = `Invalid JSON in tool arguments: ${(toolCall.function?.arguments || '').slice(0, 200)}`;
+            _logToolError(toolName, null, msg);
+            return { error: msg };
+        }
 
         // Normalize file paths — LLMs often add leading slashes
         if (typeof args.path === 'string') {
@@ -89,7 +97,9 @@ export async function executeToolCall(toolCall) {
         
         return result;
     } catch (error) {
-        const msg = `Tool execution failed: ${error.message}`;
+        // This should rarely fire since ToolRegistry.execute now catches internally,
+        // but belt-and-suspenders for anything truly unexpected
+        const msg = `Tool '${toolName}' crashed: ${error.message || String(error)}`;
         console.error(`[Tool Crash] ${toolName}:`, error);
         _logToolError(toolName, null, msg);
         return { error: msg };
