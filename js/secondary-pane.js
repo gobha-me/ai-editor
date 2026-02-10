@@ -144,7 +144,7 @@ function renderDiff() {
 // Listen for view mode changes
 window.addEventListener('diff:refresh', renderDiff);
 
-function renderMarkdown(md) {
+export function renderMarkdown(md) {
     // Use marked.js if available (loaded via CDN), fall back to basic regex
     if (typeof marked !== 'undefined') {
         try {

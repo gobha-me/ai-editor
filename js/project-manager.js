@@ -5,6 +5,7 @@
 import { State, EventBus } from './core.js';
 import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
+import { renderMarkdown } from './secondary-pane.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 
 export async function refreshProjects() {
@@ -369,8 +370,12 @@ export async function openIssueDetailModal(issueNumber) {
         if (created) metaParts.push(`Created: ${created}`);
         document.getElementById('issueDetailMeta').textContent = metaParts.join(' · ');
 
-        // Body
-        document.getElementById('issueDetailBody').textContent = issue.body || '(No description)';
+        // Body (render as markdown)
+        const bodyEl = document.getElementById('issueDetailBody');
+        bodyEl.innerHTML = issue.body
+            ? renderMarkdown(issue.body)
+            : '<em style="color: var(--text-muted);">No description</em>';
+        bodyEl.classList.add('preview-markdown');
 
         // Comments preview (last 5)
         const commentsEl = document.getElementById('issueDetailComments');
@@ -383,7 +388,7 @@ export async function openIssueDetailModal(issueNumber) {
                 ${shown.map(c => `
                     <div style="font-size: var(--font-md); border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
                         <div style="color: var(--text-muted);">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
-                        <div style="white-space: pre-wrap; max-height: 80px; overflow-y: auto;">${escapeHtml((c.body || '').slice(0, 300))}</div>
+                        <div class="preview-markdown" style="max-height: 120px; overflow-y: auto;">${renderMarkdown(c.body || '')}</div>
                     </div>
                 `).join('')}
             `;
@@ -627,8 +632,12 @@ function renderIssueFocusBar() {
     }
     metaEl.innerHTML = escapeHtml(parts.join(' · ')) + (labelsHtml ? ' ' + labelsHtml : '');
 
-    // Body
-    document.getElementById('issueFocusBody').textContent = issue.body || '(No description)';
+    // Body (render as markdown)
+    const bodyEl = document.getElementById('issueFocusBody');
+    bodyEl.innerHTML = issue.body
+        ? renderMarkdown(issue.body)
+        : '<em style="color: var(--text-muted);">No description</em>';
+    bodyEl.classList.add('preview-markdown');
 
     // Comments (last 3)
     const commentsEl = document.getElementById('issueFocusComments');
@@ -639,7 +648,7 @@ function renderIssueFocusBar() {
         commentsEl.innerHTML = moreText + shown.map(c => `
             <div class="issue-focus-comment-item">
                 <div class="issue-focus-comment-meta">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
-                <div class="issue-focus-comment-body">${escapeHtml((c.body || '').slice(0, 300))}</div>
+                <div class="issue-focus-comment-body preview-markdown">${renderMarkdown(c.body || '')}</div>
             </div>
         `).join('');
     } else {

@@ -259,12 +259,12 @@
 
 <!-- Issue Detail Modal -->
 <div class="modal-overlay" id="issueDetailModal">
-    <div class="modal" style="max-width: 620px;">
+    <div class="modal modal-resizable" style="width: 620px; height: 520px;">
         <div class="modal-header">
             <h2 id="issueDetailTitle">Issue</h2>
             <button class="modal-close" onclick="window.closeIssueDetailModal()">×</button>
         </div>
-        <div class="modal-body" style="max-height: 450px; overflow-y: auto;">
+        <div class="modal-body">
             <!-- Labels -->
             <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;"></div>
 
@@ -272,7 +272,7 @@
             <div id="issueDetailMeta" style="font-size: var(--font-md); color: var(--text-muted); margin-bottom: 1rem;"></div>
 
             <!-- Body (markdown-rendered) -->
-            <div id="issueDetailBody" style="font-size: var(--font-base); line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); max-height: 200px; overflow-y: auto;"></div>
+            <div id="issueDetailBody" class="preview-markdown" style="font-size: var(--font-base); line-height: 1.6; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); min-height: 60px; max-height: 40%; overflow-y: auto;"></div>
 
             <!-- Comments preview -->
             <div id="issueDetailComments" style="margin-top: 0.75rem;"></div>
@@ -349,7 +349,7 @@
 
 <!-- Plugin Modal (generic container for plugin-contributed modals) -->
 <div class="modal-overlay" id="pluginModal">
-    <div class="modal" id="pluginModalContent" style="max-width: 700px;">
+    <div class="modal modal-resizable" id="pluginModalContent" style="width: 700px; height: 550px;">
         <div class="modal-header">
             <h3 id="pluginModalTitle">Plugin</h3>
             <button class="modal-close" onclick="window.closePluginModal()">&times;</button>
