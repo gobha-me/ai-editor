@@ -205,10 +205,10 @@ export function initSecondaryPaneAutoRefresh() {
     });
     
     // Refresh diff after commit (originalContent now matches current)
-    EventBus.on('gitea:saved', () => {
+    EventBus.on('git:fileUpdated', () => {
         if (secondaryPaneMode === 'diff') renderDiff();
     });
-    EventBus.on('gitea:batchSaved', () => {
+    EventBus.on('git:batchCommitted', () => {
         if (secondaryPaneMode === 'diff') renderDiff();
     });
     

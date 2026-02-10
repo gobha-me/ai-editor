@@ -11,12 +11,12 @@
 
 import { GitProviderRegistry } from './registry.js';
 import giteaProvider from './gitea.js';
-// import githubProvider from './github.js';   // Phase 3
+import githubProvider from './github.js';
 // import gitlabProvider from './gitlab.js';   // Phase 4
 
 // Register built-in providers
 GitProviderRegistry.register(giteaProvider);
-// GitProviderRegistry.register(githubProvider);
+GitProviderRegistry.register(githubProvider);
 // GitProviderRegistry.register(gitlabProvider);
 
 export { GitProviderRegistry };

@@ -2,6 +2,30 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.8.3] - 2025-02-10
+
+### Added
+- **GitHub Provider**: Full GitHub.com support as second git provider implementation
+  - All repository, branch, file, issue, PR, and Actions operations
+  - `Bearer` token auth with `X-GitHub-Api-Version` header
+  - Efficient `git/trees?recursive=true` for file tree (single request vs directory walking)
+  - Automatic fallback to contents-walk for repos exceeding git/trees limit
+  - Rate limit detection with reset time in error messages
+  - GitHub Actions workflow run listing
+  - `fixedUrl` set to `https://api.github.com` — no URL field needed in connection settings
+  - GitHub Enterprise support via `getBaseUrl()` (auto-appends `/api/v3`)
+  - Filters PRs from issues endpoint (GitHub returns both)
+  - Strips RFC 2045 newlines from base64 file content
+
+### Fixed
+- **Dead event listeners**: `secondary-pane.js` was listening for `gitea:saved`/`gitea:batchSaved` events that were never emitted after provider migration; updated to `git:fileUpdated`/`git:batchCommitted`
+- **Tool error handling (0.8.2-5 rework)**: Moved error handling to source instead of downstream hacks
+  - `ToolRegistry.execute()` now catches all errors with typed recovery hints (404/403/409/422/timeout)
+  - Guarantees non-null, non-empty tool results — LLM always gets actionable feedback
+  - `executeToolCall()` catches malformed JSON arguments separately
+  - Tool result serialization guards against `"null"`/`"undefined"` content
+  - Removed over-engineered 3-pass orphan detection from `sanitizeMessages()`
+
 ## [0.8.2] - 2025-02-10
 
 ### Added
