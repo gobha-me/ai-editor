@@ -711,6 +711,22 @@
     color: var(--text-muted);
 }
 
+.zip-badge-new {
+    background: rgba(78, 201, 176, 0.2);
+    color: var(--success, #4ec9b0);
+}
+
+.zip-badge-modified {
+    background: rgba(220, 180, 60, 0.2);
+    color: var(--warning, #dcb43c);
+}
+
+.zip-badge-unchanged {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
 .zip-field {
     margin-bottom: 0.75rem;
 }
