@@ -35,7 +35,9 @@ export function togglePreviewPane() {
     secondaryPaneMode = 'preview';
     document.getElementById('secondaryPane').style.display = 'flex';
     document.getElementById('secondaryPaneTitle').textContent = '👁 Preview';
-    document.getElementById('editorSplit').classList.add('split-active');
+    const split = document.getElementById('editorSplit');
+    split.classList.remove('diff-overlay');  // clean up if switching from diff
+    split.classList.add('split-active');
     renderPreview();
     updateToolbarButtons();
 }
@@ -45,7 +47,11 @@ export function toggleDiffPane() {
     secondaryPaneMode = 'diff';
     document.getElementById('secondaryPane').style.display = 'flex';
     document.getElementById('secondaryPaneTitle').textContent = '± Diff';
-    document.getElementById('editorSplit').classList.add('split-active');
+    
+    // Diff overlays the editor (full width, editor hidden)
+    const split = document.getElementById('editorSplit');
+    split.classList.remove('split-active');
+    split.classList.add('diff-overlay');
     
     // Initialize diff keyboard shortcuts once
     if (!diffViewerInitialized) {
@@ -64,7 +70,9 @@ export function closeSecondaryPane() {
     secondaryPaneMode = null;
     document.getElementById('secondaryPane').style.display = 'none';
     document.getElementById('secondaryPaneContent').innerHTML = '';
-    document.getElementById('editorSplit').classList.remove('split-active');
+    const split = document.getElementById('editorSplit');
+    split.classList.remove('split-active');
+    split.classList.remove('diff-overlay');
     updateToolbarButtons();
 }
 
@@ -127,6 +135,20 @@ function escapeHtml(text) {
 }
 
 function renderMarkdown(md) {
+    // Use marked.js if available (loaded via CDN), fall back to basic regex
+    if (typeof marked !== 'undefined') {
+        try {
+            const raw = marked.parse(md, { breaks: true, gfm: true });
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(raw);
+            }
+            return raw;
+        } catch (e) {
+            console.warn('Marked parse error in preview, falling back:', e);
+        }
+    }
+
+    // Fallback: basic regex markdown
     let html = md
         .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`)
         .replace(/`([^`]+)`/g, '<code>$1</code>')

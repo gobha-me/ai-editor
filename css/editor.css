@@ -212,9 +212,21 @@
     min-width: 0;
 }
 
+/* Preview mode: side-by-side */
 .editor-split.split-active .editor-container {
     flex: 1;
     min-width: 200px;
+}
+
+/* Diff mode: overlay — hides editor, secondary pane fills entire width */
+.editor-split.diff-overlay .editor-container {
+    display: none;
+}
+
+.editor-split.diff-overlay .secondary-pane {
+    width: 100%;
+    max-width: 100%;
+    border-left: none;
 }
 
 .secondary-pane {
