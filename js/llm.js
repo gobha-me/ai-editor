@@ -46,38 +46,44 @@ function sanitizeMessages(messages) {
     
     return messages
         .filter(msg => {
+            // Drop invalid roles
             if (!VALID_ROLES.has(msg.role)) {
-                console.warn(`[sanitizeMessages] Dropping message with invalid role: "${msg.role}"`);
+                console.warn(`[sanitizeMessages] Dropping invalid role: "${msg.role}"`);
+                return false;
+            }
+            // Drop empty assistant messages (no content AND no tool_calls)
+            if (msg.role === 'assistant' && !msg.content && !msg.tool_calls) {
+                console.warn('[sanitizeMessages] Dropping empty assistant message');
                 return false;
             }
             return true;
         })
         .map(msg => {
-        // Build clean message with only OpenAI-spec fields
-        const cleanMsg = {
-            role: msg.role
-        };
-        
-        // Add content if present (handle null explicitly)
-        if (msg.content !== undefined) {
-            cleanMsg.content = msg.content;
-        }
-        
-        // Add optional fields if present
-        if (msg.name !== undefined) {
-            cleanMsg.name = msg.name;
-        }
-        
-        if (msg.tool_calls !== undefined) {
-            cleanMsg.tool_calls = msg.tool_calls;
-        }
-        
-        if (msg.tool_call_id !== undefined) {
-            cleanMsg.tool_call_id = msg.tool_call_id;
-        }
-        
-        return cleanMsg;
-    });
+            const clean = { role: msg.role };
+            
+            // Content — normalize null for assistant+tool_calls (OpenAI spec allows null,
+            // Venice rejects absent content field)
+            if (msg.content !== undefined && msg.content !== null) {
+                clean.content = msg.content;
+            } else if (msg.role === 'assistant' && msg.tool_calls) {
+                clean.content = null;
+            } else if (msg.content !== undefined) {
+                clean.content = msg.content;
+            }
+            
+            if (msg.name !== undefined) clean.name = msg.name;
+            
+            // tool_calls — filter sparse gaps from SSE index-based accumulation
+            if (msg.tool_calls !== undefined) {
+                clean.tool_calls = Array.isArray(msg.tool_calls)
+                    ? msg.tool_calls.filter(tc => tc && tc.function?.name)
+                    : msg.tool_calls;
+            }
+            
+            if (msg.tool_call_id !== undefined) clean.tool_call_id = msg.tool_call_id;
+            
+            return clean;
+        });
 }
 
 // ============================================
