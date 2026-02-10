@@ -264,21 +264,21 @@
             <h2 id="issueDetailTitle">Issue</h2>
             <button class="modal-close" onclick="window.closeIssueDetailModal()">×</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="display: flex; flex-direction: column;">
             <!-- Labels -->
             <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;"></div>
 
             <!-- Meta row -->
             <div id="issueDetailMeta" style="font-size: var(--font-md); color: var(--text-muted); margin-bottom: 1rem;"></div>
 
-            <!-- Body (markdown-rendered) -->
-            <div id="issueDetailBody" class="preview-markdown" style="font-size: var(--font-base); line-height: 1.6; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); min-height: 60px; max-height: 40%; overflow-y: auto;"></div>
+            <!-- Body (markdown-rendered) — flex-grows to fill available space -->
+            <div id="issueDetailBody" class="preview-markdown" style="font-size: var(--font-base); line-height: 1.6; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); min-height: 60px; flex: 1 1 0; overflow-y: auto;"></div>
 
             <!-- Comments preview -->
-            <div id="issueDetailComments" style="margin-top: 0.75rem;"></div>
+            <div id="issueDetailComments" style="margin-top: 0.75rem; flex-shrink: 0; max-height: 35%; overflow-y: auto;"></div>
 
             <!-- Active branch indicator (shown when branch already exists) -->
-            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50);"></div>
+            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50); flex-shrink: 0;"></div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
             <button class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
