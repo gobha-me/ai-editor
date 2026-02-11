@@ -491,7 +491,8 @@ const LLM = {
                 });
                 const rawContent = data.choices?.[0]?.message?.content || '';
                 result = {
-                    content: stripThinkBlocks(rawContent),
+                    content: options.skipThinkStrip ? rawContent : stripThinkBlocks(rawContent),
+                    rawContent,
                     toolCalls: data.choices?.[0]?.message?.tool_calls || null,
                     finishReason: data.choices?.[0]?.finish_reason || 'stop',
                     usage: data.usage
@@ -1149,10 +1150,20 @@ async function generateCommitMessage(changedFiles = null) {
         stream: false,
         temperature: 0.3,
         maxTokens: 150,
-        model: commitModel
+        model: commitModel,
+        skipThinkStrip: true
     });
 
-    return result.content.trim().replace(/^[\"']|[\"']$/g, '');
+    // Use rawContent to survive think-block stripping (some models like minimax
+    // wrap short utility responses in <think> blocks, and stripThinkBlocks at the
+    // LLM layer can empty the content entirely).
+    const raw = (result.rawContent || result.content || '').trim();
+    let cleaned = stripThinkBlocks(raw).trim();
+    if (!cleaned) {
+        // Think-block stripping nuked everything — extract text from inside tags
+        cleaned = raw.replace(/<\/?think>/gi, '').trim();
+    }
+    return (cleaned || 'Update files').replace(/^[\"']|[\"']$/g, '');
 }
 
 async function analyzeIssue(issue, onToken = null) {
