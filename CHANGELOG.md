@@ -2,6 +2,16 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.6] - 2026-02-11
+
+### Added
+- **CI status polling in PR detail modal** — When a PR is open and CI is in a non-terminal state (pending/unknown), polls `getCommitStatus` every 10 seconds. Badge updates live in both the modal and the sidebar PR list. Polling stops automatically when CI reaches success/failure/error or when the modal is closed.
+- **Collapsible comments in issue and PR detail modals** — Comments now render as `<details>` elements with chevron indicators. First comment open by default, rest collapsed. "Expand All / Collapse All" toggle button appears when 2+ comments exist. Each comment shows a text preview snippet in the collapsed header. Scrollable container capped at 400px (issues) / uncapped (PRs).
+- All comments are now shown in the issue detail modal (previously capped at last 5).
+
+### Changed
+- PR detail modal CI badge now has `.pr-ci-live` class for targeted live updates without re-rendering the full meta bar.
+
 ## [0.9.5-3] - 2026-02-11
 
 ### Fixed

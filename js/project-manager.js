@@ -422,6 +422,9 @@ export async function submitCreatePR() {
 // ============================================
 
 let _currentPR = null;
+let _ciPollInterval = null;
+const CI_POLL_MS = 10_000;   // 10 seconds
+const CI_TERMINAL = new Set(['success', 'failure', 'error']);
 
 export async function openPRDetailModal(prNumber) {
     const modal = document.getElementById('prDetailModal');
@@ -481,7 +484,7 @@ export async function openPRDetailModal(prNumber) {
                 : '<span style="background: #da3633; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🔴 Closed</span>';
 
         const ciIcon = CI_ICONS[ci.state] || '⚪';
-        const ciBadge = `<span title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
+        const ciBadge = `<span class="pr-ci-live" title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
 
         const mergeableBadge = pr.merged ? '' : pr.mergeable
             ? '<span style="color: var(--success);">✅ Mergeable</span>'
@@ -517,6 +520,12 @@ export async function openPRDetailModal(prNumber) {
         const addComment = document.getElementById('prDetailAddComment');
         if (addComment) {
             addComment.style.display = (pr.state === 'open' || !pr.merged) ? '' : 'none';
+        }
+
+        // Start CI polling if status is non-terminal
+        _stopCiPolling();
+        if (pr.state === 'open' && !pr.merged && !CI_TERMINAL.has(ci.state)) {
+            _startCiPolling(owner, repo, pr.head);
         }
 
     } catch (error) {
@@ -584,23 +593,137 @@ function _renderPRComments(comments) {
         return;
     }
 
-    container.innerHTML = comments.map(c => {
+    const commentItems = comments.map((c, i) => {
         const pathInfo = c.path ? `<span style="font-family: var(--font-mono); font-size: var(--font-xs);">${escapeHtml(c.path)}${c.line ? `:${c.line}` : ''}</span>` : '';
+        const user = escapeHtml(c.user || 'unknown');
+        const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '';
+        const bodyHtml = renderMarkdown(c.body || '');
+        const open = i === 0 ? ' open' : '';
+        const preview = (c.body || '').length > 100 ? (c.body || '').substring(0, 80).replace(/\n/g, ' ') + '…' : '';
+
         return `
-            <div style="border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
-                <div style="font-size: var(--font-sm); color: var(--text-muted);">
-                    ${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''} ${pathInfo}
-                </div>
-                <div class="preview-markdown" style="font-size: var(--font-sm);">${renderMarkdown(c.body || '')}</div>
-            </div>
+            <details${open} class="pr-comment-collapsible" style="border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
+                <summary style="cursor: pointer; font-size: var(--font-sm); color: var(--text-muted); padding: 0.15rem 0; user-select: none; list-style: none; display: flex; align-items: center; gap: 0.3rem;">
+                    <span class="comment-chevron" style="font-size: 10px; transition: transform 0.15s; display: inline-block;">▶</span>
+                    <strong>${user}</strong> · ${date} ${pathInfo}
+                    <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">${escapeHtml(preview)}</span>
+                </summary>
+                <div class="preview-markdown" style="font-size: var(--font-sm); padding-top: 0.3rem;">${bodyHtml}</div>
+            </details>
         `;
     }).join('');
+
+    container.innerHTML = `
+        ${comments.length > 1 ? `
+            <div style="text-align: right; margin-bottom: 0.3rem;">
+                <button type="button" class="btn btn-secondary pr-toggle-comments" style="font-size: 10px; padding: 0.15rem 0.4rem;">
+                    Expand All
+                </button>
+            </div>
+        ` : ''}
+        ${commentItems}
+    `;
+
+    // Wire expand/collapse all
+    const toggleBtn = container.querySelector('.pr-toggle-comments');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            const details = container.querySelectorAll('details.pr-comment-collapsible');
+            const allOpen = [...details].every(d => d.open);
+            details.forEach(d => d.open = !allOpen);
+            toggleBtn.textContent = allOpen ? 'Expand All' : 'Collapse All';
+        });
+    }
+
+    // Rotate chevrons
+    container.querySelectorAll('details.pr-comment-collapsible').forEach(d => {
+        d.addEventListener('toggle', () => {
+            const chevron = d.querySelector('.comment-chevron');
+            if (chevron) chevron.style.transform = d.open ? 'rotate(90deg)' : 'rotate(0)';
+        });
+        const chevron = d.querySelector('.comment-chevron');
+        if (chevron && d.open) chevron.style.transform = 'rotate(90deg)';
+    });
 }
 
 export function closePRDetailModal() {
+    _stopCiPolling();
     const modal = document.getElementById('prDetailModal');
     if (modal) modal.classList.remove('active');
     _currentPR = null;
+}
+
+/**
+ * Start polling CI status for the given ref.
+ * Updates the CI badge in the PR detail modal in-place.
+ */
+function _startCiPolling(owner, repo, ref) {
+    _ciPollInterval = setInterval(async () => {
+        if (!_currentPR) { _stopCiPolling(); return; }
+
+        try {
+            const ci = await Git.getCommitStatus(owner, repo, ref);
+            if (!ci) return;
+
+            // Update stored state
+            _currentPR.ci = ci;
+
+            // Update badge in modal
+            const meta = document.getElementById('prDetailMeta');
+            if (meta) {
+                const oldBadge = meta.querySelector('.pr-ci-live');
+                const icon = CI_ICONS[ci.state] || '⚪';
+                const newBadge = document.createElement('span');
+                newBadge.className = 'pr-ci-live';
+                newBadge.title = `CI: ${ci.state}`;
+                newBadge.textContent = `${icon} CI ${ci.state}`;
+                if (oldBadge) {
+                    oldBadge.replaceWith(newBadge);
+                }
+            }
+
+            // Also update the PR list badge if visible
+            _updatePRListCIBadge(_currentPR.number, ci.state);
+
+            // Stop if terminal
+            if (CI_TERMINAL.has(ci.state)) {
+                _stopCiPolling();
+            }
+        } catch (e) {
+            console.warn('[CI Poll] Error:', e.message);
+        }
+    }, CI_POLL_MS);
+}
+
+function _stopCiPolling() {
+    if (_ciPollInterval) {
+        clearInterval(_ciPollInterval);
+        _ciPollInterval = null;
+    }
+}
+
+/**
+ * Update a PR's CI badge in the sidebar list (if visible).
+ */
+function _updatePRListCIBadge(prNumber, ciState) {
+    // Find the PR item in State and update it for next render
+    const pr = State.pullRequests.find(p => p.number === prNumber);
+    if (pr) pr.ciState = ciState;
+
+    // Live-update the badge icon in the DOM
+    const panel = document.getElementById('prsPanel');
+    if (!panel) return;
+    const items = panel.querySelectorAll('.issue-item');
+    for (const item of items) {
+        if (item.textContent.includes(`#${prNumber}`)) {
+            const badge = item.querySelector('.pr-ci-badge');
+            if (badge) {
+                badge.textContent = CI_ICONS[ciState] || '⚪';
+                badge.title = `CI: ${ciState}`;
+            }
+            break;
+        }
+    }
 }
 
 export async function submitMergePR() {
@@ -855,21 +978,64 @@ export async function openIssueDetailModal(issueNumber) {
             : '<em style="color: var(--text-muted);">No description</em>';
         bodyEl.classList.add('preview-markdown');
 
-        // Comments preview (last 5)
+        // Comments — collapsible when 2+
         const commentsEl = document.getElementById('issueDetailComments');
         if (comments.length > 0) {
-            const shown = comments.slice(-5);
+            const commentItems = comments.map((c, i) => {
+                const user = escapeHtml(c.user || 'unknown');
+                const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '';
+                const bodyHtml = renderMarkdown(c.body || '');
+                // First comment open by default, rest collapsed
+                const open = i === 0 ? ' open' : '';
+                return `
+                    <details${open} class="issue-comment-collapsible" style="border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
+                        <summary style="cursor: pointer; font-size: var(--font-md); color: var(--text-muted); padding: 0.15rem 0; user-select: none; list-style: none; display: flex; align-items: center; gap: 0.3rem;">
+                            <span class="comment-chevron" style="font-size: 10px; transition: transform 0.15s; display: inline-block;">▶</span>
+                            <strong>${user}</strong> · ${date}
+                            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">${(c.body || '').length > 100 ? (c.body || '').substring(0, 80).replace(/\n/g, ' ') + '…' : ''}</span>
+                        </summary>
+                        <div class="preview-markdown" style="font-size: var(--font-md); max-height: 200px; overflow-y: auto; padding-top: 0.3rem;">${bodyHtml}</div>
+                    </details>
+                `;
+            }).join('');
+
             commentsEl.innerHTML = `
-                <div style="font-size: var(--font-md); font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem;">
-                    Comments (${comments.length})
-                </div>
-                ${shown.map(c => `
-                    <div style="font-size: var(--font-md); border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
-                        <div style="color: var(--text-muted);">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
-                        <div class="preview-markdown" style="max-height: 120px; overflow-y: auto;">${renderMarkdown(c.body || '')}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                    <div style="font-size: var(--font-md); font-weight: 600; color: var(--text-secondary);">
+                        Comments (${comments.length})
                     </div>
-                `).join('')}
+                    ${comments.length > 1 ? `
+                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary" style="font-size: 10px; padding: 0.15rem 0.4rem;">
+                            Expand All
+                        </button>
+                    ` : ''}
+                </div>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    ${commentItems}
+                </div>
             `;
+
+            // Wire expand/collapse all
+            const toggleBtn = commentsEl.querySelector('#btnToggleAllComments');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => {
+                    const details = commentsEl.querySelectorAll('details.issue-comment-collapsible');
+                    const allOpen = [...details].every(d => d.open);
+                    details.forEach(d => d.open = !allOpen);
+                    toggleBtn.textContent = allOpen ? 'Expand All' : 'Collapse All';
+                });
+            }
+
+            // Rotate chevron on toggle
+            commentsEl.querySelectorAll('details.issue-comment-collapsible').forEach(d => {
+                d.addEventListener('toggle', () => {
+                    const chevron = d.querySelector('.comment-chevron');
+                    if (chevron) chevron.style.transform = d.open ? 'rotate(90deg)' : 'rotate(0)';
+                });
+                // Init chevron state for already-open details
+                const chevron = d.querySelector('.comment-chevron');
+                if (chevron && d.open) chevron.style.transform = 'rotate(90deg)';
+            });
         } else {
             commentsEl.innerHTML = '';
         }
