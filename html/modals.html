@@ -355,6 +355,20 @@
                 </summary>
                 <div id="prDetailComments" style="margin-top: 0.5rem; max-height: 200px; overflow-y: auto;"></div>
             </details>
+
+            <!-- Add Comment -->
+            <div id="prDetailAddComment" style="display: none;">
+                <label style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary);">Add Comment</label>
+                <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" style="width: 100%; margin-top: 0.35rem; font-family: var(--font-mono); font-size: var(--font-sm); resize: vertical;"></textarea>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
+                    <button class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
+                        ✨ Generate with AI
+                    </button>
+                    <button class="btn btn-primary" onclick="window.submitPRComment()" id="btnPostPRComment">
+                        📝 Post
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="modal-footer" id="prDetailFooter" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
             <div style="display: flex; gap: 0.5rem;">

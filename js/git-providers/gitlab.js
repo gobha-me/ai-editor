@@ -577,6 +577,7 @@ const gitlabProvider = {
             body: mr.description || '',
             state: mr.state === 'opened' ? 'open' : mr.state,
             head: mr.source_branch,
+            headSha: mr.sha || mr.diff_refs?.head_sha || '',
             base: mr.target_branch,
             mergeable: mr.merge_status === 'can_be_merged',
             merged: mr.state === 'merged',
@@ -634,11 +635,12 @@ const gitlabProvider = {
         );
     },
 
-    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false, headSha = '' } = {}) {
         const payload = {
             should_remove_source_branch: deleteBranch
         };
         if (mergeType === 'squash') payload.squash = true;
+        if (headSha) payload.sha = headSha;
         if (title || message) {
             payload.merge_commit_message = [title, message].filter(Boolean).join('\n\n');
             if (mergeType === 'squash') {

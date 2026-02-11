@@ -60,6 +60,8 @@ import {
     openPRDetailModal,
     closePRDetailModal,
     submitMergePR,
+    generatePRComment,
+    submitPRComment,
     focusIssue,
     unfocusIssue,
     startWorkOnIssue
@@ -168,6 +170,8 @@ window.submitCreatePR = submitCreatePR;
 window.openPRDetailModal = openPRDetailModal;
 window.closePRDetailModal = closePRDetailModal;
 window.submitMergePR = submitMergePR;
+window.generatePRComment = generatePRComment;
+window.submitPRComment = submitPRComment;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;

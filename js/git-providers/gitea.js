@@ -408,6 +408,7 @@ const giteaProvider = {
             body: pr.body || '',
             state: pr.state,
             head: pr.head.ref,
+            headSha: pr.head.sha,
             base: pr.base.ref,
             mergeable: pr.mergeable,
             merged: pr.merged,
@@ -515,7 +516,7 @@ const giteaProvider = {
         };
     },
 
-    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false, headSha = '' } = {}) {
         // Gitea merge types: merge, rebase, rebase-merge, squash, manually-merged
         const doMap = { merge: 'merge', squash: 'squash', rebase: 'rebase' };
         const payload = {
@@ -524,6 +525,7 @@ const giteaProvider = {
         };
         if (title) payload.MergeTitleField = title;
         if (message) payload.MergeMessageField = message;
+        if (headSha) payload.head_commit_id = headSha;
 
         const result = await this.request(connection, 'POST',
             `/repos/${owner}/${repo}/pulls/${number}/merge`, payload

@@ -7,6 +7,7 @@ import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
 import { renderMarkdown } from './secondary-pane.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import { LLM } from './llm.js';
 
 export async function refreshProjects() {
     try {
@@ -396,6 +397,9 @@ export async function openPRDetailModal(prNumber) {
     document.getElementById('prDetailFileCount').textContent = '';
     document.getElementById('prDetailCommentCount').textContent = '';
     document.getElementById('prDetailMergeControls').style.display = 'none';
+    document.getElementById('prDetailAddComment').style.display = 'none';
+    const commentTextEl = document.getElementById('prCommentText');
+    if (commentTextEl) commentTextEl.value = '';
 
     const { owner, repo } = State.currentProject;
 
@@ -465,6 +469,12 @@ export async function openPRDetailModal(prNumber) {
             mergeControls.style.display = '';
         } else {
             mergeControls.style.display = 'none';
+        }
+
+        // Show comment section for open and closed PRs (not useful for merged already commented)
+        const addComment = document.getElementById('prDetailAddComment');
+        if (addComment) {
+            addComment.style.display = (pr.state === 'open' || !pr.merged) ? '' : 'none';
         }
 
     } catch (error) {
@@ -558,18 +568,37 @@ export async function submitMergePR() {
     const strategy = document.getElementById('prMergeStrategy').value;
     const deleteBranch = document.getElementById('prDeleteBranch').checked;
 
-    // Confirmation
-    const msg = `Merge PR #${_currentPR.number} via ${strategy}${deleteBranch ? ' (delete branch)' : ''}?`;
-    if (!confirm(msg)) return;
+    // Inline confirmation: first click → confirm state, second click → merge
+    if (btn.dataset.confirming !== 'true') {
+        btn.dataset.confirming = 'true';
+        btn.textContent = `⚠️ Confirm ${strategy}?`;
+        btn.classList.add('btn-danger');
+        btn.classList.remove('btn-primary');
+        // Reset after 3 seconds if not confirmed
+        setTimeout(() => {
+            if (btn.dataset.confirming === 'true') {
+                btn.dataset.confirming = '';
+                btn.textContent = '✅ Merge';
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-primary');
+            }
+        }, 3000);
+        return;
+    }
 
+    // Second click — do the merge
+    btn.dataset.confirming = '';
     btn.disabled = true;
     btn.textContent = '⏳ Merging…';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-primary');
 
     try {
         const { owner, repo } = State.currentProject;
         await Git.mergePullRequest(owner, repo, _currentPR.number, {
             mergeType: strategy,
-            deleteBranch
+            deleteBranch,
+            headSha: _currentPR.headSha || ''
         });
 
         btn.textContent = '✅ Merged!';
@@ -587,9 +616,116 @@ export async function submitMergePR() {
         setTimeout(() => openPRDetailModal(_currentPR.number), 500);
 
     } catch (e) {
-        alert(`Merge failed: ${e.message}`);
+        console.error('[PR] Merge failed:', e);
+        window.showToast(`Merge failed: ${e.message}`, 'error');
         btn.disabled = false;
         btn.textContent = '✅ Merge';
+    }
+}
+
+// ── PR Comment: Generate + Post ──
+
+export async function generatePRComment() {
+    if (!_currentPR) return;
+
+    const textarea = document.getElementById('prCommentText');
+    const btn = document.getElementById('btnGeneratePRComment');
+    if (!textarea || !btn) return;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating…';
+    textarea.value = 'Analyzing PR…';
+    textarea.disabled = true;
+
+    try {
+        // Build context from PR data
+        const diffSummary = (_currentPR.files || []).map(f => {
+            const stats = `+${f.additions} −${f.deletions}`;
+            const patchSnippet = f.patch ? f.patch.slice(0, 800) : '';
+            return `File: ${f.filename} (${f.status}, ${stats})\n${patchSnippet}`;
+        }).join('\n---\n');
+
+        const existingComments = (_currentPR.comments || [])
+            .map(c => `${c.user}: ${c.body}`)
+            .join('\n');
+
+        const prompt = `You are reviewing PR #${_currentPR.number}: "${_currentPR.title}"
+Branch: ${_currentPR.head} → ${_currentPR.base}
+Author: ${_currentPR.user || 'unknown'}
+
+Description:
+${(_currentPR.body || 'No description').slice(0, 1000)}
+
+Changed files (${_currentPR.files?.length || 0}):
+${diffSummary.slice(0, 4000)}
+${existingComments ? `\nExisting comments:\n${existingComments.slice(0, 1000)}` : ''}
+
+Write a concise, constructive code review comment. Focus on:
+- Code quality, potential bugs, or edge cases
+- Suggestions for improvement (if any)
+- Positive observations about good patterns
+Keep it under 200 words. Do NOT use markdown headers. Respond with ONLY the review comment text.`;
+
+        const commitModel = State.settings.commitModel || State.settings.llmModel;
+        const result = await LLM.chat([
+            { role: 'user', content: prompt }
+        ], {
+            stream: false,
+            temperature: 0.4,
+            maxTokens: 400,
+            model: commitModel
+        });
+
+        textarea.value = result.content.trim();
+    } catch (error) {
+        console.error('[PR] Comment generation failed:', error);
+        textarea.value = '';
+        window.showToast('Failed to generate comment: ' + error.message, 'error');
+    }
+
+    textarea.disabled = false;
+    btn.disabled = false;
+    btn.textContent = '✨ Generate with AI';
+}
+
+export async function submitPRComment() {
+    if (!_currentPR || !State.currentProject) return;
+
+    const textarea = document.getElementById('prCommentText');
+    const btn = document.getElementById('btnPostPRComment');
+    const body = textarea?.value.trim();
+
+    if (!body) {
+        window.showToast('Comment is empty', 'warning');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Posting…';
+
+    try {
+        const { owner, repo } = State.currentProject;
+        await Git.addPullRequestComment(owner, repo, _currentPR.number, body);
+
+        textarea.value = '';
+        btn.textContent = '✅ Posted!';
+        window.showToast('Comment posted', 'success');
+
+        // Refresh comments in the modal
+        const comments = await Git.getPullRequestComments(owner, repo, _currentPR.number).catch(() => []);
+        _currentPR.comments = comments;
+        _renderPRComments(comments);
+
+        setTimeout(() => {
+            btn.textContent = '📝 Post';
+            btn.disabled = false;
+        }, 1000);
+
+    } catch (e) {
+        console.error('[PR] Comment post failed:', e);
+        window.showToast(`Failed to post comment: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = '📝 Post';
     }
 }
 

@@ -529,6 +529,7 @@ const githubProvider = {
             body: pr.body || '',
             state: pr.state,
             head: pr.head.ref,
+            headSha: pr.head.sha,
             base: pr.base.ref,
             mergeable: pr.mergeable,
             merged: pr.merged,
@@ -611,13 +612,14 @@ const githubProvider = {
         };
     },
 
-    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false } = {}) {
+    async mergePullRequest(connection, owner, repo, number, { mergeType = 'squash', title = '', message = '', deleteBranch = false, headSha = '' } = {}) {
         const methodMap = { merge: 'merge', squash: 'squash', rebase: 'rebase' };
         const payload = {
             merge_method: methodMap[mergeType] || 'squash'
         };
         if (title) payload.commit_title = title;
         if (message) payload.commit_message = message;
+        if (headSha) payload.sha = headSha;
 
         const result = await this.request(connection, 'PUT',
             `/repos/${owner}/${repo}/pulls/${number}/merge`, payload
