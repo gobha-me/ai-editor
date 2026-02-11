@@ -99,6 +99,23 @@ const BASE_GIT_PROVIDER = {
         return text ? JSON.parse(text) : null;
     },
 
+    /**
+     * Test a connection to verify credentials.
+     * Default implementation - providers should override with specific logic.
+     * @param {Object} connection - Connection object with url, token, etc.
+     * @returns {Promise<{ok: boolean, user?: string, error?: string}>}
+     */
+    async testConnection(connection) {
+        try {
+            // Default: try to list repositories as a basic connectivity test
+            // Providers should override with a more lightweight endpoint (e.g., /user)
+            await this.listRepos(connection);
+            return { ok: true, user: 'authenticated' };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    },
+
     // ========================================
     // REPOSITORIES
     // ========================================

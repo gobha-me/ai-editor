@@ -94,6 +94,23 @@ const giteaProvider = {
         }
     },
 
+
+    /**
+     * Test a Gitea connection by fetching the authenticated user.
+     * @param {Object} connection - Connection object with url, token, etc.
+     * @returns {Promise<{ok: boolean, user?: string, error?: string}>}
+     */
+    async testConnection(connection) {
+        try {
+            const user = await this.request(connection, 'GET', '/user');
+            return { 
+                ok: true, 
+                user: user.login || user.username || 'authenticated' 
+            };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    },
     // ========================================
     // REPOSITORIES
     // ========================================
