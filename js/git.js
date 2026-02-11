@@ -101,6 +101,14 @@ const Git = {
         return provider.listRepos(connection);
     },
 
+    /**
+     * Create a new repository on a specific connection.
+     */
+    async createRepo(connectionId, name, options = {}) {
+        const { provider, connection } = GitProviderRegistry.resolve(connectionId);
+        return provider.createRepo(connection, name, options);
+    },
+
     // ========================================
     // REPOSITORIES (current project)
     // ========================================

@@ -62,6 +62,77 @@ export async function refreshProjects() {
     }
 }
 
+/**
+ * Core project-switching logic. Clears editor state, loads the project,
+ * populates branch selector, and emits project:loaded.
+ * Used by both the UI dropdown and LLM set_active_project tool.
+ * @param {string} connectionId
+ * @param {string} owner
+ * @param {string} repo
+ * @param {Object} [options]
+ * @param {string} [options.branch] - Specific branch to switch to (default: repo default)
+ * @returns {Promise<{owner, repo, branch}>}
+ */
+export async function switchProject(connectionId, owner, repo, { branch } = {}) {
+    // Clear open tabs when switching projects
+    State.openTabs = [];
+    State.activeTabIndex = -1;
+    State.currentFile = null;
+    State.editorContent = '';
+    State.editorDirty = false;
+    State.currentIssue = null;
+
+    // Show welcome screen
+    const editorContainer = document.getElementById('editorContainer');
+    if (editorContainer) {
+        editorContainer.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                <div style="text-align: center;">
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <p>Select a file to edit</p>
+                </div>
+            </div>
+        `;
+    }
+
+    const { renderEditorTabs } = await import('./tab-manager.js');
+    renderEditorTabs();
+
+    // If a specific branch was requested, set it before loadProject reads it
+    if (branch) {
+        State.currentBranch = branch;
+    }
+
+    await loadProject(connectionId, owner, repo);
+
+    // Update branch selector
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) {
+        branchSelect.innerHTML = '';
+        State.branches.forEach(b => {
+            const option = document.createElement('option');
+            option.value = b.name;
+            option.textContent = b.name + (b.protected ? ' 🔒' : '');
+            branchSelect.appendChild(option);
+        });
+        branchSelect.value = State.currentBranch;
+    }
+
+    // Update project selector to match
+    const projectSelect = document.getElementById('projectSelect');
+    if (projectSelect) {
+        const selectorValue = `${connectionId}/${owner}/${repo}`;
+        // If the option exists, select it
+        const opt = projectSelect.querySelector(`option[value="${selectorValue}"]`);
+        if (opt) projectSelect.value = selectorValue;
+    }
+
+    // Trigger refresh events for other modules
+    EventBus.emit('project:loaded', { connectionId, owner, repo });
+
+    return { owner, repo, branch: State.currentBranch };
+}
+
 export async function onProjectChange(e) {
     const value = e.target.value;
     if (!value) return;
@@ -77,43 +148,7 @@ export async function onProjectChange(e) {
     const repo = parts.slice(2).join('/');  // Handle repos with slashes in name
     
     try {
-        // Clear open tabs when switching projects
-        State.openTabs = [];
-        State.activeTabIndex = -1;
-        State.currentFile = null;
-        State.editorContent = '';
-        State.editorDirty = false;
-        State.currentIssue = null;
-        
-        // Show welcome screen
-        document.getElementById('editorContainer').innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
-                <div style="text-align: center;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
-                    <p>Select a file to edit</p>
-                </div>
-            </div>
-        `;
-        
-        const { renderEditorTabs } = await import('./tab-manager.js');
-        renderEditorTabs();
-        
-        await loadProject(connectionId, owner, repo);
-        
-        // Update branch selector
-        const branchSelect = document.getElementById('branchSelect');
-        branchSelect.innerHTML = '';
-        State.branches.forEach(branch => {
-            const option = document.createElement('option');
-            option.value = branch.name;
-            option.textContent = branch.name + (branch.protected ? ' 🔒' : '');
-            branchSelect.appendChild(option);
-        });
-        branchSelect.value = State.currentBranch;
-
-        // Trigger refresh events for other modules
-        EventBus.emit('project:loaded', { connectionId, owner, repo });
-
+        await switchProject(connectionId, owner, repo);
         window.showToast(`Loaded ${owner}/${repo}`, 'success');
 
     } catch (error) {
@@ -1392,6 +1427,84 @@ function _contrastColor(hex) {
     return luminance > 0.5 ? '#000' : '#fff';
 }
 
+// ============================================
+// NEW PROJECT MODAL
+// ============================================
+
+export function openNewProjectModal() {
+    const modal = document.getElementById('newProjectModal');
+    if (!modal) return;
+
+    // Populate connection dropdown with enabled connections
+    const connSelect = document.getElementById('newProjectConnection');
+    if (connSelect) {
+        const connections = (State.settings.connections || []).filter(c => c.enabled !== false);
+        connSelect.innerHTML = connections.map(c =>
+            `<option value="${escapeAttr(c.id)}">${escapeHtml(c.label || c.id)} (${escapeHtml(c.provider)})</option>`
+        ).join('');
+
+        if (connections.length === 0) {
+            connSelect.innerHTML = '<option value="">No connections configured</option>';
+        }
+    }
+
+    // Clear form
+    const nameInput = document.getElementById('newProjectName');
+    if (nameInput) nameInput.value = '';
+    const descInput = document.getElementById('newProjectDesc');
+    if (descInput) descInput.value = '';
+    document.getElementById('newProjectPrivate').checked = true;
+    document.getElementById('newProjectAutoInit').checked = true;
+
+    modal.classList.add('active');
+    if (nameInput) setTimeout(() => nameInput.focus(), 100);
+}
+
+export function closeNewProjectModal() {
+    const modal = document.getElementById('newProjectModal');
+    if (modal) modal.classList.remove('active');
+}
+
+export async function submitNewProject() {
+    const connectionId = document.getElementById('newProjectConnection')?.value;
+    const name = document.getElementById('newProjectName')?.value?.trim();
+    const description = document.getElementById('newProjectDesc')?.value?.trim() || '';
+    const isPrivate = document.getElementById('newProjectPrivate')?.checked ?? true;
+    const autoInit = document.getElementById('newProjectAutoInit')?.checked ?? true;
+
+    if (!connectionId) {
+        window.showToast('No connection selected', 'error');
+        return;
+    }
+    if (!name) {
+        window.showToast('Repository name is required', 'error');
+        return;
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+        window.showToast('Invalid repo name — use letters, numbers, hyphens, dots, underscores', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitNewProject');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+
+    try {
+        const result = await Git.createRepo(connectionId, name, { description, isPrivate, autoInit });
+        closeNewProjectModal();
+        window.showToast(`Created ${result.owner}/${result.name}`, 'success');
+
+        // Refresh project list and auto-select the new repo
+        await refreshProjects();
+        await switchProject(connectionId, result.owner, result.name);
+
+    } catch (error) {
+        console.error('[NewProject] Create failed:', error);
+        window.showToast(`Failed to create repo: ${error.message}`, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🚀 Create'; }
+    }
+}
+
 // Setup event listeners for project changes
 export function initProjectListeners() {
     EventBus.on('project:loaded', () => {
@@ -1427,4 +1540,26 @@ export function initProjectListeners() {
     safeClick('btnIssueFocusWork', () => {
         if (State.focusedIssue) startWorkOnIssue(State.focusedIssue);
     });
+
+    // New Project modal
+    safeClick('btnNewProject', openNewProjectModal);
+    safeClick('btnCloseNewProject', closeNewProjectModal);
+    safeClick('btnCancelNewProject', closeNewProjectModal);
+    safeClick('btnSubmitNewProject', submitNewProject);
+
+    // Close on overlay click
+    const overlay = document.getElementById('newProjectModal');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeNewProjectModal();
+        });
+    }
+
+    // Enter key submits
+    const nameInput = document.getElementById('newProjectName');
+    if (nameInput) {
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitNewProject();
+        });
+    }
 }

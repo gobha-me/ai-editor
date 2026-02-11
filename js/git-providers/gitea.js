@@ -126,6 +126,27 @@ const giteaProvider = {
         };
     },
 
+    async createRepo(connection, name, { description = '', isPrivate = true, autoInit = true } = {}) {
+        const r = await this.request(connection, 'POST', '/user/repos', {
+            name,
+            description,
+            private: isPrivate,
+            auto_init: autoInit,
+            default_branch: 'main'
+        });
+        EventBus.emit('git:repoCreated', { connectionId: connection.id, owner: r.owner.login, repo: r.name });
+        return {
+            id: r.id,
+            owner: r.owner.login,
+            name: r.name,
+            fullName: r.full_name,
+            description: r.description,
+            defaultBranch: r.default_branch,
+            private: r.private,
+            url: r.html_url
+        };
+    },
+
     // ========================================
     // BRANCHES
     // ========================================

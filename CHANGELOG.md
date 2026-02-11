@@ -2,6 +2,34 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.8-4] - 2026-02-11
+
+### Added
+- **New Project button** (➕) in sidebar header — opens a modal to create a new repository on any connected git provider
+  - Connection selector, repo name, description, private/public toggle, auto-init README
+  - Validates repo name format, auto-selects the new project after creation
+  - `createRepo()` implemented for all three providers (Gitea, GitHub, GitLab) + Git facade
+- **LLM `list_projects` tool** — lists all available projects across all connections with current active project/branch info. Scoped to all roles.
+- **LLM `set_active_project` tool** — programmatic project switching from chat
+  - Refuses if there are dirty (unsaved) files — tells the LLM to commit first
+  - Accepts optional `branch` parameter to switch to a specific branch
+  - Clears tabs, editor state, updates branch selector, emits `project:loaded`
+  - Reuses the same `switchProject()` function as the UI dropdown
+- **`switchProject()` extracted** from `onProjectChange` as a reusable exported function — accepts `(connectionId, owner, repo, { branch })`, used by both UI and LLM tool
+- **System prompt updated** with step 0 ("if no project is loaded → list_projects → set_active_project") and step 10 for project switching during workflow
+
+### Files
+- `js/project-manager.js` — `switchProject()`, `openNewProjectModal()`, `closeNewProjectModal()`, `submitNewProject()`, wiring in `initProjectListeners`
+- `js/tools/project-tools.js` — `list_projects` and `set_active_project` tools
+- `js/git.js` — `createRepo()` facade method
+- `js/git-providers/base.js` — `createRepo()` base method
+- `js/git-providers/gitea.js` — `createRepo()` via POST `/user/repos`
+- `js/git-providers/github.js` — `createRepo()` via POST `/user/repos`
+- `js/git-providers/gitlab.js` — `createRepo()` via POST `/projects`
+- `js/llm.js` — system prompt additions for project tools
+- `html/sidebar.html` — ➕ New Project button
+- `html/modals.html` — New Project modal
+
 ## [0.9.8-3] - 2026-02-11
 
 ### Added

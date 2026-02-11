@@ -489,3 +489,41 @@
         </div>
     </div>
 </div>
+
+<!-- New Project Modal -->
+<div class="modal-overlay" id="newProjectModal" role="dialog" aria-modal="true" aria-labelledby="newProjectTitle">
+    <div class="modal" style="width: 440px;">
+        <div class="modal-header">
+            <h3 id="newProjectTitle">➕ New Project</h3>
+            <button type="button" class="modal-close" id="btnCloseNewProject" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1rem;">
+            <div class="form-group">
+                <label for="newProjectConnection">Connection:</label>
+                <select id="newProjectConnection" style="width: 100%;"></select>
+            </div>
+            <div class="form-group">
+                <label for="newProjectName">Repository name:</label>
+                <input type="text" id="newProjectName" placeholder="my-new-project" style="width: 100%;" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="newProjectDesc">Description (optional):</label>
+                <input type="text" id="newProjectDesc" placeholder="A brief description" style="width: 100%;">
+            </div>
+            <div class="form-group" style="display: flex; gap: 1rem;">
+                <label style="flex: 1;">
+                    <input type="checkbox" id="newProjectPrivate" checked>
+                    Private
+                </label>
+                <label style="flex: 1;">
+                    <input type="checkbox" id="newProjectAutoInit" checked>
+                    Initialize with README
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btnCancelNewProject">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSubmitNewProject">🚀 Create</button>
+        </div>
+    </div>
+</div>

@@ -183,6 +183,28 @@ const gitlabProvider = {
         };
     },
 
+    async createRepo(connection, name, { description = '', isPrivate = true, autoInit = true } = {}) {
+        const r = await this.request(connection, 'POST', '/projects', {
+            name,
+            description,
+            visibility: isPrivate ? 'private' : 'public',
+            initialize_with_readme: autoInit,
+            default_branch: 'main'
+        });
+        const owner = r.namespace?.full_path || r.path_with_namespace.split('/').slice(0, -1).join('/');
+        EventBus.emit('git:repoCreated', { connectionId: connection.id, owner, repo: r.path });
+        return {
+            id: r.id,
+            owner,
+            name: r.path,
+            fullName: r.path_with_namespace,
+            description: r.description,
+            defaultBranch: r.default_branch,
+            private: r.visibility === 'private',
+            url: r.web_url
+        };
+    },
+
     // ========================================
     // BRANCHES
     // ========================================

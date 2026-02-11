@@ -1,6 +1,6 @@
 /**
  * AI Editor - Project Tools
- * Tools for project navigation and file creation
+ * Tools for project navigation, switching, and file creation
  */
 
 import { State, EventBus } from '../core.js';
@@ -11,6 +11,109 @@ import { Git } from '../git.js';
  * @param {Object} registry - ToolRegistry instance
  */
 export function registerProjectTools(registry) {
+
+    // ========================================
+    // list_projects
+    // ========================================
+    registry.register('list_projects', async () => {
+        try {
+            const { repos, errors } = await Git.listAllRepos();
+            const current = State.currentProject
+                ? `${State.currentProject.owner}/${State.currentProject.repo}`
+                : null;
+
+            return {
+                current_project: current,
+                current_branch: State.currentBranch || null,
+                projects: repos.map(r => ({
+                    connectionId: r.connectionId,
+                    owner: r.owner,
+                    repo: r.name,
+                    fullName: r.fullName,
+                    defaultBranch: r.defaultBranch,
+                    private: r.private,
+                    provider: r.providerIcon || ''
+                })),
+                errors: errors.length > 0
+                    ? errors.map(e => e.message || String(e))
+                    : undefined
+            };
+        } catch (error) {
+            return { error: `Failed to list projects: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'list_projects',
+            description: 'List all available projects across all git connections. Shows the currently active project and branch. Use this to find a project before calling set_active_project.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: []
+            }
+        },
+        roles: 'all'
+    });
+
+    // ========================================
+    // set_active_project
+    // ========================================
+    registry.register('set_active_project', async ({ connectionId, owner, repo, branch }) => {
+        try {
+            // Check for unsaved work
+            const dirtyTabs = State.openTabs.filter(t => t.dirty);
+            if (dirtyTabs.length > 0) {
+                return {
+                    error: 'Cannot switch projects — there are unsaved changes.',
+                    dirty_files: dirtyTabs.map(t => t.path),
+                    hint: 'Use commit_files or list_dirty_files to handle uncommitted changes first.'
+                };
+            }
+
+            // Dynamically import to avoid circular deps
+            const { switchProject } = await import('../project-manager.js');
+            const result = await switchProject(connectionId, owner, repo, { branch });
+
+            return {
+                success: true,
+                project: `${result.owner}/${result.repo}`,
+                branch: result.branch,
+                files: State.fileTree.filter(f => f.type === 'file').length,
+                message: `Switched to ${result.owner}/${result.repo} on branch ${result.branch}`
+            };
+        } catch (error) {
+            return { error: `Failed to switch project: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'set_active_project',
+            description: 'Switch the active project. Clears open tabs and editor state. Will refuse if there are unsaved changes — commit first. Use list_projects to find connectionId/owner/repo values.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    connectionId: {
+                        type: 'string',
+                        description: 'Connection ID from list_projects result'
+                    },
+                    owner: {
+                        type: 'string',
+                        description: 'Repository owner (user or org)'
+                    },
+                    repo: {
+                        type: 'string',
+                        description: 'Repository name'
+                    },
+                    branch: {
+                        type: 'string',
+                        description: 'Optional branch to switch to (defaults to repo default branch)'
+                    }
+                },
+                required: ['connectionId', 'owner', 'repo']
+            }
+        },
+        roles: 'all'
+    });
     
     // ========================================
     // get_project_tree

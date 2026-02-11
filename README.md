@@ -336,9 +336,10 @@ Plugins are registered in Settings → Plugins. See `plugins/venice-ai.js` for a
 
 - [ ] Git blame / history view
 - [x] LLM commit tool — `commit_files` and `list_dirty_files` (v0.9.8)
+- [x] LLM project switching — `list_projects` and `set_active_project` (v0.9.8-4)
+- [x] New Project button — create repos from the UI (v0.9.8-4)
 - [ ] IndexedDB draft storage (replace localStorage) — use Settings → Storage tab to monitor usage
-- [ ] CI/CD status polling in PR modal
-- [ ] Collapsible issue comments in chat triage view
+- [x] CI/CD status polling in PR modal (v0.9.6)
 - [ ] Mobile responsive layout
 - [ ] Offline support (Service Worker)
 

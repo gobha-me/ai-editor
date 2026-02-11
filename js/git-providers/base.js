@@ -117,6 +117,10 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'listRepos');
     },
 
+    async createRepo(connection, name, { description = '', isPrivate = true, autoInit = true } = {}) {
+        notSupported(this.name, 'createRepo');
+    },
+
     async getRepo(connection, owner, repo) {
         notSupported(this.name, 'getRepo');
     },
