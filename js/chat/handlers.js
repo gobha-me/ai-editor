@@ -42,6 +42,9 @@ export async function handleUserInputDirect(input) {
     console.log(`[handleUserInputDirect] Received input="${input}"`);
     
     if (!input || State.isGenerating) return;
+
+    // Flush any pending prune stash — undo window is over
+    ChatSummarizer.flushStash();
     
     // Add user message ONCE — retries must not duplicate this
     addMessage('user', input);

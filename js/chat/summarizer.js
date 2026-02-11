@@ -149,8 +149,87 @@ SUMMARY:`;
             timestamp: Date.now()
         };
         Storage.set('chatSummaryInfo', info);
-        EventBus.emit('chat:summaryGenerated', info);
+
+        // Prune old messages — stash them for one-turn undo
+        this._pruneHistory(older.length);
+
+        // Update coveredCount to reflect post-prune state so next
+        // summary triggers after SUMMARY_INTERVAL new messages, not
+        // SUMMARY_INTERVAL + pruned_count.
+        info.coveredCount = State.chatHistory.length;
+        Storage.set('chatSummaryInfo', info);
+
+        EventBus.emit('chat:pruned', info);
         return info;
+    },
+
+    /**
+     * Splice old messages from State.chatHistory and stash them for undo.
+     * After this call, State.chatHistory contains only the recent window.
+     *
+     * Order of operations matters when localStorage is near-full:
+     *   1. Splice messages from in-memory array
+     *   2. Save the SMALLER chatHistory first (frees localStorage space)
+     *   3. THEN attempt to save the stash (now there may be room)
+     *
+     * @param {number} pruneCount - Number of messages to remove from the front
+     */
+    _pruneHistory(pruneCount) {
+        if (pruneCount <= 0) return;
+
+        // 1. Splice old messages out of in-memory array
+        const pruned = State.chatHistory.splice(0, pruneCount);
+
+        // 2. Persist the now-smaller chatHistory FIRST to free localStorage space
+        //    Remove before set — if localStorage is already full, set() would fail
+        //    because the OLD big chatHistory is still consuming space.
+        Storage.remove('chatHistory');
+        Storage.set('chatHistory', State.chatHistory.slice(-100));
+
+        // 3. Try to stash pruned messages for undo — may fail if still tight on space
+        Storage.set('chatPruneStash', pruned);
+        if (Storage.get('chatPruneStash', null)) {
+            console.log(`[ChatSummarizer] Pruned ${pruned.length} messages (stashed for undo)`);
+        } else {
+            // Stash didn't persist — prune still happened, just no undo
+            console.warn(`[ChatSummarizer] Pruned ${pruned.length} messages (stash failed — no undo)`);
+        }
+    },
+
+    /**
+     * Permanently delete the prune stash.
+     * Called on the first user query after pruning.
+     */
+    flushStash() {
+        if (Storage.get('chatPruneStash', null)) {
+            Storage.remove('chatPruneStash');
+            console.log('[ChatSummarizer] Stash flushed — prune is permanent');
+            EventBus.emit('chat:stashFlushed');
+        }
+    },
+
+    /**
+     * Undo a prune — restore stashed messages to the front of chatHistory.
+     * Only works before the stash is flushed (i.e., before the next user query).
+     * @returns {boolean} true if undo succeeded
+     */
+    undoPrune() {
+        const stash = Storage.get('chatPruneStash', null);
+        if (!stash || !Array.isArray(stash)) return false;
+
+        // Restore: prepend stash to current history
+        State.chatHistory.unshift(...stash);
+        Storage.remove('chatPruneStash');
+        Storage.remove('chatSummaryInfo');
+        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        console.log(`[ChatSummarizer] Undo prune — restored ${stash.length} messages`);
+        EventBus.emit('chat:pruneUndone');
+        return true;
+    },
+
+    /** @returns {boolean} true if a prune stash exists (undo is available) */
+    hasStash() {
+        return !!Storage.get('chatPruneStash', null);
     },
 
     /**
@@ -219,5 +298,6 @@ SUMMARY:`;
 
     clear() {
         Storage.remove('chatSummaryInfo');
+        Storage.remove('chatPruneStash');
     }
 };

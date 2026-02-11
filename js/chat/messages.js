@@ -494,6 +494,12 @@ export function renderMessages(historyOverride = null) {
         const isLastUserMessage = msg.role === 'user' && idx === lastUserMessageIndex;
         renderMessage(msg, isLastUserMessage);
     });
+
+    // Show summary badge at top if a summary exists
+    const summaryInfo = Storage.get('chatSummaryInfo', null);
+    if (summaryInfo?.summary) {
+        renderSummaryNotification(summaryInfo, ChatSummarizer.hasStash());
+    }
     
     scrollToBottom();
 }
@@ -610,16 +616,22 @@ export function getDistanceToBottom() {
 
 /**
  * Render a summary notification in the chat.
- * Shows a collapsible bar so the user can see what was compressed.
- * 
+ * Shows a collapsible bar with the summary text and an undo button
+ * that lets the user restore pruned messages (TTL = 1 user query).
+ *
  * @param {Object} info - Summary info from ChatSummarizer
  * @param {string} info.summary - The generated summary text
  * @param {number} info.compressedMessages - Number of messages that were compressed
  * @param {number} info.keptMessages - Number of messages kept verbatim
+ * @param {boolean} [showUndo=true] - Whether to show the undo button
  */
-export function renderSummaryNotification(info) {
+export function renderSummaryNotification(info, showUndo = true) {
     const chatContainer = getChatContainer();
     if (!chatContainer) return;
+
+    // Remove any existing summary notification first
+    const existing = chatContainer.querySelector('.chat-summary-notification');
+    if (existing) existing.remove();
 
     const id = `summary-${Date.now()}`;
     const el = document.createElement('div');
@@ -628,6 +640,7 @@ export function renderSummaryNotification(info) {
         <div class="summary-bar" onclick="document.getElementById('${id}').classList.toggle('expanded')">
             <span class="summary-icon">📋</span>
             <span class="summary-label">Context compressed — ${info.compressedMessages} messages → summary (${info.keptMessages} kept)</span>
+            ${showUndo ? '<button class="btn-summary-undo" title="Restore original messages (available until next query)">↩ Undo</button>' : ''}
             <span class="summary-chevron">▸</span>
         </div>
         <div class="summary-detail" id="${id}">
@@ -635,8 +648,17 @@ export function renderSummaryNotification(info) {
         </div>
     `;
 
-    chatContainer.appendChild(el);
-    scrollToBottom();
+    // Wire undo button — stops event propagation so it doesn't toggle the detail
+    if (showUndo) {
+        const undoBtn = el.querySelector('.btn-summary-undo');
+        undoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            EventBus.emit('chat:undoPrune');
+        });
+    }
+
+    // Insert at top of chat container
+    chatContainer.insertBefore(el, chatContainer.firstChild);
 }
 
 /**

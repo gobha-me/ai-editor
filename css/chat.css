@@ -318,6 +318,23 @@
     border-top: 1px solid var(--border);
 }
 
+.btn-summary-undo {
+    padding: 0.15rem 0.5rem;
+    font-size: var(--chat-xs, 11px);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+    border-radius: 3px;
+    background: var(--bg-primary);
+    color: var(--accent);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-summary-undo:hover {
+    background: var(--accent);
+    color: var(--bg-primary);
+}
+
 /* Tool call messages — compact, collapsible */
 .chat-message.tool-call {
     padding: 0;

@@ -94,9 +94,28 @@ function initChat(containerEl, inputEl) {
         }
     });
 
-    // Show summary notification when context is compressed
-    EventBus.on('chat:summaryGenerated', (info) => {
-        renderSummaryNotification(info);
+    // Show summary notification when context is pruned (replaces old summaryGenerated)
+    EventBus.on('chat:pruned', (info) => {
+        renderMessages();  // Re-render with pruned history + summary badge at top
+        const undoAvail = ChatSummarizer.hasStash();
+        showToast(
+            `📋 ${info.compressedMessages} messages summarized` + (undoAvail ? ' — ↩ undo available' : ''),
+            'info'
+        );
+    });
+
+    // Handle undo prune request from summary notification button
+    EventBus.on('chat:undoPrune', () => {
+        if (ChatSummarizer.undoPrune()) {
+            renderMessages();  // Re-render with restored history, no summary badge
+            showToast('↩ Messages restored', 'success');
+        }
+    });
+
+    // When stash is flushed (next user query), remove undo button from badge
+    EventBus.on('chat:stashFlushed', () => {
+        const undoBtn = document.querySelector('.btn-summary-undo');
+        if (undoBtn) undoBtn.remove();
     });
 
     // Handle edit-and-resend from inline message editor
