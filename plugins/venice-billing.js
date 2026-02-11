@@ -43,6 +43,7 @@ const VeniceBillingPlugin = {
     version: '2.0.0',
     description: 'Daily billing dashboard with accurate totals and browsable transaction history',
     author: 'Jeff',
+    defaultEnabled: false,
     hooks: [],
 
     defaultConfig: {

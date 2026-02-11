@@ -153,6 +153,26 @@ const GitProviderRegistry = {
         return { provider, connection };
     },
 
+    /**
+     * Test a connection before saving.
+     * Creates a temporary connection object and delegates to the provider.
+     * @param {string} providerId
+     * @param {string} url
+     * @param {string} token
+     * @returns {Promise<{ok: boolean, user?: string, error?: string}>}
+     */
+    async testConnection(providerId, url, token) {
+        const provider = this.get(providerId);
+        if (!provider) return { ok: false, error: `Unknown provider: ${providerId}` };
+
+        const tmpConn = { id: '__test__', provider: providerId, url, token, enabled: true };
+        try {
+            return await provider.testConnection(tmpConn);
+        } catch (err) {
+            return { ok: false, error: err.message || String(err) };
+        }
+    },
+
     // ========================================
     // AGGREGATE OPERATIONS
     // ========================================

@@ -320,7 +320,7 @@ const Plugins = {
 
         this._registered[manifest.id] = {
             manifest,
-            enabled: pluginState.enabled !== undefined ? pluginState.enabled : true,
+            enabled: pluginState.enabled !== undefined ? pluginState.enabled : (manifest.defaultEnabled !== undefined ? manifest.defaultEnabled : true),
             instance: null,
             config: pluginState.config || (manifest.defaultConfig ? { ...manifest.defaultConfig } : {})
         };

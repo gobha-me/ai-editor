@@ -115,40 +115,75 @@ export default {
         const apiKey = settings.llmApiKey;
         if (!endpoint || !apiKey) return null;
 
+        const authHeaders = { 'Authorization': `Bearer ${apiKey}` };
+
         try {
-            // /key endpoint works with regular API keys (not just management keys)
-            const resp = await fetch(`${endpoint}/key`, {
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
+            // Try /credits first — gives real account balance (needs provisioning key)
+            let totalCredits = null;
+            let totalUsage = null;
+            try {
+                const creditsResp = await fetch(`${endpoint}/credits`, { headers: authHeaders });
+                if (creditsResp.ok) {
+                    const creditsJson = await creditsResp.json();
+                    const cd = creditsJson.data || {};
+                    totalCredits = cd.total_credits ?? null;
+                    totalUsage = cd.total_usage ?? null;
+                }
+            } catch {
+                // /credits not available — fall through to /key
+            }
+
+            if (totalCredits !== null) {
+                // Real account balance available
+                const remaining = totalCredits - (totalUsage || 0);
+                return {
+                    provider: 'openrouter',
+                    usd: remaining,
+                    label: `$${remaining.toFixed(2)} balance`,
+                    raw: { totalCredits, totalUsage, source: 'credits' }
+                };
+            }
+
+            // Fall back to /key — shows key-level limits and usage
+            const resp = await fetch(`${endpoint}/key`, { headers: authHeaders });
             if (!resp.ok) return null;
 
             const json = await resp.json();
             const d = json.data || {};
 
-            // limit_remaining is null if unlimited
-            const remaining = d.limit_remaining;
-            const limit = d.limit;
             const usage = d.usage || 0;
+            const limit = d.limit;
+            const limitRemaining = d.limit_remaining;
+            const daily = d.usage_daily || 0;
+            const monthly = d.usage_monthly || 0;
 
-            // Build label
-            let label;
-            if (remaining !== null && remaining !== undefined) {
-                label = `$${remaining.toFixed(2)} remaining`;
-            } else {
-                label = `$${usage.toFixed(2)} used`;
+            // Short label for header display
+            let label = `$${usage.toFixed(2)} used`;
+            if (daily > 0) {
+                label += ` ($${daily.toFixed(2)} today)`;
+            }
+
+            // Detailed tooltip
+            let tooltip = `All-time: $${usage.toFixed(2)}`;
+            if (monthly > 0) tooltip += ` · This month: $${monthly.toFixed(2)}`;
+            if (daily > 0) tooltip += ` · Today: $${daily.toFixed(2)}`;
+            if (limit !== null && limit !== undefined && limitRemaining !== null) {
+                tooltip += ` · Key limit: $${limitRemaining.toFixed(2)} of $${limit.toFixed(2)} remaining`;
             }
 
             return {
                 provider: 'openrouter',
-                usd: remaining ?? null,
+                usd: null, // Can't determine account balance from /key endpoint
                 label,
+                tooltip,
                 raw: {
                     limit,
-                    limitRemaining: remaining,
+                    limitRemaining,
                     usage,
-                    usageDaily: d.usage_daily || 0,
-                    usageMonthly: d.usage_monthly || 0,
-                    isFreeTier: d.is_free_tier || false
+                    usageDaily: daily,
+                    usageMonthly: monthly,
+                    isFreeTier: d.is_free_tier || false,
+                    source: 'key'
                 }
             };
         } catch (err) {

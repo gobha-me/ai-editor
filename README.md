@@ -159,6 +159,7 @@ ai-editor/
 ├── plugins/
 │   ├── venice-ai.js            # Venice AI model info & pricing
 │   ├── venice-billing.js       # Venice usage dashboard with day picker
+│   └── openrouter-billing.js   # OpenRouter usage dashboard (uses configured API key)
 │   └── cross-repo-issues.js    # Cross-repository issue aggregation
 ├── docs/
 │   ├── TOOLS.md                # Tool system documentation
@@ -329,7 +330,7 @@ Plugins.register(MyPlugin);
 export default MyPlugin;
 ```
 
-Plugins are registered in Settings → Plugins. See `plugins/venice-ai.js` for a minimal example and `plugins/venice-billing.js` for a full-featured plugin with UI slot injection.
+Plugins are registered in Settings → Plugins. See `plugins/venice-ai.js` for a minimal example, `plugins/venice-billing.js` for a full-featured plugin with UI slot injection, and `plugins/openrouter-billing.js` for a plugin that reads the configured LLM settings directly. Billing plugins default to off — enable them in the Plugins tab.
 
 ## Future Enhancements
 

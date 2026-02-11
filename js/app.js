@@ -101,6 +101,7 @@ import './tools/context-tools.js';  // Issue #40: Embeddings-based context manag
 import '../plugins/venice-ai.js';
 import '../plugins/cross-repo-issues.js';
 import '../plugins/venice-billing.js';
+import '../plugins/openrouter-billing.js';
 
 // Log version on startup
 console.log(`Starting ${VERSION_DISPLAY}`);

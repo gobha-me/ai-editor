@@ -211,7 +211,7 @@ export function updateCostTracker() {
     if (bal) {
         let balParts = [];
 
-        // USD balance
+        // USD balance (from /credits endpoint or Venice)
         if (bal.usd !== null && bal.usd !== undefined) {
             balParts.push(`$${bal.usd.toFixed(2)}`);
         }
@@ -237,7 +237,12 @@ export function updateCostTracker() {
         }
 
         if (balParts.length > 0) {
-            parts.push(`<span class="cost-balance" title="Provider balance (${bal.provider})">${balParts.join(' · ')}</span>`);
+            const tip = bal.tooltip || `Provider balance (${bal.provider})`;
+            parts.push(`<span class="cost-balance" title="${tip}">${balParts.join(' · ')}</span>`);
+        } else if (bal.label) {
+            // Fallback: show provider-supplied label (e.g., OpenRouter usage stats)
+            const tip = bal.tooltip || `Provider info (${bal.provider})`;
+            parts.push(`<span class="cost-balance" title="${tip}">${bal.label}</span>`);
         }
     }
 

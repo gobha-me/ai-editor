@@ -296,6 +296,41 @@ export async function refreshPullRequests() {
     renderPullRequests();
 }
 
+/**
+ * Re-fetch the branch list and update the branch selector dropdown.
+ * Called after merge (especially with delete-branch), branch creation, etc.
+ */
+export async function refreshBranches() {
+    if (!State.currentProject) return;
+
+    const { owner, repo } = State.currentProject;
+
+    try {
+        State.branches = await Git.listBranches(owner, repo);
+    } catch (e) {
+        console.warn('[Branches] Failed to refresh:', e.message);
+        return;
+    }
+
+    const branchSelect = document.getElementById('branchSelect');
+    if (!branchSelect) return;
+
+    branchSelect.innerHTML = State.branches.map(b =>
+        `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
+    ).join('');
+
+    // Keep current selection if it still exists, otherwise switch to default
+    const stillExists = State.branches.some(b => b.name === State.currentBranch);
+    if (stillExists) {
+        branchSelect.value = State.currentBranch;
+    } else {
+        const defaultBranch = State.currentProject.defaultBranch || 'main';
+        branchSelect.value = defaultBranch;
+        State.currentBranch = defaultBranch;
+        EventBus.emit('branch:switch', { branch: defaultBranch });
+    }
+}
+
 // ============================================
 // CREATE PR MODAL
 // ============================================
@@ -612,12 +647,7 @@ export async function submitMergePR() {
 
         // Refresh data
         await refreshPullRequests();
-
-        // If we deleted the branch and it was our current branch, switch to default
-        if (deleteBranch && State.currentBranch === _currentPR.head) {
-            const defaultBranch = State.currentProject.defaultBranch || 'main';
-            EventBus.emit('branch:switch', { branch: defaultBranch });
-        }
+        await refreshBranches();
 
         // Refresh the modal to show merged state
         setTimeout(() => openPRDetailModal(_currentPR.number), 500);
@@ -1209,6 +1239,7 @@ export function initProjectListeners() {
     
     EventBus.on('issues:refresh', refreshIssues);
     EventBus.on('prs:refresh', refreshPullRequests);
+    EventBus.on('branches:refresh', refreshBranches);
 
     // Issue focus bar action buttons
     const safeClick = (id, fn) => {

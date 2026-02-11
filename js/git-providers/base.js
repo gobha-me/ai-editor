@@ -34,6 +34,16 @@ const BASE_GIT_PROVIDER = {
     // ========================================
 
     /**
+     * Test connectivity with given URL and token.
+     * Returns: { ok: boolean, user?: string, error?: string }
+     */
+    async testConnection(connection) {
+        // Default: try GET /user (works for Gitea and GitHub-compatible APIs)
+        const resp = await this.request(connection, 'GET', '/user');
+        return { ok: true, user: resp?.login || resp?.username || resp?.name || 'authenticated' };
+    },
+
+    /**
      * Build request headers for API calls.
      * Override for providers with different auth schemes.
      * @param {Object} connection - { url, token, ... }
