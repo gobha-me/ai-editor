@@ -9,6 +9,7 @@
  */
 
 import { Storage, State, EventBus } from './core.js';
+import { ContextManager } from './context-manager.js';
 
 // ============================================
 // CATEGORY DEFINITIONS
@@ -230,6 +231,26 @@ function _renderKeyList(items, totalBytes) {
     }
 
     container.innerHTML = html;
+
+    // Wire per-index delete buttons
+    container.querySelectorAll('.btn-delete-embedding').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const key = btn.dataset.key;
+            const projectName = key.replace('embeddings-index-', '');
+            if (!confirm(`Delete embedding index for "${projectName}"?`)) return;
+
+            Storage.remove(key);
+
+            // If this was the active in-memory index, clear it
+            if (ContextManager._indexedProject === projectName) {
+                ContextManager._fileIndex.clear();
+                ContextManager._indexedProject = null;
+            }
+
+            renderStorageMetrics();
+        });
+    });
 }
 
 /**
@@ -263,12 +284,13 @@ function _renderEmbeddingIndex(item, totalBytes, cat) {
     }
 
     return `
-        <div style="border: 1px solid var(--bg-tertiary); border-radius: 4px; padding: 0.4rem 0.5rem; margin-bottom: 0.3rem;">
+        <div class="embedding-index-card" style="border: 1px solid var(--bg-tertiary); border-radius: 4px; padding: 0.4rem 0.5rem; margin-bottom: 0.3rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
                 <span style="width: 8px; height: 8px; border-radius: 2px; background: ${cat.color}; flex-shrink: 0;"></span>
                 <span style="flex: 1; font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${_escapeAttr(projectName)}">${_escapeHtml(projectName)}</span>
                 ${usageBadge}
                 <span style="color: var(--text-muted); font-size: var(--font-xs);">${formatBytes(item.bytes)}</span>
+                <button type="button" class="btn-delete-embedding" data-key="${_escapeAttr(item.key)}" title="Delete this index" style="background: none; border: none; cursor: pointer; padding: 0.1rem 0.3rem; font-size: var(--font-sm); color: var(--text-muted); border-radius: 3px; line-height: 1;" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--text-muted)'">&times;</button>
             </div>
             <div style="display: flex; gap: 1rem; font-size: var(--font-xs); color: var(--text-muted);">
                 <span>${fileCount} files</span>

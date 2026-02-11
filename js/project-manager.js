@@ -768,6 +768,15 @@ export async function submitMergePR() {
 
         btn.textContent = '✅ Merged!';
 
+        // Notify context manager about the merge so it can reindex changed files
+        const changedFiles = (_currentPR.files || []).map(f => f.filename);
+        EventBus.emit('context:prMerged', {
+            baseBranch: _currentPR.base,
+            headBranch: _currentPR.head,
+            changedFiles,
+            deletedBranch: deleteBranch ? _currentPR.head : null
+        });
+
         // Refresh data
         await refreshPullRequests();
         await refreshBranches();

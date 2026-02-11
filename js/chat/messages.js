@@ -144,8 +144,8 @@ export function updateStreamingMessage(content) {
     const messageEl = document.getElementById('streaming-message');
     if (messageEl) {
         const contentEl = messageEl.querySelector('.message-content');
-        // Strip think blocks for display only
-        const displayContent = stripThinkBlocks(content);
+        // Strip think blocks for display only; guard null/undefined
+        const displayContent = stripThinkBlocks(content || '');
         contentEl.innerHTML = formatMessageContent(displayContent);
         
         scrollToBottom();
@@ -156,6 +156,9 @@ export function updateStreamingMessage(content) {
  * Finalize streaming message and add to history
  */
 export function finalizeStreamingMessage(content, meta = {}) {
+    // Coerce null/undefined to empty string
+    content = content || '';
+
     // Stop the interval timer and capture final elapsed time
     const timerElapsed = getStreamingElapsed();
     stopStreamingTimer();
@@ -230,6 +233,12 @@ export function renderMessage(message, isLastUserMessage = false) {
         return;
     }
 
+    // Skip assistant messages that are tool-call-only (no visible content)
+    if (message.role === 'assistant' && !message.content && message.tool_calls) {
+        console.log('[renderMessage] Skipping tool-call-only assistant message');
+        return;
+    }
+
     const chatContainer = getChatContainer();
     if (!chatContainer) return;
 
@@ -260,12 +269,12 @@ export function renderMessage(message, isLastUserMessage = false) {
 
     // CRITICAL FIX: Only strip think blocks from assistant messages, NEVER from user/system/tool messages
     let displayContent = (message.role === 'assistant') 
-        ? stripThinkBlocks(message.content)
-        : message.content;
+        ? stripThinkBlocks(message.content || '')
+        : (message.content || '');
     
     // If content is an object or array, stringify it for display
     if (typeof displayContent !== 'string') {
-        displayContent = JSON.stringify(displayContent, null, 2);
+        displayContent = JSON.stringify(displayContent, null, 2) || '';
     }
 
     messageEl.innerHTML = `

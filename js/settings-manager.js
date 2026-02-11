@@ -172,6 +172,12 @@ function populateSettingsForm() {
     
     const maxRelevantFilesValueEl = document.getElementById('maxRelevantFilesValue');
     if (maxRelevantFilesValueEl) maxRelevantFilesValueEl.textContent = State.settings.maxRelevantFiles || 5;
+
+    const maxIndexFilesEl = document.getElementById('settingMaxIndexFiles');
+    if (maxIndexFilesEl) maxIndexFilesEl.value = State.settings.maxIndexFiles || 200;
+
+    const maxIndexFilesValueEl = document.getElementById('maxIndexFilesValue');
+    if (maxIndexFilesValueEl) maxIndexFilesValueEl.textContent = State.settings.maxIndexFiles || 200;
     
     const autoReindexEl = document.getElementById('settingAutoReindex');
     if (autoReindexEl) autoReindexEl.checked = State.settings.autoReindex !== false;
@@ -179,12 +185,19 @@ function populateSettingsForm() {
     const embeddingCacheExpiryEl = document.getElementById('settingEmbeddingCacheExpiry');
     if (embeddingCacheExpiryEl) embeddingCacheExpiryEl.value = State.settings.embeddingCacheExpiry || 7;
 
-    // Max files slider
+    // Max files sliders
     const maxFilesSlider = document.getElementById('settingMaxRelevantFiles');
     if (maxFilesSlider) {
         maxFilesSlider.oninput = () => {
             const valueEl = document.getElementById('maxRelevantFilesValue');
             if (valueEl) valueEl.textContent = maxFilesSlider.value;
+        };
+    }
+    const maxIndexSlider = document.getElementById('settingMaxIndexFiles');
+    if (maxIndexSlider) {
+        maxIndexSlider.oninput = () => {
+            const valueEl = document.getElementById('maxIndexFilesValue');
+            if (valueEl) valueEl.textContent = maxIndexSlider.value;
         };
     }
 

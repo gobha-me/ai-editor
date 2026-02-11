@@ -14,6 +14,60 @@ const ContextManager = {
     _queryCount: 0,        // Times findRelevantFiles was called for current index
     _lastQueried: null,    // Timestamp of last query
 
+    // ── File Filtering ──
+
+    /** Extensions that should never be indexed (binary/generated/media) */
+    SKIP_EXTENSIONS: new Set([
+        // Images
+        'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp', 'bmp', 'tiff',
+        // Fonts
+        'woff', 'woff2', 'ttf', 'eot', 'otf',
+        // Media
+        'mp3', 'mp4', 'wav', 'ogg', 'webm', 'avi', 'mov',
+        // Archives
+        'zip', 'tar', 'gz', 'bz2', 'rar', '7z',
+        // Compiled/binary
+        'wasm', 'pyc', 'pyo', 'class', 'o', 'so', 'dylib', 'dll', 'exe',
+        // Maps & minified
+        'map',
+        // Data blobs
+        'sqlite', 'db', 'bin', 'dat',
+        // Lockfiles (huge, no semantic value)
+        'lock',
+        // PDF/office
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    ]),
+
+    /** Path patterns to exclude (directories & specific files) */
+    SKIP_PATH_PATTERNS: [
+        /node_modules\//,
+        /vendor\//,
+        /\.git\//,
+        /dist\//,
+        /build\//,
+        /\.min\.(js|css)$/,
+        /bundle\.(js|css)$/,
+        /package-lock\.json$/,
+        /yarn\.lock$/,
+        /pnpm-lock\.yaml$/,
+    ],
+
+    /**
+     * Check if a file should be indexed based on extension and path.
+     */
+    shouldIndex(path) {
+        // Extension check
+        const ext = path.split('.').pop()?.toLowerCase();
+        if (ext && this.SKIP_EXTENSIONS.has(ext)) return false;
+
+        // Path pattern check
+        for (const pattern of this.SKIP_PATH_PATTERNS) {
+            if (pattern.test(path)) return false;
+        }
+
+        return true;
+    },
+
     /**
      * Check if context manager is enabled
      */
@@ -183,8 +237,22 @@ const ContextManager = {
         EventBus.emit('context:indexStart', { project: projectKey });
 
         try {
-            // Get all files from file tree
-            const files = State.fileTree.filter(f => f.type === 'file');
+            // Filter files: type, extension, path patterns
+            const allFiles = State.fileTree.filter(f => f.type === 'file');
+            const eligible = allFiles.filter(f => this.shouldIndex(f.path));
+            const skipped = allFiles.length - eligible.length;
+
+            if (skipped > 0) {
+                console.log(`[Context] Filtered: ${eligible.length} eligible, ${skipped} skipped (binary/vendor/generated)`);
+            }
+
+            // Respect maxIndexFiles setting (default: 200)
+            const maxFiles = State.settings.maxIndexFiles || 200;
+            const files = eligible.slice(0, maxFiles);
+            if (eligible.length > maxFiles) {
+                console.warn(`[Context] Capped at ${maxFiles} files (${eligible.length} eligible). Increase maxIndexFiles in settings.`);
+            }
+
             const totalFiles = files.length;
             let indexed = 0;
 
@@ -203,9 +271,9 @@ const ContextManager = {
                         const fileData = await Git.getFile(owner, repo, file.path, State.currentBranch);
                         const content = fileData.content;
                         
-                        // Skip binary files and very large files
-                        if (content.length > 500000) { // Skip files > 500KB
-                            console.log(`[Context] Skipping large file: ${file.path}`);
+                        // Skip very large files (content-based check)
+                        if (content.length > 500000) {
+                            console.log(`[Context] Skipping large file: ${file.path} (${(content.length / 1024).toFixed(0)}KB)`);
                             return;
                         }
 
@@ -231,13 +299,15 @@ const ContextManager = {
             this._indexedProject = projectKey;
             console.log(`[Context] Indexed ${indexed} files`);
 
-            // Persist to IndexedDB
+            // Persist to storage
             await this.saveIndexToStorage();
 
             EventBus.emit('context:indexComplete', {
                 project: projectKey,
                 filesIndexed: indexed,
-                totalFiles
+                totalFiles: allFiles.length,
+                eligible: eligible.length,
+                skipped
             });
 
             return indexed;
@@ -250,6 +320,40 @@ const ContextManager = {
         } finally {
             this._indexing = false;
         }
+    },
+
+    /**
+     * Incremental re-index: only re-embed files that changed.
+     * Used after merges or branch switches when an existing index is loaded.
+     * @param {string[]} changedPaths - Paths that changed
+     */
+    async reindexChanged(changedPaths) {
+        if (!this.isEnabled() || !State.currentProject) return 0;
+
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch;
+        let updated = 0;
+
+        for (const path of changedPaths) {
+            if (!this.shouldIndex(path)) continue;
+
+            try {
+                const fileData = await Git.getFile(owner, repo, path, branch);
+                if (fileData.content.length > 500000) continue;
+                await this.indexFile(path, fileData.content);
+                updated++;
+            } catch (e) {
+                // File might have been deleted in the merge — remove from index
+                this._fileIndex.delete(path);
+            }
+        }
+
+        if (updated > 0) {
+            await this.saveIndexToStorage();
+            console.log(`[Context] Incrementally re-indexed ${updated} changed file(s)`);
+        }
+
+        return updated;
     },
 
     /**
@@ -298,6 +402,7 @@ const ContextManager = {
      */
     async updateFileIndex(path, content) {
         if (!this.isEnabled()) return;
+        if (!this.shouldIndex(path)) return;
         await this.indexFile(path, content);
         await this.saveIndexToStorage();
     },
@@ -388,6 +493,56 @@ const ContextManager = {
     },
 
     /**
+     * Remove the stored embedding index for a specific branch.
+     * Called when a branch is deleted after merge.
+     * @param {string} branchName - Branch name to remove
+     */
+    removeIndexForBranch(branchName) {
+        if (!State.currentProject) return;
+        const { owner, repo } = State.currentProject;
+        const key = `embeddings-index-${owner}/${repo}@${branchName}`;
+        const existing = Storage.get(key);
+        if (existing) {
+            Storage.remove(key);
+            console.log(`[Context] Removed embedding index for deleted branch: ${branchName}`);
+        }
+        // If the deleted branch was the currently loaded index, clear in-memory too
+        if (this._indexedProject === `${owner}/${repo}@${branchName}`) {
+            this._fileIndex.clear();
+            this._indexedProject = null;
+        }
+    },
+
+    /**
+     * Scan localStorage for embedding indexes whose branch no longer exists.
+     * Call after branch list refresh.
+     * @param {string[]} liveBranches - Array of branch names that still exist
+     */
+    cleanupOrphanedIndexes(liveBranches) {
+        if (!State.currentProject) return;
+        const { owner, repo } = State.currentProject;
+        const prefix = `ai-editor-embeddings-index-${owner}/${repo}@`;
+        const branchSet = new Set(liveBranches);
+        let removed = 0;
+
+        for (let i = 0; i < localStorage.length; i++) {
+            const fullKey = localStorage.key(i);
+            if (fullKey && fullKey.startsWith(prefix)) {
+                const branch = fullKey.slice(prefix.length);
+                if (!branchSet.has(branch)) {
+                    localStorage.removeItem(fullKey);
+                    removed++;
+                    console.log(`[Context] Cleaned up orphaned index: ${branch}`);
+                }
+            }
+        }
+
+        if (removed > 0) {
+            console.log(`[Context] Cleaned up ${removed} orphaned embedding index(es)`);
+        }
+    },
+
+    /**
      * Get index statistics
      */
     getStats() {
@@ -402,28 +557,75 @@ const ContextManager = {
     }
 };
 
-// Event listeners for automatic index updates
+// ============================================
+// EVENT LISTENERS — Automatic index lifecycle
+// ============================================
+
+// ── Project load: restore from cache or auto-index ──
 EventBus.on('project:loaded', async () => {
     if (!ContextManager.isEnabled()) return;
 
-    // Try to load from cache first
     const loaded = await ContextManager.loadIndexFromStorage();
     
-    // If cache miss or stale, index in background
     if (!loaded && State.settings.autoReindex !== false) {
         console.log('[Context] Auto-indexing project...');
-        setTimeout(() => ContextManager.indexProject(), 1000); // Delay to not block UI
+        setTimeout(() => ContextManager.indexProject(), 1000);
     }
 });
 
+// ── Branch switch: load cached index for new branch or re-index ──
+EventBus.on('branch:switch', async ({ branch }) => {
+    if (!ContextManager.isEnabled() || !State.currentProject) return;
+
+    const newKey = `${State.currentProject.owner}/${State.currentProject.repo}@${branch}`;
+    if (ContextManager._indexedProject === newKey) return; // Already on this branch
+
+    console.log(`[Context] Branch switched to ${branch}, loading index...`);
+
+    // Clear current in-memory index
+    ContextManager._fileIndex.clear();
+    ContextManager._indexedProject = null;
+
+    // Try to load cached index for the new branch
+    const loaded = await ContextManager.loadIndexFromStorage();
+    if (!loaded && State.settings.autoReindex !== false) {
+        console.log(`[Context] No cached index for ${branch}, auto-indexing...`);
+        setTimeout(() => ContextManager.indexProject(), 1000);
+    }
+});
+
+// ── Branch deleted: remove its embedding index from storage ──
+EventBus.on('git:branchDeleted', ({ name }) => {
+    if (!ContextManager.isEnabled()) return;
+    console.log(`[Context] Branch deleted: ${name}, removing embedding index`);
+    ContextManager.removeIndexForBranch(name);
+});
+
+// ── PR merged: reindex changed files on the target branch ──
+// This event is emitted from project-manager.js with enriched data
+EventBus.on('context:prMerged', async ({ baseBranch, changedFiles }) => {
+    if (!ContextManager.isEnabled() || !State.currentProject) return;
+
+    const currentKey = `${State.currentProject.owner}/${State.currentProject.repo}@${baseBranch}`;
+
+    // Only reindex if we have an index for the target branch
+    if (ContextManager._indexedProject === currentKey && changedFiles?.length > 0) {
+        console.log(`[Context] PR merged into ${baseBranch}, re-indexing ${changedFiles.length} changed file(s)...`);
+        await ContextManager.reindexChanged(changedFiles);
+    }
+});
+
+// ── File CRUD: incremental index updates ──
 EventBus.on('git:fileCreated', async ({ path, content }) => {
     if (!ContextManager.isEnabled()) return;
+    if (!ContextManager.shouldIndex(path)) return;
     console.log(`[Context] File created: ${path}, updating index`);
     await ContextManager.updateFileIndex(path, content);
 });
 
 EventBus.on('git:fileUpdated', async ({ path, content }) => {
     if (!ContextManager.isEnabled()) return;
+    if (!ContextManager.shouldIndex(path)) return;
     console.log(`[Context] File updated: ${path}, updating index`);
     await ContextManager.updateFileIndex(path, content);
 });

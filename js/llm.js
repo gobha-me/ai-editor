@@ -774,6 +774,8 @@ You have access to tools that let you:
 - Find semantically relevant files using AI embeddings (find_relevant_files) — PREFERRED for discovery
 - Create pull requests to submit work (create_pull_request)
 - List open pull requests (list_pull_requests)
+- Commit dirty editor files to Git (commit_files) — auto-generates commit message if not provided
+- Check which files have uncommitted changes (list_dirty_files)
 - Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
 
 📝 SCRATCHPAD — YOUR PERSISTENT MEMORY:
@@ -828,7 +830,8 @@ WORKFLOW — Use these tools as needed (not all are required every time):
 6. read_lines — see exact line numbers in the target region before editing
 7. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
 8. create_file — if a new file is needed
-9. scratchpad_write — update progress after completing each phase
+9. commit_files — commit your changes when the user says to commit, or when a logical unit of work is complete. Uses list_dirty_files to preview what will be committed.
+10. scratchpad_write — update progress after completing each phase
 
 🚨 CRITICAL TOOL USAGE RULES:
 1. **ALWAYS provide ALL required parameters for every tool call**

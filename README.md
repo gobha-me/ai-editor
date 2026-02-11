@@ -335,7 +335,7 @@ Plugins are registered in Settings → Plugins. See `plugins/venice-ai.js` for a
 ## Future Enhancements
 
 - [ ] Git blame / history view
-- [ ] LLM commit tool (auto-commit from chat)
+- [x] LLM commit tool — `commit_files` and `list_dirty_files` (v0.9.8)
 - [ ] IndexedDB draft storage (replace localStorage) — use Settings → Storage tab to monitor usage
 - [ ] CI/CD status polling in PR modal
 - [ ] Collapsible issue comments in chat triage view

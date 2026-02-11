@@ -8,7 +8,7 @@
         <!-- Populated dynamically by settings-manager.js -->
     </div>
 
-    <button type="button" type="button" class="btn btn-secondary" id="btnAddConnection" style="width: 100%; margin-top: 0.75rem;">
+    <button type="button" class="btn btn-secondary" id="btnAddConnection" style="width: 100%; margin-top: 0.75rem;">
         ＋ Add Connection
     </button>
 
@@ -47,10 +47,10 @@
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-            <button type="button" type="button" class="btn btn-secondary" id="btnTestConnection">🔌 Test</button>
+            <button type="button" class="btn btn-secondary" id="btnTestConnection">🔌 Test</button>
             <div style="flex: 1;"></div>
-            <button type="button" type="button" class="btn btn-secondary" id="btnCancelConnection">Cancel</button>
-            <button type="button" type="button" class="btn btn-primary" id="btnSaveConnection">💾 Save Connection</button>
+            <button type="button" class="btn btn-secondary" id="btnCancelConnection">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSaveConnection">💾 Save Connection</button>
         </div>
 
         <div id="connectionTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); display: none;"></div>
@@ -74,7 +74,7 @@
     <div class="form-group">
         <label for="settingLlmApiKey">LLM API Key:</label>
         <input type="password" id="settingLlmApiKey" placeholder="sk-...">
-        <button type="button" type="button" class="btn btn-secondary" onclick="window.fetchModelsForSettings()" style="margin-top: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="window.fetchModelsForSettings()" style="margin-top: 0.5rem;">
             🔄 Fetch Models
         </button>
     </div>
@@ -155,9 +155,9 @@
     </div>
 
     <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-        <button type="button" type="button" class="btn btn-secondary" id="btnEnableAllModels">Enable All</button>
-        <button type="button" type="button" class="btn btn-secondary" id="btnDisableAllModels">Disable All</button>
-        <button type="button" type="button" class="btn btn-secondary" id="btnEnableToolModels">Enable Tool-Capable Only</button>
+        <button type="button" class="btn btn-secondary" id="btnEnableAllModels">Enable All</button>
+        <button type="button" class="btn btn-secondary" id="btnDisableAllModels">Disable All</button>
+        <button type="button" class="btn btn-secondary" id="btnEnableToolModels">Enable Tool-Capable Only</button>
     </div>
 </div>
 
@@ -226,7 +226,7 @@
                 <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Local, ~33MB)</option>
                 <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Local, ~130MB)</option>
             </datalist>
-            <button type="button" type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
+            <button type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
                 🔄 Fetch API Models
             </button>
             <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
@@ -235,9 +235,19 @@
         </div>
 
         <div class="form-group">
-            <label for="settingMaxRelevantFiles">Max relevant files:</label>
+            <label for="settingMaxRelevantFiles">Max relevant files per query:</label>
             <input type="range" id="settingMaxRelevantFiles" min="1" max="20" step="1">
             <span id="maxRelevantFilesValue">5</span>
+            <small style="display: block; color: var(--text-muted);">How many files are returned to the LLM per semantic search</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingMaxIndexFiles">Max files to index:</label>
+            <input type="range" id="settingMaxIndexFiles" min="25" max="500" step="25">
+            <span id="maxIndexFilesValue">200</span>
+            <small style="display: block; color: var(--text-muted);">
+                Limits how many files are embedded per project. Binary, vendor, and generated files are always skipped.
+            </small>
         </div>
 
         <div class="form-group">
@@ -253,7 +263,7 @@
         </div>
 
         <div class="form-group">
-            <button type="button" type="button" class="btn btn-secondary" id="btnClearEmbeddingsCache">
+            <button type="button" class="btn btn-secondary" id="btnClearEmbeddingsCache">
                 🗑️ Clear Embeddings Cache
             </button>
         </div>

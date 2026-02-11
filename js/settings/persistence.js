@@ -63,6 +63,9 @@ export function collectAndSave() {
     
     const maxRelevantFilesEl = document.getElementById('settingMaxRelevantFiles');
     State.settings.maxRelevantFiles = maxRelevantFilesEl ? parseInt(maxRelevantFilesEl.value) || 5 : 5;
+
+    const maxIndexFilesEl = document.getElementById('settingMaxIndexFiles');
+    State.settings.maxIndexFiles = maxIndexFilesEl ? parseInt(maxIndexFilesEl.value) || 200 : 200;
     
     const autoReindexEl = document.getElementById('settingAutoReindex');
     State.settings.autoReindex = autoReindexEl ? autoReindexEl.checked : false;
@@ -194,6 +197,7 @@ export function exportSettings() {
         embeddingCacheExpiry: State.settings.embeddingCacheExpiry,
         autoReindex: State.settings.autoReindex,
         maxRelevantFiles: State.settings.maxRelevantFiles,
+        maxIndexFiles: State.settings.maxIndexFiles,
         
         // Appearance
         theme: State.settings.theme,

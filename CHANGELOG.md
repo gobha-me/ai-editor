@@ -2,6 +2,77 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.8-3] - 2026-02-11
+
+### Added
+- **Per-index delete** on embedding cards in Settings → Storage — each embedding index now has an × button to delete it individually instead of only the nuclear "Clear Embeddings" option
+  - Confirm dialog shows the project/branch name
+  - Clears in-memory index if the deleted entry was the active one
+  - Re-renders the metrics view after deletion
+
+### Files
+- `js/storage-metrics.js` — delete button on each embedding card, event delegation, ContextManager import
+
+## [0.9.8-2] - 2026-02-11
+
+### Fixed
+- **Embeddings indexing 75 files instead of respecting limits** — `indexProject()` was indexing every file from `State.fileTree` with no extension filtering, no path exclusions, and no max count. Now:
+  - **Extension filter**: skips binary, media, fonts, archives, compiled, lockfiles, maps, office docs (40+ extensions)
+  - **Path filter**: skips `node_modules/`, `vendor/`, `dist/`, `build/`, `.git/`, minified bundles, lockfiles
+  - **Max cap**: respects `maxIndexFiles` setting (default: 200, configurable 25–500 via new slider)
+  - `shouldIndex()` method shared by `indexProject`, `updateFileIndex`, `reindexChanged`, and file event handlers
+- Fixed duplicate `type="button"` attributes across settings-tabs.html
+
+### Added
+- **Branch lifecycle for embeddings**:
+  - `git:branchDeleted` → removes that branch's embedding index from localStorage
+  - `branch:switch` → loads cached index for new branch or auto-indexes if none exists
+  - `context:prMerged` → incrementally re-indexes only the changed files on the target branch after merge
+  - `removeIndexForBranch(name)` method for explicit branch index cleanup
+  - `cleanupOrphanedIndexes(liveBranches)` method for bulk orphan cleanup
+- **Incremental re-indexing** via `reindexChanged(paths)` — re-embeds only specific files instead of full project rebuild
+- **Max files to index** setting (Settings → Context): slider 25–500, default 200
+  - Status display shows when index is at the cap with a warning to increase
+- `context:prMerged` event emitted from `submitMergePR` with `baseBranch`, `headBranch`, `changedFiles`, and `deletedBranch` data
+
+### Files
+- `js/context-manager.js` — filtering, branch lifecycle, reindexChanged, event listeners overhaul
+- `js/project-manager.js` — emit `context:prMerged` after successful merge
+- `js/settings-manager.js` — maxIndexFiles slider init and handler
+- `js/settings/persistence.js` — maxIndexFiles read/write
+- `js/settings/llm-tab.js` — enhanced status display with limit info
+- `html/settings-tabs.html` — maxIndexFiles slider, fixed duplicate type attrs
+
+## [0.9.8-1] - 2026-02-11
+
+### Fixed
+- **"null" rendered in assistant messages** — tool-call-only assistant responses (no text content) were stored with `content: null` in chatHistory. On page refresh or re-render, `JSON.stringify(null)` produced the literal string "null" in the UI. Fixed in three places:
+  - `renderMessage` now skips assistant messages that have `tool_calls` but no content (these are protocol artifacts, not user-facing messages)
+  - `renderMessage` null-guards content with `|| ''` before passing to `stripThinkBlocks` and `JSON.stringify`
+  - `updateStreamingMessage` and `finalizeStreamingMessage` both null-coerce content at entry
+- **Tab-switch streaming resilience** — if the browser backgrounded the tab during streaming and chunks were lost, the same null content path could trigger. The guards prevent "null" from ever reaching the DOM regardless of how content becomes null/undefined.
+
+### Files
+- `js/chat/messages.js` — null guards in `renderMessage`, `updateStreamingMessage`, `finalizeStreamingMessage`; skip-render logic for tool-call-only assistant messages
+
+## [0.9.8] - 2026-02-11
+
+### Added
+- **LLM commit tool** (`commit_files`) — the LLM can now commit dirty editor files directly from chat:
+  - Accepts optional `paths` array to commit specific files (defaults to all dirty files)
+  - Accepts optional `message` for a custom commit message; if omitted, auto-generates one using the same `generateCommitMessage` pipeline as the commit modal
+  - Syncs current editor content to tab state before committing
+  - Updates tab dirty state and triggers UI refresh after commit
+  - Returns committed paths, failed paths (with errors), and the commit message used
+- **List dirty files tool** (`list_dirty_files`) — LLM can check which files have uncommitted changes before committing, with line change and size info
+- Both tools scoped to the `coder` role
+- System prompt updated with commit tools in tool list and workflow (step 9)
+
+### Files
+- `js/tools/commit-tools.js` — new module with `commit_files` and `list_dirty_files`
+- `js/app.js` — imports commit-tools for self-registration
+- `js/llm.js` — system prompt additions
+
 ## [0.9.7-2] - 2026-02-11
 
 ### Changed
