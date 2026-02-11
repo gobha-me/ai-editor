@@ -2,6 +2,50 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.7-2] - 2026-02-11
+
+### Changed
+- **System prompt now promotes `find_relevant_files`** — LLMs were ignoring semantic search because the prompt never mentioned it:
+  - Added to tool list with "PREFERRED for discovery" annotation
+  - Workflow step 3 (before grep) with strong guidance on when to use it vs `search_in_files`
+  - Efficiency rules updated: "DON'T know which files → find_relevant_files FIRST"
+  - Conditional context injected at end of prompt: when embeddings index is active, tells the LLM exactly how many files are indexed and that natural language queries work
+- This should cause LLMs to actually fire `find_relevant_files` during exploration, which in turn increments the query counters visible in the Storage tab
+
+### Files
+- `js/llm.js` — system prompt updates + imports `ContextManager` for stats injection
+
+## [0.9.7-1] - 2026-02-11
+
+### Added
+- **Embeddings usage tracking** — `ContextManager.findRelevantFiles()` now records `queryCount` and `lastQueried` timestamps, persisted to the index metadata in localStorage
+- **Enriched embeddings detail in Storage tab** — each embedding index now shows:
+  - File count, build age (relative time), last queried time
+  - Color-coded usage badges: red "unused", yellow "< 5 queries", green "5+ queries"
+  - Individual size bars per index
+- Storage Details section now splits embeddings (card view with stats) from other items (compact list)
+
+### Changed
+- `ContextManager.getStats()` now includes `queryCount` and `lastQueried`
+- Index metadata format extended with `queryCount` and `lastQueried` fields (backward-compatible)
+- Query stats reset on full re-index (new vectors = new tracking baseline)
+
+## [0.9.7] - 2026-02-11
+
+### Added
+- **Storage Metrics tab** in Settings — live dashboard showing browser storage usage:
+  - **Origin quota** bar using `navigator.storage.estimate()` (localStorage + IndexedDB + Cache Storage)
+  - **Category breakdown** with stacked color bar: Chat History, Drafts, Settings, Model Cache, Embeddings, UI State, Other
+  - **Per-key drill-down** — top 20 largest items with size bars and monospace key names
+  - **Cleanup actions** — per-category clear buttons (Chat, Drafts, Embeddings, Model Cache) with confirmation dialogs
+  - All metrics render live when tab activates, re-render after cleanup
+
+### Files
+- `js/storage-metrics.js` — new module (measurement, aggregation, rendering)
+- `html/settings-tabs.html` — Storage tab HTML skeleton
+- `html/modals.html` — Storage tab button in tab bar
+- `js/settings-manager.js` — imports and wires `renderStorageMetrics()` on tab switch
+
 ## [0.9.6] - 2026-02-11
 
 ### Added

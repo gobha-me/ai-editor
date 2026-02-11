@@ -11,6 +11,8 @@ const ContextManager = {
     _fileIndex: new Map(), // path -> { path, summary, embedding, lastIndexed }
     _indexing: false,
     _indexedProject: null, // Track which project is indexed
+    _queryCount: 0,        // Times findRelevantFiles was called for current index
+    _lastQueried: null,    // Timestamp of last query
 
     /**
      * Check if context manager is enabled
@@ -174,6 +176,8 @@ const ContextManager = {
 
         this._indexing = true;
         this._fileIndex.clear();
+        this._queryCount = 0;
+        this._lastQueried = null;
 
         console.log(`[Context] Indexing project: ${projectKey}`);
         EventBus.emit('context:indexStart', { project: projectKey });
@@ -278,6 +282,9 @@ const ContextManager = {
                 console.log(`  ${i + 1}. ${r.path} (similarity: ${r.similarity.toFixed(3)})`);
             });
 
+            // Track query stats
+            this._trackQuery();
+
             return results;
 
         } catch (error) {
@@ -315,10 +322,29 @@ const ContextManager = {
         const indexData = {
             project: this._indexedProject,
             timestamp: Date.now(),
-            files: Array.from(this._fileIndex.entries())
+            files: Array.from(this._fileIndex.entries()),
+            queryCount: this._queryCount,
+            lastQueried: this._lastQueried
         };
 
         Storage.set(`embeddings-index-${this._indexedProject}`, indexData);
+    },
+
+    /**
+     * Track a query against the current index and persist stats.
+     */
+    _trackQuery() {
+        this._queryCount++;
+        this._lastQueried = Date.now();
+        // Persist just the stats without re-serializing the full index
+        // (save the expensive write for indexProject)
+        const key = `embeddings-index-${this._indexedProject}`;
+        const existing = Storage.get(key);
+        if (existing) {
+            existing.queryCount = this._queryCount;
+            existing.lastQueried = this._lastQueried;
+            Storage.set(key, existing);
+        }
     },
 
     /**
@@ -333,6 +359,8 @@ const ContextManager = {
         if (indexData && indexData.files) {
             this._fileIndex = new Map(indexData.files);
             this._indexedProject = projectKey;
+            this._queryCount = indexData.queryCount || 0;
+            this._lastQueried = indexData.lastQueried || null;
             
             const age = Date.now() - indexData.timestamp;
             const maxAge = (State.settings.embeddingCacheExpiry || 7) * 24 * 60 * 60 * 1000;
@@ -367,7 +395,9 @@ const ContextManager = {
             filesIndexed: this._fileIndex.size,
             project: this._indexedProject,
             isIndexing: this._indexing,
-            enabled: this.isEnabled()
+            enabled: this.isEnabled(),
+            queryCount: this._queryCount,
+            lastQueried: this._lastQueried
         };
     }
 };

@@ -339,6 +339,42 @@
 </div>
 
 <!-- Advanced Tab -->
+<div class="settings-tab-content" id="tabStorage">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
+        Browser storage usage breakdown. All data is stored locally in your browser.
+    </p>
+
+    <!-- Origin-level quota -->
+    <div id="storageQuotaSection" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600;">Origin Quota</h4>
+        <div id="storageQuotaBar" style="height: 20px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; margin-bottom: 0.3rem;">
+            <div id="storageQuotaFill" style="height: 100%; background: var(--accent); transition: width 0.3s; border-radius: 4px;"></div>
+        </div>
+        <div id="storageQuotaLabel" style="font-size: var(--font-sm); color: var(--text-muted);"></div>
+    </div>
+
+    <!-- localStorage breakdown -->
+    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">localStorage Breakdown</h4>
+            <span id="storageTotalLabel" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
+        </div>
+        <div id="storageCategoryBars"></div>
+    </div>
+
+    <!-- Per-key detail -->
+    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600;">Storage Details</h4>
+        <div id="storageKeyList" style="max-height: 300px; overflow-y: auto;"></div>
+    </div>
+
+    <!-- Cleanup actions -->
+    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600;">Cleanup</h4>
+        <div id="storageCleanupActions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+    </div>
+</div>
+
 <div class="settings-tab-content" id="tabAdvanced">
     <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Advanced LLM parameters. Leave empty to use provider defaults.

@@ -6,6 +6,7 @@
 import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from './core.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { ToolRegistry } from './tools/registry.js';
+import { ContextManager } from './context-manager.js';
 
 // ============================================
 // THINK-BLOCK STRIPPING
@@ -770,6 +771,7 @@ You have access to tools that let you:
 - List all open tabs (list_open_tabs)
 - Create new files in the repository (create_file)
 - Search for text patterns across the codebase (search_in_files)
+- Find semantically relevant files using AI embeddings (find_relevant_files) — PREFERRED for discovery
 - Create pull requests to submit work (create_pull_request)
 - List open pull requests (list_pull_requests)
 - Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
@@ -808,7 +810,9 @@ You have a scratchpad for notes that persist across the entire conversation, eve
 2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Use read_lines only if you need specific line ranges not yet seen.
 3. **Minimum tools needed.** Skip steps you don't need:
    - If you already know the project structure → skip get_project_tree
+   - If you DON'T know which files to look at → use find_relevant_files (semantic search) FIRST
    - If you already know which file to edit → skip search_in_files
+   - If you know the exact string to grep → use search_in_files directly
    - If the file is already open → skip open_file
    - If you have enough context to respond → just respond, no tools needed
 4. **For edits, the minimum path is:** open_file (if not already open) → read_lines (target region only) → edit tool
@@ -817,8 +821,9 @@ You have a scratchpad for notes that persist across the entire conversation, eve
 WORKFLOW — Use these tools as needed (not all are required every time):
 1. scratchpad_write — note the task, plan, and key files BEFORE diving in
 2. get_project_tree — understand the project structure (skip if you already know it)
-3. search_in_files — find where relevant code lives (skip if you already know the file)
-4. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
+3. **find_relevant_files — STRONGLY PREFERRED when you need to discover which files are relevant to a task or question.** This uses semantic/AI search and is much better than grep when you don't know exact function names or strings to search for. Use it for questions like "where is X handled?", "which files relate to Y?", or at the start of any new task to orient yourself.
+4. search_in_files — find exact text patterns or identifiers (use when you KNOW the specific string/symbol to grep for)
+5. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
 5. open_file — switch to the file that needs editing (MUST do this before editing)
 6. read_lines — see exact line numbers in the target region before editing
 7. replace_lines / insert_lines / delete_lines — make targeted, SMALL edits (10-30 lines max)
@@ -982,7 +987,13 @@ function buildSystemPrompt() {
 
     // Inject scratchpad (persistent LLM notes)
     prompt += buildScratchpadPrompt();
-    
+
+    // Inject embeddings status so the LLM knows semantic search is available
+    const ctxStats = ContextManager.getStats();
+    if (ctxStats.enabled && ctxStats.filesIndexed > 0) {
+        prompt += `\n\n🔍 SEMANTIC SEARCH ACTIVE: The project "${ctxStats.project}" has ${ctxStats.filesIndexed} files indexed for semantic search. Use find_relevant_files to discover which files relate to a topic — it understands natural language queries like "error handling" or "authentication flow" and returns the most relevant files ranked by similarity. This is MUCH more effective than grep when you don't know exact identifiers.`;
+    }
+
     return prompt;
 }
 

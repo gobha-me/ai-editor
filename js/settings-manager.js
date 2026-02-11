@@ -16,6 +16,7 @@ import { collectAndSave, exportSettings, importSettings } from './settings/persi
 import { initConnectionsTab } from './settings/connections-tab.js';
 import { populateRoleCards } from './settings/roles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
+import { renderStorageMetrics } from './storage-metrics.js';
 import {
     updateProviderDescription, renderProviderSettings, showModelCapabilities,
     populateSummarizerSliders, populateAdvancedParams, updateEmbeddingsStatus,
@@ -242,6 +243,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabModels') populateModelsTab();
             // Refresh Plugins tab when switching to it
             if (tab.dataset.tab === 'tabPlugins') populatePluginsTab();
+            // Render Storage metrics when switching to it
+            if (tab.dataset.tab === 'tabStorage') renderStorageMetrics();
             
             // Re-check arrow visibility after scroll settles
             setTimeout(updateTabArrows, 100);
