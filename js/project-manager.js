@@ -193,7 +193,10 @@ export function renderIssues() {
         const activeClass = isActive ? ' issue-item-active' : isFocused ? ' issue-item-focused' : '';
         
         return `
-            <div class="issue-item${activeClass}" onclick="window.focusIssue(${issue.number})">
+            <div class="issue-item${activeClass}" role="listitem" tabindex="0"
+                 onclick="window.focusIssue(${issue.number})"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.focusIssue(${issue.number})}"
+                 aria-label="Issue #${issue.number}: ${escapeAttr(issue.title)}">
                 <div class="issue-number">#${issue.number}</div>
                 <div class="issue-title">${escapeHtml(issue.title)}</div>
                 ${issue.labels.length ? `
@@ -249,9 +252,13 @@ export function renderPullRequests() {
         const branchInfo = onDefault ? `<span style="color: var(--text-muted);">${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span>` : '';
 
         return `
-            <div class="issue-item" onclick="window.openPRDetailModal(${pr.number})" title="${ciTitle}" style="cursor: pointer;">
+            <div class="issue-item" role="listitem" tabindex="0"
+                 onclick="window.openPRDetailModal(${pr.number})"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPRDetailModal(${pr.number})}"
+                 title="${ciTitle}" style="cursor: pointer;"
+                 aria-label="Pull request #${pr.number}: ${escapeAttr(pr.title)}, CI ${pr.ciState || 'unknown'}">
                 <div class="issue-number">
-                    <span class="pr-ci-badge" title="${ciTitle}">${ciIcon}</span>
+                    <span class="pr-ci-badge" title="${ciTitle}" aria-hidden="true">${ciIcon}</span>
                     #${pr.number}
                 </div>
                 <div class="issue-title">${escapeHtml(pr.title)}</div>

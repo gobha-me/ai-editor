@@ -1,59 +1,63 @@
 <!-- Chat Panel (Right) -->
-<aside class="chat-panel" id="chatPanel">
+<aside class="chat-panel" id="chatPanel" role="complementary" aria-label="AI chat">
     <div class="chat-header">
         <h3>💬 AI Assistant</h3>
         <div class="chat-header-actions">
-            <button class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard">📋</button>
-            <button class="btn btn-secondary" id="btnNewChat" title="New Chat">🗑️</button>
+            <button class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard" aria-label="Copy chat to clipboard">📋</button>
+            <button class="btn btn-secondary" id="btnNewChat" title="New Chat" aria-label="Start new chat">🗑️</button>
             <div class="model-selector">
-                <select id="roleSelect" title="Active role — controls tool access">
+                <label for="roleSelect" class="sr-only">Role</label>
+                <select id="roleSelect" title="Active role — controls tool access" aria-label="Active role">
                     <!-- Populated dynamically -->
                 </select>
-                <select id="modelSelect">
+                <label for="modelSelect" class="sr-only">Model</label>
+                <select id="modelSelect" aria-label="Select model">
                     <option value="">Select model...</option>
                 </select>
-                <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+                <button class="btn btn-secondary" id="btnFetchModels" title="Refresh models" aria-label="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
             </div>
         </div>
     </div>
-    <div class="model-status-bar" id="modelStatusBar" style="display: none;">
+    <div class="model-status-bar" id="modelStatusBar" role="status" aria-live="polite" style="display: none;">
         <!-- Populated dynamically when model changes -->
     </div>
 
     <!-- Issue Focus Bar — shown when triaging an issue -->
-    <div class="issue-focus-bar" id="issueFocusBar" style="display: none;">
+    <div class="issue-focus-bar" id="issueFocusBar" role="region" aria-label="Issue triage" style="display: none;">
         <div class="issue-focus-header">
             <div class="issue-focus-title" id="issueFocusTitle"></div>
             <div class="issue-focus-controls">
-                <button class="btn btn-sm" id="btnIssueFocusExpand" title="Full details">📄</button>
-                <button class="btn btn-sm" id="btnIssueFocusDismiss" title="Dismiss">✕</button>
+                <button class="btn btn-sm" id="btnIssueFocusExpand" title="Full details" aria-label="Show full issue details">📄</button>
+                <button class="btn btn-sm" id="btnIssueFocusDismiss" title="Dismiss" aria-label="Dismiss issue focus">✕</button>
             </div>
         </div>
         <div class="issue-focus-meta" id="issueFocusMeta"></div>
         <div class="issue-focus-body" id="issueFocusBody"></div>
         <div class="issue-focus-comments" id="issueFocusComments"></div>
-        <div class="issue-focus-actions">
-            <button class="btn btn-sm btn-accept" id="btnIssueFocusAccept" title="Accept — close with comment">✅ Accept</button>
-            <button class="btn btn-sm btn-deny" id="btnIssueFocusDeny" title="Deny — close with comment">❌ Deny</button>
-            <button class="btn btn-sm btn-comment" id="btnIssueFocusComment" title="Add comment">💬 Comment</button>
-            <button class="btn btn-sm btn-work" id="btnIssueFocusWork" title="Create branch and start work">🚀 Start Work</button>
+        <div class="issue-focus-actions" role="group" aria-label="Issue actions">
+            <button class="btn btn-sm btn-accept" id="btnIssueFocusAccept" title="Accept — close with comment" aria-label="Accept issue">✅ Accept</button>
+            <button class="btn btn-sm btn-deny" id="btnIssueFocusDeny" title="Deny — close with comment" aria-label="Deny issue">❌ Deny</button>
+            <button class="btn btn-sm btn-comment" id="btnIssueFocusComment" title="Add comment" aria-label="Comment on issue">💬 Comment</button>
+            <button class="btn btn-sm btn-work" id="btnIssueFocusWork" title="Create branch and start work" aria-label="Start work on issue">🚀 Start Work</button>
         </div>
     </div>
 
-    <div class="chat-messages" id="chatMessages">
+    <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-label="Chat messages">
         <!-- Messages rendered here -->
     </div>
 
     <div class="chat-input-area">
         <div class="chat-input-wrapper">
+            <label for="chatInput" class="sr-only">Chat message</label>
             <textarea 
                 id="chatInput" 
                 placeholder="Ask me to edit code, explain something, or help with an issue..."
                 rows="3"
+                aria-label="Chat message input"
             ></textarea>
             <div class="chat-input-actions">
-                <button id="btnSend" title="Send (Enter)">📤</button>
-                <button id="btnStop" class="btn-stop" title="Stop" style="display: none;">⏹</button>
+                <button id="btnSend" title="Send (Enter)" aria-label="Send message">📤</button>
+                <button id="btnStop" class="btn-stop" title="Stop" aria-label="Stop generation" style="display: none;">⏹</button>
             </div>
         </div>
     </div>

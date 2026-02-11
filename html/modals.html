@@ -1,23 +1,23 @@
 <!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal">
+<div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal" id="settingsModalInner">
         <div class="modal-header">
-            <h2>⚙️ Settings</h2>
-            <button class="modal-close" onclick="window.closeSettings()">×</button>
+            <h2 id="settingsTitle">⚙️ Settings</h2>
+            <button class="modal-close" onclick="window.closeSettings()" aria-label="Close settings">×</button>
         </div>
 
         <!-- Settings Tabs -->
         <div class="settings-tabs-nav">
             <button class="settings-tabs-arrow settings-tabs-arrow-left" onclick="window.scrollSettingsTabs(-1)" aria-label="Scroll tabs left">‹</button>
-            <div class="settings-tabs">
-                <button class="settings-tab active" data-tab="tabConnections">Connections</button>
-                <button class="settings-tab" data-tab="tabGeneral">LLM</button>
-                <button class="settings-tab" data-tab="tabModels">Models</button>
-                <button class="settings-tab" data-tab="tabAppearance">Appearance</button>
-                <button class="settings-tab" data-tab="tabContext">Context</button>
-                <button class="settings-tab" data-tab="tabRoles">Roles</button>
-                <button class="settings-tab" data-tab="tabPlugins">Plugins</button>
-                <button class="settings-tab" data-tab="tabAdvanced">Advanced</button>
+            <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                <button class="settings-tab active" data-tab="tabConnections" role="tab" aria-selected="true" aria-controls="tabConnections">Connections</button>
+                <button class="settings-tab" data-tab="tabGeneral" role="tab" aria-selected="false" aria-controls="tabGeneral">LLM</button>
+                <button class="settings-tab" data-tab="tabModels" role="tab" aria-selected="false" aria-controls="tabModels">Models</button>
+                <button class="settings-tab" data-tab="tabAppearance" role="tab" aria-selected="false" aria-controls="tabAppearance">Appearance</button>
+                <button class="settings-tab" data-tab="tabContext" role="tab" aria-selected="false" aria-controls="tabContext">Context</button>
+                <button class="settings-tab" data-tab="tabRoles" role="tab" aria-selected="false" aria-controls="tabRoles">Roles</button>
+                <button class="settings-tab" data-tab="tabPlugins" role="tab" aria-selected="false" aria-controls="tabPlugins">Plugins</button>
+                <button class="settings-tab" data-tab="tabAdvanced" role="tab" aria-selected="false" aria-controls="tabAdvanced">Advanced</button>
             </div>
             <button class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollSettingsTabs(1)" aria-label="Scroll tabs right">›</button>
         </div>
@@ -41,11 +41,11 @@
 </div>
 
 <!-- Revert Modal -->
-<div class="modal-overlay" id="revertModal">
+<div class="modal-overlay" id="revertModal" role="dialog" aria-modal="true" aria-labelledby="revertTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2>↩️ Revert Changes</h2>
-            <button class="modal-close" onclick="window.closeRevertModal()">×</button>
+            <h2 id="revertTitle">↩️ Revert Changes</h2>
+            <button class="modal-close" onclick="window.closeRevertModal()" aria-label="Close revert dialog">×</button>
         </div>
         <div class="modal-body">
             <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
@@ -70,11 +70,11 @@
 </div>
 
 <!-- Commit Modal -->
-<div class="modal-overlay" id="commitModal">
+<div class="modal-overlay" id="commitModal" role="dialog" aria-modal="true" aria-labelledby="commitTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2>📦 Commit Changes</h2>
-            <button class="modal-close" onclick="window.closeCommitModal()">×</button>
+            <h2 id="commitTitle">📦 Commit Changes</h2>
+            <button class="modal-close" onclick="window.closeCommitModal()" aria-label="Close commit dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -104,11 +104,11 @@
 </div>
 
 <!-- New Branch Modal -->
-<div class="modal-overlay" id="newBranchModal">
+<div class="modal-overlay" id="newBranchModal" role="dialog" aria-modal="true" aria-labelledby="newBranchTitle">
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2>🌿 Create New Branch</h2>
-            <button class="modal-close" onclick="window.closeNewBranchModal()">×</button>
+            <h2 id="newBranchTitle">🌿 Create New Branch</h2>
+            <button class="modal-close" onclick="window.closeNewBranchModal()" aria-label="Close new branch dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -131,11 +131,11 @@
 </div>
 
 <!-- New File Modal -->
-<div class="modal-overlay" id="newFileModal">
+<div class="modal-overlay" id="newFileModal" role="dialog" aria-modal="true" aria-labelledby="newFileTitle">
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2>📄 Create New File</h2>
-            <button class="modal-close" onclick="window.closeNewFileModal()">×</button>
+            <h2 id="newFileTitle">📄 Create New File</h2>
+            <button class="modal-close" onclick="window.closeNewFileModal()" aria-label="Close new file dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -152,11 +152,11 @@
 </div>
 
 <!-- Error Log Modal -->
-<div class="modal-overlay" id="errorLogModal">
+<div class="modal-overlay" id="errorLogModal" role="dialog" aria-modal="true" aria-labelledby="errorLogTitle">
     <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
-            <h2>🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
-            <button class="modal-close" onclick="window.closeErrorLog()">×</button>
+            <h2 id="errorLogTitle">🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
+            <button class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
         </div>
         <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
             <div id="errorLogContent">
@@ -172,11 +172,11 @@
 </div>
 
 <!-- LLM Debug Modal -->
-<div class="modal-overlay" id="llmDebugModal">
+<div class="modal-overlay" id="llmDebugModal" role="dialog" aria-modal="true" aria-labelledby="llmDebugTitle">
     <div class="modal" style="max-width: 900px;">
         <div class="modal-header">
-            <h2>🔬 LLM Debug (<span id="llmDebugCount">0</span> exchanges)</h2>
-            <button class="modal-close" onclick="window.closeLLMDebug()">×</button>
+            <h2 id="llmDebugTitle">🔬 LLM Debug (<span id="llmDebugCount">0</span> exchanges)</h2>
+            <button class="modal-close" onclick="window.closeLLMDebug()" aria-label="Close debug log">×</button>
         </div>
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div id="llmDebugContent">
@@ -209,11 +209,11 @@
 </div>
 
 <!-- Keyboard Shortcuts Help (F1 / Ctrl+?) -->
-<div class="modal-overlay" id="helpModal">
+<div class="modal-overlay" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="modal" style="max-width: 580px;">
         <div class="modal-header">
-            <h2>⌨️ Keyboard Shortcuts</h2>
-            <button class="modal-close" onclick="window.closeHelpModal()">×</button>
+            <h2 id="helpTitle">⌨️ Keyboard Shortcuts</h2>
+            <button class="modal-close" onclick="window.closeHelpModal()" aria-label="Close help">×</button>
         </div>
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div class="help-shortcuts">
@@ -224,6 +224,12 @@
                     <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></span><span>Toggle sidebar</span></div>
                     <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>J</kbd></span><span>Toggle chat panel</span></div>
                     <div class="help-row"><span class="help-keys"><kbd>Esc</kbd></span><span>Close modal / panel</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Panel Focus</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>1</kbd></span><span>Focus sidebar</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>2</kbd></span><span>Focus editor</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>3</kbd></span><span>Focus chat input</span></div>
                 </div>
                 <div class="help-group">
                     <h3>Files</h3>
@@ -237,6 +243,27 @@
                     <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Toggle preview pane</span></div>
                     <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span><span>Toggle diff view</span></div>
                     <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></span><span>Toggle line numbers</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Editor Tabs</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>←</kbd> <kbd>→</kbd></span><span>Switch between tabs</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last tab</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Delete</kbd></span><span>Close current tab</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>File Tree</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate files</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>→</kbd></span><span>Expand folder</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>←</kbd></span><span>Collapse folder / go to parent</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file / toggle folder</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last item</span></div>
+                </div>
+                <div class="help-group">
+                    <h3>Diff Viewer</h3>
+                    <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↓</kbd></span><span>Next change</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↑</kbd></span><span>Previous change</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>V</kbd></span><span>Toggle unified / split view</span></div>
+                    <div class="help-row"><span class="help-keys"><kbd>S</kbd></span><span>Toggle syntax highlighting</span></div>
                 </div>
                 <div class="help-group">
                     <h3>Chat</h3>
@@ -258,11 +285,11 @@
 </div>
 
 <!-- Issue Detail Modal -->
-<div class="modal-overlay" id="issueDetailModal">
+<div class="modal-overlay" id="issueDetailModal" role="dialog" aria-modal="true" aria-labelledby="issueDetailTitle">
     <div class="modal modal-resizable" style="width: 620px; height: 520px;">
         <div class="modal-header">
             <h2 id="issueDetailTitle">Issue</h2>
-            <button class="modal-close" onclick="window.closeIssueDetailModal()">×</button>
+            <button class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column;">
             <!-- Labels -->
@@ -288,11 +315,11 @@
 </div>
 
 <!-- Create PR Modal -->
-<div class="modal-overlay" id="createPRModal">
+<div class="modal-overlay" id="createPRModal" role="dialog" aria-modal="true" aria-labelledby="createPRTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2>🔀 Create Pull Request</h2>
-            <button class="modal-close" onclick="window.closeCreatePRModal()">×</button>
+            <h2 id="createPRTitle">🔀 Create Pull Request</h2>
+            <button class="modal-close" onclick="window.closeCreatePRModal()" aria-label="Close create PR">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -324,11 +351,11 @@
 </div>
 
 <!-- PR Detail Modal -->
-<div class="modal-overlay" id="prDetailModal">
+<div class="modal-overlay" id="prDetailModal" role="dialog" aria-modal="true" aria-labelledby="prDetailTitle">
     <div class="modal modal-resizable" style="width: 780px; height: 600px;">
         <div class="modal-header">
             <h2 id="prDetailTitle">Pull Request</h2>
-            <button class="modal-close" onclick="window.closePRDetailModal()">×</button>
+            <button class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
             <!-- Meta row: state, CI, mergeable, stats -->
@@ -391,11 +418,11 @@
 </div>
 
 <!-- Zip Upload Modal -->
-<div class="modal-overlay" id="zipUploadModal">
+<div class="modal-overlay" id="zipUploadModal" role="dialog" aria-modal="true" aria-labelledby="zipUploadTitle">
     <div class="modal" style="max-width: 650px;">
         <div class="modal-header">
-            <h2>📦 Upload Zip</h2>
-            <button class="modal-close" onclick="window.closeZipUpload()">×</button>
+            <h2 id="zipUploadTitle">📦 Upload Zip</h2>
+            <button class="modal-close" onclick="window.closeZipUpload()" aria-label="Close zip upload">×</button>
         </div>
         <div class="modal-body">
             <!-- Drop Zone -->
@@ -451,11 +478,11 @@
 </div>
 
 <!-- Plugin Modal (generic container for plugin-contributed modals) -->
-<div class="modal-overlay" id="pluginModal">
+<div class="modal-overlay" id="pluginModal" role="dialog" aria-modal="true" aria-labelledby="pluginModalTitle">
     <div class="modal modal-resizable" id="pluginModalContent" style="width: 700px; height: 550px;">
         <div class="modal-header">
             <h3 id="pluginModalTitle">Plugin</h3>
-            <button class="modal-close" onclick="window.closePluginModal()">&times;</button>
+            <button class="modal-close" onclick="window.closePluginModal()" aria-label="Close plugin">&times;</button>
         </div>
         <div class="modal-body" id="pluginModalBody" style="flex: 1; overflow-y: auto;">
         </div>

@@ -130,23 +130,6 @@ const githubProvider = {
         }
     },
 
-
-    /**
-     * Test a GitHub connection by fetching the authenticated user.
-     * @param {Object} connection - Connection object with url, token, etc.
-     * @returns {Promise<{ok: boolean, user?: string, error?: string}>}
-     */
-    async testConnection(connection) {
-        try {
-            const user = await this.request(connection, 'GET', '/user');
-            return { 
-                ok: true, 
-                user: user.login || 'authenticated' 
-            };
-        } catch (err) {
-            return { ok: false, error: err.message };
-        }
-    },
     // ========================================
     // REPOSITORIES
     // ========================================

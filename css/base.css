@@ -231,6 +231,79 @@ body.resizing .cm-editor {
 }
 
 /* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Screen-reader only — visually hidden but accessible */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip navigation link */
+.skip-nav {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    z-index: 10000;
+    padding: 0.5rem 1rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 0 0 4px 4px;
+    text-decoration: none;
+    font-size: var(--font-sm);
+    transition: top 0.15s ease;
+}
+.skip-nav:focus {
+    top: 0;
+}
+
+/* Focus-visible: keyboard users get a clear ring, mouse users don't */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Suppress outline on mouse focus */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Buttons, inputs, selects — tighter focus ring */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+
+/* Tab items focus ring */
+.editor-tab:focus-visible,
+.settings-tab:focus-visible,
+.file-tree-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Modal close buttons — circular focus ring */
+.modal-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 50%;
+}
+
+/* ============================================
    RESPONSIVE — laptop vs desktop
    ============================================ */
 
@@ -239,5 +312,17 @@ body.resizing .cm-editor {
     :root {
         --sidebar-width: 220px;
         --chat-width: 300px;
+    }
+}
+
+/* ============================================
+   REDUCED MOTION — respect OS preference
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
 }

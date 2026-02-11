@@ -51,6 +51,9 @@
         });
     </script>
     
+    <!-- Skip Navigation -->
+    <a href="#editorContainer" class="skip-nav" id="skipNav">Skip to editor</a>
+
     <!-- App Container - Templates loaded dynamically -->
     <div class="app-container" id="app">
         <!-- Loading indicator -->
@@ -63,7 +66,7 @@
     </div>
 
     <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" aria-live="polite" role="status"></div>
 
     <!-- Main Application Module -->
     <script type="module" src="./js/app.js"></script>

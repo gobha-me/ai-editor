@@ -1,41 +1,43 @@
 <!-- Project Search Panel (Ctrl+Shift+F) -->
-<div class="search-panel" id="searchPanel">
+<div class="search-panel" id="searchPanel" role="search" aria-label="Project search">
     <div class="search-panel-header">
         <div class="search-input-wrapper">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="searchInput" placeholder="Search in project..." autocomplete="off" spellcheck="false">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <label for="searchInput" class="sr-only">Search in project</label>
+            <input type="text" id="searchInput" placeholder="Search in project..." autocomplete="off" spellcheck="false" aria-label="Search query">
         </div>
-        <div class="search-options">
+        <div class="search-options" role="group" aria-label="Search options">
             <label class="search-option" title="Match case">
-                <input type="checkbox" id="searchCaseSensitive"> <span>Aa</span>
+                <input type="checkbox" id="searchCaseSensitive" aria-label="Match case"> <span aria-hidden="true">Aa</span>
             </label>
             <label class="search-option" title="Regular expression">
-                <input type="checkbox" id="searchRegex"> <span>.*</span>
+                <input type="checkbox" id="searchRegex" aria-label="Regular expression"> <span aria-hidden="true">.*</span>
             </label>
             <label class="search-option" title="Whole word">
-                <input type="checkbox" id="searchWholeWord"> <span>\\b</span>
+                <input type="checkbox" id="searchWholeWord" aria-label="Whole word"> <span aria-hidden="true">\\b</span>
             </label>
         </div>
         <div class="search-actions">
-            <button class="btn btn-primary" id="btnDoSearch">Search</button>
-            <button class="btn btn-secondary" id="btnToggleReplace" title="Toggle replace">⇄</button>
-            <button class="btn btn-secondary" id="btnCloseSearch" title="Close">✕</button>
+            <button class="btn btn-primary" id="btnDoSearch" aria-label="Run search">Search</button>
+            <button class="btn btn-secondary" id="btnToggleReplace" title="Toggle replace" aria-label="Toggle replace" aria-expanded="false" aria-controls="replaceBar">⇄</button>
+            <button class="btn btn-secondary" id="btnCloseSearch" title="Close" aria-label="Close search panel">✕</button>
         </div>
     </div>
 
     <!-- Replace bar (hidden by default) -->
     <div class="replace-bar" id="replaceBar" style="display: none;">
-        <input type="text" class="replace-input" id="replaceInput" placeholder="Replace with...">
-        <button class="btn btn-secondary" id="btnReplaceAll" title="Replace all matches">Replace All</button>
+        <label for="replaceInput" class="sr-only">Replace with</label>
+        <input type="text" class="replace-input" id="replaceInput" placeholder="Replace with..." aria-label="Replacement text">
+        <button class="btn btn-secondary" id="btnReplaceAll" title="Replace all matches" aria-label="Replace all matches">Replace All</button>
     </div>
 
     <!-- Search status -->
-    <div class="search-status" id="searchStatus" style="display: none;">
+    <div class="search-status" id="searchStatus" role="status" aria-live="polite" style="display: none;">
         <span id="searchStatusText"></span>
     </div>
 
     <!-- Results -->
-    <div class="search-results" id="searchResults">
+    <div class="search-results" id="searchResults" role="list" aria-label="Search results">
         <!-- Populated dynamically -->
     </div>
 </div>

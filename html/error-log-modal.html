@@ -1,9 +1,9 @@
 <!-- Error Log Modal -->
-<div class="modal-overlay" id="errorLogModal">
+<div class="modal-overlay" id="errorLogModal" role="dialog" aria-modal="true" aria-labelledby="errorLogTitle">
     <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
-            <h2>🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
-            <button class="modal-close" onclick="window.closeErrorLog()">×</button>
+            <h2 id="errorLogTitle">🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
+            <button class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
         </div>
         <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
             <div id="errorLogContent">

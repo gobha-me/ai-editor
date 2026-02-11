@@ -217,11 +217,20 @@ function populateSettingsForm() {
     initModelsTabEvents();
 
     // --- Settings tab switching ---
+    // Add role="tabpanel" to tab content panels
+    document.querySelectorAll('.settings-tab-content').forEach(panel => {
+        panel.setAttribute('role', 'tabpanel');
+    });
+
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.onclick = () => {
-            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.settings-tab').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
             document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
             document.getElementById(tab.dataset.tab).classList.add('active');
             
             // Scroll clicked tab into view

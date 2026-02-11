@@ -133,38 +133,6 @@ const GitProviderRegistry = {
             : [..._connections];
     },
 
-    /**
-     * Test a connection without saving it.
-     * Used by the settings UI to validate credentials.
-     * @param {string} providerId - Provider ID (e.g., 'gitea')
-     * @param {string} url - API base URL
-     * @param {string} token - Authentication token
-     * @returns {Promise<{ok: boolean, user?: string, error?: string}>}
-     */
-    async testConnection(providerId, url, token) {
-        const provider = this.get(providerId);
-        if (!provider) {
-            return { ok: false, error: `Unknown provider: ${providerId}` };
-        }
-
-        // Create temporary connection object
-        const tempConn = {
-            id: '__test__',
-            provider: providerId,
-            url: url || provider.fixedUrl || '',
-            token: token || '',
-            enabled: true
-        };
-
-        try {
-            // Call provider's test method
-            const result = await provider.testConnection(tempConn);
-            return result;
-        } catch (err) {
-            return { ok: false, error: err.message };
-        }
-    },
-
     // ========================================
     // RESOLUTION
     // ========================================

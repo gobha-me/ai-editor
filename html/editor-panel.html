@@ -1,23 +1,23 @@
 <!-- Editor Panel (Center) -->
-<section class="editor-panel">
+<main class="editor-panel" role="main" aria-label="Code editor">
     <!-- Tabs -->
     <div class="editor-tabs-bar">
-        <div class="editor-tabs" id="editorTabs">
-            <div class="editor-tab active">
+        <div class="editor-tabs" id="editorTabs" role="tablist" aria-label="Open files">
+            <div class="editor-tab active" role="tab" aria-selected="true">
                 <span>Welcome</span>
             </div>
         </div>
-        <div class="editor-toolbar">
-            <button class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)">🔢</button>
-            <button class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" disabled>👁 Preview</button>
-            <button class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" disabled>± Diff</button>
+        <div class="editor-toolbar" role="toolbar" aria-label="Editor tools">
+            <button class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)" aria-label="Toggle line numbers">🔢</button>
+            <button class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" aria-label="Toggle preview" disabled>👁 Preview</button>
+            <button class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" aria-label="Toggle diff view" disabled>± Diff</button>
         </div>
     </div>
 
     <!-- Editor + Secondary Pane Container -->
     <div class="editor-split" id="editorSplit">
         <!-- Editor Container -->
-        <div class="editor-container" id="editorContainer">
+        <div class="editor-container" id="editorContainer" role="region" aria-label="Code editor content">
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
                     <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ <span id="welcomeAppName"></span></h2>
@@ -30,15 +30,15 @@
         </div>
 
         <!-- Resize Handle (Editor ↔ Preview/Diff) -->
-        <div class="resize-handle resize-handle-preview" id="resizeHandlePreview" style="display: none;"></div>
+        <div class="resize-handle resize-handle-preview" id="resizeHandlePreview" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview" style="display: none;"></div>
 
         <!-- Secondary Pane (Preview / Diff) -->
-        <div class="secondary-pane" id="secondaryPane" style="display: none;">
+        <div class="secondary-pane" id="secondaryPane" role="region" aria-label="Preview pane" style="display: none;">
             <div class="secondary-pane-header">
                 <span id="secondaryPaneTitle">Preview</span>
                 <div class="secondary-pane-actions">
-                    <button class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen">⛶</button>
-                    <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close">✕</button>
+                    <button class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">⛶</button>
+                    <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">✕</button>
                 </div>
             </div>
             <div class="secondary-pane-content" id="secondaryPaneContent">
@@ -47,7 +47,7 @@
     </div>
 
     <!-- Status Bar -->
-    <div class="editor-status">
+    <div class="editor-status" role="status" aria-live="polite" aria-label="Editor status">
         <div class="status-left">
             <span class="status-item" id="statusFile">No file open</span>
             <span class="status-item" id="statusModified"></span>
@@ -57,4 +57,4 @@
             <span class="status-item" id="statusConnection">●</span>
         </div>
     </div>
-</section>
+</main>

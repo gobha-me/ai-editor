@@ -50,6 +50,10 @@ export function renderFileTree() {
     // Build tree structure
     const tree = buildTreeStructure(State.fileTree);
     container.innerHTML = renderTreeNodes(tree, 0);
+
+    // Roving tabindex: make only the first item tabbable
+    const firstItem = container.querySelector('.tree-item');
+    if (firstItem) firstItem.tabIndex = 0;
 }
 
 function buildTreeStructure(files) {
@@ -96,18 +100,22 @@ function renderTreeNodes(nodes, depth) {
                      data-depth="${depth}" 
                      data-path="${escapeAttr(node.path)}"
                      data-type="${escapeAttr(node.type)}"
+                     role="treeitem"
+                     tabindex="-1"
+                     aria-label="${escapeAttr(node.name)}${isDir ? ', folder' : ''}"
+                     ${isDir && hasChildren ? `aria-expanded="false"` : ''}
                      onclick="${clickHandler}">
                     ${chevron}
-                    <span class="icon">${icon}</span>
+                    <span class="icon" aria-hidden="true">${icon}</span>
                     <span class="name">${escapeHtml(node.name)}</span>
                     <div class="actions">
-                        ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete">🗑</button>` : ''}
+                        ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
                     </div>
                 </div>
             `;
 
             if (isDir && hasChildren) {
-                html += `<div class="tree-children collapsed" data-parent="${escapeAttr(node.path)}">${renderTreeNodes(node.children, depth + 1)}</div>`;
+                html += `<div class="tree-children collapsed" data-parent="${escapeAttr(node.path)}" role="group">${renderTreeNodes(node.children, depth + 1)}</div>`;
             }
 
             return html;
@@ -153,11 +161,13 @@ export async function onTreeItemClick(path, type, isDoubleClick = false) {
         const item = document.querySelector(`.tree-item[data-path="${path}"]`);
         const children = document.querySelector(`.tree-children[data-parent="${path}"]`);
         if (children) {
-            children.classList.toggle('collapsed');
+            const isExpanding = children.classList.toggle('collapsed') === false;
             const chevron = item.querySelector('.chevron');
             if (chevron) {
-                chevron.classList.toggle('expanded');
+                chevron.classList.toggle('expanded', isExpanding);
             }
+            // Sync ARIA state
+            item.setAttribute('aria-expanded', String(isExpanding));
         }
         return;
     }

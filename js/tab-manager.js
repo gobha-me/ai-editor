@@ -131,12 +131,16 @@ export function renderEditorTabs() {
         
         return `
             <div class="editor-tab ${activeClass} ${previewClass}" 
+                 role="tab"
+                 tabindex="${isActive ? '0' : '-1'}"
+                 aria-selected="${isActive}"
+                 aria-label="${escapeAttr(fileName)}${tab.dirty ? ', modified' : ''}${tab.isPreview ? ', preview' : ''}"
                  onclick="window.switchToTab(${index})"
                  ondblclick="window.pinTab(${index})"
                  title="${escapeAttr(tab.path)}">
                 <span class="tab-name">${escapeHtml(fileName)}</span>
-                <span class="modified" style="display: ${tab.dirty ? 'inline' : 'none'}">●</span>
-                <button class="close" onclick="window.closeTab(${index}, event)" title="Close">×</button>
+                <span class="modified" aria-hidden="true" style="display: ${tab.dirty ? 'inline' : 'none'}">●</span>
+                <button class="close" onclick="window.closeTab(${index}, event)" title="Close" aria-label="Close ${escapeAttr(fileName)}">×</button>
             </div>
         `;
     }).join('');

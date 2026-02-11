@@ -140,9 +140,9 @@ export async function buildAppLayout() {
         ${templates.get('search-panel')}
         <main class="main-content">
             ${templates.get('sidebar')}
-            <div class="resize-handle resize-handle-sidebar" id="resizeHandleSidebar" title="Drag to resize sidebar"></div>
+            <div class="resize-handle resize-handle-sidebar" id="resizeHandleSidebar" title="Drag to resize sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
             ${templates.get('editor-panel')}
-            <div class="resize-handle resize-handle-chat" id="resizeHandleChat" title="Drag to resize chat"></div>
+            <div class="resize-handle resize-handle-chat" id="resizeHandleChat" title="Drag to resize chat" role="separator" aria-orientation="vertical" aria-label="Resize chat panel"></div>
             ${templates.get('chat-panel')}
         </main>
         ${templates.get('modals')}

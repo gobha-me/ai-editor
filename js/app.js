@@ -78,6 +78,7 @@ import {
     fetchProviderBalance
 } from './model-manager.js';
 import { initPanelResize } from './resize-manager.js';
+import { initAccessibility, announce } from './accessibility.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -259,17 +260,27 @@ function applyLineNumbersVisibility() {
 
 function initSidebarCollapse() {
     document.querySelectorAll('.sidebar-header-collapsible').forEach(header => {
-        header.addEventListener('click', () => {
-            const targetId = header.dataset.collapse;
-            const body = document.getElementById(targetId);
-            if (!body) return;
+        const targetId = header.dataset.collapse;
+        const body = document.getElementById(targetId);
+        if (!body) return;
 
+        const toggle = () => {
             const isCollapsed = body.classList.toggle('collapsed');
+            header.setAttribute('aria-expanded', String(!isCollapsed));
             const label = header.querySelector('span');
             if (label) {
-                // Swap chevron
                 const text = label.textContent.replace(/^[▾▸]\s*/, '');
                 label.textContent = (isCollapsed ? '▸ ' : '▾ ') + text;
+            }
+        };
+
+        header.addEventListener('click', toggle);
+
+        // Keyboard: Enter/Space toggles, same as a button
+        header.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
             }
         });
     });
@@ -363,6 +374,30 @@ function setupKeyboardShortcuts() {
         if (e.key === 'F1') {
             e.preventDefault();
             openHelpModal();
+        }
+
+        // Ctrl+1 - Focus sidebar
+        if (e.ctrlKey && !e.shiftKey && e.key === '1') {
+            e.preventDefault();
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar && !sidebar.classList.contains('hidden')) {
+                const first = sidebar.querySelector('select, button, input, [tabindex]');
+                if (first) first.focus();
+            }
+        }
+
+        // Ctrl+2 - Focus editor
+        if (e.ctrlKey && !e.shiftKey && e.key === '2') {
+            e.preventDefault();
+            const cm = document.querySelector('.cm-editor .cm-content');
+            if (cm) cm.focus();
+            else document.getElementById('editorContainer')?.focus();
+        }
+
+        // Ctrl+3 - Focus chat input
+        if (e.ctrlKey && !e.shiftKey && e.key === '3') {
+            e.preventDefault();
+            document.getElementById('chatInput')?.focus();
         }
 
         // Escape - Close modals
@@ -649,6 +684,19 @@ async function init() {
     initQuickOpen();
     initSearchPanel();
     initZipDragDrop();
+    initAccessibility();
+
+    // Screen reader announcements for key state changes
+    EventBus.on('file:opened', ({ path }) => {
+        const name = path.split('/').pop();
+        announce(`Opened ${name}`);
+    });
+    EventBus.on('tab:switched', ({ tab }) => {
+        if (tab?.path) {
+            const name = tab.path.split('/').pop();
+            announce(`Tab: ${name}`);
+        }
+    });
 
     // Initialize plugins
     initPluginToolbar();
