@@ -178,29 +178,47 @@ const Storage = {
             localStorage.setItem(this._prefix + key, JSON.stringify(value));
         } catch (e) {
             if (e.name === 'QuotaExceededError') {
-                // Try to recover by pruning chat history (largest consumer)
+                // Recovery pass 1: prune chat history (largest consumer)
                 const chatKey = this._prefix + 'chatHistory';
                 try {
                     const raw = localStorage.getItem(chatKey);
                     if (raw) {
                         const history = JSON.parse(raw);
                         if (Array.isArray(history) && history.length > 20) {
-                            // Keep only last 20 messages
                             const pruned = history.slice(-20);
                             localStorage.setItem(chatKey, JSON.stringify(pruned));
                             console.warn(`[Storage] Quota exceeded — pruned chat history from ${history.length} to ${pruned.length} messages`);
-                            // Retry the original write
                             try {
                                 localStorage.setItem(this._prefix + key, JSON.stringify(value));
                                 return;
                             } catch {
-                                // Still full — give up gracefully
+                                // Still full — try draft eviction
                             }
                         }
                     }
                 } catch {
-                    // Pruning failed — fall through
+                    // Pruning failed — try draft eviction
                 }
+
+                // Recovery pass 2: evict oldest drafts
+                try {
+                    const drafts = this._getDraftsByAge();
+                    let evicted = 0;
+                    for (const draft of drafts) {
+                        localStorage.removeItem(draft.key);
+                        evicted++;
+                        try {
+                            localStorage.setItem(this._prefix + key, JSON.stringify(value));
+                            console.warn(`[Storage] Quota exceeded — evicted ${evicted} draft(s) to free space`);
+                            return;
+                        } catch {
+                            // Still full — evict another
+                        }
+                    }
+                } catch {
+                    // Draft eviction failed — fall through
+                }
+
                 console.warn('[Storage] localStorage quota exceeded. Data not saved for key:', key);
             } else {
                 console.error('Storage set error:', e);
@@ -208,14 +226,48 @@ const Storage = {
         }
     },
 
+    /**
+     * List all draft keys sorted by age (oldest first) for eviction.
+     * @returns {Array<{key: string, timestamp: number}>}
+     */
+    _getDraftsByAge() {
+        const drafts = [];
+        const prefix = this._prefix + 'draft-';
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(prefix)) {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    drafts.push({ key, timestamp: data?.timestamp || 0 });
+                } catch {
+                    drafts.push({ key, timestamp: 0 });
+                }
+            }
+        }
+        // Oldest first — evict stale drafts before recent ones
+        drafts.sort((a, b) => a.timestamp - b.timestamp);
+        return drafts;
+    },
+
     remove(key) {
         localStorage.removeItem(this._prefix + key);
     },
 
     // Draft management
+    // Max draft size: 512KB. Files larger than this skip localStorage drafting.
+    // The in-memory tab.content is still the source of truth for uncommitted work.
+    MAX_DRAFT_BYTES: 512 * 1024,
+
     saveDraft(owner, repo, branch, path, content) {
         const key = `draft-${owner}/${repo}/${branch}/${path}`;
-        this.set(key, { content, timestamp: Date.now() });
+        const payload = { content, timestamp: Date.now() };
+        // Guard against large files blowing the quota
+        const size = JSON.stringify(payload).length * 2; // UTF-16 chars ≈ 2 bytes each
+        if (size > this.MAX_DRAFT_BYTES) {
+            console.warn(`[Storage] Draft too large (${(size / 1024).toFixed(0)}KB) for ${path} — skipping localStorage`);
+            return;
+        }
+        this.set(key, payload);
         State.drafts[`${owner}/${repo}/${branch}/${path}`] = content;
         EventBus.emit('draft:saved', { owner, repo, branch, path });
     },

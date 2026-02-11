@@ -8,9 +8,9 @@
             </div>
         </div>
         <div class="editor-toolbar" role="toolbar" aria-label="Editor tools">
-            <button class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)" aria-label="Toggle line numbers">🔢</button>
-            <button class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" aria-label="Toggle preview" disabled>👁 Preview</button>
-            <button class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" aria-label="Toggle diff view" disabled>± Diff</button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)" aria-label="Toggle line numbers">🔢</button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" aria-label="Toggle preview" disabled>👁 Preview</button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" aria-label="Toggle diff view" disabled>± Diff</button>
         </div>
     </div>
 
@@ -22,7 +22,7 @@
                 <div style="text-align: center;">
                     <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ <span id="welcomeAppName"></span></h2>
                     <p>Configure your Gitea and LLM settings to get started.</p>
-                    <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
+                    <button type="button" class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
                         ⚙️ Open Settings
                     </button>
                 </div>
@@ -37,8 +37,8 @@
             <div class="secondary-pane-header">
                 <span id="secondaryPaneTitle">Preview</span>
                 <div class="secondary-pane-actions">
-                    <button class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">⛶</button>
-                    <button class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">✕</button>
+                    <button type="button" class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">⛶</button>
+                    <button type="button" class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">✕</button>
                 </div>
             </div>
             <div class="secondary-pane-content" id="secondaryPaneContent">

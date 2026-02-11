@@ -72,7 +72,7 @@ export function populatePluginsTab() {
                     <div class="connection-card-meta">v${escapeHtml(p.version || '1.0')}${p.author ? ` · by ${escapeHtml(p.author)}` : ''} · ${escapeHtml(p.description || '')}</div>
                 </div>
                 <div class="connection-card-actions">
-                    ${hasConfig ? `<button data-plugin-expand="${escapeAttr(p.id)}" title="Configure">⚙️</button>` : ''}
+                    ${hasConfig ? `<button type="button" data-plugin-expand="${escapeAttr(p.id)}" title="Configure">⚙️</button>` : ''}
                     <button data-plugin-toggle="${escapeAttr(p.id)}" title="${p.enabled ? 'Disable' : 'Enable'}">${p.enabled ? '✅' : '⬜'}</button>
                 </div>
             </div>

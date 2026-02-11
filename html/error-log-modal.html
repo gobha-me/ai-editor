@@ -3,7 +3,7 @@
     <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
             <h2 id="errorLogTitle">🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
-            <button class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
+            <button type="button" class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
         </div>
         <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
             <div id="errorLogContent">
@@ -11,9 +11,9 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
-            <button class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
-            <button class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
+            <button type="button" class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
+            <button type="button" class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
+            <button type="button" class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
         </div>
     </div>
 </div>

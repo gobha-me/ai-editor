@@ -3,20 +3,20 @@
     <h1>⚡ <span id="appName"></span> <span class="version" id="appVersion"></span></h1>
     <div class="header-cost-tracker" id="costTrackerBar" aria-label="Session cost">
         <span id="costTrackerText">0 tok · 0 req</span>
-        <button id="btnResetCost" title="Reset session cost" aria-label="Reset session cost" class="cost-reset-btn">✕</button>
+        <button type="button" id="btnResetCost" title="Reset session cost" aria-label="Reset session cost" class="cost-reset-btn">✕</button>
     </div>
     <nav class="header-actions" aria-label="Main actions">
-        <button class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar" aria-label="Toggle sidebar" aria-expanded="true">📁</button>
-        <button class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" aria-label="Revert file" disabled>↩️ Revert</button>
-        <button class="btn btn-commit" id="btnCommit" title="Commit all changes" aria-label="Commit changes" style="display: none;">📦 Commit</button>
-        <button class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)" aria-label="Settings">⚙️</button>
-        <button class="btn btn-secondary" id="btnErrorLog" title="Error Log" aria-label="Error log">🐛</button>
-        <button class="btn btn-secondary" id="btnLLMDebug" title="LLM Debug Log" aria-label="LLM debug log">🔬</button>
+        <button type="button" class="btn btn-secondary" id="btnToggleSidebar" title="Toggle Sidebar" aria-label="Toggle sidebar" aria-expanded="true">📁</button>
+        <button type="button" class="btn btn-secondary" id="btnRevert" title="Revert current file to last commit" aria-label="Revert file" disabled>↩️ Revert</button>
+        <button type="button" class="btn btn-commit" id="btnCommit" title="Commit all changes" aria-label="Commit changes" style="display: none;">📦 Commit</button>
+        <button type="button" class="btn btn-secondary" id="btnSettings" title="Settings (Ctrl+,)" aria-label="Settings">⚙️</button>
+        <button type="button" class="btn btn-secondary" id="btnErrorLog" title="Error Log" aria-label="Error log">🐛</button>
+        <button type="button" class="btn btn-secondary" id="btnLLMDebug" title="LLM Debug Log" aria-label="LLM debug log">🔬</button>
         <div class="plugin-toolbar" id="pluginToolbar" style="display: none; position: relative;">
-            <button class="btn btn-secondary" id="btnPluginMenu" title="Plugins" aria-label="Plugins menu" aria-haspopup="true" aria-expanded="false">⚡</button>
+            <button type="button" class="btn btn-secondary" id="btnPluginMenu" title="Plugins" aria-label="Plugins menu" aria-haspopup="true" aria-expanded="false">⚡</button>
             <div class="plugin-dropdown" id="pluginDropdown" role="menu" style="display: none;"></div>
         </div>
-        <button class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat" aria-label="Toggle chat panel" aria-expanded="true">💬</button>
-        <button class="btn btn-secondary" id="btnHelp" title="Keyboard Shortcuts (F1)" aria-label="Keyboard shortcuts">❓</button>
+        <button type="button" class="btn btn-secondary" id="btnToggleChat" title="Toggle Chat" aria-label="Toggle chat panel" aria-expanded="true">💬</button>
+        <button type="button" class="btn btn-secondary" id="btnHelp" title="Keyboard Shortcuts (F1)" aria-label="Keyboard shortcuts">❓</button>
     </nav>
 </header>

@@ -109,7 +109,7 @@ function renderTreeNodes(nodes, depth) {
                     <span class="icon" aria-hidden="true">${icon}</span>
                     <span class="name">${escapeHtml(node.name)}</span>
                     <div class="actions">
-                        ${!isDir ? `<button onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
+                        ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
                     </div>
                 </div>
             `;

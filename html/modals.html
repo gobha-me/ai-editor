@@ -3,23 +3,23 @@
     <div class="modal" id="settingsModalInner">
         <div class="modal-header">
             <h2 id="settingsTitle">⚙️ Settings</h2>
-            <button class="modal-close" onclick="window.closeSettings()" aria-label="Close settings">×</button>
+            <button type="button" class="modal-close" onclick="window.closeSettings()" aria-label="Close settings">×</button>
         </div>
 
         <!-- Settings Tabs -->
         <div class="settings-tabs-nav">
-            <button class="settings-tabs-arrow settings-tabs-arrow-left" onclick="window.scrollSettingsTabs(-1)" aria-label="Scroll tabs left">‹</button>
+            <button type="button" class="settings-tabs-arrow settings-tabs-arrow-left" onclick="window.scrollSettingsTabs(-1)" aria-label="Scroll tabs left">‹</button>
             <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-                <button class="settings-tab active" data-tab="tabConnections" role="tab" aria-selected="true" aria-controls="tabConnections">Connections</button>
-                <button class="settings-tab" data-tab="tabGeneral" role="tab" aria-selected="false" aria-controls="tabGeneral">LLM</button>
-                <button class="settings-tab" data-tab="tabModels" role="tab" aria-selected="false" aria-controls="tabModels">Models</button>
-                <button class="settings-tab" data-tab="tabAppearance" role="tab" aria-selected="false" aria-controls="tabAppearance">Appearance</button>
-                <button class="settings-tab" data-tab="tabContext" role="tab" aria-selected="false" aria-controls="tabContext">Context</button>
-                <button class="settings-tab" data-tab="tabRoles" role="tab" aria-selected="false" aria-controls="tabRoles">Roles</button>
-                <button class="settings-tab" data-tab="tabPlugins" role="tab" aria-selected="false" aria-controls="tabPlugins">Plugins</button>
-                <button class="settings-tab" data-tab="tabAdvanced" role="tab" aria-selected="false" aria-controls="tabAdvanced">Advanced</button>
+                <button type="button" class="settings-tab active" data-tab="tabConnections" role="tab" aria-selected="true" aria-controls="tabConnections">Connections</button>
+                <button type="button" class="settings-tab" data-tab="tabGeneral" role="tab" aria-selected="false" aria-controls="tabGeneral">LLM</button>
+                <button type="button" class="settings-tab" data-tab="tabModels" role="tab" aria-selected="false" aria-controls="tabModels">Models</button>
+                <button type="button" class="settings-tab" data-tab="tabAppearance" role="tab" aria-selected="false" aria-controls="tabAppearance">Appearance</button>
+                <button type="button" class="settings-tab" data-tab="tabContext" role="tab" aria-selected="false" aria-controls="tabContext">Context</button>
+                <button type="button" class="settings-tab" data-tab="tabRoles" role="tab" aria-selected="false" aria-controls="tabRoles">Roles</button>
+                <button type="button" class="settings-tab" data-tab="tabPlugins" role="tab" aria-selected="false" aria-controls="tabPlugins">Plugins</button>
+                <button type="button" class="settings-tab" data-tab="tabAdvanced" role="tab" aria-selected="false" aria-controls="tabAdvanced">Advanced</button>
             </div>
-            <button class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollSettingsTabs(1)" aria-label="Scroll tabs right">›</button>
+            <button type="button" class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollSettingsTabs(1)" aria-label="Scroll tabs right">›</button>
         </div>
 
         <div class="modal-body">
@@ -29,12 +29,12 @@
         
         <div class="modal-footer" style="justify-content: space-between;">
             <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">📤 Export</button>
-                <button class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">📥 Import</button>
+                <button type="button" class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">📤 Export</button>
+                <button type="button" class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">📥 Import</button>
             </div>
             <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
-                <button class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+                <button type="button" class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
             </div>
         </div>
     </div>
@@ -45,7 +45,7 @@
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
             <h2 id="revertTitle">↩️ Revert Changes</h2>
-            <button class="modal-close" onclick="window.closeRevertModal()" aria-label="Close revert dialog">×</button>
+            <button type="button" class="modal-close" onclick="window.closeRevertModal()" aria-label="Close revert dialog">×</button>
         </div>
         <div class="modal-body">
             <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
@@ -55,16 +55,16 @@
                 <!-- Populated dynamically -->
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <button class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
+                <button type="button" class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
                     📄 Revert Current File Only
                 </button>
-                <button class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
+                <button type="button" class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
                     🔥 Revert ALL Files
                 </button>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeRevertModal()">Cancel</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeRevertModal()">Cancel</button>
         </div>
     </div>
 </div>
@@ -74,7 +74,7 @@
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
             <h2 id="commitTitle">📦 Commit Changes</h2>
-            <button class="modal-close" onclick="window.closeCommitModal()" aria-label="Close commit dialog">×</button>
+            <button type="button" class="modal-close" onclick="window.closeCommitModal()" aria-label="Close commit dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -87,7 +87,7 @@
                 <label for="commitMessage">Commit message:</label>
                 <textarea id="commitMessage" rows="4" placeholder="Describe your changes..."></textarea>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <button class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
                         ✨ Generate with AI
                     </button>
                 </div>
@@ -97,8 +97,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
-            <button class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit</button>
         </div>
     </div>
 </div>
@@ -108,7 +108,7 @@
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
             <h2 id="newBranchTitle">🌿 Create New Branch</h2>
-            <button class="modal-close" onclick="window.closeNewBranchModal()" aria-label="Close new branch dialog">×</button>
+            <button type="button" class="modal-close" onclick="window.closeNewBranchModal()" aria-label="Close new branch dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -124,8 +124,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="window.createNewBranch()">✅ Create Branch</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="window.createNewBranch()">✅ Create Branch</button>
         </div>
     </div>
 </div>
@@ -135,7 +135,7 @@
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
             <h2 id="newFileTitle">📄 Create New File</h2>
-            <button class="modal-close" onclick="window.closeNewFileModal()" aria-label="Close new file dialog">×</button>
+            <button type="button" class="modal-close" onclick="window.closeNewFileModal()" aria-label="Close new file dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -145,8 +145,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="window.createNewFile()">✅ Create File</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="window.createNewFile()">✅ Create File</button>
         </div>
     </div>
 </div>
@@ -156,7 +156,7 @@
     <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
             <h2 id="errorLogTitle">🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
-            <button class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
+            <button type="button" class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
         </div>
         <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
             <div id="errorLogContent">
@@ -164,9 +164,9 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
-            <button class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
-            <button class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
+            <button type="button" class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
+            <button type="button" class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
+            <button type="button" class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
         </div>
     </div>
 </div>
@@ -176,7 +176,7 @@
     <div class="modal" style="max-width: 900px;">
         <div class="modal-header">
             <h2 id="llmDebugTitle">🔬 LLM Debug (<span id="llmDebugCount">0</span> exchanges)</h2>
-            <button class="modal-close" onclick="window.closeLLMDebug()" aria-label="Close debug log">×</button>
+            <button type="button" class="modal-close" onclick="window.closeLLMDebug()" aria-label="Close debug log">×</button>
         </div>
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div id="llmDebugContent">
@@ -187,9 +187,9 @@
             <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: var(--font-md); margin-right: auto;">
                 <input type="checkbox" id="llmDebugAutoScroll" checked> Auto-scroll
             </label>
-            <button class="btn btn-secondary" onclick="window.clearLLMDebug()">🗑️ Clear</button>
-            <button class="btn btn-secondary" onclick="window.copyLLMDebug()">📋 Copy</button>
-            <button class="btn btn-primary" onclick="window.exportLLMDebug()">📥 Export</button>
+            <button type="button" class="btn btn-secondary" onclick="window.clearLLMDebug()">🗑️ Clear</button>
+            <button type="button" class="btn btn-secondary" onclick="window.copyLLMDebug()">📋 Copy</button>
+            <button type="button" class="btn btn-primary" onclick="window.exportLLMDebug()">📥 Export</button>
         </div>
     </div>
 </div>
@@ -213,7 +213,7 @@
     <div class="modal" style="max-width: 580px;">
         <div class="modal-header">
             <h2 id="helpTitle">⌨️ Keyboard Shortcuts</h2>
-            <button class="modal-close" onclick="window.closeHelpModal()" aria-label="Close help">×</button>
+            <button type="button" class="modal-close" onclick="window.closeHelpModal()" aria-label="Close help">×</button>
         </div>
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div class="help-shortcuts">
@@ -279,7 +279,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeHelpModal()">Close</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeHelpModal()">Close</button>
         </div>
     </div>
 </div>
@@ -289,7 +289,7 @@
     <div class="modal modal-resizable" style="width: 620px; height: 520px;">
         <div class="modal-header">
             <h2 id="issueDetailTitle">Issue</h2>
-            <button class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
+            <button type="button" class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column;">
             <!-- Labels -->
@@ -308,8 +308,8 @@
             <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50); flex-shrink: 0;"></div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
-            <button class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
-            <button class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">🚀 Start Work</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
+            <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">🚀 Start Work</button>
         </div>
     </div>
 </div>
@@ -319,7 +319,7 @@
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
             <h2 id="createPRTitle">🔀 Create Pull Request</h2>
-            <button class="modal-close" onclick="window.closeCreatePRModal()" aria-label="Close create PR">×</button>
+            <button type="button" class="modal-close" onclick="window.closeCreatePRModal()" aria-label="Close create PR">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -344,8 +344,8 @@
             <div id="prCreateError" style="display: none; color: var(--danger); font-size: var(--font-sm); margin-top: 0.5rem;"></div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
-            <button class="btn btn-secondary" onclick="window.closeCreatePRModal()">Cancel</button>
-            <button class="btn btn-primary" id="btnSubmitPR" onclick="window.submitCreatePR()">🚀 Create Pull Request</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeCreatePRModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSubmitPR" onclick="window.submitCreatePR()">🚀 Create Pull Request</button>
         </div>
     </div>
 </div>
@@ -355,7 +355,7 @@
     <div class="modal modal-resizable" style="width: 780px; height: 600px;">
         <div class="modal-header">
             <h2 id="prDetailTitle">Pull Request</h2>
-            <button class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
+            <button type="button" class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
             <!-- Meta row: state, CI, mergeable, stats -->
@@ -388,10 +388,10 @@
                 <label style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary);">Add Comment</label>
                 <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" style="width: 100%; margin-top: 0.35rem; font-family: var(--font-mono); font-size: var(--font-sm); resize: vertical;"></textarea>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
-                    <button class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
                         ✨ Generate with AI
                     </button>
-                    <button class="btn btn-primary" onclick="window.submitPRComment()" id="btnPostPRComment">
+                    <button type="button" class="btn btn-primary" onclick="window.submitPRComment()" id="btnPostPRComment">
                         📝 Post
                     </button>
                 </div>
@@ -399,7 +399,7 @@
         </div>
         <div class="modal-footer" id="prDetailFooter" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
             <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-secondary" onclick="window.closePRDetailModal()">Close</button>
+                <button type="button" class="btn btn-secondary" onclick="window.closePRDetailModal()">Close</button>
                 <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary" title="Open in browser">🌐 Open</a>
             </div>
             <div id="prDetailMergeControls" style="display: flex; gap: 0.5rem; align-items: center;">
@@ -411,7 +411,7 @@
                 <label style="font-size: var(--font-sm); display: flex; align-items: center; gap: 0.25rem;">
                     <input type="checkbox" id="prDeleteBranch" checked> Delete branch
                 </label>
-                <button class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">✅ Merge</button>
+                <button type="button" class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">✅ Merge</button>
             </div>
         </div>
     </div>
@@ -422,7 +422,7 @@
     <div class="modal" style="max-width: 650px;">
         <div class="modal-header">
             <h2 id="zipUploadTitle">📦 Upload Zip</h2>
-            <button class="modal-close" onclick="window.closeZipUpload()" aria-label="Close zip upload">×</button>
+            <button type="button" class="modal-close" onclick="window.closeZipUpload()" aria-label="Close zip upload">×</button>
         </div>
         <div class="modal-body">
             <!-- Drop Zone -->
@@ -441,9 +441,9 @@
                 
                 <!-- Select all / none / scan -->
                 <div class="zip-select-controls">
-                    <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
-                    <button class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
-                    <button class="btn btn-secondary btn-sm" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
                 </div>
 
                 <!-- File List -->
@@ -471,8 +471,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
-            <button class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">📤 Upload</button>
+            <button type="button" class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">📤 Upload</button>
         </div>
     </div>
 </div>
@@ -482,7 +482,7 @@
     <div class="modal modal-resizable" id="pluginModalContent" style="width: 700px; height: 550px;">
         <div class="modal-header">
             <h3 id="pluginModalTitle">Plugin</h3>
-            <button class="modal-close" onclick="window.closePluginModal()" aria-label="Close plugin">&times;</button>
+            <button type="button" class="modal-close" onclick="window.closePluginModal()" aria-label="Close plugin">&times;</button>
         </div>
         <div class="modal-body" id="pluginModalBody" style="flex: 1; overflow-y: auto;">
         </div>

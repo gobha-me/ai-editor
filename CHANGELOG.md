@@ -2,6 +2,97 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.4] - 2026-02-11
+
+### Fixed
+- **Chat history localStorage quota exceeded** — `ChatSummarizer` generated summaries but never pruned `State.chatHistory`. The in-memory array grew unbounded, causing `QuotaExceededError` on every save. Fixed with a prune→stash→flush lifecycle: summary generates, old messages splice out and stash for one-query undo, then flush permanently on the next user input.
+- **Stash save order-of-operations** — Pruned messages couldn't be stashed because the old (large) chatHistory was still in localStorage, leaving no room. Fixed by removing the old key before writing the smaller array, freeing space for the stash write.
+- **Invisible summary notification** — Summary badge rendered at `chatContainer.firstChild` but user was scrolled to bottom. Added toast notifications on prune and undo events.
+- **Commit message generation returning empty** — Non-streaming `LLM.chat` applied `stripThinkBlocks` before returning. Models that wrap short utility responses in `<think>` blocks (e.g., minimax-m21) had their commit messages nuked to empty string. Added `skipThinkStrip` option and `rawContent` field to the response; `generateCommitMessage` now handles think blocks locally with fallback extraction.
+- **JS-generated buttons missing `type="button"`** — 3 buttons in file-tree, chat messages, and plugin settings defaulted to `type="submit"`.
+
+### Changed
+- **Venice Billing Plugin v2** — Complete rewrite: fetches all pages in parallel batches (was capped at 5 pages, missing 73%+ of data), day picker for 24hr totals navigable 30 days back, paginated transaction log, fixed model name extraction for cache SKUs, filtered non-inference entries from totals.
+- **README rewrite** — Updated to reflect current state: GitHub + GitLab providers documented, project structure updated (settings/, git-providers/, accessibility.js, etc.), deployment guide with BASE_PATH multi-environment docs, CI/CD pipeline reference, provider comparison table removed from "Future Enhancements".
+- **CHANGELOG catch-up** — Added missing entries for 0.8.6 through 0.9.3.
+
+## [0.9.3] - 2026-02-11
+
+### Added
+- **Accessibility module** (`js/accessibility.js`) — Comprehensive keyboard navigation and screen reader support:
+  - Modal focus trapping with Tab/Shift+Tab cycling and previous-focus restoration on close
+  - File tree arrow key navigation: Up/Down to move, Right to expand directory, Left to collapse/go to parent, Enter/Space to open file or toggle directory
+  - Editor tab arrow key navigation with Home/End support
+  - Settings tab keyboard navigation
+  - ARIA roles and labels across all interactive elements
+  - `MutationObserver`-based modal watcher for automatic focus management
+- 114 `aria-*` attributes and 49 `role` attributes added across HTML templates
+- 26 `tabindex` attributes for keyboard-focusable elements
+
+## [0.9.2] - 2026-02-11
+
+### Fixed
+- **PR merge button silent failure** — `confirm()` dialogs can be suppressed by browsers in modal contexts. Replaced with inline confirmation: first click turns button red with "⚠️ Confirm squash?", second click merges, auto-resets after 3 seconds. All three providers now pass `head_commit_id`/`sha` to the merge API. Error handling upgraded from `alert()` to `showToast()`.
+
+### Added
+- **AI-generated PR review comments** — "Add Comment" section in PR detail modal with ✨ Generate with AI button. Analyzes PR title, description, diffs, and existing comments, writes a code review comment using the commit model. Post button submits via provider API and refreshes comments inline.
+
+## [0.9.1] - 2026-02-11
+
+### Changed
+- **Settings manager split** — Refactored 1,753-line `settings-manager.js` monolith into 7 focused modules:
+  - `settings-manager.js` (298 lines) — Orchestrator: open/close, tab switching
+  - `settings/persistence.js` (287 lines) — DOM→State collection, export/import (backend swap target for switchboard)
+  - `settings/llm-tab.js` (402 lines) — Provider settings, advanced params, sliders
+  - `settings/connections-tab.js` (276 lines) — Git connection CRUD
+  - `settings/models-tab.js` (301 lines) — Model browser, fetch, capabilities
+  - `settings/plugins-tab.js` (125 lines) — Plugin config UI
+  - `settings/roles-tab.js` (88 lines) — Role cards + tool list
+- External API surface unchanged; no circular dependencies
+
+## [0.9.0] - 2026-02-11
+
+### Added
+- **Runtime BASE_PATH** — Container accepts `BASE_PATH` environment variable for sub-path deployment. `docker-entrypoint.sh` generates nginx config from `nginx.conf.template` via `envsubst` at startup. Supports root (`/`), sub-path (`/editor`, `/test`, `/dev`), and arbitrary prefixes.
+- **CI/CD pipeline** (`.gitea/workflows/ci.yaml`) — Three-environment deployment:
+  - PR opened/synced → build `:dev` → deploy `ai-editor-dev` with `BASE_PATH=/dev`
+  - Push to main → build `:test` → deploy `ai-editor-test` with `BASE_PATH=/test`
+  - Tag `v*` → build `:latest` + `:vX.Y.Z` → deploy `ai-editor` with `BASE_PATH=/`
+  - Concurrency groups prevent duplicate builds
+- `docker-entrypoint.sh` and `nginx.conf.template` — New files for runtime config generation
+
+### Changed
+- All hardcoded `editor/` path prefixes in `index.html`, `template-loader.js`, `search-manager.js` converted to `./` relative paths. App is now truly path-agnostic.
+- Removed Traefik `stripPrefix` middleware dependency from deployment
+
+## [0.8.7] - 2025-02-10
+
+### Added
+- **Full PR workflow — never leave the editor**:
+  - **Create PR**: ➕ button in PR panel header. Auto-populates title from branch name (e.g., `issue/42-fix-bug` → "Fix bug (#42)"), branch selectors pre-filled.
+  - **Review PR**: Click any PR → full detail modal with state/CI/mergeable badges, markdown description, changed files with expandable inline diffs (syntax-colored), and all comments rendered as markdown.
+  - **Merge PR**: Strategy picker (squash/merge/rebase), "delete branch" checkbox, auto-switches to main if you delete the branch you're on.
+- **Provider methods**: `addPullRequestComment()`, `mergePullRequest()` — implemented on Gitea, GitHub, and GitLab with normalized return shapes
+- **`merge_pull_request` LLM tool** — strategy, title, message, delete_branch params
+- PR detail modal is resizable
+
+## [0.8.6] - 2025-02-10
+
+### Added
+- **Plugin infrastructure**:
+  - Settings → Plugins tab with connection-card-style UI (icon, name, status dot, ⚙️ config expand, ✅/⬜ toggle)
+  - Plugin button/modal registration API via SlotManager
+  - `beforeFetchIssues` / `resolveIssueConnection` hooks in Git facade for cross-repo routing
+- **Cross-repo issues plugin** (`plugins/cross-repo-issues.js`) — Route issues from a GitHub connection to a Gitea working repo. Entire issue pipeline (sidebar, focus bar, triage, LLM tools) works against the mapped connection.
+- **Venice billing plugin** (`plugins/venice-billing.js`) — Opens modal via plugin toolbar, calls Venice billing-usage endpoint, renders cost breakdown. Requires admin API key.
+- **Markdown rendering in issues** — Issue bodies and comments in the detail modal and focus bar now render through `marked` + `DOMPurify` using the existing `preview-markdown` class. Full support for code blocks, blockquotes, links, images, headings.
+- **Resizable modals** — New `.modal-resizable` class with CSS `resize: both`, min/max constraints, flex body that fills available space. Applied to issue detail and plugin modals.
+
+### Fixed
+- Rogue plugin modal visible on page load (used `class="modal"` instead of `class="modal-overlay"`)
+- Removed 300-char truncation on issue comments — full markdown renders with scroll overflow
+
+
 ## [0.8.5] - 2025-02-10
 
 ### Added

@@ -640,7 +640,7 @@ export function renderSummaryNotification(info, showUndo = true) {
         <div class="summary-bar" onclick="document.getElementById('${id}').classList.toggle('expanded')">
             <span class="summary-icon">📋</span>
             <span class="summary-label">Context compressed — ${info.compressedMessages} messages → summary (${info.keptMessages} kept)</span>
-            ${showUndo ? '<button class="btn-summary-undo" title="Restore original messages (available until next query)">↩ Undo</button>' : ''}
+            ${showUndo ? '<button type="button" class="btn-summary-undo" title="Restore original messages (available until next query)">↩ Undo</button>' : ''}
             <span class="summary-chevron">▸</span>
         </div>
         <div class="summary-detail" id="${id}">
