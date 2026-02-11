@@ -27,6 +27,13 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Guard: only run for PR events, pushes to main, or version tags.
+    # Prevents duplicate runs when Gitea fires both push + pull_request
+    # for the same commit on a PR branch.
+    if: >
+      gitea.event_name == 'pull_request' ||
+      gitea.ref == 'refs/heads/main' ||
+      startsWith(gitea.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
