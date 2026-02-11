@@ -95,6 +95,7 @@ function renderBillingDashboard(container) {
                     <select id="vb-currency" style="font-size: 11px; padding: 0.2rem 0.3rem;">
                         <option value="DIEM">DIEM</option>
                         <option value="USD">USD</option>
+                        <option value="Both">Both</option>
                     </select>
                     <button class="btn btn-secondary" id="vb-refresh" style="font-size: 11px; padding: 0.2rem 0.5rem;">🔄 Refresh</button>
                 </div>
@@ -162,39 +163,104 @@ async function fetchAndRender() {
         if (!rlRes.ok) throw new Error(`Rate limits: ${rlRes.status} ${rlRes.statusText}`);
         const rlData = (await rlRes.json()).data || {};
 
-        // Fetch usage data (paginated — grab up to 3 pages for dashboard)
+        // Fetch usage data (paginated — grab up to 5 pages for dashboard)
         const { startDate, endDate } = getDateRange(currentRange);
-        const usageEntries = [];
-        let page = 1;
+        
+        let usageEntriesDiem = [];
+        let usageEntriesUsd = [];
         const maxPages = 5;
 
-        while (page <= maxPages) {
-            const params = new URLSearchParams({
-                currency,
-                limit: '500',
-                page: String(page),
-                sortOrder: 'desc'
-            });
-            if (startDate) params.set('startDate', startDate);
-            if (endDate) params.set('endDate', endDate);
+        // If "Both" is selected, fetch both DIEM and USD separately
+        if (currency === 'Both') {
+            // Fetch DIEM data
+            let page = 1;
+            while (page <= maxPages) {
+                const params = new URLSearchParams({
+                    currency: 'DIEM',
+                    limit: '500',
+                    page: String(page),
+                    sortOrder: 'desc'
+                });
+                if (startDate) params.set('startDate', startDate);
+                if (endDate) params.set('endDate', endDate);
 
-            const usageRes = await fetch(`${baseUrl}/api/v1/billing/usage?${params}`, { headers });
-            if (!usageRes.ok) {
-                if (usageRes.status === 403 || usageRes.status === 401) {
-                    throw new Error('Billing endpoint requires Admin API key');
+                const usageRes = await fetch(`${baseUrl}/api/v1/billing/usage?${params}`, { headers });
+                if (!usageRes.ok) {
+                    if (usageRes.status === 403 || usageRes.status === 401) {
+                        throw new Error('Billing endpoint requires Admin API key');
+                    }
+                    throw new Error(`Usage: ${usageRes.status} ${usageRes.statusText}`);
                 }
-                throw new Error(`Usage: ${usageRes.status} ${usageRes.statusText}`);
+                const usageJson = await usageRes.json();
+                const entries = usageJson.data || [];
+                usageEntriesDiem.push(...entries);
+
+                const pagination = usageJson.pagination;
+                if (!pagination || page >= (pagination.totalPages || 1)) break;
+                page++;
             }
-            const usageJson = await usageRes.json();
-            const entries = usageJson.data || [];
-            usageEntries.push(...entries);
 
-            const pagination = usageJson.pagination;
-            if (!pagination || page >= (pagination.totalPages || 1)) break;
-            page++;
+            // Fetch USD data
+            page = 1;
+            while (page <= maxPages) {
+                const params = new URLSearchParams({
+                    currency: 'USD',
+                    limit: '500',
+                    page: String(page),
+                    sortOrder: 'desc'
+                });
+                if (startDate) params.set('startDate', startDate);
+                if (endDate) params.set('endDate', endDate);
+
+                const usageRes = await fetch(`${baseUrl}/api/v1/billing/usage?${params}`, { headers });
+                if (!usageRes.ok) {
+                    if (usageRes.status === 403 || usageRes.status === 401) {
+                        throw new Error('Billing endpoint requires Admin API key');
+                    }
+                    throw new Error(`Usage: ${usageRes.status} ${usageRes.statusText}`);
+                }
+                const usageJson = await usageRes.json();
+                const entries = usageJson.data || [];
+                usageEntriesUsd.push(...entries);
+
+                const pagination = usageJson.pagination;
+                if (!pagination || page >= (pagination.totalPages || 1)) break;
+                page++;
+            }
+
+            renderDashboard(content, rlData, usageEntriesDiem, usageEntriesUsd, currency);
+        } else {
+            // Single currency mode
+            const usageEntries = [];
+            let page = 1;
+            while (page <= maxPages) {
+                const params = new URLSearchParams({
+                    currency,
+                    limit: '500',
+                    page: String(page),
+                    sortOrder: 'desc'
+                });
+                if (startDate) params.set('startDate', startDate);
+                if (endDate) params.set('endDate', endDate);
+
+                const usageRes = await fetch(`${baseUrl}/api/v1/billing/usage?${params}`, { headers });
+                if (!usageRes.ok) {
+                    if (usageRes.status === 403 || usageRes.status === 401) {
+                        throw new Error('Billing endpoint requires Admin API key');
+                    }
+                    throw new Error(`Usage: ${usageRes.status} ${usageRes.statusText}`);
+                }
+                const usageJson = await usageRes.json();
+                const entries = usageJson.data || [];
+                usageEntries.push(...entries);
+
+                const pagination = usageJson.pagination;
+                if (!pagination || page >= (pagination.totalPages || 1)) break;
+                page++;
+            }
+
+            renderDashboard(content, rlData, usageEntries, null, currency);
         }
-
-        renderDashboard(content, rlData, usageEntries, currency);
     } catch (err) {
         content.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: var(--text-danger, #d9534f);">
@@ -311,7 +377,7 @@ function aggregateUsage(entries) {
 // RENDER DASHBOARD
 // ============================================
 
-function renderDashboard(container, rl, usageEntries, currency) {
+function renderDashboard(container, rl, usageEntriesDiem, usageEntriesUsd, currency) {
     const balances = rl.balances || {};
     const usd = parseFloat(balances.USD || 0);
     const diem = parseFloat(balances.DIEM || 0);
@@ -320,10 +386,52 @@ function renderDashboard(container, rl, usageEntries, currency) {
     const epochReset = rl.nextEpochBegins;
     const rateLimits = rl.rateLimits || [];
 
-    const agg = aggregateUsage(usageEntries);
+    // Handle "Both" mode: aggregate both currencies separately then merge
+    let agg, aggDiem, aggUsd;
+    if (currency === 'Both') {
+        aggDiem = aggregateUsage(usageEntriesDiem);
+        aggUsd = aggregateUsage(usageEntriesUsd);
+        // Merge model data
+        const mergedModels = {};
+        
+        // Add DIEM models
+        for (const [name, data] of Object.entries(aggDiem.models)) {
+            mergedModels[name] = {
+                ...data,
+                diemCost: data.inputCost + data.outputCost,
+                usdCost: 0
+            };
+        }
+        
+        // Add USD models
+        for (const [name, data] of Object.entries(aggUsd.models)) {
+            if (mergedModels[name]) {
+                mergedModels[name].usdCost = data.inputCost + data.outputCost;
+            } else {
+                mergedModels[name] = {
+                    ...data,
+                    diemCost: 0,
+                    usdCost: data.inputCost + data.outputCost
+                };
+            }
+        }
+        
+        agg = {
+            models: mergedModels,
+            totalCostDiem: aggDiem.totalCost,
+            totalCostUsd: aggUsd.totalCost,
+            totalTokens: aggDiem.totalTokens + aggUsd.totalTokens,
+            totalRequests: aggDiem.totalRequests + aggUsd.totalRequests,
+            entryCount: aggDiem.entryCount + aggUsd.entryCount
+        };
+    } else {
+        // Single currency mode
+        agg = aggregateUsage(usageEntriesDiem);
+    }
+    
     const sym = currency === 'USD' ? '$' : '';
     const unit = currency === 'USD' ? '' : ' DIEM';
-
+    
     // Epoch countdown
     let epochHtml = '';
     if (epochReset) {
@@ -340,7 +448,13 @@ function renderDashboard(container, rl, usageEntries, currency) {
 
     // Sort models by total cost descending
     const sortedModels = Object.entries(agg.models)
-        .map(([name, data]) => ({ name, ...data, totalCost: data.inputCost + data.outputCost }))
+        .map(([name, data]) => {
+            if (currency === 'Both') {
+                return { name, ...data, totalCost: (data.diemCost || 0) + (data.usdCost || 0) };
+            } else {
+                return { name, ...data, totalCost: data.inputCost + data.outputCost };
+            }
+        })
         .sort((a, b) => b.totalCost - a.totalCost);
 
     // Model breakdown rows
@@ -352,6 +466,32 @@ function renderDashboard(container, rl, usageEntries, currency) {
         // Cost bar (relative to highest model)
         const maxCost = sortedModels[0]?.totalCost || 1;
         const barWidth = Math.max(2, (m.totalCost / maxCost) * 100);
+
+        // Cost cell: handle "Both" mode vs single currency
+        let costCell;
+        if (currency === 'Both') {
+            const diemStr = m.diemCost > 0 ? `${m.diemCost.toFixed(6)} DIEM` : '-';
+            const usdStr = m.usdCost > 0 ? `$${m.usdCost.toFixed(6)}` : '-';
+            costCell = `
+                <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; font-family: var(--font-mono, monospace); font-size: 11px;">
+                    <div style="display: flex; flex-direction: column; gap: 0.1rem;">
+                        <div>${diemStr}</div>
+                        <div>${usdStr}</div>
+                    </div>
+                </td>
+            `;
+        } else {
+            costCell = `
+                <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; min-width: 140px;">
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem;">
+                        <div style="flex: 1; max-width: 80px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${barWidth}%; height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); border-radius: 3px;"></div>
+                        </div>
+                        <span style="font-family: var(--font-mono, monospace); font-size: 11px;">${sym}${m.totalCost.toFixed(6)}${unit}</span>
+                    </div>
+                </td>
+            `;
+        }
 
         return `
             <tr>
@@ -367,19 +507,10 @@ function renderDashboard(container, rl, usageEntries, currency) {
                 <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right;">
                     ${avgLatency > 0 ? avgLatency + 'ms' : '-'}
                 </td>
-                <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; min-width: 140px;">
-                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem;">
-                        <div style="flex: 1; max-width: 80px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
-                            <div style="width: ${barWidth}%; height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); border-radius: 3px;"></div>
-                        </div>
-                        <span style="font-family: var(--font-mono, monospace); font-size: 11px;">${sym}${m.totalCost.toFixed(6)}${unit}</span>
-                    </div>
-                </td>
+                ${costCell}
             </tr>
         `;
     }).join('');
-
-    // Rate limits (compact)
     const rlRows = rateLimits.slice(0, 15).map(entry => {
         const model = entry.apiModelId || '?';
         const limits = (entry.rateLimits || []).map(l => `${l.amount} ${l.type}`).join(', ');
@@ -389,12 +520,21 @@ function renderDashboard(container, rl, usageEntries, currency) {
         </tr>`;
     }).join('');
 
+    // Balance cards - handle "Both" mode
+    let periodCostCard;
+    if (currency === 'Both') {
+        const combinedCost = `${agg.totalCostDiem.toFixed(4)} DIEM + $${agg.totalCostUsd.toFixed(4)}`;
+        periodCostCard = balanceCard('Period Cost', combinedCost, '#1e8449', '#27ae60');
+    } else {
+        periodCostCard = balanceCard('Period Cost', sym + agg.totalCost.toFixed(4) + unit, '#1e8449', '#27ae60');
+    }
+
     container.innerHTML = `
         <!-- Balance Cards -->
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
             ${balanceCard('USD Balance', '$' + usd.toFixed(2), '#1a5276', '#2471a3')}
             ${balanceCard('DIEM Balance', diem.toFixed(4), '#6c3483', '#8e44ad')}
-            ${balanceCard('Period Cost', sym + agg.totalCost.toFixed(4) + unit, '#1e8449', '#27ae60')}
+            ${periodCostCard}
             ${balanceCard('Requests', agg.totalRequests.toLocaleString(), '#7d6608', '#b7950b')}
         </div>
 
@@ -423,7 +563,7 @@ function renderDashboard(container, rl, usageEntries, currency) {
                                 <th style="padding: 0.3rem 0.5rem; text-align: right; font-weight: 600;">Reqs</th>
                                 <th style="padding: 0.3rem 0.5rem; text-align: right; font-weight: 600;">In / Out Tokens</th>
                                 <th style="padding: 0.3rem 0.5rem; text-align: right; font-weight: 600;">Avg Latency</th>
-                                <th style="padding: 0.3rem 0.5rem; text-align: right; font-weight: 600;">Cost</th>
+                                <th style="padding: 0.3rem 0.5rem; text-align: right; font-weight: 600;">${currency === 'Both' ? 'DIEM / USD' : 'Cost'}</th>
                             </tr>
                         </thead>
                         <tbody>${modelRows}</tbody>
@@ -478,5 +618,5 @@ function esc(s) {
 
 // Register
 Plugins.register(VeniceBillingPlugin);
-
+	
 export default VeniceBillingPlugin;
