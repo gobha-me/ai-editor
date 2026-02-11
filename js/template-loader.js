@@ -21,7 +21,7 @@ export async function loadTemplate(name, useCache = true) {
     }
 
     try {
-        const response = await fetch(`editor/html/${name}.html`);
+        const response = await fetch(`./html/${name}.html`);
         
         if (!response.ok) {
             throw new Error(`Failed to load template '${name}': ${response.status} ${response.statusText}`);

@@ -17,7 +17,7 @@ class _SearchManager {
     init() {
         if (typeof Worker !== 'undefined') {
             try {
-                this.worker = new Worker('editor/js/workers/search-worker.js');
+                this.worker = new Worker('./js/workers/search-worker.js');
                 this.worker.onmessage = (e) => this._handleWorkerMessage(e.data);
                 this.worker.onerror = (e) => {
                     console.error('[Search] Worker error:', e);

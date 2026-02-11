@@ -56,6 +56,10 @@ RUN test -s codemirror-bundle.js \
 # --------------------------------------------------
 FROM nginx:1-alpine
 
+# Runtime configuration: set BASE_PATH to serve from a sub-path
+# Examples: / (root), /editor, /test, /dev
+ENV BASE_PATH=/
+
 # Security headers and gzip configuration
 COPY --from=vendor-build /build/codemirror-bundle.js /tmp/vendor/
 COPY --from=vendor-build /build/marked.min.js        /tmp/vendor/
@@ -78,12 +82,16 @@ RUN rm -rf /usr/share/nginx/html/vendor/node_modules \
            /usr/share/nginx/html/vendor/codemirror-entry.mjs \
            /usr/share/nginx/html/Dockerfile \
            /usr/share/nginx/html/deployment.yaml \
-           /usr/share/nginx/html/dockerignore \
-           /usr/share/nginx/html/nginx.conf
+           /usr/share/nginx/html/nginx.conf \
+           /usr/share/nginx/html/nginx.conf.template \
+           /usr/share/nginx/html/docker-entrypoint.sh \
+           /usr/share/nginx/html/20-configure-base-path.sh \
+           /usr/share/nginx/html/.gitea \
+    # Remove default nginx config (entrypoint.d script generates it)
+    && rm -f /etc/nginx/conf.d/default.conf
 
-# Nginx configuration with security headers and gzip
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Startup hook: generates nginx config from BASE_PATH env var
+COPY 20-configure-base-path.sh /docker-entrypoint.d/20-configure-base-path.sh
+RUN chmod +x /docker-entrypoint.d/20-configure-base-path.sh
 
 EXPOSE 8000
-
-CMD ["nginx", "-g", "daemon off;"]

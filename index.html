@@ -5,27 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Editor</title>
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="editor/assets/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
     <!-- Stylesheets (split by component) -->
-    <link rel="stylesheet" href="editor/css/base.css">
-    <link rel="stylesheet" href="editor/css/sidebar.css">
-    <link rel="stylesheet" href="editor/css/editor.css">
-    <link rel="stylesheet" href="editor/css/chat.css">
-    <link rel="stylesheet" href="editor/css/modals.css">
-    <link rel="stylesheet" href="editor/css/components.css">
+    <link rel="stylesheet" href="./css/base.css">
+    <link rel="stylesheet" href="./css/sidebar.css">
+    <link rel="stylesheet" href="./css/editor.css">
+    <link rel="stylesheet" href="./css/chat.css">
+    <link rel="stylesheet" href="./css/modals.css">
+    <link rel="stylesheet" href="./css/components.css">
     <!-- Vendor libs: local bundle first (Docker build), CDN fallback (dev mode) -->
-    <script src="editor/vendor/marked.min.js"
+    <script src="./vendor/marked.min.js"
         onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js'">
     </script>
-    <script src="editor/vendor/purify.min.js"
+    <script src="./vendor/purify.min.js"
         onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js'">
     </script>
-    <script src="editor/vendor/jszip.min.js"
+    <script src="./vendor/jszip.min.js"
         onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'">
     </script>
     <script type="module">
         // Set page title with version from central config
-        import { VERSION_DISPLAY } from './editor/js/version.js';
+        import { VERSION_DISPLAY } from './js/version.js';
         document.title = VERSION_DISPLAY;
     </script>
 </head>
@@ -66,6 +66,6 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- Main Application Module -->
-    <script type="module" src="editor/js/app.js"></script>
+    <script type="module" src="./js/app.js"></script>
 </body>
 </html>

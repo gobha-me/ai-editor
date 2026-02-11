@@ -1,0 +1,93 @@
+# ============================================
+# AI Editor - CI/CD Pipeline
+# ============================================
+# Trigger matrix:
+#   PR opened/synced  → build :dev   → deploy ai-editor-dev
+#   Push to main      → build :test  → deploy ai-editor-test
+#   Tag v*            → build :latest + :vX.Y.Z → deploy ai-editor
+# ============================================
+
+name: CI/CD
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: ${{ gitea.workflow }}-${{ gitea.event.pull_request.number || gitea.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: registry.gobha.me:5000
+  IMAGE_NAME: xcaliber/ai-editor
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ gitea.event_name }}" == "pull_request" ]]; then
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+            echo "deployment=ai-editor-dev" >> "$GITHUB_OUTPUT"
+            echo "base_path=/dev" >> "$GITHUB_OUTPUT"
+            echo "env_name=dev" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ gitea.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ gitea.ref_name }}"
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "extra_tag=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "deployment=ai-editor" >> "$GITHUB_OUTPUT"
+            echo "base_path=/" >> "$GITHUB_OUTPUT"
+            echo "env_name=production" >> "$GITHUB_OUTPUT"
+          else
+            # Push to main
+            echo "tag=test" >> "$GITHUB_OUTPUT"
+            echo "deployment=ai-editor-test" >> "$GITHUB_OUTPUT"
+            echo "base_path=/test" >> "$GITHUB_OUTPUT"
+            echo "env_name=test" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image
+        run: |
+          echo "Building ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}"
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }} .
+
+      - name: Tag release version
+        if: steps.env.outputs.extra_tag != ''
+        run: |
+          docker tag \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }}
+
+      - name: Push image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}
+          if [[ -n "${{ steps.env.outputs.extra_tag }}" ]]; then
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }}
+          fi
+
+      - name: Deploy to cluster
+        continue-on-error: true
+        run: |
+          DEPLOY="${{ steps.env.outputs.deployment }}"
+          TAG="${{ steps.env.outputs.tag }}"
+          echo "Deploying ${DEPLOY} with image tag :${TAG}"
+          kubectl set image deployment/${DEPLOY} \
+            ai-editor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}
+          kubectl rollout restart deployment/${DEPLOY}
+          kubectl rollout status deployment/${DEPLOY} --timeout=120s
+
+      - name: Summary
+        run: |
+          echo "## ✅ Deployed to ${{ steps.env.outputs.env_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment:** \`${{ steps.env.outputs.deployment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **BASE_PATH:** \`${{ steps.env.outputs.base_path }}\`" >> $GITHUB_STEP_SUMMARY
