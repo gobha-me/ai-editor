@@ -23,26 +23,16 @@ import {
     updateStatusBar, 
     showToast, 
     closeAllModals,
-    openCommitModal,
-    closeCommitModal,
-    generateCommitMsg,
-    commitAndPush,
-    openNewBranchModal,
-    closeNewBranchModal,
-    createNewBranch,
-    openNewFileModal,
-    closeNewFileModal,
-    createNewFile,
     updateCommitButton,
     updateRevertButton,
-    revertCurrentFile,
     clearAllDrafts,
     clearProjectDrafts,
-    closeRevertModal,
-    revertAllFiles,
-    revertOnlyCurrentFile,
     initStatusBarListener
 } from './ui-helpers.js';
+import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush } from './ui/commit.js';
+import { openNewBranchModal, closeNewBranchModal, createNewBranch } from './ui/branch.js';
+import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-create.js';
+import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
 import { 
     refreshProjects, 
     onProjectChange, 

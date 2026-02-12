@@ -2,6 +2,59 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.13] - 2026-02-12
+
+### Changed — Module Decomposition
+
+Three monolithic modules split into focused sub-modules using barrel re-export
+pattern. Zero downstream import changes required (except app.js for ui/).
+
+**editor.js (1036→4 files)**
+- `editor/setup.js` — CodeMirror loading, CDN fallback, language config
+- `editor/instance.js` — Editor creation, content ops, line-level editing
+- `editor/file-utils.js` — `isTextFile`, `getFileIcon` (pure, zero deps)
+- `editor/diff.js` — `computeSimpleDiff`, `formatDiffForDisplay` (pure)
+- `editor.js` — barrel re-export (all existing imports preserved)
+
+**llm.js (919→3 files)**
+- `llm/utils.js` — `stripThinkBlocks`, `sanitizeMessages` (pure, tested)
+- `llm/debug.js` — `LLMDebug` ring-buffer logger (self-contained)
+- `llm/api.js` — `LLM` client, streaming, tool calling, cost tracking
+- `llm.js` — barrel re-export (all existing imports preserved)
+
+**ui-helpers.js (634→4 files)**
+- `ui/commit.js` — Commit modal workflow
+- `ui/revert.js` — Single & batch revert with confirmation modal
+- `ui/branch.js` — Branch creation with git-ref sanitization
+- `ui/file-create.js` — New file modal
+- `ui-helpers.js` — shared utilities (toggles, toast, draft mgmt, status bar)
+
+### Architecture
+- CM namespace pattern (`CM` object) eliminates module-level `let` sharing
+  between setup and instance modules
+- Direct import from `prompts.js` in `editor/setup.js` eliminates the
+  editor→llm→prompts indirection for `getLanguageFromPath`
+- No circular dependencies: sub-modules import parent utilities,
+  barrels only re-export
+
+### Files Modified
+- `js/editor.js` → barrel re-export
+- `js/editor/setup.js` — NEW
+- `js/editor/instance.js` — NEW
+- `js/editor/file-utils.js` — NEW
+- `js/editor/diff.js` — NEW
+- `js/llm.js` → barrel re-export
+- `js/llm/utils.js` — NEW
+- `js/llm/debug.js` — NEW
+- `js/llm/api.js` — NEW
+- `js/ui-helpers.js` → trimmed to shared utilities
+- `js/ui/commit.js` — NEW
+- `js/ui/revert.js` — NEW
+- `js/ui/branch.js` — NEW
+- `js/ui/file-create.js` — NEW
+- `js/app.js` — updated imports for ui/ sub-modules
+- `js/version.js` — 0.9.13
+
 ## [0.9.12] - 2026-02-12
 
 Test coverage expansion for pure functions across the codebase.
