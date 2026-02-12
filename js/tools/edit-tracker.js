@@ -15,10 +15,14 @@
  */
 const EditTracker = {
     // Track the most recent read operation per file
-    lastReads: new Map(),  // path -> { startLine, endLine, timestamp, totalLines }
+    lastReads: new Map(),  // path -> { startLine, endLine, timestamp, totalLines, seq }
     
     // Track all edit operations (ring buffer per file)
-    edits: new Map(),      // path -> Array<{ operation, startLine, endLine, lineDelta, timestamp }>
+    edits: new Map(),      // path -> Array<{ operation, startLine, endLine, lineDelta, timestamp, seq }>
+    
+    // Monotonic sequence counter — ensures logical ordering even when
+    // Date.now() returns the same value for rapid consecutive operations
+    _seq: 0,
     
     // Configuration
     MAX_EDITS_PER_FILE: 50,           // Keep last 50 edits per file
@@ -37,7 +41,8 @@ const EditTracker = {
             startLine,
             endLine: endLine || totalLines,  // null means "whole file"
             totalLines,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            seq: ++this._seq
         });
         
         console.log(`[EditTracker] Recorded read: ${path} lines ${startLine}-${endLine || 'end'}`);
@@ -61,7 +66,8 @@ const EditTracker = {
             startLine,
             endLine,
             lineDelta,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            seq: ++this._seq
         });
         
         // Keep only recent edits (ring buffer)
@@ -101,9 +107,10 @@ const EditTracker = {
             };
         }
         
-        // RULE 3: No edits should have occurred AFTER the last read that would affect target lines
+        // RULE 3: No edits should have occurred AFTER the last read that would shift target lines
         const editsAfterRead = pathEdits.filter(e => 
-            e.timestamp > lastRead.timestamp &&
+            e.seq > lastRead.seq &&
+            e.lineDelta !== 0 &&           // delta=0 means no line shift, so no staleness
             e.startLine < targetStartLine  // Edit was above target, so it shifted target's line numbers
         );
         
@@ -157,6 +164,7 @@ const EditTracker = {
     clearAll() {
         this.lastReads.clear();
         this.edits.clear();
+        this._seq = 0;
         console.log('[EditTracker] Cleared all tracking');
     },
     
