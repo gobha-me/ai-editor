@@ -83,12 +83,36 @@
  * @property {Array} statuses
  */
 
+import { EditorError, ErrorCode } from '../utils/errors.js';
+
+/** @type {Object.<number, string>} */
+const STATUS_TO_GIT_CODE = {
+    401: ErrorCode.AUTH_INVALID_TOKEN,
+    403: ErrorCode.AUTH_FORBIDDEN,
+    404: ErrorCode.GIT_NOT_FOUND,
+    409: ErrorCode.GIT_CONFLICT,
+    422: ErrorCode.GIT_VALIDATION,
+};
+
+/** @type {Object.<number, string>} */
+const STATUS_TO_GIT_HINT = {
+    401: 'Check your API token in Settings → Connections.',
+    403: 'Your token lacks permission. Check token scopes.',
+    404: 'Resource not found. Use the file tree to verify the path.',
+    409: 'Conflict — the file was modified elsewhere. Refresh and try again.',
+    422: 'Validation error. Check your parameters.',
+};
+
 /**
  * @param {string} provider
  * @param {string} method
+ * @throws {EditorError}
  */
 function notSupported(provider, method) {
-    throw new Error(`${provider} does not support ${method}`);
+    throw new EditorError(`${provider} does not support ${method}`, {
+        code: ErrorCode.GIT_NOT_SUPPORTED,
+        recoveryHint: `This operation is not available for ${provider}. Try a different provider.`,
+    });
 }
 
 const BASE_GIT_PROVIDER = {
@@ -166,19 +190,17 @@ const BASE_GIT_PROVIDER = {
             let friendlyMsg = `${response.status}`;
             try {
                 const parsed = JSON.parse(rawBody);
-                // Most Git APIs return { message: "..." } or { error: "..." }
                 friendlyMsg = parsed.message || parsed.error || parsed.errors?.[0] || friendlyMsg;
             } catch {
-                // Not JSON — use raw text if short, otherwise just status
                 if (rawBody.length < 200) friendlyMsg = rawBody;
             }
             
-            const err = new Error(`${this.name}: ${friendlyMsg}`);
-            err.status = response.status;
-            err.url = url;
-            err.endpoint = endpoint;
-            err.rawBody = rawBody;
-            throw err;
+            throw new EditorError(`${this.name}: ${friendlyMsg}`, {
+                code: STATUS_TO_GIT_CODE[response.status] || ErrorCode.UNKNOWN,
+                recoveryHint: STATUS_TO_GIT_HINT[response.status],
+                status: response.status,
+                context: { url, endpoint, rawBody: rawBody.slice(0, 500) },
+            });
         }
 
         const text = await response.text();

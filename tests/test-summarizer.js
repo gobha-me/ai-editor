@@ -1,5 +1,6 @@
 /**
- * Tests for ChatSummarizer — tier detection, mode shifting, symbol extraction, tool result handling.
+ * Tests for ChatSummarizer — percentage-based scaling, mode differentiation,
+ * symbol extraction, tool result handling.
  * Imports the full module graph (core.js → providers → etc.) which is fine in the browser.
  */
 import { ChatSummarizer } from '../js/chat/summarizer.js';
@@ -8,16 +9,12 @@ import { State } from '../js/core.js';
 const { T } = window;
 
 // ============================================
-// TIER DETECTION (Balanced mode = no shift)
+// SETUP
 // ============================================
 
-T.suite('ChatSummarizer — Tier Detection');
-
-// Mock State.models for tier testing
 const originalModels = State.models;
 const originalMode = State.settings.summarizerMode;
 
-// Helper to set mock model
 function setMockModel(contextTokens) {
     State.settings.llmModel = 'test-model';
     State.models = [{ id: 'test-model', meta: { contextTokens } }];
@@ -28,81 +25,136 @@ function resetMocks() {
     State.settings.summarizerMode = originalMode;
 }
 
-// Force balanced mode for tier tests (no shift)
+// ============================================
+// PERCENTAGE-BASED SCALING (Balanced = 50%)
+// ============================================
+
+T.suite('ChatSummarizer — Percentage-Based Scaling');
+
 State.settings.summarizerMode = 'balanced';
 
-// Small model (<32K)
-setMockModel(8000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', '8K model → Small tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 30, 'Small tier threshold = 30');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 10, 'Small tier recentBase = 10');
-
-// Medium model (32K+)
-setMockModel(32000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Medium (32K+)', '32K model → Medium tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 50, 'Medium tier threshold = 50');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 16, 'Medium tier recentBase = 16');
-
-// Large model (128K+)
+// 128K model, balanced (50%): capacity = 128000 * 0.50 / 800 = 80
 setMockModel(128000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Large (128K+)', '128K model → Large tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Large tier threshold = 80');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 30, 'Large tier recentBase = 30');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, '128K balanced: threshold=80 (capacity=80)');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 28, '128K balanced: recentBase=28 (80*0.35)');
+T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 48, '128K balanced: recentTools=48 (80*0.60)');
+T.eq(ChatSummarizer.SUMMARY_INTERVAL, 36, '128K balanced: interval=36 (80*0.45)');
 
-// Huge model (500K+)
+// 1M model, balanced: capacity = 1000000 * 0.50 / 800 = 625 → clamped 250
 setMockModel(1000000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', '1M model → Huge tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, 'Huge tier threshold = 200');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 60, 'Huge tier recentBase = 60');
-T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 100, 'Huge tier recentTools = 100');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, '1M balanced: threshold=200 (cap clamps at 250→200)');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 60, '1M balanced: recentBase=60 (max clamp)');
+T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 100, '1M balanced: recentTools=100 (max clamp)');
 
-// Edge case: exactly at boundary
-setMockModel(500000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', '500K exactly → Huge tier');
+// 32K model, balanced: capacity = 32000 * 0.50 / 800 = 20
+setMockModel(32000);
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 20, '32K balanced: threshold=20 (capacity=20)');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 8, '32K balanced: recentBase=8 (min clamp)');
 
-setMockModel(31999);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', '31999 → Small tier (just under 32K)');
-
-// No context info → falls back to Small
-setMockModel(null);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', 'null context → Small tier fallback');
-
-// ============================================
-// MODE SHIFTING
-// ============================================
-
-T.suite('ChatSummarizer — Mode Shifting');
-
-// Aggressive shifts tier +1 (toward smaller)
-setMockModel(128000); // Detected: Large (index 1)
-State.settings.summarizerMode = 'aggressive';
-T.eq(ChatSummarizer.getAutoParams().label, 'Medium (32K+)', 'Aggressive shifts Large → Medium');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 50, 'Aggressive 128K: threshold from Medium tier');
-
-// Conservative shifts tier -1 (toward larger)
-State.settings.summarizerMode = 'conservative';
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', 'Conservative shifts Large → Huge');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, 'Conservative 128K: threshold from Huge tier');
-
-// Aggressive on Small (already smallest) — clamped, stays Small
+// 8K model, balanced: capacity = 8000 * 0.50 / 800 = 5 → clamped 20
 setMockModel(8000);
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 20, '8K balanced: threshold=20 (min clamp)');
+
+// Null context → falls back to defaults
+setMockModel(null);
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 30, 'null context → default threshold=30');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 10, 'null context → default recentBase=10');
+
+// ============================================
+// MODE DIFFERENTIATION
+// ============================================
+
+T.suite('ChatSummarizer — Mode Differentiation');
+
+// For a given model, aggressive < balanced < conservative
+setMockModel(128000);
+
 State.settings.summarizerMode = 'aggressive';
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', 'Aggressive on Small stays Small (clamped)');
+const aggrThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+const aggrRecent = ChatSummarizer.RECENT_COUNT_BASE;
 
-// Conservative on Huge (already largest) — clamped, stays Huge
-setMockModel(1000000);
+State.settings.summarizerMode = 'balanced';
+const balThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+const balRecent = ChatSummarizer.RECENT_COUNT_BASE;
+
 State.settings.summarizerMode = 'conservative';
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', 'Conservative on Huge stays Huge (clamped)');
+const consThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+const consRecent = ChatSummarizer.RECENT_COUNT_BASE;
 
-// Legacy mode migration
+T.assert(aggrThreshold < balThreshold, `Aggressive threshold (${aggrThreshold}) < Balanced (${balThreshold})`);
+T.assert(balThreshold < consThreshold, `Balanced threshold (${balThreshold}) < Conservative (${consThreshold})`);
+T.assert(aggrRecent < balRecent, `Aggressive recent (${aggrRecent}) < Balanced (${balRecent})`);
+T.assert(balRecent < consRecent, `Balanced recent (${balRecent}) < Conservative (${consRecent})`);
+
+// Verify specific fill percentages (128K model)
+// Aggressive: 128K * 0.30 / 800 = 48
+State.settings.summarizerMode = 'aggressive';
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 48, '128K aggressive: threshold=48 (30% fill)');
+
+// Conservative: 128K * 0.75 / 800 = 120
+State.settings.summarizerMode = 'conservative';
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 120, '128K conservative: threshold=120 (75% fill)');
+
+// ============================================
+// SMOOTH SCALING (no tier cliffs)
+// ============================================
+
+T.suite('ChatSummarizer — Smooth Scaling');
+
+State.settings.summarizerMode = 'balanced';
+
+// Models at different sizes should produce different thresholds (no tier cliffs)
+setMockModel(64000);
+const t64 = ChatSummarizer.SUMMARY_THRESHOLD;
+setMockModel(96000);
+const t96 = ChatSummarizer.SUMMARY_THRESHOLD;
+setMockModel(128000);
+const t128 = ChatSummarizer.SUMMARY_THRESHOLD;
+
+T.assert(t64 < t96, `64K threshold (${t64}) < 96K threshold (${t96})`);
+T.assert(t96 < t128, `96K threshold (${t96}) < 128K threshold (${t128})`);
+
+// Verify no duplicates at boundary points (old tier system gave same params for 33K and 127K)
+setMockModel(33000);
+const t33 = ChatSummarizer.SUMMARY_THRESHOLD;
+setMockModel(127000);
+const t127 = ChatSummarizer.SUMMARY_THRESHOLD;
+T.assert(t33 < t127, `33K threshold (${t33}) < 127K threshold (${t127}) — no tier cliff`);
+
+// ============================================
+// getAutoParams API
+// ============================================
+
+T.suite('ChatSummarizer — getAutoParams');
+
+State.settings.summarizerMode = 'balanced';
+setMockModel(128000);
+const info = ChatSummarizer.getAutoParams();
+
+T.eq(info.mode, 'balanced', 'getAutoParams returns mode');
+T.eq(info.contextTokens, 128000, 'getAutoParams returns contextTokens');
+T.eq(info.fillPct, 0.50, 'getAutoParams returns fillPct');
+T.assert(info.label.includes('50%'), `Label includes fill%: "${info.label}"`);
+T.assert(info.label.includes('128K'), `Label includes context size: "${info.label}"`);
+T.eq(info.params.threshold, 80, 'getAutoParams.params matches _cfg()');
+
+// ============================================
+// LEGACY MODE MIGRATION
+// ============================================
+
+T.suite('ChatSummarizer — Legacy Migration');
+
 State.settings.summarizerMode = 'auto';
 T.eq(ChatSummarizer.mode, 'balanced', 'Legacy "auto" migrates to "balanced"');
 State.settings.summarizerMode = 'manual';
 T.eq(ChatSummarizer.mode, 'custom', 'Legacy "manual" migrates to "custom"');
 
+// ============================================
+// CUSTOM MODE
+// ============================================
+
 T.suite('ChatSummarizer — Custom Mode');
 
-// Custom mode should use State.settings.summarizer values
 State.settings.summarizerMode = 'custom';
 State.settings.summarizer = { recentCountBase: 20, threshold: 60 };
 T.eq(ChatSummarizer.mode, 'custom', 'Mode reads from settings');
@@ -112,7 +164,7 @@ T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 60, 'Custom mode threshold from settings'
 // Balanced mode should ignore custom settings
 State.settings.summarizerMode = 'balanced';
 setMockModel(128000);
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Balanced mode ignores custom settings, uses tier');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Balanced mode ignores custom settings, uses computed');
 
 // ============================================
 // SYMBOL EXTRACTION

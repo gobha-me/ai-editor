@@ -2,6 +2,82 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.16-1] - 2026-02-12
+
+### Removed — Dead Scroll Sync Code
+
+With diffs now overlaying the editor pane (since 0.9.14-2), the
+editor-to-diff scroll sync was OBE. Removed:
+
+- `initEditorDiffSync()` — bidirectional editor↔diff scroll polling
+- `syncEditorToChange()` — editor scroll on change navigation
+- `toggleScrollSync()` — toggle function and state variable
+- `scrollSyncEnabled` / `editorScrollListener` state
+- 🔗 Sync button from diff controls toolbar
+- `S` keyboard shortcut (was mapped to sync toggle, help page incorrectly said "syntax highlighting")
+- `toggleScrollSync` from `window.DiffViewer` global
+
+**Kept:** Left↔right pane sync in side-by-side mode (still needed).
+
+**Files modified:** `js/diff-viewer.js` (746→597 lines, −149),
+`html/modals.html` (removed `S` from help), `js/version.js`
+
+## [0.9.16] - 2026-02-12
+
+### Changed — Summarizer: Percentage-Based Scaling (replaces tier system)
+
+The old tier system (`Huge`/`Large`/`Medium`/`Small` + mode shift) is
+replaced with smooth, linear scaling from the loaded model's actual
+context window size.
+
+**How it works:**
+- Mode sets a *fill percentage* of the context window:
+  - Aggressive: **30%** — summarize early, keep context lean
+  - Balanced: **50%** — default middle ground
+  - Conservative: **75%** — preserve more, still safe from overflow
+- All params (recent count, threshold, interval, maxChars) derived from
+  `contextTokens × fillPct / 800` with per-param min/max clamps
+- No discrete tiers → no "cliff" when a model sits near a boundary
+- Custom mode still uses user-specified values, unchanged
+
+**Examples (128K model):**
+| Mode | Threshold | Recent (base/tools) | Interval |
+|------|-----------|---------------------|----------|
+| Aggressive | 48 | 17/29 | 22 |
+| Balanced | 80 | 28/48 | 36 |
+| Conservative | 120 | 42/72 | 54 |
+
+**Files modified:** `js/chat/summarizer.js`, `js/settings/llm-tab.js`,
+`js/tools/scratchpad-tools.js`, `tests/test-summarizer.js`
+
+### Added — `docs/ARCHITECTURE.md`
+
+Module dependency map, layer diagram, key data flows, and file size
+budget. Auto-derived from source with manual annotations.
+
+### Added — Structured Error Objects (`js/utils/errors.js`)
+
+`EditorError` class extends native `Error` with:
+- `.code` — machine-readable enum (`ErrorCode.GIT_NOT_FOUND`, etc.)
+- `.recoveryHint` — actionable suggestion for the user
+- `.status` — HTTP status code (when applicable)
+- `.context` — metadata (endpoint, rawBody, etc.)
+- `EditorError.fromResponse(response)` — factory from fetch Response
+- `EditorError.wrap(err)` — wrap any thrown value with code inference
+
+Wired into:
+- `git-providers/base.js` — `request()` now throws `EditorError`
+- `git-providers/gitea.js` — blame unsupported uses `ErrorCode.BLAME_UNSUPPORTED`
+- `tools/registry.js` — `execute()` checks `.code` + `.recoveryHint` first
+
+### Added — Offline Indicator Banner (`js/offline-indicator.js`)
+
+Fixed-position banner at screen bottom when network connectivity is lost.
+- Listens for browser `online`/`offline` events
+- Periodic fetch probe (every 10s when offline) catches captive portal / DNS failures
+- `aria-live="assertive"` for screen reader announcement
+- Emits `EventBus('network:status', { online })` for other modules to react
+
 ## [0.9.15] - 2026-02-12
 
 ### Added — JSDoc Type Annotations & `@ts-check`

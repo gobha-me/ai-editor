@@ -3,14 +3,14 @@
  * Chat History Summarizer
  * Compresses older chat messages into LLM-generated summaries.
  *
- * Modes:
- *   - aggressive:   Summarize early & often — smaller recent windows, lower thresholds
- *   - balanced:     Default middle ground — matches context window tier directly
- *   - conservative: Preserve history — larger recent windows, higher thresholds
- *   - custom:       User-specified manual values
+ * Modes (percentage of context window to fill before summarizing):
+ *   - aggressive:   30% — summarize early, keep context lean
+ *   - balanced:     50% — default middle ground
+ *   - conservative: 75% — preserve more history, still safe from overflow
+ *   - custom:       user-specified manual values
  *
- * All non-custom modes are context-window-aware: detected tier is shifted
- * up/down depending on mode aggressiveness.
+ * All non-custom modes derive params from the loaded model's actual context
+ * window size. No tiers, no cliffs — smooth linear scaling with min/max clamps.
  *
  * @module chat/summarizer
  */
@@ -22,19 +22,12 @@
  */
 
 /**
- * @typedef {Object} TierParams
+ * @typedef {Object} SummarizerParams
  * @property {number} recentCountBase
  * @property {number} recentCountTools
  * @property {number} threshold
  * @property {number} interval
  * @property {number} maxChars
- */
-
-/**
- * @typedef {Object} Tier
- * @property {string}     label
- * @property {number}     minContext
- * @property {TierParams} params
  */
 
 /**
@@ -48,45 +41,41 @@
 
 /**
  * @typedef {Object} AutoParams
- * @property {string}         label
- * @property {number|null}    contextTokens
- * @property {TierParams}     params
- * @property {SummarizerMode} mode
+ * @property {string}           label          - Human-readable description (e.g. "50% of 128K")
+ * @property {number|null}      contextTokens  - Model's context window (null if unknown)
+ * @property {number}           fillPct        - Fill percentage used (0.30 / 0.50 / 0.75)
+ * @property {SummarizerParams} params         - Computed summarizer parameters
+ * @property {SummarizerMode}   mode           - Active mode name
  */
 
 import { State, EventBus, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 
-/** @type {Tier[]} Context-window tiers (ordered largest → smallest). */
-const TIERS = [
-    {
-        label: 'Huge (500K+)',
-        minContext: 500_000,
-        params: { recentCountBase: 60, recentCountTools: 100, threshold: 200, interval: 80, maxChars: 4000 }
-    },
-    {
-        label: 'Large (128K+)',
-        minContext: 128_000,
-        params: { recentCountBase: 30, recentCountTools: 50, threshold: 80, interval: 40, maxChars: 3000 }
-    },
-    {
-        label: 'Medium (32K+)',
-        minContext: 32_000,
-        params: { recentCountBase: 16, recentCountTools: 32, threshold: 50, interval: 25, maxChars: 2500 }
-    },
-    {
-        label: 'Small (<32K)',
-        minContext: 0,
-        params: { recentCountBase: 10, recentCountTools: 24, threshold: 30, interval: 15, maxChars: 2000 }
-    }
-];
+// ============================================
+// PERCENTAGE-BASED SCALING CONSTANTS
+// ============================================
 
-/** @type {Object.<string, number>} Mode → tier index shift. Positive = shift toward smaller. */
-const MODE_SHIFT = {
-    aggressive:   +1,
-    balanced:      0,
-    conservative: -1,
+/** Average tokens per chat message (user + assistant + tool mix). */
+const AVG_TOKENS_PER_MSG = 800;
+
+/**
+ * Mode → fraction of context window to fill before triggering summarization.
+ * @type {Object.<string, number>}
+ */
+const MODE_FILL = {
+    aggressive:   0.30,
+    balanced:     0.50,
+    conservative: 0.75,
 };
+
+/**
+ * Clamp a value between min and max.
+ * @param {number} v
+ * @param {number} lo
+ * @param {number} hi
+ * @returns {number}
+ */
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 /**
  * Compresses older chat messages into LLM-generated summaries.
@@ -94,7 +83,7 @@ const MODE_SHIFT = {
  * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
-    /** @type {TierParams} */
+    /** @type {SummarizerParams} */
     _defaults: {
         recentCountBase: 10,
         recentCountTools: 24,
@@ -116,28 +105,27 @@ export const ChatSummarizer = {
     },
 
     /**
-     * Get the detected tier index for a context window size.
-     * @param {number|null} contextTokens
-     * @returns {number} Index into TIERS array
+     * Compute summarizer params from context window size and mode fill percentage.
+     * Capacity = contextTokens × fillPct / AVG_TOKENS_PER_MSG, clamped [20, 250].
+     * All params scale linearly from capacity with per-param min/max bounds.
+     * @returns {SummarizerParams}
      */
-    _getDetectedTierIndex(contextTokens) {
-        if (!contextTokens) return TIERS.length - 1; // smallest
-        const idx = TIERS.findIndex(t => contextTokens >= t.minContext);
-        return idx >= 0 ? idx : TIERS.length - 1;
-    },
-
-    /**
-     * Get the effective tier after applying mode shift.
-     * @returns {{ label: string, params: Object, tierIndex: number }}
-     */
-    _getEffectiveTier() {
+    _computeParams() {
         const ctx = this._getContextWindow();
-        const detected = this._getDetectedTierIndex(ctx);
-        const mode = this.mode;
-        const shift = MODE_SHIFT[mode] ?? 0;
-        // Clamp shifted index to valid range
-        const effective = Math.max(0, Math.min(TIERS.length - 1, detected + shift));
-        return { ...TIERS[effective], tierIndex: effective, detectedIndex: detected };
+        const fillPct = MODE_FILL[this.mode] ?? MODE_FILL.balanced;
+
+        // No context info → use defaults (safe small-model behavior)
+        if (!ctx) return { ...this._defaults };
+
+        const capacity = clamp(Math.floor(ctx * fillPct / AVG_TOKENS_PER_MSG), 20, 250);
+
+        return {
+            recentCountBase:  clamp(Math.round(capacity * 0.35), 8, 60),
+            recentCountTools: clamp(Math.round(capacity * 0.60), 16, 100),
+            threshold:        clamp(capacity, 20, 200),
+            interval:         clamp(Math.round(capacity * 0.45), 10, 80),
+            maxChars:         clamp(Math.round(1500 + (capacity / 250) * 2500), 1500, 4000),
+        };
     },
 
     /**
@@ -146,8 +134,12 @@ export const ChatSummarizer = {
      */
     getAutoParams() {
         const ctx = this._getContextWindow();
-        const tier = this._getEffectiveTier();
-        return { label: tier.label, contextTokens: ctx, params: { ...tier.params }, mode: this.mode };
+        const mode = this.mode;
+        const fillPct = MODE_FILL[mode] ?? MODE_FILL.balanced;
+        const params = this._computeParams();
+        const ctxLabel = ctx ? `${(ctx / 1000).toFixed(0)}K` : 'unknown';
+        const label = `${(fillPct * 100).toFixed(0)}% of ${ctxLabel}`;
+        return { label, contextTokens: ctx, fillPct, params, mode };
     },
 
     /** @returns {'aggressive'|'balanced'|'conservative'|'custom'} */
@@ -160,8 +152,8 @@ export const ChatSummarizer = {
     },
 
     /**
-     * Read a summarizer setting with fallback: custom overrides → tier → hardcoded defaults.
-     * @param {keyof TierParams} key
+     * Read a summarizer setting with fallback: custom overrides → computed → hardcoded defaults.
+     * @param {keyof SummarizerParams} key
      * @returns {number}
      */
     _cfg(key) {
@@ -169,9 +161,9 @@ export const ChatSummarizer = {
             const s = State.settings.summarizer;
             return (s && s[key] != null) ? s[key] : this._defaults[key];
         }
-        // Named mode: use shifted tier params
-        const tier = this._getEffectiveTier();
-        return tier.params[key] ?? this._defaults[key];
+        // Named mode: percentage-based computation
+        const params = this._computeParams();
+        return params[key] ?? this._defaults[key];
     },
 
     /** @returns {number} */ get RECENT_COUNT_BASE()  { return this._cfg('recentCountBase'); },
@@ -459,7 +451,7 @@ SUMMARY:`;
         console.log(`[ChatSummarizer] Mode: ${this.mode} | Recent: ${this.RECENT_COUNT} | Threshold: ${this.SUMMARY_THRESHOLD} | Compressing ${older.length} messages`);
         if (this.mode !== 'custom') {
             const info = this.getAutoParams();
-            console.log(`[ChatSummarizer] Tier: ${info.label} (${info.contextTokens ? (info.contextTokens/1000).toFixed(0) + 'K' : 'unknown'} ctx) · Mode: ${this.mode}`);
+            console.log(`[ChatSummarizer] Fill: ${info.label} · Mode: ${this.mode}`);
         }
 
         let summary;

@@ -6,10 +6,10 @@
  * outside chat history. Cleared on new chat.
  * 
  * Limits scale with summarizer mode (tied to model context capability):
- *   aggressive:   8 keys,  400 chars/value,  1.5K auto-inject
- *   balanced:     15 keys, 1000 chars/value,  4K auto-inject
- *   conservative: 20 keys, 2000 chars/value,  8K auto-inject
- *   custom:       15 keys, 1000 chars/value,  4K auto-inject
+ *   aggressive:   8 keys,  400 chars/value,  1.5K auto-inject (30% fill)
+ *   balanced:     15 keys, 1000 chars/value,  4K auto-inject  (50% fill)
+ *   conservative: 20 keys, 2000 chars/value,  8K auto-inject  (75% fill)
+ *   custom:       15 keys, 1000 chars/value,  4K auto-inject  (user values)
  */
 
 import { State } from '../core.js';
@@ -213,11 +213,19 @@ export function buildScratchpadPrompt() {
     try {
         const total = (State.chatHistory || []).length;
         const mode = State.settings.summarizerMode || 'balanced';
-        // Rough threshold/interval lookup matching summarizer tiers
-        const thresholds = { aggressive: 30, balanced: 50, conservative: 80, custom: 30 };
-        const intervals = { aggressive: 15, balanced: 25, conservative: 40, custom: 15 };
-        const threshold = thresholds[mode] || 50;
-        const interval = intervals[mode] || 25;
+        // Derive threshold/interval from context window (matches summarizer % logic)
+        const fillPct = { aggressive: 0.30, balanced: 0.50, conservative: 0.75 }[mode] || 0.50;
+        let threshold = 30, interval = 15;
+        try {
+            const modelId = State.settings.llmModel;
+            const model = (State.models || []).find(m => m.id === modelId);
+            const ctx = model?.meta?.contextTokens;
+            if (ctx) {
+                const cap = Math.max(20, Math.min(250, Math.floor(ctx * fillPct / 800)));
+                threshold = Math.max(20, Math.min(200, cap));
+                interval = Math.max(10, Math.min(80, Math.round(cap * 0.45)));
+            }
+        } catch { /* ignore — use defaults */ }
 
         if (total >= threshold - interval) {
             // Try to read actual coveredCount from storage

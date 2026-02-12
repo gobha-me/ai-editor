@@ -28,6 +28,7 @@
  */
 
 import { Roles, State } from '../core.js';
+import { EditorError, ErrorCode } from '../utils/errors.js';
 
 export const ToolRegistry = {
     /** @type {Map<string, ToolHandler>} */
@@ -111,7 +112,11 @@ export const ToolRegistry = {
             }
             return result;
         } catch (error) {
-            // Known error types with recovery hints
+            // Structured errors — use .code + .recoveryHint when available
+            if (error instanceof EditorError && error.recoveryHint) {
+                return { error: `${error.message}. ${error.recoveryHint}`, code: error.code };
+            }
+            // Legacy status-based fallback
             if (error.status === 404) {
                 return { error: `Not found (404). ${args?.path ? `'${args.path}' does not exist.` : ''} Use get_project_tree to see available files.` };
             }

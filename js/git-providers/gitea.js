@@ -11,6 +11,7 @@
  */
 
 import { EventBus } from '../core.js';
+import { EditorError, ErrorCode } from '../utils/errors.js';
 
 // ============================================
 // ENCODING UTILITIES (shared)
@@ -234,9 +235,10 @@ const giteaProvider = {
     async getBlame(connection, owner, repo, path, ref = 'main') {
         // Gitea does not expose a blame API endpoint.
         // Throw BLAME_UNSUPPORTED so the UI falls back to file history.
-        const err = new Error('Gitea REST API does not support line-by-line blame. Use file history instead.');
-        err.code = 'BLAME_UNSUPPORTED';
-        throw err;
+        throw new EditorError('Gitea REST API does not support line-by-line blame.', {
+            code: ErrorCode.BLAME_UNSUPPORTED,
+            recoveryHint: 'Showing file commit history instead.',
+        });
     },
 
     async getFileCommits(connection, owner, repo, path, ref = 'main') {

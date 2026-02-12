@@ -69,6 +69,7 @@ import {
 } from './model-manager.js';
 import { initPanelResize } from './resize-manager.js';
 import { initAccessibility, announce } from './accessibility.js';
+import { initOfflineIndicator } from './offline-indicator.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -690,6 +691,7 @@ async function init() {
     initSearchPanel();
     initZipDragDrop();
     initAccessibility();
+    initOfflineIndicator();
 
     // Screen reader announcements for key state changes
     EventBus.on('file:opened', ({ path }) => {

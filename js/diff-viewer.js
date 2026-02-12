@@ -13,8 +13,6 @@ import { escapeHtml } from './utils/html.js';
 let currentViewMode = 'unified'; // 'unified' | 'side-by-side'
 let currentChangeIndex = 0; // FIX: Start at 0, not -1
 let changePositions = [];
-let scrollSyncEnabled = true;
-let editorScrollListener = null;
 
 // ============================================
 // CORE DIFF ALGORITHM (Myers Diff)
@@ -364,11 +362,6 @@ function renderDiffHeader(stats, originalLineCount, modifiedLineCount) {
                         title="Side-by-Side View">
                     Side-by-Side
                 </button>
-                <button class="diff-btn ${scrollSyncEnabled ? 'active' : ''}" 
-                        onclick="window.DiffViewer.toggleScrollSync()" 
-                        title="Toggle Scroll Sync with Editor">
-                    🔗 Sync
-                </button>
                 <button class="diff-btn" 
                         onclick="window.DiffViewer.previousChange()" 
                         title="Previous Change (Alt+↑)">
@@ -417,11 +410,6 @@ function highlightChange(index) {
     if (element) {
         element.classList.add('diff-current');
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Sync editor scroll if enabled
-        if (scrollSyncEnabled) {
-            syncEditorToChange(index);
-        }
     }
 }
 
@@ -448,163 +436,38 @@ export function getViewMode() {
 }
 
 // ============================================
-// SCROLL SYNCHRONIZATION - ENHANCED
+// SCROLL SYNCHRONIZATION
 // ============================================
 
 /**
- * Initialize bidirectional scroll sync:
- * 1. Between left/right diff panes (side-by-side mode) — LOCKED like vimdiff
- * 2. Between editor and diff pane (both modes)
+ * Initialize scroll sync between left/right diff panes (side-by-side mode).
+ * Editor sync was removed in 0.9.16-1 since diffs now overlay the editor.
  */
 export function initScrollSync() {
-    // Side-by-side pane sync — vimdiff locked scrolling
     const leftPane = document.querySelector('.diff-pane-left');
     const rightPane = document.querySelector('.diff-pane-right');
     
     if (leftPane && rightPane) {
-        // Use a single "source" flag to prevent infinite scroll loops
         let scrollSource = null;
         
         const syncScroll = (source, target) => {
             if (scrollSource && scrollSource !== source) return;
             scrollSource = source;
-            
-            // Directly lock scrollTop — no setTimeout delay
             target.scrollTop = source.scrollTop;
             target.scrollLeft = source.scrollLeft;
-            
-            // Release lock on next frame
             requestAnimationFrame(() => { scrollSource = null; });
         };
         
         leftPane.addEventListener('scroll', () => syncScroll(leftPane, rightPane), { passive: true });
         rightPane.addEventListener('scroll', () => syncScroll(rightPane, leftPane), { passive: true });
     }
-    
-    // Editor-to-diff sync
-    initEditorDiffSync();
 }
 
 /**
- * NEW: Sync diff pane scrolling with editor scrolling
- * Intelligently handles line additions/deletions
+ * Cleanup (no-op since editor scroll sync was removed, kept for API compat).
  */
-function initEditorDiffSync() {
-    // Clean up old listener - FIX: Use clearInterval instead of removeEventListener
-    if (editorScrollListener) {
-        clearInterval(editorScrollListener);
-        editorScrollListener = null;
-    }
-    
-    // Get editor and diff containers
-    const getEditorScroller = () => document.querySelector('.cm-scroller');
-    const getDiffContainer = () => {
-        if (currentViewMode === 'side-by-side') {
-            return document.querySelector('.diff-pane-right'); // Sync to modified/current version
-        } else {
-            return document.querySelector('.diff-view');
-        }
-    };
-    
-    let syncingEditor = false;
-    let syncingDiff = false;
-    
-    // Editor scroll → Diff scroll
-    editorScrollListener = setInterval(() => {
-        if (!scrollSyncEnabled) return;
-        
-        const editorScroller = getEditorScroller();
-        const diffContainer = getDiffContainer();
-        
-        if (!editorScroller || !diffContainer) return;
-        
-        // Listen to editor scroll
-        if (!syncingDiff) {
-            const editorScrollTop = editorScroller.scrollTop;
-            const editorScrollHeight = editorScroller.scrollHeight;
-            const editorClientHeight = editorScroller.clientHeight;
-            
-            // Calculate scroll percentage
-            const scrollPercentage = editorScrollTop / (editorScrollHeight - editorClientHeight);
-            
-            // Apply to diff (with bounds checking)
-            syncingEditor = true;
-            const diffScrollHeight = diffContainer.scrollHeight;
-            const diffClientHeight = diffContainer.clientHeight;
-            diffContainer.scrollTop = scrollPercentage * (diffScrollHeight - diffClientHeight);
-            setTimeout(() => syncingEditor = false, 10);
-        }
-    }, 100); // Check every 100ms
-    
-    // Diff scroll → Editor scroll
-    const diffContainer = getDiffContainer();
-    if (diffContainer) {
-        diffContainer.addEventListener('scroll', () => {
-            if (!scrollSyncEnabled || syncingEditor) return;
-            
-            const editorScroller = getEditorScroller();
-            if (!editorScroller) return;
-            
-            syncingDiff = true;
-            const diffScrollTop = diffContainer.scrollTop;
-            const diffScrollHeight = diffContainer.scrollHeight;
-            const diffClientHeight = diffContainer.clientHeight;
-            
-            // Calculate scroll percentage
-            const scrollPercentage = diffScrollTop / (diffScrollHeight - diffClientHeight);
-            
-            // Apply to editor
-            const editorScrollHeight = editorScroller.scrollHeight;
-            const editorClientHeight = editorScroller.clientHeight;
-            editorScroller.scrollTop = scrollPercentage * (editorScrollHeight - editorClientHeight);
-            setTimeout(() => syncingDiff = false, 10);
-        });
-    }
-}
-
-/**
- * Sync editor to a specific change index
- */
-function syncEditorToChange(changeIndex) {
-    if (!scrollSyncEnabled || changePositions.length === 0) return;
-    
-    const change = changePositions[changeIndex];
-    if (!change) return;
-    
-    // Determine which line to scroll to in the editor (use new line if available, else old line)
-    const targetLine = change.newLine || change.oldLine;
-    if (!targetLine) return;
-    
-    // Get CodeMirror instance
-    const editorScroller = document.querySelector('.cm-scroller');
-    if (!editorScroller) return;
-    
-    // Find the line element in CodeMirror
-    const cmContent = document.querySelector('.cm-content');
-    if (!cmContent) return;
-    
-    // Calculate approximate scroll position (CodeMirror doesn't expose line positions easily)
-    const lineHeight = parseFloat(getComputedStyle(cmContent).lineHeight) || 20;
-    const targetScrollTop = (targetLine - 1) * lineHeight;
-    
-    // Scroll editor
-    editorScroller.scrollTop = targetScrollTop - (editorScroller.clientHeight / 2);
-}
-
-/**
- * Toggle scroll sync on/off
- */
-export function toggleScrollSync() {
-    scrollSyncEnabled = !scrollSyncEnabled;
-    
-    // Update button state
-    const syncBtn = document.querySelector('.diff-controls button[title*="Scroll Sync"]');
-    if (syncBtn) {
-        syncBtn.classList.toggle('active', scrollSyncEnabled);
-    }
-    
-    console.log(`[Diff] Scroll sync ${scrollSyncEnabled ? 'enabled' : 'disabled'}`);
-    window.showToast(`Scroll sync ${scrollSyncEnabled ? 'enabled' : 'disabled'}`, 'success');
+export function cleanupScrollSync() {
+    // No-op — editor scroll sync removed in 0.9.16-1
 }
 
 // ============================================
@@ -638,25 +501,7 @@ export function initDiffKeyboardShortcuts() {
                 setViewMode(currentViewMode === 'unified' ? 'side-by-side' : 'unified');
             }
         }
-        // S - Toggle scroll sync
-        else if (e.key === 's' || e.key === 'S') {
-            if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                e.preventDefault();
-                toggleScrollSync();
-            }
-        }
     });
-}
-
-// ============================================
-// CLEANUP
-// ============================================
-
-export function cleanupScrollSync() {
-    if (editorScrollListener) {
-        clearInterval(editorScrollListener);
-        editorScrollListener = null;
-    }
 }
 
 // ============================================
@@ -669,7 +514,6 @@ window.DiffViewer = {
     nextChange,
     previousChange,
     getViewMode,
-    toggleScrollSync
 };
 
 // ============================================

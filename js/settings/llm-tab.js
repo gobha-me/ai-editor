@@ -149,13 +149,15 @@ export function populateSummarizerSliders() {
 
     // Get auto-tune params for display
     let autoParams = defaults;
-    let autoLabel = 'Small (<32K)';
+    let autoLabel = '';
     let contextTokens = null;
+    let fillPct = 0.50;
     try {
         const info = ChatSummarizer.getAutoParams();
         autoParams = info.params;
         autoLabel = info.label;
         contextTokens = info.contextTokens;
+        fillPct = info.fillPct ?? 0.50;
     } catch { /* ignore — use defaults */ }
 
     // Determine which values to show
@@ -189,7 +191,8 @@ export function populateSummarizerSliders() {
                 ? `${(contextTokens / 1000).toFixed(0)}K tokens`
                 : 'unknown (using conservative defaults)';
             const modeLabel = effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1);
-            infoEl.innerHTML = `🤖 <strong>${modeLabel}</strong> · Tier: ${autoLabel} · Context: ${ctxStr}`;
+            const fillStr = `${(fillPct * 100).toFixed(0)}% fill`;
+            infoEl.innerHTML = `🤖 <strong>${modeLabel}</strong> · ${fillStr} · Context: ${ctxStr}`;
             infoEl.style.display = 'block';
         } else {
             infoEl.style.display = 'none';
