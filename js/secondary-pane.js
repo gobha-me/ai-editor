@@ -65,6 +65,8 @@ export function toggleDiffPane() {
     split.classList.remove('split-active');
     split.classList.remove('secondary-fullscreen');
     split.classList.add('diff-overlay');
+    // Clear any inline width set by the resize manager so CSS class takes effect
+    document.getElementById('secondaryPane').style.width = '';
     isFullscreen = false;
     _updateFullscreenButton();
     
@@ -90,6 +92,8 @@ export function toggleBlamePane() {
     split.classList.remove('split-active');
     split.classList.remove('secondary-fullscreen');
     split.classList.add('diff-overlay');
+    // Clear any inline width set by the resize manager so CSS class takes effect
+    document.getElementById('secondaryPane').style.width = '';
     isFullscreen = false;
     _updateFullscreenButton();
 
@@ -199,12 +203,10 @@ async function renderBlame() {
         const blameData = await Git.getBlame(owner, repo, path, branch);
         _renderBlameView(pane, blameData, path);
     } catch (err) {
-        if (err.code === 'BLAME_UNSUPPORTED' || err.message?.includes('not support')) {
-            // Fall back to file commit history
-            await _renderFileHistory(pane, owner, repo, path, branch);
-        } else {
-            pane.innerHTML = `<div class="diff-empty">⚠️ Blame failed: ${escapeHtml(err.message)}</div>`;
-        }
+        console.warn('[Blame] getBlame failed, falling back to file history:', err.message);
+        // Fall back to file commit history for ANY blame error —
+        // not just UNSUPPORTED (GitHub), also 404 (old Gitea), format errors, etc.
+        await _renderFileHistory(pane, owner, repo, path, branch, err.message);
     }
 }
 
@@ -258,7 +260,7 @@ function _renderBlameView(pane, blameData, path) {
     pane.innerHTML = titleBar + html;
 }
 
-async function _renderFileHistory(pane, owner, repo, path, branch) {
+async function _renderFileHistory(pane, owner, repo, path, branch, fallbackReason = null) {
     pane.innerHTML = '<div class="blame-loading">⏳ Loading file history…</div>';
 
     try {
@@ -273,6 +275,12 @@ async function _renderFileHistory(pane, owner, repo, path, branch) {
             <span class="blame-path">📜 ${escapeHtml(path)} — File History</span>
             <span class="blame-stats">${commits.length} commits</span>
         </div>`;
+
+        if (fallbackReason) {
+            html += `<div style="padding: 0.35rem 0.75rem; font-size: 0.75rem; color: var(--text-muted); background: var(--bg-secondary);">
+                ℹ️ Line blame unavailable (${escapeHtml(fallbackReason.slice(0, 120))}), showing file history instead
+            </div>`;
+        }
 
         html += '<div class="file-history"><table class="history-table">';
         html += '<thead><tr><th>Commit</th><th>Author</th><th>Date</th><th>Message</th></tr></thead><tbody>';
@@ -430,6 +438,12 @@ export function toggleSecondaryFullscreen() {
 function _updateFullscreenButton() {
     const btn = document.getElementById('btnSecondaryFullscreen');
     if (!btn) return;
+    // Diff and blame already fill the editor-split via diff-overlay — fullscreen button is redundant
+    if (secondaryPaneMode === 'diff' || secondaryPaneMode === 'blame') {
+        btn.style.display = 'none';
+        return;
+    }
+    btn.style.display = '';
     btn.textContent = isFullscreen ? '⛶' : '⛶';
     btn.title = isFullscreen ? 'Exit Fullscreen' : 'Toggle Fullscreen';
     btn.classList.toggle('active', isFullscreen);

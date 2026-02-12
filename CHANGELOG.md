@@ -2,6 +2,81 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.14-3] - 2026-02-12
+
+### Fixed — Summarizer Mode Radio Buttons
+
+- Mode radio buttons (Aggressive/Balanced/Conservative/Custom) were
+  non-functional — clicking a different mode re-read the old value from
+  `State.settings.summarizerMode` and re-checked it, ignoring the click
+- Change handler now writes `e.target.value` into State before
+  re-populating the sliders, so mode switches take effect immediately
+
+## [0.9.14-2] - 2026-02-12
+
+### Fixed — Diff/Blame Full-Width & Gitea Blame
+
+- Diff and Blame panes now fill 100% of the editor-split area — cleared
+  inline `style.width` set by the resize manager so the `diff-overlay`
+  CSS class takes effect properly
+- Gitea blame now immediately throws `BLAME_UNSUPPORTED` since the Gitea
+  REST API has no blame endpoint, cleanly triggering the file history
+  fallback instead of hitting a 404
+- Fixed Gitea file history endpoint from `/git/commits` (non-existent)
+  to `/commits` — the correct Gitea API path for listing commits with
+  path filtering
+
+## [0.9.14-1] - 2026-02-12
+
+### Fixed — Diff/Blame Fullscreen Button
+
+- Fullscreen button now hidden for Diff and Blame modes — these already
+  overlay the editor at full width via `diff-overlay`, making the button
+  redundant and confusing
+- Button remains visible for Preview mode where split/fullscreen toggle
+  is meaningful
+
+## [0.9.14] - 2026-02-12
+
+### Changed — Summarizer Modes & Scratchpad Scaling
+
+**Summarizer: named modes replace auto/manual**
+- New modes: 🔥 Aggressive, ⚖️ Balanced, 🧊 Conservative, 🔧 Custom
+- All non-custom modes remain context-window-aware via tier detection
+- Aggressive shifts detected tier toward smaller (prune early, save tokens)
+- Conservative shifts toward larger (preserve history, use more context)
+- Legacy `auto` → `balanced`, `manual` → `custom` (auto-migrated)
+- System prompt now injects "Summary in ~N messages" countdown when
+  approaching summarization — encourages scratchpad note-taking
+
+**Scratchpad scaling by mode**
+- Limits now scale with summarizer mode (tied to context capability):
+  - Aggressive: 8 keys, 400 chars/value, 1.5K auto-inject
+  - Balanced: 15 keys, 1000 chars/value, 4K auto-inject
+  - Conservative: 20 keys, 2000 chars/value, 8K auto-inject
+- Gives large-context models proportionally more working space
+
+### Fixed
+
+**Gitea blame fallback**
+- Blame now falls back to file history for ANY error, not just
+  BLAME_UNSUPPORTED — fixes broken Gitea blame (404 on older instances,
+  format mismatches)
+- Gitea blame normalizer hardened: handles multiple response shapes
+  (`commit.sha` vs `commit_sha`, string vs object lines, etc.)
+- Fallback view now shows reason: "Line blame unavailable (reason)"
+
+### Improved
+
+**Test runner TLDR**
+- Summary + per-suite pills now render at top of page before detailed results
+- Instant pass/fail visibility without scrolling
+
+**Test coverage: mode shifting**
+- New tests for aggressive/conservative tier shifting
+- Legacy mode migration tests (`auto`→`balanced`, `manual`→`custom`)
+- Boundary clamping tests (aggressive on smallest, conservative on largest)
+
 ## [0.9.13] - 2026-02-12
 
 ### Changed — Module Decomposition

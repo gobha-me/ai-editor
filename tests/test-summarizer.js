@@ -1,5 +1,5 @@
 /**
- * Tests for ChatSummarizer — auto-tune tiers, symbol extraction, tool result handling.
+ * Tests for ChatSummarizer — tier detection, mode shifting, symbol extraction, tool result handling.
  * Imports the full module graph (core.js → providers → etc.) which is fine in the browser.
  */
 import { ChatSummarizer } from '../js/chat/summarizer.js';
@@ -8,10 +8,10 @@ import { State } from '../js/core.js';
 const { T } = window;
 
 // ============================================
-// AUTO-TUNE TIERS
+// TIER DETECTION (Balanced mode = no shift)
 // ============================================
 
-T.suite('ChatSummarizer — Auto-Tune Tiers');
+T.suite('ChatSummarizer — Tier Detection');
 
 // Mock State.models for tier testing
 const originalModels = State.models;
@@ -28,8 +28,8 @@ function resetMocks() {
     State.settings.summarizerMode = originalMode;
 }
 
-// Force auto mode for tier tests
-State.settings.summarizerMode = 'auto';
+// Force balanced mode for tier tests (no shift)
+State.settings.summarizerMode = 'balanced';
 
 // Small model (<32K)
 setMockModel(8000);
@@ -67,19 +67,52 @@ T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', '31999 → Small tier
 setMockModel(null);
 T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', 'null context → Small tier fallback');
 
-T.suite('ChatSummarizer — Mode Toggle');
+// ============================================
+// MODE SHIFTING
+// ============================================
 
-// Manual mode should use State.settings.summarizer values
-State.settings.summarizerMode = 'manual';
-State.settings.summarizer = { recentCountBase: 20, threshold: 60 };
-T.eq(ChatSummarizer.mode, 'manual', 'Mode reads from settings');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 20, 'Manual mode uses settings.summarizer value');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 60, 'Manual mode threshold from settings');
+T.suite('ChatSummarizer — Mode Shifting');
 
-// Auto mode should ignore manual settings
+// Aggressive shifts tier +1 (toward smaller)
+setMockModel(128000); // Detected: Large (index 1)
+State.settings.summarizerMode = 'aggressive';
+T.eq(ChatSummarizer.getAutoParams().label, 'Medium (32K+)', 'Aggressive shifts Large → Medium');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 50, 'Aggressive 128K: threshold from Medium tier');
+
+// Conservative shifts tier -1 (toward larger)
+State.settings.summarizerMode = 'conservative';
+T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', 'Conservative shifts Large → Huge');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, 'Conservative 128K: threshold from Huge tier');
+
+// Aggressive on Small (already smallest) — clamped, stays Small
+setMockModel(8000);
+State.settings.summarizerMode = 'aggressive';
+T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', 'Aggressive on Small stays Small (clamped)');
+
+// Conservative on Huge (already largest) — clamped, stays Huge
+setMockModel(1000000);
+State.settings.summarizerMode = 'conservative';
+T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', 'Conservative on Huge stays Huge (clamped)');
+
+// Legacy mode migration
 State.settings.summarizerMode = 'auto';
+T.eq(ChatSummarizer.mode, 'balanced', 'Legacy "auto" migrates to "balanced"');
+State.settings.summarizerMode = 'manual';
+T.eq(ChatSummarizer.mode, 'custom', 'Legacy "manual" migrates to "custom"');
+
+T.suite('ChatSummarizer — Custom Mode');
+
+// Custom mode should use State.settings.summarizer values
+State.settings.summarizerMode = 'custom';
+State.settings.summarizer = { recentCountBase: 20, threshold: 60 };
+T.eq(ChatSummarizer.mode, 'custom', 'Mode reads from settings');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 20, 'Custom mode uses settings.summarizer value');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 60, 'Custom mode threshold from settings');
+
+// Balanced mode should ignore custom settings
+State.settings.summarizerMode = 'balanced';
 setMockModel(128000);
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Auto mode ignores manual settings, uses tier');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Balanced mode ignores custom settings, uses tier');
 
 // ============================================
 // SYMBOL EXTRACTION

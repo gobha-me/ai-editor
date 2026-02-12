@@ -1,18 +1,27 @@
 /**
  * Chat History Summarizer
  * Compresses older chat messages into LLM-generated summaries.
- * Supports auto-tuning based on the active model's context window size.
+ * 
+ * Modes:
+ *   - aggressive:   Summarize early & often — smaller recent windows, lower thresholds
+ *   - balanced:     Default middle ground — matches context window tier directly
+ *   - conservative: Preserve history — larger recent windows, higher thresholds
+ *   - custom:       User-specified manual values
+ * 
+ * All non-custom modes are context-window-aware: detected tier is shifted
+ * up/down depending on mode aggressiveness.
  */
 
 import { State, EventBus, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 
 /**
- * Auto-tune tiers: keyed by context window threshold (tokens).
- * Each tier defines summarizer defaults appropriate for that window size.
+ * Context-window tiers (ordered largest → smallest).
  * Matched top-down — first tier whose threshold the model meets is used.
+ * Tier index is then shifted by mode: aggressive shifts toward smaller,
+ * conservative shifts toward larger.
  */
-const AUTO_TUNE_TIERS = [
+const TIERS = [
     {
         label: 'Huge (500K+)',
         minContext: 500_000,
@@ -35,13 +44,20 @@ const AUTO_TUNE_TIERS = [
     }
 ];
 
+/** Mode → tier index shift. Positive = shift toward smaller (more aggressive). */
+const MODE_SHIFT = {
+    aggressive:   +1,
+    balanced:      0,
+    conservative: -1,
+};
+
 /**
  * Compresses older chat messages into LLM-generated summaries.
  * Keeps last N messages in full, summarizes everything older.
  * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
-    // Defaults — overridden by auto-tune or State.settings.summarizer when present
+    // Defaults — fallback for custom mode when values aren't set
     _defaults: {
         recentCountBase: 10,
         recentCountTools: 24,
@@ -63,38 +79,57 @@ export const ChatSummarizer = {
     },
 
     /**
-     * Get the auto-tuned tier for a given context window size.
+     * Get the detected tier index for a context window size.
      * @param {number|null} contextTokens
-     * @returns {{ label: string, params: Object }}
+     * @returns {number} Index into TIERS array
      */
-    _getTier(contextTokens) {
-        if (!contextTokens) return AUTO_TUNE_TIERS[AUTO_TUNE_TIERS.length - 1]; // smallest
-        return AUTO_TUNE_TIERS.find(t => contextTokens >= t.minContext) || AUTO_TUNE_TIERS[AUTO_TUNE_TIERS.length - 1];
+    _getDetectedTierIndex(contextTokens) {
+        if (!contextTokens) return TIERS.length - 1; // smallest
+        const idx = TIERS.findIndex(t => contextTokens >= t.minContext);
+        return idx >= 0 ? idx : TIERS.length - 1;
     },
 
     /**
-     * Get the effective auto-tuned parameters for the current model.
-     * @returns {{ label: string, contextTokens: number|null, params: Object }}
+     * Get the effective tier after applying mode shift.
+     * @returns {{ label: string, params: Object, tierIndex: number }}
+     */
+    _getEffectiveTier() {
+        const ctx = this._getContextWindow();
+        const detected = this._getDetectedTierIndex(ctx);
+        const mode = this.mode;
+        const shift = MODE_SHIFT[mode] ?? 0;
+        // Clamp shifted index to valid range
+        const effective = Math.max(0, Math.min(TIERS.length - 1, detected + shift));
+        return { ...TIERS[effective], tierIndex: effective, detectedIndex: detected };
+    },
+
+    /**
+     * Get the effective parameters and metadata for the current model + mode.
+     * @returns {{ label: string, contextTokens: number|null, params: Object, mode: string }}
      */
     getAutoParams() {
         const ctx = this._getContextWindow();
-        const tier = this._getTier(ctx);
-        return { label: tier.label, contextTokens: ctx, params: { ...tier.params } };
+        const tier = this._getEffectiveTier();
+        return { label: tier.label, contextTokens: ctx, params: { ...tier.params }, mode: this.mode };
     },
 
-    /** @returns {'auto'|'manual'} */
+    /** @returns {'aggressive'|'balanced'|'conservative'|'custom'} */
     get mode() {
-        return State.settings.summarizerMode || 'auto';
+        const m = State.settings.summarizerMode || 'balanced';
+        // Migrate old values
+        if (m === 'auto') return 'balanced';
+        if (m === 'manual') return 'custom';
+        return m;
     },
 
-    /** Read a summarizer setting with fallback: manual overrides → auto-tune → hardcoded defaults */
+    /** Read a summarizer setting with fallback: custom overrides → tier → hardcoded defaults */
     _cfg(key) {
-        if (this.mode === 'manual') {
+        if (this.mode === 'custom') {
             const s = State.settings.summarizer;
             return (s && s[key] != null) ? s[key] : this._defaults[key];
         }
-        // Auto mode: use tier-based params
-        const tier = this._getTier(this._getContextWindow());
+        // Named mode: use shifted tier params
+        const tier = this._getEffectiveTier();
         return tier.params[key] ?? this._defaults[key];
     },
 
@@ -124,6 +159,31 @@ export const ChatSummarizer = {
         if (!info) return true;
 
         return (total - (info.coveredCount || 0)) >= this.SUMMARY_INTERVAL;
+    },
+
+    /**
+     * Estimate how many user messages until next summary triggers.
+     * Returns null if summarization is not yet relevant (below threshold).
+     * Used to inject a heads-up into the system prompt.
+     * @returns {number|null}
+     */
+    messagesUntilSummary() {
+        const total = State.chatHistory.length;
+        if (total < this.SUMMARY_THRESHOLD - this.SUMMARY_INTERVAL) return null; // too early
+
+        const info = Storage.get('chatSummaryInfo', null);
+        const coveredCount = info?.coveredCount || 0;
+        const messagesSinceLast = total - coveredCount;
+
+        if (total < this.SUMMARY_THRESHOLD) {
+            // Haven't hit initial threshold yet
+            // Rough estimate: ~2 messages per user query (user + assistant)
+            return Math.max(0, Math.ceil((this.SUMMARY_THRESHOLD - total) / 2));
+        }
+
+        // After threshold: count down to next interval
+        const remaining = this.SUMMARY_INTERVAL - messagesSinceLast;
+        return Math.max(0, Math.ceil(remaining / 2)); // /2 because each query ≈ 2 messages
     },
 
     /** Pick cheapest available model (utility model → auto-detect cheap → fallback to primary) */
@@ -341,9 +401,9 @@ SUMMARY:`;
         if (older.length < 5) return null;
 
         console.log(`[ChatSummarizer] Mode: ${this.mode} | Recent: ${this.RECENT_COUNT} | Threshold: ${this.SUMMARY_THRESHOLD} | Compressing ${older.length} messages`);
-        if (this.mode === 'auto') {
+        if (this.mode !== 'custom') {
             const info = this.getAutoParams();
-            console.log(`[ChatSummarizer] Auto-tune tier: ${info.label} (${info.contextTokens ? (info.contextTokens/1000).toFixed(0) + 'K' : 'unknown'} ctx)`);
+            console.log(`[ChatSummarizer] Tier: ${info.label} (${info.contextTokens ? (info.contextTokens/1000).toFixed(0) + 'K' : 'unknown'} ctx) · Mode: ${this.mode}`);
         }
 
         let summary;

@@ -16,9 +16,13 @@
         .test.pass { color: #86efac; }
         .test.fail { color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
         .test .detail { color: #94a3b8; font-size: 0.75rem; margin-top: 0.15rem; }
-        .summary { margin-top: 2rem; padding: 1rem; background: #0f172a; border-radius: 8px; font-size: 1.1rem; }
+        .summary { margin-bottom: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px; font-size: 1.1rem; }
         .summary.all-pass { border: 2px solid #22c55e; }
         .summary.has-fail { border: 2px solid #ef4444; }
+        .suite-summary { margin-bottom: 1.5rem; padding: 0.5rem 1rem; background: #16213e; border-radius: 8px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
+        .suite-summary .suite-pill { padding: 0.2rem 0.5rem; border-radius: 4px; }
+        .suite-summary .suite-pill.pass { background: #166534; color: #86efac; }
+        .suite-summary .suite-pill.fail { background: #7f1d1d; color: #fca5a5; }
         .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
         .badge-pass { background: #166534; color: #86efac; }
         .badge-fail { background: #7f1d1d; color: #fca5a5; }
@@ -26,8 +30,9 @@
 </head>
 <body>
     <h1>⚡ AI Editor — Test Suite</h1>
-    <div id="results"></div>
     <div id="summary"></div>
+    <div id="suite-summary"></div>
+    <div id="results"></div>
 
     <script type="module">
         // Minimal test framework
@@ -178,6 +183,14 @@
             const allGood = totalFail === 0;
             summaryEl.className = `summary ${allGood ? 'all-pass' : 'has-fail'}`;
             summaryEl.innerHTML = `${allGood ? '🎉' : '⚠️'} <strong>${totalPass} passed</strong>, <strong>${totalFail} failed</strong> across ${results.length} suites`;
+
+            // Suite-level TLDR pills
+            const suiteSummaryEl = document.getElementById('suite-summary');
+            suiteSummaryEl.className = 'suite-summary';
+            suiteSummaryEl.innerHTML = results.map(s => {
+                const ok = s.failed === 0;
+                return `<span class="suite-pill ${ok ? 'pass' : 'fail'}">${ok ? '✅' : '❌'} ${s.name} ${s.passed}/${s.passed + s.failed}</span>`;
+            }).join('');
         }
 
         run();

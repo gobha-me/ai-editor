@@ -5,17 +5,34 @@
  * across conversation exchanges. Survives summarization because it lives
  * outside chat history. Cleared on new chat.
  * 
- * Limits: 10 keys max, 500 chars per value, ~2K total auto-injected into
- * system prompt. Over that threshold, only keys are shown and the LLM
- * must explicitly read entries it needs.
+ * Limits scale with summarizer mode (tied to model context capability):
+ *   aggressive:   8 keys,  400 chars/value,  1.5K auto-inject
+ *   balanced:     15 keys, 1000 chars/value,  4K auto-inject
+ *   conservative: 20 keys, 2000 chars/value,  8K auto-inject
+ *   custom:       15 keys, 1000 chars/value,  4K auto-inject
  */
 
 import { State } from '../core.js';
 
-/** Max entries, max chars per entry, auto-inject threshold */
-const MAX_KEYS = 10;
-const MAX_VALUE_LEN = 500;
-const AUTO_INJECT_CHARS = 2000;
+/**
+ * Scratchpad limits per summarizer mode (scaled to context capability).
+ * Duplicated here to avoid circular dependency (summarizer → llm → prompts → scratchpad).
+ */
+const SCRATCHPAD_LIMITS = {
+    aggressive:   { maxKeys: 8,  maxValueLen: 400,  autoInjectChars: 1500 },
+    balanced:     { maxKeys: 15, maxValueLen: 1000, autoInjectChars: 4000 },
+    conservative: { maxKeys: 20, maxValueLen: 2000, autoInjectChars: 8000 },
+    custom:       { maxKeys: 15, maxValueLen: 1000, autoInjectChars: 4000 },
+};
+
+/** Get current limits based on summarizer mode */
+function _limits() {
+    let mode = State.settings.summarizerMode || 'balanced';
+    // Migrate legacy
+    if (mode === 'auto') mode = 'balanced';
+    if (mode === 'manual') mode = 'custom';
+    return SCRATCHPAD_LIMITS[mode] || SCRATCHPAD_LIMITS.balanced;
+}
 
 /**
  * Register scratchpad tools.
@@ -34,18 +51,19 @@ export function registerScratchpadTools(registry) {
         const k = key.trim().slice(0, 60);
         if (!k) return { error: 'Key cannot be empty' };
 
+        const lim = _limits();
         const pad = State.scratchpad || {};
         const existingKeys = Object.keys(pad);
 
         // Enforce max keys (allow overwrite of existing key)
-        if (!pad.hasOwnProperty(k) && existingKeys.length >= MAX_KEYS) {
+        if (!pad.hasOwnProperty(k) && existingKeys.length >= lim.maxKeys) {
             return {
-                error: `Scratchpad full (${MAX_KEYS} entries max). Remove an entry first or overwrite an existing key.`,
+                error: `Scratchpad full (${lim.maxKeys} entries max). Remove an entry first or overwrite an existing key.`,
                 keys: existingKeys
             };
         }
 
-        const val = (content || '').slice(0, MAX_VALUE_LEN);
+        const val = (content || '').slice(0, lim.maxValueLen);
         pad[k] = val;
         State.scratchpad = pad;
 
@@ -53,14 +71,16 @@ export function registerScratchpadTools(registry) {
             success: true,
             key: k,
             length: val.length,
+            max_length: lim.maxValueLen,
             total_entries: Object.keys(pad).length,
-            message: `Wrote "${k}" (${val.length} chars)`
+            max_entries: lim.maxKeys,
+            message: `Wrote "${k}" (${val.length}/${lim.maxValueLen} chars)`
         };
     }, {
         type: 'function',
         function: {
             name: 'scratchpad_write',
-            description: 'Write a note to the scratchpad. Use this to persist important details you\'ll need later — file paths, decisions, architecture notes, issue details, function signatures. Notes survive chat summarization. Max 10 entries, 500 chars each.',
+            description: 'Write a note to the scratchpad. Use this to persist important details you\'ll need later — file paths, decisions, architecture notes, issue details, function signatures. Notes survive chat summarization. Limits scale with model context.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -70,7 +90,7 @@ export function registerScratchpadTools(registry) {
                     },
                     content: {
                         type: 'string',
-                        description: 'The note content (max 500 chars)'
+                        description: 'The note content'
                     }
                 },
                 required: ['key', 'content']
@@ -175,21 +195,61 @@ export function registerScratchpadTools(registry) {
 
 /**
  * Build the scratchpad section for the system prompt.
- * If total content is under AUTO_INJECT_CHARS, dumps everything inline.
+ * If total content is under auto-inject threshold, dumps everything inline.
  * If over, shows only keys with a hint to use scratchpad_read.
+ * Also injects a summary countdown when approaching the next summarization.
  * 
- * @returns {string} Prompt section (empty string if scratchpad is empty)
+ * @returns {string} Prompt section (empty string if scratchpad is empty and no countdown)
  */
 export function buildScratchpadPrompt() {
+    const lim = _limits();
     const pad = State.scratchpad || {};
     const entries = Object.entries(pad);
-    if (entries.length === 0) return '';
+
+    let section = '';
+
+    // Summary countdown — encourage note-taking before summarization
+    // Self-contained estimate to avoid circular dep on ChatSummarizer
+    try {
+        const total = (State.chatHistory || []).length;
+        const mode = State.settings.summarizerMode || 'balanced';
+        // Rough threshold/interval lookup matching summarizer tiers
+        const thresholds = { aggressive: 30, balanced: 50, conservative: 80, custom: 30 };
+        const intervals = { aggressive: 15, balanced: 25, conservative: 40, custom: 15 };
+        const threshold = thresholds[mode] || 50;
+        const interval = intervals[mode] || 25;
+
+        if (total >= threshold - interval) {
+            // Try to read actual coveredCount from storage
+            let coveredCount = 0;
+            try {
+                const info = JSON.parse(localStorage.getItem('chatSummaryInfo') || 'null');
+                coveredCount = info?.coveredCount || 0;
+            } catch { /* ignore */ }
+
+            const messagesSinceLast = total - coveredCount;
+            let remaining;
+            if (total < threshold) {
+                remaining = Math.ceil((threshold - total) / 2);
+            } else {
+                remaining = Math.max(0, Math.ceil((interval - messagesSinceLast) / 2));
+            }
+
+            if (remaining <= 8) {
+                section += `\n\n⚠️ CONTEXT MANAGEMENT: Chat summarization will occur in ~${remaining} message${remaining !== 1 ? 's' : ''}. `
+                    + 'Important details not in the scratchpad may be compressed. '
+                    + `Use scratchpad_write to preserve key info (${lim.maxKeys} entries, ${lim.maxValueLen} chars each).`;
+            }
+        }
+    } catch { /* ignore — summarizer may not be loaded */ }
+
+    if (entries.length === 0) return section;
 
     const totalChars = entries.reduce((sum, [k, v]) => sum + k.length + v.length, 0);
 
-    let section = '\n\n--- SCRATCHPAD (your persistent notes) ---\n';
+    section += '\n\n--- SCRATCHPAD (your persistent notes) ---\n';
 
-    if (totalChars <= AUTO_INJECT_CHARS) {
+    if (totalChars <= lim.autoInjectChars) {
         // Dump everything inline
         for (const [k, v] of entries) {
             section += `[${k}]: ${v}\n`;

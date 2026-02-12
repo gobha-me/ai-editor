@@ -116,14 +116,28 @@ export function showModelCapabilities() {
 
 export function populateSummarizerSliders() {
     const sum = State.settings.summarizer || {};
-    const mode = State.settings.summarizerMode || 'auto';
+    const mode = State.settings.summarizerMode || 'balanced';
+    // Migrate old values on the fly
+    const effectiveMode = mode === 'auto' ? 'balanced' : mode === 'manual' ? 'custom' : mode;
     const defaults = { recentCountBase: 10, recentCountTools: 24, threshold: 30, interval: 15, maxChars: 2000 };
 
     // Set mode radio
-    const autoRadio = document.getElementById('summarizerModeAuto');
-    const manualRadio = document.getElementById('summarizerModeManual');
-    if (autoRadio) autoRadio.checked = (mode === 'auto');
-    if (manualRadio) manualRadio.checked = (mode === 'manual');
+    const radios = {
+        aggressive:   document.getElementById('summarizerModeAggressive'),
+        balanced:     document.getElementById('summarizerModeBalanced'),
+        conservative: document.getElementById('summarizerModeConservative'),
+        custom:       document.getElementById('summarizerModeCustom'),
+    };
+    // Also handle legacy radio IDs
+    const legacyAuto = document.getElementById('summarizerModeAuto');
+    const legacyManual = document.getElementById('summarizerModeManual');
+    
+    for (const [key, el] of Object.entries(radios)) {
+        if (el) el.checked = (effectiveMode === key);
+    }
+    // Legacy fallback
+    if (legacyAuto) legacyAuto.checked = false;
+    if (legacyManual) legacyManual.checked = false;
 
     const sliders = [
         { id: 'settingSumRecentBase', valueId: 'sumRecentBaseValue', key: 'recentCountBase' },
@@ -145,22 +159,22 @@ export function populateSummarizerSliders() {
     } catch { /* ignore — use defaults */ }
 
     // Determine which values to show
-    const isAuto = mode === 'auto';
-    const activeValues = isAuto ? autoParams : {};
+    const isCustom = effectiveMode === 'custom';
+    const activeValues = isCustom ? {} : autoParams;
 
     for (const s of sliders) {
         const el = document.getElementById(s.id);
         const valEl = document.getElementById(s.valueId);
         if (!el) continue;
 
-        const val = isAuto
-            ? (autoParams[s.key] ?? defaults[s.key])
-            : (sum[s.key] != null ? sum[s.key] : defaults[s.key]);
+        const val = isCustom
+            ? (sum[s.key] != null ? sum[s.key] : defaults[s.key])
+            : (autoParams[s.key] ?? defaults[s.key]);
 
         el.value = val;
         if (valEl) valEl.textContent = val;
-        el.disabled = isAuto;
-        el.style.opacity = isAuto ? '0.5' : '1';
+        el.disabled = !isCustom;
+        el.style.opacity = isCustom ? '1' : '0.5';
 
         el.oninput = () => {
             if (valEl) valEl.textContent = el.value;
@@ -170,11 +184,12 @@ export function populateSummarizerSliders() {
     // Auto-tune info badge
     const infoEl = document.getElementById('summarizerAutoInfo');
     if (infoEl) {
-        if (isAuto) {
+        if (!isCustom) {
             const ctxStr = contextTokens
                 ? `${(contextTokens / 1000).toFixed(0)}K tokens`
                 : 'unknown (using conservative defaults)';
-            infoEl.innerHTML = `🤖 <strong>Tier: ${autoLabel}</strong> · Context window: ${ctxStr}`;
+            const modeLabel = effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1);
+            infoEl.innerHTML = `🤖 <strong>${modeLabel}</strong> · Tier: ${autoLabel} · Context: ${ctxStr}`;
             infoEl.style.display = 'block';
         } else {
             infoEl.style.display = 'none';
@@ -182,11 +197,19 @@ export function populateSummarizerSliders() {
     }
 
     // Wire mode toggle (only once)
-    if (autoRadio && !autoRadio._wired) {
-        autoRadio._wired = true;
-        const handler = () => populateSummarizerSliders();
-        autoRadio.addEventListener('change', handler);
-        manualRadio.addEventListener('change', handler);
+    const firstRadio = radios.aggressive || radios.balanced;
+    if (firstRadio && !firstRadio._wired) {
+        firstRadio._wired = true;
+        const handler = (e) => {
+            // Update state from the newly-selected radio before re-populating
+            if (e.target?.value) {
+                State.settings.summarizerMode = e.target.value;
+            }
+            populateSummarizerSliders();
+        };
+        for (const el of Object.values(radios)) {
+            if (el) el.addEventListener('change', handler);
+        }
     }
 }
 
@@ -195,8 +218,8 @@ export function populateSummarizerSliders() {
  * Called from model-manager on model selection change.
  */
 export function updateSummarizerForModel() {
-    const mode = State.settings.summarizerMode || 'auto';
-    if (mode !== 'auto') return; // Manual mode — don't touch sliders
+    const mode = State.settings.summarizerMode || 'balanced';
+    if (mode === 'custom' || mode === 'manual') return; // Custom mode — don't touch sliders
 
     // Re-populate if settings modal is open
     const slidersContainer = document.getElementById('summarizerSliders');

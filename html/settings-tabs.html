@@ -283,16 +283,27 @@
 
         <div class="form-group" style="margin-bottom: 1rem;">
             <label style="font-weight: 600;">Mode:</label>
-            <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem;">
+            <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap;">
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                    <input type="radio" name="summarizerMode" id="summarizerModeAuto" value="auto">
-                    🤖 Auto-tune (from model context window)
+                    <input type="radio" name="summarizerMode" id="summarizerModeAggressive" value="aggressive">
+                    🔥 Aggressive
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                    <input type="radio" name="summarizerMode" id="summarizerModeManual" value="manual">
-                    🔧 Manual
+                    <input type="radio" name="summarizerMode" id="summarizerModeBalanced" value="balanced">
+                    ⚖️ Balanced
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                    <input type="radio" name="summarizerMode" id="summarizerModeConservative" value="conservative">
+                    🧊 Conservative
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                    <input type="radio" name="summarizerMode" id="summarizerModeCustom" value="custom">
+                    🔧 Custom
                 </label>
             </div>
+            <small style="display: block; color: var(--text-muted); margin-top: 0.35rem;">
+                All modes auto-tune to your model's context window. Aggressive summarizes early (saves tokens), Conservative preserves more history.
+            </small>
             <div id="summarizerAutoInfo" style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg-secondary); border-radius: 6px; font-size: var(--font-sm); color: var(--text-muted); display: none;">
                 <!-- Populated dynamically with tier info -->
             </div>

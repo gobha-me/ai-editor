@@ -101,7 +101,7 @@ const State = {
         theme: 'dark',
 
         // Summarizer Configuration
-        summarizerMode: 'auto',    // 'auto' (tier from context window) or 'manual'
+        summarizerMode: 'balanced',    // 'aggressive' | 'balanced' | 'conservative' | 'custom'
         summarizer: {
             recentCountBase: 10,   // Messages kept verbatim (no tool calls active)
             recentCountTools: 24,  // Messages kept when tool calls are in recent history
