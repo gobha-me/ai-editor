@@ -16,7 +16,7 @@ import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-pan
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
 import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile } from './file-tree.js';
-import { togglePreviewPane, toggleDiffPane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
+import { togglePreviewPane, toggleDiffPane, toggleBlamePane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
 import { 
     toggleSidebar, 
     toggleChat, 
@@ -348,6 +348,15 @@ function setupKeyboardShortcuts() {
             }
         }
 
+        // Ctrl+Shift+B - Toggle blame
+        if (e.ctrlKey && e.shiftKey && e.key === 'B') {
+            e.preventDefault();
+            const btn = document.getElementById('btnToggleBlame');
+            if (btn && !btn.disabled) {
+                toggleBlamePane();
+            }
+        }
+
         // Ctrl+Shift+L - Toggle line numbers
         if (e.ctrlKey && e.shiftKey && e.key === 'L') {
             e.preventDefault();
@@ -553,6 +562,7 @@ function setupEventListeners() {
     safeAdd('btnToggleLineNumbers', 'click', toggleLineNumbers);
     safeAdd('btnTogglePreview', 'click', togglePreviewPane);
     safeAdd('btnToggleDiff', 'click', toggleDiffPane);
+    safeAdd('btnToggleBlame', 'click', toggleBlamePane);
 
     // Chat
     safeAdd('btnSend', 'click', () => {

@@ -339,6 +339,8 @@ Plugins are registered in Settings → Plugins. See `plugins/venice-ai.js` for a
 - [x] LLM project switching — `list_projects` and `set_active_project` (v0.9.8-4)
 - [x] New Project button — create repos from the UI (v0.9.8-4)
 - [x] Summarizer auto-tune — scales with model context window, preserves tool results (v0.9.9)
+- [x] Git blame / history view — line-by-line blame with commit-colored gutter (v0.9.10)
+- [x] Test suite — browser-based tests for EditTracker, retry, summarizer, blame (v0.9.10)
 - [ ] IndexedDB draft storage (replace localStorage) — use Settings → Storage tab to monitor usage
 - [x] CI/CD status polling in PR modal (v0.9.6)
 - [ ] Mobile responsive layout

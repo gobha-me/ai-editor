@@ -228,6 +228,51 @@ const giteaProvider = {
     },
 
     // ========================================
+    // BLAME & FILE HISTORY
+    // ========================================
+
+    async getBlame(connection, owner, repo, path, ref = 'main') {
+        // Gitea 1.22+: GET /repos/{owner}/{repo}/git/blames/{ref}/{path}
+        const data = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/git/blames/${encodeURIComponent(ref)}/${path}`);
+
+        // Normalize Gitea blame format: [{ sha, lines, commit: { author, committer, message, sha } }]
+        let lineNum = 1;
+        const ranges = (data || []).map(part => {
+            const c = part.commit || {};
+            const a = c.author || {};
+            const range = {
+                commit: {
+                    sha: c.sha || part.sha || '',
+                    shortSha: (c.sha || part.sha || '').slice(0, 7),
+                    message: (c.message || '').split('\n')[0],
+                    author: a.name || '',
+                    email: a.email || '',
+                    date: a.date || ''
+                },
+                startLine: lineNum,
+                lines: part.lines || []
+            };
+            lineNum += range.lines.length;
+            return range;
+        });
+        return { ranges };
+    },
+
+    async getFileCommits(connection, owner, repo, path, ref = 'main') {
+        const data = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/git/commits?sha=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}&limit=50`);
+        return (data || []).map(c => ({
+            sha: c.sha,
+            shortSha: (c.sha || '').slice(0, 7),
+            message: (c.commit?.message || '').split('\n')[0],
+            author: c.commit?.author?.name || c.author?.login || '',
+            email: c.commit?.author?.email || '',
+            date: c.commit?.author?.date || c.created || ''
+        }));
+    },
+
+    // ========================================
     // FILE CRUD
     // ========================================
 

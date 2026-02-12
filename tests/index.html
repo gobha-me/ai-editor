@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Editor — Test Suite</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Fira Code', 'Cascadia Code', monospace; background: #1a1a2e; color: #e0e0e0; padding: 2rem; }
+        h1 { color: #7c3aed; margin-bottom: 1rem; }
+        .suite { margin: 1rem 0; padding: 1rem; background: #16213e; border-radius: 8px; border-left: 4px solid #334155; }
+        .suite.pass { border-left-color: #22c55e; }
+        .suite.fail { border-left-color: #ef4444; }
+        .suite-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .test { padding: 0.25rem 0.5rem; margin: 0.15rem 0; border-radius: 4px; font-size: 0.85rem; }
+        .test.pass { color: #86efac; }
+        .test.fail { color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
+        .test .detail { color: #94a3b8; font-size: 0.75rem; margin-top: 0.15rem; }
+        .summary { margin-top: 2rem; padding: 1rem; background: #0f172a; border-radius: 8px; font-size: 1.1rem; }
+        .summary.all-pass { border: 2px solid #22c55e; }
+        .summary.has-fail { border: 2px solid #ef4444; }
+        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        .badge-pass { background: #166534; color: #86efac; }
+        .badge-fail { background: #7f1d1d; color: #fca5a5; }
+    </style>
+</head>
+<body>
+    <h1>⚡ AI Editor — Test Suite</h1>
+    <div id="results"></div>
+    <div id="summary"></div>
+
+    <script type="module">
+        // Minimal test framework
+        const results = [];
+        let currentSuite = null;
+
+        window.T = {
+            suite(name) {
+                currentSuite = { name, tests: [], passed: 0, failed: 0 };
+                results.push(currentSuite);
+            },
+
+            assert(condition, label, detail = '') {
+                const pass = !!condition;
+                currentSuite.tests.push({ label, pass, detail });
+                if (pass) currentSuite.passed++;
+                else currentSuite.failed++;
+            },
+
+            eq(actual, expected, label) {
+                const pass = actual === expected;
+                const detail = pass ? '' : `Expected: ${JSON.stringify(expected)}, Got: ${JSON.stringify(actual)}`;
+                this.assert(pass, label, detail);
+            },
+
+            deepEq(actual, expected, label) {
+                const pass = JSON.stringify(actual) === JSON.stringify(expected);
+                const detail = pass ? '' : `Expected: ${JSON.stringify(expected)}, Got: ${JSON.stringify(actual)}`;
+                this.assert(pass, label, detail);
+            },
+
+            throws(fn, label) {
+                let threw = false;
+                try { fn(); } catch { threw = true; }
+                this.assert(threw, label);
+            },
+
+            async throwsAsync(fn, label) {
+                let threw = false;
+                try { await fn(); } catch { threw = true; }
+                this.assert(threw, label);
+            }
+        };
+
+        // Import and run test modules
+        async function run() {
+            const errors = [];
+
+            try {
+                await import('./test-edit-tracker.js');
+            } catch (e) { errors.push(['EditTracker', e]); }
+
+            try {
+                await import('./test-retry.js');
+            } catch (e) { errors.push(['Retry', e]); }
+
+            try {
+                await import('./test-summarizer.js');
+            } catch (e) { errors.push(['Summarizer', e]); }
+
+            try {
+                await import('./test-blame-normalize.js');
+            } catch (e) { errors.push(['Blame', e]); }
+
+            if (errors.length > 0) {
+                const container = document.getElementById('results');
+                for (const [name, err] of errors) {
+                    container.innerHTML += `<div class="suite fail">
+                        <div class="suite-name">⚠️ ${name} — IMPORT FAILED</div>
+                        <div class="test fail">❌ ${err.message}</div>
+                        <div class="test fail" style="font-size:0.75rem;color:#94a3b8;white-space:pre-wrap;">${err.stack || ''}</div>
+                    </div>`;
+                }
+            }
+
+            render();
+        }
+
+        function render() {
+            const container = document.getElementById('results');
+            let totalPass = 0, totalFail = 0;
+
+            for (const suite of results) {
+                const allPass = suite.failed === 0;
+                let html = `<div class="suite ${allPass ? 'pass' : 'fail'}">`;
+                html += `<div class="suite-name">${suite.name} <span class="badge ${allPass ? 'badge-pass' : 'badge-fail'}">${suite.passed}/${suite.passed + suite.failed}</span></div>`;
+
+                for (const t of suite.tests) {
+                    html += `<div class="test ${t.pass ? 'pass' : 'fail'}">`;
+                    html += `${t.pass ? '✅' : '❌'} ${t.label}`;
+                    if (t.detail) html += `<div class="detail">${t.detail}</div>`;
+                    html += `</div>`;
+                }
+
+                html += `</div>`;
+                container.innerHTML += html;
+                totalPass += suite.passed;
+                totalFail += suite.failed;
+            }
+
+            const summaryEl = document.getElementById('summary');
+            const allGood = totalFail === 0;
+            summaryEl.className = `summary ${allGood ? 'all-pass' : 'has-fail'}`;
+            summaryEl.innerHTML = `${allGood ? '🎉' : '⚠️'} <strong>${totalPass} passed</strong>, <strong>${totalFail} failed</strong> across ${results.length} suites`;
+        }
+
+        run();
+    </script>
+</body>
+</html>

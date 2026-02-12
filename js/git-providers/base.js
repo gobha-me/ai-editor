@@ -158,6 +158,26 @@ const BASE_GIT_PROVIDER = {
     },
 
     // ========================================
+    // BLAME & FILE HISTORY
+    // ========================================
+
+    /**
+     * Get line-by-line blame data for a file.
+     * @returns {{ ranges: Array<{ commit: { sha, shortSha, message, author, email, date }, lines: string[] }> }}
+     */
+    async getBlame(connection, owner, repo, path, ref = 'main') {
+        notSupported(this.name, 'getBlame');
+    },
+
+    /**
+     * Get commit history for a specific file.
+     * @returns {Array<{ sha, shortSha, message, author, email, date }>}
+     */
+    async getFileCommits(connection, owner, repo, path, ref = 'main') {
+        notSupported(this.name, 'getFileCommits');
+    },
+
+    // ========================================
     // FILE CRUD
     // ========================================
 

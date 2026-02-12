@@ -799,3 +799,173 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
+
+/* ============================================
+   BLAME VIEW
+   ============================================ */
+
+.blame-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: var(--font-base);
+}
+
+.blame-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.blame-path {
+    font-weight: 600;
+}
+
+.blame-stats {
+    color: var(--text-muted);
+}
+
+.blame-view {
+    overflow: auto;
+    height: calc(100% - 2.25rem);
+}
+
+.blame-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono, 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.blame-table tr {
+    border-bottom: none;
+}
+
+.blame-ln {
+    width: 3.5em;
+    min-width: 3.5em;
+    text-align: right;
+    padding: 0 0.5em 0 0.25em;
+    color: var(--text-muted);
+    user-select: none;
+    vertical-align: top;
+    opacity: 0.6;
+    border-right: 1px solid var(--border);
+}
+
+.blame-gutter {
+    width: 18em;
+    min-width: 14em;
+    max-width: 22em;
+    padding: 0 0.5em;
+    vertical-align: top;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-right: 1px solid var(--border);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.blame-sha {
+    font-family: var(--font-mono, monospace);
+    color: var(--accent);
+    cursor: default;
+    margin-right: 0.5em;
+}
+
+.blame-author {
+    margin-right: 0.5em;
+    font-weight: 500;
+}
+
+.blame-date {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.blame-code {
+    padding: 0 0.5em;
+    vertical-align: top;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.blame-code pre {
+    margin: 0;
+    padding: 0;
+    background: none;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+}
+
+/* File History (fallback for GitHub) */
+
+.file-history {
+    overflow: auto;
+    height: calc(100% - 2.25rem);
+    padding: 0.5rem;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-sm);
+}
+
+.history-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary, var(--bg-secondary));
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--text-secondary);
+    position: sticky;
+    top: 0;
+}
+
+.history-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.history-sha code {
+    font-family: var(--font-mono, monospace);
+    color: var(--accent);
+    font-size: 12px;
+}
+
+.history-author {
+    white-space: nowrap;
+    max-width: 10em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-date {
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.history-msg {
+    word-break: break-word;
+}
+
+@media (max-width: 1200px) {
+    .blame-gutter {
+        min-width: 10em;
+        max-width: 14em;
+    }
+}

@@ -2,6 +2,43 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.10] - 2026-02-11
+
+### Added
+- **Git blame view** — line-by-line blame data displayed in the secondary pane
+  - Gitea: Full blame via `GET /repos/{owner}/{repo}/git/blames/{ref}/{path}` (requires Gitea 1.22+)
+  - GitLab: Full blame via `GET /projects/:id/repository/files/:path/blame`
+  - GitHub: Falls back to file commit history (REST API lacks blame endpoint)
+  - Color-coded by commit with alternating backgrounds for visual range separation
+  - Blame gutter shows short SHA (with commit message tooltip), author, and relative date
+  - Stats bar: total lines and unique commit count
+  - Keyboard shortcut: `Ctrl+Shift+B`
+  - Toolbar button: 🔍 Blame (disabled when no file is open)
+  - Auto-refreshes on tab switch
+- **File commit history** — `getFileCommits()` API across all three providers
+  - Gitea: `GET /repos/{owner}/{repo}/git/commits?path=...`
+  - GitHub: `GET /repos/{owner}/{repo}/commits?path=...`
+  - GitLab: `GET /projects/:id/repository/commits?path=...`
+  - Used as fallback when blame is unavailable, displayed as a sortable table
+- **Test suite** — browser-based test runner with 4 test modules
+  - `tests/index.html` — minimal test framework (assert, eq, deepEq, throws/throwsAsync)
+  - `tests/test-edit-tracker.mjs` — EditTracker stale detection, multi-edit tracking, cross-file isolation
+  - `tests/test-retry.mjs` — isRetryable classification (transient vs permanent errors, all error patterns)
+  - `tests/test-summarizer.mjs` — auto-tune tier boundaries, mode toggle, _extractSymbols (JS/Python/Rust), _summarizeToolResult (file/tree/search/error results)
+  - `tests/test-blame-normalize.mjs` — blame export validation and guard checks
+
+### Files
+- `js/git-providers/base.js` — `getBlame()`, `getFileCommits()` base methods
+- `js/git-providers/gitea.js` — `getBlame()` (blame API), `getFileCommits()` (commits API)
+- `js/git-providers/github.js` — `getBlame()` (throws BLAME_UNSUPPORTED), `getFileCommits()` (commits API)
+- `js/git-providers/gitlab.js` — `getBlame()` (blame API), `getFileCommits()` (commits API)
+- `js/git.js` — `getBlame()`, `getFileCommits()` facade methods
+- `js/secondary-pane.js` — `toggleBlamePane()`, `renderBlame()`, `_renderBlameView()`, `_renderFileHistory()`, `_shortAuthor()`, `_shortDate()`, blame color palette
+- `js/app.js` — blame import, `Ctrl+Shift+B` shortcut, blame button wiring
+- `html/editor-panel.html` — 🔍 Blame toolbar button
+- `css/editor.css` — blame-view, blame-table, blame-gutter, file-history, history-table styles
+- `tests/` — new test directory with runner and 4 test modules
+
 ## [0.9.9] - 2026-02-11
 
 ### Added

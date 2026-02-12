@@ -315,6 +315,50 @@ const gitlabProvider = {
     },
 
     // ========================================
+    // BLAME & FILE HISTORY
+    // ========================================
+
+    async getBlame(connection, owner, repo, path, ref = 'main') {
+        // GitLab: GET /projects/:id/repository/files/:path/blame?ref=branch
+        const data = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/files/${encodePath(path)}/blame?ref=${encodeURIComponent(ref)}`);
+
+        // Normalize GitLab blame format: [{ commit: { id, message, authored_date, author_name, ... }, lines: [...] }]
+        let lineNum = 1;
+        const ranges = (data || []).map(part => {
+            const c = part.commit || {};
+            const range = {
+                commit: {
+                    sha: c.id || '',
+                    shortSha: c.short_id || (c.id || '').slice(0, 7),
+                    message: (c.message || '').split('\n')[0],
+                    author: c.author_name || '',
+                    email: c.author_email || '',
+                    date: c.authored_date || ''
+                },
+                startLine: lineNum,
+                lines: part.lines || []
+            };
+            lineNum += range.lines.length;
+            return range;
+        });
+        return { ranges };
+    },
+
+    async getFileCommits(connection, owner, repo, path, ref = 'main') {
+        const data = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/commits?ref_name=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}&per_page=50`);
+        return (data || []).map(c => ({
+            sha: c.id,
+            shortSha: c.short_id || (c.id || '').slice(0, 7),
+            message: (c.message || '').split('\n')[0],
+            author: c.author_name || '',
+            email: c.author_email || '',
+            date: c.authored_date || ''
+        }));
+    },
+
+    // ========================================
     // FILE CRUD
     // ========================================
 

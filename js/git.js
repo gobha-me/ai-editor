@@ -157,6 +157,20 @@ const Git = {
     },
 
     // ========================================
+    // BLAME & FILE HISTORY
+    // ========================================
+
+    async getBlame(owner, repo, path, ref = 'main') {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getBlame(connection, owner, repo, path, ref);
+    },
+
+    async getFileCommits(owner, repo, path, ref = 'main') {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getFileCommits(connection, owner, repo, path, ref);
+    },
+
+    // ========================================
     // FILE CRUD
     // ========================================
 

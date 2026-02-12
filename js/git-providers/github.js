@@ -320,6 +320,30 @@ const githubProvider = {
     },
 
     // ========================================
+    // BLAME & FILE HISTORY
+    // ========================================
+
+    async getBlame(connection, owner, repo, path, ref = 'main') {
+        // GitHub REST API does not provide line-by-line blame
+        const err = new Error('GitHub REST API does not support line-by-line blame. Use file history instead.');
+        err.code = 'BLAME_UNSUPPORTED';
+        throw err;
+    },
+
+    async getFileCommits(connection, owner, repo, path, ref = 'main') {
+        const data = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}&per_page=50`);
+        return (data || []).map(c => ({
+            sha: c.sha,
+            shortSha: (c.sha || '').slice(0, 7),
+            message: (c.commit?.message || '').split('\n')[0],
+            author: c.commit?.author?.name || c.author?.login || '',
+            email: c.commit?.author?.email || '',
+            date: c.commit?.author?.date || ''
+        }));
+    },
+
+    // ========================================
     // FILE CRUD
     // ========================================
 
