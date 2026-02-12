@@ -89,7 +89,7 @@ export function clearAllDrafts() {
         return;
     }
     
-    if (!confirm(`Clear ALL ${count} draft(s) from localStorage? This cannot be undone.\n\nThis will remove any unsaved changes stored locally.`)) {
+    if (!confirm(`Clear ALL ${count} draft(s) from storage? This cannot be undone.\n\nThis will remove any unsaved changes stored locally.`)) {
         return;
     }
     
@@ -110,8 +110,8 @@ export function clearAllDrafts() {
     // Also clear the in-memory drafts object
     State.drafts = {};
     
-    showToast(`Cleared ${count} draft(s) from localStorage`, 'success');
-    console.log(`[DRAFTS] Cleared ${count} drafts from localStorage`);
+    showToast(`Cleared ${count} draft(s)`, 'success');
+    console.log(`[DRAFTS] Cleared ${count} drafts`);
 }
 
 /**

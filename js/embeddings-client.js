@@ -97,7 +97,8 @@ const EmbeddingsClient = {
         
         // Dynamically import Transformers.js — try local vendor first, then CDN
         try {
-            transformers = await import('/vendor/transformers.min.js');
+            const vendorUrl = new URL('vendor/transformers.min.js', document.baseURI).href;
+            transformers = await import(vendorUrl);
         } catch (_) {
             transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         }

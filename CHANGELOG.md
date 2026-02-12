@@ -2,6 +2,69 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.11-1] - 2026-02-12
+
+### Fixed
+- **IDB test stability** — `test-idb.js` now clears IDB on startup to prevent stale data from prior runs causing false failures (IndexedDB persists across page reloads unlike in-memory state)
+
+### Added
+- **External dependency audit test** (`test-dependencies.js`) — SCIF readiness validation
+  - Manifest of all 5 external dependencies with local/CDN paths and bundling status
+  - Local vendor file probing (HEAD fetch for each vendor path)
+  - CDN reachability check (5s timeout, no-cors mode)
+  - Runtime global verification (marked, DOMPurify, JSZip)
+  - SCIF summary: asserts all 4 required deps are Docker-bundled, flags 1 optional dep (Transformers.js)
+
+## [0.9.11] - 2026-02-12
+
+### Added
+- **IndexedDB storage backend** — primary persistence layer replacing localStorage
+  - `js/storage/idb.js` — async key-value wrapper with single `kv` object store
+  - Methods: `open()`, `get()`, `set()`, `remove()`, `keys(prefix)`, `getAll()`, `setMany()`, `clear()`, `estimate()`
+  - Automatic migration from localStorage to IndexedDB on first load
+  - In-memory `Map` cache keeps `Storage.get()` synchronous — zero API changes for callers
+  - Write-through: `set()` writes to cache + IDB (async) + localStorage (fallback)
+  - `remove()` cleans all three layers: cache, IDB, localStorage
+- **Storage.keys(prefix)** — list all keys with optional prefix filter (synchronous, reads from cache)
+- **Storage.isIDBActive** — boolean property indicating whether IndexedDB is active
+- **Large draft support** — drafts >512KB now saved to IDB (previously skipped entirely)
+- **New tests** — `test-idb.js` (IDB low-level operations) and `test-storage.js` (cache layer, keys, drafts)
+
+### Changed
+- **Storage.init()** — new async initialization step called before `loadSettings()` in app boot
+  - Loads IDB → cache on startup; falls back to localStorage → cache if IDB unavailable
+  - Migration runs once: all `ai-editor-*` localStorage keys copied to IDB, flag set
+- **Storage Metrics tab** — now reads from in-memory cache instead of iterating localStorage
+  - Shows active backend (IndexedDB or localStorage) in total label and quota section
+  - Tab description updated to reflect IDB-primary architecture
+- **ContextManager.cleanupOrphanedIndexes()** — uses `Storage.keys()` / `Storage.remove()` instead of direct `localStorage` iteration
+- **SearchManager** — ported from raw `localStorage` to `Storage` API with one-time migration of legacy unprefixed `searchHistory` key
+
+### Fixed
+- **EditTracker** — same-millisecond timestamp collision caused `checkStale()` to miss edits
+  - Added monotonic `_seq` counter for guaranteed logical ordering
+  - `checkStale()` now filters on `e.seq > lastRead.seq` instead of timestamp comparison
+  - Delta-zero edits (same-size replacements) no longer falsely trigger staleness
+- **Vendor bundle paths** — hardcoded absolute `/vendor/` paths broke deployments at sub-paths (e.g. `/editor-dev/`)
+  - `editor.js`: CodeMirror bundle import now resolves via `document.baseURI` instead of absolute `/vendor/`
+  - `embeddings-client.js`: Transformers.js import uses same baseURI resolution
+
+### Files
+- `js/storage/idb.js` — NEW: IndexedDB wrapper module
+- `js/core.js` — Storage object rewritten: _cache Map, init(), keys(), IDB integration
+- `js/app.js` — `await Storage.init()` added to boot sequence before `loadSettings()`
+- `js/context-manager.js` — `cleanupOrphanedIndexes()` uses Storage API
+- `js/managers/search-manager.js` — imports Storage, ported from raw localStorage
+- `js/storage-metrics.js` — `measureStorage()` reads from cache, IDB-aware rendering
+- `js/ui-helpers.js` — updated string references (localStorage → storage)
+- `js/tools/edit-tracker.js` — `_seq` counter, `clearAll()` resets seq
+- `html/settings-tabs.html` — updated tab description and heading
+- `js/editor.js` — vendor bundle path: absolute → baseURI-relative
+- `js/embeddings-client.js` — vendor transformers path: absolute → baseURI-relative
+- `tests/test-idb.js` — NEW: IDB wrapper tests (open, CRUD, keys, setMany, clear)
+- `tests/test-storage.js` — NEW: Storage cache layer tests (keys, consistency, drafts)
+- `tests/index.html` — added IDB and Storage test imports
+
 ## [0.9.10] - 2026-02-11
 
 ### Added

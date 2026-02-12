@@ -4,7 +4,7 @@
  * ES module — import { SearchManager } from './managers/search-manager.js'
  */
 
-import { EventBus } from '../core.js';
+import { EventBus, Storage } from '../core.js';
 
 class _SearchManager {
     constructor() {
@@ -108,7 +108,7 @@ class _SearchManager {
 
     clearHistory() {
         this.searchHistory = [];
-        try { localStorage.removeItem('searchHistory'); } catch {}
+        Storage.remove('searchHistory');
         EventBus.emit('search:historyUpdated', this.searchHistory);
     }
 
@@ -221,14 +221,21 @@ class _SearchManager {
             { pattern, options, timestamp: Date.now() },
             ...this.searchHistory.filter(h => h.pattern !== pattern)
         ].slice(0, this.maxHistory);
-        try { localStorage.setItem('searchHistory', JSON.stringify(this.searchHistory)); } catch {}
+        Storage.set('searchHistory', this.searchHistory);
     }
 
     _loadHistory() {
+        // Migrate legacy key (no prefix) → Storage API (prefixed)
         try {
-            const h = localStorage.getItem('searchHistory');
-            if (h) this.searchHistory = JSON.parse(h);
+            const legacy = localStorage.getItem('searchHistory');
+            if (legacy) {
+                this.searchHistory = JSON.parse(legacy);
+                Storage.set('searchHistory', this.searchHistory);
+                localStorage.removeItem('searchHistory');
+                return;
+            }
         } catch {}
+        this.searchHistory = Storage.get('searchHistory', []);
     }
 }
 

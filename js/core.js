@@ -161,10 +161,124 @@ const State = {
 // STORAGE
 // ============================================
 
+/**
+ * Unified storage layer — synchronous reads, async persistence.
+ * 
+ * Architecture (0.9.11):
+ *   _cache (Map)     — source of truth for reads, always synchronous
+ *   IndexedDB        — primary persistent backend (no quota issues)
+ *   localStorage     — write-through fallback (quota-limited, eviction)
+ * 
+ * On init(): IDB data is loaded into _cache. If IDB is unavailable
+ * (incognito, unsupported), localStorage populates _cache instead.
+ * 
+ * get() reads from _cache, never touches disk.
+ * set() writes to _cache + fires async IDB write + tries localStorage.
+ * remove() deletes from _cache + IDB + localStorage.
+ * 
+ * Migration: On first init(), localStorage data is bulk-copied to IDB.
+ */
 const Storage = {
     _prefix: 'ai-editor-',
+    _cache: new Map(),
+    _idb: null,             // IDB module reference (lazy-loaded)
+    _idbReady: false,       // true after successful IDB init
+    _initPromise: null,     // Deduplication for concurrent init calls
+
+    /**
+     * Initialize storage. Must be awaited before loadSettings().
+     * Loads IDB → cache, or falls back to localStorage → cache.
+     * Runs migration from localStorage to IDB on first load.
+     * @returns {Promise<void>}
+     */
+    async init() {
+        if (this._initPromise) return this._initPromise;
+        this._initPromise = this._doInit();
+        return this._initPromise;
+    },
+
+    async _doInit() {
+        try {
+            const { IDB } = await import('./storage/idb.js');
+            await IDB.open();
+            this._idb = IDB;
+
+            // Migration: copy localStorage → IDB on first run
+            const migrationFlag = 'ai-editor-idb-migrated';
+            if (!localStorage.getItem(migrationFlag)) {
+                const migrated = await this._migrateToIDB();
+                localStorage.setItem(migrationFlag, '1');
+                console.log(`[Storage] Migration complete: ${migrated} keys copied to IndexedDB`);
+            }
+
+            // Hydrate in-memory cache from IDB
+            const all = await IDB.getAll();
+            for (const [key, value] of all) {
+                this._cache.set(key, value);
+            }
+
+            this._idbReady = true;
+            console.log(`[Storage] IndexedDB ready — ${this._cache.size} keys cached`);
+        } catch (e) {
+            console.warn('[Storage] IndexedDB unavailable, using localStorage fallback:', e.message);
+            // Populate cache from localStorage
+            this._loadCacheFromLocalStorage();
+        }
+    },
+
+    /**
+     * Migrate all ai-editor-* keys from localStorage to IndexedDB.
+     * @returns {Promise<number>} Number of keys migrated
+     */
+    async _migrateToIDB() {
+        const entries = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const rawKey = localStorage.key(i);
+            if (!rawKey || !rawKey.startsWith(this._prefix)) continue;
+
+            const key = rawKey.slice(this._prefix.length);
+            try {
+                const value = JSON.parse(localStorage.getItem(rawKey));
+                entries.push([key, value]);
+            } catch {
+                // Skip unparseable entries
+                console.warn(`[Storage] Migration: skipped unparseable key "${rawKey}"`);
+            }
+        }
+
+        if (entries.length > 0 && this._idb) {
+            return this._idb.setMany(entries);
+        }
+        return 0;
+    },
+
+    /**
+     * Fallback: populate cache from localStorage when IDB is unavailable.
+     */
+    _loadCacheFromLocalStorage() {
+        for (let i = 0; i < localStorage.length; i++) {
+            const rawKey = localStorage.key(i);
+            if (!rawKey || !rawKey.startsWith(this._prefix)) continue;
+
+            const key = rawKey.slice(this._prefix.length);
+            try {
+                this._cache.set(key, JSON.parse(localStorage.getItem(rawKey)));
+            } catch {
+                // Skip
+            }
+        }
+        console.log(`[Storage] localStorage fallback — ${this._cache.size} keys cached`);
+    },
+
+    // --- Synchronous read API (unchanged signature) ---
 
     get(key, defaultValue = null) {
+        // Primary: in-memory cache (populated by init)
+        if (this._cache.has(key)) {
+            return this._cache.get(key);
+        }
+        // Pre-init fallback: read directly from localStorage
+        // This ensures module-scope code that runs before init() still works
         try {
             const item = localStorage.getItem(this._prefix + key);
             return item ? JSON.parse(item) : defaultValue;
@@ -174,7 +288,28 @@ const Storage = {
         }
     },
 
+    // --- Write API (cache + async IDB + localStorage write-through) ---
+
     set(key, value) {
+        // 1. Always update in-memory cache (immediate, synchronous)
+        this._cache.set(key, value);
+
+        // 2. Async persist to IDB (fire-and-forget)
+        if (this._idbReady && this._idb) {
+            this._idb.set(key, value).catch(e =>
+                console.warn(`[Storage] IDB write failed for "${key}":`, e.message)
+            );
+        }
+
+        // 3. Write-through to localStorage (with quota handling)
+        this._writeLocalStorage(key, value);
+    },
+
+    /**
+     * Write to localStorage with quota-exceeded recovery.
+     * This is best-effort — IDB is the authoritative store.
+     */
+    _writeLocalStorage(key, value) {
         try {
             localStorage.setItem(this._prefix + key, JSON.stringify(value));
         } catch (e) {
@@ -201,7 +336,7 @@ const Storage = {
                     // Pruning failed — try draft eviction
                 }
 
-                // Recovery pass 2: evict oldest drafts
+                // Recovery pass 2: evict oldest drafts from localStorage
                 try {
                     const drafts = this._getDraftsByAge();
                     let evicted = 0;
@@ -220,7 +355,12 @@ const Storage = {
                     // Draft eviction failed — fall through
                 }
 
-                console.warn('[Storage] localStorage quota exceeded. Data not saved for key:', key);
+                // localStorage is full but that's OK — IDB has the data
+                if (this._idbReady) {
+                    console.debug(`[Storage] localStorage full for "${key}" — data safe in IndexedDB`);
+                } else {
+                    console.warn('[Storage] localStorage quota exceeded. Data not saved for key:', key);
+                }
             } else {
                 console.error('Storage set error:', e);
             }
@@ -229,6 +369,7 @@ const Storage = {
 
     /**
      * List all draft keys sorted by age (oldest first) for eviction.
+     * Uses localStorage directly since this is a localStorage recovery path.
      * @returns {Array<{key: string, timestamp: number}>}
      */
     _getDraftsByAge() {
@@ -251,24 +392,64 @@ const Storage = {
     },
 
     remove(key) {
+        // Remove from all three layers
+        this._cache.delete(key);
+
+        if (this._idbReady && this._idb) {
+            this._idb.remove(key).catch(e =>
+                console.warn(`[Storage] IDB remove failed for "${key}":`, e.message)
+            );
+        }
+
         localStorage.removeItem(this._prefix + key);
     },
 
-    // Draft management
-    // Max draft size: 512KB. Files larger than this skip localStorage drafting.
-    // The in-memory tab.content is still the source of truth for uncommitted work.
+    /**
+     * List all keys in storage, optionally filtered by prefix.
+     * Reads from the in-memory cache (fast, synchronous).
+     * @param {string} [prefix=''] — Key prefix to filter by
+     * @returns {string[]}
+     */
+    keys(prefix = '') {
+        const result = [];
+        for (const key of this._cache.keys()) {
+            if (!prefix || key.startsWith(prefix)) {
+                result.push(key);
+            }
+        }
+        return result;
+    },
+
+    /**
+     * Whether IndexedDB is the active backend.
+     * @returns {boolean}
+     */
+    get isIDBActive() {
+        return this._idbReady;
+    },
+
+    // --- Draft management ---
+    // Max draft size: 512KB for localStorage write-through.
+    // IDB stores all drafts regardless of size.
     MAX_DRAFT_BYTES: 512 * 1024,
 
     saveDraft(owner, repo, branch, path, content) {
         const key = `draft-${owner}/${repo}/${branch}/${path}`;
         const payload = { content, timestamp: Date.now() };
-        // Guard against large files blowing the quota
+        // Guard against large files blowing the localStorage quota
         const size = JSON.stringify(payload).length * 2; // UTF-16 chars ≈ 2 bytes each
         if (size > this.MAX_DRAFT_BYTES) {
-            console.warn(`[Storage] Draft too large (${(size / 1024).toFixed(0)}KB) for ${path} — skipping localStorage`);
-            return;
+            // Still save to cache + IDB, just skip localStorage
+            this._cache.set(key, payload);
+            if (this._idbReady && this._idb) {
+                this._idb.set(key, payload).catch(e =>
+                    console.warn(`[Storage] IDB write failed for draft "${path}":`, e.message)
+                );
+            }
+            console.debug(`[Storage] Large draft (${(size / 1024).toFixed(0)}KB) for ${path} — saved to IDB only`);
+        } else {
+            this.set(key, payload);
         }
-        this.set(key, payload);
         State.drafts[`${owner}/${repo}/${branch}/${path}`] = content;
         EventBus.emit('draft:saved', { owner, repo, branch, path });
     },
@@ -287,11 +468,10 @@ const Storage = {
 
     listDrafts() {
         const drafts = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key.startsWith(this._prefix + 'draft-')) {
-                const path = key.replace(this._prefix + 'draft-', '');
-                const data = this.get(key.replace(this._prefix, ''));
+        const prefix = 'draft-';
+        for (const [key, data] of this._cache) {
+            if (key.startsWith(prefix)) {
+                const path = key.slice(prefix.length);
                 drafts.push({ path, ...data });
             }
         }

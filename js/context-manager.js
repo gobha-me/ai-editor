@@ -514,23 +514,22 @@ const ContextManager = {
     },
 
     /**
-     * Scan localStorage for embedding indexes whose branch no longer exists.
+     * Scan storage for embedding indexes whose branch no longer exists.
      * Call after branch list refresh.
      * @param {string[]} liveBranches - Array of branch names that still exist
      */
     cleanupOrphanedIndexes(liveBranches) {
         if (!State.currentProject) return;
         const { owner, repo } = State.currentProject;
-        const prefix = `ai-editor-embeddings-index-${owner}/${repo}@`;
+        const prefix = `embeddings-index-${owner}/${repo}@`;
         const branchSet = new Set(liveBranches);
         let removed = 0;
 
-        for (let i = 0; i < localStorage.length; i++) {
-            const fullKey = localStorage.key(i);
-            if (fullKey && fullKey.startsWith(prefix)) {
-                const branch = fullKey.slice(prefix.length);
+        for (const key of Storage.keys('embeddings-index-')) {
+            if (key.startsWith(prefix)) {
+                const branch = key.slice(prefix.length);
                 if (!branchSet.has(branch)) {
-                    localStorage.removeItem(fullKey);
+                    Storage.remove(key);
                     removed++;
                     console.log(`[Context] Cleaned up orphaned index: ${branch}`);
                 }

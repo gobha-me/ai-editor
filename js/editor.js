@@ -40,7 +40,9 @@ let editorInstance = null;
  * Returns true if successful, false if bundle not found.
  */
 async function loadFromVendorBundle() {
-    const bundle = await import('/vendor/codemirror-bundle.js');
+    // Resolve relative to <base href> so it works at any BASE_PATH
+    const bundleUrl = new URL('vendor/codemirror-bundle.js', document.baseURI).href;
+    const bundle = await import(bundleUrl);
 
     // Core modules
     const { cmView, cmState, cmBasicSetup, cmCommands, cmLanguage, cmLint, cmAutocomplete, cmSearch, cmOneDark } = bundle;

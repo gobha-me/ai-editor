@@ -77,6 +77,14 @@
             const errors = [];
 
             try {
+                await import('./test-idb.js');
+            } catch (e) { errors.push(['IDB', e]); }
+
+            try {
+                await import('./test-storage.js');
+            } catch (e) { errors.push(['Storage', e]); }
+
+            try {
                 await import('./test-edit-tracker.js');
             } catch (e) { errors.push(['EditTracker', e]); }
 
@@ -91,6 +99,10 @@
             try {
                 await import('./test-blame-normalize.js');
             } catch (e) { errors.push(['Blame', e]); }
+
+            try {
+                await import('./test-dependencies.js');
+            } catch (e) { errors.push(['Dependencies', e]); }
 
             if (errors.length > 0) {
                 const container = document.getElementById('results');

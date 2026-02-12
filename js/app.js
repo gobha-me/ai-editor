@@ -646,6 +646,9 @@ async function init() {
     // Initialize error logger
     ErrorLogger.init();
     
+    // Initialize storage (IDB + migration) before loading settings
+    await Storage.init();
+    
     // Load settings
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]

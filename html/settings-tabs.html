@@ -370,7 +370,7 @@
 <!-- Advanced Tab -->
 <div class="settings-tab-content" id="tabStorage">
     <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
-        Browser storage usage breakdown. All data is stored locally in your browser.
+        Browser storage usage breakdown. Data is stored in IndexedDB with localStorage as a write-through fallback.
     </p>
 
     <!-- Origin-level quota -->
@@ -385,7 +385,7 @@
     <!-- localStorage breakdown -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">localStorage Breakdown</h4>
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">Storage Breakdown</h4>
             <span id="storageTotalLabel" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
         </div>
         <div id="storageCategoryBars"></div>

@@ -21,34 +21,32 @@ const CATEGORIES = [
     { id: 'settings',   label: 'Settings',       color: '#8b949e', match: k => /^(settings|pluginState)$/.test(k) },
     { id: 'models',     label: 'Model Cache',    color: '#bc8cff', match: k => k === 'models' },
     { id: 'embeddings', label: 'Embeddings',     color: '#3fb950', match: k => k.startsWith('embeddings-index-') },
-    { id: 'ui',         label: 'UI State',       color: '#484f58', match: k => /^(chatHidden|chatWidth|previewWidthPct|sidebarHidden|sidebarWidth)$/.test(k) },
+    { id: 'ui',         label: 'UI State',       color: '#484f58', match: k => /^(chatHidden|chatWidth|previewWidthPct|sidebarHidden|sidebarWidth|searchHistory)$/.test(k) },
 ];
 
-const PREFIX = 'ai-editor-';
+// PREFIX removed in 0.9.11 — Storage.keys() handles namespacing
 
 // ============================================
 // MEASUREMENT
 // ============================================
 
 /**
- * Enumerate all localStorage keys belonging to this app.
- * Returns sorted array of { key, rawKey, bytes, category }.
+ * Measure all storage entries from the in-memory cache.
+ * Returns sorted array of { key, bytes, category }.
  */
-function measureLocalStorage() {
+function measureStorage() {
     const items = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const rawKey = localStorage.key(i);
-        if (!rawKey || !rawKey.startsWith(PREFIX)) continue;
 
-        const key = rawKey.slice(PREFIX.length);
-        const value = localStorage.getItem(rawKey) || '';
-        // JS strings are UTF-16 → 2 bytes per char
-        const bytes = (rawKey.length + value.length) * 2;
+    for (const key of Storage.keys()) {
+        const value = Storage.get(key);
+        // Estimate serialized size (key in IDB + JSON value)
+        // Use same UTF-16 estimate as before for consistency
+        const serialized = JSON.stringify(value) || '';
+        const bytes = (key.length + serialized.length) * 2;
 
         const cat = CATEGORIES.find(c => c.match(key));
         items.push({
             key,
-            rawKey,
             bytes,
             category: cat ? cat.id : 'other',
         });
@@ -114,7 +112,7 @@ function pct(value, total) {
  * Called when the Storage tab becomes active.
  */
 export async function renderStorageMetrics() {
-    const items = measureLocalStorage();
+    const items = measureStorage();
     const totals = aggregateByCategory(items);
     const totalBytes = items.reduce((sum, i) => sum + i.bytes, 0);
 
@@ -128,7 +126,8 @@ export async function renderStorageMetrics() {
     // Total label
     const totalLabel = document.getElementById('storageTotalLabel');
     if (totalLabel) {
-        totalLabel.textContent = `${formatBytes(totalBytes)} across ${items.length} keys`;
+        const backend = Storage.isIDBActive ? 'IndexedDB' : 'localStorage';
+        totalLabel.textContent = `${formatBytes(totalBytes)} across ${items.length} keys (${backend})`;
     }
 
     // Per-key list (top 20)
@@ -138,7 +137,7 @@ export async function renderStorageMetrics() {
     _renderCleanupActions(totals, items);
 }
 
-function _renderQuota(estimate, localStorageBytes) {
+function _renderQuota(estimate, storageBytes) {
     const bar = document.getElementById('storageQuotaFill');
     const label = document.getElementById('storageQuotaLabel');
     if (!bar || !label) return;
@@ -147,10 +146,11 @@ function _renderQuota(estimate, localStorageBytes) {
         const p = pct(estimate.usage, estimate.quota);
         bar.style.width = `${p}%`;
         bar.style.background = p > 90 ? 'var(--danger)' : p > 70 ? 'var(--warning)' : 'var(--accent)';
-        label.textContent = `${formatBytes(estimate.usage)} used of ${formatBytes(estimate.quota)} (${p.toFixed(1)}%) — includes localStorage, IndexedDB, Cache Storage`;
+        const backend = Storage.isIDBActive ? 'IndexedDB (primary) + localStorage (fallback)' : 'localStorage only';
+        label.textContent = `${formatBytes(estimate.usage)} used of ${formatBytes(estimate.quota)} (${p.toFixed(1)}%) — ${backend}`;
     } else {
         bar.style.width = '0%';
-        label.textContent = `Storage API not available. localStorage: ~${formatBytes(localStorageBytes)}`;
+        label.textContent = `Storage API not available. Estimated: ~${formatBytes(storageBytes)}`;
     }
 }
 
@@ -260,8 +260,7 @@ function _renderEmbeddingIndex(item, totalBytes, cat) {
     // Parse stored index for metadata
     let meta = null;
     try {
-        const raw = localStorage.getItem(PREFIX + item.key);
-        if (raw) meta = JSON.parse(raw);
+        meta = Storage.get(item.key);
     } catch { /* ignore */ }
 
     const barWidth = pct(item.bytes, totalBytes);
