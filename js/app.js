@@ -576,7 +576,7 @@ function setupEventListeners() {
     safeAdd('btnNewChat', 'click', () => {
         clearChat();
         resetSessionCost();
-        showToast('Chat cleared', 'success');
+        showToast('New conversation started', 'success');
     });
     safeAdd('btnExportChat', 'click', () => {
         if (window.Chat && window.Chat.exportChat) {

@@ -2,6 +2,67 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.23-1] - 2026-02-12
+
+### Fixed — Duplicate showToast declaration
+
+Removed local `showToast()` function in `chat/index.js` that conflicted
+with the `import { showToast } from '../ui-helpers.js'` added in 0.9.23.
+The local copy was a legacy inline version; the imported one is the
+canonical implementation.
+
+## [0.9.23] - 2026-02-12
+
+### Added — Conversation Persistence
+
+Chat history now persists across multiple conversations. "New Chat"
+saves the current conversation and creates a blank one instead of
+destroying history.
+
+**Core system (`js/chat/conversations.js`):**
+- `ConversationManager` — CRUD for conversations with Storage backend
+- Storage layout: `conversations` (metadata index), `conv-{id}`
+  (messages + summaryInfo + pruneStash), `activeConversation` (active ID)
+- Auto-migration: on first run, existing `chatHistory`/`chatSummaryInfo`/
+  `chatPruneStash` are wrapped into the first conversation entry
+- Auto-title: derived from first user message, truncated to 60 chars
+- Handles multimodal content (image+text arrays) for title derivation
+- Max 50 conversations; oldest auto-pruned when exceeded
+- Debounced save on `chat:message` and `chat:pruned` events (2s delay)
+- Immediate save on `beforeunload`
+
+**Conversation drawer UI:**
+- 📚 button in chat header toggles a slide-down drawer
+- Shows all conversations sorted by most recent, with:
+  - Title (from first message)
+  - Relative time ("3h ago", "2d ago")
+  - Message count
+  - Active conversation highlighted with `--bg-active`
+  - ✕ delete button (appears on hover)
+- Click to switch: saves current → loads target → re-renders messages
+- Click outside or toggle button to close drawer
+- Auto-re-renders on create/load/delete/rename events
+
+**Behavioral changes:**
+- "New Chat" button: 🗑️ → ➕ icon, toast says "New conversation
+  started" instead of "Chat cleared"
+- `clearChat()` now calls `ConversationManager.create()` instead of
+  wiping State — current conversation is saved first
+- Each conversation stores its own summary and prune stash
+
+**New CSS in `chat.css`:** `.conversation-drawer`, `.conv-drawer-header`,
+`.conv-drawer-list`, `.conv-item`, `.conv-item-active`,
+`.conv-item-content`, `.conv-item-title`, `.conv-item-meta`,
+`.conv-item-delete`, `.conv-empty`
+
+**New:** `js/chat/conversations.js` (337 lines)
+
+**Modified:** `js/chat/index.js` (ConversationManager init, drawer UI,
+debounced save, beforeunload hook, switchConversation on window.Chat),
+`js/app.js` (toast wording), `html/chat-panel.html` (📚 button + drawer
+element, ➕ icon), `css/chat.css` (drawer styles),
+`docs/ARCHITECTURE.md` (conversations module entry)
+
 ## [0.9.22-2] - 2026-02-12
 
 ### Fixed — Full UI Theme Audit

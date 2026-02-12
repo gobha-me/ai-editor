@@ -23,6 +23,7 @@ import {
     getInputElement
 } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
+import { ConversationManager } from './conversations.js';
 import { 
     addMessage, 
     renderMessages,
@@ -33,6 +34,7 @@ import {
 } from './messages.js';
 import { setupInputHandlers, stopGeneration, removeImage } from './input.js';
 import { exportChat } from './export.js';
+import { showToast } from '../ui-helpers.js';
 import { 
     handleUserInputDirect,
     applyPendingEdit,
@@ -63,6 +65,15 @@ registerMultiFileTools(ToolRegistry);
 function initChat(containerEl, inputEl) {
     initChatState(containerEl, inputEl);
 
+    // Initialize conversation system (migrates legacy data if needed)
+    ConversationManager.init();
+
+    // Load active conversation (or fall back to chatHistory for compat)
+    const activeId = ConversationManager.getActiveId();
+    if (activeId) {
+        ConversationManager.load(activeId);
+    }
+
     // Load chat history from storage (summary-aware)
     const savedHistory = Storage.get('chatHistory', []);
     const summaryInfo = Storage.get('chatSummaryInfo', null);
@@ -81,6 +92,27 @@ function initChat(containerEl, inputEl) {
 
     renderMessages(displayHistory.slice(-50));
     setupInputHandlers(inputEl, handleUserInputDirect);
+    initConversationDrawer();
+
+    // Debounced conversation save — persists after message activity settles
+    let _saveTimer = null;
+    const debouncedSave = () => {
+        clearTimeout(_saveTimer);
+        _saveTimer = setTimeout(() => ConversationManager.save(), 2000);
+    };
+    EventBus.on('chat:message', debouncedSave);
+    EventBus.on('chat:pruned', debouncedSave);
+
+    // Save on page unload
+    window.addEventListener('beforeunload', () => {
+        ConversationManager.save();
+    });
+
+    // Re-render conversation list when conversations change
+    EventBus.on('conversation:created', () => renderConversationList());
+    EventBus.on('conversation:loaded', () => renderConversationList());
+    EventBus.on('conversation:deleted', () => renderConversationList());
+    EventBus.on('conversation:renamed', () => renderConversationList());
 
     // Listen for LLM events
     EventBus.on('llm:generating', (isGenerating) => {
@@ -156,13 +188,11 @@ function sendMessage(content) {
 }
 
 /**
- * Clear chat history
+ * Start a new chat conversation.
+ * Saves the current conversation and creates a blank one.
  */
 function clearChat() {
-    State.chatHistory = [];
-    Storage.set('chatHistory', []);
-    State.scratchpad = {};
-    ChatSummarizer.clear();
+    ConversationManager.create();
     renderMessages();
     EventBus.emit('chat:cleared');
 }
@@ -268,27 +298,6 @@ function copyMessage(buttonEl) {
     });
 }
 
-/**
- * Show a toast notification
- * @param {string} message - Toast message
- * @param {string} type - Toast type: success, error, warning
- */
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toastContainer');
-    if (!container) return;
-    
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    
-    container.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
 // ============================================
 // IMAGE PREVIEW
 // ============================================
@@ -316,6 +325,113 @@ function previewImage(src) {
 }
 
 // ============================================
+// CONVERSATION DRAWER
+// ============================================
+
+/**
+ * Initialize the conversation list drawer toggle.
+ */
+function initConversationDrawer() {
+    const toggle = document.getElementById('btnConversations');
+    const drawer = document.getElementById('conversationDrawer');
+    if (!toggle || !drawer) return;
+
+    toggle.addEventListener('click', () => {
+        const isOpen = drawer.classList.contains('open');
+        if (isOpen) {
+            drawer.classList.remove('open');
+        } else {
+            renderConversationList();
+            drawer.classList.add('open');
+        }
+    });
+
+    // Close drawer when clicking outside
+    document.addEventListener('click', (e) => {
+        if (drawer.classList.contains('open') &&
+            !drawer.contains(e.target) &&
+            !e.target.closest('#btnConversations')) {
+            drawer.classList.remove('open');
+        }
+    });
+}
+
+/**
+ * Render the conversation list inside the drawer.
+ */
+function renderConversationList() {
+    const list = document.getElementById('conversationList');
+    if (!list) return;
+
+    const conversations = ConversationManager.list();
+    const activeId = ConversationManager.getActiveId();
+
+    if (conversations.length === 0) {
+        list.innerHTML = '<div class="conv-empty">No saved conversations</div>';
+        return;
+    }
+
+    list.innerHTML = conversations.map(c => {
+        const isActive = c.id === activeId;
+        const date = _formatRelativeTime(c.updatedAt);
+        const msgCount = c.messageCount || 0;
+        const title = c.title || 'New Chat';
+        const activeClass = isActive ? ' conv-item-active' : '';
+
+        return `
+            <div class="conv-item${activeClass}" data-conv-id="${c.id}">
+                <div class="conv-item-content" data-conv-load="${c.id}" title="${_escapeAttr(title)}">
+                    <div class="conv-item-title">${_escapeHtml(title)}</div>
+                    <div class="conv-item-meta">${date} · ${msgCount} msg${msgCount !== 1 ? 's' : ''}</div>
+                </div>
+                <button type="button" class="btn-icon-danger conv-item-delete" data-conv-delete="${c.id}" title="Delete">✕</button>
+            </div>
+        `;
+    }).join('');
+
+    // Wire click handlers
+    list.querySelectorAll('[data-conv-load]').forEach(el => {
+        el.addEventListener('click', () => {
+            const id = el.dataset.convLoad;
+            if (id === ConversationManager.getActiveId()) return;
+            ConversationManager.load(id);
+            renderMessages();
+            document.getElementById('conversationDrawer')?.classList.remove('open');
+        });
+    });
+
+    list.querySelectorAll('[data-conv-delete]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = el.dataset.convDelete;
+            ConversationManager.delete(id);
+            renderMessages();
+        });
+    });
+}
+
+/** Format timestamp as relative time */
+function _formatRelativeTime(ts) {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+}
+
+function _escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _escapeAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ============================================
 // EXPOSE TO GLOBAL (for onclick handlers)
 // ============================================
 
@@ -334,7 +450,11 @@ window.Chat = {
     cancelEdit,
     commitEdit,
     removeImage,
-    previewImage
+    previewImage,
+    switchConversation: (id) => {
+        ConversationManager.load(id);
+        renderMessages();
+    }
 };
 
 // ============================================

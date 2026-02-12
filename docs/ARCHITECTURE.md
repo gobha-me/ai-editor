@@ -25,9 +25,9 @@
 │   persistence│ tab-manager   │   input (user entry)     │
 │   plugins-tab│ file-tree     │   messages (render)      │
 │   roles-tab  │ resize-manager│   summarizer             │
-│   models-tab │ secondary-pane│   export                 │
-│ ui/          │ diff-viewer   │   tools (dispatch)       │
-│   branch     │ search-panel  │                          │
+│   models-tab │ secondary-pane│   conversations           │
+│ ui/          │ diff-viewer   │   export                 │
+│   branch     │ search-panel  │   tools (dispatch)       │
 │   commit     │ quick-open    │                          │
 │   file-create│               │                          │
 │   revert     │               │                          │
@@ -217,6 +217,7 @@ paths clean while modules stay focused.
 | `core.js` | ~1135 | Shared kernel (5 subsystems + types) |
 | `llm/api.js` | ~680 | LLM client + high-level functions |
 | `chat/summarizer.js` | ~640 | Chat compression engine |
+| `chat/conversations.js` | ~340 | Multi-conversation persistence (save/load/switch/delete) |
 | `prompts.js` | ~580 | System prompt assembly |
 | `git-providers/base.js` | ~450 | Provider interface (43 methods) |
 
