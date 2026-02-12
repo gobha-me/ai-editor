@@ -330,22 +330,22 @@
         <div class="modal-body">
             <div class="form-group">
                 <label>Title</label>
-                <input type="text" id="prCreateTitle" placeholder="Describe your changes…" style="width: 100%;">
+                <input type="text" id="prCreateTitle" placeholder="Describe your changes…">
             </div>
             <div style="display: flex; gap: 0.75rem; margin-bottom: 0.75rem;">
                 <div class="form-group" style="flex: 1;">
                     <label>From (head)</label>
-                    <select id="prCreateHead" style="width: 100%;"></select>
+                    <select id="prCreateHead"></select>
                 </div>
                 <div style="display: flex; align-items: flex-end; padding-bottom: 0.3rem; font-size: var(--font-lg);">→</div>
                 <div class="form-group" style="flex: 1;">
                     <label>Into (base)</label>
-                    <select id="prCreateBase" style="width: 100%;"></select>
+                    <select id="prCreateBase"></select>
                 </div>
             </div>
             <div class="form-group">
                 <label>Description <span style="color: var(--text-muted); font-weight: normal;">(markdown)</span></label>
-                <textarea id="prCreateBody" rows="6" placeholder="What changed and why…" style="width: 100%; font-family: var(--font-mono); font-size: var(--font-sm); resize: vertical;"></textarea>
+                <textarea id="prCreateBody" rows="6" placeholder="What changed and why…" class="textarea-mono"></textarea>
             </div>
             <div id="prCreateError" style="display: none; color: var(--danger); font-size: var(--font-sm); margin-top: 0.5rem;"></div>
         </div>
@@ -390,9 +390,9 @@
             </details>
 
             <!-- Add Comment -->
-            <div id="prDetailAddComment" style="display: none;">
-                <label style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary);">Add Comment</label>
-                <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" style="width: 100%; margin-top: 0.35rem; font-family: var(--font-mono); font-size: var(--font-sm); resize: vertical;"></textarea>
+            <div id="prDetailAddComment" class="form-group" style="display: none;">
+                <label>Add Comment</label>
+                <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" class="textarea-mono"></textarea>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
                     <button type="button" class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
                         ✨ Generate with AI
@@ -409,12 +409,12 @@
                 <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary" title="Open in browser">🌐 Open</a>
             </div>
             <div id="prDetailMergeControls" style="display: flex; gap: 0.5rem; align-items: center;">
-                <select id="prMergeStrategy" style="font-size: var(--font-sm);">
+                <select id="prMergeStrategy" class="select-inline">
                     <option value="squash">Squash</option>
                     <option value="merge">Merge</option>
                     <option value="rebase">Rebase</option>
                 </select>
-                <label style="font-size: var(--font-sm); display: flex; align-items: center; gap: 0.25rem;">
+                <label class="label-inline-check">
                     <input type="checkbox" id="prDeleteBranch" checked> Delete branch
                 </label>
                 <button type="button" class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">✅ Merge</button>
@@ -505,15 +505,15 @@
         <div class="modal-body" style="padding: 1rem;">
             <div class="form-group">
                 <label for="newProjectConnection">Connection:</label>
-                <select id="newProjectConnection" style="width: 100%;"></select>
+                <select id="newProjectConnection"></select>
             </div>
             <div class="form-group">
                 <label for="newProjectName">Repository name:</label>
-                <input type="text" id="newProjectName" placeholder="my-new-project" style="width: 100%;" autocomplete="off" spellcheck="false">
+                <input type="text" id="newProjectName" placeholder="my-new-project" autocomplete="off" spellcheck="false">
             </div>
             <div class="form-group">
                 <label for="newProjectDesc">Description (optional):</label>
-                <input type="text" id="newProjectDesc" placeholder="A brief description" style="width: 100%;">
+                <input type="text" id="newProjectDesc" placeholder="A brief description">
             </div>
             <div class="form-group" style="display: flex; gap: 1rem;">
                 <label style="flex: 1;">

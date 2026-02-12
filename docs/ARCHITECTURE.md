@@ -69,6 +69,7 @@ The shared kernel. Everything imports from here. Exports:
 | `EventBus` | Object | Pub/sub: `.on(event, cb)`, `.emit(event, data)` |
 | `Storage` | Object | Sync reads from in-memory cache; async writes to IndexedDB + localStorage |
 | `Plugins` | Object | Plugin lifecycle: register, init, hooks, config persistence |
+| `window.AIEditor` | Global | API for external plugins: `{ Plugins, EventBus, State, Storage, Providers, Roles }` |
 | `Roles` | Object | Role definitions + tool filtering (`full`, `coder`, `pm`, `reviewer`) |
 | `Providers` | Object | Backward-compat facade over `ProviderRegistry` |
 | `ProviderRegistry` | Object | LLM API provider plugins (OpenAI, Venice, OpenRouter) |

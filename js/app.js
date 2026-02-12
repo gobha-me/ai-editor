@@ -6,6 +6,7 @@ import { VERSION_DISPLAY } from './version.js';
 import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
+import { loadInstalledPlugins } from './plugin-loader.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
@@ -715,10 +716,18 @@ async function init() {
         }
     });
 
-    // Initialize plugins
+    // Initialize built-in plugins
     initPluginToolbar();
     for (const plugin of Plugins.list()) {
         await Plugins.init(plugin.id);
+    }
+
+    // Load externally installed plugins (from URLs saved in storage)
+    const extResult = await loadInstalledPlugins();
+    if (extResult.loaded > 0 || extResult.failed > 0) {
+        console.log(`[plugins] External: ${extResult.loaded} loaded, ${extResult.failed} failed`);
+        // Re-render toolbar in case new plugins added buttons
+        initPluginToolbar();
     }
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);

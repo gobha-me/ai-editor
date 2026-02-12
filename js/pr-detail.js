@@ -90,10 +90,10 @@ export async function openPRDetailModal(prNumber) {
         // Meta badges
         const meta = document.getElementById('prDetailMeta');
         const stateBadge = pr.merged
-            ? '<span style="background: #8957e5; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🟣 Merged</span>'
+            ? '<span class="badge-state badge-state-merged">🟣 Merged</span>'
             : pr.state === 'open'
-                ? '<span style="background: #238636; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🟢 Open</span>'
-                : '<span style="background: #da3633; color: white; padding: 2px 8px; border-radius: 12px; font-size: var(--font-sm);">🔴 Closed</span>';
+                ? '<span class="badge-state badge-state-open">🟢 Open</span>'
+                : '<span class="badge-state badge-state-closed">🔴 Closed</span>';
 
         const ciIcon = CI_ICONS[ci.state] || '⚪';
         const ciBadge = `<span class="pr-ci-live" title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
@@ -230,7 +230,7 @@ function _renderPRComments(comments) {
     container.innerHTML = `
         ${comments.length > 1 ? `
             <div style="text-align: right; margin-bottom: 0.3rem;">
-                <button type="button" class="btn btn-secondary pr-toggle-comments" style="font-size: 10px; padding: 0.15rem 0.4rem;">
+                <button type="button" class="btn btn-secondary btn-xs pr-toggle-comments">
                     Expand All
                 </button>
             </div>

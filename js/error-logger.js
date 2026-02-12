@@ -141,7 +141,7 @@ export const ErrorLogger = {
         if (btn) {
             const errorCount = this.logs.filter(l => l.type === 'ERROR' || l.type === 'UNHANDLED REJECTION').length;
             if (errorCount > 0) {
-                btn.style.backgroundColor = '#dc3545';
+                btn.style.backgroundColor = 'var(--danger)';
                 btn.style.color = 'white';
             } else {
                 btn.style.backgroundColor = '';
@@ -171,20 +171,20 @@ export const ErrorLogger = {
         }
 
         const typeColors = {
-            'ERROR': '#dc3545',
-            'UNHANDLED REJECTION': '#dc3545',
-            'WARN': '#ffc107',
-            'LOG': '#6c757d'
+            'ERROR': 'var(--danger)',
+            'UNHANDLED REJECTION': 'var(--danger)',
+            'WARN': 'var(--warning)',
+            'LOG': 'var(--text-muted)'
         };
 
         container.innerHTML = this.logs.map((entry, i) => {
             const time = new Date(entry.timestamp).toLocaleTimeString();
-            const color = typeColors[entry.type] || '#6c757d';
+            const color = typeColors[entry.type] || 'var(--text-muted)';
             const codeBadge = entry.code
                 ? `<span style="background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 3px; font-size: 11px; font-family: monospace; color: ${color};">${escapeHtml(entry.code)}</span>`
                 : '';
             const hintBlock = entry.recoveryHint
-                ? `<div style="margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: rgba(59,130,246,0.1); border-left: 2px solid #3b82f6; border-radius: 2px; color: #93c5fd; font-size: 12px;">💡 ${escapeHtml(entry.recoveryHint)}</div>`
+                ? `<div class="error-recovery-hint">💡 ${escapeHtml(entry.recoveryHint)}</div>`
                 : '';
             const statusBadge = entry.status
                 ? `<span style="color: var(--text-muted); font-size: 11px;">HTTP ${entry.status}</span>`

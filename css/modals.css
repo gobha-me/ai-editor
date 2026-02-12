@@ -526,6 +526,240 @@
 
 
 /* ============================================
+   PLUGIN INSTALL UI
+   ============================================ */
+
+.plugin-section-header {
+    font-weight: 600;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.plugin-install-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.plugin-install-row input {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--font-sm);
+    font-family: var(--font-mono);
+}
+
+.plugin-install-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.plugin-install-row input::placeholder {
+    color: var(--text-muted);
+}
+
+.plugin-install-status {
+    margin-top: 0.35rem;
+    font-size: var(--font-sm);
+    min-height: 1.2em;
+}
+
+.plugin-install-hint {
+    margin-top: 0.35rem;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+}
+
+.plugin-external-meta {
+    word-break: break-all;
+}
+
+.plugin-badge-external {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+}
+
+.plugin-config-panel textarea {
+    font-family: var(--font-mono);
+    resize: vertical;
+}
+
+.plugin-install-title {
+    font-weight: 600;
+    font-size: var(--font-base);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.plugin-config-panel {
+    margin: -0.25rem 0 0.5rem 0;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+.plugin-config-panel .form-group {
+    margin-bottom: 0.5rem;
+}
+
+
+/* ============================================
+   STANDALONE FORM CONTROLS (outside .form-group)
+   ============================================ */
+
+/* Themed select for use outside .form-group (e.g. merge strategy, inline controls) */
+.select-inline {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.35rem 0.5rem;
+    font-size: var(--font-sm);
+    cursor: pointer;
+}
+
+.select-inline:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* Inline checkbox label (merge controls, compact toggles) */
+.label-inline-check {
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Markdown / code textarea used outside .form-group */
+.textarea-mono {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    resize: vertical;
+}
+
+.textarea-mono:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+
+/* ============================================
+   STATE BADGES (PR, issue, CI)
+   ============================================ */
+
+.badge-state {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: var(--font-sm);
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.badge-state-open {
+    background: var(--success);
+    color: var(--bg-primary);
+}
+
+.badge-state-closed {
+    background: var(--danger);
+    color: white;
+}
+
+.badge-state-merged {
+    background: #8957e5;
+    color: white;
+}
+
+
+/* ============================================
+   BUTTON SIZE VARIANTS
+   ============================================ */
+
+/* Extra-small button for inline/compact controls */
+.btn-xs {
+    font-size: var(--font-xs);
+    padding: 0.15rem 0.4rem;
+}
+
+/* Small button for secondary actions */
+.btn-sm {
+    font-size: var(--font-sm);
+    padding: 0.25rem 0.5rem;
+}
+
+/* Icon-only close/delete button (e.g. embedding delete, tag remove) */
+.btn-icon-danger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.1rem 0.3rem;
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    border-radius: 3px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.btn-icon-danger:hover {
+    color: var(--danger);
+}
+
+
+/* ============================================
+   ERROR LOG TYPE BADGES
+   ============================================ */
+
+.error-type-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: white;
+}
+
+.error-type-error {
+    background: var(--danger);
+}
+
+.error-type-warn {
+    background: var(--warning);
+    color: var(--bg-primary);
+}
+
+.error-type-log {
+    background: var(--text-muted);
+}
+
+.error-recovery-hint {
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(14, 125, 202, 0.1);
+    border-left: 2px solid var(--accent);
+    border-radius: 2px;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+}
+
+
+/* ============================================
    HELP / KEYBOARD SHORTCUTS MODAL
    ============================================ */
 

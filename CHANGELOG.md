@@ -2,6 +2,124 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.22-2] - 2026-02-12
+
+### Fixed — Full UI Theme Audit
+
+Comprehensive audit across all modals, JS-generated HTML, and form
+controls. Every inline-styled form element now uses CSS classes from
+the design system.
+
+**Merge modal (the reported bug):**
+- `#prMergeStrategy` select → `class="select-inline"` — was unstyled
+  browser chrome with only inline `font-size`
+- Delete branch label/checkbox → `class="label-inline-check"`
+- PR comment textarea → `class="textarea-mono"` inside `.form-group`
+
+**New CSS classes in `modals.css`:**
+- `.select-inline` — themed select for use outside .form-group
+- `.label-inline-check` — compact checkbox+label combo
+- `.textarea-mono` — monospace textarea with theme colors/borders
+- `.badge-state` + `-open/-closed/-merged` — PR/issue state badges
+- `.btn-xs` — extra-small button (toggle comments)
+- `.btn-sm` — small button (storage cleanup)
+- `.btn-icon-danger` — icon-only delete button with hover→danger
+- `.error-type-error/-warn/-log` — error log type badges
+- `.error-recovery-hint` — themed recovery hint block
+
+**PR detail (`pr-detail.js`):**
+- State badges: hardcoded `#8957e5`, `#238636`, `#da3633` → CSS classes
+- Toggle comments button: `font-size: 10px` inline → `.btn-xs`
+
+**Issue detail (`issue-detail.js`):**
+- Toggle comments button: same fix as PR detail
+
+**Error logger (`error-logger.js`):**
+- Badge highlight: `#dc3545` → `var(--danger)`
+- Type colors: hardcoded hex map → `var(--danger)`, `var(--warning)`,
+  `var(--text-muted)`
+- Recovery hint: hardcoded `#3b82f6`/`#93c5fd` → `.error-recovery-hint`
+
+**Storage metrics (`storage-metrics.js`):**
+- Delete embedding button: 8-property inline + onmouseover/out →
+  `.btn-icon-danger` (CSS handles hover)
+- Cleanup buttons: inline font-size → `.btn-sm`
+
+**Modals HTML cleanup:**
+- Removed 6 redundant `style="width: 100%"` on selects/inputs already
+  inside `.form-group` (rule provides it)
+
+## [0.9.22-1] - 2026-02-12
+
+### Fixed — Plugin Install UI Theme Consistency
+
+Audited the plugin install UI from 0.9.22 against the design system.
+All inline-styled elements now use existing CSS classes or new
+purpose-built rules.
+
+**Before → After:**
+- Install button: raw `<button>` with inline padding → `class="btn btn-primary"`
+- URL input: inline font/size → `.plugin-install-row input` rule with proper
+  `background`, `border`, `color`, `padding`, `::placeholder`, `:focus` from theme
+- Install section container: inline bg/border/radius → `class="connection-editor"`
+  (already existed for connection edit panels)
+- Uninstall button: inline `color: var(--error)` → `class="danger"` (uses existing
+  `.connection-card-actions button.danger:hover` pattern)
+- Section headers: inline uppercase/tracking → `.plugin-section-header` class
+- Config panel container: inline bg/border → `class="connection-editor"`
+- Config field labels: inline `font-size` → inherited from `.form-group label`
+- Config textareas: inline `font-family: mono` → `.plugin-config-panel textarea` rule
+- External badge text: inline font-size → `.plugin-badge-external` class
+- URL display in external cards: inline word-break → `.plugin-external-meta` class
+
+**New CSS in `css/modals.css`:** `.plugin-section-header`,
+`.plugin-install-row` (flex + input), `.plugin-install-status`,
+`.plugin-install-hint`, `.plugin-external-meta`, `.plugin-badge-external`,
+`.plugin-config-panel textarea`
+
+**Modified:** `js/settings/plugins-tab.js` (replaced inline styles with
+classes), `css/modals.css` (new plugin UI rules)
+
+## [0.9.22] - 2026-02-12
+
+### Added — Plugin Install from URL
+
+External plugins can now be installed at runtime from any URL, without
+modifying the `plugins/` directory or rebuilding the container image.
+
+**Install flow:**
+1. Settings → Plugins → paste URL → Install
+2. Plugin JS is fetched, loaded via blob import, verified via
+   `Plugins.register()` call detection
+3. URL is persisted to localStorage — auto-reloads on next visit
+4. Uninstall disables immediately; fully removed on reload
+
+**`window.AIEditor` global API** — external plugins can't use relative
+ES module imports, so `core.js` now exposes a global object:
+```js
+const { Plugins, EventBus, State, Storage, Providers, Roles } = window.AIEditor;
+Plugins.register({ id: 'my-plugin', name: 'My Plugin', ... });
+```
+
+**Settings UI changes:**
+- "Install Plugin from URL" section at top of Plugins tab with URL
+  input, install button, and status feedback
+- "Installed from URL" section shows external plugins with source URL,
+  load status (● loaded / ⚠ error), and ✕ uninstall button
+- "All Plugins" section now labels external plugins with 📦 icon and
+  "(external)" badge
+- Empty state updated to mention URL install option
+
+**New:** `js/plugin-loader.js` — `installPlugin(url)`,
+`uninstallPlugin(url)`, `getInstalledPlugins()`,
+`loadInstalledPlugins()`
+
+**Modified:** `js/core.js` (window.AIEditor global),
+`js/app.js` (import + call loadInstalledPlugins at init),
+`js/settings/plugins-tab.js` (install UI, external plugin list,
+uninstall), `html/settings-tabs.html` (description update),
+`docs/ARCHITECTURE.md` (window.AIEditor entry)
+
 ## [0.9.21] - 2026-02-12
 
 ### Added — Multi-File Editing

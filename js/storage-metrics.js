@@ -289,7 +289,7 @@ function _renderEmbeddingIndex(item, totalBytes, cat) {
                 <span style="flex: 1; font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${_escapeAttr(projectName)}">${_escapeHtml(projectName)}</span>
                 ${usageBadge}
                 <span style="color: var(--text-muted); font-size: var(--font-xs);">${formatBytes(item.bytes)}</span>
-                <button type="button" class="btn-delete-embedding" data-key="${_escapeAttr(item.key)}" title="Delete this index" style="background: none; border: none; cursor: pointer; padding: 0.1rem 0.3rem; font-size: var(--font-sm); color: var(--text-muted); border-radius: 3px; line-height: 1;" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--text-muted)'">&times;</button>
+                <button type="button" class="btn-icon-danger btn-delete-embedding" data-key="${_escapeAttr(item.key)}" title="Delete this index">&times;</button>
             </div>
             <div style="display: flex; gap: 1rem; font-size: var(--font-xs); color: var(--text-muted);">
                 <span>${fileCount} files</span>
@@ -342,7 +342,7 @@ function _renderCleanupActions(totals, items) {
     }
 
     container.innerHTML = actions.map((a, i) =>
-        `<button type="button" class="btn btn-secondary storage-cleanup-btn" data-idx="${i}" style="font-size: var(--font-sm);">${_escapeHtml(a.label)}</button>`
+        `<button type="button" class="btn btn-secondary btn-sm storage-cleanup-btn" data-idx="${i}">${_escapeHtml(a.label)}</button>`
     ).join('');
 
     if (actions.length === 0) {

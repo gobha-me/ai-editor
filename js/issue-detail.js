@@ -133,7 +133,7 @@ export async function openIssueDetailModal(issueNumber) {
                         Comments (${comments.length})
                     </div>
                     ${comments.length > 1 ? `
-                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary" style="font-size: 10px; padding: 0.15rem 0.4rem;">
+                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary btn-xs">
                             Expand All
                         </button>
                     ` : ''}

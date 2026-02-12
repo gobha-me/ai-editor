@@ -1117,6 +1117,22 @@ window.addEventListener('beforeunload', () => {
 });
 
 // ============================================
+// GLOBAL API FOR EXTERNAL PLUGINS
+// ============================================
+// External plugins loaded via URL can't use ES module imports with
+// relative paths. They use window.AIEditor instead:
+//   const { Plugins, EventBus, State } = window.AIEditor;
+
+window.AIEditor = {
+    Plugins,
+    EventBus,
+    State,
+    Storage,
+    Providers,
+    Roles
+};
+
+// ============================================
 // EXPORTS
 // ============================================
 
