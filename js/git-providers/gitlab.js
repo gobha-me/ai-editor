@@ -416,7 +416,7 @@ const gitlabProvider = {
         EventBus.emit('git:fileRenamed', { connectionId: connection.id, owner, repo, oldPath, newPath, branch });
     },
 
-    async batchUpdateFiles(connection, owner, repo, files, message, branch = 'main') {
+    async batchCommitFiles(connection, owner, repo, files, message, branch = 'main') {
         // GitLab's Commits API supports atomic multi-file operations in a single commit!
         // Much better than the sequential approach GitHub/Gitea need.
         const actions = files.map(f => ({

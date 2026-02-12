@@ -10,7 +10,7 @@
  *   3. File tree shown with checkboxes for selection
  *   4. Optional: "Scan for Diffs" compares against repo
  *   5. User sets target dir + commit message
- *   6. Files created/updated one at a time via Git facade
+ *   6. All selected files committed in a SINGLE push via batch API
  *   7. Progress bar tracks completion
  *   8. File tree refreshes on completion
  */
@@ -396,13 +396,15 @@ export async function uploadExtractedFiles() {
     const btn = document.getElementById('btnZipUpload');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '⏳ Uploading...';
+        btn.textContent = `⏳ Committing ${selected.length} files...`;
     }
     
     const progressBar = document.getElementById('zipProgress');
     const progressFill = document.getElementById('zipProgressFill');
     const progressText = document.getElementById('zipProgressText');
     if (progressBar) progressBar.style.display = '';
+    if (progressFill) progressFill.style.width = '50%';
+    if (progressText) progressText.textContent = `Preparing ${selected.length} files...`;
     
     // Build a lookup of existing files for create vs update detection
     const existingFiles = new Map();
@@ -412,57 +414,54 @@ export async function uploadExtractedFiles() {
     
     const { provider, connection, owner, repo, branch } = resolveContext();
     
-    let succeeded = 0;
-    let failed = 0;
-    const errors = [];
-    
-    for (let i = 0; i < selected.length; i++) {
-        const file = selected[i];
+    // Build batch payload — single commit for ALL files
+    const batchFiles = selected.map(file => {
         const fullPath = targetDir ? `${targetDir}/${file.path}` : file.path;
+        const existingSha = existingFiles.get(fullPath);
         
-        // Update progress
-        const pct = Math.round(((i) / selected.length) * 100);
-        if (progressFill) progressFill.style.width = pct + '%';
-        if (progressText) progressText.textContent = `${i + 1}/${selected.length}: ${file.path}`;
+        return {
+            path: fullPath,
+            content: file.content,
+            sha: existingSha || undefined,
+            operation: existingSha ? 'update' : 'create',
+            // Binary files are already base64 from JSZip; text files need encoding
+            encoding: file.isBinary ? 'base64' : 'text'
+        };
+    });
+    
+    if (progressText) progressText.textContent = `Committing ${batchFiles.length} files in one push...`;
+    
+    try {
+        const { results, errors } = await provider.batchCommitFiles(
+            connection, owner, repo, batchFiles, commitMsg, branch
+        );
         
-        try {
-            const existingSha = existingFiles.get(fullPath);
-            
-            if (existingSha) {
-                await provider.updateFile(
-                    connection, owner, repo,
-                    fullPath, file.content,
-                    commitMsg, existingSha, branch
-                );
-            } else {
-                await provider.createFile(
-                    connection, owner, repo,
-                    fullPath, file.content,
-                    commitMsg, branch
-                );
-            }
-            
-            succeeded++;
-        } catch (error) {
-            failed++;
-            errors.push({ path: fullPath, error: error.message });
-            console.error(`Upload failed for ${fullPath}:`, error);
+        // Final progress
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressText) progressText.textContent = `Done: ${results.length} files committed`;
+        
+        isUploading = false;
+        if (btn) btn.textContent = '✅ Done';
+        
+        if (errors.length > 0) {
+            console.warn('Batch commit errors:', errors);
+            window.showToast(`Committed ${results.length}, failed ${errors.length}`, 'warning');
+        } else {
+            window.showToast(`Committed ${results.length} file${results.length !== 1 ? 's' : ''} in 1 push`, 'success');
         }
-    }
-    
-    // Final progress
-    if (progressFill) progressFill.style.width = '100%';
-    if (progressText) progressText.textContent = `Done: ${succeeded} uploaded${failed > 0 ? `, ${failed} failed` : ''}`;
-    
-    isUploading = false;
-    if (btn) btn.textContent = '✅ Done';
-    
-    if (failed > 0) {
-        const failedPaths = errors.map(e => `  ${e.path}: ${e.error}`).join('\n');
-        console.warn('Upload errors:\n' + failedPaths);
-        window.showToast(`Uploaded ${succeeded}, failed ${failed}`, 'warning');
-    } else {
-        window.showToast(`Uploaded ${succeeded} file${succeeded !== 1 ? 's' : ''}`, 'success');
+    } catch (error) {
+        console.error('Batch commit failed:', error);
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = `Failed: ${error.message}`;
+        
+        isUploading = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '📦 Upload';
+        }
+        
+        window.showToast(`Upload failed: ${error.message}`, 'error');
+        return;
     }
     
     EventBus.emit('tree:refresh');

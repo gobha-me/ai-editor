@@ -298,28 +298,65 @@ const giteaProvider = {
         EventBus.emit('git:fileRenamed', { connectionId: connection.id, owner, repo, oldPath, newPath, branch });
     },
 
-    async batchUpdateFiles(connection, owner, repo, files, message, branch = 'main') {
-        const results = [];
-        const errors = [];
+    /**
+     * Commit multiple file creates/updates/deletes in a SINGLE commit.
+     * Uses Gitea's multi-file contents endpoint so only ONE push event fires.
+     *
+     * @param {Object}   connection
+     * @param {string}   owner
+     * @param {string}   repo
+     * @param {Array<{path: string, content?: string, sha?: string, operation?: 'create'|'update'|'delete', encoding?: 'base64'|'text'}>} files
+     * @param {string}   message  Commit message
+     * @param {string}   branch
+     * @returns {Promise<{results: Array, errors: Array}>}
+     */
+    async batchCommitFiles(connection, owner, repo, files, message, branch = 'main') {
+        const payload = {
+            message,
+            branch,
+            files: files.map(f => {
+                const entry = {
+                    operation: f.operation || (f.sha ? 'update' : 'create'),
+                    path: f.path
+                };
+                if (entry.operation !== 'delete' && f.content !== undefined) {
+                    // If caller already base64-encoded (binary), pass through.
+                    // Otherwise encode text to base64.
+                    entry.content = f.encoding === 'base64'
+                        ? f.content
+                        : utf8ToBase64(f.content);
+                }
+                if (f.sha) {
+                    entry.sha = f.sha;
+                }
+                return entry;
+            })
+        };
 
-        for (const file of files) {
-            try {
-                const result = await this.updateFile(
-                    connection, owner, repo,
-                    file.path, file.content, message, file.sha, branch
-                );
-                results.push({ path: file.path, success: true, newSha: result.content.sha });
-            } catch (error) {
-                errors.push({ path: file.path, success: false, error: error.message });
-            }
-        }
+        const response = await this.request(
+            connection, 'POST',
+            `/repos/${owner}/${repo}/contents`,
+            payload
+        );
+
+        // Normalize to { results, errors } shape for backward compat.
+        // Gitea batch is atomic — all succeed or the whole request throws.
+        const responseFiles = response?.files || [];
+        const results = files.map(f => {
+            const remote = responseFiles.find(rf => rf.path === f.path);
+            return {
+                path: f.path,
+                success: true,
+                newSha: remote?.sha || null
+            };
+        });
 
         EventBus.emit('git:batchCommitted', {
             connectionId: connection.id, owner, repo, branch, message,
-            succeeded: results.length, failed: errors.length
+            fileCount: files.length
         });
 
-        return { results, errors };
+        return { results, errors: [] };
     },
 
     // ========================================

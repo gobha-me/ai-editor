@@ -309,8 +309,17 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'renameFile');
     },
 
-    async batchUpdateFiles(connection, owner, repo, files, message, branch = 'main') {
-        notSupported(this.name, 'batchUpdateFiles');
+    /**
+     * Commit multiple file operations in a single commit.
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {Array<{path: string, content?: string, sha?: string, operation: 'create'|'update'|'delete', encoding?: 'base64'|'text'}>} files
+     * @param {string} message
+     * @param {string} branch
+     */
+    async batchCommitFiles(connection, owner, repo, files, message, branch = 'main') {
+        notSupported(this.name, 'batchCommitFiles');
     },
 
     // ========================================

@@ -97,7 +97,7 @@ const BASE_GIT_PROVIDER = {
   async updateFile(connection, owner, repo, path, content, message, sha, branch) {},
   async deleteFile(connection, owner, repo, path, message, sha, branch) {},
   async renameFile(connection, owner, repo, oldPath, newPath, message, branch) {},
-  async batchUpdateFiles(connection, owner, repo, files, message, branch) {},
+  async batchCommitFiles(connection, owner, repo, files, message, branch) {},
 
   // === Issues ===
   async listIssues(connection, owner, repo, state) {},

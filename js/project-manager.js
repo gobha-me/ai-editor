@@ -2,7 +2,7 @@
 // PROJECT MANAGEMENT
 // ============================================
 
-import { State, EventBus } from './core.js';
+import { State, EventBus, Storage } from './core.js';
 import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
@@ -47,6 +47,13 @@ export async function refreshProjects() {
                 });
                 select.appendChild(optgroup);
             }
+        }
+
+        // Re-select current project if one is loaded (e.g. after settings save)
+        if (State.currentProject) {
+            const currentValue = `${State.currentProject.connectionId}/${State.currentProject.owner}/${State.currentProject.repo}`;
+            const opt = select.querySelector(`option[value="${currentValue}"]`);
+            if (opt) select.value = currentValue;
         }
 
         if (errors.length > 0) {
@@ -127,6 +134,7 @@ export async function switchProject(connectionId, owner, repo, { branch } = {}) 
 
     // Trigger refresh events for other modules
     EventBus.emit('project:loaded', { connectionId, owner, repo });
+    saveSession();
 
     return { owner, repo, branch: State.currentBranch };
 }
@@ -196,6 +204,174 @@ export async function onBranchChange(e) {
     }
 
     EventBus.emit('statusBar:update');
+    saveSession();
+}
+
+// ============================================
+// SESSION PERSISTENCE
+// ============================================
+
+/**
+ * Save current project, branch, and open tab paths to Storage.
+ * Called after project switch, branch change, and tab changes.
+ */
+export function saveSession() {
+    if (!State.currentProject) {
+        Storage.set('session', null);
+        return;
+    }
+
+    const session = {
+        connectionId: State.currentProject.connectionId,
+        owner: State.currentProject.owner,
+        repo: State.currentProject.repo,
+        branch: State.currentBranch || 'main',
+        // Only save pinned (non-preview) tabs — preview tabs are transient
+        openTabs: State.openTabs
+            .filter(t => !t.isPreview)
+            .map(t => t.path),
+        activeTabPath: State.activeTabIndex >= 0
+            ? State.openTabs[State.activeTabIndex]?.path || null
+            : null,
+        savedAt: Date.now()
+    };
+
+    Storage.set('session', session);
+    console.log(`[Session] Saved: ${session.owner}/${session.repo}@${session.branch}, ${session.openTabs.length} tabs`);
+}
+
+/**
+ * Restore project, branch, and open tabs from previous session.
+ * Called once at startup after refreshProjects populates the dropdown.
+ * @returns {Promise<boolean>} true if session was restored
+ */
+export async function restoreSession() {
+    const session = Storage.get('session');
+    if (!session?.connectionId || !session?.owner || !session?.repo) {
+        return false;
+    }
+
+    try {
+        console.log(`[Session] Restoring: ${session.owner}/${session.repo}@${session.branch}`);
+
+        // Switch to the saved project + branch
+        await switchProject(session.connectionId, session.owner, session.repo, {
+            branch: session.branch
+        });
+
+        // Re-open saved tabs (best-effort, skip missing files)
+        if (session.openTabs?.length > 0 && window.onTreeItemClick) {
+            for (const path of session.openTabs) {
+                // Verify file exists in current tree before opening
+                const exists = State.fileTree.some(f => f.path === path);
+                if (exists) {
+                    try {
+                        await window.onTreeItemClick(path, 'file', true); // true = pin
+                    } catch (err) {
+                        console.warn(`[Session] Failed to restore tab: ${path}`, err.message);
+                    }
+                } else {
+                    console.warn(`[Session] Skipping missing file: ${path}`);
+                }
+            }
+
+            // Switch to the tab that was active when session was saved
+            if (session.activeTabPath) {
+                const targetIdx = State.openTabs.findIndex(t => t.path === session.activeTabPath);
+                if (targetIdx >= 0 && targetIdx !== State.activeTabIndex) {
+                    const { switchToTab } = await import('./tab-manager.js');
+                    await switchToTab(targetIdx);
+                }
+            }
+        }
+
+        window.showToast(`Restored ${session.owner}/${session.repo}`, 'info');
+        return true;
+    } catch (error) {
+        console.warn('[Session] Restore failed:', error.message);
+        Storage.set('session', null);
+        return false;
+    }
+}
+
+/**
+ * Clear the current project and reset the workspace.
+ */
+export async function clearProject() {
+    // Check for unsaved work
+    const dirtyTabs = State.openTabs.filter(t => t.dirty);
+    if (dirtyTabs.length > 0) {
+        const paths = dirtyTabs.map(t => t.path.split('/').pop()).join(', ');
+        if (!confirm(`You have unsaved changes in: ${paths}\n\nDiscard and clear project?`)) {
+            return;
+        }
+    }
+
+    // Clear all project state
+    State.currentProject = null;
+    State.currentBranch = 'main';
+    State.fileTree = [];
+    State.openTabs = [];
+    State.activeTabIndex = -1;
+    State.currentFile = null;
+    State.editorContent = '';
+    State.editorDirty = false;
+    State.currentIssue = null;
+    State.issues = [];
+    State.pullRequests = [];
+    State.branches = [];
+
+    // Clear session storage
+    Storage.set('session', null);
+
+    // Reset UI
+    const projectSelect = document.getElementById('projectSelect');
+    if (projectSelect) projectSelect.value = '';
+    
+    const branchSelect = document.getElementById('branchSelect');
+    if (branchSelect) branchSelect.innerHTML = '<option value="main">main</option>';
+
+    const editorContainer = document.getElementById('editorContainer');
+    if (editorContainer) {
+        editorContainer.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                <div style="text-align: center;">
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <p>Select a project to get started</p>
+                </div>
+            </div>
+        `;
+    }
+
+    const { renderEditorTabs } = await import('./tab-manager.js');
+    renderEditorTabs();
+    renderFileTree([]);
+
+    // Close secondary pane
+    const { closeSecondaryPane } = await import('./secondary-pane.js');
+    closeSecondaryPane();
+
+    // Notify other modules
+    EventBus.emit('project:cleared');
+    EventBus.emit('statusBar:update');
+
+    window.showToast('Project cleared', 'success');
+}
+
+/**
+ * Initialize session persistence listeners.
+ * Debounces tab change events so we don't write to Storage on every keystroke.
+ */
+export function initSessionListeners() {
+    let _saveDebounce = null;
+    const debouncedSave = () => {
+        clearTimeout(_saveDebounce);
+        _saveDebounce = setTimeout(saveSession, 1000);
+    };
+
+    EventBus.on('file:opened', debouncedSave);
+    EventBus.on('tab:closed', debouncedSave);
+    EventBus.on('tab:switched', debouncedSave);
 }
 
 // ============================================

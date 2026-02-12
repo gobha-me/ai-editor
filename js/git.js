@@ -194,9 +194,9 @@ const Git = {
         return provider.renameFile(connection, owner, repo, oldPath, newPath, message, branch);
     },
 
-    async batchUpdateFiles(owner, repo, files, message, branch = 'main') {
+    async batchCommitFiles(owner, repo, files, message, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.batchUpdateFiles(connection, owner, repo, files, message, branch);
+        return provider.batchCommitFiles(connection, owner, repo, files, message, branch);
     },
 
     // ========================================
@@ -484,7 +484,7 @@ async function batchSaveFiles(commitMessage, tabs) {
 
     EventBus.emit('git:batchSaving', { files: files.map(f => f.path) });
 
-    const { results, errors } = await provider.batchUpdateFiles(
+    const { results, errors } = await provider.batchCommitFiles(
         connection, owner, repo, files, commitMessage, branch
     );
 

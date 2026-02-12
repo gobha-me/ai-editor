@@ -54,7 +54,10 @@ import {
     submitPRComment,
     focusIssue,
     unfocusIssue,
-    startWorkOnIssue
+    startWorkOnIssue,
+    clearProject,
+    restoreSession,
+    initSessionListeners
 } from './project-manager.js';
 import { 
     fetchModels, 
@@ -530,6 +533,7 @@ function setupEventListeners() {
 
     // Sidebar buttons
     safeAdd('btnRefreshProjects', 'click', refreshProjects);
+    safeAdd('btnClearProject', 'click', clearProject);
     safeAdd('btnNewBranch', 'click', openNewBranchModal);
     safeAdd('btnNewFile', 'click', openNewFileModal);
     safeAdd('btnRefreshIssues', 'click', refreshIssues);
@@ -672,10 +676,13 @@ async function init() {
     initStatusBarListener();
     initProjectListeners();
     initCostTrackerListener();
+    initSessionListeners();
 
     // Load projects if any connections configured
     if (GitProviderRegistry.listConnections(true).length > 0) {
         await refreshProjects();
+        // Restore previous session (project + branch + tabs)
+        await restoreSession();
     }
 
     // Load models if configured

@@ -66,6 +66,7 @@ export function closeTab(index, event) {
     
     // Remove tab
     State.openTabs.splice(index, 1);
+    EventBus.emit('tab:closed', { path: tab.path });
     
     // Adjust active index
     if (State.openTabs.length === 0) {

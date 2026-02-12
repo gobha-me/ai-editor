@@ -13,6 +13,7 @@ import { registerSearchTools } from '../tools/search-tools.js';
 import { registerIssueTools } from '../tools/issue-tools.js';
 import { registerPRTools } from '../tools/pr-tools.js';
 import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
+import { registerXRefTools } from '../tools/xref-tools.js';
 
 // Import submodules
 import { 
@@ -51,6 +52,7 @@ registerSearchTools(ToolRegistry);
 registerIssueTools(ToolRegistry);
 registerPRTools(ToolRegistry);
 registerScratchpadTools(ToolRegistry);
+registerXRefTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION
@@ -184,23 +186,28 @@ function retryLastMessage() {
     }
     
     // Find the last user message in history
-    const lastUserMessage = [...State.chatHistory].reverse().find(msg => msg.role === 'user');
+    let lastUserIdx = -1;
+    for (let i = State.chatHistory.length - 1; i >= 0; i--) {
+        if (State.chatHistory[i].role === 'user') {
+            lastUserIdx = i;
+            break;
+        }
+    }
     
-    if (!lastUserMessage) {
+    if (lastUserIdx === -1) {
         showToast('⚠️ No previous message to retry', 'warning');
         return;
     }
+
+    const content = State.chatHistory[lastUserIdx].content;
     
-    // Remove the last assistant response if it exists (to retry fresh)
-    const lastMsg = State.chatHistory[State.chatHistory.length - 1];
-    if (lastMsg && lastMsg.role === 'assistant') {
-        State.chatHistory.pop();
-        Storage.set('chatHistory', State.chatHistory.slice(-100));
-        renderMessages();
-    }
+    // Truncate from the user message onward (removes user + assistant + tool messages)
+    State.chatHistory.splice(lastUserIdx);
+    Storage.set('chatHistory', State.chatHistory.slice(-100));
+    renderMessages();
     
-    // Resend the last user message
-    handleUserInputDirect(lastUserMessage.content);
+    // Resend the same content as a fresh message
+    handleUserInputDirect(content);
 }
 
 /**

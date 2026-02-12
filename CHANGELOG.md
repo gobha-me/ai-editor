@@ -2,6 +2,109 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.19-1] - 2026-02-12
+
+### Fixed — Settings Save Clears Project
+
+When saving settings, `refreshProjects()` rebuilt the dropdown but lost
+the selection. The project appeared to vanish, leaving an orphaned branch
+selector. Fix: after rebuilding the dropdown, re-select the current
+`State.currentProject` value if one is loaded.
+
+### Added — Session Persistence
+
+Project, branch, and open tabs now survive page reloads:
+
+- **`saveSession()`** — writes `connectionId`, `owner`, `repo`, `branch`,
+  and pinned tab paths to `Storage` on every project switch, branch
+  change, file open, or tab close (debounced at 1 s).
+- **`restoreSession()`** — called once at startup after `refreshProjects`.
+  Re-opens the saved project + branch, then re-opens each saved tab
+  (best-effort, skips files that no longer exist on the branch).
+- Preview tabs are intentionally excluded — only pinned tabs persist.
+- The previously-active tab is re-activated after all tabs reopen.
+
+### Added — Clear Project Button
+
+New **✕** button in the sidebar project header:
+
+- Prompts for confirmation if there are dirty (unsaved) tabs.
+- Resets all project state (`currentProject`, `fileTree`, `openTabs`,
+  `branches`, `issues`, `pullRequests`).
+- Clears session storage so next reload starts fresh.
+- Emits `project:cleared` event for other modules.
+
+### Changed — `tab:closed` Event
+
+`closeTab()` in `tab-manager.js` now emits `EventBus.emit('tab:closed')`
+so session persistence can track tab removals (previously only
+`tab:switched` existed).
+
+### Fixed — Zip Upload Fires N Commits Instead of One
+
+`uploadExtractedFiles()` called `provider.createFile()` / `updateFile()`
+in a loop — one API call per file, each creating a separate commit and
+push event. Uploading 137 files to a repo with CI triggered 137
+concurrent pipeline runs.
+
+Replaced with `provider.batchCommitFiles()`, a new method that uses
+Gitea's multi-file contents endpoint (`POST /repos/{owner}/{repo}/contents`)
+to commit ALL file operations in a **single atomic commit**. One push
+event, one CI trigger, regardless of file count.
+
+**Renamed across all providers:** `batchUpdateFiles` → `batchCommitFiles`.
+The Gitea provider now uses the real batch API; GitHub/GitLab retain the
+sequential fallback (can be upgraded later). The `batchSaveFiles()` facade
+(used by the commit flow for dirty tabs) also benefits from this — dirty
+tab commits that previously created N pushes now create one.
+
+**New file parameter:** `encoding: 'base64' | 'text'` tells the batch
+method whether content is pre-encoded (binary from JSZip) or needs
+base64 conversion (text files).
+
+### Fixed — Retry Leaves Dangling User Message
+
+`retryLastMessage()` only popped the last assistant reply before re-
+sending, leaving the original user message in place — resulting in a
+duplicate. Now uses the same truncate-from-user-message-onward pattern
+as `editAndResend()`, which also cleans up any interleaved tool messages.
+
+**Modified:** `js/zip-upload.js` (single batch commit), `js/git-providers/gitea.js`
+(real batch API), `js/git-providers/base.js` + `github.js` + `gitlab.js`
+(method rename), `js/git.js` (facade + batchSaveFiles), `js/project-manager.js`
+(refreshProjects fix + session persistence + clearProject), `js/app.js`
+(imports + wiring), `js/tab-manager.js` (tab:closed event),
+`js/chat/index.js` (retry fix), `html/sidebar.html` (✕ button)
+
+## [0.9.19] - 2026-02-12
+
+### Added — Cross-Project Reference Tools
+
+Two new LLM tools that allow reading files from OTHER projects without
+switching away from the current workspace:
+
+- **`peek_project_tree`** — browse the file tree of any connected repo.
+  Takes `connectionId`, `owner`, `repo`, optional `branch` and `path`.
+  Returns the same shape as `get_project_tree`.
+- **`peek_project_file`** — read a file from any connected repo (read-
+  only). Supports the same truncation and `full=true` semantics as
+  `read_file`. Returns `reference_project` and `current_project` fields
+  so the LLM always knows which repo it's looking at.
+
+**Why this matters:** The user can now say "look at how the billing
+service handles pagination and implement the same pattern here" and the
+LLM will peek at the billing repo's files, save the pattern to
+scratchpad, and implement it in the current project — all without
+disrupting the workspace, losing dirty tabs, or triggering UI refreshes.
+
+**Workflow guidance:** System prompt updated with step 11: Cross-Project
+Reference, instructing the LLM to prefer `peek_*` tools over
+`set_active_project` for read-only reference lookups.
+
+**New file:** `js/tools/xref-tools.js` (190 lines)
+**Modified:** `js/chat/index.js` (import + registration),
+`js/prompts.js` (tool list + workflow), `docs/ARCHITECTURE.md`
+
 ## [0.9.18] - 2026-02-12
 
 ### Fixed — V Hotkey Captured in Commit Modal
