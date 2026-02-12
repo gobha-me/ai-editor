@@ -2,6 +2,34 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.9] - 2026-02-11
+
+### Added
+- **Summarizer auto-tune** — automatically scales summarizer parameters based on the active model's context window size
+  - Four tiers: Small (<32K, aggressive), Medium (32K+), Large (128K+), Huge (500K+, nearly disabled)
+  - New auto/manual mode toggle in Settings → LLM → Chat Summarizer
+  - Auto mode: sliders show computed values (read-only), info badge shows tier and detected context window
+  - Manual mode: sliders work as before with full user control
+  - `summarizerMode` setting persisted; defaults to `auto`
+  - Slider ranges expanded (max recent: 80/120, threshold: 250, interval: 100) for large-context models
+  - Recomputes on model change via `model:changed` EventBus event
+- **Smarter tool result handling in summarizer** — tool results now get structured compression instead of being discarded
+  - File read results → `[File: path — N lines. Key symbols: fn1, fn2, ...]`
+  - File tree results → `[File tree: N files. Sample: path1, path2, ...]`
+  - Search results → `[Search: N matches in M files: path1, path2, ...]`
+  - Error results preserved in full
+  - `_extractSymbols()` extracts function/class/const/def names from source code (JS, Python, Rust, Go)
+  - Assistant tool_calls now listed in summary prompt: `[Tools called: read_file → path, search_in_files → "query"]`
+  - `_basicSummary()` fallback now includes file paths from tool results
+- **`maxTokens` scaling** — LLM summary generation token budget now scales with `maxChars` setting instead of hardcoded 500
+
+### Files
+- `js/chat/summarizer.js` — auto-tune tiers, mode property, `getAutoParams()`, `_getContextWindow()`, `_getTier()`, `_summarizeToolResult()`, `_extractSymbols()`, rewritten `_buildPrompt()`, `_basicSummary()` with tool paths, scaled `maxTokens`
+- `js/settings/llm-tab.js` — rewritten `populateSummarizerSliders()` with auto/manual toggle, `updateSummarizerForModel()`, `model:changed` listener, ChatSummarizer import
+- `js/settings/persistence.js` — `summarizerMode` persistence, conditional slider save (skip in auto mode)
+- `js/model-manager.js` — emit `model:changed` event on model selection
+- `html/settings-tabs.html` — auto/manual radio toggle, auto-tune info badge, expanded slider ranges
+
 ## [0.9.8-4] - 2026-02-11
 
 ### Added

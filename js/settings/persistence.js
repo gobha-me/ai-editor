@@ -74,13 +74,19 @@ export function collectAndSave() {
     State.settings.embeddingCacheExpiry = embeddingCacheExpiryEl ? parseInt(embeddingCacheExpiryEl.value) || 7 : 7;
 
     // Summarizer
-    State.settings.summarizer = {
-        recentCountBase:  parseInt(document.getElementById('settingSumRecentBase')?.value)  || 10,
-        recentCountTools: parseInt(document.getElementById('settingSumRecentTools')?.value) || 24,
-        threshold:        parseInt(document.getElementById('settingSumThreshold')?.value)   || 30,
-        interval:         parseInt(document.getElementById('settingSumInterval')?.value)    || 15,
-        maxChars:         parseInt(document.getElementById('settingSumMaxChars')?.value)    || 2000,
-    };
+    const summarizerMode = document.querySelector('input[name="summarizerMode"]:checked')?.value || 'auto';
+    State.settings.summarizerMode = summarizerMode;
+
+    if (summarizerMode === 'manual') {
+        State.settings.summarizer = {
+            recentCountBase:  parseInt(document.getElementById('settingSumRecentBase')?.value)  || 10,
+            recentCountTools: parseInt(document.getElementById('settingSumRecentTools')?.value) || 24,
+            threshold:        parseInt(document.getElementById('settingSumThreshold')?.value)   || 30,
+            interval:         parseInt(document.getElementById('settingSumInterval')?.value)    || 15,
+            maxChars:         parseInt(document.getElementById('settingSumMaxChars')?.value)    || 2000,
+        };
+    }
+    // In auto mode, don't save slider values — they're computed from context window
 
     // Roles
     const activeRoleCard = document.querySelector('.role-card.active');

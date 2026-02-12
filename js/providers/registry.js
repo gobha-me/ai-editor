@@ -52,7 +52,9 @@ const BASE_PROVIDER = {
             owned_by: m.owned_by || null,
             capabilities: { ...DEFAULT_CAPABILITIES },
             pricing: null,
-            meta: {}
+            meta: {
+                contextTokens: m.context_length || m.context_window || null
+            }
         }));
     },
 

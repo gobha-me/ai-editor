@@ -4,9 +4,10 @@
 // Provider settings, advanced parameters, slider sync,
 // summarizer sliders, and embeddings status.
 
-import { State, Providers, ProviderRegistry } from '../core.js';
+import { State, Providers, ProviderRegistry, EventBus } from '../core.js';
 import { ContextManager } from '../context-manager.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
+import { ChatSummarizer } from '../chat/summarizer.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 // ── Provider description ──
@@ -115,7 +116,14 @@ export function showModelCapabilities() {
 
 export function populateSummarizerSliders() {
     const sum = State.settings.summarizer || {};
+    const mode = State.settings.summarizerMode || 'auto';
     const defaults = { recentCountBase: 10, recentCountTools: 24, threshold: 30, interval: 15, maxChars: 2000 };
+
+    // Set mode radio
+    const autoRadio = document.getElementById('summarizerModeAuto');
+    const manualRadio = document.getElementById('summarizerModeManual');
+    if (autoRadio) autoRadio.checked = (mode === 'auto');
+    if (manualRadio) manualRadio.checked = (mode === 'manual');
 
     const sliders = [
         { id: 'settingSumRecentBase', valueId: 'sumRecentBaseValue', key: 'recentCountBase' },
@@ -125,18 +133,75 @@ export function populateSummarizerSliders() {
         { id: 'settingSumMaxChars', valueId: 'sumMaxCharsValue', key: 'maxChars' },
     ];
 
+    // Get auto-tune params for display
+    let autoParams = defaults;
+    let autoLabel = 'Small (<32K)';
+    let contextTokens = null;
+    try {
+        const info = ChatSummarizer.getAutoParams();
+        autoParams = info.params;
+        autoLabel = info.label;
+        contextTokens = info.contextTokens;
+    } catch { /* ignore — use defaults */ }
+
+    // Determine which values to show
+    const isAuto = mode === 'auto';
+    const activeValues = isAuto ? autoParams : {};
+
     for (const s of sliders) {
         const el = document.getElementById(s.id);
         const valEl = document.getElementById(s.valueId);
         if (!el) continue;
 
-        const val = sum[s.key] != null ? sum[s.key] : defaults[s.key];
+        const val = isAuto
+            ? (autoParams[s.key] ?? defaults[s.key])
+            : (sum[s.key] != null ? sum[s.key] : defaults[s.key]);
+
         el.value = val;
         if (valEl) valEl.textContent = val;
+        el.disabled = isAuto;
+        el.style.opacity = isAuto ? '0.5' : '1';
 
         el.oninput = () => {
             if (valEl) valEl.textContent = el.value;
         };
+    }
+
+    // Auto-tune info badge
+    const infoEl = document.getElementById('summarizerAutoInfo');
+    if (infoEl) {
+        if (isAuto) {
+            const ctxStr = contextTokens
+                ? `${(contextTokens / 1000).toFixed(0)}K tokens`
+                : 'unknown (using conservative defaults)';
+            infoEl.innerHTML = `🤖 <strong>Tier: ${autoLabel}</strong> · Context window: ${ctxStr}`;
+            infoEl.style.display = 'block';
+        } else {
+            infoEl.style.display = 'none';
+        }
+    }
+
+    // Wire mode toggle (only once)
+    if (autoRadio && !autoRadio._wired) {
+        autoRadio._wired = true;
+        const handler = () => populateSummarizerSliders();
+        autoRadio.addEventListener('change', handler);
+        manualRadio.addEventListener('change', handler);
+    }
+}
+
+/**
+ * Update auto-tuned summarizer values when the model changes.
+ * Called from model-manager on model selection change.
+ */
+export function updateSummarizerForModel() {
+    const mode = State.settings.summarizerMode || 'auto';
+    if (mode !== 'auto') return; // Manual mode — don't touch sliders
+
+    // Re-populate if settings modal is open
+    const slidersContainer = document.getElementById('summarizerSliders');
+    if (slidersContainer) {
+        populateSummarizerSliders();
     }
 }
 
@@ -406,3 +471,8 @@ export function updateEmbeddingsStatus() {
         `;
     }
 }
+
+// Auto-update summarizer sliders when the model changes
+EventBus.on('model:changed', () => {
+    updateSummarizerForModel();
+});

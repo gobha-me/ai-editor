@@ -1,10 +1,39 @@
 /**
  * Chat History Summarizer
- * Compresses older chat messages into LLM-generated summaries
+ * Compresses older chat messages into LLM-generated summaries.
+ * Supports auto-tuning based on the active model's context window size.
  */
 
 import { State, EventBus, Storage } from '../core.js';
 import { LLM } from '../llm.js';
+
+/**
+ * Auto-tune tiers: keyed by context window threshold (tokens).
+ * Each tier defines summarizer defaults appropriate for that window size.
+ * Matched top-down — first tier whose threshold the model meets is used.
+ */
+const AUTO_TUNE_TIERS = [
+    {
+        label: 'Huge (500K+)',
+        minContext: 500_000,
+        params: { recentCountBase: 60, recentCountTools: 100, threshold: 200, interval: 80, maxChars: 4000 }
+    },
+    {
+        label: 'Large (128K+)',
+        minContext: 128_000,
+        params: { recentCountBase: 30, recentCountTools: 50, threshold: 80, interval: 40, maxChars: 3000 }
+    },
+    {
+        label: 'Medium (32K+)',
+        minContext: 32_000,
+        params: { recentCountBase: 16, recentCountTools: 32, threshold: 50, interval: 25, maxChars: 2500 }
+    },
+    {
+        label: 'Small (<32K)',
+        minContext: 0,
+        params: { recentCountBase: 10, recentCountTools: 24, threshold: 30, interval: 15, maxChars: 2000 }
+    }
+];
 
 /**
  * Compresses older chat messages into LLM-generated summaries.
@@ -12,7 +41,7 @@ import { LLM } from '../llm.js';
  * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
-    // Defaults — overridden by State.settings.summarizer when present
+    // Defaults — overridden by auto-tune or State.settings.summarizer when present
     _defaults: {
         recentCountBase: 10,
         recentCountTools: 24,
@@ -21,10 +50,52 @@ export const ChatSummarizer = {
         maxChars: 2000
     },
 
-    /** Read a summarizer setting with fallback to defaults */
+    /**
+     * Resolve the active context window size (tokens) from model metadata.
+     * Checks State.models for the currently selected llmModel.
+     * @returns {number|null}
+     */
+    _getContextWindow() {
+        const modelId = State.settings.llmModel;
+        if (!modelId || !State.models?.length) return null;
+        const model = State.models.find(m => m.id === modelId);
+        return model?.meta?.contextTokens || null;
+    },
+
+    /**
+     * Get the auto-tuned tier for a given context window size.
+     * @param {number|null} contextTokens
+     * @returns {{ label: string, params: Object }}
+     */
+    _getTier(contextTokens) {
+        if (!contextTokens) return AUTO_TUNE_TIERS[AUTO_TUNE_TIERS.length - 1]; // smallest
+        return AUTO_TUNE_TIERS.find(t => contextTokens >= t.minContext) || AUTO_TUNE_TIERS[AUTO_TUNE_TIERS.length - 1];
+    },
+
+    /**
+     * Get the effective auto-tuned parameters for the current model.
+     * @returns {{ label: string, contextTokens: number|null, params: Object }}
+     */
+    getAutoParams() {
+        const ctx = this._getContextWindow();
+        const tier = this._getTier(ctx);
+        return { label: tier.label, contextTokens: ctx, params: { ...tier.params } };
+    },
+
+    /** @returns {'auto'|'manual'} */
+    get mode() {
+        return State.settings.summarizerMode || 'auto';
+    },
+
+    /** Read a summarizer setting with fallback: manual overrides → auto-tune → hardcoded defaults */
     _cfg(key) {
-        const s = State.settings.summarizer;
-        return (s && s[key] != null) ? s[key] : this._defaults[key];
+        if (this.mode === 'manual') {
+            const s = State.settings.summarizer;
+            return (s && s[key] != null) ? s[key] : this._defaults[key];
+        }
+        // Auto mode: use tier-based params
+        const tier = this._getTier(this._getContextWindow());
+        return tier.params[key] ?? this._defaults[key];
     },
 
     get RECENT_COUNT_BASE()  { return this._cfg('recentCountBase'); },
@@ -75,18 +146,63 @@ export const ChatSummarizer = {
         const convo = messages
             .filter(m => m.role !== 'system')
             .map(m => {
-                const who = m.role === 'user' ? 'User' : 'Assistant';
+                // User messages
+                if (m.role === 'user') {
+                    const text = (typeof m.content === 'string'
+                        ? m.content : JSON.stringify(m.content)).slice(0, 500);
+                    return `User: ${text}`;
+                }
+
+                // Tool results — extract structured info instead of raw content
+                if (m.role === 'tool') {
+                    return this._summarizeToolResult(m);
+                }
+
+                // Assistant messages — include tool_calls info
+                if (m.role === 'assistant') {
+                    const parts = [];
+
+                    // List which tools were called
+                    if (m.tool_calls?.length > 0) {
+                        const calls = m.tool_calls.map(tc => {
+                            const name = tc.function?.name || tc.name || 'unknown';
+                            const args = tc.function?.arguments;
+                            let argSummary = '';
+                            try {
+                                const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+                                if (parsed?.path) argSummary = ` → ${parsed.path}`;
+                                else if (parsed?.query) argSummary = ` → "${parsed.query}"`;
+                                else if (parsed?.paths) argSummary = ` → [${parsed.paths.length} files]`;
+                            } catch { /* ignore */ }
+                            return `${name}${argSummary}`;
+                        });
+                        parts.push(`[Tools called: ${calls.join(', ')}]`);
+                    }
+
+                    // Include text content if present
+                    const text = (typeof m.content === 'string'
+                        ? m.content : (m.content ? JSON.stringify(m.content) : ''));
+                    if (text && text !== 'null') {
+                        parts.push(text.slice(0, 600));
+                    }
+
+                    return parts.length > 0 ? `Assistant: ${parts.join('\n')}` : null;
+                }
+
+                // Error/other roles
                 const text = (typeof m.content === 'string'
-                    ? m.content : JSON.stringify(m.content)).slice(0, 500);
-                return `${who}: ${text}`;
+                    ? m.content : JSON.stringify(m.content)).slice(0, 300);
+                return `[${m.role}]: ${text}`;
             })
+            .filter(Boolean)
             .join('\n\n');
 
         return `Summarize this coding-assistant conversation concisely. Include:
 1. Project/branch context
 2. User goals and key decisions
-3. Files created or modified
-4. Where the conversation left off
+3. Files read, created, or modified (with paths)
+4. Tool results that contained important data (file contents, search results)
+5. Where the conversation left off
 
 Keep under 400 words. Output ONLY the summary, no preamble.
 
@@ -96,14 +212,121 @@ ${convo}
 SUMMARY:`;
     },
 
+    /**
+     * Compress a tool result message into a structured summary.
+     * Preserves file paths, line counts, and key identifiers
+     * instead of discarding the entire content.
+     */
+    _summarizeToolResult(msg) {
+        const content = typeof msg.content === 'string'
+            ? msg.content
+            : JSON.stringify(msg.content);
+        
+        if (!content || content === 'null') return null;
+
+        let parsed;
+        try {
+            parsed = JSON.parse(content);
+        } catch {
+            // Plain text tool result — truncate
+            return `[Tool result]: ${content.slice(0, 300)}`;
+        }
+
+        // Error results — keep full
+        if (parsed.error) {
+            return `[Tool error]: ${parsed.error}`;
+        }
+
+        const parts = [];
+
+        // File read results — extract path, line count, key symbols
+        if (parsed.path && (parsed.content || parsed.lines)) {
+            const lineCount = parsed.lines?.length 
+                || (parsed.content?.split?.('\n')?.length) 
+                || 'unknown';
+            parts.push(`[File: ${parsed.path} — ${lineCount} lines`);
+
+            // Extract key symbols (function/class/export names) from first ~2000 chars
+            const src = parsed.content || parsed.lines?.join?.('\n') || '';
+            const symbols = this._extractSymbols(src.slice(0, 2000));
+            if (symbols.length > 0) {
+                parts.push(`. Key symbols: ${symbols.join(', ')}`);
+            }
+            parts.push(']');
+            return parts.join('');
+        }
+
+        // File tree results
+        if (parsed.files && Array.isArray(parsed.files)) {
+            const count = parsed.files.length;
+            const sample = parsed.files.slice(0, 8).map(f => f.path || f).join(', ');
+            return `[File tree: ${count} files. Sample: ${sample}]`;
+        }
+
+        // Search results
+        if (parsed.matches && Array.isArray(parsed.matches)) {
+            const count = parsed.matches.length;
+            const files = [...new Set(parsed.matches.map(m => m.path || m.file).filter(Boolean))];
+            return `[Search: ${count} matches in ${files.length} files: ${files.slice(0, 5).join(', ')}]`;
+        }
+
+        // Commit results
+        if (parsed.committed || parsed.success) {
+            return `[Tool result]: ${JSON.stringify(parsed).slice(0, 300)}`;
+        }
+
+        // Generic — structured truncation
+        return `[Tool result]: ${JSON.stringify(parsed).slice(0, 400)}`;
+    },
+
+    /**
+     * Extract key symbols (function names, class names, exports) from source code.
+     * Used to preserve searchable identifiers in compressed tool results.
+     */
+    _extractSymbols(src) {
+        if (!src) return [];
+        const symbols = new Set();
+        const patterns = [
+            /(?:export\s+)?(?:async\s+)?function\s+(\w+)/g,
+            /(?:export\s+)?class\s+(\w+)/g,
+            /(?:export\s+)?const\s+(\w+)\s*=/g,
+            /(?:export\s+)?(?:let|var)\s+(\w+)\s*=/g,
+            /(\w+)\s*:\s*(?:async\s+)?function/g,
+            /def\s+(\w+)\s*\(/g,   // Python
+            /fn\s+(\w+)\s*[<(]/g,  // Rust
+        ];
+        for (const pat of patterns) {
+            let match;
+            while ((match = pat.exec(src)) !== null) {
+                const name = match[1];
+                // Skip common noise
+                if (name.length > 2 && !['use', 'var', 'let', 'for', 'new', 'try', 'get', 'set'].includes(name)) {
+                    symbols.add(name);
+                }
+            }
+            if (symbols.size >= 15) break;
+        }
+        return [...symbols].slice(0, 15);
+    },
+
     /** Fallback: extract topic snippets without LLM */
     _basicSummary(messages) {
         const user = messages.filter(m => m.role === 'user');
         const asst = messages.filter(m => m.role === 'assistant');
+        const tool = messages.filter(m => m.role === 'tool');
         const topics = user.map(m =>
             (typeof m.content === 'string' ? m.content : 'complex request').slice(0, 80)
         );
-        return `${user.length} user / ${asst.length} assistant messages. Topics: ${topics.join('; ')}`;
+        // Include file paths from tool results
+        const filePaths = new Set();
+        tool.forEach(m => {
+            try {
+                const c = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
+                if (c?.path) filePaths.add(c.path);
+            } catch { /* ignore */ }
+        });
+        const fileNote = filePaths.size > 0 ? ` Files touched: ${[...filePaths].slice(0, 10).join(', ')}.` : '';
+        return `${user.length} user / ${asst.length} assistant / ${tool.length} tool messages. Topics: ${topics.join('; ')}.${fileNote}`;
     },
 
     /**
@@ -117,6 +340,12 @@ SUMMARY:`;
         const older = history.slice(0, -this.RECENT_COUNT);
         if (older.length < 5) return null;
 
+        console.log(`[ChatSummarizer] Mode: ${this.mode} | Recent: ${this.RECENT_COUNT} | Threshold: ${this.SUMMARY_THRESHOLD} | Compressing ${older.length} messages`);
+        if (this.mode === 'auto') {
+            const info = this.getAutoParams();
+            console.log(`[ChatSummarizer] Auto-tune tier: ${info.label} (${info.contextTokens ? (info.contextTokens/1000).toFixed(0) + 'K' : 'unknown'} ctx)`);
+        }
+
         let summary;
         try {
             const model = this._pickModel();
@@ -126,7 +355,7 @@ SUMMARY:`;
             const result = await Promise.race([
                 LLM.chat(
                     [{ role: 'user', content: this._buildPrompt(older) }],
-                    { model, stream: false, temperature: 0.3, maxTokens: 500 }
+                    { model, stream: false, temperature: 0.3, maxTokens: Math.ceil(this.SUMMARY_MAX_CHARS / 3.5) }
                 ),
                 new Promise((_, rej) =>
                     setTimeout(() => rej(new Error('summary timeout')), summaryTimeout)

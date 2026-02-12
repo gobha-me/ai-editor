@@ -53,6 +53,7 @@ export function onModelChange(e) {
     State.settings.llmModel = e.target.value;
     Storage.set('settings', State.settings);
     updateModelStatusBar();
+    EventBus.emit('model:changed', { modelId: e.target.value });
 }
 
 export function updateModelStatusBar() {
