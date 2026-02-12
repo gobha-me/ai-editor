@@ -1,20 +1,92 @@
+// @ts-check
 /**
  * Base Git Provider
- * 
+ *
  * Default interface that all git providers extend. Providers only need
  * to implement the methods they support — unimplemented methods throw
  * a clear "not supported" error.
- * 
- * Provider shape mirrors LLM ProviderRegistry pattern:
- *   - id, name, icon, description (metadata)
- *   - fixedUrl (null = user-configurable, string = hardcoded like GitHub)
- *   - API methods receive a `connection` object with url/token
- *   - contributes {} declares UI extensions
- * 
- * Connection object shape:
- *   { id, provider, label, url, token, enabled }
+ *
+ * @module git-providers/base
  */
 
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
+
+/**
+ * @typedef {import('../core.js').GitConnection} GitConnection
+ */
+
+/**
+ * @typedef {Object} TestConnectionResult
+ * @property {boolean} ok
+ * @property {string}  [user]
+ * @property {string}  [error]
+ */
+
+/**
+ * @typedef {Object} BlameCommit
+ * @property {string} sha
+ * @property {string} shortSha
+ * @property {string} message
+ * @property {string} author
+ * @property {string} email
+ * @property {string} date
+ */
+
+/**
+ * @typedef {Object} BlameRange
+ * @property {BlameCommit} commit
+ * @property {number}      startLine
+ * @property {string[]}    lines
+ */
+
+/**
+ * @typedef {Object} BlameData
+ * @property {BlameRange[]} ranges
+ */
+
+/**
+ * @typedef {Object} FileCommit
+ * @property {string} sha
+ * @property {string} shortSha
+ * @property {string} message
+ * @property {string} author
+ * @property {string} email
+ * @property {string} date
+ */
+
+/**
+ * @typedef {Object} PullRequestData
+ * @property {number}  number
+ * @property {string}  title
+ * @property {string}  body
+ * @property {string}  state
+ * @property {string}  head
+ * @property {string}  base
+ * @property {boolean} [mergeable]
+ * @property {string}  [url]
+ */
+
+/**
+ * @typedef {Object} PRFileChange
+ * @property {string} filename
+ * @property {string} status
+ * @property {number} additions
+ * @property {number} deletions
+ * @property {string} [patch]
+ */
+
+/**
+ * @typedef {Object} CommitStatus
+ * @property {'success'|'pending'|'failure'|'error'} state
+ * @property {Array} statuses
+ */
+
+/**
+ * @param {string} provider
+ * @param {string} method
+ */
 function notSupported(provider, method) {
     throw new Error(`${provider} does not support ${method}`);
 }
@@ -35,7 +107,8 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Test connectivity with given URL and token.
-     * Returns: { ok: boolean, user?: string, error?: string }
+     * @param {GitConnection} connection
+     * @returns {Promise<TestConnectionResult>}
      */
     async testConnection(connection) {
         // Default: try GET /user (works for Gitea and GitHub-compatible APIs)
@@ -45,9 +118,8 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Build request headers for API calls.
-     * Override for providers with different auth schemes.
-     * @param {Object} connection - { url, token, ... }
-     * @returns {Object} Headers object
+     * @param {GitConnection} connection
+     * @returns {Object.<string, string>}
      */
     getHeaders(connection) {
         return {
@@ -59,8 +131,8 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Build the base API URL.
-     * @param {Object} connection - { url, ... }
-     * @returns {string} Base URL for API requests
+     * @param {GitConnection} connection
+     * @returns {string}
      */
     getBaseUrl(connection) {
         return `${connection.url.replace(/\/$/, '')}/api/v1`;
@@ -68,7 +140,11 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Generic HTTP request helper.
-     * Providers can override for custom error handling.
+     * @param {GitConnection} connection
+     * @param {string} method - HTTP method
+     * @param {string} endpoint - API path
+     * @param {Object|null} [data=null]
+     * @returns {Promise<*>}
      */
     async request(connection, method, endpoint, data = null) {
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
@@ -113,6 +189,10 @@ const BASE_GIT_PROVIDER = {
     // REPOSITORIES
     // ========================================
 
+    /**
+     * @param {GitConnection} connection
+     * @returns {Promise<Array>}
+     */
     async listRepos(connection) {
         notSupported(this.name, 'listRepos');
     },
@@ -163,7 +243,12 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Get line-by-line blame data for a file.
-     * @returns {{ ranges: Array<{ commit: { sha, shortSha, message, author, email, date }, lines: string[] }> }}
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} path
+     * @param {string} [ref='main']
+     * @returns {Promise<BlameData>}
      */
     async getBlame(connection, owner, repo, path, ref = 'main') {
         notSupported(this.name, 'getBlame');
@@ -171,7 +256,12 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Get commit history for a specific file.
-     * @returns {Array<{ sha, shortSha, message, author, email, date }>}
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} path
+     * @param {string} [ref='main']
+     * @returns {Promise<FileCommit[]>}
      */
     async getFileCommits(connection, owner, repo, path, ref = 'main') {
         notSupported(this.name, 'getFileCommits');
@@ -255,7 +345,11 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Get full details of a single PR/MR.
-     * Returns: { number, title, body, state, head, base, mergeable, url, user, createdAt, updatedAt }
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @returns {Promise<PullRequestData>}
      */
     async getPullRequest(connection, owner, repo, number) {
         notSupported(this.name, 'getPullRequest');
@@ -263,7 +357,11 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Get files changed in a PR/MR with per-file patches.
-     * Returns: [{ filename, status, additions, deletions, patch }]
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @returns {Promise<PRFileChange[]>}
      */
     async getPullRequestFiles(connection, owner, repo, number) {
         notSupported(this.name, 'getPullRequestFiles');
@@ -304,8 +402,12 @@ const BASE_GIT_PROVIDER = {
     // ========================================
 
     /**
-     * Get combined commit status for a ref (branch name or SHA).
-     * Returns: { state: 'success'|'pending'|'failure'|'error', statuses: [...] }
+     * Get combined commit status for a ref.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} ref
+     * @returns {Promise<CommitStatus>}
      */
     async getCommitStatus(connection, owner, repo, ref) {
         notSupported(this.name, 'getCommitStatus');

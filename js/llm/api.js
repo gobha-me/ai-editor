@@ -1,8 +1,61 @@
+// @ts-check
 /**
  * LLM API Client
  * OpenAI-compatible chat completions with streaming, tool calling,
  * cost tracking, and provider-specific extensions.
  * Extracted from llm.js in 0.9.13.
+ *
+ * @module llm/api
+ */
+
+/**
+ * @typedef {import('../core.js').ChatMessage} ChatMessage
+ * @typedef {import('../core.js').ModelEntry} ModelEntry
+ * @typedef {import('../core.js').Settings} Settings
+ * @typedef {import('../tools/registry.js').ToolDefinition} ToolDefinition
+ */
+
+/**
+ * @typedef {Object} LLMChatOptions
+ * @property {string}    [model]
+ * @property {boolean}   [stream=true]
+ * @property {number}    [maxTokens=4096]
+ * @property {number}    [temperature=0.7]
+ * @property {ToolDefinition[]|null} [tools=null]
+ * @property {((token: string, full: string) => void)|null} [onToken=null]
+ * @property {boolean}   [skipThinkStrip]
+ */
+
+/**
+ * @typedef {Object} LLMUsage
+ * @property {number}  [prompt_tokens]
+ * @property {number}  [completion_tokens]
+ * @property {{cached_tokens?: number}}       [prompt_tokens_details]
+ * @property {{reasoning_tokens?: number}}    [completion_tokens_details]
+ */
+
+/**
+ * @typedef {Object} ToolCallDelta
+ * @property {string} id
+ * @property {'function'} type
+ * @property {{name: string, arguments: string}} function
+ */
+
+/**
+ * @typedef {Object} LLMChatResult
+ * @property {string}               content
+ * @property {string}               [rawContent]
+ * @property {ToolCallDelta[]|null}  toolCalls
+ * @property {string}               finishReason
+ * @property {LLMUsage|null}        usage
+ */
+
+/**
+ * @typedef {Object} RequestBodyOptions
+ * @property {boolean}              [stream=true]
+ * @property {number}               [maxTokens=4096]
+ * @property {number}               [temperature=0.7]
+ * @property {ToolDefinition[]|null} [tools=null]
  */
 
 import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from '../core.js';
@@ -23,7 +76,10 @@ import {
 
 /**
  * Build request body with provider-specific extensions.
- * Handles OpenAI-compatible base + Venice.ai extensions.
+ * @param {string} model
+ * @param {ChatMessage[]} messages
+ * @param {RequestBodyOptions} [options={}]
+ * @returns {Object}
  */
 export function buildRequestBody(model, messages, options = {}) {
     const {
@@ -60,12 +116,17 @@ export function buildRequestBody(model, messages, options = {}) {
 // ============================================
 
 export const LLM = {
+    /** @type {AbortController|null} */
     abortController: null,
 
     // ========================================
     // MODELS
     // ========================================
 
+    /**
+     * Fetch available models from the LLM endpoint.
+     * @returns {Promise<ModelEntry[]>}
+     */
     async listModels() {
         const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/models`;
         
@@ -100,6 +161,7 @@ export const LLM = {
     /**
      * Fetch embedding models from the API endpoint.
      * Tries ?type=embedding query parameter first, falls back to filtering all models.
+     * @returns {Promise<Array<{id: string, name: string, type: 'embedding', owned_by: string|null}>>}
      */
     async listEmbeddingModels() {
         const baseUrl = State.settings.llmEndpoint.replace(/\/$/, '');
@@ -178,6 +240,12 @@ export const LLM = {
     // CHAT COMPLETION
     // ========================================
 
+    /**
+     * Send a chat completion request.
+     * @param {ChatMessage[]} messages
+     * @param {LLMChatOptions} [options={}]
+     * @returns {Promise<LLMChatResult>}
+     */
     async chat(messages, options = {}) {
         const {
             model = State.settings.llmModel,
@@ -272,6 +340,8 @@ export const LLM = {
 
     /**
      * Track token usage and estimated cost for the session.
+     * @param {LLMUsage|null} usage
+     * @param {string} modelId
      */
     _trackUsage(usage, modelId) {
         if (!usage) return;
@@ -313,6 +383,13 @@ export const LLM = {
         EventBus.emit('cost:updated', { usage, sessionCost: State.sessionCost });
     },
 
+    /**
+     * Process an SSE stream from the LLM.
+     * @param {Response} response
+     * @param {((token: string, full: string) => void)|null} onToken
+     * @param {boolean} [hasTools=false]
+     * @returns {Promise<LLMChatResult>}
+     */
     async _handleStream(response, onToken, hasTools = false) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -484,13 +561,22 @@ export const LLM = {
 // LLM TOOLS — Managed by ToolRegistry
 // ============================================
 
+/**
+ * Thin facade over ToolRegistry — used by the chat loop to fetch
+ * tool definitions with role-based filtering applied.
+ */
 export const LLMTools = {
+    /** @returns {ToolDefinition[]} All registered tool definitions (unfiltered) */
     get definitions() {
         const defs = ToolRegistry.getDefinitions();
         console.log('[LLMTools] Fetching definitions from registry, count:', defs.length);
         return defs;
     },
 
+    /**
+     * Get tools filtered by the currently active role.
+     * @returns {ToolDefinition[]}
+     */
     getToolsForRole() {
         const defs = ToolRegistry.getDefinitions();
         console.log('[LLMTools] getToolsForRole: registry has', defs.length, 'tools');
@@ -510,6 +596,12 @@ export const LLMTools = {
 // HIGH-LEVEL FUNCTIONS
 // ============================================
 
+/**
+ * Generate a code edit based on a user request.
+ * @param {string} request
+ * @param {((token: string, full: string) => void)|null} [onToken=null]
+ * @returns {Promise<LLMChatResult & {code: string}>}
+ */
 export async function generateEdit(request, onToken = null) {
     const systemPrompt = buildSystemPrompt();
     const editPrompt = buildEditPrompt(request);
@@ -532,6 +624,11 @@ export async function generateEdit(request, onToken = null) {
     };
 }
 
+/**
+ * Generate a conventional commit message from changed files.
+ * @param {Array<{path: string, content: string, originalContent: string}>|null} [changedFiles=null]
+ * @returns {Promise<string>}
+ */
 export async function generateCommitMessage(changedFiles = null) {
     let diffSummary = 'Changes pending';
 
@@ -564,6 +661,12 @@ export async function generateCommitMessage(changedFiles = null) {
     return raw.replace(/^["']|["']$/g, '').trim();
 }
 
+/**
+ * Analyze an issue and generate recommendations.
+ * @param {{title: string, body: string, labels?: Array<{name: string}|string>}} issue
+ * @param {((token: string, full: string) => void)|null} [onToken=null]
+ * @returns {Promise<string>}
+ */
 export async function analyzeIssue(issue, onToken = null) {
     const prompt = EditorPrompts.issueAnalysisPrompt
         .replace('{title}', issue.title)

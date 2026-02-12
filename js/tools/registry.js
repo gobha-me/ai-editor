@@ -1,24 +1,47 @@
+// @ts-check
 /**
  * AI Editor - Tool Registry
  * Dynamic tool registration system for LLM function calling with role-based access control
+ *
+ * @module tools/registry
+ */
+
+/**
+ * @typedef {Object} ToolFunctionSchema
+ * @property {string} name
+ * @property {string} description
+ * @property {Object} parameters - JSON Schema for tool arguments
+ */
+
+/**
+ * @typedef {Object} ToolDefinition
+ * @property {'function'}         type
+ * @property {ToolFunctionSchema} function
+ * @property {string|string[]}    roles            - 'all' or array of role IDs
+ * @property {string[]}           [_registeredRoles] - Normalized role array (set at registration)
+ */
+
+/**
+ * @callback ToolHandler
+ * @param {Object} args - Tool arguments (parsed from JSON)
+ * @returns {Promise<Object>} Tool result object
  */
 
 import { Roles, State } from '../core.js';
 
 export const ToolRegistry = {
+    /** @type {Map<string, ToolHandler>} */
     handlers: new Map(),
+    /** @type {ToolDefinition[]} */
     definitions: [],
     
     /**
      * Register a tool with its handler and definition.
-     * 
-     * @param {string} name - Tool name
-     * @param {Function} handler - Async function that executes the tool
-     * @param {Object} definition - OpenAI function definition with additional metadata
-     * @param {string|string[]} definition.roles - Required: Role(s) that can access this tool
-     *                                              - 'all': available to all roles
-     *                                              - ['coder', 'pm']: specific roles only
-     * 
+     * @param {string} name
+     * @param {ToolHandler} handler
+     * @param {Object} definition - OpenAI function definition with roles metadata
+     * @param {string|string[]} definition.roles - 'all' or array of role IDs
+     * @returns {void}
      * @throws {Error} If roles field is missing or references invalid roles
      */
     register(name, handler, definition) {
@@ -71,9 +94,9 @@ export const ToolRegistry = {
     
     /**
      * Execute a registered tool by name.
-     * @param {string} name - Tool name
-     * @param {Object} args - Tool arguments
-     * @returns {Promise<Object>} Tool result
+     * @param {string} name
+     * @param {Object} args
+     * @returns {Promise<Object>}
      */
     async execute(name, args) {
         const handler = this.handlers.get(name);
@@ -111,7 +134,7 @@ export const ToolRegistry = {
     
     /**
      * Get all tool definitions (unfiltered).
-     * @returns {Array} Array of tool definitions
+     * @returns {ToolDefinition[]}
      */
     getDefinitions() {
         return this.definitions;
@@ -119,10 +142,8 @@ export const ToolRegistry = {
     
     /**
      * Get tools filtered for a specific role.
-     * Delegates to Roles.filterTools() which applies role-based filtering.
-     * 
-     * @param {string} roleId - Role name (defaults to current active role from State)
-     * @returns {Array} Filtered tool definitions
+     * @param {string} [roleId] - Role name (defaults to current active role)
+     * @returns {ToolDefinition[]}
      */
     getToolsForRole(roleId) {
         const activeRole = roleId || State.settings.role;
@@ -141,7 +162,7 @@ export const ToolRegistry = {
     
     /**
      * Get statistics about registered tools.
-     * @returns {Object} { total, byRole: { roleId: count } }
+     * @returns {{total: number, byRole: Object.<string, number>}}
      */
     getStats() {
         const stats = {

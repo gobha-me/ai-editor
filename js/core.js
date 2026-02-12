@@ -1,6 +1,166 @@
+// @ts-check
 /**
  * AI Editor - Core Module
  * State management, event bus, plugin system
+ *
+ * @module core
+ */
+
+// ============================================
+// TYPE DEFINITIONS (shared across codebase)
+// ============================================
+
+/**
+ * @typedef {Object} GitConnection
+ * @property {string} id         - Unique connection ID
+ * @property {string} provider   - Provider key ('gitea' | 'github' | 'gitlab')
+ * @property {string} label      - User-facing label
+ * @property {string} url        - Base URL (e.g. 'https://git.example.com')
+ * @property {string} token      - API token
+ * @property {boolean} enabled   - Whether connection is active
+ */
+
+/**
+ * @typedef {Object} VeniceParameters
+ * @property {boolean} stripThinking
+ * @property {boolean} disableThinking
+ * @property {'off'|'auto'|'always'} enableWebSearch
+ * @property {boolean} enableWebScraping
+ * @property {boolean} enableWebCitations
+ * @property {boolean} includeSearchResultsInStream
+ * @property {boolean} returnSearchResultsAsDocuments
+ * @property {boolean} includeSystemPrompt
+ * @property {'low'|'medium'|'high'|null} reasoningEffort
+ */
+
+/**
+ * @typedef {Object} OpenRouterParameters
+ * @property {string}   siteUrl
+ * @property {string}   appName
+ * @property {string}   route
+ * @property {string[]} models
+ * @property {string[]} transforms
+ */
+
+/**
+ * @typedef {Object} SummarizerConfig
+ * @property {number} recentCountBase   - Messages kept verbatim (no tool calls)
+ * @property {number} recentCountTools  - Messages kept when tools are active
+ * @property {number} threshold         - Min messages before first summary
+ * @property {number} interval          - New messages between re-summarizations
+ * @property {number} maxChars          - Max summary output length (chars)
+ */
+
+/**
+ * @typedef {'aggressive'|'balanced'|'conservative'|'custom'} SummarizerMode
+ */
+
+/**
+ * @typedef {Object} Settings
+ * @property {string}               giteaUrl
+ * @property {GitConnection[]}      connections
+ * @property {boolean}              useEmbeddings
+ * @property {string}               embeddingModel
+ * @property {boolean}              autoReindex
+ * @property {number}               embeddingCacheExpiry
+ * @property {number}               maxRelevantFiles
+ * @property {string}               llmEndpoint
+ * @property {string}               llmApiKey
+ * @property {string}               llmModel
+ * @property {string}               commitModel
+ * @property {string[]}             disabledModels
+ * @property {string}               apiProvider
+ * @property {VeniceParameters}     veniceParameters
+ * @property {OpenRouterParameters} openRouterParameters
+ * @property {number}               llmTimeout
+ * @property {number}               toolTimeout
+ * @property {number}               summaryTimeout
+ * @property {string}               role
+ * @property {number}               fontSize
+ * @property {number}               chatFontSize
+ * @property {number}               editorFontSize
+ * @property {boolean}              showIssues
+ * @property {boolean}              showPullRequests
+ * @property {boolean}              showLineNumbers
+ * @property {string}               theme
+ * @property {SummarizerMode}       summarizerMode
+ * @property {SummarizerConfig}     summarizer
+ */
+
+/**
+ * @typedef {Object} ModelMeta
+ * @property {number}  [contextTokens]
+ * @property {string}  [architecture]
+ * @property {boolean} [supportsTools]
+ */
+
+/**
+ * @typedef {Object} ModelEntry
+ * @property {string}    id
+ * @property {string}    name
+ * @property {string}    [type]
+ * @property {Object}    [capabilities]
+ * @property {Object}    [pricing]
+ * @property {ModelMeta} [meta]
+ */
+
+/**
+ * @typedef {Object} TabEntry
+ * @property {string}  path
+ * @property {string}  content
+ * @property {string}  originalContent
+ * @property {string}  sha
+ * @property {boolean} dirty
+ * @property {boolean} isPreview
+ */
+
+/**
+ * @typedef {Object} ChatMessage
+ * @property {'user'|'assistant'|'system'|'tool'} role
+ * @property {string|Object}  content
+ * @property {number}         [timestamp]
+ * @property {Array}          [tool_calls]
+ * @property {string}         [tool_call_id]
+ * @property {boolean}        [isSummary]
+ */
+
+/**
+ * @typedef {Object} SessionCost
+ * @property {number} totalInputTokens
+ * @property {number} totalOutputTokens
+ * @property {number} cachedInputTokens
+ * @property {number} reasoningTokens
+ * @property {number} totalCost
+ * @property {number} cacheSavings
+ * @property {number} requests
+ */
+
+/**
+ * @typedef {Object} ProviderBalance
+ * @property {string} provider
+ * @property {number} usd
+ * @property {string} label
+ * @property {*}      raw
+ */
+
+/**
+ * @typedef {Object} Role
+ * @property {string} id
+ * @property {string} name
+ * @property {string} icon
+ * @property {string} description
+ */
+
+/**
+ * @typedef {Object} PluginManifest
+ * @property {string}   id
+ * @property {string}   name
+ * @property {string}   [version]
+ * @property {string}   [description]
+ * @property {boolean}  [defaultEnabled]
+ * @property {Object}   [defaultConfig]
+ * @property {string[]} [hooks]
+ * @property {Function} [init]
  */
 
 // Import provider registry (auto-registers built-in providers)
@@ -11,8 +171,15 @@ import { ProviderRegistry, DEFAULT_CAPABILITIES } from './providers/index.js';
 // ============================================
 
 const EventBus = {
+    /** @type {Object.<string, Function[]>} */
     _listeners: {},
 
+    /**
+     * Subscribe to an event.
+     * @param {string} event
+     * @param {Function} callback
+     * @returns {() => void} Unsubscribe function
+     */
     on(event, callback) {
         if (!this._listeners[event]) {
             this._listeners[event] = [];
@@ -21,11 +188,21 @@ const EventBus = {
         return () => this.off(event, callback);
     },
 
+    /**
+     * Unsubscribe from an event.
+     * @param {string} event
+     * @param {Function} callback
+     */
     off(event, callback) {
         if (!this._listeners[event]) return;
         this._listeners[event] = this._listeners[event].filter(cb => cb !== callback);
     },
 
+    /**
+     * Emit an event to all listeners.
+     * @param {string} event
+     * @param {*} [data]
+     */
     emit(event, data) {
         if (!this._listeners[event]) return;
         this._listeners[event].forEach(cb => {
@@ -272,6 +449,13 @@ const Storage = {
 
     // --- Synchronous read API (unchanged signature) ---
 
+    /**
+     * Read a value from storage (synchronous, from in-memory cache).
+     * @template T
+     * @param {string} key
+     * @param {T} [defaultValue=null]
+     * @returns {T}
+     */
     get(key, defaultValue = null) {
         // Primary: in-memory cache (populated by init)
         if (this._cache.has(key)) {
@@ -290,6 +474,11 @@ const Storage = {
 
     // --- Write API (cache + async IDB + localStorage write-through) ---
 
+    /**
+     * Write a value to storage (cache + IDB + localStorage).
+     * @param {string} key
+     * @param {*} value
+     */
     set(key, value) {
         // 1. Always update in-memory cache (immediate, synchronous)
         this._cache.set(key, value);
@@ -391,6 +580,10 @@ const Storage = {
         return drafts;
     },
 
+    /**
+     * Remove a key from all storage layers.
+     * @param {string} key
+     */
     remove(key) {
         // Remove from all three layers
         this._cache.delete(key);
@@ -433,6 +626,14 @@ const Storage = {
     // IDB stores all drafts regardless of size.
     MAX_DRAFT_BYTES: 512 * 1024,
 
+    /**
+     * Save a file draft to storage.
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch
+     * @param {string} path
+     * @param {string} content
+     */
     saveDraft(owner, repo, branch, path, content) {
         const key = `draft-${owner}/${repo}/${branch}/${path}`;
         const payload = { content, timestamp: Date.now() };
@@ -454,18 +655,37 @@ const Storage = {
         EventBus.emit('draft:saved', { owner, repo, branch, path });
     },
 
+    /**
+     * Retrieve a saved draft.
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch
+     * @param {string} path
+     * @returns {string|null}
+     */
     getDraft(owner, repo, branch, path) {
         const key = `draft-${owner}/${repo}/${branch}/${path}`;
         const draft = this.get(key);
         return draft ? draft.content : null;
     },
 
+    /**
+     * Remove a saved draft.
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch
+     * @param {string} path
+     */
     clearDraft(owner, repo, branch, path) {
         const key = `draft-${owner}/${repo}/${branch}/${path}`;
         this.remove(key);
         delete State.drafts[`${owner}/${repo}/${branch}/${path}`];
     },
 
+    /**
+     * List all saved drafts.
+     * @returns {Array<{path: string, content: string, timestamp: number}>}
+     */
     listDrafts() {
         const drafts = [];
         const prefix = 'draft-';
@@ -484,11 +704,20 @@ const Storage = {
 // ============================================
 
 const Plugins = {
+    /** @type {Object.<string, {manifest: PluginManifest, enabled: boolean, instance: *|null, config: Object}>} */
     _registered: {},
+    /** @type {Object.<string, string[]>} */
     _hooks: {},
-    _buttons: [],      // Toolbar buttons contributed by plugins
-    _modals: {},       // Modal definitions contributed by plugins
+    /** @type {Array<{pluginId: string, icon: string, label: string, onClick: Function}>} */
+    _buttons: [],
+    /** @type {Object.<string, {pluginId: string, id: string, title: string, render: Function, width?: number}>} */
+    _modals: {},
 
+    /**
+     * Register a plugin.
+     * @param {PluginManifest} manifest
+     * @returns {boolean}
+     */
     register(manifest) {
         if (!manifest.id || !manifest.name) {
             console.error('Plugin missing id or name:', manifest);
@@ -521,6 +750,11 @@ const Plugins = {
         return true;
     },
 
+    /**
+     * Initialize a registered plugin.
+     * @param {string} pluginId
+     * @returns {Promise<boolean>}
+     */
     async init(pluginId) {
         const plugin = this._registered[pluginId];
         if (!plugin) return false;
@@ -543,6 +777,12 @@ const Plugins = {
         return true;
     },
 
+    /**
+     * Run a hook across all enabled plugins.
+     * @param {string} hookName
+     * @param {*} data
+     * @returns {Promise<*>}
+     */
     async runHook(hookName, data) {
         const plugins = this._hooks[hookName] || [];
         let result = data;
@@ -564,10 +804,19 @@ const Plugins = {
         return result;
     },
 
+    /**
+     * Get a plugin's registration entry.
+     * @param {string} pluginId
+     * @returns {{manifest: PluginManifest, enabled: boolean, instance: *, config: Object}|undefined}
+     */
     get(pluginId) {
         return this._registered[pluginId];
     },
 
+    /**
+     * List all registered plugins.
+     * @returns {Array<PluginManifest & {enabled: boolean, config: Object}>}
+     */
     list() {
         return Object.values(this._registered).map(p => ({
             ...p.manifest,
@@ -589,6 +838,11 @@ const Plugins = {
         EventBus.emit('plugin:configChanged', { pluginId, config });
     },
 
+    /**
+     * Enable or disable a plugin.
+     * @param {string} pluginId
+     * @param {boolean} enabled
+     */
     setEnabled(pluginId, enabled) {
         const plugin = this._registered[pluginId];
         if (!plugin) return;

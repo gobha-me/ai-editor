@@ -1,26 +1,63 @@
+// @ts-check
 /**
  * Chat History Summarizer
  * Compresses older chat messages into LLM-generated summaries.
- * 
+ *
  * Modes:
  *   - aggressive:   Summarize early & often — smaller recent windows, lower thresholds
  *   - balanced:     Default middle ground — matches context window tier directly
  *   - conservative: Preserve history — larger recent windows, higher thresholds
  *   - custom:       User-specified manual values
- * 
+ *
  * All non-custom modes are context-window-aware: detected tier is shifted
  * up/down depending on mode aggressiveness.
+ *
+ * @module chat/summarizer
+ */
+
+/**
+ * @typedef {import('../core.js').ChatMessage} ChatMessage
+ * @typedef {import('../core.js').SummarizerMode} SummarizerMode
+ * @typedef {import('../core.js').SummarizerConfig} SummarizerConfig
+ */
+
+/**
+ * @typedef {Object} TierParams
+ * @property {number} recentCountBase
+ * @property {number} recentCountTools
+ * @property {number} threshold
+ * @property {number} interval
+ * @property {number} maxChars
+ */
+
+/**
+ * @typedef {Object} Tier
+ * @property {string}     label
+ * @property {number}     minContext
+ * @property {TierParams} params
+ */
+
+/**
+ * @typedef {Object} SummaryInfo
+ * @property {string} summary
+ * @property {number} coveredCount
+ * @property {number} compressedMessages
+ * @property {number} keptMessages
+ * @property {number} timestamp
+ */
+
+/**
+ * @typedef {Object} AutoParams
+ * @property {string}         label
+ * @property {number|null}    contextTokens
+ * @property {TierParams}     params
+ * @property {SummarizerMode} mode
  */
 
 import { State, EventBus, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 
-/**
- * Context-window tiers (ordered largest → smallest).
- * Matched top-down — first tier whose threshold the model meets is used.
- * Tier index is then shifted by mode: aggressive shifts toward smaller,
- * conservative shifts toward larger.
- */
+/** @type {Tier[]} Context-window tiers (ordered largest → smallest). */
 const TIERS = [
     {
         label: 'Huge (500K+)',
@@ -44,7 +81,7 @@ const TIERS = [
     }
 ];
 
-/** Mode → tier index shift. Positive = shift toward smaller (more aggressive). */
+/** @type {Object.<string, number>} Mode → tier index shift. Positive = shift toward smaller. */
 const MODE_SHIFT = {
     aggressive:   +1,
     balanced:      0,
@@ -57,7 +94,7 @@ const MODE_SHIFT = {
  * Uses the utility model (commitModel) to avoid burning tokens on the primary model.
  */
 export const ChatSummarizer = {
-    // Defaults — fallback for custom mode when values aren't set
+    /** @type {TierParams} */
     _defaults: {
         recentCountBase: 10,
         recentCountTools: 24,
@@ -105,7 +142,7 @@ export const ChatSummarizer = {
 
     /**
      * Get the effective parameters and metadata for the current model + mode.
-     * @returns {{ label: string, contextTokens: number|null, params: Object, mode: string }}
+     * @returns {AutoParams}
      */
     getAutoParams() {
         const ctx = this._getContextWindow();
@@ -122,7 +159,11 @@ export const ChatSummarizer = {
         return m;
     },
 
-    /** Read a summarizer setting with fallback: custom overrides → tier → hardcoded defaults */
+    /**
+     * Read a summarizer setting with fallback: custom overrides → tier → hardcoded defaults.
+     * @param {keyof TierParams} key
+     * @returns {number}
+     */
     _cfg(key) {
         if (this.mode === 'custom') {
             const s = State.settings.summarizer;
@@ -133,13 +174,16 @@ export const ChatSummarizer = {
         return tier.params[key] ?? this._defaults[key];
     },
 
-    get RECENT_COUNT_BASE()  { return this._cfg('recentCountBase'); },
-    get RECENT_COUNT_TOOLS() { return this._cfg('recentCountTools'); },
-    get SUMMARY_THRESHOLD()  { return this._cfg('threshold'); },
-    get SUMMARY_INTERVAL()   { return this._cfg('interval'); },
-    get SUMMARY_MAX_CHARS()  { return this._cfg('maxChars'); },
+    /** @returns {number} */ get RECENT_COUNT_BASE()  { return this._cfg('recentCountBase'); },
+    /** @returns {number} */ get RECENT_COUNT_TOOLS() { return this._cfg('recentCountTools'); },
+    /** @returns {number} */ get SUMMARY_THRESHOLD()  { return this._cfg('threshold'); },
+    /** @returns {number} */ get SUMMARY_INTERVAL()   { return this._cfg('interval'); },
+    /** @returns {number} */ get SUMMARY_MAX_CHARS()  { return this._cfg('maxChars'); },
 
-    /** Dynamic recent count — expand window when tool calls are in recent history */
+    /**
+     * Dynamic recent count — expand window when tool calls are in recent history.
+     * @returns {number}
+     */
     get RECENT_COUNT() {
         const history = State.chatHistory;
         // Check if any of the last 15 messages are tool-related
@@ -186,7 +230,10 @@ export const ChatSummarizer = {
         return Math.max(0, Math.ceil(remaining / 2)); // /2 because each query ≈ 2 messages
     },
 
-    /** Pick cheapest available model (utility model → auto-detect cheap → fallback to primary) */
+    /**
+     * Pick cheapest available model for summarization.
+     * @returns {string} Model ID
+     */
     _pickModel() {
         // Prefer dedicated utility model
         if (State.settings.commitModel) return State.settings.commitModel;
@@ -201,7 +248,11 @@ export const ChatSummarizer = {
         return State.settings.llmModel; // last resort
     },
 
-    /** Build the summarization prompt */
+    /**
+     * Build the summarization prompt.
+     * @param {ChatMessage[]} messages
+     * @returns {string}
+     */
     _buildPrompt(messages) {
         const convo = messages
             .filter(m => m.role !== 'system')
@@ -274,8 +325,8 @@ SUMMARY:`;
 
     /**
      * Compress a tool result message into a structured summary.
-     * Preserves file paths, line counts, and key identifiers
-     * instead of discarding the entire content.
+     * @param {ChatMessage} msg
+     * @returns {string|null}
      */
     _summarizeToolResult(msg) {
         const content = typeof msg.content === 'string'
@@ -341,7 +392,8 @@ SUMMARY:`;
 
     /**
      * Extract key symbols (function names, class names, exports) from source code.
-     * Used to preserve searchable identifiers in compressed tool results.
+     * @param {string} src
+     * @returns {string[]}
      */
     _extractSymbols(src) {
         if (!src) return [];
@@ -369,7 +421,11 @@ SUMMARY:`;
         return [...symbols].slice(0, 15);
     },
 
-    /** Fallback: extract topic snippets without LLM */
+    /**
+     * Fallback: extract topic snippets without LLM.
+     * @param {ChatMessage[]} messages
+     * @returns {string}
+     */
     _basicSummary(messages) {
         const user = messages.filter(m => m.role === 'user');
         const asst = messages.filter(m => m.role === 'assistant');
@@ -391,7 +447,7 @@ SUMMARY:`;
 
     /**
      * Generate summary via LLM (non-blocking, fire-and-forget safe).
-     * Stores result in localStorage under 'chatSummaryInfo'.
+     * @returns {Promise<SummaryInfo|null>}
      */
     async generateAndStore() {
         if (!this.shouldSummarize()) return null;
@@ -523,12 +579,8 @@ SUMMARY:`;
 
     /**
      * Build the message array to send to the LLM.
-     * Prepends stored summary as a system message, then appends recent messages.
-     * 
-     * CRITICAL: Ensures tool call sequences remain intact.
-     * If recent messages include 'tool' role messages, we MUST include their
-     * corresponding 'assistant' message with tool_calls, even if it falls
-     * outside the RECENT_COUNT window.
+     * Prepends stored summary + recent messages. Ensures tool call sequences stay intact.
+     * @returns {ChatMessage[]}
      */
     getContextMessages() {
         const history = State.chatHistory;

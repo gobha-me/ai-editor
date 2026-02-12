@@ -2,6 +2,45 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.15] - 2026-02-12
+
+### Added — JSDoc Type Annotations & `@ts-check`
+
+First pass of static type coverage across the five core modules. Zero
+runtime changes — every edit is a JSDoc comment or a new `jsconfig.json`.
+
+**New file:**
+- `jsconfig.json` — VS Code project config enabling `@ts-check` IDE
+  support project-wide (ES2022, bundler resolution, `js/**/*.js` scope)
+
+**Typed modules (41 `@typedef`, 5 `@ts-check`):**
+- `js/core.js` — 14 typedefs: `GitConnection`, `Settings`,
+  `VeniceParameters`, `OpenRouterParameters`, `SummarizerConfig`,
+  `SummarizerMode`, `ModelEntry`, `ModelMeta`, `TabEntry`,
+  `ChatMessage`, `SessionCost`, `ProviderBalance`, `Role`,
+  `PluginManifest`. All `EventBus`, `Storage`, `Plugins` methods typed.
+- `js/git-providers/base.js` — 9 typedefs: `TestConnectionResult`,
+  `BlameCommit`, `BlameRange`, `BlameData`, `FileCommit`,
+  `PullRequestData`, `PRFileChange`, `CommitStatus`. Every provider
+  method annotated with `@param`/`@returns`.
+- `js/tools/registry.js` — 2 typedefs + 1 callback:
+  `ToolDefinition`, `ToolFunctionSchema`, `ToolHandler`. Typed
+  `handlers` Map and `definitions` array.
+- `js/llm/api.js` — 9 typedefs: `LLMChatOptions`, `LLMUsage`,
+  `ToolCallDelta`, `LLMChatResult`, `RequestBodyOptions`. Re-imports
+  shared types from core and registry.
+- `js/chat/summarizer.js` — 7 typedefs: `TierParams`, `Tier`,
+  `SummaryInfo`, `AutoParams`. Re-imports `ChatMessage`,
+  `SummarizerMode`, `SummarizerConfig` from core.
+
+**Developer experience:**
+- VS Code now shows inline type hints, autocomplete, and red squiggles
+  for type mismatches across the entire `js/` tree
+- Hover over any `State.settings.*` property to see its type
+- Tool handlers get full parameter and return-type checking
+- Cross-module imports resolve typed interfaces (e.g. `GitConnection`
+  defined in core.js, used in base.js via `@typedef {import(...)}`)
+
 ## [0.9.14-3] - 2026-02-12
 
 ### Fixed — Summarizer Mode Radio Buttons
