@@ -483,6 +483,12 @@ export function initDiffKeyboardShortcuts() {
         // Only handle shortcuts when diff pane is active
         const diffPane = document.getElementById('secondaryPane');
         if (!diffPane || diffPane.style.display === 'none') return;
+
+        // Don't capture keystrokes when user is typing in an input/textarea
+        // or when a modal overlay is active (e.g. commit modal)
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+        if (document.querySelector('.modal-overlay.active')) return;
         
         // Alt+↓ - Next change
         if (e.altKey && e.key === 'ArrowDown') {

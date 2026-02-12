@@ -657,7 +657,11 @@ export async function generateCommitMessage(changedFiles = null) {
         temperature: 0.3
     });
 
-    const raw = (result.rawContent || result.content || '').trim();
+    // Prefer .content (think-blocks stripped) over .rawContent
+    let raw = (result.content || result.rawContent || '').trim();
+    // Strip markdown code fences some models wrap commit messages in
+    raw = raw.replace(/^```[\w]*\n?/gm, '').replace(/\n?```$/gm, '').trim();
+    // Strip surrounding quotes
     return raw.replace(/^["']|["']$/g, '').trim();
 }
 

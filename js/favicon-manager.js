@@ -100,50 +100,14 @@ export const FaviconManager = {
     },
 
     /**
-     * Draw the idle icon (default application icon)
+     * Restore the original favicon (idle state)
      * @private
      */
     _drawIdleIcon() {
-        const ctx = this.ctx;
-        const size = 32;
-
-        // Clear canvas
-        ctx.clearRect(0, 0, size, size);
-
-        // Draw a simple code/editor icon
-        // Background
-        ctx.fillStyle = '#3b82f6'; // Blue color
-        ctx.beginPath();
-        ctx.roundRect(2, 2, size - 4, size - 4, 6);
-        ctx.fill();
-
-        // Draw code brackets
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        // Left bracket
-        ctx.beginPath();
-        ctx.moveTo(12, 10);
-        ctx.lineTo(8, 16);
-        ctx.lineTo(12, 22);
-        ctx.stroke();
-
-        // Right bracket
-        ctx.beginPath();
-        ctx.moveTo(20, 10);
-        ctx.lineTo(24, 16);
-        ctx.lineTo(20, 22);
-        ctx.stroke();
-
-        // Slash in middle
-        ctx.beginPath();
-        ctx.moveTo(15, 24);
-        ctx.lineTo(17, 8);
-        ctx.stroke();
-
-        this._updateFavicon();
+        // Restore the original HTML favicon (e.g. lightning bolt SVG)
+        if (this.originalFavicon) {
+            this.faviconLink.href = this.originalFavicon;
+        }
     },
 
     /**

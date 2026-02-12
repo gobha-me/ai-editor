@@ -153,17 +153,7 @@ Respond with the complete updated file content in a code block, followed by a br
 
     commitMessagePrompt: `Generate a concise git commit message for the following changes.
 
-File: {{file}}
-
-Original content:
-\`\`\`
-{{original}}
-\`\`\`
-
-New content:
-\`\`\`
-{{updated}}
-\`\`\`
+{{diff_summary}}
 
 Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc).`,
 
@@ -278,11 +268,9 @@ function buildEditPrompt(request) {
         .replace('{{request}}', request);
 }
 
-function buildCommitMessagePrompt(original, updated) {
+function buildCommitMessagePrompt(diffSummary) {
     return EditorPrompts.commitMessagePrompt
-        .replace('{{file}}', State.currentFile?.path || 'unknown')
-        .replace('{{original}}', original)
-        .replace('{{updated}}', updated);
+        .replace('{{diff_summary}}', diffSummary);
 }
 
 // ============================================

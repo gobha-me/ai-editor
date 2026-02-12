@@ -2,6 +2,46 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.18] - 2026-02-12
+
+### Fixed — V Hotkey Captured in Commit Modal
+
+The diff viewer's keyboard shortcut handler (`initDiffKeyboardShortcuts`)
+now checks for active inputs/textareas and open modals before handling
+bare key presses. Typing "v" in the commit message textarea no longer
+toggles the diff view mode.
+
+**Guards added:** `activeElement` is INPUT/TEXTAREA/contentEditable,
+or any `.modal-overlay.active` is present.
+
+**File modified:** `js/diff-viewer.js`
+
+### Fixed — Generated Commit Message Not Populating
+
+Root cause: `buildCommitMessagePrompt(original, updated)` expected two
+arguments (single-file original/updated), but `generateCommitMessage()`
+passed one combined diff summary string. `{{updated}}` resolved to the
+literal string "undefined".
+
+Fixes:
+- Template now uses single `{{diff_summary}}` placeholder for multi-file diffs
+- `buildCommitMessagePrompt()` takes one argument matching the caller
+- `generateCommitMessage()` now prefers `result.content` (think-blocks
+  stripped) over `result.rawContent` (may contain `<think>` blocks)
+- Strips markdown code fences some models wrap commit messages in
+- Empty result shows warning toast instead of silent failure
+
+**Files modified:** `js/prompts.js`, `js/llm/api.js`, `js/ui/commit.js`
+
+### Fixed — Favicon Replaced by Canvas Icon on Load
+
+`FaviconManager.init()` stored the original SVG favicon (⚡ lightning
+bolt) but immediately replaced it with a canvas-drawn code-brackets icon
+via `_drawIdleIcon()`. The idle state now restores the original HTML
+favicon. Canvas drawing is only used for loading spinner and error states.
+
+**File modified:** `js/favicon-manager.js`
+
 ## [0.9.17] - 2026-02-12
 
 ### Improved — Error Logger + EditorError Integration

@@ -68,7 +68,10 @@ export async function generateCommitMsg() {
         const dirtyTabs = State.openTabs.filter(t => checkedPaths.includes(t.path));
         
         const msg = await generateCommitMessage(dirtyTabs);
-        textarea.value = msg;
+        textarea.value = msg || '';
+        if (!msg) {
+            showToast('Commit message generation returned empty — model may have used think blocks only', 'warning');
+        }
     } catch (error) {
         textarea.value = '';
         showToast('Failed to generate commit message: ' + error.message, 'error');
