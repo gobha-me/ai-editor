@@ -103,7 +103,7 @@ export async function handleUserInputDirect(input) {
  * Shorten an error message for user-facing display.
  * Strips JSON noise from provider error payloads.
  */
-function _briefError(err) {
+export function _briefError(err) {
     const msg = err.message || String(err);
     // Strip JSON wrapper from "LLM stream error: ConnectionError: {...}" style messages
     const match = msg.match(/"message"\s*:\s*"([^"]+)"/);
@@ -115,7 +115,7 @@ function _briefError(err) {
 /**
  * Detect user intent from input text
  */
-function detectIntent(input) {
+export function detectIntent(input) {
     const lower = input.toLowerCase();
     
     // Commit message is very specific, check first
@@ -132,8 +132,9 @@ function detectIntent(input) {
     // Edit intent — ONLY if a file is already open.
     // Without a file, the general handler uses tools to find the right file.
     if (State.currentFile) {
-        if (lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
-            lower.includes('refactor') || lower.includes('rewrite')) {
+        if ((lower.includes('edit') || lower.includes('change') || lower.includes('modify') ||
+            lower.includes('refactor') || lower.includes('rewrite'))
+            && !lower.includes('review')) {
             return 'edit';
         }
         // Weaker signals — only edit if clearly about current file

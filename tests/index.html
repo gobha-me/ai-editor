@@ -76,6 +76,7 @@
         async function run() {
             const errors = [];
 
+            // --- Infrastructure (0.9.11) ---
             try {
                 await import('./test-idb.js');
             } catch (e) { errors.push(['IDB', e]); }
@@ -84,6 +85,16 @@
                 await import('./test-storage.js');
             } catch (e) { errors.push(['Storage', e]); }
 
+            // --- Core utilities ---
+            try {
+                await import('./test-eventbus.js');
+            } catch (e) { errors.push(['EventBus', e]); }
+
+            try {
+                await import('./test-html-escape.js');
+            } catch (e) { errors.push(['HTML Escape', e]); }
+
+            // --- Module tests (0.9.10) ---
             try {
                 await import('./test-edit-tracker.js');
             } catch (e) { errors.push(['EditTracker', e]); }
@@ -100,6 +111,29 @@
                 await import('./test-blame-normalize.js');
             } catch (e) { errors.push(['Blame', e]); }
 
+            // --- LLM & Chat (0.9.12) ---
+            try {
+                await import('./test-llm-pure.js');
+            } catch (e) { errors.push(['LLM Pure', e]); }
+
+            try {
+                await import('./test-handlers.js');
+            } catch (e) { errors.push(['Handlers', e]); }
+
+            try {
+                await import('./test-tools-parse.js');
+            } catch (e) { errors.push(['Tools Parse', e]); }
+
+            // --- UI & Context (0.9.12) ---
+            try {
+                await import('./test-context-filter.js');
+            } catch (e) { errors.push(['Context Filter', e]); }
+
+            try {
+                await import('./test-secondary-pane.js');
+            } catch (e) { errors.push(['Secondary Pane', e]); }
+
+            // --- Deployment ---
             try {
                 await import('./test-dependencies.js');
             } catch (e) { errors.push(['Dependencies', e]); }

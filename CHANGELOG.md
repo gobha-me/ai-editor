@@ -2,6 +2,42 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.12] - 2026-02-12
+
+Test coverage expansion for pure functions across the codebase.
+Adds 7 new test modules (~248 assertions) covering LLM message handling,
+chat intent routing, tool call parsing, context filtering, HTML escaping,
+event bus, and secondary pane utilities.
+
+### Added
+- **test-eventbus.js** — on/off/emit, return-value unsubscribe, error isolation, data passing (13 assertions)
+- **test-llm-pure.js** — `stripThinkBlocks` edge cases, `sanitizeMessages` field stripping/role filtering/tool call sparse gap handling, `getLanguageFromPath` mapping (53 assertions)
+- **test-handlers.js** — `detectIntent` routing for commit/issue/edit/explain/general intents with and without open file, `_briefError` JSON extraction and truncation (45 assertions)
+- **test-tools-parse.js** — `validateToolParameters` required/missing/edge cases, `parseTextToolCalls` JSON tags/function_call variant/argument formats (35 assertions)
+- **test-context-filter.js** — `ContextManager.shouldIndex` for source files, binary/media exclusions, lock files, path patterns, edge cases (47 assertions)
+- **test-secondary-pane.js** — `isPreviewable`, `_shortAuthor` name formatting, `_shortDate` relative time (30 assertions)
+- **test-html-escape.js** — `escapeHtml` and `escapeAttr` XSS prevention, null/coercion handling (25 assertions)
+
+### Changed
+- **js/llm.js** — exported `sanitizeMessages` for testability
+- **js/secondary-pane.js** — exported `_shortAuthor`, `_shortDate` for testability
+- **js/chat/handlers.js** — exported `detectIntent`, `_briefError` for testability
+- **tests/index.html** — organized imports by category (infrastructure → core → modules → LLM/chat → UI/context → deployment)
+
+### Files
+- `tests/test-eventbus.js` — NEW
+- `tests/test-llm-pure.js` — NEW
+- `tests/test-handlers.js` — NEW
+- `tests/test-tools-parse.js` — NEW
+- `tests/test-context-filter.js` — NEW
+- `tests/test-secondary-pane.js` — NEW
+- `tests/test-html-escape.js` — NEW
+- `tests/index.html` — updated with 7 new imports
+- `js/llm.js` — added `sanitizeMessages` to exports
+- `js/secondary-pane.js` — exported `_shortAuthor`, `_shortDate`
+- `js/chat/handlers.js` — exported `detectIntent`, `_briefError`
+- `js/version.js` — bumped to 0.9.12
+
 ## [0.9.11-1] - 2026-02-12
 
 ### Fixed

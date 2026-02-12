@@ -1217,5 +1217,6 @@ export {
     generateCommitMessage,
     analyzeIssue,
     getLanguageFromPath,
-    stripThinkBlocks
+    stripThinkBlocks,
+    sanitizeMessages
 };

@@ -293,7 +293,7 @@ async function _renderFileHistory(pane, owner, repo, path, branch) {
     }
 }
 
-function _shortAuthor(name) {
+export function _shortAuthor(name) {
     if (!name) return '';
     // "Jeff Smith" → "Jeff S."
     const parts = name.trim().split(/\s+/);
@@ -301,10 +301,11 @@ function _shortAuthor(name) {
     return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
-function _shortDate(dateStr) {
+export function _shortDate(dateStr) {
     if (!dateStr) return '';
     try {
         const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr.slice(0, 10);
         const now = new Date();
         const diffMs = now - d;
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
