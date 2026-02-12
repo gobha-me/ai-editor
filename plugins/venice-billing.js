@@ -80,8 +80,9 @@ const VeniceBillingPlugin = {
 // ═══════════════════════════════════════════
 
 function renderDashboard(container) {
-    selectedDate = new Date();
-    selectedDate.setHours(0, 0, 0, 0);
+    // Initialize to today at midnight GMT (not local)
+    const now = new Date();
+    selectedDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     logPage = 1;
 
     container.innerHTML = `
@@ -111,12 +112,15 @@ function renderDashboard(container) {
 }
 
 function navDay(delta) {
+    // Navigate by GMT days
     const d = new Date(selectedDate);
-    d.setDate(d.getDate() + delta);
+    d.setUTCDate(d.getUTCDate() + delta);
 
-    const today  = midnight(new Date());
+    // Calculate today and oldest in GMT
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const oldest = new Date(today);
-    oldest.setDate(oldest.getDate() - MAX_DAYS_BACK);
+    oldest.setUTCDate(oldest.getUTCDate() - MAX_DAYS_BACK);
 
     if (d > today || d < oldest) return;
     selectedDate = d;
@@ -127,18 +131,29 @@ function navDay(delta) {
 
 function syncDayPicker() {
     const el = document.getElementById('vb-date');
-    if (el) el.textContent = selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    if (el) {
+        // Display date in GMT with explicit timezone indicator
+        const dateStr = selectedDate.toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'short', 
+            day: 'numeric', 
+            year: 'numeric',
+            timeZone: 'UTC'
+        });
+        el.textContent = dateStr + ' GMT';
+    }
 
-    const today  = midnight(new Date());
+    // Calculate today and oldest in GMT
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const oldest = new Date(today);
-    oldest.setDate(oldest.getDate() - MAX_DAYS_BACK);
+    oldest.setUTCDate(oldest.getUTCDate() - MAX_DAYS_BACK);
 
     const prev = document.getElementById('vb-prev');
     const next = document.getElementById('vb-next');
     if (prev) prev.disabled = (selectedDate <= oldest);
     if (next) next.disabled = (selectedDate >= today);
 }
-
 // ═══════════════════════════════════════════
 // FETCH
 // ═══════════════════════════════════════════
@@ -172,7 +187,6 @@ async function fetchAndRender() {
         if (!dayCache[key]) {
             const start = selectedDate.toISOString();
             const end   = new Date(selectedDate.getTime() + 86400000).toISOString();
-
             content.innerHTML = msgBox('⏳', 'Fetching usage… <span id="vb-prog"></span>');
 
             // Page 1 → learn totalPages
@@ -446,7 +460,9 @@ function seq(a, b) { return Array.from({ length: b - a + 1 }, (_, i) => a + i); 
 // HELPERS
 // ═══════════════════════════════════════════
 
+// Helper: Create GMT midnight date (not used anymore, kept for compatibility)
 function midnight(d) { d.setHours(0, 0, 0, 0); return d; }
+// Cache key: YYYY-MM-DD in GMT (ISO date portion)
 function dkey(d) { return d.toISOString().slice(0, 10); }
 
 function fmtCost(usd, diem) {
