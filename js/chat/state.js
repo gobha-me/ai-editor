@@ -10,6 +10,9 @@ let inputElement = null;
 // Edit state
 let pendingEdit = null;  // { code, explanation } waiting for user approval
 
+// Image attachments pending send
+let pendingImages = [];  // [{ dataUrl, name, size }]
+
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 
@@ -75,4 +78,38 @@ export function cancelToolLoop() {
  */
 export function resetToolLoopCancel() {
     _cancelToolLoop = false;
+}
+
+// ============================================
+// IMAGE ATTACHMENTS
+// ============================================
+
+/**
+ * Get current pending images.
+ * @returns {Array<{dataUrl: string, name: string, size: number}>}
+ */
+export function getPendingImages() {
+    return pendingImages;
+}
+
+/**
+ * Add an image to the pending queue.
+ * @param {{dataUrl: string, name: string, size: number}} image
+ */
+export function addPendingImage(image) {
+    pendingImages.push(image);
+}
+
+/**
+ * Remove a pending image by index.
+ */
+export function removePendingImage(index) {
+    pendingImages.splice(index, 1);
+}
+
+/**
+ * Clear all pending images (after send).
+ */
+export function clearPendingImages() {
+    pendingImages = [];
 }

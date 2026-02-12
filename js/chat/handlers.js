@@ -20,8 +20,11 @@ import {
     setPendingEdit, 
     clearPendingEdit,
     isToolLoopCancelled,
-    resetToolLoopCancel 
+    resetToolLoopCancel,
+    getPendingImages,
+    clearPendingImages
 } from './state.js';
+import { renderImagePreview } from './input.js';
 import { executeToolCall } from './tools.js';
 import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
@@ -41,16 +44,39 @@ const INPUT_RETRY_BASE_MS = 2000;
 export async function handleUserInputDirect(input) {
     console.log(`[handleUserInputDirect] Received input="${input}"`);
     
-    if (!input || State.isGenerating) return;
+    const images = getPendingImages().slice(); // snapshot
+    
+    if (!input && images.length === 0) return;
+    if (State.isGenerating) return;
+
+    // Build message content — multimodal array if images present, plain string otherwise
+    let messageContent;
+    if (images.length > 0) {
+        messageContent = [];
+        if (input) {
+            messageContent.push({ type: 'text', text: input });
+        }
+        for (const img of images) {
+            messageContent.push({
+                type: 'image_url',
+                image_url: { url: img.dataUrl }
+            });
+        }
+        // Clear pending images and preview strip
+        clearPendingImages();
+        renderImagePreview();
+    } else {
+        messageContent = input;
+    }
 
     // Flush any pending prune stash — undo window is over
     ChatSummarizer.flushStash();
     
     // Add user message ONCE — retries must not duplicate this
-    addMessage('user', input);
+    addMessage('user', messageContent);
 
-    // Determine intent
-    const intent = detectIntent(input);
+    // Determine intent from text only
+    const intent = detectIntent(input || '');
 
     /**
      * Build the handler thunk.  On retry this is re-invoked, but the user
@@ -267,7 +293,13 @@ export async function handleGeneralRequest(input) {
     console.log(`[handleGeneralRequest] Context messages count: ${contextMessages.length}`);
     
     const lastCtx = contextMessages[contextMessages.length - 1];
-    const alreadyInContext = lastCtx && lastCtx.role === 'user' && lastCtx.content === input;
+    // Handle multimodal content: extract text portion for comparison
+    const lastCtxText = lastCtx ? (
+        Array.isArray(lastCtx.content)
+            ? (lastCtx.content.find(c => c.type === 'text')?.text || '')
+            : lastCtx.content
+    ) : '';
+    const alreadyInContext = lastCtx && lastCtx.role === 'user' && lastCtxText === input;
 
     const messages = [
         { role: 'system', content: systemPrompt },

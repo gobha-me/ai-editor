@@ -2,6 +2,40 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.20] - 2026-02-12
+
+### Added — Image/Screenshot Paste for Vision Models
+
+Chat now supports sending images alongside text prompts for use with
+vision-capable LLMs. Three input methods:
+
+- **Clipboard paste** — paste a screenshot or copied image directly into
+  the chat textarea (Ctrl+V / Cmd+V)
+- **Drag & drop** — drop image files onto the textarea
+- **Attach button** — 📎 button opens a file picker (PNG/JPEG/GIF/WebP,
+  5 MB max)
+
+Pending images appear as thumbnails in a preview strip above the input
+with ✕ to remove. Images-only sends (no text) are allowed.
+
+Messages are stored using the OpenAI multimodal content format
+(`content: [{type:'text',...}, {type:'image_url',...}]`), which passes
+through the existing LLM pipeline to any vision-capable model. Image
+thumbnails render inline in user chat messages and can be clicked for
+a fullscreen overlay preview (Escape or click to dismiss).
+
+The summarizer already guards against non-string content with
+`typeof m.content === 'string' ? ... : JSON.stringify(...)`, so
+multimodal messages are handled gracefully in context management.
+
+**New:** `js/chat/state.js` (pendingImages state), `js/chat/input.js`
+(paste/drop/attach handlers + preview strip), `js/chat/index.js`
+(previewImage overlay + window.Chat wiring), `js/chat/handlers.js`
+(multimodal content builder + alreadyInContext fix), `js/chat/messages.js`
+(image rendering in messages), `js/app.js` (send button images-only),
+`html/chat-panel.html` (📎 button), `css/chat.css` (preview strip,
+message images, overlay, drag-over styles)
+
 ## [0.9.19-1] - 2026-02-12
 
 ### Fixed — Settings Save Clears Project

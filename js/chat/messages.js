@@ -268,20 +268,43 @@ export function renderMessage(message, isLastUserMessage = false) {
     }
 
     // CRITICAL FIX: Only strip think blocks from assistant messages, NEVER from user/system/tool messages
-    let displayContent = (message.role === 'assistant') 
-        ? stripThinkBlocks(message.content || '')
-        : (message.content || '');
+    let displayContent;
+    let messageImages = [];  // data URLs for inline image rendering
+
+    if (Array.isArray(message.content)) {
+        // Multimodal content — extract text and images
+        const textParts = message.content
+            .filter(c => c.type === 'text')
+            .map(c => c.text);
+        displayContent = textParts.join('\n') || '';
+        messageImages = message.content
+            .filter(c => c.type === 'image_url')
+            .map(c => c.image_url?.url)
+            .filter(Boolean);
+    } else {
+        displayContent = (message.role === 'assistant') 
+            ? stripThinkBlocks(message.content || '')
+            : (message.content || '');
+    }
     
     // If content is an object or array, stringify it for display
     if (typeof displayContent !== 'string') {
         displayContent = JSON.stringify(displayContent, null, 2) || '';
     }
 
+    // Build image HTML for multimodal messages
+    const imageHtml = messageImages.length > 0
+        ? `<div class="message-images">${messageImages.map(url => 
+            `<img src="${url}" alt="Attached image" class="message-image" onclick="window.Chat.previewImage(this.src)">`
+          ).join('')}</div>`
+        : '';
+
     messageEl.innerHTML = `
         <div class="message-header">
             <span class="message-role">${roleIcon} ${roleName}</span>
             <span class="message-time">${timeDisplay}</span>
         </div>
+        ${imageHtml}
         <div class="message-content">${formatMessageContent(displayContent)}</div>
     `;
 

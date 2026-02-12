@@ -562,9 +562,12 @@ function setupEventListeners() {
     // Chat
     safeAdd('btnSend', 'click', () => {
         const input = document.getElementById('chatInput');
-        if (input && input.value.trim()) {
-            window.Chat.sendMessage(input.value.trim());
-            input.value = '';
+        const text = input ? input.value.trim() : '';
+        const hasImages = document.getElementById('imagePreviewStrip')?.style.display !== 'none'
+            && document.getElementById('imagePreviewStrip')?.children.length > 0;
+        if (text || hasImages) {
+            window.Chat.sendMessage(text);
+            if (input) input.value = '';
         }
     });
     safeAdd('btnStop', 'click', stopGeneration);

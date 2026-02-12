@@ -30,7 +30,7 @@ import {
     cancelEdit,
     commitEdit
 } from './messages.js';
-import { setupInputHandlers, stopGeneration } from './input.js';
+import { setupInputHandlers, stopGeneration, removeImage } from './input.js';
 import { exportChat } from './export.js';
 import { 
     handleUserInputDirect,
@@ -288,6 +288,32 @@ function showToast(message, type = 'success') {
 }
 
 // ============================================
+// IMAGE PREVIEW
+// ============================================
+
+/**
+ * Open an image in a fullscreen overlay for closer inspection.
+ * @param {string} src - Data URL or image URL
+ */
+function previewImage(src) {
+    // Remove existing overlay if any
+    document.getElementById('imageOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'imageOverlay';
+    overlay.className = 'image-overlay';
+    overlay.innerHTML = `<img src="${src}" alt="Image preview">`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.addEventListener('keydown', function _esc(e) {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', _esc);
+        }
+    });
+    document.body.appendChild(overlay);
+}
+
+// ============================================
 // EXPOSE TO GLOBAL (for onclick handlers)
 // ============================================
 
@@ -304,7 +330,9 @@ window.Chat = {
     copyMessage,
     editMessage,
     cancelEdit,
-    commitEdit
+    commitEdit,
+    removeImage,
+    previewImage
 };
 
 // ============================================
