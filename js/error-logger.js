@@ -3,6 +3,7 @@
 // ============================================
 
 import { escapeHtml } from './utils/html.js';
+import { EditorError } from './utils/errors.js';
 
 export const ErrorLogger = {
     logs: [],
@@ -11,12 +12,12 @@ export const ErrorLogger = {
     init() {
         // Capture unhandled errors
         window.addEventListener('error', (e) => {
-            this.logError('ERROR', e.message, e.error?.stack || '', e.filename, e.lineno, e.colno);
+            this.logError('ERROR', e.message, e.error?.stack || '', e.filename, e.lineno, e.colno, e.error);
         });
 
         // Capture unhandled promise rejections
         window.addEventListener('unhandledrejection', (e) => {
-            this.logError('UNHANDLED REJECTION', e.reason?.message || e.reason, e.reason?.stack || '', '', 0, 0);
+            this.logError('UNHANDLED REJECTION', e.reason?.message || e.reason, e.reason?.stack || '', '', 0, 0, e.reason);
         });
 
         // Intercept console methods
@@ -44,7 +45,7 @@ export const ErrorLogger = {
         };
     },
 
-    logError(type, message, stack, file, line, col) {
+    logError(type, message, stack, file, line, col, originalError = null) {
         const entry = {
             timestamp: new Date().toISOString(),
             type,
@@ -52,8 +53,22 @@ export const ErrorLogger = {
             stack: String(stack || ''),
             file: String(file || ''),
             line: line || 0,
-            col: col || 0
+            col: col || 0,
+            // EditorError structured fields
+            code: null,
+            recoveryHint: null,
+            status: null,
         };
+
+        // Extract structured info from EditorError
+        if (originalError instanceof EditorError) {
+            entry.code = originalError.code;
+            entry.recoveryHint = originalError.recoveryHint;
+            entry.status = originalError.status;
+        } else if (originalError?.code) {
+            // Legacy errors with .code property
+            entry.code = originalError.code;
+        }
 
         this.logs.push(entry);
         if (this.logs.length > this.maxLogs) {
@@ -64,7 +79,21 @@ export const ErrorLogger = {
     },
 
     serializeValue(arg) {
-        // Handle Error objects specially
+        // Handle EditorError with structured fields
+        if (arg instanceof EditorError) {
+            const obj = {
+                name: arg.name,
+                code: arg.code,
+                message: arg.message,
+                ...(arg.recoveryHint && { recoveryHint: arg.recoveryHint }),
+                ...(arg.status && { status: arg.status }),
+                ...(arg.context && { context: arg.context }),
+                stack: arg.stack,
+            };
+            return JSON.stringify(obj, null, 2);
+        }
+
+        // Handle other Error objects
         if (arg instanceof Error) {
             return JSON.stringify({
                 name: arg.name,
@@ -151,15 +180,27 @@ export const ErrorLogger = {
         container.innerHTML = this.logs.map((entry, i) => {
             const time = new Date(entry.timestamp).toLocaleTimeString();
             const color = typeColors[entry.type] || '#6c757d';
+            const codeBadge = entry.code
+                ? `<span style="background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 3px; font-size: 11px; font-family: monospace; color: ${color};">${escapeHtml(entry.code)}</span>`
+                : '';
+            const hintBlock = entry.recoveryHint
+                ? `<div style="margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: rgba(59,130,246,0.1); border-left: 2px solid #3b82f6; border-radius: 2px; color: #93c5fd; font-size: 12px;">💡 ${escapeHtml(entry.recoveryHint)}</div>`
+                : '';
+            const statusBadge = entry.status
+                ? `<span style="color: var(--text-muted); font-size: 11px;">HTTP ${entry.status}</span>`
+                : '';
             
             return `
                 <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(0,0,0,0.1); border-left: 3px solid ${color}; border-radius: 3px;">
-                    <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap;">
                         <span style="color: ${color}; font-weight: bold;">[${entry.type}]</span>
+                        ${codeBadge}
+                        ${statusBadge}
                         <span style="color: var(--text-muted);">${time}</span>
                         ${entry.file ? `<span style="color: var(--text-muted);">${escapeHtml(entry.file)}:${escapeHtml(entry.line)}:${escapeHtml(entry.col)}</span>` : ''}
                     </div>
                     <div style="color: var(--text-primary); margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(entry.message)}</div>
+                    ${hintBlock}
                     ${entry.stack ? `<details style="margin-top: 0.5rem;"><summary style="cursor: pointer; color: var(--text-muted);">Stack Trace</summary><pre style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); overflow-x: auto; font-size: 11px;">${escapeHtml(entry.stack)}</pre></details>` : ''}
                 </div>
             `;
@@ -172,7 +213,11 @@ export const ErrorLogger = {
 
     exportText() {
         return this.logs.map(entry => {
-            let text = `[${entry.timestamp}] [${entry.type}] ${entry.message}`;
+            let text = `[${entry.timestamp}] [${entry.type}]`;
+            if (entry.code) text += ` [${entry.code}]`;
+            if (entry.status) text += ` (HTTP ${entry.status})`;
+            text += ` ${entry.message}`;
+            if (entry.recoveryHint) text += `\n  💡 ${entry.recoveryHint}`;
             if (entry.file) text += `\n  at ${entry.file}:${entry.line}:${entry.col}`;
             if (entry.stack) text += `\n${entry.stack}`;
             return text;

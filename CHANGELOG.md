@@ -2,6 +2,32 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.17] - 2026-02-12
+
+### Improved — Error Logger + EditorError Integration
+
+The error log modal now surfaces structured fields from `EditorError`:
+
+- **Code badge** — monospace `AUTH_INVALID_TOKEN`, `GIT_NOT_FOUND`, etc.
+  displayed inline next to the error type
+- **Recovery hint** — blue-highlighted 💡 block below the error message
+  with actionable suggestions (e.g. "Check your API token in Settings →
+  Connections.")
+- **HTTP status** — shown when available (e.g. `HTTP 404`)
+- Text export (`exportText()`) includes code, status, and hint
+- `serializeValue()` extracts EditorError fields when logging via
+  `console.error()`
+- Backward-compatible: regular `Error` objects render unchanged
+
+**Files modified:** `js/error-logger.js`
+
+### Added — Buy Me a Coffee Badge
+
+☕ badge in the Help modal footer linking to
+https://buymeacoffee.com/jeffasmith — visible but not intrusive.
+
+**Files modified:** `html/modals.html`
+
 ## [0.9.16-1] - 2026-02-12
 
 ### Removed — Dead Scroll Sync Code
