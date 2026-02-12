@@ -38,6 +38,7 @@
 │  tools/issue-tools  tools/pr-tools  tools/commit-tools │
 │  tools/scan-tools  tools/scratchpad-tools              │
 │  tools/xref-tools (cross-project reference)            │
+│  tools/multifile-tools (edit_file, write_file)         │
 │  tools/context-tools  tools/edit-tracker               │
 ├─────────────────────────────────────────────────────────┤
 │                    LLM Layer                            │

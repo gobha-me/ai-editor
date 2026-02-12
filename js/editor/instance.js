@@ -325,11 +325,13 @@ export function replaceRange(startLine, endLine, newContent) {
     
     const newTotalLines = editorInstance.state.doc.lines;
     const newLineCount = newContent.split('\n').length;
+    const originalLineCount = clampedEnd - clampedStart + 1;
+    const lineDelta = newLineCount - originalLineCount;
     
     EventBus.emit('editor:linesReplaced', {
         startLine: clampedStart,
         endLine: clampedEnd,
-        oldLineCount: clampedEnd - clampedStart + 1,
+        oldLineCount: originalLineCount,
         newLineCount,
         totalLines: newTotalLines
     });
@@ -337,7 +339,9 @@ export function replaceRange(startLine, endLine, newContent) {
     return {
         success: true,
         oldContent,
+        originalLineCount,
         newLineCount,
+        lineDelta,
         totalLines: newTotalLines
     };
 }
@@ -389,7 +393,9 @@ export function insertAtLine(afterLine, content) {
     
     return {
         success: true,
+        insertedAfter: afterLine,
         insertedLines,
+        newLineCount: insertedLines,
         totalLines: newTotalLines
     };
 }

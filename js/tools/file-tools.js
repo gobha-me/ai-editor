@@ -170,13 +170,11 @@ export function registerFileTools(registry) {
         }
         
         // Track this as a read operation (opening = reading)
-        // Use setTimeout to ensure State is updated after file loads
-        setTimeout(() => {
-            if (State.currentFile?.path === path && State.editorContent) {
-                const lineCount = State.editorContent.split('\n').length;
-                EditTracker.recordRead(path, 1, lineCount, lineCount);
-            }
-        }, 100);
+        // onTreeItemClick awaits file load, so State is already updated
+        if (State.currentFile?.path === path && State.editorContent) {
+            const lineCount = State.editorContent.split('\n').length;
+            EditTracker.recordRead(path, 1, lineCount, lineCount);
+        }
         
         return {
             success: true,

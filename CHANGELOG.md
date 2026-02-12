@@ -2,6 +2,59 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.21] - 2026-02-12
+
+### Added — Multi-File Editing
+
+Two new tools let the LLM edit across files without manual `open_file`
+calls, cutting the tool-call overhead for multi-file tasks roughly in
+half.
+
+**`edit_file`** — surgical edit on any file by path. Accepts `path`,
+`operation` (replace/insert/delete), and the relevant line parameters.
+Auto-opens the target file if it's not already active, switching tabs
+transparently. The LLM can now do:
+```
+edit_file(path='a.js', operation='replace', start_line=10, end_line=15, new_content='...')
+edit_file(path='b.js', operation='insert', after_line=5, new_content='...')
+```
+No intermediate `open_file` calls needed.
+
+**`write_file`** — create new files or completely overwrite existing
+ones. For existing files, opens in the editor and replaces all content
+(not committed until user saves). For new files, creates via Git API,
+refreshes the tree, and opens the new file.
+
+### Fixed — open_file Race Condition
+
+`open_file` used `setTimeout(100)` to record the EditTracker read after
+the file loaded. Since `onTreeItemClick` already `await`s the full load
+chain, the setTimeout was both unreliable and unnecessary. Replaced with
+inline recording after the await.
+
+### Fixed — replaceRange Missing Return Fields
+
+`replaceRange()` in `editor/instance.js` didn't return `originalLineCount`
+or `lineDelta` — both were `undefined` in edit tool responses and
+EditTracker recordings. Added both fields. Also added `insertedAfter`
+and `newLineCount` alias to `insertAtLine()` return for consistency.
+
+### Changed — System Prompt Multi-File Guidance
+
+Updated the system prompt to:
+- List `edit_file` and `write_file` in capabilities
+- Add `edit_file` as step 6 in the workflow (preferred over open_file + replace_lines)
+- Add a dedicated "MULTI-FILE EDITING" workflow section
+- Update critical rules to prefer `edit_file` over the manual open→edit pattern
+- 35 tools total (2 new)
+
+**New:** `js/tools/multifile-tools.js` (edit_file, write_file + ensureFileActive helper)
+
+**Modified:** `js/tools/file-tools.js` (open_file setTimeout fix),
+`js/editor/instance.js` (replaceRange + insertAtLine return fields),
+`js/chat/index.js` (import + register), `js/prompts.js` (multi-file
+workflow), `docs/ARCHITECTURE.md` (tool diagram)
+
 ## [0.9.20] - 2026-02-12
 
 ### Added — Image/Screenshot Paste for Vision Models

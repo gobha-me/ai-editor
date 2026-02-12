@@ -14,6 +14,7 @@ import { registerIssueTools } from '../tools/issue-tools.js';
 import { registerPRTools } from '../tools/pr-tools.js';
 import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
 import { registerXRefTools } from '../tools/xref-tools.js';
+import { registerMultiFileTools } from '../tools/multifile-tools.js';
 
 // Import submodules
 import { 
@@ -53,6 +54,7 @@ registerIssueTools(ToolRegistry);
 registerPRTools(ToolRegistry);
 registerScratchpadTools(ToolRegistry);
 registerXRefTools(ToolRegistry);
+registerMultiFileTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION
