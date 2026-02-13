@@ -81,6 +81,7 @@ async function commitFiles({ paths, message }) {
 
         // Refresh UI
         EventBus.emit('tabs:render');
+        EventBus.emit('tree:refresh');
 
         const response = {
             success: true,

@@ -12,6 +12,7 @@
 import { Storage, State } from './core.js';
 import { GitProviderRegistry } from './git.js';
 import { showToast } from './ui-helpers.js';
+import { openMarkdownModal } from './markdown-modal.js';
 
 const STORAGE_KEY = 'onboardingComplete';
 
@@ -97,6 +98,15 @@ function _showWizard(hasConnections, hasLLM) {
 
     // Git connection form (inline in step 1)
     _wireGitForm(overlay, () => goTo(2));
+
+    // Setup guide link → markdown viewer modal
+    const guideLink = overlay.querySelector('#obSetupGuideLink');
+    if (guideLink) {
+        guideLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            openMarkdownModal('REPOS.md', 'Git Provider Setup');
+        });
+    }
 
     // LLM form (inline in step 2)
     _wireLLMForm(overlay, () => goTo(3));

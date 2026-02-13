@@ -317,7 +317,10 @@ function previewImage(src) {
     const overlay = document.createElement('div');
     overlay.id = 'imageOverlay';
     overlay.className = 'image-overlay';
-    overlay.innerHTML = `<img src="${src}" alt="Image preview">`;
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'Image preview';
+    overlay.appendChild(img);
     overlay.addEventListener('click', () => overlay.remove());
     document.addEventListener('keydown', function _esc(e) {
         if (e.key === 'Escape') {
@@ -331,6 +334,11 @@ function previewImage(src) {
 // ============================================
 // CONVERSATION DRAWER
 // ============================================
+
+/** Drawer state */
+let _convSortMode = 'recent';   // 'recent' | 'alpha' | 'messages'
+const SORT_MODES = ['recent', 'alpha', 'messages'];
+const SORT_LABELS = { recent: '🕐 Recent', alpha: '🔤 A–Z', messages: '💬 Most messages' };
 
 /**
  * Initialize the conversation list drawer toggle.
@@ -347,6 +355,9 @@ function initConversationDrawer() {
         } else {
             renderConversationList();
             drawer.classList.add('open');
+            // Focus search input when opening
+            const searchInput = document.getElementById('convSearchInput');
+            if (searchInput) setTimeout(() => searchInput.focus(), 50);
         }
     });
 
@@ -358,20 +369,75 @@ function initConversationDrawer() {
             drawer.classList.remove('open');
         }
     });
+
+    // Search input — filter as you type
+    const searchInput = document.getElementById('convSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => renderConversationList());
+        // Don't close drawer on Escape if search has text — clear it first
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (searchInput.value) {
+                    e.stopPropagation();
+                    searchInput.value = '';
+                    renderConversationList();
+                }
+            }
+        });
+    }
+
+    // Sort button — cycle through sort modes
+    const sortBtn = document.getElementById('btnConvSort');
+    if (sortBtn) {
+        sortBtn.addEventListener('click', () => {
+            const idx = SORT_MODES.indexOf(_convSortMode);
+            _convSortMode = SORT_MODES[(idx + 1) % SORT_MODES.length];
+            sortBtn.title = `Sort: ${SORT_LABELS[_convSortMode]}`;
+            sortBtn.setAttribute('aria-label', `Sort: ${SORT_LABELS[_convSortMode]}`);
+            renderConversationList();
+            showToast(SORT_LABELS[_convSortMode], 'info');
+        });
+    }
 }
 
 /**
  * Render the conversation list inside the drawer.
+ * Applies current search filter and sort mode.
  */
 function renderConversationList() {
     const list = document.getElementById('conversationList');
     if (!list) return;
 
-    const conversations = ConversationManager.list();
+    let conversations = ConversationManager.list();
     const activeId = ConversationManager.getActiveId();
 
+    // Filter by search query
+    const searchInput = document.getElementById('convSearchInput');
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    if (query) {
+        conversations = conversations.filter(c =>
+            (c.title || '').toLowerCase().includes(query)
+        );
+    }
+
+    // Apply sort
+    switch (_convSortMode) {
+        case 'alpha':
+            conversations.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            break;
+        case 'messages':
+            conversations.sort((a, b) => (b.messageCount || 0) - (a.messageCount || 0));
+            break;
+        case 'recent':
+        default:
+            conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+            break;
+    }
+
     if (conversations.length === 0) {
-        list.innerHTML = '<div class="conv-empty">No saved conversations</div>';
+        list.innerHTML = query
+            ? '<div class="conv-empty">No matches</div>'
+            : '<div class="conv-empty">No saved conversations</div>';
         return;
     }
 

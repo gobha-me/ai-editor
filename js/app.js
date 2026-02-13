@@ -8,6 +8,7 @@ import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { checkOnboarding } from './onboarding.js';
+import { openMarkdownModal, closeMarkdownModal } from './markdown-modal.js';
 import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
@@ -132,6 +133,9 @@ function closeHelpModal() {
 }
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
+
+window.openMarkdownModal = openMarkdownModal;
+window.closeMarkdownModal = closeMarkdownModal;
 
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;

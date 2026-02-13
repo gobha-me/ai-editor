@@ -2,6 +2,46 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.27-2] - 2026-02-13
+
+### Fixed
+- Markdown viewer modal z-index bumped to `10001` — onboarding overlay
+  was `10000`, not `1000` as assumed in -1 patch
+- File tree now refreshes after every git commit — both the UI commit
+  modal (`ui/commit.js`) and the LLM tool commit (`tools/commit-tools.js`)
+  now emit `tree:refresh` on success. Previously the tree stayed stale
+  until manual refresh, causing UX confusion and potential sha conflicts
+  on subsequent operations
+
+## [0.9.27] - 2026-02-13
+
+### Added — UX polish
+
+**Markdown viewer modal** (`js/markdown-modal.js`):
+- Generic reusable modal for rendering local `.md` files in-app
+- Fetches file, pipes through `marked` → `DOMPurify`, displays in a
+  scrollable overlay with styled headings, tables, code blocks, and links
+- Caches rendered content per path (no re-fetch on repeat opens)
+- Lazy DOM injection — modal element created on first use only
+- Keyboard accessible: Escape to close, backdrop click to close,
+  focus trapped on close button
+- Onboarding "see setup guide" link now opens `REPOS.md` in the modal
+  instead of downloading the raw file
+- Exposed as `window.openMarkdownModal(path, title)` for global access
+  (e.g. from help menus, settings links, or plugins)
+
+**Conversation search** (`html/chat-panel.html`, `js/chat/index.js`):
+- Search input at top of conversation drawer, filters by title as you type
+- Auto-focuses when drawer opens for immediate keyboard use
+- Escape clears search text before closing drawer
+- "No matches" empty state when filter has no results
+
+**Conversation sort** (`js/chat/index.js`):
+- Sort toggle button (↕) in drawer header cycles through 3 modes:
+  🕐 Recent (default) → 🔤 Alphabetical → 💬 Most messages
+- Toast notification shows current sort mode on each cycle
+- Sort state persists within session (resets to Recent on reload)
+
 ## [0.9.26-1] - 2026-02-13
 
 ### Fixed — Lighthouse audit & mobile chat input
@@ -13,6 +53,11 @@ All notable changes to AI Editor are documented here.
 - Chat and sidebar overlays use `bottom: 0` instead of `height: 100%`
   for robustness against viewport height mismatches
 - Modal overrides also use `dvh` units
+- Added `flex-shrink: 0` to `.chat-header` and `.chat-input-area` —
+  prevents flex compression from squishing the input off-screen
+- Added `min-height: 0` to `.chat-messages` — standard fix for flex
+  children with `overflow: auto` in a column; without this the messages
+  area won't shrink below its content size and can push the input out
 
 **Performance (CLS 0.181 → target <0.1)**
 - Added `contain: layout style` and `min-height: 0` to `.main-content`
@@ -33,6 +78,11 @@ All notable changes to AI Editor are documented here.
 - Balance polling no longer starts eagerly on page load — deferred
   until after `fetchModels()` succeeds, preventing 401 console errors
   from unconfigured Venice API keys (B2)
+
+**Hardening**
+- `previewImage()` now uses DOM API (`createElement`/`appendChild`)
+  instead of `innerHTML` with string interpolation — eliminates a
+  potential XSS vector from crafted image URLs
 
 ## [0.9.26] - 2026-02-13
 

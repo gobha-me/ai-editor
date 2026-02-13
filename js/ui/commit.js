@@ -4,7 +4,7 @@
  * Extracted from ui-helpers.js in 0.9.13.
  */
 
-import { State } from '../core.js';
+import { State, EventBus } from '../core.js';
 import { batchSaveFiles } from '../git.js';
 import { generateCommitMessage } from '../llm.js';
 import { getFileIcon } from '../editor.js';
@@ -123,6 +123,9 @@ export async function commitAndPush() {
         renderEditorTabs();
         updateCommitButton();
         updateStatusBar();
+
+        // Refresh file tree to reflect committed state
+        EventBus.emit('tree:refresh');
 
         closeCommitModal();
         document.getElementById('commitMessage').value = '';

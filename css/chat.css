@@ -23,6 +23,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .chat-header h3 {
@@ -81,6 +82,66 @@
     letter-spacing: 0.04em;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.conv-drawer-controls {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.conv-sort-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: var(--chat-sm);
+    line-height: 1;
+    min-width: 24px;
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.conv-sort-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.conv-sort-btn.active {
+    color: var(--accent);
+}
+
+.conv-search-bar {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.conv-search-bar input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.3rem 0.5rem;
+    font-family: var(--font-sans);
+    font-size: var(--chat-sm);
+}
+
+.conv-search-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.conv-search-bar input::placeholder {
+    color: var(--text-muted);
 }
 
 .conv-drawer-list {
@@ -150,6 +211,7 @@
 
 .chat-messages {
     flex: 1;
+    min-height: 0;               /* allow flex child to shrink below content size */
     overflow-y: auto;
     padding: 1rem;
 }
@@ -708,6 +770,7 @@
     padding: 0.75rem;
     border-top: 1px solid var(--border);
     background: var(--bg-tertiary);
+    flex-shrink: 0;              /* never compress the input area */
 }
 
 .chat-input-wrapper {

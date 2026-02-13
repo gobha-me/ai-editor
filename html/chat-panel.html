@@ -47,6 +47,12 @@
     <div class="conversation-drawer" id="conversationDrawer">
         <div class="conv-drawer-header">
             <span>Conversations</span>
+            <div class="conv-drawer-controls">
+                <button type="button" class="btn-icon conv-sort-btn" id="btnConvSort" title="Sort order" aria-label="Change sort order">↕</button>
+            </div>
+        </div>
+        <div class="conv-search-bar">
+            <input type="text" id="convSearchInput" placeholder="Search conversations…" aria-label="Search conversations" autocomplete="off">
         </div>
         <div class="conv-drawer-list" id="conversationList">
             <!-- Populated dynamically -->
