@@ -278,6 +278,15 @@ const Git = {
     },
 
     // ========================================
+    // COMMIT DIFF
+    // ========================================
+
+    async getCommitDiff(owner, repo, sha) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getCommitDiff(connection, owner, repo, sha);
+    },
+
+    // ========================================
     // CI/CD
     // ========================================
 

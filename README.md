@@ -111,6 +111,7 @@ Roles control which tools the AI can access. The default role exposes all tools.
 | Ctrl+, | Settings |
 | Ctrl+Shift+P | Toggle preview pane |
 | Ctrl+Shift+D | Toggle diff pane |
+| Ctrl+Shift+B | Toggle blame / file history |
 | Ctrl+Shift+L | Toggle line numbers |
 | Ctrl+Shift+Z | Revert to last commit |
 | Escape | Close modal / stop generation |

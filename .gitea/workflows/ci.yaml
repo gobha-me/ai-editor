@@ -5,6 +5,11 @@
 #   PR opened/synced  → build :dev   → deploy ai-editor-dev
 #   Push to main      → build :test  → deploy ai-editor-test
 #   Tag v*            → build :latest + :vX.Y.Z → deploy ai-editor
+#                       + push to Docker Hub (gobha/ai-editor)
+#
+# Secrets (repo → Settings → Actions → Secrets):
+#   DOCKERHUB_USERNAME  — Docker Hub username
+#   DOCKERHUB_TOKEN     — Docker Hub access token (Read & Write)
 # ============================================
 
 name: CI/CD
@@ -23,6 +28,7 @@ concurrency:
 env:
   REGISTRY: registry.gobha.me:5000
   IMAGE_NAME: xcaliber/ai-editor
+  DOCKERHUB_IMAGE: gobha/ai-editor
 
 jobs:
   build-and-deploy:
@@ -53,6 +59,7 @@ jobs:
             echo "deployment=ai-editor" >> "$GITHUB_OUTPUT"
             echo "base_path=/" >> "$GITHUB_OUTPUT"
             echo "env_name=production" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
           else
             # Push to main
             echo "tag=test" >> "$GITHUB_OUTPUT"
@@ -80,6 +87,30 @@ jobs:
             docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }}
           fi
 
+      # ── Docker Hub (release tags only) ──────────
+      - name: Login to Docker Hub
+        if: steps.env.outputs.is_release == 'true'
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Tag for Docker Hub
+        if: steps.env.outputs.is_release == 'true'
+        run: |
+          docker tag \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.DOCKERHUB_IMAGE }}:latest
+          docker tag \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }} \
+            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}
+
+      - name: Push to Docker Hub
+        if: steps.env.outputs.is_release == 'true'
+        run: |
+          docker push ${{ env.DOCKERHUB_IMAGE }}:latest
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}
+
+      # ── Deploy to cluster ───────────────────────
       - name: Deploy to cluster
         continue-on-error: true
         run: |
@@ -96,5 +127,8 @@ jobs:
           echo "## ✅ Deployed to ${{ steps.env.outputs.env_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.env.outputs.is_release }}" == "true" ]]; then
+            echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "- **Deployment:** \`${{ steps.env.outputs.deployment }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **BASE_PATH:** \`${{ steps.env.outputs.base_path }}\`" >> $GITHUB_STEP_SUMMARY

@@ -64,6 +64,12 @@ export const CM = {
     highlightSelectionMatches: null,
     searchKeymap: null,
 
+    // Gutter & state APIs (for blame gutter)
+    gutter: null,
+    GutterMarker: null,
+    StateField: null,
+    StateEffect: null,
+
     // Theme
     oneDark: null,
 
@@ -122,6 +128,12 @@ async function loadFromVendorBundle() {
     CM.searchKeymap = cmSearch.searchKeymap;
 
     CM.oneDark = cmOneDark.oneDark;
+
+    // Gutter & decoration APIs (for blame gutter extension)
+    CM.gutter = cmView.gutter;
+    CM.GutterMarker = cmView.GutterMarker;
+    CM.StateField = cmState.StateField;
+    CM.StateEffect = cmState.StateEffect;
 
     // Language modules
     CM.languages.javascript = bundle.langJavascript;
@@ -312,6 +324,12 @@ export async function loadCodeMirror() {
             // Theme
             const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
             CM.oneDark = cmOneDark?.oneDark;
+
+            // Gutter & decoration APIs (for blame gutter extension)
+            CM.gutter = cmView?.gutter;
+            CM.GutterMarker = cmView?.GutterMarker;
+            CM.StateField = cmState?.StateField;
+            CM.StateEffect = cmState?.StateEffect;
 
             console.log('CodeMirror modules loaded:', {
                 EditorView: !!CM.EditorView,

@@ -400,6 +400,7 @@ export const LLM = {
         let buffer = '';
         let inThinkBlock = false;
         let thinkBuffer = '';
+        let thinkEndTag = '</think>';  // set dynamically when opening tag found
         let hasToolCallsInResponse = false;
         let streamError = null;
 
@@ -479,27 +480,31 @@ export const LLM = {
                     if (!hasToolCallsInResponse && !hasTools) {
                         if (inThinkBlock) {
                             thinkBuffer += chunk;
-                            const endIdx = thinkBuffer.indexOf('</think>');
+                            const endIdx = thinkBuffer.indexOf(thinkEndTag);
                             if (endIdx >= 0) {
-                                chunk = thinkBuffer.slice(endIdx + 8);
+                                chunk = thinkBuffer.slice(endIdx + thinkEndTag.length);
                                 inThinkBlock = false;
                                 LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
                                 thinkBuffer = '';
                             } else {
-                                if (thinkBuffer.length > 8) {
-                                    thinkBuffer = thinkBuffer.slice(-7);
+                                if (thinkBuffer.length > 12) {
+                                    thinkBuffer = thinkBuffer.slice(-11);
                                 }
                                 continue;
                             }
                         }
 
-                        const startIdx = chunk.indexOf('<think>');
-                        if (startIdx >= 0) {
+                        // Detect <think> or <thinking> open tags
+                        const thinkMatch = chunk.match(/<think(?:ing)?>/i);
+                        if (thinkMatch) {
+                            const startIdx = thinkMatch.index;
+                            const openTag = thinkMatch[0];
+                            thinkEndTag = openTag.replace('<', '</');  // </think> or </thinking>
                             const before = chunk.slice(0, startIdx);
-                            const afterStart = chunk.slice(startIdx + 7);
-                            const endIdx = afterStart.indexOf('</think>');
+                            const afterStart = chunk.slice(startIdx + openTag.length);
+                            const endIdx = afterStart.indexOf(thinkEndTag);
                             if (endIdx >= 0) {
-                                chunk = before + afterStart.slice(endIdx + 8);
+                                chunk = before + afterStart.slice(endIdx + thinkEndTag.length);
                                 LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
                             } else {
                                 chunk = before;
@@ -648,12 +653,11 @@ export async function generateCommitMessage(changedFiles = null) {
     const commitModel = State.settings.commitModel || State.settings.llmModel;
 
     const result = await LLM.chat([
-        { role: 'system', content: 'You are a helpful assistant that writes concise, descriptive git commit messages following conventional commit format.' },
+        { role: 'system', content: 'You are a git commit message generator. Output ONLY the commit message — no thinking, no explanation, no quotes, no code fences. One line, conventional commit format (feat:, fix:, refactor:, docs:, chore:, etc).' },
         { role: 'user', content: commitPrompt }
     ], {
         model: commitModel,
         stream: false,
-        maxTokens: 256,
         temperature: 0.3
     });
 

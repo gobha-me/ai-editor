@@ -186,7 +186,7 @@ Respond with the complete updated file content in a code block, followed by a br
 
 {{diff_summary}}
 
-Respond with ONLY the commit message, no quotes or explanation. Use conventional commit format (feat:, fix:, refactor:, docs:, etc).`,
+Respond with ONLY the commit message — no thinking, no explanation, no quotes, no code fences. One line, conventional commit format (type: description).`,
 
     issueAnalysisPrompt: `Analyze this issue and suggest an implementation approach.
 

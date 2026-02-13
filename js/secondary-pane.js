@@ -6,6 +6,8 @@ import { State, EventBus } from './core.js';
 import { Git } from './git.js';
 import { renderUnifiedView, renderSideBySideView, getViewMode, initDiffKeyboardShortcuts, initScrollSync, cleanupScrollSync } from './diff-viewer.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import { setBlameData, clearBlameData } from './editor/blame-gutter.js';
+import { editorInstance } from './editor/instance.js';
 
 let secondaryPaneMode = null; // 'preview' | 'diff' | 'blame' | null
 let diffViewerInitialized = false;
@@ -105,6 +107,11 @@ export function closeSecondaryPane() {
     // Cleanup scroll sync listeners
     cleanupScrollSync();
     
+    // Clear inline blame gutter if it was active
+    if (secondaryPaneMode === 'blame' && editorInstance) {
+        clearBlameData(editorInstance);
+    }
+
     secondaryPaneMode = null;
     isFullscreen = false;
     document.getElementById('secondaryPane').style.display = 'none';
@@ -202,6 +209,8 @@ async function renderBlame() {
     try {
         const blameData = await Git.getBlame(owner, repo, path, branch);
         _renderBlameView(pane, blameData, path);
+        // Push blame data to inline editor gutter
+        if (editorInstance) setBlameData(editorInstance, blameData);
     } catch (err) {
         console.warn('[Blame] getBlame failed, falling back to file history:', err.message);
         // Fall back to file commit history for ANY blame error —
@@ -236,7 +245,7 @@ function _renderBlameView(pane, blameData, path) {
         for (let i = 0; i < range.lines.length; i++) {
             const line = range.lines[i];
             const gutterContent = i === 0
-                ? `<span class="blame-sha" title="${escapeAttr(range.commit.message)}">${escapeHtml(range.commit.shortSha)}</span>
+                ? `<span class="blame-sha" data-sha="${escapeAttr(range.commit.sha)}" title="${escapeAttr(range.commit.message)}">${escapeHtml(range.commit.shortSha)}</span>
                    <span class="blame-author">${escapeHtml(_shortAuthor(range.commit.author))}</span>
                    <span class="blame-date">${escapeHtml(_shortDate(range.commit.date))}</span>`
                 : '';
@@ -258,6 +267,14 @@ function _renderBlameView(pane, blameData, path) {
     </div>`;
 
     pane.innerHTML = titleBar + html;
+
+    // Wire SHA click → commit diff
+    pane.querySelectorAll('.blame-sha[data-sha]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _showCommitDiff(pane, el.dataset.sha);
+        });
+    });
 }
 
 async function _renderFileHistory(pane, owner, repo, path, branch, fallbackReason = null) {
@@ -286,7 +303,7 @@ async function _renderFileHistory(pane, owner, repo, path, branch, fallbackReaso
         html += '<thead><tr><th>Commit</th><th>Author</th><th>Date</th><th>Message</th></tr></thead><tbody>';
 
         for (const c of commits) {
-            html += `<tr>
+            html += `<tr class="history-row" data-sha="${escapeAttr(c.sha)}" title="Click to diff against current version">
                 <td class="history-sha"><code>${escapeHtml(c.shortSha)}</code></td>
                 <td class="history-author">${escapeHtml(c.author)}</td>
                 <td class="history-date">${escapeHtml(_shortDate(c.date))}</td>
@@ -296,6 +313,14 @@ async function _renderFileHistory(pane, owner, repo, path, branch, fallbackReaso
 
         html += '</tbody></table></div>';
         pane.innerHTML = html;
+
+        // Wire row click → file diff at that commit vs current
+        pane.querySelectorAll('.history-row[data-sha]').forEach(row => {
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', () => {
+                _showFileDiffAtCommit(pane, owner, repo, path, branch, row.dataset.sha, row.querySelector('.history-sha code')?.textContent || '');
+            });
+        });
     } catch (err) {
         pane.innerHTML = `<div class="diff-empty">⚠️ File history failed: ${escapeHtml(err.message)}</div>`;
     }
@@ -328,8 +353,125 @@ export function _shortDate(dateStr) {
     }
 }
 
+// ============================================
+// INTERACTIVE: FILE DIFF AT COMMIT
+// ============================================
+
+/**
+ * Fetch file at a historical commit and diff against current version.
+ * Shows a simple unified diff in the secondary pane.
+ */
+async function _showFileDiffAtCommit(pane, owner, repo, path, branch, sha, shortSha) {
+    pane.innerHTML = `<div class="blame-loading">⏳ Loading ${escapeHtml(shortSha)} vs current…</div>`;
+
+    try {
+        // Fetch file at the historical commit
+        const oldFile = await Git.getFile(owner, repo, path, sha);
+        const oldContent = oldFile?.content || '';
+
+        // Current content from the open tab
+        const tab = State.openTabs[State.activeTabIndex];
+        const currentContent = tab?.content || tab?.originalContent || '';
+
+        if (oldContent === currentContent) {
+            pane.innerHTML = `<div class="blame-header">
+                <span class="blame-path">${escapeHtml(shortSha)} vs current — ${escapeHtml(path)}</span>
+                <button type="button" class="btn-link blame-back" title="Back to history">← Back</button>
+            </div>
+            <div class="diff-empty">No changes — file is identical at ${escapeHtml(shortSha)}</div>`;
+            _wireBackButton(pane, owner, repo, path, branch);
+            return;
+        }
+
+        // Render diff
+        const header = `<div class="blame-header">
+            <span class="blame-path">${escapeHtml(shortSha)} → current — ${escapeHtml(path)}</span>
+            <button type="button" class="btn-link blame-back" title="Back to history">← Back</button>
+        </div>`;
+
+        const diffHtml = renderUnifiedView(oldContent, currentContent, `${shortSha}:${path}`, `current:${path}`);
+        pane.innerHTML = header + diffHtml;
+        _wireBackButton(pane, owner, repo, path, branch);
+
+    } catch (err) {
+        pane.innerHTML = `<div class="diff-empty">⚠️ Failed to load file at ${escapeHtml(shortSha)}: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+// ============================================
+// INTERACTIVE: COMMIT DIFF
+// ============================================
+
+/**
+ * Show the files changed in a specific commit.
+ */
+async function _showCommitDiff(pane, sha) {
+    const { owner, repo } = State.currentProject || {};
+    if (!owner || !repo) return;
+
+    pane.innerHTML = '<div class="blame-loading">⏳ Loading commit diff…</div>';
+
+    try {
+        const commit = await Git.getCommitDiff(owner, repo, sha);
+
+        let html = `<div class="blame-header">
+            <span class="blame-path">📝 Commit ${escapeHtml(commit.shortSha)} — ${escapeHtml(commit.message)}</span>
+            <button type="button" class="btn-link blame-back" title="Back to blame">← Back</button>
+        </div>
+        <div style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: var(--text-secondary);">
+            ${escapeHtml(commit.author)} · ${escapeHtml(_shortDate(commit.date))} · ${commit.files.length} file(s) changed
+        </div>`;
+
+        html += '<div class="commit-files"><table class="history-table">';
+        html += '<thead><tr><th>Status</th><th>File</th><th>+/-</th></tr></thead><tbody>';
+
+        const statusIcons = { added: '🟢', removed: '🔴', modified: '🟡', renamed: '🔵' };
+
+        for (const f of commit.files) {
+            html += `<tr>
+                <td>${statusIcons[f.status] || '⚪'} ${escapeHtml(f.status)}</td>
+                <td class="history-msg">${escapeHtml(f.path)}</td>
+                <td><span style="color: var(--success);">+${f.additions}</span> / <span style="color: var(--error);">-${f.deletions}</span></td>
+            </tr>`;
+        }
+
+        html += '</tbody></table></div>';
+        pane.innerHTML = html;
+
+        // Wire back button
+        const backBtn = pane.querySelector('.blame-back');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => renderBlame());
+        }
+
+    } catch (err) {
+        pane.innerHTML = `<div class="diff-empty">⚠️ Failed to load commit: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+/**
+ * Wire the "← Back" button to return to file history view.
+ */
+function _wireBackButton(pane, owner, repo, path, branch) {
+    const backBtn = pane.querySelector('.blame-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            _renderFileHistory(pane, owner, repo, path, branch);
+        });
+    }
+}
+
 // Listen for view mode changes
 window.addEventListener('diff:refresh', renderDiff);
+
+// Delegated click handler for inline blame gutter SHA elements
+document.addEventListener('click', (e) => {
+    const shaEl = e.target.closest('.cm-blame-sha[data-sha]');
+    if (!shaEl) return;
+    e.stopPropagation();
+    const pane = document.getElementById('secondaryPaneContent');
+    if (pane) _showCommitDiff(pane, shaEl.dataset.sha);
+});
 
 export function renderMarkdown(md) {
     // Use marked.js if available (loaded via CDN), fall back to basic regex

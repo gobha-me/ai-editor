@@ -2,6 +2,85 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.28-2] - 2026-02-13
+
+### Fixed
+- **Commit message truncation**: Removed `maxTokens: 256` cap from
+  commit message generation. Thinking models would burn the token
+  budget on `<think>` blocks, leaving the actual message truncated.
+  Prompt instructions now control output length instead
+- **Think block stripping**: `stripThinkBlocks()` now handles both
+  `<think>` and `<thinking>` tag variants (used by different model
+  families). Applies to both non-streaming util and streaming parser
+- **Commit message prompts**: Strengthened system and user prompts to
+  explicitly instruct against thinking, explanations, quotes, and
+  code fences — reduces think-block output from models that respect
+  system instructions
+
+### Added
+- CI/CD workflow (`.gitea/workflows/ci.yaml`): Docker Hub dual-push
+  on release tags — `gobha/ai-editor:latest` + `gobha/ai-editor:vX.Y.Z`
+- `DOCKERHUB.md`: Docker Hub repository overview page
+- `Ctrl+Shift+B` added to README keyboard shortcuts table
+
+## [0.9.28-1] - 2026-02-13
+
+### Fixed
+- **Blame gutter empty column**: Rewrote inline blame gutter from
+  `StateField` + `gutter()` (always renders column) to `Compartment`
+  pattern — gutter column only exists when blame data is dispatched.
+  Empty compartment = zero pixels. No more 180px blank column on load
+  or when providers lack blame support (Gitea, GitHub)
+- **Help modal**: Added `Ctrl+Shift+B` (blame/history) to keyboard
+  shortcuts help
+
+## [0.9.28] - 2026-02-13
+
+### Added — Blame/History Interactive Cluster
+
+Three features that build on the existing blame and file history
+infrastructure (shipped in 0.9.10), making them interactive.
+
+**Inline blame gutter** (`js/editor/blame-gutter.js`):
+- CodeMirror 6 gutter extension showing blame annotations directly
+  in the editor: SHA · author · relative date, color-coded by commit
+- Uses CM6 `gutter()` + `GutterMarker` + `StateField` architecture
+- Only marks the first line of each blame range (GitLens-style) to
+  avoid visual noise
+- Activates automatically when blame pane is toggled on; clears when
+  closed
+- SHA elements are clickable → opens commit diff in secondary pane
+- Graceful no-op when blame data isn't available (GitHub/Gitea fall
+  back to file history as before)
+- New CM namespace exports: `gutter`, `GutterMarker`, `StateField`,
+  `StateEffect` (both vendor bundle and CDN fallback paths)
+
+**File history → diff** (`js/secondary-pane.js`):
+- History table rows are now clickable — click any commit to view a
+  unified diff between that commit's version of the file and the
+  current editor content
+- Fetches historical file via `Git.getFile(owner, repo, path, sha)`
+  (works across all 3 providers since `getFile` already accepts a ref)
+- Shows "No changes" state when file is identical
+- "← Back" button returns to the history table
+
+**Blame → commit diff** (`js/secondary-pane.js`, providers):
+- Blame SHA elements are now clickable — click any SHA to see the
+  full commit summary: author, date, and table of changed files with
+  status icons and +/- line counts
+- New provider method `getCommitDiff(sha)` added to all 3 providers:
+  - **Gitea**: `GET /repos/{owner}/{repo}/commits/{sha}` (files array)
+  - **GitHub**: `GET /repos/{owner}/{repo}/commits/{sha}` (files + patches)
+  - **GitLab**: `GET /projects/{id}/repository/commits/{sha}/diff`
+- Normalized return format: `{sha, shortSha, message, author, date, files[]}`
+- "← Back" button returns to blame view
+
+**CSS** (`css/editor.css`):
+- Blame SHA elements now show pointer cursor and underline on hover
+- History rows show hover background highlight
+- New `.blame-back` button styles for in-pane navigation
+- New `.commit-files` container for commit diff view
+
 ## [0.9.27-2] - 2026-02-13
 
 ### Fixed

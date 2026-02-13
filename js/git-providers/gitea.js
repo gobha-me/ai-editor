@@ -562,6 +562,34 @@ const giteaProvider = {
     },
 
     // ========================================
+    // COMMIT DIFF
+    // ========================================
+
+    async getCommitDiff(connection, owner, repo, sha) {
+        // Gitea: GET /repos/{owner}/{repo}/git/commits/{sha} includes changed files
+        const data = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/git/commits/${sha}`);
+        // Gitea's git/commits endpoint returns commit info but not file diffs.
+        // Use the commits endpoint which may include stats:
+        const commit = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/commits/${sha}`);
+        const files = (commit.files || []).map(f => ({
+            path: f.filename,
+            status: f.status || 'modified',
+            additions: f.additions || 0,
+            deletions: f.deletions || 0,
+        }));
+        return {
+            sha,
+            shortSha: sha.slice(0, 7),
+            message: (data?.commit?.message || commit?.commit?.message || '').split('\n')[0],
+            author: data?.commit?.author?.name || commit?.commit?.author?.name || '',
+            date: data?.commit?.author?.date || commit?.commit?.author?.date || '',
+            files
+        };
+    },
+
+    // ========================================
     // CI/CD STATUS
     // ========================================
 

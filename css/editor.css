@@ -880,8 +880,12 @@
 .blame-sha {
     font-family: var(--font-mono, monospace);
     color: var(--accent);
-    cursor: default;
+    cursor: pointer;
     margin-right: 0.5em;
+}
+
+.blame-sha:hover {
+    text-decoration: underline;
 }
 
 .blame-author {
@@ -961,6 +965,34 @@
 
 .history-msg {
     word-break: break-word;
+}
+
+.history-row {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.history-row:hover td {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.blame-back {
+    color: var(--accent);
+    font-size: var(--font-sm);
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    margin-left: auto;
+}
+
+.blame-back:hover {
+    text-decoration: underline;
+}
+
+.commit-files {
+    overflow: auto;
+    padding: 0.5rem;
 }
 
 @media (max-width: 1200px) {

@@ -727,6 +727,35 @@ const gitlabProvider = {
     },
 
     // ========================================
+    // COMMIT DIFF
+    // ========================================
+
+    async getCommitDiff(connection, owner, repo, sha) {
+        // GitLab: GET /projects/:id/repository/commits/:sha returns commit info
+        const commit = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/commits/${sha}`);
+        // GitLab: GET /projects/:id/repository/commits/:sha/diff returns file diffs
+        const diffs = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/commits/${sha}/diff`);
+        const files = (diffs || []).map(d => ({
+            path: d.new_path || d.old_path,
+            oldPath: d.old_path,
+            status: d.new_file ? 'added' : d.deleted_file ? 'removed' : d.renamed_file ? 'renamed' : 'modified',
+            additions: (d.diff || '').split('\n').filter(l => l.startsWith('+')).length,
+            deletions: (d.diff || '').split('\n').filter(l => l.startsWith('-')).length,
+            patch: d.diff || ''
+        }));
+        return {
+            sha,
+            shortSha: (commit.short_id || sha.slice(0, 7)),
+            message: (commit.message || '').split('\n')[0],
+            author: commit.author_name || '',
+            date: commit.authored_date || '',
+            files
+        };
+    },
+
+    // ========================================
     // CI/CD STATUS
     // ========================================
 

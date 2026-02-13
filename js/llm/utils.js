@@ -10,14 +10,17 @@
 // ============================================
 
 /**
- * Strip <think> blocks from text content.
- * Handles multiple blocks, nested whitespace, and partial/unclosed tags.
+ * Strip <think> / <thinking> blocks from text content.
+ * Handles multiple blocks, nested whitespace, partial/unclosed tags,
+ * and both tag variants used by different model families.
  * Used for non-streaming responses where think blocks arrive intact.
  */
 export function stripThinkBlocks(text) {
     if (!text) return text;
-    let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    result = result.replace(/<think>[\s\S]*$/gi, '');
+    // Closed blocks: <think>...</think> and <thinking>...</thinking>
+    let result = text.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
+    // Unclosed trailing blocks (model hit token limit mid-thought)
+    result = result.replace(/<think(?:ing)?>[\s\S]*$/gi, '');
     return result.trim();
 }
 

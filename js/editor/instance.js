@@ -8,6 +8,7 @@
 
 import { State, EventBus } from '../core.js';
 import { CM, loadCodeMirror, getLanguageExtension } from './setup.js';
+import { getBlameCompartment } from './blame-gutter.js';
 
 // ============================================
 // EDITOR INSTANCE
@@ -109,6 +110,10 @@ export async function createEditor(container, content, filename) {
     
     // Line wrapping
     if (CM.lineWrapping) extensions.push(CM.lineWrapping);
+
+    // Blame gutter compartment (starts empty = no gutter column)
+    const blameComp = getBlameCompartment();
+    if (blameComp) extensions.push(blameComp.of([]));
     
     // Language extensions
     extensions.push(...languageExtensions);
