@@ -514,6 +514,54 @@ const ContextManager = {
     },
 
     /**
+     * Copy the embedding index from one branch to another.
+     * Used when creating a new branch (files are identical at creation time).
+     * @param {string} sourceBranch - Branch to copy from
+     * @param {string} targetBranch - Branch to copy to
+     * @returns {boolean} Whether the copy succeeded
+     */
+    copyIndexForBranch(sourceBranch, targetBranch) {
+        if (!State.currentProject) return false;
+        const { owner, repo } = State.currentProject;
+        const sourceKey = `embeddings-index-${owner}/${repo}@${sourceBranch}`;
+        const targetKey = `embeddings-index-${owner}/${repo}@${targetBranch}`;
+
+        // Try in-memory first (if currently loaded index matches the source)
+        const sourceProjectKey = `${owner}/${repo}@${sourceBranch}`;
+        if (this._indexedProject === sourceProjectKey && this._fileIndex.size > 0) {
+            // Clone from in-memory to storage under the new branch key
+            const indexData = {
+                project: `${owner}/${repo}@${targetBranch}`,
+                timestamp: Date.now(),
+                files: Array.from(this._fileIndex.entries()),
+                queryCount: 0,
+                lastQueried: null
+            };
+            Storage.set(targetKey, indexData);
+            console.log(`[Context] Copied in-memory index (${this._fileIndex.size} files) from ${sourceBranch} → ${targetBranch}`);
+            return true;
+        }
+
+        // Fall back to storage-to-storage copy
+        const sourceData = Storage.get(sourceKey);
+        if (sourceData && sourceData.files) {
+            const targetData = {
+                ...sourceData,
+                project: `${owner}/${repo}@${targetBranch}`,
+                timestamp: Date.now(),
+                queryCount: 0,
+                lastQueried: null
+            };
+            Storage.set(targetKey, targetData);
+            console.log(`[Context] Copied stored index (${sourceData.files.length} files) from ${sourceBranch} → ${targetBranch}`);
+            return true;
+        }
+
+        console.log(`[Context] No index to copy from ${sourceBranch}`);
+        return false;
+    },
+
+    /**
      * Scan storage for embedding indexes whose branch no longer exists.
      * Call after branch list refresh.
      * @param {string[]} liveBranches - Array of branch names that still exist
@@ -600,10 +648,30 @@ EventBus.on('git:branchDeleted', ({ name }) => {
     ContextManager.removeIndexForBranch(name);
 });
 
-// ── PR merged: reindex changed files on the target branch ──
-// This event is emitted from project-manager.js with enriched data
-EventBus.on('context:prMerged', async ({ baseBranch, changedFiles }) => {
+// ── Branch created: copy parent branch's index to the new branch ──
+EventBus.on('branch:created', ({ sourceBranch, targetBranch }) => {
+    if (!ContextManager.isEnabled()) return;
+    ContextManager.copyIndexForBranch(sourceBranch, targetBranch);
+});
+
+// ── Branch list refreshed: clean up orphaned embedding indexes ──
+EventBus.on('branches:refresh', () => {
+    if (!ContextManager.isEnabled() || !State.branches?.length) return;
+    const liveBranches = State.branches.map(b => b.name);
+    // Defer to avoid blocking the branch UI update
+    setTimeout(() => ContextManager.cleanupOrphanedIndexes(liveBranches), 500);
+});
+
+// ── PR merged: reindex changed files on the target branch AND clean up deleted branch ──
+// This event is emitted from pr-detail.js (UI) and pr-tools.js (LLM) with enriched data
+EventBus.on('context:prMerged', async ({ baseBranch, changedFiles, deletedBranch }) => {
     if (!ContextManager.isEnabled() || !State.currentProject) return;
+
+    // Clean up embedding index for the deleted source branch
+    if (deletedBranch) {
+        console.log(`[Context] Cleaning up embeddings for merged+deleted branch: ${deletedBranch}`);
+        ContextManager.removeIndexForBranch(deletedBranch);
+    }
 
     const currentKey = `${State.currentProject.owner}/${State.currentProject.repo}@${baseBranch}`;
 

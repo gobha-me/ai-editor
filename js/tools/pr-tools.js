@@ -306,12 +306,21 @@ export function registerPRTools(registry) {
             EventBus.emit('prs:refresh');
             EventBus.emit('branches:refresh');
 
+            // Notify context manager to reindex target branch and clean up deleted branch embeddings
+            const files = await Git.getPullRequestFiles(owner, repo, prNum).catch(() => []);
+            EventBus.emit('context:prMerged', {
+                baseBranch: pr.base,
+                headBranch: pr.head,
+                changedFiles: files.map(f => f.filename),
+                deletedBranch: delete_branch ? pr.head : null
+            });
+
             return {
                 success: true,
                 merged: result.merged,
                 sha: result.sha,
                 message: result.message,
-                deletedBranch: delete_branch
+                deletedBranch: delete_branch ? pr.head : null
             };
         } catch (error) {
             return { error: `Failed to merge PR #${prNum}: ${error.message}` };

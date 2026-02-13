@@ -164,6 +164,7 @@ export async function onProjectChange(e) {
 }
 
 export async function onBranchChange(e) {
+    const previousBranch = State.currentBranch;
     State.currentBranch = e.target.value;
     
     // Clear active issue if switching away from its branch
@@ -202,6 +203,9 @@ export async function onBranchChange(e) {
         // Reload file tree for new branch
         EventBus.emit('tree:refresh');
     }
+
+    // Notify context manager and other listeners about branch switch
+    EventBus.emit('branch:switch', { branch: State.currentBranch, previousBranch });
 
     EventBus.emit('statusBar:update');
     saveSession();

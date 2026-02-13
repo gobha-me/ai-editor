@@ -266,9 +266,13 @@ export async function startWorkOnIssue(issue) {
             await Git.createBranch(owner, repo, branchName, baseBranch);
             // Refresh branch list
             State.branches = await Git.listBranches(owner, repo);
+
+            // Copy embedding index from parent branch (files are identical at creation)
+            EventBus.emit('branch:created', { sourceBranch: baseBranch, targetBranch: branchName });
         }
 
         // Switch to the branch
+        const previousBranch = State.currentBranch;
         State.currentBranch = branchName;
 
         // Update branch selector to reflect reality
@@ -314,6 +318,9 @@ export async function startWorkOnIssue(issue) {
         // Refresh file tree for new branch
         EventBus.emit('tree:refresh');
         EventBus.emit('statusBar:update');
+
+        // Notify context manager about the branch switch
+        EventBus.emit('branch:switch', { branch: branchName, previousBranch });
 
         // Re-render issues to highlight the active one (avoids circular import)
         EventBus.emit('issues:render');
@@ -460,6 +467,25 @@ function renderIssueFocusBar() {
 // ── Triage quick actions ──
 
 /**
+ * Retry a git operation up to `n` times with a brief delay.
+ * Designed for transient "Failed to fetch" / CORS preflight failures.
+ */
+async function _retryOp(fn, retries = 2, delayMs = 600) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await fn();
+        } catch (e) {
+            const isTransient = !e.status && /fetch|network|abort/i.test(e.message);
+            if (i < retries && isTransient) {
+                await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+                continue;
+            }
+            throw e;
+        }
+    }
+}
+
+/**
  * Quick action: Accept issue — post comment and close.
  */
 export async function acceptFocusedIssue() {
@@ -472,18 +498,22 @@ export async function acceptFocusedIssue() {
     const { owner, repo } = State.currentProject;
     try {
         const body = comment || 'Accepted — will address this.';
-        await Git.createIssueComment(owner, repo, issue.number, `✅ **Accepted**\n\n${body}`);
+        await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, `✅ **Accepted**\n\n${body}`));
         // Don't close — accepted means "will work on". Leave open for tracking.
         EventBus.emit('issues:refresh');
+        window.showToast(`Accepted #${issue.number}`, 'success');
         // Refresh focus bar with new comment
         await focusIssue(issue.number);
     } catch (e) {
-        alert(`Failed to comment: ${e.message}`);
+        console.error('[Triage] Accept failed:', e);
+        window.showToast(`Failed to accept: ${e.message}`, 'error');
     }
 }
 
 /**
  * Quick action: Deny issue — post comment and close.
+ * Handles partial failure: if comment posts but close fails,
+ * reports which step failed so the user isn't confused.
  */
 export async function denyFocusedIssue() {
     const issue = State.focusedIssue;
@@ -493,13 +523,29 @@ export async function denyFocusedIssue() {
     if (!comment) return;  // Cancelled or empty
 
     const { owner, repo } = State.currentProject;
+    let commentPosted = false;
+
     try {
-        await Git.createIssueComment(owner, repo, issue.number, `❌ **Denied**\n\n${comment}`);
-        await Git.updateIssueState(owner, repo, issue.number, 'closed');
+        // Step 1: Post denial comment
+        await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, `❌ **Denied**\n\n${comment}`));
+        commentPosted = true;
+
+        // Step 2: Close the issue
+        await _retryOp(() => Git.updateIssueState(owner, repo, issue.number, 'closed'));
+
         EventBus.emit('issues:refresh');
+        window.showToast(`Denied & closed #${issue.number}`, 'success');
         unfocusIssue();
     } catch (e) {
-        alert(`Failed to deny issue: ${e.message}`);
+        console.error('[Triage] Deny failed:', e);
+        if (commentPosted) {
+            // Comment posted but close failed — partial success
+            window.showToast(`Comment posted but failed to close #${issue.number}: ${e.message}`, 'warning');
+            EventBus.emit('issues:refresh');
+            await focusIssue(issue.number);
+        } else {
+            window.showToast(`Failed to deny #${issue.number}: ${e.message}`, 'error');
+        }
     }
 }
 
@@ -515,11 +561,13 @@ export async function commentOnFocusedIssue() {
 
     const { owner, repo } = State.currentProject;
     try {
-        await Git.createIssueComment(owner, repo, issue.number, comment);
+        await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, comment));
         EventBus.emit('issues:refresh');
+        window.showToast(`Comment posted on #${issue.number}`, 'success');
         await focusIssue(issue.number);
     } catch (e) {
-        alert(`Failed to comment: ${e.message}`);
+        console.error('[Triage] Comment failed:', e);
+        window.showToast(`Failed to comment: ${e.message}`, 'error');
     }
 }
 
