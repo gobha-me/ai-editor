@@ -1708,3 +1708,166 @@ details[open] > .modal-section-header .section-chevron {
     background: var(--bg-primary);
     border-radius: 0 4px 4px 0;
 }
+
+/* ══════════════════════════════════════════════
+   RELEASE MANAGER MODAL
+   ══════════════════════════════════════════════ */
+
+.modal-release {
+    max-width: 680px;
+    width: 90vw;
+}
+
+/* ── Compare row ── */
+.release-compare-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.release-ref-picker {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.release-arrow {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    padding-bottom: 0.2rem;
+    flex-shrink: 0;
+}
+
+.release-select {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+}
+
+.release-label {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* ── Notes textarea ── */
+.release-notes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.release-textarea {
+    width: 100%;
+    min-height: 200px;
+    max-height: 50vh;
+    padding: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono, 'Fira Code', monospace);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.release-textarea:focus {
+    outline: none;
+    border-color: var(--accent, #58a6ff);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+/* ── Meta row ── */
+.release-meta-row {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.release-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.release-input {
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+}
+
+.release-input:focus {
+    outline: none;
+    border-color: var(--accent, #58a6ff);
+}
+
+/* ── Options ── */
+.release-options-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.release-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.release-checkbox input[type="checkbox"] {
+    accent-color: var(--accent, #58a6ff);
+}
+
+/* ── Status ── */
+.release-status {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    min-height: 1.2em;
+}
+
+.release-status a {
+    color: var(--accent, #58a6ff);
+    text-decoration: none;
+}
+
+.release-status a:hover {
+    text-decoration: underline;
+}
+
+.release-status-error {
+    color: var(--danger, #f85149);
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+    .modal-release {
+        max-width: 95vw;
+    }
+
+    .release-compare-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .release-arrow {
+        text-align: center;
+        padding: 0;
+    }
+
+    .release-meta-row {
+        flex-direction: column;
+    }
+}

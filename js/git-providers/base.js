@@ -445,6 +445,63 @@ const BASE_GIT_PROVIDER = {
     },
 
     // ========================================
+    // TAGS & RELEASES
+    // ========================================
+
+    /**
+     * List tags in a repository, newest first.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @returns {Promise<Array<{name: string, sha: string, date?: string}>>}
+     */
+    async listTags(connection, owner, repo) {
+        notSupported(this.name, 'listTags');
+    },
+
+    /**
+     * Compare two refs and return the commits and file changes between them.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} base - Base ref (tag, branch, sha)
+     * @param {string} head - Head ref (tag, branch, sha)
+     * @returns {Promise<{commits: Array<{sha: string, message: string, author: string, date: string}>, files: Array<{filename: string, status: string, additions: number, deletions: number, patch: string}>, totalCommits: number}>}
+     */
+    async compareRefs(connection, owner, repo, base, head) {
+        notSupported(this.name, 'compareRefs');
+    },
+
+    /**
+     * List existing releases.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @returns {Promise<Array<{id: number, tag: string, name: string, body: string, draft: boolean, prerelease: boolean, url: string, createdAt: string}>>}
+     */
+    async listReleases(connection, owner, repo) {
+        notSupported(this.name, 'listReleases');
+    },
+
+    /**
+     * Create a release.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {Object} opts
+     * @param {string} opts.tag - Tag name (will be created if it doesn't exist)
+     * @param {string} opts.name - Release title
+     * @param {string} opts.body - Release notes (markdown)
+     * @param {boolean} [opts.draft=false]
+     * @param {boolean} [opts.prerelease=false]
+     * @param {string} [opts.target] - Target branch/commit for tag creation
+     * @returns {Promise<{id: number, tag: string, url: string}>}
+     */
+    async createRelease(connection, owner, repo, opts) {
+        notSupported(this.name, 'createRelease');
+    },
+
+    // ========================================
     // CI/CD (optional — returns empty by default)
     // ========================================
 

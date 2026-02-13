@@ -566,25 +566,34 @@ const giteaProvider = {
     // ========================================
 
     async getCommitDiff(connection, owner, repo, sha) {
-        // Gitea: GET /repos/{owner}/{repo}/git/commits/{sha} includes changed files
-        const data = await this.request(connection, 'GET',
-            `/repos/${owner}/${repo}/git/commits/${sha}`);
-        // Gitea's git/commits endpoint returns commit info but not file diffs.
-        // Use the commits endpoint which may include stats:
-        const commit = await this.request(connection, 'GET',
-            `/repos/${owner}/${repo}/commits/${sha}`);
+        // Try /repos/{owner}/{repo}/commits/{sha} — includes files array in modern Gitea
+        let commit = null;
+        try {
+            commit = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/commits/${sha}`);
+        } catch (_) {
+            // Fallback to /git/commits/ (different Gitea versions)
+            try {
+                commit = await this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/git/commits/${sha}`);
+            } catch (e2) {
+                throw new Error(`Could not fetch commit ${sha.slice(0, 7)}: ${e2.message}`);
+            }
+        }
+
         const files = (commit.files || []).map(f => ({
-            path: f.filename,
+            path: f.filename || f.new_path || f.old_path || '',
             status: f.status || 'modified',
             additions: f.additions || 0,
             deletions: f.deletions || 0,
+            patch: f.patch || ''
         }));
         return {
             sha,
             shortSha: sha.slice(0, 7),
-            message: (data?.commit?.message || commit?.commit?.message || '').split('\n')[0],
-            author: data?.commit?.author?.name || commit?.commit?.author?.name || '',
-            date: data?.commit?.author?.date || commit?.commit?.author?.date || '',
+            message: (commit?.commit?.message || '').split('\n')[0],
+            author: commit?.commit?.author?.name || commit?.author?.login || '',
+            date: commit?.commit?.author?.date || '',
             files
         };
     },
@@ -651,6 +660,91 @@ const giteaProvider = {
             merged: true,
             sha: result?.sha || null,
             message: `PR #${number} merged via ${mergeType}`
+        };
+    },
+
+    // ========================================
+    // TAGS & RELEASES
+    // ========================================
+
+    async listTags(connection, owner, repo) {
+        const tags = await this.request(connection, 'GET', `/repos/${owner}/${repo}/tags?limit=50`);
+        return (tags || []).map(t => ({
+            name: t.name,
+            sha: t.commit?.sha || t.id,
+            date: t.commit?.timestamp || t.commit?.created || null
+        }));
+    },
+
+    async compareRefs(connection, owner, repo, base, head) {
+        const result = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`
+        );
+
+        // Debug: log response shape
+        const keys = Object.keys(result || {});
+        console.log('[Gitea] Compare response keys:', keys);
+        console.log(`[Gitea] Compare: commits=${(result.commits || []).length}, total_commits=${result.total_commits}, files field exists=${result.files !== undefined}, files count=${(result.files || []).length}`);
+        if ((result.commits || []).length === 0) {
+            console.log('[Gitea] Compare returned 0 commits. Response snippet:', JSON.stringify(result).slice(0, 300));
+        }
+
+        const commits = (result.commits || []).map(c => ({
+            sha: c.sha,
+            message: c.commit?.message || c.message || '',
+            author: c.commit?.author?.name || c.author?.login || 'unknown',
+            date: c.commit?.author?.date || c.created || ''
+        }));
+
+        // Gitea versions vary on where file data lives
+        const rawFiles = result.files || result.changed_files || result.diffs || [];
+        if (rawFiles.length === 0 && result.files !== undefined) {
+            console.log('[Gitea] Compare returned files field but it is empty');
+        }
+        if (rawFiles.length === 0 && result.files === undefined) {
+            console.log('[Gitea] Compare response has no "files" field. Available:', Object.keys(result));
+        }
+
+        const files = rawFiles.map(f => ({
+            filename: f.filename || f.new_path || f.old_path || f.name || '',
+            status: f.status || (f.new_file ? 'added' : f.deleted_file ? 'removed' : 'modified'),
+            additions: f.additions || 0,
+            deletions: f.deletions || 0,
+            patch: f.patch || f.diff || ''
+        }));
+
+        return { commits, files, totalCommits: result.total_commits ?? commits.length };
+    },
+
+    async listReleases(connection, owner, repo) {
+        const releases = await this.request(connection, 'GET', `/repos/${owner}/${repo}/releases?limit=20`);
+        return (releases || []).map(r => ({
+            id: r.id,
+            tag: r.tag_name,
+            name: r.name || r.tag_name,
+            body: r.body || '',
+            draft: r.draft || false,
+            prerelease: r.prerelease || false,
+            url: r.html_url || '',
+            createdAt: r.created_at || ''
+        }));
+    },
+
+    async createRelease(connection, owner, repo, { tag, name, body, draft = false, prerelease = false, target }) {
+        const payload = {
+            tag_name: tag,
+            name: name || tag,
+            body: body || '',
+            draft,
+            prerelease
+        };
+        if (target) payload.target_commitish = target;
+
+        const result = await this.request(connection, 'POST', `/repos/${owner}/${repo}/releases`, payload);
+        return {
+            id: result.id,
+            tag: result.tag_name,
+            url: result.html_url || ''
         };
     },
 

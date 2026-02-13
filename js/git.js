@@ -308,6 +308,30 @@ const Git = {
     async getWorkflowRunLogs(owner, repo, runId) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.getWorkflowRunLogs(connection, owner, repo, runId);
+    },
+
+    // ========================================
+    // TAGS & RELEASES
+    // ========================================
+
+    async listTags(owner, repo) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.listTags(connection, owner, repo);
+    },
+
+    async compareRefs(owner, repo, base, head) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.compareRefs(connection, owner, repo, base, head);
+    },
+
+    async listReleases(owner, repo) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.listReleases(connection, owner, repo);
+    },
+
+    async createRelease(owner, repo, opts) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.createRelease(connection, owner, repo, opts);
     }
 };
 

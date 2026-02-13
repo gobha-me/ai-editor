@@ -685,3 +685,69 @@
 
     </div>
 </div>
+
+<!-- Release Manager Modal -->
+<div class="modal-overlay" id="releaseModal" role="dialog" aria-modal="true" aria-labelledby="releaseModalTitle">
+    <div class="modal modal-release">
+        <div class="modal-header">
+            <h2 id="releaseModalTitle">🏷️ Release Manager</h2>
+            <button type="button" class="modal-close" onclick="window.closeReleaseModal()" aria-label="Close">×</button>
+        </div>
+
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <!-- Ref comparison row -->
+            <div class="release-compare-row">
+                <div class="release-ref-picker">
+                    <label for="releaseFrom" class="release-label">From (base)</label>
+                    <select id="releaseFrom" class="release-select">
+                        <option value="">Loading…</option>
+                    </select>
+                </div>
+                <span class="release-arrow">→</span>
+                <div class="release-ref-picker">
+                    <label for="releaseTo" class="release-label">To (head)</label>
+                    <select id="releaseTo" class="release-select">
+                        <option value="">Loading…</option>
+                    </select>
+                </div>
+                <button type="button" id="btnGenerateRelease" class="btn btn-primary" onclick="window.generateReleaseNotes()">✨ Generate Notes</button>
+            </div>
+
+            <!-- Release notes textarea -->
+            <div class="release-notes-section">
+                <label for="releaseNotes" class="release-label">Release Notes</label>
+                <textarea id="releaseNotes" class="release-textarea" placeholder="Generate notes from commits, or write them manually…" rows="12"></textarea>
+            </div>
+
+            <!-- Release metadata -->
+            <div class="release-meta-row">
+                <div class="release-field">
+                    <label for="releaseTag" class="release-label">Tag</label>
+                    <input type="text" id="releaseTag" class="release-input" placeholder="v1.0.0">
+                </div>
+                <div class="release-field">
+                    <label for="releaseTitle" class="release-label">Title <span class="text-muted">(optional)</span></label>
+                    <input type="text" id="releaseTitle" class="release-input" placeholder="Release title">
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="release-options-row">
+                <label class="release-checkbox">
+                    <input type="checkbox" id="releaseDraft"> Draft
+                </label>
+                <label class="release-checkbox">
+                    <input type="checkbox" id="releasePrerelease"> Pre-release
+                </label>
+            </div>
+
+            <!-- Status -->
+            <div id="releaseStatus" class="release-status"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="window.closeReleaseModal()">Close</button>
+            <button type="button" id="btnCreateRelease" class="btn btn-primary" onclick="window.createRelease()">🚀 Create Release</button>
+        </div>
+    </div>
+</div>

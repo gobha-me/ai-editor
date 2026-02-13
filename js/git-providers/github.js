@@ -715,6 +715,71 @@ const githubProvider = {
         };
     },
 
+    // ========================================
+    // TAGS & RELEASES
+    // ========================================
+
+    async listTags(connection, owner, repo) {
+        const tags = await this.request(connection, 'GET', `/repos/${owner}/${repo}/tags?per_page=50`);
+        return (tags || []).map(t => ({
+            name: t.name,
+            sha: t.commit?.sha || '',
+            date: t.commit?.committer?.date || null
+        }));
+    },
+
+    async compareRefs(connection, owner, repo, base, head) {
+        const result = await this.request(connection, 'GET',
+            `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`
+        );
+        const commits = (result.commits || []).map(c => ({
+            sha: c.sha,
+            message: c.commit?.message || '',
+            author: c.commit?.author?.name || c.author?.login || 'unknown',
+            date: c.commit?.author?.date || ''
+        }));
+        const files = (result.files || []).map(f => ({
+            filename: f.filename,
+            status: f.status || 'modified',
+            additions: f.additions || 0,
+            deletions: f.deletions || 0,
+            patch: f.patch || ''
+        }));
+        return { commits, files, totalCommits: result.total_commits ?? commits.length };
+    },
+
+    async listReleases(connection, owner, repo) {
+        const releases = await this.request(connection, 'GET', `/repos/${owner}/${repo}/releases?per_page=20`);
+        return (releases || []).map(r => ({
+            id: r.id,
+            tag: r.tag_name,
+            name: r.name || r.tag_name,
+            body: r.body || '',
+            draft: r.draft || false,
+            prerelease: r.prerelease || false,
+            url: r.html_url || '',
+            createdAt: r.created_at || ''
+        }));
+    },
+
+    async createRelease(connection, owner, repo, { tag, name, body, draft = false, prerelease = false, target }) {
+        const payload = {
+            tag_name: tag,
+            name: name || tag,
+            body: body || '',
+            draft,
+            prerelease
+        };
+        if (target) payload.target_commitish = target;
+
+        const result = await this.request(connection, 'POST', `/repos/${owner}/${repo}/releases`, payload);
+        return {
+            id: result.id,
+            tag: result.tag_name,
+            url: result.html_url || ''
+        };
+    },
+
     async getCommitStatus(connection, owner, repo, ref) {
         try {
             const status = await this.request(connection, 'GET',

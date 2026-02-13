@@ -727,6 +727,76 @@ const gitlabProvider = {
     },
 
     // ========================================
+    // TAGS & RELEASES
+    // ========================================
+
+    async listTags(connection, owner, repo) {
+        const tags = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/tags?per_page=50&order_by=updated&sort=desc`
+        );
+        return (tags || []).map(t => ({
+            name: t.name,
+            sha: t.commit?.id || '',
+            date: t.commit?.committed_date || null
+        }));
+    },
+
+    async compareRefs(connection, owner, repo, base, head) {
+        const result = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/repository/compare?from=${encodeURIComponent(base)}&to=${encodeURIComponent(head)}`
+        );
+        const commits = (result.commits || []).map(c => ({
+            sha: c.id || c.sha,
+            message: c.message || '',
+            author: c.author_name || 'unknown',
+            date: c.authored_date || c.committed_date || ''
+        }));
+        // GitLab returns diffs, not files
+        const files = (result.diffs || []).map(d => ({
+            filename: d.new_path || d.old_path,
+            status: d.new_file ? 'added' : d.deleted_file ? 'removed' : d.renamed_file ? 'renamed' : 'modified',
+            additions: (d.diff || '').split('\n').filter(l => l.startsWith('+')).length,
+            deletions: (d.diff || '').split('\n').filter(l => l.startsWith('-')).length,
+            patch: d.diff || ''
+        }));
+        return { commits, files, totalCommits: commits.length };
+    },
+
+    async listReleases(connection, owner, repo) {
+        const releases = await this.request(connection, 'GET',
+            `/projects/${projectId(owner, repo)}/releases?per_page=20&order_by=released_at&sort=desc`
+        );
+        return (releases || []).map(r => ({
+            id: r.name, // GitLab uses tag_name as primary key
+            tag: r.tag_name,
+            name: r.name || r.tag_name,
+            body: r.description || '',
+            draft: false, // GitLab doesn't have draft releases
+            prerelease: false,
+            url: r._links?.self || '',
+            createdAt: r.released_at || r.created_at || ''
+        }));
+    },
+
+    async createRelease(connection, owner, repo, { tag, name, body, draft = false, prerelease = false, target }) {
+        const payload = {
+            tag_name: tag,
+            name: name || tag,
+            description: body || ''
+        };
+        if (target) payload.ref = target;
+
+        const result = await this.request(connection, 'POST',
+            `/projects/${projectId(owner, repo)}/releases`, payload
+        );
+        return {
+            id: result.name,
+            tag: result.tag_name,
+            url: result._links?.self || ''
+        };
+    },
+
+    // ========================================
     // COMMIT DIFF
     // ========================================
 

@@ -37,6 +37,7 @@ import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush } f
 import { openNewBranchModal, closeNewBranchModal, createNewBranch } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-create.js';
 import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
+import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease } from './release-manager.js';
 import { 
     refreshProjects, 
     onProjectChange,
