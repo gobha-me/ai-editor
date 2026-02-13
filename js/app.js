@@ -593,6 +593,8 @@ function closePluginModal() {
  * Initialize the plugin toolbar dropdown.
  * Shows/hides based on whether any plugins have registered buttons.
  */
+let _pluginToolbarInitialized = false;
+
 function initPluginToolbar() {
     const toolbar = document.getElementById('pluginToolbar');
     const btn = document.getElementById('btnPluginMenu');
@@ -623,20 +625,25 @@ function initPluginToolbar() {
         });
     }
 
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isVisible = dropdown.style.display !== 'none';
-        dropdown.style.display = isVisible ? 'none' : '';
-    });
+    // Only bind event listeners once — this function may be called multiple times
+    if (!_pluginToolbarInitialized) {
+        _pluginToolbarInitialized = true;
 
-    // Close on outside click
-    document.addEventListener('click', () => {
-        dropdown.style.display = 'none';
-    });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = dropdown.style.display !== 'none';
+            dropdown.style.display = isVisible ? 'none' : '';
+        });
 
-    // Re-render when plugins change
-    EventBus.on('plugin:buttonRegistered', render);
-    EventBus.on('plugin:enabledChanged', render);
+        // Close on outside click
+        document.addEventListener('click', () => {
+            dropdown.style.display = 'none';
+        });
+
+        // Re-render when plugins change
+        EventBus.on('plugin:buttonRegistered', render);
+        EventBus.on('plugin:enabledChanged', render);
+    }
 
     render();
 }

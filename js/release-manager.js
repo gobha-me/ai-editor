@@ -212,42 +212,34 @@ export async function generateReleaseNotes() {
         const numFiles = files.length;
         _setStatus(`Found ${numCommits} commit(s), ${numFiles} file(s). Generating notes…`);
 
-        // Step 2: Build rich context for the LLM
-        // -- Commit log (short sha + first line)
+        // ── Build rich context for the LLM ──
+
+        // Commit log (short sha + first line)
         const commitLog = (comparison.commits || []).map(c => {
             const shortSha = c.sha.slice(0, 7);
             const firstLine = (c.message || '').split('\n')[0];
             return `${shortSha} ${firstLine} (${c.author})`;
         }).join('\n');
 
-        // -- File summary: filename, status, +/- counts
-        const fileSummary = files.map(f => {
+        // Filter and prioritize files for analysis
+        const prioritized = _prioritizeFiles(files);
+
+        // File summary (all files for overview)
+        const fileSummary = prioritized.map(f => {
             const stats = `+${f.additions} -${f.deletions}`;
             return `[${f.status}] ${f.filename} (${stats})`;
         }).join('\n');
 
-        // -- Truncated patches for meaningful context
-        //    Cap total patch size to ~8K chars to avoid blowing the context window
-        let patchBudget = 8000;
-        const patchSnippets = [];
-        for (const f of files) {
-            if (!f.patch || patchBudget <= 0) continue;
-            // Skip binary/minified — patches with very long lines
-            const avgLineLen = f.patch.length / (f.patch.split('\n').length || 1);
-            if (avgLineLen > 300) continue;
+        // Build meaningful patch context — extract only +/- lines, skip noise
+        const patchContext = _buildPatchContext(prioritized);
 
-            const truncated = f.patch.slice(0, Math.min(f.patch.length, patchBudget));
-            const wasTruncated = f.patch.length > patchBudget;
-            patchSnippets.push(
-                `--- ${f.filename} [${f.status}] ---\n` +
-                truncated +
-                (wasTruncated ? '\n... (truncated)' : '')
-            );
-            patchBudget -= truncated.length;
+        // If no patches available at all, try to fetch key file contents
+        // so the LLM can at least see what the current state looks like
+        let fileContentContext = '';
+        if (!patchContext && prioritized.length > 0) {
+            _setStatus(`No diffs available, fetching key file contents…`);
+            fileContentContext = await _fetchKeyFileContents(owner, repo, prioritized);
         }
-        const patchContext = patchSnippets.length > 0
-            ? `\n\nCode changes (unified diff excerpts):\n${patchSnippets.join('\n\n')}`
-            : '';
 
         // Step 3: Generate release notes via LLM
         const commitModel = State.settings.commitModel || State.settings.llmModel;
@@ -255,19 +247,39 @@ export async function generateReleaseNotes() {
 
         if (genBtn) genBtn.textContent = '⏳ Generating…';
 
+        // Build the user prompt
+        const userPromptParts = [
+            `Generate release notes for ${repoName}.`,
+            `Comparing: ${fromRef} → ${toRef}`,
+            `Total commits: ${comparison.totalCommits}`,
+            '',
+            `Commit log:\n${commitLog}`,
+            '',
+            `Files changed (${numFiles}):\n${fileSummary}`,
+        ];
+
+        if (patchContext) {
+            userPromptParts.push('', `Code changes (key diffs):\n${patchContext}`);
+        }
+        if (fileContentContext) {
+            userPromptParts.push('', `Key file contents (current state):\n${fileContentContext}`);
+        }
+
+        const userPrompt = userPromptParts.join('\n');
+        console.log(`[Release] LLM context: ${userPrompt.length} chars, ${numCommits} commits, ${numFiles} files, patches=${!!patchContext}, fileContents=${!!fileContentContext}`);
+
         // Stream into the textarea so the user sees progress
-        // and we avoid server-side non-streaming timeouts
         notesArea.value = '';
         let accumulated = '';
 
         const result = await LLM.chat([
             {
                 role: 'system',
-                content: `You are a release notes writer. Generate clear, well-organized release notes in Markdown format. Group changes by category (Features, Bug Fixes, Improvements, Refactoring, Breaking Changes, etc). Only include categories that have entries. Be concise — one line per item. Use the actual code changes (diffs) to understand what was done, not just the commit messages (which may be generic like "Upload files from zip"). Focus on what changed functionally. Do NOT include a title heading — the user will set the release title separately. Output ONLY the Markdown notes body, no wrapping code fences.`
+                content: _buildSystemPrompt()
             },
             {
                 role: 'user',
-                content: `Generate release notes for ${repoName}.\n\nComparing: ${fromRef} → ${toRef}\nTotal commits: ${comparison.totalCommits}\n\nCommit log:\n${commitLog}\n\nFiles changed (${numFiles}):\n${fileSummary}${patchContext}`
+                content: userPrompt
             }
         ], {
             model: commitModel,
@@ -366,6 +378,167 @@ export async function createRelease() {
             createBtn.textContent = '🚀 Create Release';
         }
     }
+}
+
+// ============================================
+// CONTEXT BUILDING HELPERS
+// ============================================
+
+/** Noise patterns — files that rarely matter for release notes */
+const NOISE_PATTERNS = [
+    /^\.gitea\//,
+    /^\.github\//,
+    /^vendor\//,
+    /^node_modules\//,
+    /^package-lock\.json$/,
+    /^yarn\.lock$/,
+    /\.min\.(js|css)$/,
+    /\.map$/,
+    /\.DS_Store$/,
+    /^\.eslintcache$/,
+];
+
+/** Priority tiers — higher tier = more relevant for release notes */
+const FILE_PRIORITY = [
+    { pattern: /\.js$/, tier: 4 },            // JS source
+    { pattern: /\.html$/, tier: 3 },           // Templates / UI
+    { pattern: /\.css$/, tier: 3 },            // Styles
+    { pattern: /\.json$/, tier: 2 },           // Config
+    { pattern: /\.ya?ml$/, tier: 2 },          // Config
+    { pattern: /\.md$/, tier: 1 },             // Docs
+    { pattern: /Dockerfile/, tier: 2 },        // Infra
+];
+
+/**
+ * Filter noise files and sort by relevance.
+ * Keeps all files but puts the most important ones first.
+ */
+function _prioritizeFiles(files) {
+    return files
+        .filter(f => !NOISE_PATTERNS.some(p => p.test(f.filename)))
+        .sort((a, b) => {
+            const tierA = FILE_PRIORITY.find(p => p.pattern.test(a.filename))?.tier || 0;
+            const tierB = FILE_PRIORITY.find(p => p.pattern.test(b.filename))?.tier || 0;
+            if (tierB !== tierA) return tierB - tierA; // Higher tier first
+            // Within same tier, sort by change volume
+            return (b.additions + b.deletions) - (a.additions + a.deletions);
+        });
+}
+
+/**
+ * Build compact patch context from file diffs.
+ * Extracts only added/removed lines (not context lines) for maximum signal.
+ * Budget: ~12K chars to leave room for the rest of the prompt.
+ */
+function _buildPatchContext(files) {
+    let budget = 12000;
+    const snippets = [];
+
+    for (const f of files) {
+        if (!f.patch || budget <= 0) continue;
+
+        // Skip binary/minified — avg line length > 300 chars
+        const lines = f.patch.split('\n');
+        const avgLen = f.patch.length / (lines.length || 1);
+        if (avgLen > 300) continue;
+
+        // Extract only meaningful lines: +/- lines and @@ headers
+        const meaningful = lines.filter(line =>
+            line.startsWith('+') || line.startsWith('-') || line.startsWith('@@')
+        );
+
+        if (meaningful.length === 0) continue;
+
+        // Skip files where 90%+ lines are added (full file replacement from zip upload)
+        // These are noise — every line shows as "added" because the file was replaced
+        const addedCount = meaningful.filter(l => l.startsWith('+')).length;
+        const removedCount = meaningful.filter(l => l.startsWith('-')).length;
+        if (addedCount > 50 && removedCount < addedCount * 0.1) {
+            // Full replacement — just note it, don't include the patch
+            snippets.push(`--- ${f.filename} [${f.status}] --- (full file, +${f.additions} -${f.deletions})`);
+            budget -= 80;
+            continue;
+        }
+
+        const excerpt = meaningful.join('\n');
+        const truncated = excerpt.slice(0, Math.min(excerpt.length, budget));
+        const wasTruncated = excerpt.length > budget;
+
+        snippets.push(
+            `--- ${f.filename} [${f.status}] ---\n` +
+            truncated +
+            (wasTruncated ? '\n... (truncated)' : '')
+        );
+        budget -= truncated.length + 50; // 50 for the header
+    }
+
+    return snippets.length > 0 ? snippets.join('\n\n') : '';
+}
+
+/**
+ * When no patches are available at all, fetch the current content of
+ * key changed files so the LLM can at least see what exists.
+ * Fetches up to 5 high-priority files, ~2K chars each.
+ */
+async function _fetchKeyFileContents(owner, repo, files) {
+    const topFiles = files.filter(f =>
+        /\.(js|html|css|json|ya?ml|md)$/.test(f.filename)
+    ).slice(0, 5);
+
+    if (topFiles.length === 0) return '';
+
+    const branch = State.currentBranch || 'main';
+    const contents = [];
+    let budget = 10000;
+
+    for (const f of topFiles) {
+        if (budget <= 0) break;
+        try {
+            const file = await Git.getFile(owner, repo, f.filename, branch);
+            if (!file?.content) continue;
+
+            const text = file.content;
+            const truncated = text.slice(0, Math.min(text.length, 2000));
+            contents.push(
+                `--- ${f.filename} (current state, ${f.status}) ---\n` +
+                truncated +
+                (text.length > 2000 ? '\n... (truncated)' : '')
+            );
+            budget -= truncated.length;
+        } catch {
+            // Skip files we can't fetch
+        }
+    }
+
+    return contents.join('\n\n');
+}
+
+/**
+ * Build the system prompt for release notes generation.
+ */
+function _buildSystemPrompt() {
+    return `You are a release notes writer for a software project. Generate clear, well-organized release notes in Markdown format.
+
+CRITICAL RULES:
+1. Commit messages are often USELESS (e.g., "Upload files from zip", "Update files", "changeset 0.9.32"). IGNORE generic commit messages entirely.
+2. Determine what changed by analyzing: the FILE NAMES that changed, the DIFFS/patches (added and removed lines), and the file STRUCTURE (which modules were touched).
+3. Group changes by category: Features, Bug Fixes, Improvements, Performance, UI/UX, Refactoring, Infrastructure, Breaking Changes. Only include categories that have entries.
+4. Be specific — "Added request timeout to git providers" is good. "Updated files" is worthless.
+5. One line per item. Be concise but descriptive.
+6. If you see CSS changes, describe the visual/UX impact, not the property changes.
+7. If you see JS module changes, describe the behavioral change, not the code structure.
+8. Do NOT include a title heading — the user sets the release title separately.
+9. Output ONLY the Markdown notes body, no wrapping code fences.
+10. If file paths suggest the change scope (e.g., js/chat/ = chat panel, css/sidebar.css = sidebar styling), use that to infer what area was affected.
+
+INFERENCE PATTERNS:
+- New files = new features
+- Deleted files = removed features
+- Changes to multiple related files (e.g., HTML + CSS + JS for same component) = a coordinated feature/fix
+- version.js change = version bump (mention it once at the end, don't make it a category)
+- Changes to git-providers/ = git integration changes
+- Changes to css/ = UI/styling changes
+- Changes to html/ = layout/template changes`;
 }
 
 // ============================================

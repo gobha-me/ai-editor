@@ -598,13 +598,44 @@ const giteaProvider = {
             }
         }
 
-        const files = (commit.files || []).map(f => ({
+        let files = (commit.files || []).map(f => ({
             path: f.filename || f.new_path || f.old_path || '',
             status: f.status || 'modified',
             additions: f.additions || 0,
             deletions: f.deletions || 0,
             patch: f.patch || ''
         }));
+
+        // Some Gitea versions return files without patches or stats.
+        // Detect this and fetch the raw .diff endpoint as fallback.
+        const hasPatch = files.some(f => f.patch || f.additions > 0 || f.deletions > 0);
+        if (!hasPatch && files.length > 0) {
+            console.log(`[Gitea] Commit ${sha.slice(0, 7)}: files lack patches, fetching raw .diff`);
+            try {
+                const rawDiff = await this._fetchRawDiff(connection, owner, repo, sha);
+                if (rawDiff) {
+                    const parsed = this._parseUnifiedDiff(rawDiff);
+                    // Merge parsed patches into existing file list
+                    for (const f of files) {
+                        const match = parsed.get(f.path);
+                        if (match) {
+                            f.patch = match.patch;
+                            f.additions = match.additions;
+                            f.deletions = match.deletions;
+                        }
+                    }
+                    // Add any files found in diff but missing from file list
+                    for (const [path, data] of parsed) {
+                        if (!files.find(f => f.path === path)) {
+                            files.push({ path, ...data });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`[Gitea] Raw diff fetch failed for ${sha.slice(0, 7)}:`, e.message);
+            }
+        }
+
         return {
             sha,
             shortSha: sha.slice(0, 7),
@@ -613,6 +644,75 @@ const giteaProvider = {
             date: commit?.commit?.author?.date || '',
             files
         };
+    },
+
+    /**
+     * Fetch raw unified diff for a commit via the .diff endpoint.
+     * Returns the raw diff text or null.
+     */
+    async _fetchRawDiff(connection, owner, repo, sha) {
+        const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/git/commits/${sha}.diff`;
+        const resp = await fetch(url, {
+            headers: this.getHeaders(connection),
+            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
+        });
+        if (!resp.ok) return null;
+        return resp.text();
+    },
+
+    /**
+     * Parse a raw unified diff into a Map<filename, {status, additions, deletions, patch}>.
+     */
+    _parseUnifiedDiff(rawDiff) {
+        const fileMap = new Map();
+        // Split on "diff --git" boundaries
+        const sections = rawDiff.split(/^diff --git /m).slice(1); // skip empty first element
+
+        for (const section of sections) {
+            // Extract filename from "a/path b/path" header
+            const headerLine = section.split('\n')[0];
+            const match = headerLine.match(/a\/(.+?) b\/(.+)/);
+            if (!match) continue;
+
+            const filename = match[2];
+            let status = 'modified';
+            if (section.includes('new file mode')) status = 'added';
+            else if (section.includes('deleted file mode')) status = 'removed';
+
+            // Count +/- lines
+            let additions = 0, deletions = 0;
+            const lines = section.split('\n');
+            const patchLines = [];
+            let inHunk = false;
+
+            for (const line of lines) {
+                if (line.startsWith('@@')) {
+                    inHunk = true;
+                    patchLines.push(line);
+                } else if (inHunk) {
+                    if (line.startsWith('+') && !line.startsWith('+++')) {
+                        additions++;
+                        patchLines.push(line);
+                    } else if (line.startsWith('-') && !line.startsWith('---')) {
+                        deletions++;
+                        patchLines.push(line);
+                    } else if (line.startsWith(' ') || line === '') {
+                        patchLines.push(line);
+                    } else if (line.startsWith('diff ')) {
+                        break; // next file
+                    }
+                }
+            }
+
+            fileMap.set(filename, {
+                status,
+                additions,
+                deletions,
+                patch: patchLines.join('\n')
+            });
+        }
+
+        return fileMap;
     },
 
     // ========================================
