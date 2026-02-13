@@ -204,7 +204,7 @@
 }
 
 .header-cost-tracker .cost-balance {
-    color: var(--accent);
+    color: #5bbdf5;              /* AA contrast on bg-secondary */
     font-weight: 600;
     padding-left: 6px;
     border-left: 1px solid var(--border-light);

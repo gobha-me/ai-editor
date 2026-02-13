@@ -1,0 +1,418 @@
+/**
+ * AI Editor - Mobile Layout
+ *
+ * Single-panel mode with bottom tab bar at ≤768px.
+ * Sidebar and chat become full-width overlays.
+ * Editor is the persistent base layer.
+ *
+ * Panel switching is handled by .mobile-active class
+ * toggled via js/mobile.js.
+ */
+
+/* ============================================
+   BOTTOM TAB BAR (always rendered, hidden on desktop)
+   ============================================ */
+
+.mobile-tab-bar {
+    display: none;          /* shown via media query below */
+}
+
+/* ============================================
+   MOBILE BREAKPOINT (≤768px)
+   ============================================ */
+
+@media (max-width: 768px) {
+
+    /* ---- Bottom tab bar ---- */
+
+    .mobile-tab-bar {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 52px;
+        background: var(--bg-tertiary);
+        border-top: 1px solid var(--border);
+        z-index: 9000;
+        justify-content: stretch;
+        flex-shrink: 0;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-tab {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        border: none;
+        background: none;
+        color: var(--text-muted);
+        font-size: 18px;
+        padding: 4px 0;
+        cursor: pointer;
+        position: relative;
+        min-height: 44px;       /* touch target */
+        font-family: var(--font-sans);
+        -webkit-tap-highlight-color: transparent;
+        transition: color 0.15s;
+    }
+
+    .mobile-tab span {
+        font-size: 10px;
+        line-height: 1;
+    }
+
+    .mobile-tab.active {
+        color: var(--accent);
+    }
+
+    .mobile-tab.active::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 25%;
+        right: 25%;
+        height: 2px;
+        background: var(--accent);
+        border-radius: 0 0 2px 2px;
+    }
+
+    .mobile-tab .mobile-badge {
+        position: absolute;
+        top: 4px;
+        right: calc(50% - 16px);
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: none;          /* shown by JS when panel has activity */
+    }
+
+    /* ---- Core layout overrides ---- */
+
+    .app-container {
+        padding-bottom: 52px;   /* room for tab bar */
+    }
+
+    .main-content {
+        position: relative;
+    }
+
+    /* Sidebar: full-screen overlay, hidden by default */
+    .sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 100% !important;
+        z-index: 100;
+        border-right: none;
+        display: none;
+    }
+
+    .sidebar.mobile-active {
+        display: flex;
+    }
+
+    /* Override the desktop .hidden toggle on mobile */
+    .sidebar.hidden {
+        display: none;
+    }
+    .sidebar.hidden.mobile-active {
+        display: flex;
+    }
+
+    /* Chat: full-screen overlay, hidden by default */
+    .chat-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 100% !important;
+        z-index: 100;
+        border-left: none;
+        display: none;
+    }
+
+    .chat-panel.mobile-active {
+        display: flex;
+    }
+
+    .chat-panel.hidden {
+        display: none;
+    }
+    .chat-panel.hidden.mobile-active {
+        display: flex;
+    }
+
+    /* Editor panel: always visible as base layer */
+    .editor-panel {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Hide resize handles */
+    .resize-handle {
+        display: none !important;
+    }
+
+    /* ---- Header simplification ---- */
+
+    .app-header {
+        padding: 0 0.5rem;
+        gap: 0.25rem;
+    }
+
+    .app-header h1 {
+        font-size: var(--font-base);
+    }
+
+    .app-header .version {
+        display: none;
+    }
+
+    .header-actions {
+        gap: 0.25rem;
+    }
+
+    /* Hide non-essential header buttons on mobile */
+    #btnToggleSidebar,
+    #btnToggleChat,
+    #btnErrorLog,
+    #btnLLMDebug,
+    #btnHelp {
+        display: none;
+    }
+
+    /* Make remaining header buttons touch-friendly */
+    .header-actions .btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 0.25rem 0.4rem;
+        font-size: var(--font-base);
+    }
+
+    /* Hide text on commit/revert buttons, show only icon */
+    #btnCommit {
+        font-size: 0;
+    }
+    #btnCommit::before {
+        content: '📦';
+        font-size: var(--font-base);
+    }
+
+    /* Cost tracker: compact */
+    .header-cost-tracker {
+        font-size: var(--font-xs);
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* ---- Editor toolbar ---- */
+
+    .editor-tabs-bar {
+        flex-wrap: nowrap;
+    }
+
+    .editor-toolbar {
+        flex-shrink: 0;
+    }
+
+    .editor-toolbar .btn-toolbar {
+        min-width: 36px;
+        min-height: 32px;
+        padding: 0.2rem 0.4rem;
+        font-size: var(--font-sm);
+    }
+
+    /* Tabs scroll horizontally */
+    .editor-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;      /* hide scrollbar on mobile */
+    }
+
+    .editor-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .editor-tab {
+        min-width: 80px;
+        flex-shrink: 0;
+        font-size: var(--font-sm);
+    }
+
+    /* ---- Chat panel mobile tweaks ---- */
+
+    /* Model selector: stack vertically */
+    .chat-header {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        padding: 0.4rem 0.5rem;
+    }
+
+    .chat-header h3 {
+        font-size: var(--chat-base);
+    }
+
+    .chat-header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .model-selector {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        width: 100%;
+    }
+
+    .model-selector select {
+        flex: 1;
+        min-width: 0;
+        font-size: var(--chat-sm);
+    }
+
+    /* Chat input: more prominent on mobile */
+    .chat-input-wrapper textarea {
+        font-size: 16px;        /* prevents iOS zoom on focus */
+        min-height: 44px;
+    }
+
+    .chat-input-actions button {
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    /* Issue focus bar: compact */
+    .issue-focus-bar {
+        font-size: var(--chat-sm);
+    }
+
+    .issue-focus-actions {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    /* ---- Sidebar mobile tweaks ---- */
+
+    .sidebar-header {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .project-selector select,
+    .branch-selector select {
+        font-size: var(--font-base);
+        min-height: 36px;
+    }
+
+    .sidebar-section-bottom .issues-panel,
+    .sidebar-section-bottom .prs-panel {
+        max-height: 250px;      /* more room in full-width view */
+    }
+
+    /* File tree: bigger touch targets */
+    .tree-item {
+        min-height: 36px;
+        padding: 0.4rem 0.25rem 0.4rem 0;
+    }
+
+    /* ---- Modals: near full-screen ---- */
+
+    .modal-overlay .modal {
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        max-height: 100dvh !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        border-radius: 0;
+        margin: 0;
+    }
+
+    /* Settings modal: full screen */
+    #settingsModalInner {
+        max-width: 100vw !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        border-radius: 0;
+    }
+
+    .settings-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Onboarding: full width */
+    .onboard-modal {
+        max-width: 100vw !important;
+        width: 100vw !important;
+        border-radius: 0;
+        padding: 1.5rem 1rem;
+    }
+
+    /* ---- Status bar ---- */
+
+    .editor-status {
+        font-size: var(--font-xs);
+        padding: 0 0.5rem;
+    }
+
+    /* ---- Quick open ---- */
+
+    .quick-open-panel {
+        width: 95vw;
+        max-width: 95vw;
+    }
+
+    /* ---- Toast: above tab bar ---- */
+
+    .toast-container {
+        bottom: 62px;          /* above the 52px tab bar + margin */
+    }
+
+    /* ---- Form inputs: prevent iOS zoom ---- */
+
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    input[type="email"],
+    input[type="url"],
+    textarea,
+    select {
+        font-size: 16px;       /* ≥16px prevents iOS auto-zoom */
+    }
+}
+
+/* ============================================
+   SMALL PHONE (≤480px) — further tightening
+   ============================================ */
+
+@media (max-width: 480px) {
+
+    .app-header h1 {
+        font-size: var(--font-sm);
+    }
+
+    .mobile-tab span {
+        font-size: 9px;
+    }
+
+    .onboard-paths {
+        gap: 0.35rem;
+    }
+
+    .onboard-path {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .onboard-path-icon {
+        font-size: 20px;
+    }
+}

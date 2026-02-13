@@ -32,6 +32,7 @@
 │   file-create│               │                          │
 │   revert     │               │                          │
 │ onboarding   │               │                          │
+│ mobile       │               │                          │
 ├──────────────┴───────────────┴──────────────────────────┤
 │                    Tool Layer                           │
 │  tools/registry  tools/file-tools  tools/edit-tools    │

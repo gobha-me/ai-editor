@@ -94,6 +94,7 @@ function renderTreeNodes(nodes, depth) {
             
             // Use mousedown handler with click counting for proper single/double click detection
             const clickHandler = `window.handleTreeClick(event, '${escapeAttr(node.path)}', '${escapeAttr(node.type)}')`;
+            const itemId = `ti-${escapeAttr(node.path).replace(/[^a-zA-Z0-9]/g, '-')}`;
             
             let html = `
                 <div class="tree-item ${isDir ? 'dir' : ''}" 
@@ -102,12 +103,12 @@ function renderTreeNodes(nodes, depth) {
                      data-type="${escapeAttr(node.type)}"
                      role="treeitem"
                      tabindex="-1"
-                     aria-label="${escapeAttr(node.name)}${isDir ? ', folder' : ''}"
+                     aria-labelledby="${itemId}"
                      ${isDir && hasChildren ? `aria-expanded="false"` : ''}
                      onclick="${clickHandler}">
                     ${chevron}
                     <span class="icon" aria-hidden="true">${icon}</span>
-                    <span class="name">${escapeHtml(node.name)}</span>
+                    <span class="name" id="${itemId}">${escapeHtml(node.name)}${isDir ? '<span class="sr-only">, folder</span>' : ''}</span>
                     <div class="actions">
                         ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
                     </div>

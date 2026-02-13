@@ -8,6 +8,7 @@ import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { checkOnboarding } from './onboarding.js';
+import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
@@ -704,6 +705,7 @@ async function init() {
     initZipDragDrop();
     initAccessibility();
     initOfflineIndicator();
+    initMobile();
 
     // Screen reader announcements for key state changes
     EventBus.on('file:opened', ({ path }) => {

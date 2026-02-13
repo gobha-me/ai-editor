@@ -15,8 +15,8 @@
     --bg-active: #094771;
     
     --text-primary: #cccccc;
-    --text-secondary: #858585;
-    --text-muted: #6e6e6e;
+    --text-secondary: #9e9e9e;   /* AA 4.5:1+ on bg-tertiary #2d2d30 */
+    --text-muted: #8e8e8e;       /* AA 4.5:1+ on bg-secondary #252526 */
     
     --accent: #0e7dca;
     --accent-hover: #1a8fe0;
@@ -92,6 +92,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;          /* dynamic viewport: excludes mobile browser chrome */
 }
 
 /* ---- Header ---- */
@@ -130,6 +131,8 @@ body {
     display: flex;
     flex: 1;
     overflow: hidden;
+    contain: layout style;       /* P1-CLS: prevent children from shifting ancestor layout */
+    min-height: 0;               /* P1-CLS: flex child won't push container beyond bounds */
 }
 
 /* ---- Banners (opt-in header/footer areas) ----

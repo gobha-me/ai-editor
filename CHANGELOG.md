@@ -2,6 +2,114 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.26-1] - 2026-02-13
+
+### Fixed — Lighthouse audit & mobile chat input
+
+**Critical: Mobile chat input offscreen**
+- `100vh` → `100dvh` (with `vh` fallback) on `.app-container` — fixes
+  mobile Safari/Chrome where `100vh` includes browser chrome, pushing the
+  chat input below the visible area
+- Chat and sidebar overlays use `bottom: 0` instead of `height: 100%`
+  for robustness against viewport height mismatches
+- Modal overrides also use `dvh` units
+
+**Performance (CLS 0.181 → target <0.1)**
+- Added `contain: layout style` and `min-height: 0` to `.main-content`
+  to prevent child panels from shifting ancestor layout during JS init
+- Vendor scripts (`marked`, `purify`, `jszip`) now load with `defer` —
+  no longer render-blocking (P2: 3 fewer blocking resources)
+
+**Accessibility (89 → target 95+)**
+- Welcome tab placeholder now has `role="tab"` and `aria-selected` (A1)
+- Color contrast: bumped `--text-secondary` (#858585→#9e9e9e) and
+  `--text-muted` (#6e6e6e→#8e8e8e) for WCAG AA 4.5:1 on dark
+  backgrounds; `.cost-balance` uses brighter blue (#5bbdf5) (A2)
+- Sidebar action buttons: bumped to 28×28px min touch targets (A3)
+- File tree: switched from `aria-label` to `aria-labelledby` pointing
+  at the visible `.name` span to fix label/name mismatch (A4)
+
+**Best Practices**
+- Balance polling no longer starts eagerly on page load — deferred
+  until after `fetchModels()` succeeds, preventing 401 console errors
+  from unconfigured Venice API keys (B2)
+
+## [0.9.26] - 2026-02-13
+
+### Added — Mobile responsive layout
+
+Full mobile support at ≤768px breakpoint. The three-column desktop
+layout (sidebar | editor | chat) becomes a single-panel mode with
+bottom tab bar navigation.
+
+**Bottom tab bar** (`js/mobile.js`, `css/mobile.css`):
+- Three tabs: 📁 Files | ⚡ Editor | 💬 Chat
+- Only one panel visible at a time
+- Activity badges: blue dot on Chat when assistant responds, on Files
+  when tree refreshes (while user is on another panel)
+- Panel switching via `.mobile-active` CSS class
+- Auto-switch to Editor when a file is opened or tab is switched
+- Injected dynamically by `initMobile()` — no HTML template changes
+- `mobileShowPanel(panel)` exported for programmatic switching
+
+**Panel layout changes** (CSS-only, no JS layout changes):
+- Sidebar: `position: absolute; width: 100%; height: 100%` overlay
+- Chat: same overlay treatment
+- Editor: persistent base layer (always mounted)
+- Resize handles: hidden
+- Desktop `.hidden` class overridden by `.mobile-active` on mobile
+
+**Header simplification:**
+- Hidden: sidebar/chat toggles (replaced by tab bar), debug buttons,
+  help button, version number
+- Remaining buttons: settings, commit, revert — all 36×36px touch targets
+- Cost tracker: truncated to 100px max
+
+**Touch-friendly targets (44px minimum):**
+- All header buttons: 36×36px minimum
+- Tab bar tabs: 44px min-height
+- File tree items: 36px min-height
+- Chat input actions: 40×40px
+- Project/branch selectors: 36px min-height
+
+**Modal sizing:**
+- All modals: full-screen (100vw × 100vh, no border-radius)
+- Settings: full-screen with horizontal-scrolling tab bar
+- Onboarding: full-width, tighter padding
+
+**Text input zoom prevention:**
+- All text inputs, textareas, and selects set to `font-size: 16px`
+  (iOS auto-zooms on inputs below 16px)
+
+**Chat panel tweaks:**
+- Header wraps: model selector and action buttons flow to second line
+- Chat textarea: 16px font-size, 44px min-height
+
+**Editor tweaks:**
+- Tabs: horizontal scroll with hidden scrollbar, 80px min-width
+- Toolbar buttons: 36×36px touch targets
+
+**Toast positioning:**
+- `.toast-container` raised to `bottom: 62px` (above 52px tab bar)
+
+**Small phone (≤480px):**
+- Tighter header text, smaller tab labels, compact onboarding cards
+
+**Integration with existing code:**
+- `toggleSidebar()` / `toggleChat()` updated to delegate to
+  `mobileShowPanel()` at ≤768px
+- No changes to any tool, provider, or chat module — only UI layer
+
+**New files:**
+- `css/mobile.css` — all mobile styles (dedicated file, no pollution
+  of existing CSS)
+- `js/mobile.js` — tab bar injection, panel switching, badge logic
+
+**Modified files:**
+- `index.html` — mobile.css stylesheet link
+- `js/app.js` — import + `initMobile()` call
+- `js/ui-helpers.js` — toggleSidebar/toggleChat delegate to mobile module
+
 ## [0.9.25-1] - 2026-02-13
 
 ### Added — Local filesystem provider (zip-only mode)

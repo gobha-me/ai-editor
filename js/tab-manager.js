@@ -117,7 +117,7 @@ export function renderEditorTabs() {
     
     if (State.openTabs.length === 0) {
         tabsContainer.innerHTML = `
-            <div class="editor-tab active">
+            <div class="editor-tab active" role="tab" aria-selected="true" tabindex="0">
                 <span class="tab-name">Welcome</span>
             </div>
         `;

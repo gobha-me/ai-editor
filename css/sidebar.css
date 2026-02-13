@@ -84,8 +84,13 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 4px 6px;
     border-radius: 3px;
+    min-width: 28px;              /* A3: touch target */
+    min-height: 28px;             /* A3: touch target */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .sidebar-header button:hover {

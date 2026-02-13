@@ -20,11 +20,17 @@ export function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const handle = document.getElementById('resizeHandleSidebar');
     const btn = document.getElementById('btnToggleSidebar');
-    const isMobile = window.innerWidth <= 900;
+    const isMobile = window.innerWidth <= 768;
     
     if (isMobile) {
-        sidebar.classList.toggle('open');
-        if (btn) btn.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+        // Delegate to mobile module
+        import('./mobile.js').then(m => {
+            if (sidebar?.classList.contains('mobile-active')) {
+                m.mobileShowPanel('editor');
+            } else {
+                m.mobileShowPanel('sidebar');
+            }
+        });
     } else {
         const hiding = !sidebar.classList.contains('hidden');
         sidebar.classList.toggle('hidden');
@@ -38,11 +44,16 @@ export function toggleChat() {
     const chatPanel = document.getElementById('chatPanel');
     const handle = document.getElementById('resizeHandleChat');
     const btn = document.getElementById('btnToggleChat');
-    const isMobile = window.innerWidth <= 900;
+    const isMobile = window.innerWidth <= 768;
     
     if (isMobile) {
-        chatPanel.classList.toggle('open');
-        if (btn) btn.setAttribute('aria-expanded', chatPanel.classList.contains('open'));
+        import('./mobile.js').then(m => {
+            if (chatPanel?.classList.contains('mobile-active')) {
+                m.mobileShowPanel('editor');
+            } else {
+                m.mobileShowPanel('chat');
+            }
+        });
     } else {
         const hiding = !chatPanel.classList.contains('hidden');
         chatPanel.classList.toggle('hidden');

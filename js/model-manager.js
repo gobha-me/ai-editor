@@ -42,6 +42,9 @@ export async function fetchModels() {
         populateSettingsModelSelects(models);
         updateModelStatusBar();
         
+        // B2: Now that the API connection is verified, start balance polling
+        startBalancePolling();
+        
         window.showToast(`Loaded ${models.length} models`, 'success');
     } catch (error) {
         console.error('Failed to fetch models:', error);
@@ -347,8 +350,7 @@ export function initCostTrackerListener() {
         _repopulateMainModelSelect();
     });
 
-    // Start balance polling if we have an API key
-    if (State.settings.llmApiKey) {
-        startBalancePolling();
-    }
+    // B2: Don't start balance polling eagerly on init — wait for
+    // fetchModels() success so we don't fire 401s against unconfigured
+    // or wrong-provider endpoints on page load.
 }
