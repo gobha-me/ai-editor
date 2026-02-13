@@ -296,27 +296,47 @@
     <div class="modal modal-resizable" style="width: 620px; height: 520px;">
         <div class="modal-header">
             <h2 id="issueDetailTitle">Issue</h2>
-            <button type="button" class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <a id="issueDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">🌐</a>
+                <button type="button" class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
+            </div>
         </div>
-        <div class="modal-body" style="display: flex; flex-direction: column;">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <!-- Meta row: state badge + labels + assignee + date -->
+            <div id="issueDetailMeta" class="modal-meta-row"></div>
+
             <!-- Labels -->
-            <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;"></div>
+            <div id="issueDetailLabels" style="display: flex; flex-wrap: wrap; gap: 0.35rem;"></div>
 
-            <!-- Meta row -->
-            <div id="issueDetailMeta" style="font-size: var(--font-md); color: var(--text-muted); margin-bottom: 1rem;"></div>
+            <!-- Body (collapsible, open by default) -->
+            <details id="issueDetailBodySection" class="issue-detail-section" open>
+                <summary class="modal-section-header">
+                    <span class="section-chevron">▶</span>
+                    Description
+                </summary>
+                <div id="issueDetailBody" class="issue-detail-body preview-markdown"></div>
+            </details>
 
-            <!-- Body (markdown-rendered) — flex-grows to fill available space -->
-            <div id="issueDetailBody" class="preview-markdown" style="font-size: var(--font-base); line-height: 1.6; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); min-height: 60px; flex: 1 1 0; overflow-y: auto;"></div>
+            <!-- Comments (collapsible, open by default) -->
+            <details id="issueDetailCommentsSection" class="issue-detail-section">
+                <summary class="modal-section-header" id="issueDetailCommentsHeader" style="display: none;">
+                    <span class="section-chevron">▶</span>
+                    <span id="issueDetailCommentsTitle">Comments</span>
+                    <span style="margin-left: auto;">
+                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary btn-xs" style="display: none;" onclick="event.stopPropagation()">
+                            Expand All
+                        </button>
+                    </span>
+                </summary>
+                <div id="issueDetailComments" class="issue-detail-comments"></div>
+            </details>
 
-            <!-- Comments preview -->
-            <div id="issueDetailComments" style="margin-top: 0.75rem; flex-shrink: 0; max-height: 35%; overflow-y: auto;"></div>
-
-            <!-- Active branch indicator (shown when branch already exists) -->
-            <div id="issueDetailBranchInfo" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); background: color-mix(in srgb, var(--bg-secondary) 80%, #4caf50); flex-shrink: 0;"></div>
+            <!-- Active branch indicator -->
+            <div id="issueDetailBranchInfo" class="issue-detail-branch-info"></div>
         </div>
-        <div class="modal-footer" style="justify-content: space-between;">
+        <div class="modal-footer modal-footer-split">
             <button type="button" class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
-            <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">🚀 Start Work</button>
+            <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">✏️ Start Work</button>
         </div>
     </div>
 </div>
@@ -362,39 +382,44 @@
     <div class="modal modal-resizable" style="width: 780px; height: 600px;">
         <div class="modal-header">
             <h2 id="prDetailTitle">Pull Request</h2>
-            <button type="button" class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">🌐</a>
+                <button type="button" class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
+            </div>
         </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.6rem;">
             <!-- Meta row: state, CI, mergeable, stats -->
-            <div id="prDetailMeta" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: var(--font-md);"></div>
+            <div id="prDetailMeta" class="modal-meta-row"></div>
 
             <!-- Branch info -->
-            <div id="prDetailBranches" style="font-size: var(--font-sm); color: var(--text-muted);"></div>
+            <div id="prDetailBranches" class="pr-detail-branches"></div>
 
             <!-- Body (markdown) -->
-            <div id="prDetailBody" class="preview-markdown" style="border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem; background: var(--bg-primary); min-height: 40px; max-height: 30%; overflow-y: auto; font-size: var(--font-base); line-height: 1.6;"></div>
+            <div id="prDetailBody" class="pr-detail-body preview-markdown"></div>
 
             <!-- Changed files -->
-            <details id="prDetailFilesSection" open>
-                <summary style="cursor: pointer; font-weight: 600; font-size: var(--font-md); color: var(--text-secondary); user-select: none;">
-                    Changed Files <span id="prDetailFileCount" style="font-weight: normal; color: var(--text-muted);"></span>
+            <details id="prDetailFilesSection" class="pr-detail-section" open>
+                <summary class="modal-section-header">
+                    <span class="section-chevron">▶</span>
+                    Changed Files <span id="prDetailFileCount" class="section-count"></span>
                 </summary>
-                <div id="prDetailFiles" style="margin-top: 0.5rem; max-height: 250px; overflow-y: auto;"></div>
+                <div id="prDetailFiles" style="margin-top: 0.4rem; max-height: 250px; overflow-y: auto;"></div>
             </details>
 
             <!-- Comments -->
-            <details id="prDetailCommentsSection">
-                <summary style="cursor: pointer; font-weight: 600; font-size: var(--font-md); color: var(--text-secondary); user-select: none;">
-                    Comments <span id="prDetailCommentCount" style="font-weight: normal; color: var(--text-muted);"></span>
+            <details id="prDetailCommentsSection" class="pr-detail-section">
+                <summary class="modal-section-header">
+                    <span class="section-chevron">▶</span>
+                    Comments <span id="prDetailCommentCount" class="section-count"></span>
                 </summary>
-                <div id="prDetailComments" style="margin-top: 0.5rem; max-height: 200px; overflow-y: auto;"></div>
+                <div id="prDetailComments" style="margin-top: 0.4rem; max-height: 200px; overflow-y: auto;"></div>
             </details>
 
             <!-- Add Comment -->
-            <div id="prDetailAddComment" class="form-group" style="display: none;">
+            <div id="prDetailAddComment" class="pr-add-comment" style="display: none;">
                 <label>Add Comment</label>
                 <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" class="textarea-mono"></textarea>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
+                <div class="comment-actions">
                     <button type="button" class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
                         ✨ Generate with AI
                     </button>
@@ -404,12 +429,11 @@
                 </div>
             </div>
         </div>
-        <div class="modal-footer" id="prDetailFooter" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="display: flex; gap: 0.5rem;">
+        <div class="modal-footer modal-footer-split">
+            <div class="modal-footer-left">
                 <button type="button" class="btn btn-secondary" onclick="window.closePRDetailModal()">Close</button>
-                <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary" title="Open in browser">🌐 Open</a>
             </div>
-            <div id="prDetailMergeControls" style="display: flex; gap: 0.5rem; align-items: center;">
+            <div id="prDetailMergeControls" class="modal-footer-right" style="display: none;">
                 <select id="prMergeStrategy" class="select-inline">
                     <option value="squash">Squash</option>
                     <option value="merge">Merge</option>

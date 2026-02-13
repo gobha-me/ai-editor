@@ -78,7 +78,7 @@ export async function openPRDetailModal(prNumber) {
         // Title
         document.getElementById('prDetailTitle').textContent = `#${pr.number}: ${pr.title}`;
 
-        // External link
+        // External link (now in header)
         const extLink = document.getElementById('prDetailExternalLink');
         if (pr.url) {
             extLink.href = pr.url;
@@ -102,13 +102,13 @@ export async function openPRDetailModal(prNumber) {
             ? '<span style="color: var(--success);">✅ Mergeable</span>'
             : '<span style="color: var(--warning);">⚠️ Conflicts</span>';
 
-        const stats = `<span style="color: var(--text-muted);">+${pr.additions || 0} −${pr.deletions || 0} · ${pr.changed_files || files.length} files</span>`;
-        const author = `<span style="color: var(--text-muted);">by ${escapeHtml(pr.user || 'unknown')}</span>`;
+        const stats = `<span class="modal-meta-item">+${pr.additions || 0} −${pr.deletions || 0} · ${pr.changed_files || files.length} files</span>`;
+        const author = `<span class="modal-meta-item">by ${escapeHtml(pr.user || 'unknown')}</span>`;
 
-        meta.innerHTML = [stateBadge, ciBadge, mergeableBadge, stats, author].filter(Boolean).join(' ');
+        meta.innerHTML = [stateBadge, ciBadge, mergeableBadge, stats, author].filter(Boolean).join('<span class="meta-sep">·</span>');
 
         // Branches
-        document.getElementById('prDetailBranches').innerHTML = `<code>${escapeHtml(pr.head)}</code> → <code>${escapeHtml(pr.base)}</code>`;
+        document.getElementById('prDetailBranches').innerHTML = `<code>${escapeHtml(pr.head)}</code> <span class="branch-arrow">→</span> <code>${escapeHtml(pr.base)}</code>`;
 
         // Body (markdown)
         const bodyEl = document.getElementById('prDetailBody');
@@ -168,7 +168,7 @@ function _renderPRFiles(files) {
         const hasPatch = f.patch && f.patch.length > 0;
         const patchHtml = hasPatch ? `
             <div class="pr-file-diff" id="prDiff-${i}" style="display: none; margin-top: 0.5rem;">
-                <pre style="background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; overflow-x: auto; font-size: var(--font-xs); line-height: 1.5; max-height: 300px; overflow-y: auto; margin: 0;">${_formatDiffPatch(f.patch)}</pre>
+                <pre>${_formatDiffPatch(f.patch)}</pre>
             </div>` : '';
 
         return `
@@ -213,16 +213,16 @@ function _renderPRComments(comments) {
         const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '';
         const bodyHtml = renderMarkdown(c.body || '');
         const open = i === 0 ? ' open' : '';
-        const preview = (c.body || '').length > 100 ? (c.body || '').substring(0, 80).replace(/\n/g, ' ') + '…' : '';
+        const preview = (c.body || '').length > 100 ? escapeHtml((c.body || '').substring(0, 80).replace(/\n/g, ' ')) + '…' : '';
 
         return `
-            <details${open} class="pr-comment-collapsible" style="border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem;">
-                <summary style="cursor: pointer; font-size: var(--font-sm); color: var(--text-muted); padding: 0.15rem 0; user-select: none; list-style: none; display: flex; align-items: center; gap: 0.3rem;">
-                    <span class="comment-chevron" style="font-size: 10px; transition: transform 0.15s; display: inline-block;">▶</span>
+            <details${open} class="modal-comment-item pr-comment-collapsible">
+                <summary>
+                    <span class="comment-chevron">▶</span>
                     <strong>${user}</strong> · ${date} ${pathInfo}
-                    <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">${escapeHtml(preview)}</span>
+                    <span class="comment-preview">${preview}</span>
                 </summary>
-                <div class="preview-markdown" style="font-size: var(--font-sm); padding-top: 0.3rem;">${bodyHtml}</div>
+                <div class="comment-body preview-markdown">${bodyHtml}</div>
             </details>
         `;
     }).join('');
@@ -248,16 +248,6 @@ function _renderPRComments(comments) {
             toggleBtn.textContent = allOpen ? 'Expand All' : 'Collapse All';
         });
     }
-
-    // Rotate chevrons
-    container.querySelectorAll('details.pr-comment-collapsible').forEach(d => {
-        d.addEventListener('toggle', () => {
-            const chevron = d.querySelector('.comment-chevron');
-            if (chevron) chevron.style.transform = d.open ? 'rotate(90deg)' : 'rotate(0)';
-        });
-        const chevron = d.querySelector('.comment-chevron');
-        if (chevron && d.open) chevron.style.transform = 'rotate(90deg)';
-    });
 }
 
 // ── Close ──

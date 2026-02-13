@@ -388,6 +388,34 @@
     select {
         font-size: 16px;       /* ≥16px prevents iOS auto-zoom */
     }
+
+    /* Issue/PR detail modals: full-width on mobile */
+    #issueDetailModal .modal-resizable,
+    #prDetailModal .modal-resizable {
+        width: 95vw !important;
+        height: 80vh !important;
+        max-width: 95vw;
+    }
+
+    .modal-meta-row {
+        gap: 0.3rem 0.4rem;
+        font-size: var(--font-sm);
+    }
+
+    .pr-merge-controls,
+    .modal-footer-right {
+        flex-wrap: wrap;
+    }
+
+    .modal-footer-split {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .modal-footer-left,
+    .modal-footer-right {
+        justify-content: center;
+    }
 }
 
 /* ============================================

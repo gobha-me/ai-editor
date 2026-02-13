@@ -1070,12 +1070,304 @@
     margin: 0.4rem 0;
 }
 
-#issueDetailComments .preview-markdown p { margin: 0.3em 0; }
-#issueDetailComments .preview-markdown pre { padding: 0.5rem; margin: 0.4rem 0; }
+#issueDetailComments .preview-markdown p,
+.modal-comment-item .comment-body.preview-markdown p { margin: 0.3em 0; }
+#issueDetailComments .preview-markdown pre,
+.modal-comment-item .comment-body.preview-markdown pre { padding: 0.5rem; margin: 0.4rem 0; }
 
 /* ── PR Detail file items ── */
 .pr-file-item > div:first-child:hover {
     background: var(--bg-hover);
+}
+
+/* ============================================
+   ISSUE & PR DETAIL MODAL POLISH
+   ============================================ */
+
+/* ── Shared meta row ── */
+.modal-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.6rem;
+    align-items: center;
+    font-size: var(--font-md);
+    line-height: 1;
+}
+
+.modal-meta-row .meta-sep {
+    color: var(--border-light);
+    font-size: var(--font-xs);
+    user-select: none;
+}
+
+.modal-meta-item {
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ── Shared section header (collapsible) ── */
+.modal-section-header {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: var(--font-md);
+    color: var(--text-secondary);
+    user-select: none;
+    padding: 0.4rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.modal-section-header:hover {
+    color: var(--text-primary);
+}
+
+.modal-section-header .section-count {
+    font-weight: normal;
+    color: var(--text-muted);
+}
+
+.modal-section-header .section-chevron {
+    font-size: 10px;
+    transition: transform 0.15s;
+    display: inline-block;
+    color: var(--text-muted);
+}
+
+details[open] > .modal-section-header .section-chevron {
+    transform: rotate(90deg);
+}
+
+/* ── Shared comment collapsible ── */
+.modal-comment-item {
+    border-left: 2px solid var(--border);
+    padding-left: 0.6rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s;
+}
+
+.modal-comment-item:hover {
+    border-color: var(--border-light);
+}
+
+.modal-comment-item > summary {
+    cursor: pointer;
+    font-size: var(--font-md);
+    color: var(--text-muted);
+    padding: 0.2rem 0;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.modal-comment-item > summary::-webkit-details-marker { display: none; }
+
+.modal-comment-item > summary .comment-chevron {
+    font-size: 10px;
+    transition: transform 0.15s;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.modal-comment-item[open] > summary .comment-chevron {
+    transform: rotate(90deg);
+}
+
+.modal-comment-item > summary strong {
+    color: var(--text-primary);
+}
+
+.modal-comment-item > summary .comment-preview {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40%;
+}
+
+.modal-comment-item .comment-body {
+    font-size: var(--font-md);
+    max-height: 200px;
+    overflow-y: auto;
+    padding-top: 0.3rem;
+}
+
+/* ── Issue detail specific ── */
+.issue-detail-section {
+    border-top: 1px solid var(--border);
+    padding-top: 0.3rem;
+}
+
+.issue-detail-section > summary {
+    list-style: none;
+}
+
+.issue-detail-section > summary::-webkit-details-marker { display: none; }
+
+.issue-detail-body {
+    font-size: var(--font-base);
+    line-height: 1.6;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    min-height: 40px;
+    max-height: 40vh;
+    overflow-y: auto;
+    margin-top: 0.3rem;
+}
+
+.issue-detail-comments {
+    flex-shrink: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding-top: 0.25rem;
+}
+
+.issue-detail-branch-info {
+    display: none;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: var(--font-md);
+    flex-shrink: 0;
+    border: 1px solid;
+}
+
+.issue-detail-branch-info.branch-create {
+    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--success));
+    border-color: color-mix(in srgb, var(--border) 70%, var(--success));
+    color: var(--text-primary);
+}
+
+.issue-detail-branch-info.branch-exists {
+    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--accent));
+    border-color: color-mix(in srgb, var(--border) 70%, var(--accent));
+    color: var(--text-primary);
+}
+
+.issue-detail-branch-info.branch-active {
+    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--success));
+    border-color: color-mix(in srgb, var(--border) 60%, var(--success));
+    color: var(--success);
+}
+
+/* ── PR detail specific ── */
+.pr-detail-body {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    min-height: 40px;
+    max-height: 30%;
+    overflow-y: auto;
+    font-size: var(--font-base);
+    line-height: 1.6;
+}
+
+.pr-detail-branches {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.pr-detail-branches code {
+    background: var(--bg-primary);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.pr-detail-branches .branch-arrow {
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+}
+
+/* PR sections */
+.pr-detail-section {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+}
+
+.pr-detail-section > summary {
+    list-style: none;
+}
+
+.pr-detail-section > summary::-webkit-details-marker { display: none; }
+
+/* PR comment add section */
+.pr-add-comment {
+    border-top: 1px solid var(--border);
+    padding-top: 0.6rem;
+}
+
+.pr-add-comment label {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+.pr-add-comment .comment-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+
+.pr-add-comment .comment-actions .btn {
+    font-size: var(--font-sm);
+}
+
+/* PR merge controls (footer) */
+.pr-merge-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ── PR file diff improvements ── */
+.pr-file-diff pre {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+    overflow-x: auto;
+    font-size: var(--font-xs);
+    line-height: 1.5;
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+/* ── Modal footer improvements ── */
+.modal-footer-split {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.modal-footer-left {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.modal-footer-right {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
 /* ============================================
