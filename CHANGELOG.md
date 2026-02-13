@@ -2,6 +2,22 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.28-3] - 2026-02-13
+
+### Fixed
+- **Issue focus bar display**: Comments section now has proper containment
+  with background, border, max-height, and scroll — matches body section
+  visual style. Comment items use accent-colored left border and bolder
+  meta line for clearer hierarchy
+- **Issue body overflow**: Reduced body max-height from 120px to 80px,
+  font from `--font-md` to `--font-sm` — tighter in the focus bar
+- **Comments header**: Shows "💬 Comments (N)" label with "showing last 3"
+  note when truncated — clearly separates body from comments
+- **Accept tooltip**: Changed from "close with comment" to "comment and
+  keep open" — accept posts a comment but does not close the issue
+- **README ports**: Fixed `docker run` examples from `:80` to `:8000`
+  to match Dockerfile `EXPOSE 8000`
+
 ## [0.9.28-2] - 2026-02-13
 
 ### Fixed

@@ -9,7 +9,7 @@ A browser-based code editor with integrated AI assistance. Multi-provider Git, m
 ```bash
 # Option 1: Docker
 docker build -t ai-editor .
-docker run -p 8080:80 ai-editor
+docker run -p 8080:8000 ai-editor
 
 # Option 2: Any static file server
 python3 -m http.server 8080
@@ -126,15 +126,15 @@ Static site served by nginx. No build step — the Dockerfile bundles vendor dep
 
 ```bash
 docker build -t ai-editor .
-docker run -p 8080:80 ai-editor
+docker run -p 8080:8000 ai-editor
 ```
 
 ### Multi-environment with BASE_PATH
 
 ```bash
-docker run -p 80:80 ai-editor                          # root
-docker run -p 80:80 -e BASE_PATH=/test ai-editor        # /test
-docker run -p 80:80 -e BASE_PATH=/dev ai-editor         # /dev
+docker run -p 80:8000 ai-editor                          # root
+docker run -p 80:8000 -e BASE_PATH=/test ai-editor        # /test
+docker run -p 80:8000 -e BASE_PATH=/dev ai-editor         # /dev
 ```
 
 ### Kubernetes

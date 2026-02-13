@@ -413,8 +413,11 @@ function renderIssueFocusBar() {
     const comments = issue.issueComments || [];
     if (comments.length > 0) {
         const shown = comments.slice(-3);
-        const moreText = comments.length > 3 ? `<div style="color: var(--text-muted); margin-bottom: 0.3rem;">… ${comments.length - 3} earlier comments</div>` : '';
-        commentsEl.innerHTML = moreText + shown.map(c => `
+        const headerText = comments.length > 3
+            ? `💬 Comments (${comments.length}, showing last 3)`
+            : `💬 Comments (${comments.length})`;
+        const header = `<div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 0.3rem;">${headerText}</div>`;
+        commentsEl.innerHTML = header + shown.map(c => `
             <div class="issue-focus-comment-item">
                 <div class="issue-focus-comment-meta">${escapeHtml(c.user || 'unknown')} · ${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}</div>
                 <div class="issue-focus-comment-body preview-markdown">${renderMarkdown(c.body || '')}</div>
