@@ -20,12 +20,20 @@
         <!-- Editor Container -->
         <div class="editor-container" id="editorContainer" role="region" aria-label="Code editor content">
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
-                <div style="text-align: center;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ <span id="welcomeAppName"></span></h2>
-                    <p>Configure your Gitea and LLM settings to get started.</p>
-                    <button type="button" class="btn btn-primary" style="margin-top: 1rem;" onclick="window.openSettings()">
-                        ⚙️ Open Settings
-                    </button>
+                <div style="text-align: center; max-width: 360px;">
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 0.75rem;">⚡ <span id="welcomeAppName"></span></h2>
+                    <p style="margin-bottom: 1rem;">Select a project from the sidebar, or upload a zip to start editing.</p>
+                    <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-primary" onclick="window.openSettings()">
+                            ⚙️ Settings
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="window.openZipUpload && window.openZipUpload()">
+                            📦 Upload Zip
+                        </button>
+                    </div>
+                    <p style="margin-top: 1rem; font-size: var(--font-md); color: var(--text-muted);">
+                        Press <kbd style="padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; font-size: var(--font-sm);">F1</kbd> for keyboard shortcuts
+                    </p>
                 </div>
             </div>
         </div>

@@ -31,6 +31,7 @@
 │   commit     │ quick-open    │                          │
 │   file-create│               │                          │
 │   revert     │               │                          │
+│ onboarding   │               │                          │
 ├──────────────┴───────────────┴──────────────────────────┤
 │                    Tool Layer                           │
 │  tools/registry  tools/file-tools  tools/edit-tools    │
@@ -39,6 +40,8 @@
 │  tools/scan-tools  tools/scratchpad-tools              │
 │  tools/xref-tools (cross-project reference)            │
 │  tools/multifile-tools (edit_file, write_file)         │
+│  tools/search-replace-tools (text-based editing)       │
+│  tools/eval-tools (sandboxed JS execution)             │
 │  tools/context-tools  tools/edit-tracker               │
 ├─────────────────────────────────────────────────────────┤
 │                    LLM Layer                            │

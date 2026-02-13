@@ -13,10 +13,12 @@ import { GitProviderRegistry } from './registry.js';
 import giteaProvider from './gitea.js';
 import githubProvider from './github.js';
 import gitlabProvider from './gitlab.js';
+import { LOCAL_PROVIDER } from './local.js';
 
 // Register built-in providers
 GitProviderRegistry.register(giteaProvider);
 GitProviderRegistry.register(githubProvider);
 GitProviderRegistry.register(gitlabProvider);
+GitProviderRegistry.register(LOCAL_PROVIDER);
 
 export { GitProviderRegistry };

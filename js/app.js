@@ -7,6 +7,7 @@ import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
+import { checkOnboarding } from './onboarding.js';
 import { initGitProviders, GitProviderRegistry } from './git.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
@@ -36,7 +37,7 @@ import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-cr
 import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
 import { 
     refreshProjects, 
-    onProjectChange, 
+    onProjectChange,
     onBranchChange, 
     renderIssues, 
     refreshIssues, 
@@ -731,6 +732,9 @@ async function init() {
     }
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);
+
+    // Show first-run onboarding if no connections/LLM configured
+    checkOnboarding();
 }
 
 // Start the application

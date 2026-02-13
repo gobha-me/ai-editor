@@ -2,6 +2,94 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.25-1] - 2026-02-13
+
+### Added — Local filesystem provider (zip-only mode)
+
+Uploading a zip no longer requires a Git connection. When no project is
+active, the Upload Zip modal switches to "local mode":
+
+- Git-specific controls hidden (target directory, commit message, Scan
+  for Diffs button)
+- Upload button reads "📂 Load into Editor"
+- Files load into an in-memory filesystem provider
+- File tree, tabs, editor, and all LLM tools work normally
+
+**New file: `js/git-providers/local.js`**
+
+A full git provider implementation backed by an in-memory Map. Implements
+the same interface as Gitea/GitHub/GitLab so all existing code works
+without modification:
+
+- `listRepos()` — returns locally loaded projects
+- `getFileTree()` — builds tree from Map keys
+- `getFile()` / `createFile()` / `updateFile()` — read/write Map entries
+- `batchCommitFiles()` — batch update Map (so "commit" saves to memory)
+- `listBranches()` — returns `[{name: 'main'}]`
+- `listIssues()` / `listMergeRequests()` — returns `[]`
+- `getBlame()` / `getFileCommits()` — returns empty (no history)
+- `hidden: true` — excluded from Settings → Connections dropdown
+
+**How it works:**
+1. User clicks Upload Zip (or drops a zip) with no project loaded
+2. `openZipUpload()` detects no `State.currentProject`, hides git controls
+3. On "Load into Editor", `_loadLocal()`:
+   - Creates a `__local__` connection in `GitProviderRegistry` (ephemeral)
+   - Calls `loadFilesIntoLocal()` to populate the in-memory file store
+   - Calls `switchProject()` which triggers the standard project load flow
+   - `loadProject()` calls `provider.getFileTree()` → file tree renders
+   - `refreshProjects()` adds local projects to the sidebar dropdown
+4. Everything downstream (editor, tabs, tools, AI) works unchanged
+
+**Data lifetime:** In-memory only — refreshing the page clears local
+projects. This is by design: no persistence, no privacy concerns, no
+stale state.
+
+**Settings isolation:**
+- Local provider hidden from connection settings UI
+- Local connection excluded from settings persistence (not in `connections[]`)
+- Settings → Connections only shows Gitea/GitHub/GitLab
+
+## [0.9.25] - 2026-02-13
+
+### Added — First-run onboarding wizard
+
+New users see a guided setup wizard on first launch when no Git
+connections and no LLM are configured. Four-step flow:
+
+**Step 0 — Welcome:** Three paths presented as clickable cards:
+- "Connect to Git + LLM" → full setup flow
+- "Just browse & edit code" → Git only, skip LLM
+- "Zip upload only" → dismiss immediately, no config needed
+- "I'll configure later in Settings (Ctrl+,)" → skip all
+
+**Step 1 — Git Connection:** Provider selector (Gitea/GitHub/GitLab),
+URL with auto-fill for GitHub/GitLab, token, test button. Saves
+connection directly to GitProviderRegistry + persists to Storage.
+Links to REPOS.md for token setup guide.
+
+**Step 2 — LLM Provider:** Venice/OpenRouter/Custom selector, endpoint
+auto-fill, API key. Saves to State.settings + Storage.
+
+**Step 3 — Done:** Quick reference card: select project, upload zip,
+ask AI, Settings (Ctrl+,), F1 for shortcuts.
+
+**Implementation:**
+- `js/onboarding.js` (new) — wizard logic, form wiring, persistence
+- `html/modals.html` — onboarding overlay with 4-step wizard
+- `css/modals.css` — 24 new CSS classes for wizard styling
+- `html/editor-panel.html` — improved welcome screen: shows both
+  Settings and Upload Zip buttons, F1 hint
+- `js/app.js` — calls `checkOnboarding()` at end of init
+
+**Completion flag:** `Storage.get('onboardingComplete')` — set on any
+exit path (finish, skip, or dismiss). Also auto-set if user already has
+connections + LLM configured (e.g., imported settings).
+
+### Added — LICENSE file
+
+MIT license. Referenced by README.md.
+
 ## [0.9.24-2] - 2026-02-12
 
 ### Fixed — `run_code` always returning `undefined`

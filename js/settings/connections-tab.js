@@ -51,7 +51,10 @@ function renderConnectionsList() {
     const container = document.getElementById('connectionsList');
     if (!container) return;
 
-    const connections = GitProviderRegistry.listConnections();
+    const connections = GitProviderRegistry.listConnections().filter(c => {
+        const p = GitProviderRegistry.get(c.provider);
+        return !p?.hidden;
+    });
 
     if (connections.length === 0) {
         container.innerHTML = `
@@ -102,7 +105,7 @@ function showConnectionEditor(connId) {
 
     // Populate provider dropdown
     const providerSelect = document.getElementById('connEditProvider');
-    const providers = GitProviderRegistry.list();
+    const providers = GitProviderRegistry.list().filter(p => !p.hidden);
     providerSelect.innerHTML = providers.map(p =>
         `<option value="${escapeAttr(p.id)}">${p.icon} ${escapeHtml(p.name)}</option>`
     ).join('');

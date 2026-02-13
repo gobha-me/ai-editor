@@ -449,20 +449,20 @@
                 <div class="zip-select-controls">
                     <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
+                    <button type="button" class="btn btn-secondary btn-sm zip-git-only" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
                 </div>
 
                 <!-- File List -->
                 <div class="zip-file-list" id="zipFileList"></div>
 
                 <!-- Target Directory -->
-                <div class="zip-field">
+                <div class="zip-field zip-git-only">
                     <label for="zipTargetDir">Target directory <span class="zip-field-hint">(leave empty for repo root)</span></label>
                     <input type="text" id="zipTargetDir" placeholder="e.g. src/components" spellcheck="false">
                 </div>
 
                 <!-- Commit Message -->
-                <div class="zip-field">
+                <div class="zip-field zip-git-only">
                     <label for="zipCommitMessage">Commit message</label>
                     <input type="text" id="zipCommitMessage" placeholder="Upload files from zip" spellcheck="false">
                 </div>
@@ -530,5 +530,133 @@
             <button type="button" class="btn btn-secondary" id="btnCancelNewProject">Cancel</button>
             <button type="button" class="btn btn-primary" id="btnSubmitNewProject">🚀 Create</button>
         </div>
+    </div>
+</div>
+
+<!-- Onboarding Wizard -->
+<div class="modal-overlay onboard-overlay" id="onboardingOverlay" role="dialog" aria-modal="true" aria-label="Welcome to AI Editor">
+    <div class="modal onboard-modal">
+
+        <!-- Progress dots -->
+        <div class="onboard-dots">
+            <span class="onboard-dot active" aria-label="Welcome"></span>
+            <span class="onboard-dot" aria-label="Git setup"></span>
+            <span class="onboard-dot" aria-label="LLM setup"></span>
+            <span class="onboard-dot" aria-label="Done"></span>
+        </div>
+
+        <!-- Step 0: Welcome -->
+        <div class="onboard-step active" data-step="0">
+            <div class="onboard-hero">⚡</div>
+            <h2>Welcome to AI Editor</h2>
+            <p class="onboard-subtitle">Browser-based code editor with AI assistance.<br>No backend, no build step — your code stays in your Git host.</p>
+
+            <div class="onboard-paths">
+                <div class="onboard-path" data-goto="1">
+                    <div class="onboard-path-icon">🔗</div>
+                    <div class="onboard-path-label">Connect to Git + LLM</div>
+                    <div class="onboard-path-desc">Full experience — browse repos, edit with AI assistance</div>
+                </div>
+                <div class="onboard-path" data-goto="1">
+                    <div class="onboard-path-icon">📦</div>
+                    <div class="onboard-path-label">Just browse & edit code</div>
+                    <div class="onboard-path-desc">Connect Git, skip AI — upload zips or browse repos</div>
+                </div>
+                <div class="onboard-path" data-finish>
+                    <div class="onboard-path-icon">🚀</div>
+                    <div class="onboard-path-label">Zip upload only</div>
+                    <div class="onboard-path-desc">No setup needed — drag & drop a zip to start editing</div>
+                </div>
+            </div>
+
+            <button type="button" class="btn-link onboard-skip" data-skip-all>I'll configure later in Settings (Ctrl+,)</button>
+        </div>
+
+        <!-- Step 1: Git Connection -->
+        <div class="onboard-step" data-step="1">
+            <h2>🔗 Connect a Git Provider</h2>
+            <p class="onboard-subtitle">Gitea, GitHub, or GitLab. You'll need an API token — <a href="REPOS.md" target="_blank" rel="noopener">see setup guide</a>.</p>
+
+            <div class="onboard-form">
+                <div class="form-group">
+                    <label for="obGitProvider">Provider:</label>
+                    <select id="obGitProvider">
+                        <option value="gitea">Gitea</option>
+                        <option value="github">GitHub</option>
+                        <option value="gitlab">GitLab</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="obGitUrl">URL:</label>
+                    <input type="text" id="obGitUrl" placeholder="https://git.example.com">
+                </div>
+                <div class="form-group">
+                    <label for="obGitToken">API Token:</label>
+                    <input type="password" id="obGitToken" placeholder="Your API token">
+                </div>
+                <div class="onboard-form-actions">
+                    <button type="button" class="btn btn-secondary" id="obGitTest">🔌 Test</button>
+                    <button type="button" class="btn btn-primary" id="obGitSave">Save & Continue</button>
+                </div>
+                <div id="obGitStatus" class="onboard-status" style="display:none;"></div>
+            </div>
+
+            <div class="onboard-nav">
+                <button type="button" class="btn-link" data-goto="0">← Back</button>
+                <button type="button" class="btn-link" data-goto="2">Skip — configure later</button>
+            </div>
+        </div>
+
+        <!-- Step 2: LLM Provider -->
+        <div class="onboard-step" data-step="2">
+            <h2>🤖 Connect an LLM</h2>
+            <p class="onboard-subtitle">Any OpenAI-compatible API. AI features are optional — the editor works without them.</p>
+
+            <div class="onboard-form">
+                <div class="form-group">
+                    <label for="obLLMProvider">Provider:</label>
+                    <select id="obLLMProvider">
+                        <option value="venice">Venice.ai</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="custom">Custom (OpenAI-compatible)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="obLLMEndpoint">Endpoint:</label>
+                    <input type="text" id="obLLMEndpoint" placeholder="https://api.venice.ai/api/v1">
+                </div>
+                <div class="form-group">
+                    <label for="obLLMKey">API Key:</label>
+                    <input type="password" id="obLLMKey" placeholder="Your API key">
+                </div>
+                <div class="onboard-form-actions">
+                    <button type="button" class="btn btn-primary" id="obLLMSave">Save & Continue</button>
+                </div>
+                <div id="obLLMStatus" class="onboard-status" style="display:none;"></div>
+            </div>
+
+            <div class="onboard-nav">
+                <button type="button" class="btn-link" data-goto="1">← Back</button>
+                <button type="button" class="btn-link" data-goto="3">Skip — configure later</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Done -->
+        <div class="onboard-step" data-step="3">
+            <div class="onboard-hero">🎉</div>
+            <h2>You're all set!</h2>
+            <p class="onboard-subtitle">Here's what you can do next:</p>
+
+            <div class="onboard-next-steps">
+                <div class="onboard-next-item">📂 <strong>Select a project</strong> from the sidebar dropdown</div>
+                <div class="onboard-next-item">📦 <strong>Upload a zip</strong> — click 📦 in the Files header</div>
+                <div class="onboard-next-item">💬 <strong>Ask the AI</strong> to explain, edit, or refactor code</div>
+                <div class="onboard-next-item">⚙️ <strong>Settings (Ctrl+,)</strong> to fine-tune connections, models, and roles</div>
+                <div class="onboard-next-item">❓ <strong>F1</strong> for keyboard shortcuts</div>
+            </div>
+
+            <button type="button" class="btn btn-primary onboard-done-btn" data-finish>Start Editing</button>
+        </div>
+
     </div>
 </div>

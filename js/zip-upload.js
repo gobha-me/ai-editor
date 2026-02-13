@@ -17,6 +17,8 @@
 
 import { State, EventBus } from './core.js';
 import { Git, resolveContext } from './git.js';
+import { GitProviderRegistry } from './git-providers/registry.js';
+import { loadFilesIntoLocal } from './git-providers/local.js';
 import { isTextFile } from './editor.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 
@@ -36,11 +38,6 @@ const DEFAULT_OFF_EXTENSIONS = new Set(['svg', 'xml', 'csv', 'tsv']);
 // ============================================
 
 export function openZipUpload() {
-    if (!State.currentProject) {
-        window.showToast('Load a project first', 'warning');
-        return;
-    }
-    
     const modal = document.getElementById('zipUploadModal');
     if (!modal) return;
     
@@ -62,6 +59,16 @@ export function openZipUpload() {
     if (targetDir) targetDir.value = '';
     if (commitMsg) commitMsg.value = '';
     if (btn) btn.disabled = true;
+
+    // Show/hide git-specific controls based on whether a project is loaded
+    const isLocalMode = !State.currentProject;
+    const gitControls = modal.querySelectorAll('.zip-git-only');
+    gitControls.forEach(el => el.style.display = isLocalMode ? 'none' : '');
+    
+    // Update upload button text
+    if (btn) {
+        btn.textContent = isLocalMode ? '📂 Load into Editor' : '📦 Upload';
+    }
     
     modal.classList.add('active');
 }
@@ -387,7 +394,18 @@ export async function scanForDiffs() {
 export async function uploadExtractedFiles() {
     const selected = extractedFiles.filter(f => f.selected);
     if (selected.length === 0) return;
-    
+
+    // ========================================
+    // LOCAL MODE — no active project
+    // ========================================
+    if (!State.currentProject) {
+        await _loadLocal(selected);
+        return;
+    }
+
+    // ========================================
+    // GIT MODE — commit to active repo
+    // ========================================
     const targetDir = (document.getElementById('zipTargetDir').value || '').trim().replace(/^\/+|\/+$/g, '');
     const commitMsg = (document.getElementById('zipCommitMessage').value || '').trim()
         || `Upload ${selected.length} files`;
@@ -508,6 +526,80 @@ export function initZipDragDrop() {
 export function handleZipFileSelect(event) {
     const file = event.target?.files?.[0];
     if (file) handleZipFile(file);
+}
+
+// ============================================
+// LOCAL MODE (in-memory filesystem)
+// ============================================
+
+/**
+ * Load selected zip files into the local provider and activate as a project.
+ * No network calls — everything stays in-memory.
+ */
+async function _loadLocal(selected) {
+    const btn = document.getElementById('btnZipUpload');
+    const progressBar = document.getElementById('zipProgress');
+    const progressFill = document.getElementById('zipProgressFill');
+    const progressText = document.getElementById('zipProgressText');
+
+    if (btn) btn.disabled = true;
+    if (progressBar) progressBar.style.display = '';
+    if (progressFill) progressFill.style.width = '50%';
+    if (progressText) progressText.textContent = 'Loading files...';
+
+    try {
+        // Ensure a "local" connection exists in the registry
+        const LOCAL_CONN_ID = '__local__';
+        const existingConns = GitProviderRegistry.listConnections();
+        if (!existingConns.find(c => c.id === LOCAL_CONN_ID)) {
+            GitProviderRegistry.addConnection({
+                id: LOCAL_CONN_ID,
+                provider: 'local',
+                label: 'Local',
+                url: 'local://',
+                token: '',
+                enabled: true
+            });
+        }
+
+        // Generate a project name from the zip filename
+        const repoName = currentZipName
+            .replace(/\.zip$/i, '')
+            .replace(/[^a-zA-Z0-9._-]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            || 'untitled';
+        const owner = 'local';
+
+        // Load files into the in-memory store
+        loadFilesIntoLocal(owner, repoName, selected);
+
+        if (progressFill) progressFill.style.width = '80%';
+        if (progressText) progressText.textContent = 'Activating project...';
+
+        // Switch to the local project using the standard flow
+        const { switchProject } = await import('./project-manager.js');
+        await switchProject(LOCAL_CONN_ID, owner, repoName);
+
+        // Also add to projects list for the selector
+        const { refreshProjects } = await import('./project-manager.js');
+        await refreshProjects();
+
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressText) progressText.textContent = `Loaded ${selected.length} files`;
+        if (btn) btn.textContent = '✅ Done';
+
+        window.showToast(`Loaded ${selected.length} files from ${currentZipName}`, 'success');
+
+        setTimeout(() => closeZipUpload(), 800);
+
+    } catch (error) {
+        console.error('Local load failed:', error);
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = `Failed: ${error.message}`;
+        if (btn) { btn.disabled = false; btn.textContent = '📂 Load into Editor'; }
+        window.showToast(`Load failed: ${error.message}`, 'error');
+    }
 }
 
 // ============================================
