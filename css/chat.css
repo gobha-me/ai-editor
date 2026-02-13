@@ -9,6 +9,7 @@
 
 .chat-panel {
     width: var(--chat-width);
+    min-width: 280px;
     background: var(--bg-secondary);
     border-left: 1px solid var(--border);
     display: flex;
@@ -17,18 +18,23 @@
 }
 
 .chat-header {
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.5rem;
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     flex-shrink: 0;
 }
 
-.chat-header h3 {
-    font-size: var(--chat-md);
-    font-weight: 500;
+.chat-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.chat-header-spacer {
+    flex: 1;
+    min-width: 0.25rem;
 }
 
 .chat-header-actions {
@@ -40,7 +46,9 @@
 .model-selector {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .model-selector select {
@@ -48,9 +56,11 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text-primary);
-    padding: 0.25rem 0.5rem;
+    padding: 0.2rem 0.4rem;
     font-size: var(--chat-sm);
-    max-width: 150px;
+    max-width: 130px;
+    min-width: 60px;
+    flex-shrink: 1;
 }
 
 
@@ -186,7 +196,7 @@
 }
 
 .conv-item-meta {
-    font-size: var(--font-xs);
+    font-size: var(--chat-xs);
     color: var(--text-muted);
     margin-top: 1px;
 }
@@ -854,7 +864,7 @@
 
 .issue-focus-title {
     font-weight: 700;
-    font-size: var(--font-md);
+    font-size: var(--chat-md);
     color: var(--text-primary);
     line-height: 1.3;
 }
@@ -867,7 +877,7 @@
 
 .issue-focus-controls .btn-sm {
     padding: 0.15rem 0.4rem;
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 3px;
@@ -880,7 +890,7 @@
 }
 
 .issue-focus-meta {
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     color: var(--text-muted);
     margin-bottom: 0.4rem;
 }
@@ -896,7 +906,7 @@
 }
 
 .issue-focus-body {
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     color: var(--text-secondary);
     max-height: 80px;
     overflow-y: auto;
@@ -913,7 +923,7 @@
 }
 
 .issue-focus-comments {
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     max-height: 100px;
     overflow-y: auto;
     padding: 0.4rem 0.5rem;
@@ -960,7 +970,7 @@
 
 .issue-focus-actions .btn-sm {
     padding: 0.3rem 0.6rem;
-    font-size: var(--font-sm);
+    font-size: var(--chat-sm);
     border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;

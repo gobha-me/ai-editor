@@ -427,7 +427,12 @@ export async function refreshIssues() {
     if (!State.currentProject) return;
     
     const { owner, repo } = State.currentProject;
-    State.issues = await Git.listIssues(owner, repo);
+    try {
+        State.issues = await Git.listIssues(owner, repo);
+    } catch (e) {
+        console.warn('[Issues] Failed to refresh:', e.message);
+        // Keep existing issues in state rather than wiping them
+    }
     renderIssues();
 }
 

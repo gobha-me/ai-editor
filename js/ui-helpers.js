@@ -19,7 +19,7 @@ import { renderEditorTabs } from './tab-manager.js';
 export function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const handle = document.getElementById('resizeHandleSidebar');
-    const btn = document.getElementById('btnToggleSidebar');
+    const edgeTab = document.getElementById('sidebarExpandTab');
     const isMobile = window.innerWidth <= 768;
     
     if (isMobile) {
@@ -35,7 +35,7 @@ export function toggleSidebar() {
         const hiding = !sidebar.classList.contains('hidden');
         sidebar.classList.toggle('hidden');
         if (handle) handle.style.display = hiding ? 'none' : '';
-        if (btn) btn.setAttribute('aria-expanded', String(!hiding));
+        if (edgeTab) edgeTab.style.display = hiding ? '' : 'none';
         Storage.set('sidebarHidden', hiding);
     }
 }
@@ -43,7 +43,7 @@ export function toggleSidebar() {
 export function toggleChat() {
     const chatPanel = document.getElementById('chatPanel');
     const handle = document.getElementById('resizeHandleChat');
-    const btn = document.getElementById('btnToggleChat');
+    const edgeTab = document.getElementById('chatExpandTab');
     const isMobile = window.innerWidth <= 768;
     
     if (isMobile) {
@@ -58,7 +58,7 @@ export function toggleChat() {
         const hiding = !chatPanel.classList.contains('hidden');
         chatPanel.classList.toggle('hidden');
         if (handle) handle.style.display = hiding ? 'none' : '';
-        if (btn) btn.setAttribute('aria-expanded', String(!hiding));
+        if (edgeTab) edgeTab.style.display = hiding ? '' : 'none';
         Storage.set('chatHidden', hiding);
     }
 }

@@ -139,11 +139,13 @@ export async function buildAppLayout() {
         ${templates.get('header')}
         ${templates.get('search-panel')}
         <main class="main-content">
+            <div class="panel-edge-tab panel-edge-tab-left" id="sidebarExpandTab" title="Show sidebar" aria-label="Expand sidebar" role="button" tabindex="0" style="display:none;">📁</div>
             ${templates.get('sidebar')}
             <div class="resize-handle resize-handle-sidebar" id="resizeHandleSidebar" title="Drag to resize sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
             ${templates.get('editor-panel')}
             <div class="resize-handle resize-handle-chat" id="resizeHandleChat" title="Drag to resize chat" role="separator" aria-orientation="vertical" aria-label="Resize chat panel"></div>
             ${templates.get('chat-panel')}
+            <div class="panel-edge-tab panel-edge-tab-right" id="chatExpandTab" title="Show chat" aria-label="Expand chat" role="button" tabindex="0" style="display:none;">💬</div>
         </main>
         ${templates.get('modals')}
     `;

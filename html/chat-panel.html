@@ -1,11 +1,11 @@
 <!-- Chat Panel (Right) -->
 <aside class="chat-panel" id="chatPanel" role="complementary" aria-label="AI chat">
     <div class="chat-header">
-        <h3>💬 AI Assistant</h3>
-        <div class="chat-header-actions">
+        <div class="chat-header-row">
             <button type="button" class="btn btn-secondary" id="btnConversations" title="Conversations" aria-label="Show conversations">📚</button>
             <button type="button" class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard" aria-label="Copy chat to clipboard">📋</button>
             <button type="button" class="btn btn-secondary" id="btnNewChat" title="New Chat" aria-label="Start new chat">➕</button>
+            <div class="chat-header-spacer"></div>
             <div class="model-selector">
                 <label for="roleSelect" class="sr-only">Role</label>
                 <select id="roleSelect" title="Active role — controls tool access" aria-label="Active role">
@@ -17,6 +17,7 @@
                 </select>
                 <button type="button" class="btn btn-secondary" id="btnFetchModels" title="Refresh models" aria-label="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
             </div>
+            <button type="button" class="panel-collapse-btn" id="btnCollapseChat" title="Collapse chat" aria-label="Collapse chat">▶</button>
         </div>
     </div>
     <div class="model-status-bar" id="modelStatusBar" role="status" aria-live="polite" style="display: none;">

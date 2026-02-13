@@ -73,11 +73,15 @@ const githubProvider = {
         return `${url}/api/v3`;
     },
 
+    /** Default request timeout (ms). */
+    REQUEST_TIMEOUT: 15000,
+
     async request(connection, method, endpoint, data = null) {
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
-            headers: this.getHeaders(connection)
+            headers: this.getHeaders(connection),
+            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
         };
 
         if (data && method !== 'GET') {
@@ -119,12 +123,21 @@ const githubProvider = {
                 throw err;
             }
 
+            if (connection._unreachable) {
+                connection._unreachable = false;
+                EventBus.emit('git:connectionRestored', { connectionId: connection.id, provider: 'github' });
+            }
+
             const text = await response.text();
             return text ? JSON.parse(text) : null;
         } catch (error) {
             if (!error.status) {
                 error.url = url;
                 error.endpoint = endpoint;
+                if (!connection._unreachable) {
+                    connection._unreachable = true;
+                    EventBus.emit('git:connectionLost', { connectionId: connection.id, provider: 'github', error: error.message });
+                }
             }
             throw error;
         }

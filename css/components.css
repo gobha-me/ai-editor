@@ -645,3 +645,75 @@
     color: white;
     border-color: var(--accent, #4a9eff);
 }
+
+/* ══════════════════════════════════════════════
+   PANEL COLLAPSE / EXPAND
+   ══════════════════════════════════════════════ */
+
+/* Collapse button inside panel headers */
+.panel-collapse-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.15rem 0.3rem;
+    font-size: var(--font-sm);
+    border-radius: 3px;
+    opacity: 0.5;
+    transition: opacity 0.15s, background 0.15s;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.panel-collapse-btn:hover {
+    opacity: 1;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Edge expand tabs — thin clickable strips shown when panel is hidden */
+.panel-edge-tab {
+    width: 28px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+    user-select: none;
+    writing-mode: vertical-lr;
+}
+
+.panel-edge-tab:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.panel-edge-tab:focus-visible {
+    outline: 2px solid var(--accent, #58a6ff);
+    outline-offset: -2px;
+}
+
+.panel-edge-tab-left {
+    border-right: none;
+    border-radius: 0;
+}
+
+.panel-edge-tab-right {
+    border-left: none;
+    border-radius: 0;
+}
+
+/* Hide edge tabs on mobile — mobile has its own panel switching */
+@media (max-width: 768px) {
+    .panel-edge-tab {
+        display: none !important;
+    }
+    .panel-collapse-btn {
+        display: none;
+    }
+}

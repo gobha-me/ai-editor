@@ -7,7 +7,7 @@ import { Storage } from './core.js';
 
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 500;
-const CHAT_MIN = 250;
+const CHAT_MIN = 280;
 const CHAT_MAX = 700;
 const PREVIEW_MIN_PCT = 20;  // Minimum preview width as % of split
 const PREVIEW_MAX_PCT = 75;  // Maximum preview width as % of split
@@ -34,14 +34,18 @@ export function initPanelResize() {
         chatPanel.style.width = savedChatWidth + 'px';
     }
 
-    // Restore hidden state
+    // Restore hidden state + edge tabs
     if (Storage.get('sidebarHidden')) {
         sidebar.classList.add('hidden');
         sidebarHandle.style.display = 'none';
+        const tab = document.getElementById('sidebarExpandTab');
+        if (tab) tab.style.display = '';
     }
     if (Storage.get('chatHidden')) {
         chatPanel.classList.add('hidden');
         chatHandle.style.display = 'none';
+        const tab = document.getElementById('chatExpandTab');
+        if (tab) tab.style.display = '';
     }
 
     // --- Sidebar resize ---

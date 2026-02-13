@@ -3,7 +3,10 @@
     <!-- Project Selector -->
     <div class="sidebar-section">
         <div class="sidebar-header">
-            Projects
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <button type="button" class="panel-collapse-btn" id="btnCollapseSidebar" title="Collapse sidebar" aria-label="Collapse sidebar">◀</button>
+                Projects
+            </div>
             <div style="display: flex; gap: 2px;">
                 <button type="button" id="btnNewProject" title="New Project" aria-label="Create new project">➕</button>
                 <button type="button" id="btnRefreshProjects" title="Refresh" aria-label="Refresh projects">🔄</button>
@@ -26,53 +29,63 @@
         </div>
     </div>
 
-    <!-- File Tree -->
-    <div class="sidebar-section sidebar-section-flex">
-        <div class="sidebar-header sidebar-header-collapsible" data-collapse="fileTreeBody" role="button" tabindex="0" aria-expanded="true" aria-controls="fileTreeBody">
-            <span>▾ Files</span>
-            <div>
-                <button type="button" id="btnZipUploadOpen" title="Upload Zip" aria-label="Upload zip file" onclick="event.stopPropagation(); window.openZipUpload()">📦</button>
-                <button type="button" id="btnNewFile" title="New File" aria-label="Create new file" onclick="event.stopPropagation()">📄</button>
-                <button type="button" id="btnNewFolder" title="New Folder" aria-label="Create new folder" onclick="event.stopPropagation()">📁</button>
+    <!-- Resizable sections container -->
+    <div class="sidebar-sections-resizable" id="sidebarSections">
+        <!-- File Tree -->
+        <div class="sidebar-section sidebar-section-resizable" id="sectionFiles" data-section="files">
+            <div class="sidebar-header sidebar-header-collapsible" data-collapse="fileTreeBody" role="button" tabindex="0" aria-expanded="true" aria-controls="fileTreeBody">
+                <span>▾ Files</span>
+                <div>
+                    <button type="button" id="btnRefreshFiles" title="Refresh file tree" aria-label="Refresh file tree" onclick="event.stopPropagation()">🔄</button>
+                    <button type="button" id="btnZipUploadOpen" title="Upload Zip" aria-label="Upload zip file" onclick="event.stopPropagation(); window.openZipUpload()">📦</button>
+                    <button type="button" id="btnNewFile" title="New File" aria-label="Create new file" onclick="event.stopPropagation()">📄</button>
+                    <button type="button" id="btnNewFolder" title="New Folder" aria-label="Create new folder" onclick="event.stopPropagation()">📁</button>
+                </div>
             </div>
-        </div>
-        <div class="sidebar-collapse-body" id="fileTreeBody" role="tree" aria-label="File tree">
-            <div class="file-tree" id="fileTree">
-                <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
-                    Select a project to browse files
+            <div class="sidebar-collapse-body" id="fileTreeBody" role="tree" aria-label="File tree">
+                <div class="file-tree" id="fileTree">
+                    <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
+                        Select a project to browse files
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Issues Panel -->
-    <div class="sidebar-section sidebar-section-bottom">
-        <div class="sidebar-header sidebar-header-collapsible" data-collapse="issuesPanelBody" role="button" tabindex="0" aria-expanded="true" aria-controls="issuesPanelBody">
-            <span>▾ Issues</span>
-            <button type="button" id="btnRefreshIssues" title="Refresh" aria-label="Refresh issues" onclick="event.stopPropagation()">🔄</button>
-        </div>
-        <div class="sidebar-collapse-body" id="issuesPanelBody">
-            <div class="issues-panel" id="issuesPanel" role="list" aria-label="Issues">
-                <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                    No issues loaded
+        <!-- Resize handle: Files ↔ Issues -->
+        <div class="sidebar-resize-handle" data-above="sectionFiles" data-below="sectionIssues" title="Drag to resize" role="separator" aria-orientation="horizontal"></div>
+
+        <!-- Issues Panel -->
+        <div class="sidebar-section sidebar-section-resizable" id="sectionIssues" data-section="issues">
+            <div class="sidebar-header sidebar-header-collapsible" data-collapse="issuesPanelBody" role="button" tabindex="0" aria-expanded="true" aria-controls="issuesPanelBody">
+                <span>▾ Issues</span>
+                <button type="button" id="btnRefreshIssues" title="Refresh" aria-label="Refresh issues" onclick="event.stopPropagation()">🔄</button>
+            </div>
+            <div class="sidebar-collapse-body" id="issuesPanelBody">
+                <div class="issues-panel" id="issuesPanel" role="list" aria-label="Issues">
+                    <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                        No issues loaded
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Pull Requests -->
-    <div class="sidebar-section sidebar-section-bottom">
-        <div class="sidebar-header sidebar-header-collapsible" data-collapse="prsPanelBody" role="button" tabindex="0" aria-expanded="true" aria-controls="prsPanelBody">
-            <span>▾ Pull Requests</span>
-            <div style="display: flex; gap: 2px;">
-                <button type="button" id="btnNewPR" title="Create Pull Request" aria-label="Create pull request" onclick="event.stopPropagation(); window.openCreatePRModal()">➕</button>
-                <button type="button" id="btnRefreshPRs" title="Refresh" aria-label="Refresh pull requests" onclick="event.stopPropagation()">🔄</button>
+        <!-- Resize handle: Issues ↔ PRs -->
+        <div class="sidebar-resize-handle" data-above="sectionIssues" data-below="sectionPRs" title="Drag to resize" role="separator" aria-orientation="horizontal"></div>
+
+        <!-- Pull Requests -->
+        <div class="sidebar-section sidebar-section-resizable" id="sectionPRs" data-section="prs">
+            <div class="sidebar-header sidebar-header-collapsible" data-collapse="prsPanelBody" role="button" tabindex="0" aria-expanded="true" aria-controls="prsPanelBody">
+                <span>▾ Pull Requests</span>
+                <div style="display: flex; gap: 2px;">
+                    <button type="button" id="btnNewPR" title="Create Pull Request" aria-label="Create pull request" onclick="event.stopPropagation(); window.openCreatePRModal()">➕</button>
+                    <button type="button" id="btnRefreshPRs" title="Refresh" aria-label="Refresh pull requests" onclick="event.stopPropagation()">🔄</button>
+                </div>
             </div>
-        </div>
-        <div class="sidebar-collapse-body" id="prsPanelBody">
-            <div class="prs-panel" id="prsPanel" role="list" aria-label="Pull requests">
-                <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                    No pull requests
+            <div class="sidebar-collapse-body" id="prsPanelBody">
+                <div class="prs-panel" id="prsPanel" role="list" aria-label="Pull requests">
+                    <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
+                        No pull requests
+                    </div>
                 </div>
             </div>
         </div>

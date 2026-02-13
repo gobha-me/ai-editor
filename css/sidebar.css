@@ -21,16 +21,46 @@
     border-bottom: 1px solid var(--border);
 }
 
-/* File tree section takes remaining space */
+/* ── Resizable sections container ── */
+.sidebar-sections-resizable {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Each resizable section: files, issues, PRs */
+.sidebar-section-resizable {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    flex: 1 1 auto;             /* All share space equally by default */
+    border-bottom: none;        /* Resize handles provide visual separation */
+}
+
+/* Files gets extra default share */
+.sidebar-section-resizable[data-section="files"] {
+    flex: 3 1 auto;
+}
+
+/* When collapsed via ▸ toggle, section shrinks to header only */
+.sidebar-section-resizable.section-collapsed {
+    flex: 0 0 auto !important;
+    min-height: auto;
+    overflow: visible;
+}
+
+/* Old classes kept for backward compat — no longer used in HTML */
 .sidebar-section-flex {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;   /* Critical: allows flex child to shrink below content size */
+    min-height: 0;
     overflow: hidden;
 }
 
-/* Issues/pull requests pinned at bottom with max heights */
 .sidebar-section-bottom {
     flex-shrink: 0;
 }
@@ -39,6 +69,40 @@
 .sidebar-section-bottom .prs-panel {
     max-height: 180px;
     overflow-y: auto;
+}
+
+/* ── Horizontal resize handles between sections ── */
+.sidebar-resize-handle {
+    height: 4px;
+    background: var(--border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+    background: var(--accent, #58a6ff);
+}
+
+/* Larger hit area */
+.sidebar-resize-handle::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    left: 0;
+    right: 0;
+}
+
+/* PRs panel — flex inside resizable section */
+.prs-panel {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-hover) transparent;
 }
 
 .sidebar-header {
@@ -268,8 +332,9 @@
 
 /* Issues Panel */
 .issues-panel {
-    max-height: 250px;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: var(--bg-hover) transparent;
 }

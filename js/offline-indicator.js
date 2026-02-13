@@ -117,3 +117,69 @@ function _createBanner() {
     bannerEl.innerHTML = '⚠️ <strong>Offline</strong> — Network connection lost. Changes are saved locally.';
     document.body.appendChild(bannerEl);
 }
+
+// ============================================
+// GIT CONNECTION HEALTH
+// ============================================
+
+/** @type {HTMLElement|null} */
+let gitBannerEl = null;
+
+/** @type {Set<string>} Connection IDs that are unreachable */
+const _downConnections = new Set();
+
+function _createGitBanner() {
+    gitBannerEl = document.createElement('div');
+    gitBannerEl.id = 'git-connection-banner';
+    gitBannerEl.setAttribute('role', 'status');
+    gitBannerEl.setAttribute('aria-live', 'polite');
+    Object.assign(gitBannerEl.style, {
+        display: 'none',
+        position: 'fixed',
+        bottom: '0',
+        left: '0',
+        right: '0',
+        zIndex: '9998',
+        padding: '8px 16px',
+        background: '#92400e',
+        color: '#fff',
+        fontSize: '13px',
+        fontFamily: 'system-ui, sans-serif',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.2)',
+        transition: 'transform 0.3s ease',
+    });
+    document.body.appendChild(gitBannerEl);
+}
+
+function _updateGitBanner() {
+    if (!gitBannerEl) _createGitBanner();
+
+    if (_downConnections.size === 0) {
+        gitBannerEl.style.display = 'none';
+        return;
+    }
+
+    const count = _downConnections.size;
+    gitBannerEl.innerHTML = `🔌 <strong>Git provider${count > 1 ? 's' : ''} unreachable</strong> — Editor & chat still work. Git operations will fail until connection is restored.`;
+    gitBannerEl.style.display = 'flex';
+
+    // Shift up if main offline banner is also showing
+    gitBannerEl.style.bottom = bannerEl?.style.display !== 'none' ? '36px' : '0';
+}
+
+// Listen for provider health events
+EventBus.on('git:connectionLost', ({ connectionId }) => {
+    _downConnections.add(connectionId);
+    _updateGitBanner();
+});
+
+EventBus.on('git:connectionRestored', ({ connectionId }) => {
+    _downConnections.delete(connectionId);
+    _updateGitBanner();
+    if (_downConnections.size === 0) {
+        window.showToast?.('Git connection restored ✓', 'success');
+    }
+});

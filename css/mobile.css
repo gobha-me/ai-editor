@@ -179,8 +179,6 @@
     }
 
     /* Hide non-essential header buttons on mobile */
-    #btnToggleSidebar,
-    #btnToggleChat,
     #btnErrorLog,
     #btnLLMDebug,
     #btnHelp {

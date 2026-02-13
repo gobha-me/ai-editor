@@ -61,11 +61,15 @@ const giteaProvider = {
         return `${connection.url.replace(/\/$/, '')}/api/v1`;
     },
 
+    /** Default request timeout (ms). Prevents hanging when server is unreachable. */
+    REQUEST_TIMEOUT: 15000,
+
     async request(connection, method, endpoint, data = null) {
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
-            headers: this.getHeaders(connection)
+            headers: this.getHeaders(connection),
+            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
         };
 
         if (data && method !== 'GET') {
@@ -84,12 +88,25 @@ const giteaProvider = {
                 throw err;
             }
 
+            // Connection is healthy — emit recovery if previously down
+            if (connection._unreachable) {
+                connection._unreachable = false;
+                EventBus.emit('git:connectionRestored', { connectionId: connection.id, provider: 'gitea' });
+                console.log(`[Gitea] Connection restored: ${connection.url}`);
+            }
+
             const text = await response.text();
             return text ? JSON.parse(text) : null;
         } catch (error) {
             if (!error.status) {
                 error.url = url;
                 error.endpoint = endpoint;
+                // Mark connection unreachable on network errors
+                if (!connection._unreachable) {
+                    connection._unreachable = true;
+                    EventBus.emit('git:connectionLost', { connectionId: connection.id, provider: 'gitea', error: error.message });
+                    console.warn(`[Gitea] Connection unreachable: ${connection.url} — ${error.message}`);
+                }
             }
             throw error;
         }

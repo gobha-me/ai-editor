@@ -37,6 +37,11 @@ export function addMessage(role, content, meta = {}) {
         }, 1500);
     }
 
+    // Clear welcome screen on first message
+    const chatContainer = getChatContainer();
+    const welcome = chatContainer?.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+
     renderMessage(message);
     scrollToBottom();
 

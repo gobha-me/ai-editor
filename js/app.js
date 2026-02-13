@@ -268,6 +268,9 @@ function initSidebarCollapse() {
         const body = document.getElementById(targetId);
         if (!body) return;
 
+        // Find parent resizable section
+        const section = header.closest('.sidebar-section-resizable');
+
         const toggle = () => {
             const isCollapsed = body.classList.toggle('collapsed');
             header.setAttribute('aria-expanded', String(!isCollapsed));
@@ -276,6 +279,17 @@ function initSidebarCollapse() {
                 const text = label.textContent.replace(/^[▾▸]\s*/, '');
                 label.textContent = (isCollapsed ? '▸ ' : '▾ ') + text;
             }
+            // When collapsed, remove flex-grow so section shrinks to header only
+            if (section) {
+                section.classList.toggle('section-collapsed', isCollapsed);
+                // Clear any inline flex overrides from drag resize
+                if (isCollapsed) {
+                    section.style.flexBasis = '';
+                    section.style.flexGrow = '';
+                }
+            }
+            // Reflow: let expanded sections reclaim space & hide orphan handles
+            _reflowSidebarSections();
         };
 
         header.addEventListener('click', toggle);
@@ -288,6 +302,115 @@ function initSidebarCollapse() {
             }
         });
     });
+}
+
+/**
+ * After collapse/expand, redistribute flex space and hide resize handles
+ * adjacent to collapsed sections so expanded sections fill available space.
+ */
+function _reflowSidebarSections() {
+    const container = document.getElementById('sidebarSections');
+    if (!container) return;
+
+    const sections = container.querySelectorAll('.sidebar-section-resizable');
+    const handles = container.querySelectorAll('.sidebar-resize-handle');
+
+    // Count expanded sections
+    const expanded = [...sections].filter(s => !s.classList.contains('section-collapsed'));
+
+    // Reset expanded sections to equal flex if their inline styles were cleared
+    expanded.forEach(s => {
+        if (!s.style.flexBasis) {
+            s.style.flexGrow = '';  // let CSS flex rule take over
+        }
+    });
+
+    // If only one section is expanded, let it take all space
+    if (expanded.length === 1) {
+        expanded[0].style.flexGrow = '1';
+        expanded[0].style.flexBasis = '';
+    }
+
+    // Hide handles where either neighbor is collapsed
+    handles.forEach(h => {
+        const aboveEl = document.getElementById(h.dataset.above);
+        const belowEl = document.getElementById(h.dataset.below);
+        const hide = aboveEl?.classList.contains('section-collapsed') ||
+                     belowEl?.classList.contains('section-collapsed');
+        h.style.display = hide ? 'none' : '';
+    });
+}
+
+/**
+ * Sidebar vertical section resize.
+ * Drag handles between Files ↔ Issues ↔ PRs to redistribute vertical space.
+ */
+function initSidebarSectionResize() {
+    const handles = document.querySelectorAll('.sidebar-resize-handle');
+    if (!handles.length) return;
+
+    handles.forEach(handle => {
+        const aboveId = handle.dataset.above;
+        const belowId = handle.dataset.below;
+        const aboveEl = document.getElementById(aboveId);
+        const belowEl = document.getElementById(belowId);
+        if (!aboveEl || !belowEl) return;
+
+        let startY = 0;
+        let startAboveH = 0;
+        let startBelowH = 0;
+
+        const onMouseMove = (e) => {
+            e.preventDefault();
+            const delta = e.clientY - startY;
+            const newAbove = Math.max(32, startAboveH + delta);   // min = header height
+            const newBelow = Math.max(32, startBelowH - delta);
+            aboveEl.style.flexBasis = newAbove + 'px';
+            aboveEl.style.flexGrow = '0';
+            belowEl.style.flexBasis = newBelow + 'px';
+            belowEl.style.flexGrow = '0';
+        };
+
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            // Save proportions
+            const saved = {};
+            document.querySelectorAll('.sidebar-section-resizable').forEach(s => {
+                const key = s.dataset.section;
+                if (key && s.style.flexBasis) {
+                    saved[key] = s.style.flexBasis;
+                }
+            });
+            Storage.set('sidebarSectionSizes', saved);
+        };
+
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startAboveH = aboveEl.getBoundingClientRect().height;
+            startBelowH = belowEl.getBoundingClientRect().height;
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    });
+
+    // Restore saved sizes
+    const saved = Storage.get('sidebarSectionSizes');
+    if (saved) {
+        Object.entries(saved).forEach(([key, basis]) => {
+            const el = document.querySelector(`.sidebar-section-resizable[data-section="${key}"]`);
+            if (el) {
+                el.style.flexBasis = basis;
+                el.style.flexGrow = '0';
+            }
+        });
+    }
 }
 
 // Expose LLMTools reference for role tool list display
@@ -530,19 +653,38 @@ function setupEventListeners() {
     };
 
     // Header buttons
-    safeAdd('btnToggleSidebar', 'click', toggleSidebar);
     safeAdd('btnCommit', 'click', openCommitModal);
     safeAdd('btnRevert', 'click', revertCurrentFile);
     safeAdd('btnSettings', 'click', openSettings);
     safeAdd('btnErrorLog', 'click', openErrorLog);
     safeAdd('btnLLMDebug', 'click', openLLMDebug);
-    safeAdd('btnToggleChat', 'click', toggleChat);
     safeAdd('btnHelp', 'click', openHelpModal);
+
+    // Panel collapse buttons (inside panel headers)
+    safeAdd('btnCollapseSidebar', 'click', toggleSidebar);
+    safeAdd('btnCollapseChat', 'click', toggleChat);
+
+    // Panel edge expand tabs (shown when panel is hidden)
+    safeAdd('sidebarExpandTab', 'click', toggleSidebar);
+    safeAdd('chatExpandTab', 'click', toggleChat);
+    // Also support keyboard activation on edge tabs
+    const edgeKeyHandler = (fn) => (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
+    };
+    const sidebarTab = document.getElementById('sidebarExpandTab');
+    const chatTab = document.getElementById('chatExpandTab');
+    if (sidebarTab) sidebarTab.addEventListener('keydown', edgeKeyHandler(toggleSidebar));
+    if (chatTab) chatTab.addEventListener('keydown', edgeKeyHandler(toggleChat));
 
     // Sidebar buttons
     safeAdd('btnRefreshProjects', 'click', refreshProjects);
     safeAdd('btnClearProject', 'click', clearProject);
     safeAdd('btnNewBranch', 'click', openNewBranchModal);
+    safeAdd('btnRefreshFiles', 'click', () => {
+        EventBus.emit('tree:refresh');
+        EventBus.emit('branches:refresh');
+        window.showToast('Refreshing files & branches…', 'info');
+    });
     safeAdd('btnNewFile', 'click', openNewFileModal);
     safeAdd('btnRefreshIssues', 'click', refreshIssues);
     safeAdd('btnRefreshPRs', 'click', refreshPullRequests);
@@ -688,21 +830,38 @@ async function init() {
     initProjectListeners();
     initCostTrackerListener();
     initSessionListeners();
+    initSidebarCollapse();
+    initSidebarSectionResize();
 
-    // Load projects if any connections configured
-    if (GitProviderRegistry.listConnections(true).length > 0) {
-        await refreshProjects();
-        // Restore previous session (project + branch + tabs)
-        await restoreSession();
-    }
+    // ── Parallel init: git + LLM + editor load concurrently ──
+    // Git provider outage must NOT block LLM or editor loading.
 
-    // Load models if configured
-    if (State.settings.llmEndpoint && State.settings.llmApiKey) {
-        await fetchModels();
-    }
+    const gitReady = (async () => {
+        if (GitProviderRegistry.listConnections(true).length > 0) {
+            try {
+                await refreshProjects();
+                await restoreSession();
+            } catch (e) {
+                console.warn('[Init] Git initialization failed (provider may be down):', e.message);
+                window.showToast('Git provider unreachable — editor & chat still work', 'warning');
+            }
+        }
+    })();
 
-    // Pre-load CodeMirror
-    await loadCodeMirror();
+    const llmReady = (async () => {
+        if (State.settings.llmEndpoint && State.settings.llmApiKey) {
+            try {
+                await fetchModels();
+            } catch (e) {
+                console.warn('[Init] LLM model fetch failed:', e.message);
+            }
+        }
+    })();
+
+    const editorReady = loadCodeMirror();
+
+    // Wait for all three, but each is independent
+    await Promise.allSettled([gitReady, llmReady, editorReady]);
     
     // Initialize quick open and search panel (DOM is ready after buildAppLayout)
     initQuickOpen();
