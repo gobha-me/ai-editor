@@ -468,6 +468,7 @@ export async function handleGeneralRequest(input) {
 
                 for (const toolCall of toolCalls) {
                     if (isToolLoopCancelled()) break;
+                    if (!toolCall?.function) continue; // skip sparse array holes
 
                     const toolName = toolCall.function?.name || 'unknown';
                     let args = {};

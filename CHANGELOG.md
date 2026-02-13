@@ -2,6 +2,40 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.23-2] - 2026-02-12
+
+### Fixed — Sparse tool call array crash
+
+Streaming tool call deltas with non-zero `index` values created sparse
+array holes (e.g., `[undefined, {function: ...}]`). The `for...of` loop
+in `handleGeneralRequest` iterated the `undefined` slot, crashing on
+`toolCall.function`.
+
+**Root cause (`llm/api.js`):** `toolCalls[tc.index]` indexed by delta
+position without filtering. Fixed: `.filter(Boolean)` before returning.
+
+**Belt-and-suspenders (`chat/handlers.js`):** Added `if (!toolCall?.function) continue;` guard in the loop body.
+
+### Added — Public-ready documentation
+
+**`README.md`** — complete rewrite for GitHub readiness. Tighter
+structure: Quick Start → What It Does → Features → Config → Shortcuts →
+Deployment → Project Structure. No more stale "Future Enhancements"
+checkbox list.
+
+**`REPOS.md`** (new) — Git provider setup guide with minimum token
+permissions per provider. Covers Gitea (repository + issue + user
+scopes), GitHub (fine-grained and classic token options), GitLab (api
+scope, explanation of why). Includes connection settings, multiple
+connections, and troubleshooting.
+
+**`docs/PLUGIN.md`** (new) — Plugin authoring guide. Covers bundled and
+external plugins, manifest fields, hooks (beforeSend, afterResponse,
+onModelChange), UI registration (toolbar buttons, modals), config schema
+with auto-generated settings UI, `window.AIEditor` API reference
+(Plugins, EventBus, State, Storage, Providers, Roles), event catalog,
+State properties, and tips.
+
 ## [0.9.23-1] - 2026-02-12
 
 ### Fixed — Duplicate showToast declaration

@@ -541,7 +541,7 @@ export const LLM = {
 
         return {
             content,
-            toolCalls: toolCalls.length > 0 ? toolCalls : null,
+            toolCalls: toolCalls.length > 0 ? toolCalls.filter(Boolean) : null,
             finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
             usage
         };
