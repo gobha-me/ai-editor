@@ -2,6 +2,95 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.24-2] - 2026-02-12
+
+### Fixed — `run_code` always returning `undefined`
+
+The IIFE wrapper `(function(){ CODE })()` treated expressions as
+statements — `42 * 17` ran but never returned its value.
+
+**Fix:** REPL-style auto-return. `_wrapForReturn()` prepends `return`
+to the last non-empty, non-comment line. If that creates a SyntaxError
+(last line is a declaration like `const x = 5;`), falls back gracefully
+to running code as-is (result stays `undefined`, console output still
+captured).
+
+Examples now working correctly:
+- `42 * 17` → result: `714`
+- `Array.from(...)...reduce(...)` → result: `385`
+- `const fib = ...; fib(10)` → result: `55`
+- `'world'.split('').reverse().join('')` → result: `dlrow`
+
+## [0.9.24-1] - 2026-02-12
+
+### Added — `run_code` tool (sandboxed JavaScript execution)
+
+LLMs can now run JavaScript to verify calculations, transform data,
+test regex patterns, or prototype logic instead of doing mental math.
+
+**Sandbox security (`js/tools/eval-tools.js`):**
+- Runs in `Function()` constructor — not `eval()`
+- Blocked globals set to `undefined` inside sandbox: `window`, `self`,
+  `globalThis`, `document`, `fetch`, `XMLHttpRequest`, `WebSocket`,
+  `eval`, `Function`, `localStorage`, `sessionStorage`, `indexedDB`,
+  `navigator`, `location`, `setTimeout`, `setInterval`, `Worker`,
+  `alert`, `confirm`, `prompt`, `postMessage`, and more
+- 3-second timeout via `Promise.race`
+- Console capture: `console.log/warn/error/info` output returned in
+  `console_output` field
+- Max 100KB output to prevent memory bombs
+- Last expression auto-returned (REPL-style) unless code contains
+  explicit `return`
+
+**System prompt:** Added to tool inventory — models know it exists for
+math, string manipulation, data transforms, and logic validation.
+
+**Tool count:** 41 → 42
+
+## [0.9.24] - 2026-02-12
+
+### Added — `search_replace` tool (text-based editing for all models)
+
+Small and medium LLMs consistently fail with line-number-based editing
+tools. They miscalculate line numbers, lose track after edits shift
+lines, and confuse `start_line`/`end_line`/`after_line` parameters.
+The new `search_replace` tool eliminates this entirely.
+
+**How it works:** The model reads the file, copies the exact text it
+wants to change (including whitespace/indentation), and provides the
+replacement. No line numbers involved.
+
+**Four explicit operations — no magic empty-string behavior:**
+- `replace` — find exact text, swap with new text
+- `delete` — find exact text, remove it entirely
+- `insert_after` — find anchor text, add new content after it
+- `insert_before` — find anchor text, add new content before it
+
+**Uniqueness requirement:** The `find` text must match exactly once in
+the file. If it matches multiple times, the tool returns an error with
+the match count and asks the model to include more surrounding context.
+
+**New files:**
+- `js/tools/search-replace-tools.js` — tool definition + ensureFileActive
+- `js/editor/instance.js` — new `replaceText()` function for character-
+  offset find-and-replace through CodeMirror
+
+**System prompt updated (`js/prompts.js`):**
+- `search_replace` listed first in tool inventory
+- Editing workflow rewritten: search_replace as PREFERRED approach,
+  line-based tools as alternative "when you have confident line numbers"
+- Efficiency rules updated: minimum edit path is now `read_file →
+  search_replace`
+- Line number drift warning explicitly notes "use search_replace to
+  avoid this problem entirely"
+
+**Cache handling (`js/chat/handlers.js`):**
+- `search_replace`, `edit_file`, `write_file`, `delete_file` added to
+  all three cache exclusion lists (bypass, invalidation, don't-cache).
+  These were missing for `edit_file`/`write_file` since 0.9.21.
+
+**Tool count:** 40 → 41
+
 ## [0.9.23-2] - 2026-02-12
 
 ### Fixed — Sparse tool call array crash

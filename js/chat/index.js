@@ -15,6 +15,8 @@ import { registerPRTools } from '../tools/pr-tools.js';
 import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
 import { registerXRefTools } from '../tools/xref-tools.js';
 import { registerMultiFileTools } from '../tools/multifile-tools.js';
+import { registerSearchReplaceTools } from '../tools/search-replace-tools.js';
+import { registerEvalTools } from '../tools/eval-tools.js';
 
 // Import submodules
 import { 
@@ -57,6 +59,8 @@ registerPRTools(ToolRegistry);
 registerScratchpadTools(ToolRegistry);
 registerXRefTools(ToolRegistry);
 registerMultiFileTools(ToolRegistry);
+registerSearchReplaceTools(ToolRegistry);
+registerEvalTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION

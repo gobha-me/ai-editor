@@ -33,7 +33,9 @@ export {
     getLineRange,
     replaceRange,
     insertAtLine,
-    deleteRange
+    deleteRange,
+    // Text-based editing (for search-replace tool)
+    replaceText
 } from './editor/instance.js';
 
 // File utilities

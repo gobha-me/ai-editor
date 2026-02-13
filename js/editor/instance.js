@@ -401,6 +401,77 @@ export function insertAtLine(afterLine, content) {
 }
 
 /**
+ * Find and replace text in the editor buffer by exact string match.
+ * Works at character offsets — no line numbers needed.
+ *
+ * @param {string} find - Exact text to find (must appear exactly once)
+ * @param {string} replacement - Text to substitute (can be empty for delete)
+ * @returns {object} { success, startLine, endLine, totalLines } or { error }
+ */
+export function replaceText(find, replacement) {
+    if (!editorInstance) return { error: 'No editor instance' };
+    if (!find) return { error: 'find text is required' };
+
+    const doc = editorInstance.state.doc;
+    const content = doc.toString();
+
+    // Require unique match
+    const firstIdx = content.indexOf(find);
+    if (firstIdx === -1) {
+        return { error: 'Text not found in file. Make sure you copied the exact text including whitespace and indentation.' };
+    }
+    const secondIdx = content.indexOf(find, firstIdx + 1);
+    if (secondIdx !== -1) {
+        // Count occurrences for a helpful message
+        let count = 2;
+        let pos = secondIdx;
+        while ((pos = content.indexOf(find, pos + 1)) !== -1) count++;
+        return { error: `Found ${count} matches — search text must be unique. Include more surrounding context to disambiguate.` };
+    }
+
+    const from = firstIdx;
+    const to = firstIdx + find.length;
+
+    // Record line positions before edit (for context)
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+
+    editorInstance.dispatch({
+        changes: { from, to, insert: replacement }
+    });
+
+    // Update state
+    State.editorContent = editorInstance.state.doc.toString();
+    State.editorDirty = true;
+
+    const newDoc = editorInstance.state.doc;
+    const newTotalLines = newDoc.lines;
+
+    // Calculate what changed
+    const oldLineCount = find.split('\n').length;
+    const newLineCount = replacement.split('\n').length;
+    const lineDelta = newLineCount - oldLineCount;
+
+    EventBus.emit('editor:linesReplaced', {
+        startLine,
+        endLine,
+        oldLineCount,
+        newLineCount,
+        totalLines: newTotalLines
+    });
+
+    return {
+        success: true,
+        startLine,
+        endLine,
+        oldLineCount,
+        newLineCount,
+        lineDelta,
+        totalLines: newTotalLines
+    };
+}
+
+/**
  * Delete a range of lines.
  * @param {number} startLine - 1-indexed start line (inclusive)
  * @param {number} endLine - 1-indexed end line (inclusive)
