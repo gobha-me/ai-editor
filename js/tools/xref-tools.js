@@ -178,4 +178,90 @@ export function registerXRefTools(registry) {
         },
         roles: 'all'
     });
+
+    // ========================================
+    // peek_read_lines
+    // ========================================
+    registry.register('peek_read_lines', async ({ connectionId, owner, repo, path, branch = 'main', start_line, end_line }) => {
+        try {
+            const { provider, connection } = GitProviderRegistry.resolve(connectionId);
+            const file = await provider.getFile(connection, owner, repo, path, branch);
+
+            const lines = file.content.split('\n');
+            const total = lines.length;
+
+            // Clamp range
+            const start = Math.max(1, start_line || 1);
+            const end = Math.min(total, end_line || total);
+
+            if (start > total) {
+                return { error: `start_line ${start} exceeds file length (${total} lines)` };
+            }
+
+            const slice = lines.slice(start - 1, end)
+                .map((l, i) => `${start + i}: ${l}`)
+                .join('\n');
+
+            const current = State.currentProject
+                ? `${State.currentProject.owner}/${State.currentProject.repo}`
+                : null;
+
+            return {
+                reference_project: `${owner}/${repo}`,
+                reference_branch: branch,
+                current_project: current,
+                path,
+                start_line: start,
+                end_line: end,
+                total_lines: total,
+                content: slice
+            };
+        } catch (error) {
+            if (error.status === 404) {
+                return { error: `File not found: '${path}' in ${owner}/${repo} on branch '${branch}'` };
+            }
+            return { error: `Failed to read ${owner}/${repo}/${path}: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'peek_read_lines',
+            description: 'Read a specific line range from a file in ANOTHER project. More efficient than peek_project_file for large files — fetch only the lines you need. Use peek_project_file first to find the relevant area, then peek_read_lines for the exact range.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    connectionId: {
+                        type: 'string',
+                        description: 'The connection ID from list_projects'
+                    },
+                    owner: {
+                        type: 'string',
+                        description: 'Repository owner / organization'
+                    },
+                    repo: {
+                        type: 'string',
+                        description: 'Repository name'
+                    },
+                    path: {
+                        type: 'string',
+                        description: 'Path to the file'
+                    },
+                    branch: {
+                        type: 'string',
+                        description: 'Branch to read from (default: "main")'
+                    },
+                    start_line: {
+                        type: 'integer',
+                        description: 'First line to read (1-indexed)'
+                    },
+                    end_line: {
+                        type: 'integer',
+                        description: 'Last line to read (inclusive)'
+                    }
+                },
+                required: ['connectionId', 'owner', 'repo', 'path', 'start_line', 'end_line']
+            }
+        },
+        roles: 'all'
+    });
 }

@@ -14,8 +14,8 @@ vendor/package-lock.json
 .DS_Store
 Thumbs.db
 
-# Docs
+# Docs (exclude all markdown except docs/ directory)
 README.md
 LICENSE
 *.md
-!editor/**/*.md
+!docs/*.md

@@ -153,8 +153,8 @@ export const ToolRegistry = {
     getToolsForRole(roleId) {
         const activeRole = roleId || State.settings.role;
         
-        // If 'full' role, return everything
-        if (activeRole === 'full') {
+        // If 'full' or 'plugin-dev' role, return everything
+        if (activeRole === 'full' || activeRole === 'plugin-dev') {
             return this.definitions;
         }
         

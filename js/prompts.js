@@ -232,6 +232,10 @@ function buildSystemPrompt() {
     const role = Roles.get(State.settings.role);
     if (role && role.id !== 'full') {
         prompt += `\n\nActive role: ${role.name}. ${role.description}`;
+        // Roles with a systemPrompt field inject additional context (e.g., SDK docs)
+        if (role.systemPrompt) {
+            prompt += `\n\n${role.systemPrompt}`;
+        }
     }
 
     // Inject active issue context (working on a branch for this issue)

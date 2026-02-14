@@ -58,7 +58,7 @@
  * @property {ToolDefinition[]|null} [tools=null]
  */
 
-import { State, EventBus, Storage, Providers, ProviderRegistry, Roles } from '../core.js';
+import { State, EventBus, Storage, Providers, ProviderRegistry, Plugins, Roles } from '../core.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
@@ -261,11 +261,20 @@ export const LLM = {
         EventBus.emit('llm:generating', true);
 
         try {
-            const requestBody = buildRequestBody(model, messages, {
+            // === Plugin hook: beforeSend ===
+            const hookData = await Plugins.runHook('beforeSend', {
+                messages, model, tools, stream, maxTokens, temperature
+            });
+            // Plugins may return modified messages/model/tools
+            const hookedMessages = hookData.messages || messages;
+            const hookedModel = hookData.model || model;
+            const hookedTools = hookData.tools !== undefined ? hookData.tools : tools;
+
+            const requestBody = buildRequestBody(hookedModel, hookedMessages, {
                 stream,
                 maxTokens,
                 temperature,
-                tools
+                tools: hookedTools
             });
 
             // === DEBUG: Start exchange logging with tool diagnostic ===
@@ -325,7 +334,14 @@ export const LLM = {
             // === DEBUG: End exchange logging ===
             LLMDebug.endExchange(result);
 
-            this._trackUsage(result.usage, model);
+            // === Plugin hook: afterResponse ===
+            await Plugins.runHook('afterResponse', {
+                content: result.content,
+                model: hookedModel,
+                result
+            });
+
+            this._trackUsage(result.usage, hookedModel);
             return result;
 
         } catch (err) {

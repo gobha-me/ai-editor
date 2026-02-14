@@ -211,74 +211,100 @@
 
 <!-- Keyboard Shortcuts Help (F1 / Ctrl+?) -->
 <div class="modal-overlay" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
-    <div class="modal" style="max-width: 580px;">
+    <div class="modal" style="max-width: 700px; height: 80vh; display: flex; flex-direction: column;">
         <div class="modal-header">
-            <h2 id="helpTitle">⌨️ Keyboard Shortcuts</h2>
+            <h2 id="helpTitle">📖 Help</h2>
             <button type="button" class="modal-close" onclick="window.closeHelpModal()" aria-label="Close help">×</button>
         </div>
-        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-            <div class="help-shortcuts">
-                <div class="help-group">
-                    <h3>General</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>F1</kbd></span><span>Show this help</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></span><span>Open settings</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></span><span>Toggle sidebar</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>J</kbd></span><span>Toggle chat panel</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Esc</kbd></span><span>Close modal / panel</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Panel Focus</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>1</kbd></span><span>Focus sidebar</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>2</kbd></span><span>Focus editor</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>3</kbd></span><span>Focus chat input</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Files</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>P</kbd></span><span>Quick open file</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></span><span>Search in project</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></span><span>Commit changes</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></span><span>Revert file(s)</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Editor</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Toggle preview pane</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span><span>Toggle diff view</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></span><span>Toggle blame / file history</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></span><span>Toggle line numbers</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Editor Tabs</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>←</kbd> <kbd>→</kbd></span><span>Switch between tabs</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last tab</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Delete</kbd></span><span>Close current tab</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>File Tree</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate files</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>→</kbd></span><span>Expand folder</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>←</kbd></span><span>Collapse folder / go to parent</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file / toggle folder</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last item</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Diff Viewer</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↓</kbd></span><span>Next change</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↑</kbd></span><span>Previous change</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>V</kbd></span><span>Toggle unified / split view</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Chat</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Send message</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>New line in chat</span></div>
-                </div>
-                <div class="help-group">
-                    <h3>Quick Open</h3>
-                    <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate results</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file (preview)</span></div>
-                    <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>Open file (pinned tab)</span></div>
+
+        <!-- Tab navigation (reuses settings-tab pattern) -->
+        <div class="settings-tabs-nav">
+            <button type="button" class="settings-tabs-arrow settings-tabs-arrow-left" onclick="window.scrollHelpTabs(-1)" aria-label="Scroll tabs left">‹</button>
+            <div class="settings-tabs" id="helpTabs">
+                <button class="settings-tab active" data-help-tab="hotkeys">⌨️ Hotkeys</button>
+                <button class="settings-tab" data-help-tab="plugin-sdk">🧩 Plugin SDK</button>
+                <button class="settings-tab" data-help-tab="tools">🔧 Tools</button>
+                <button class="settings-tab" data-help-tab="roles">👤 Roles</button>
+                <button class="settings-tab" data-help-tab="architecture">🏗️ Architecture</button>
+                <button class="settings-tab" data-help-tab="plan">📋 Roadmap</button>
+            </div>
+            <button type="button" class="settings-tabs-arrow settings-tabs-arrow-right" onclick="window.scrollHelpTabs(1)" aria-label="Scroll tabs right">›</button>
+        </div>
+
+        <div class="modal-body" style="flex: 1; overflow-y: auto; min-height: 0;">
+            <!-- Tab: Hotkeys (default, static HTML) -->
+            <div class="help-tab-content active" id="helpTab-hotkeys">
+                <div class="help-shortcuts">
+                    <div class="help-group">
+                        <h3>General</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>F1</kbd></span><span>Show this help</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></span><span>Open settings</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></span><span>Toggle sidebar</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>J</kbd></span><span>Toggle chat panel</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Esc</kbd></span><span>Close modal / panel</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Panel Focus</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>1</kbd></span><span>Focus sidebar</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>2</kbd></span><span>Focus editor</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>3</kbd></span><span>Focus chat input</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Files</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>P</kbd></span><span>Quick open file</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></span><span>Search in project</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></span><span>Commit changes</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></span><span>Revert file(s)</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Editor</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span><span>Toggle preview pane</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span><span>Toggle diff view</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></span><span>Toggle blame / file history</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></span><span>Toggle line numbers</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Editor Tabs</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>←</kbd> <kbd>→</kbd></span><span>Switch between tabs</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last tab</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Delete</kbd></span><span>Close current tab</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>File Tree</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate files</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>→</kbd></span><span>Expand folder</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>←</kbd></span><span>Collapse folder / go to parent</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file / toggle folder</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Home</kbd> <kbd>End</kbd></span><span>First / last item</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Diff Viewer</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↓</kbd></span><span>Next change</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Alt</kbd>+<kbd>↑</kbd></span><span>Previous change</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>V</kbd></span><span>Toggle unified / split view</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Chat</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Send message</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>New line in chat</span></div>
+                    </div>
+                    <div class="help-group">
+                        <h3>Quick Open</h3>
+                        <div class="help-row"><span class="help-keys"><kbd>↑</kbd> <kbd>↓</kbd></span><span>Navigate results</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Enter</kbd></span><span>Open file (preview)</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span><span>Open file (pinned tab)</span></div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Dynamic doc tabs (loaded on first click) -->
+            <div class="help-tab-content" id="helpTab-plugin-sdk" data-doc="docs/PLUGIN.md"></div>
+            <div class="help-tab-content" id="helpTab-tools" data-doc="docs/TOOLS.md"></div>
+            <div class="help-tab-content" id="helpTab-roles" data-doc="docs/ROLES_AND_TOOLS.md"></div>
+            <div class="help-tab-content" id="helpTab-architecture" data-doc="docs/ARCHITECTURE.md"></div>
+            <div class="help-tab-content" id="helpTab-plan" data-doc="docs/PLAN.md"></div>
         </div>
+
         <div class="modal-footer" style="justify-content: space-between; align-items: center;">
             <a href="https://buymeacoffee.com/jeffasmith" target="_blank" rel="noopener noreferrer"
                style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #FFDD00; color: #000; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600; transition: opacity 0.2s;"

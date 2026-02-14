@@ -26,7 +26,7 @@ server {
     server_name _;
 
     gzip on;
-    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml text/markdown;
     gzip_min_length 256;
     gzip_vary on;
 
@@ -34,6 +34,14 @@ server {
         alias /usr/share/nginx/html/vendor/;
         expires 7d;
         add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Serve docs as text/markdown (not SPA fallback)
+    location ${LOCATION_PATH}docs/ {
+        alias /usr/share/nginx/html/docs/;
+        default_type text/markdown;
+        add_header Cache-Control "no-cache, must-revalidate";
         add_header X-Content-Type-Options "nosniff" always;
     }
 

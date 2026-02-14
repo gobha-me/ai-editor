@@ -2,7 +2,7 @@
 // MODEL MANAGER
 // ============================================
 
-import { State, Storage, Roles, EventBus, ProviderRegistry } from './core.js';
+import { State, Storage, Roles, EventBus, ProviderRegistry, Plugins } from './core.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 import { LLM } from './llm.js';
 import { populateSettingsModelSelects } from './settings-manager.js';
@@ -57,6 +57,7 @@ export function onModelChange(e) {
     Storage.set('settings', State.settings);
     updateModelStatusBar();
     EventBus.emit('model:changed', { modelId: e.target.value });
+    Plugins.runHook('onModelChange', { model: e.target.value });
 }
 
 export function updateModelStatusBar() {

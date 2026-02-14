@@ -1032,6 +1032,194 @@ const BUILTIN_ROLES = [
         name: 'Reviewer',
         icon: '🔍',
         description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.'
+    },
+    {
+        id: 'plugin-dev',
+        name: 'Plugin Developer',
+        icon: '🧩',
+        description: 'Full tool access plus the AI Editor Plugin SDK reference. Use this role when building or debugging plugins.',
+        systemPrompt: `
+=== AI EDITOR PLUGIN SDK REFERENCE ===
+
+You are helping build plugins for AI Editor. Below is the complete API reference.
+
+## PLUGIN REGISTRATION
+
+Bundled plugins (ship with editor — use ES imports):
+\`\`\`javascript
+import { Plugins, EventBus, State, Storage } from '../js/core.js';
+Plugins.register({ id, name, version, description, hooks, defaultEnabled, defaultConfig, configSchema, init, destroy });
+\`\`\`
+
+External plugins (loaded from URL — use window.AIEditor):
+\`\`\`javascript
+const { Plugins, EventBus, State, Storage, Providers, Roles } = window.AIEditor;
+Plugins.register({ ... });
+\`\`\`
+
+Then add import in js/app.js for bundled, or paste URL in Settings → Plugins → Install for external.
+
+## MANIFEST FIELDS
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| id | string | YES | kebab-case unique ID |
+| name | string | YES | Display name |
+| version | string | no | Semver |
+| description | string | no | Short description |
+| defaultEnabled | boolean | no | Default: true |
+| defaultConfig | object | no | Default config values |
+| configSchema | array | no | Auto-generates settings UI |
+| hooks | string[] | no | Hook names to intercept |
+| init | async fn | no | (config) → instance |
+| destroy | async fn | no | (instance) → cleanup |
+
+## HOOKS
+
+Declare in hooks array, implement as method on manifest. All receive (data, instance, config), MUST return data.
+
+**beforeSend** — Before LLM API call:
+\`\`\`javascript
+{ messages: ChatMessage[], model: string, tools: ToolDef[]|null, stream: boolean, maxTokens: number, temperature: number }
+\`\`\`
+Modify messages, model, or tools before they hit the API.
+
+**afterResponse** — After LLM response parsed:
+\`\`\`javascript
+{ content: string, model: string, result: { content, rawContent, toolCalls, finishReason, usage } }
+\`\`\`
+
+**onModelChange** — User switches model:
+\`\`\`javascript
+{ model: string }
+\`\`\`
+
+**resolveIssueConnection** — Issue loaded for triage:
+\`\`\`javascript
+{ issue: Object, connection: Object }
+\`\`\`
+
+## UI REGISTRATION
+
+### Toolbar Buttons
+\`\`\`javascript
+Plugins.registerButton('my-plugin', {
+    icon: '📊', label: 'Dashboard',
+    onClick: () => window.openPluginModal('my-modal-id')
+});
+\`\`\`
+
+### Modal Dialogs
+\`\`\`javascript
+Plugins.registerModal('my-plugin', {
+    id: 'my-modal-id', title: '📊 Dashboard', width: 700,
+    render: (container) => { container.innerHTML = '<div>Content</div>'; }
+});
+\`\`\`
+
+## CONFIG SCHEMA (auto-generates settings UI)
+\`\`\`javascript
+defaultConfig: { apiKey: '', maxResults: 10 },
+configSchema: [
+    { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'Enter key' },
+    { key: 'maxResults', label: 'Max Results', type: 'number' }
+]
+\`\`\`
+Types: text, password, number, select (add options array), textarea, checkbox.
+Config persisted in localStorage under pluginState.
+
+## EVENTBUS EVENTS (subscribe with EventBus.on)
+
+Chat: chat:message, chat:cleared, chat:pruned, chat:editAndResend, chat:stashFlushed
+Editor: editor:change, editor:loaded, editor:loading, editor:created, editor:error, editor:linesReplaced, editor:linesInserted, editor:linesDeleted, editor:editApplied, editor:scrollToLine
+Files: file:opened, file:created, file:deleted, file:renamed, tab:switched, tab:closed
+Git: git:fileUpdated, git:projectLoaded, branch:switch, branch:created, branches:refresh, tree:refresh, context:prMerged
+LLM: llm:generating (bool), model:changed, cost:updated, debug:exchange, debug:exchangeDone
+Plugin: plugin:registered, plugin:initialized, plugin:configChanged, plugin:enabledChanged, plugin:buttonRegistered, plugin:modalRegistered
+Issues: issues:loaded, issue:created, issue:updated
+Conversations: conversation:created, conversation:loaded, conversation:deleted, conversation:renamed
+
+## STATE PROPERTIES (read/write but be careful)
+
+State.currentFile — { path, content, sha }
+State.currentProject — { connectionId, owner, repo }
+State.currentBranch — string
+State.chatHistory — array of { role, content, timestamp }
+State.isGenerating — boolean
+State.scratchpad — key-value persistent notes
+State.settings — { llmModel, llmEndpoint, llmApiKey, apiProvider, role, ... }
+State.models — array of model objects
+State.issues — array of issue objects
+
+## STORAGE
+
+Storage.get(key, defaultValue) / Storage.set(key, value) / Storage.remove(key)
+Namespace keys with plugin ID: Storage.set('my-plugin:cache', data)
+
+## ADDITIONAL REGISTRIES (public but no settings UI integration)
+
+ToolRegistry.register(name, handler, definition) — Add LLM tools. definition needs roles field ('all' or ['coder','pm',...]).
+Providers.register(provider) — Add LLM providers.
+Roles.register({ id, name, icon, description }) — Add custom roles.
+
+## WHAT IS NOT POSSIBLE
+
+- No CSS injection API (can't add themes/styles)
+- No DOM slot injection (SlotManager not implemented)
+- No CodeMirror extension bridge (can't add editor keybindings/syntax)
+- No plugin settings tab slots (only auto-generated configSchema)
+- Settings dropdowns don't auto-discover plugin-registered providers
+
+## EXAMPLE: COMPLETE PLUGIN
+
+\`\`\`javascript
+import { Plugins, EventBus, State, Storage } from '../js/core.js';
+
+const MyPlugin = {
+    id: 'my-plugin',
+    name: 'My Plugin',
+    version: '1.0.0',
+    description: 'Example plugin',
+    defaultEnabled: true,
+    defaultConfig: { greeting: 'Hello' },
+    configSchema: [
+        { key: 'greeting', label: 'Greeting', type: 'text' }
+    ],
+    hooks: ['beforeSend', 'afterResponse'],
+
+    async init(config) {
+        EventBus.on('chat:message', (msg) => {
+            console.log(\`[\${config.greeting}] New \${msg.role} message\`);
+        });
+        Plugins.registerButton('my-plugin', {
+            icon: '👋', label: 'Greet',
+            onClick: () => window.openPluginModal('my-greeting')
+        });
+        Plugins.registerModal('my-plugin', {
+            id: 'my-greeting', title: '👋 Greeting', width: 400,
+            render: (el) => { el.innerHTML = \`<p>\${config.greeting}!</p>\`; }
+        });
+        return { startedAt: Date.now() };
+    },
+
+    async beforeSend(data, instance, config) {
+        // Inject custom system context
+        const sys = data.messages.find(m => m.role === 'system');
+        if (sys) sys.content += \`\\nPlugin greeting: \${config.greeting}\`;
+        return data;
+    },
+
+    async afterResponse(data, instance, config) {
+        console.log(\`Response: \${data.content.length} chars, model: \${data.model}\`);
+        return data;
+    }
+};
+
+Plugins.register(MyPlugin);
+export default MyPlugin;
+\`\`\`
+
+=== END SDK REFERENCE ===`
     }
 ];
 

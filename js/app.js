@@ -132,6 +132,116 @@ function openHelpModal() {
 function closeHelpModal() {
     document.getElementById('helpModal')?.classList.remove('active');
 }
+
+// Help tabs — switch tab and lazy-load markdown docs
+const _helpDocCache = {};
+
+function initHelpTabs() {
+    const tabBar = document.getElementById('helpTabs');
+    if (!tabBar) return;
+
+    tabBar.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-help-tab]');
+        if (!btn) return;
+
+        const tabId = btn.dataset.helpTab;
+
+        // Switch active tab button
+        tabBar.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Switch active content
+        const modal = document.getElementById('helpModal');
+        modal.querySelectorAll('.help-tab-content').forEach(c => c.classList.remove('active'));
+        const panel = document.getElementById(`helpTab-${tabId}`);
+        if (panel) {
+            panel.classList.add('active');
+            // Lazy-load doc if this tab has a data-doc attribute
+            const docPath = panel.dataset.doc;
+            if (docPath && !panel.dataset.loaded) {
+                _loadHelpDoc(panel, docPath);
+            }
+        }
+    });
+
+    // Arrow visibility on scroll
+    tabBar.addEventListener('scroll', _updateHelpTabArrows);
+    // Check on open too
+    const observer = new MutationObserver(() => {
+        if (document.getElementById('helpModal')?.classList.contains('active')) {
+            _updateHelpTabArrows();
+        }
+    });
+    observer.observe(document.getElementById('helpModal'), { attributes: true, attributeFilter: ['class'] });
+}
+
+function _updateHelpTabArrows() {
+    const container = document.getElementById('helpTabs');
+    if (!container) return;
+    const nav = container.closest('.settings-tabs-nav');
+    if (!nav) return;
+
+    const leftBtn = nav.querySelector('.settings-tabs-arrow-left');
+    const rightBtn = nav.querySelector('.settings-tabs-arrow-right');
+    if (!leftBtn || !rightBtn) return;
+
+    leftBtn.classList.toggle('visible', container.scrollLeft > 1);
+    rightBtn.classList.toggle('visible', container.scrollLeft < (container.scrollWidth - container.clientWidth - 1));
+}
+
+window.scrollHelpTabs = function(direction) {
+    const container = document.getElementById('helpTabs');
+    if (!container) return;
+    const step = container.clientWidth * 0.6;
+    container.scrollBy({ left: direction * step, behavior: 'smooth' });
+    setTimeout(_updateHelpTabArrows, 350);
+};
+
+async function _loadHelpDoc(panel, docPath) {
+    // Check cache first
+    if (_helpDocCache[docPath]) {
+        panel.innerHTML = `<div class="help-doc-content">${_helpDocCache[docPath]}</div>`;
+        panel.dataset.loaded = '1';
+        return;
+    }
+
+    panel.innerHTML = '<div class="help-doc-loading">Loading documentation…</div>';
+
+    try {
+        // Fetch relative — <base href> injected by entrypoint handles sub-path resolution
+        const resp = await fetch(docPath);
+        if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+
+        // Guard: if nginx returns index.html as SPA fallback (docs not in image),
+        // the Content-Type will be text/html instead of text/plain or text/markdown
+        const ct = resp.headers.get('content-type') || '';
+        const md = await resp.text();
+        if (ct.includes('text/html') || md.trimStart().startsWith('<!') || md.trimStart().startsWith('<html')) {
+            throw new Error('Doc file not found — rebuild the Docker image to include docs/');
+        }
+
+        // Render markdown (marked.js is always available — bundled in vendor)
+        let html;
+        if (typeof marked !== 'undefined') {
+            html = DOMPurify.sanitize(marked.parse(md, { breaks: true, gfm: true }));
+        } else {
+            // Fallback: preformatted text
+            html = `<pre>${md.replace(/</g, '&lt;')}</pre>`;
+        }
+
+        _helpDocCache[docPath] = html;
+        panel.innerHTML = `<div class="help-doc-content">${html}</div>`;
+        panel.dataset.loaded = '1';
+    } catch (err) {
+        console.warn(`[Help] Failed to load ${docPath}:`, err.message);
+        panel.innerHTML = `<div class="help-doc-error">Could not load ${docPath}<br><small>${err.message}</small></div>`;
+    }
+}
+
+// Expose for window + export for read_docs tool
+window._helpDocCache = _helpDocCache;
+window._loadHelpDoc = _loadHelpDoc;
+
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
 
@@ -839,6 +949,7 @@ async function init() {
     initSessionListeners();
     initSidebarCollapse();
     initSidebarSectionResize();
+    initHelpTabs();
 
     // ── Parallel init: git + LLM + editor load concurrently ──
     // Git provider outage must NOT block LLM or editor loading.
