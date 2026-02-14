@@ -1,15 +1,21 @@
+# .gitea/workflows/ci.yaml
 # ============================================
-# AI Editor - CI/CD Pipeline
+# AI Editor - CI/CD Pipeline (Template-Based)
 # ============================================
-# Trigger matrix:
-#   PR opened/synced  → build :dev   → deploy ai-editor-dev
-#   Push to main      → build :test  → deploy ai-editor-test
-#   Tag v*            → build :latest + :vX.Y.Z → deploy ai-editor
-#                       + push to Docker Hub (gobha/ai-editor)
+# Deployment mapping:
+#   PR opened/synced  → build :dev     → deploy ai-editor-dev     → editor.gobha.ai/dev
+#   Push to main      → build :test    → deploy ai-editor-test    → editor.gobha.ai/test
+#   Tag v*            → build :latest  → deploy ai-editor         → editor.gobha.ai/
+#                       + :vX.Y.Z tag  → push to Docker Hub
 #
-# Secrets (repo → Settings → Actions → Secrets):
-#   DOCKERHUB_USERNAME  — Docker Hub username
-#   DOCKERHUB_TOKEN     — Docker Hub access token (Read & Write)
+# Required Gitea Variables (Settings → Actions → Variables):
+#   REGISTRY      — e.g. registry.gobha.me:5000
+#   NAMESPACE     — e.g. gobha-ai-editor
+#   DOMAIN        — e.g. editor.gobha.ai
+#   CERT_ISSUER   — e.g. letsencrypt-prod
+#
+# Optional Secrets (Settings → Actions → Secrets):
+#   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
 # ============================================
 
 name: CI/CD
@@ -26,16 +32,16 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: registry.gobha.me:5000
-  IMAGE_NAME: xcaliber/ai-editor
-  DOCKERHUB_IMAGE: gobha/ai-editor
+  REGISTRY: ${{ vars.REGISTRY }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME || 'xcaliber/ai-editor' }}
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'gobha/ai-editor' }}
+  NAMESPACE: ${{ vars.NAMESPACE }}
+  DOMAIN: ${{ vars.DOMAIN }}
+  CERT_ISSUER: ${{ vars.CERT_ISSUER_PROD || 'letsencrypt-prod' }}
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # Guard: only run for PR events, pushes to main, or version tags.
-    # Prevents duplicate runs when Gitea fires both push + pull_request
-    # for the same commit on a PR branch.
     if: >
       gitea.event_name == 'pull_request' ||
       gitea.ref == 'refs/heads/main' ||
@@ -43,92 +49,164 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
+      - name: Add /tools to PATH
+        run: echo "/tools" >> $GITHUB_PATH
+        
+      - name: Install envsubst
+        run: apt-get update -qq && apt-get install -y -qq gettext-base > /dev/null
+        
       - name: Determine environment
         id: env
         run: |
           if [[ "${{ gitea.event_name }}" == "pull_request" ]]; then
-            echo "tag=dev" >> "$GITHUB_OUTPUT"
-            echo "deployment=ai-editor-dev" >> "$GITHUB_OUTPUT"
-            echo "base_path=/dev" >> "$GITHUB_OUTPUT"
-            echo "env_name=dev" >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT=dev"         >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=dev"           >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_NAME=ai-editor-dev" >> "$GITHUB_OUTPUT"
+            echo "BASE_PATH=/dev"          >> "$GITHUB_OUTPUT"
+            echo "PROBE_PATH=/dev/"        >> "$GITHUB_OUTPUT"
+            echo "REPLICAS=1"              >> "$GITHUB_OUTPUT"
+            echo "MEMORY_REQUEST=128Mi"    >> "$GITHUB_OUTPUT"
+            echo "MEMORY_LIMIT=256Mi"      >> "$GITHUB_OUTPUT"
+            echo "CPU_REQUEST=50m"         >> "$GITHUB_OUTPUT"
+            echo "CPU_LIMIT=250m"          >> "$GITHUB_OUTPUT"
+            echo "env_name=dev (PR #${{ gitea.event.pull_request.number }})" >> "$GITHUB_OUTPUT"
           elif [[ "${{ gitea.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ gitea.ref_name }}"
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-            echo "extra_tag=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "deployment=ai-editor" >> "$GITHUB_OUTPUT"
-            echo "base_path=/" >> "$GITHUB_OUTPUT"
-            echo "env_name=production" >> "$GITHUB_OUTPUT"
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT=production"  >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=latest"        >> "$GITHUB_OUTPUT"
+            echo "EXTRA_TAG=${VERSION}"    >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_NAME=ai-editor"   >> "$GITHUB_OUTPUT"
+            echo "BASE_PATH=/"             >> "$GITHUB_OUTPUT"
+            echo "PROBE_PATH=/"            >> "$GITHUB_OUTPUT"
+            echo "REPLICAS=2"              >> "$GITHUB_OUTPUT"
+            echo "MEMORY_REQUEST=256Mi"    >> "$GITHUB_OUTPUT"
+            echo "MEMORY_LIMIT=512Mi"      >> "$GITHUB_OUTPUT"
+            echo "CPU_REQUEST=100m"        >> "$GITHUB_OUTPUT"
+            echo "CPU_LIMIT=500m"          >> "$GITHUB_OUTPUT"
+            echo "is_release=true"         >> "$GITHUB_OUTPUT"
+            echo "env_name=production"     >> "$GITHUB_OUTPUT"
           else
-            # Push to main
-            echo "tag=test" >> "$GITHUB_OUTPUT"
-            echo "deployment=ai-editor-test" >> "$GITHUB_OUTPUT"
-            echo "base_path=/test" >> "$GITHUB_OUTPUT"
-            echo "env_name=test" >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT=test"        >> "$GITHUB_OUTPUT"
+            echo "IMAGE_TAG=test"          >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_NAME=ai-editor-test" >> "$GITHUB_OUTPUT"
+            echo "BASE_PATH=/test"         >> "$GITHUB_OUTPUT"
+            echo "PROBE_PATH=/test/"       >> "$GITHUB_OUTPUT"
+            echo "REPLICAS=1"              >> "$GITHUB_OUTPUT"
+            echo "MEMORY_REQUEST=128Mi"    >> "$GITHUB_OUTPUT"
+            echo "MEMORY_LIMIT=256Mi"      >> "$GITHUB_OUTPUT"
+            echo "CPU_REQUEST=50m"         >> "$GITHUB_OUTPUT"
+            echo "CPU_LIMIT=250m"          >> "$GITHUB_OUTPUT"
+            echo "env_name=test (main)"    >> "$GITHUB_OUTPUT"
           fi
 
+      # ── Build & Push to Internal Registry ──────
       - name: Build image
         run: |
-          echo "Building ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}"
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }} .
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Building ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.IMAGE_TAG }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          docker build -t ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.IMAGE_TAG }} .
 
       - name: Tag release version
-        if: steps.env.outputs.extra_tag != ''
+        if: steps.env.outputs.EXTRA_TAG != ''
         run: |
           docker tag \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }}
+            ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.IMAGE_TAG }} \
+            ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.EXTRA_TAG }}
 
-      - name: Push image
+      - name: Push to internal registry
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}
-          if [[ -n "${{ steps.env.outputs.extra_tag }}" ]]; then
-            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }}
+          docker push ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.IMAGE_TAG }}
+          if [[ -n "${{ steps.env.outputs.EXTRA_TAG }}" ]]; then
+            docker push ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.EXTRA_TAG }}
           fi
 
-      # ── Docker Hub (release tags only) ──────────
+      # ── Docker Hub (release only) ───────────────
       - name: Login to Docker Hub
-        if: steps.env.outputs.is_release == 'true'
+        if: steps.env.outputs.is_release == 'true' && secrets.DOCKERHUB_TOKEN != ''
         run: |
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
             docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Tag for Docker Hub
-        if: steps.env.outputs.is_release == 'true'
-        run: |
-          docker tag \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.DOCKERHUB_IMAGE }}:latest
-          docker tag \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.extra_tag }} \
-            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}
-
       - name: Push to Docker Hub
-        if: steps.env.outputs.is_release == 'true'
+        if: steps.env.outputs.is_release == 'true' && secrets.DOCKERHUB_TOKEN != ''
         run: |
-          docker push ${{ env.DOCKERHUB_IMAGE }}:latest
-          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}
+          docker tag ${REGISTRY}/${IMAGE_NAME}:latest ${DOCKERHUB_IMAGE}:latest
+          docker tag ${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.EXTRA_TAG }} ${DOCKERHUB_IMAGE}:${{ steps.env.outputs.EXTRA_TAG }}
+          docker push ${DOCKERHUB_IMAGE}:latest
+          docker push ${DOCKERHUB_IMAGE}:${{ steps.env.outputs.EXTRA_TAG }}
 
-      # ── Deploy to cluster ───────────────────────
-      - name: Deploy to cluster
-        continue-on-error: true
+      # ── Deploy to Kubernetes ────────────────────
+      - name: Ensure namespace exists
         run: |
-          DEPLOY="${{ steps.env.outputs.deployment }}"
-          TAG="${{ steps.env.outputs.tag }}"
-          echo "Deploying ${DEPLOY} with image tag :${TAG}"
-          kubectl set image deployment/${DEPLOY} \
-            ai-editor=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}
-          kubectl rollout restart deployment/${DEPLOY}
-          kubectl rollout status deployment/${DEPLOY} --timeout=120s
+          kubectl create namespace ${NAMESPACE} 2>/dev/null || true
+          kubectl label namespace ${NAMESPACE} \
+            service=ai-editor \
+            managed-by=gitea-actions \
+            domain=${DOMAIN} \
+            --overwrite
+
+      - name: Render manifest
+        env:
+          ENVIRONMENT: ${{ steps.env.outputs.ENVIRONMENT }}
+          IMAGE_TAG: ${{ steps.env.outputs.IMAGE_TAG }}
+          DEPLOY_NAME: ${{ steps.env.outputs.DEPLOY_NAME }}
+          BASE_PATH: ${{ steps.env.outputs.BASE_PATH }}
+          PROBE_PATH: ${{ steps.env.outputs.PROBE_PATH }}
+          REPLICAS: ${{ steps.env.outputs.REPLICAS }}
+          MEMORY_REQUEST: ${{ steps.env.outputs.MEMORY_REQUEST }}
+          MEMORY_LIMIT: ${{ steps.env.outputs.MEMORY_LIMIT }}
+          CPU_REQUEST: ${{ steps.env.outputs.CPU_REQUEST }}
+          CPU_LIMIT: ${{ steps.env.outputs.CPU_LIMIT }}
+        run: |
+          envsubst < k8s/deployment.yaml > /tmp/manifest.yaml
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Rendered manifest for ${ENVIRONMENT}:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          cat /tmp/manifest.yaml
+
+      - name: Apply and rollout
+        run: |
+          DEPLOY="${{ steps.env.outputs.DEPLOY_NAME }}"
+
+          kubectl apply -f /tmp/manifest.yaml
+          kubectl rollout restart deployment/${DEPLOY} -n ${NAMESPACE}
+          kubectl rollout status deployment/${DEPLOY} -n ${NAMESPACE} --timeout=180s
+
+      - name: Verify
+        run: |
+          DEPLOY="${{ steps.env.outputs.DEPLOY_NAME }}"
+          ENV="${{ steps.env.outputs.ENVIRONMENT }}"
+
+          kubectl get pods -n ${NAMESPACE} -l app=ai-editor,env=${ENV}
+
+          READY=$(kubectl get deployment ${DEPLOY} -n ${NAMESPACE} -o jsonpath='{.status.readyReplicas}')
+          DESIRED=$(kubectl get deployment ${DEPLOY} -n ${NAMESPACE} -o jsonpath='{.spec.replicas}')
+
+          if [[ "${READY}" == "${DESIRED}" ]] && [[ "${READY}" -gt 0 ]]; then
+            echo "✅ Healthy: ${READY}/${DESIRED} pods ready"
+          else
+            echo "❌ Unhealthy: ${READY:-0}/${DESIRED} pods ready"
+            kubectl describe deployment ${DEPLOY} -n ${NAMESPACE}
+            kubectl logs -n ${NAMESPACE} -l app=ai-editor,env=${ENV} --tail=50
+            exit 1
+          fi
 
       - name: Summary
         run: |
+          URL="https://${DOMAIN}${{ steps.env.outputs.BASE_PATH }}"
+
           echo "## ✅ Deployed to ${{ steps.env.outputs.env_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.env.outputs.is_release }}" == "true" ]]; then
-            echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE }}:${{ steps.env.outputs.extra_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Namespace** | \`${NAMESPACE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployment** | \`${{ steps.env.outputs.DEPLOY_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${REGISTRY}/${IMAGE_NAME}:${{ steps.env.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | ${URL} |" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.env.outputs.is_release }}" == "true" ]] && [[ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
+            echo "| **Docker Hub** | \`${DOCKERHUB_IMAGE}:${{ steps.env.outputs.EXTRA_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- **Deployment:** \`${{ steps.env.outputs.deployment }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **BASE_PATH:** \`${{ steps.env.outputs.base_path }}\`" >> $GITHUB_STEP_SUMMARY

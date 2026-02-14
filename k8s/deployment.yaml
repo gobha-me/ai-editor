@@ -1,0 +1,122 @@
+# k8s/deployment.yaml
+# ============================================
+# AI Editor - Kubernetes Deployment Template
+# ============================================
+# Variables substituted by CI/CD via envsubst:
+#   DEPLOY_NAME    - Deployment name (ai-editor, ai-editor-dev, ai-editor-test)
+#   ENVIRONMENT    - production, dev, or test
+#   IMAGE_TAG      - Container image tag
+#   BASE_PATH      - URL base path (/, /dev, /test)
+#   PROBE_PATH     - Health check path (must return 200, not 301)
+#   REPLICAS       - Number of pod replicas
+#   NAMESPACE      - Kubernetes namespace
+#   REGISTRY       - Container registry URL
+#   IMAGE_NAME     - Image name in registry
+#   DOMAIN         - Public domain
+#   CERT_ISSUER    - cert-manager ClusterIssuer name
+#   MEMORY_REQUEST, MEMORY_LIMIT, CPU_REQUEST, CPU_LIMIT
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${DEPLOY_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ai-editor
+    env: ${ENVIRONMENT}
+    service: ai-editor
+spec:
+  replicas: ${REPLICAS}
+  selector:
+    matchLabels:
+      app: ai-editor
+      env: ${ENVIRONMENT}
+  template:
+    metadata:
+      labels:
+        app: ai-editor
+        env: ${ENVIRONMENT}
+        service: ai-editor
+    spec:
+      containers:
+      - name: ai-editor
+        image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: BASE_PATH
+          value: "${BASE_PATH}"
+        - name: ENVIRONMENT
+          value: "${ENVIRONMENT}"
+        resources:
+          requests:
+            memory: "${MEMORY_REQUEST}"
+            cpu: "${CPU_REQUEST}"
+          limits:
+            memory: "${MEMORY_LIMIT}"
+            cpu: "${CPU_LIMIT}"
+        livenessProbe:
+          httpGet:
+            path: ${PROBE_PATH}
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: ${PROBE_PATH}
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${DEPLOY_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ai-editor
+    env: ${ENVIRONMENT}
+spec:
+  selector:
+    app: ai-editor
+    env: ${ENVIRONMENT}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+    name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${DEPLOY_NAME}
+  namespace: ${NAMESPACE}
+  annotations:
+    cert-manager.io/cluster-issuer: "${CERT_ISSUER}"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  labels:
+    app: ai-editor
+    env: ${ENVIRONMENT}
+spec:
+  ingressClassName: "traefik"
+  tls:
+  - hosts:
+    - ${DOMAIN}
+    secretName: ai-editor-tls
+  rules:
+  - host: "${DOMAIN}"
+    http:
+      paths:
+      - path: ${BASE_PATH}
+        pathType: Prefix
+        backend:
+          service:
+            name: ${DEPLOY_NAME}
+            port:
+              number: 80
