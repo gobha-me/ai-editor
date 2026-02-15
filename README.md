@@ -23,13 +23,15 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 
 **Three-panel layout** — file browser, CodeMirror 6 editor, AI chat — with everything stored in your Git host. No separate database, no cloud sync, no accounts.
 
-**The AI assistant has 25+ tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; and cross-project reference. It makes surgical line-based edits in your buffer — you review before committing.
+**The AI assistant has 28 tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; and cross-project reference. It makes surgical line-based edits in your buffer — you review before committing.
 
 **Multi-provider Git** — Gitea, GitHub, and GitLab connections, multiple active simultaneously. Your self-hosted Gitea and your GitHub repos side by side.
 
 **Multi-provider LLM** — Venice, OpenRouter, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings.
 
 **Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, and configurable settings. Install from URL or bundle locally. See [docs/PLUGIN.md](docs/PLUGIN.md).
+
+**Mobile responsive** — full mobile layout with bottom tab bar, swipe gestures, soft keyboard detection, and PWA support.
 
 ## Features
 
@@ -53,7 +55,7 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 - Zip upload with batch commit (atomic)
 
 ### AI Assistant
-- 25+ LLM tools organized by category
+- 28 LLM tools organized by category
 - `scan_file` / `read_function` for token-efficient reads
 - Cross-project reference (`peek_project_tree`, `peek_project_file`)
 - Multi-file editing (`edit_file`, `write_file`) without manual open
@@ -64,6 +66,19 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 - Role-based tool filtering
 - Edit tracker (detects stale line numbers)
 - LLM debug modal for inspecting raw requests
+
+### Accessibility
+- Full keyboard navigation for file tree, editor tabs, and settings
+- ARIA roles, roving tabindex, aria-expanded sync
+- Screen reader announcer
+- `prefers-reduced-motion` support
+
+### Mobile
+- Bottom tab bar with panel switching (Files / Editor / Chat)
+- Swipe gestures between panels
+- Soft keyboard detection with layout adjustment
+- Touch-friendly targets (≥44px)
+- PWA meta tags for home screen install
 
 ### Plugins
 - Lifecycle hooks: `beforeSend`, `afterResponse`, `onModelChange`
@@ -171,8 +186,8 @@ ai-editor/
 │   ├── chat/               # Chat subsystem (8 modules)
 │   ├── git-providers/      # Gitea, GitHub, GitLab backends
 │   ├── providers/          # LLM provider configs
-│   ├── tools/              # 25+ LLM tool definitions
-│   ├── settings/           # Settings panel modules
+│   ├── tools/              # 28 LLM tool definitions
+│   ├── settings/           # Settings panel modules (7 files)
 │   └── ...                 # Editor, search, diff, resize, etc.
 ├── plugins/                # Bundled plugins
 ├── docs/                   # Architecture, tools, plugin guide
@@ -180,6 +195,14 @@ ai-editor/
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full module map and data flow.
+
+## Built With AI
+
+The vast majority of this codebase was written by [Claude Opus 4.6](https://www.anthropic.com/), Anthropic's AI assistant. The human ([Jeff Smith](https://github.com/gobha-me)) served as architect, engineer, and tester — setting direction, making architectural decisions, reviewing every change, and testing in the browser. Claude wrote the code.
+
+This project was built over ~11 days of evening sessions through claude.ai's chat interface. The development process is documented in detail in [this Medium article](https://medium.com/@xcaliberalgo/i-built-a-30-000-line-code-editor-in-11-days-my-co-developer-was-an-ai-f2bef1b4ecc6).
+
+We believe in transparency about AI-assisted development. This is how software is increasingly going to be built, and pretending otherwise does everyone a disservice.
 
 ## License
 
