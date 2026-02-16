@@ -3,7 +3,7 @@
 // ============================================
 
 import { State } from './core.js';
-import { getFileIcon, isTextFile } from './editor.js';
+import { getFileIcon, isBinaryFile, looksLikeText } from './editor.js';
 import { loadFile, Git } from './git.js';
 import { createEditor } from './editor.js';
 import { renderEditorTabs } from './tab-manager.js';
@@ -173,8 +173,8 @@ export async function onTreeItemClick(path, type, isDoubleClick = false) {
         return;
     }
 
-    // Check if it's a text file
-    if (!isTextFile(path)) {
+    // Block known binary files (images, archives, compiled, etc.)
+    if (isBinaryFile(path)) {
         window.showToast('Cannot edit binary files', 'warning');
         return;
     }
@@ -211,6 +211,13 @@ export async function onTreeItemClick(path, type, isDoubleClick = false) {
             // Load the file from remote (async operation)
             console.log('[LOAD] Loading file from remote...');
             await loadFile(path);
+
+            // Post-load binary content sniff for files with unrecognised extensions
+            if (!looksLikeText(State.currentFile.content)) {
+                console.warn('[LOAD] Content sniff detected binary data for', path);
+                window.showToast('File appears to contain binary data', 'warning');
+                return;
+            }
             
             // Store the original (server) content for revert — NOT the draft
             const originalContent = State.currentFile.content;

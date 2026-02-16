@@ -39,7 +39,7 @@ export {
 } from './editor/instance.js';
 
 // File utilities
-export { isTextFile, getFileIcon } from './editor/file-utils.js';
+export { isTextFile, isBinaryFile, looksLikeText, getFileIcon } from './editor/file-utils.js';
 
 // Diff utilities
 export { computeSimpleDiff, formatDiffForDisplay } from './editor/diff.js';
