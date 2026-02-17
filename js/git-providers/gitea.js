@@ -12,6 +12,7 @@
 
 import { EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
+import { circuitBreakerGuard, markReachable, markUnreachable } from './base.js';
 
 // ============================================
 // ENCODING UTILITIES (shared)
@@ -65,6 +66,9 @@ const giteaProvider = {
     REQUEST_TIMEOUT: 15000,
 
     async request(connection, method, endpoint, data = null) {
+        // Circuit breaker: short-circuit if connection is down and cooldown active
+        circuitBreakerGuard(connection);
+
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
@@ -89,24 +93,15 @@ const giteaProvider = {
             }
 
             // Connection is healthy — emit recovery if previously down
-            if (connection._unreachable) {
-                connection._unreachable = false;
-                EventBus.emit('git:connectionRestored', { connectionId: connection.id, provider: 'gitea' });
-                console.log(`[Gitea] Connection restored: ${connection.url}`);
-            }
+            markReachable(connection, 'gitea');
 
             const text = await response.text();
             return text ? JSON.parse(text) : null;
         } catch (error) {
-            if (!error.status) {
+            if (!error.status && !error.circuitOpen) {
                 error.url = url;
                 error.endpoint = endpoint;
-                // Mark connection unreachable on network errors
-                if (!connection._unreachable) {
-                    connection._unreachable = true;
-                    EventBus.emit('git:connectionLost', { connectionId: connection.id, provider: 'gitea', error: error.message });
-                    console.warn(`[Gitea] Connection unreachable: ${connection.url} — ${error.message}`);
-                }
+                markUnreachable(connection, 'gitea', error.message);
             }
             throw error;
         }

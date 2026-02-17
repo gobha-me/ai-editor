@@ -539,3 +539,79 @@ const BASE_GIT_PROVIDER = {
 };
 
 export { BASE_GIT_PROVIDER };
+
+// ============================================
+// CIRCUIT BREAKER
+// ============================================
+
+/**
+ * Cooldown period (ms) before allowing a probe request to a downed connection.
+ * During cooldown, all requests short-circuit with an error — no network hit.
+ */
+const CIRCUIT_COOLDOWN_MS = 60_000;
+
+/**
+ * Guard to call at the top of every provider's request() method.
+ * Throws immediately if the circuit is open and cooldown hasn't expired.
+ * Returns true if this is a probe request (cooldown expired, testing recovery).
+ *
+ * @param {object} connection
+ * @returns {boolean} isProbe — true if this request is a recovery probe
+ * @throws {Error} if circuit is open and cooldown is active
+ */
+export function circuitBreakerGuard(connection) {
+    if (!connection._unreachable) return false;
+    if (connection._forceRetry) {
+        // Force-retry flag: clear it and let the request through
+        delete connection._forceRetry;
+        return true;
+    }
+    const elapsed = Date.now() - (connection._unreachableAt || 0);
+    if (elapsed < CIRCUIT_COOLDOWN_MS) {
+        const remainSec = Math.ceil((CIRCUIT_COOLDOWN_MS - elapsed) / 1000);
+        const err = new Error(`Connection offline (retry in ${remainSec}s)`);
+        err.circuitOpen = true;
+        throw err;
+    }
+    // Cooldown expired — allow one probe request through
+    return true;
+}
+
+/**
+ * Mark a connection as unreachable with a timestamp.
+ * @param {object} connection
+ * @param {string} provider — provider id for the event
+ * @param {string} errorMsg
+ */
+export function markUnreachable(connection, provider, errorMsg) {
+    if (!connection._unreachable) {
+        connection._unreachable = true;
+        connection._unreachableAt = Date.now();
+        // Lazy import to avoid circular deps
+        import('../core.js').then(({ EventBus }) => {
+            EventBus.emit('git:connectionLost', {
+                connectionId: connection.id, provider, error: errorMsg
+            });
+        });
+        console.warn(`[${provider}] Connection unreachable: ${connection.url} — ${errorMsg}`);
+    } else {
+        // Update timestamp on repeated failures (extends cooldown)
+        connection._unreachableAt = Date.now();
+    }
+}
+
+/**
+ * Mark a connection as restored.
+ * @param {object} connection
+ * @param {string} provider
+ */
+export function markReachable(connection, provider) {
+    if (connection._unreachable) {
+        connection._unreachable = false;
+        delete connection._unreachableAt;
+        import('../core.js').then(({ EventBus }) => {
+            EventBus.emit('git:connectionRestored', { connectionId: connection.id, provider });
+        });
+        console.log(`[${provider}] Connection restored: ${connection.url}`);
+    }
+}

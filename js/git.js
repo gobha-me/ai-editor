@@ -94,6 +94,22 @@ const Git = {
     },
 
     /**
+     * Force-retry all downed connections on next request.
+     * Bypasses circuit breaker cooldown.
+     */
+    forceRetryAll() {
+        GitProviderRegistry.forceRetryAll();
+    },
+
+    /**
+     * Get IDs of connections currently marked unreachable.
+     * @returns {string[]}
+     */
+    getDownConnectionIds() {
+        return GitProviderRegistry.getDownConnectionIds();
+    },
+
+    /**
      * List repos from a specific connection.
      */
     async listRepos(connectionId) {

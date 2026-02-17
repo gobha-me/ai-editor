@@ -9,10 +9,16 @@ import { escapeHtml, escapeAttr } from './utils/html.js';
 
 export async function refreshProjects() {
     try {
+        // Bypass circuit breaker cooldown so manual refresh always tries the network
+        Git.forceRetryAll();
+
         const { repos, errors } = await Git.listAllRepos();
         const select = document.getElementById('projectSelect');
         select.innerHTML = '<option value="">Select a project...</option>';
-        
+
+        // Collect IDs of connections that are still down after the retry
+        const downIds = new Set(Git.getDownConnectionIds());
+
         // Group repos by connection for the optgroup UI
         const grouped = new Map();
         repos.forEach(repo => {
@@ -26,12 +32,20 @@ export async function refreshProjects() {
             grouped.get(key).repos.push(repo);
         });
 
+        // Add stub groups for connections that returned zero repos because they're down
+        for (const err of errors) {
+            if (!grouped.has(err.connectionId)) {
+                grouped.set(err.connectionId, {
+                    label: `${err.connectionId}`,
+                    repos: []
+                });
+            }
+        }
+
         // Single connection: flat list. Multiple: optgroups.
-        if (grouped.size <= 1) {
+        if (grouped.size <= 1 && downIds.size === 0) {
             repos.forEach(repo => {
                 const option = document.createElement('option');
-                // Encode connectionId into the value so onProjectChange can extract it
-                // Use :: delimiter because owner can contain / (GitLab nested groups)
                 option.value = `${repo.connectionId}::${repo.owner}::${repo.name}`;
                 option.textContent = repo.fullName;
                 select.appendChild(option);
@@ -39,7 +53,10 @@ export async function refreshProjects() {
         } else {
             for (const [connId, group] of grouped) {
                 const optgroup = document.createElement('optgroup');
-                optgroup.label = group.label;
+                const isDown = downIds.has(connId);
+                optgroup.label = isDown
+                    ? `⚠️ ${group.label} — OFFLINE`
+                    : group.label;
                 group.repos.forEach(repo => {
                     const option = document.createElement('option');
                     option.value = `${repo.connectionId}::${repo.owner}::${repo.name}`;
@@ -59,9 +76,11 @@ export async function refreshProjects() {
 
         if (errors.length > 0) {
             console.warn('Some connections failed to load repos:', errors);
+            const downCount = errors.length;
+            window.showToast(`Loaded ${repos.length} projects (${downCount} connection${downCount > 1 ? 's' : ''} offline)`, 'warning');
+        } else {
+            window.showToast(`Loaded ${repos.length} projects`, 'success');
         }
-
-        window.showToast(`Loaded ${repos.length} projects`, 'success');
     } catch (error) {
         console.error('Failed to load projects:', error);
         window.showToast('Failed to load projects. Check connection settings.', 'error');

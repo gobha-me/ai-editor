@@ -18,6 +18,7 @@
  */
 
 import { EventBus } from '../core.js';
+import { circuitBreakerGuard, markReachable, markUnreachable } from './base.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -98,6 +99,9 @@ const gitlabProvider = {
     REQUEST_TIMEOUT: 15000,
 
     async request(connection, method, endpoint, data = null) {
+        // Circuit breaker: short-circuit if connection is down and cooldown active
+        circuitBreakerGuard(connection);
+
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
@@ -139,21 +143,15 @@ const gitlabProvider = {
                 throw err;
             }
 
-            if (connection._unreachable) {
-                connection._unreachable = false;
-                EventBus.emit('git:connectionRestored', { connectionId: connection.id, provider: 'gitlab' });
-            }
+            markReachable(connection, 'gitlab');
 
             const text = await response.text();
             return text ? JSON.parse(text) : null;
         } catch (error) {
-            if (!error.status) {
+            if (!error.status && !error.circuitOpen) {
                 error.url = url;
                 error.endpoint = endpoint;
-                if (!connection._unreachable) {
-                    connection._unreachable = true;
-                    EventBus.emit('git:connectionLost', { connectionId: connection.id, provider: 'gitlab', error: error.message });
-                }
+                markUnreachable(connection, 'gitlab', error.message);
             }
             throw error;
         }

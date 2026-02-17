@@ -14,6 +14,7 @@ import { State, Roles } from './core.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { ContextManager } from './context-manager.js';
 import { getCursorContext } from './editor.js';
+import { isConnectionDown } from './offline-indicator.js';
 
 // ============================================
 // EDITOR-SPECIFIC PROMPTS
@@ -289,6 +290,17 @@ function buildSystemPrompt() {
 
     // Inject live cursor / selection context from the editor
     prompt += buildCursorPrompt();
+
+    // Inject offline warning if the active project's git connection is down
+    if (State.currentProject?.connectionId && isConnectionDown(State.currentProject.connectionId)) {
+        prompt += `\n\n--- GIT PROVIDER OFFLINE ---`;
+        prompt += `\nThe git provider for the current project is unreachable. All git operations (read_file, write_file, search_replace, commit_files, etc.) will fail.`;
+        prompt += `\nYou can still help with:`;
+        prompt += `\n- Explaining code already visible in the editor`;
+        prompt += `\n- Answering questions from the conversation context`;
+        prompt += `\n- Planning and discussing approach`;
+        prompt += `\nSuggest the user check their network or git provider status, or click Refresh Projects to retry.`;
+    }
 
     return prompt;
 }

@@ -198,7 +198,8 @@ const GitProviderRegistry = {
                     connectionId: conn.id,
                     connectionLabel: conn.label,
                     providerIcon: provider.icon,
-                    providerId: provider.id
+                    providerId: provider.id,
+                    _unreachable: false
                 }));
             } catch (err) {
                 console.warn(`[GitProviders] Failed to list repos for ${conn.label}:`, err);
@@ -213,6 +214,27 @@ const GitProviderRegistry = {
         }
 
         return { repos: results, errors };
+    },
+
+    /**
+     * Set _forceRetry on all connections so the next request
+     * bypasses the circuit breaker cooldown. Called by the
+     * Refresh Projects button.
+     */
+    forceRetryAll() {
+        for (const conn of _connections) {
+            if (conn._unreachable) {
+                conn._forceRetry = true;
+            }
+        }
+    },
+
+    /**
+     * Get a list of connection IDs that are currently unreachable.
+     * @returns {string[]}
+     */
+    getDownConnectionIds() {
+        return _connections.filter(c => c._unreachable).map(c => c.id);
     },
 
     // ========================================
