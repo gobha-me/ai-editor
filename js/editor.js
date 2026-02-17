@@ -21,6 +21,7 @@ export {
     setContent,
     getContent,
     getSelection,
+    getCursorContext,
     replaceSelection,
     insertAtCursor,
     goToLine,

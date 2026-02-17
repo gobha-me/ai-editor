@@ -14,6 +14,13 @@ import { showToast } from '../ui-helpers.js';
 
 export function openNewFileModal() {
     document.getElementById('newFileModal').classList.add('active');
+    const input = document.getElementById('newFileName');
+    input.value = '';
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); createNewFile(); }
+        if (e.key === 'Escape') { e.preventDefault(); closeNewFileModal(); }
+    };
+    requestAnimationFrame(() => input.focus());
 }
 
 export function closeNewFileModal() {
@@ -33,6 +40,7 @@ export async function createNewFile() {
     try {
         await Git.createFile(owner, repo, path, '', `Create ${path}`, State.currentBranch);
         
+        EventBus.emit('fs:created', { path, branch: State.currentBranch });
         EventBus.emit('tree:refresh');
         
         closeNewFileModal();

@@ -36,6 +36,7 @@ import {
 import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush } from './ui/commit.js';
 import { openNewBranchModal, closeNewBranchModal, createNewBranch } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-create.js';
+import { openRenameModal, closeRenameModal, submitRename } from './ui/file-rename.js';
 import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
 import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease } from './release-manager.js';
 import { 
@@ -290,6 +291,10 @@ window.submitPRComment = submitPRComment;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;
+
+window.openRenameModal = openRenameModal;
+window.closeRenameModal = closeRenameModal;
+window.submitRename = submitRename;
 
 // Plugin modal
 window.openPluginModal = openPluginModal;
@@ -620,6 +625,14 @@ function setupKeyboardShortcuts() {
         if (e.key === 'F1') {
             e.preventDefault();
             openHelpModal();
+        }
+
+        // F2 - Rename current file
+        if (e.key === 'F2' && !e.ctrlKey && !e.shiftKey) {
+            if (State.currentFile && State.activeTabIndex >= 0) {
+                e.preventDefault();
+                openRenameModal(State.currentFile.path);
+            }
         }
 
         // Ctrl+1 - Focus sidebar

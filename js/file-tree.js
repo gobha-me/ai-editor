@@ -2,7 +2,7 @@
 // FILE TREE RENDERER
 // ============================================
 
-import { State } from './core.js';
+import { State, Storage } from './core.js';
 import { getFileIcon, isBinaryFile, looksLikeText } from './editor.js';
 import { loadFile, Git } from './git.js';
 import { createEditor } from './editor.js';
@@ -110,6 +110,7 @@ function renderTreeNodes(nodes, depth) {
                     <span class="icon" aria-hidden="true">${icon}</span>
                     <span class="name" id="${itemId}">${escapeHtml(node.name)}${isDir ? '<span class="sr-only">, folder</span>' : ''}</span>
                     <div class="actions">
+                        ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.openRenameModal('${escapeAttr(node.path)}')" title="Rename / Move" aria-label="Rename ${escapeAttr(node.name)}">✏️</button>` : ''}
                         ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
                     </div>
                 </div>
@@ -316,6 +317,9 @@ export async function deleteFile(path) {
     try {
         await Git.deleteFile(owner, repo, path, `Delete ${path}`, file.sha, State.currentBranch);
         
+        // Clear any orphaned draft for this file
+        Storage.clearDraft(owner, repo, State.currentBranch, path);
+        
         // Close tab if open
         const tabIndex = State.openTabs.findIndex(t => t.path === path);
         if (tabIndex >= 0) {
@@ -331,6 +335,7 @@ export async function deleteFile(path) {
         
         // Refresh file tree
         const { EventBus } = await import('./core.js');
+        EventBus.emit('fs:deleted', { path, branch: State.currentBranch });
         EventBus.emit('tree:refresh');
         
         window.showToast('File deleted', 'success');

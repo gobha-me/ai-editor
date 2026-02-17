@@ -105,6 +105,10 @@ export async function createEditor(container, content, filename) {
                 State.editorDirty = true;
                 EventBus.emit('editor:change', { content: State.editorContent });
             }
+            // Emit cursor/selection changes (selection includes cursor moves)
+            if (update.selectionSet || update.docChanged) {
+                EventBus.emit('editor:cursorActivity', getCursorContext());
+            }
         }));
     }
     
@@ -196,6 +200,56 @@ export function getSelection() {
         to: selection.to,
         text: editorInstance.state.sliceDoc(selection.from, selection.to)
     };
+}
+
+/**
+ * Get full cursor context for LLM awareness.
+ * Returns cursor position, selection (if any), and surrounding lines.
+ * @returns {object|null} { line, col, filePath, selection?: { fromLine, toLine, text } }
+ */
+const MAX_SELECTION_CHARS = 3000;
+const MAX_SELECTION_LINES = 60;
+
+export function getCursorContext() {
+    if (!editorInstance || !State.currentFile) return null;
+
+    const state = editorInstance.state;
+    const sel = state.selection.main;
+    const cursorPos = sel.head;
+    const cursorLine = state.doc.lineAt(cursorPos);
+
+    const ctx = {
+        filePath: State.currentFile.path,
+        line: cursorLine.number,
+        col: cursorPos - cursorLine.from + 1,
+        totalLines: state.doc.lines,
+        selection: null
+    };
+
+    if (!sel.empty) {
+        const fromLine = state.doc.lineAt(sel.from);
+        const toLine = state.doc.lineAt(sel.to);
+        let text = state.sliceDoc(sel.from, sel.to);
+        let truncated = false;
+
+        const lineCount = toLine.number - fromLine.number + 1;
+        if (text.length > MAX_SELECTION_CHARS || lineCount > MAX_SELECTION_LINES) {
+            // Truncate but keep first and last portions for context
+            const half = Math.floor(MAX_SELECTION_CHARS / 2);
+            text = text.slice(0, half) + `\n... (${lineCount} lines total, truncated) ...\n` + text.slice(-half);
+            truncated = true;
+        }
+
+        ctx.selection = {
+            fromLine: fromLine.number,
+            toLine: toLine.number,
+            lineCount,
+            text,
+            truncated
+        };
+    }
+
+    return ctx;
 }
 
 export function replaceSelection(text) {

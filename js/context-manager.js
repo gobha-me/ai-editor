@@ -703,4 +703,16 @@ EventBus.on('git:fileDeleted', ({ path }) => {
     ContextManager.removeFileIndex(path);
 });
 
+EventBus.on('git:fileRenamed', async ({ oldPath, newPath, content }) => {
+    if (!ContextManager.isEnabled()) return;
+    console.log(`[Context] File renamed: ${oldPath} → ${newPath}, migrating index`);
+    ContextManager.removeFileIndex(oldPath);
+    if (ContextManager.shouldIndex(newPath)) {
+        // If content was provided, index directly; otherwise the next scan will pick it up
+        if (content) {
+            await ContextManager.updateFileIndex(newPath, content);
+        }
+    }
+});
+
 export { ContextManager };

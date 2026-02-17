@@ -13,6 +13,7 @@
 import { State, Roles } from './core.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { ContextManager } from './context-manager.js';
+import { getCursorContext } from './editor.js';
 
 // ============================================
 // EDITOR-SPECIFIC PROMPTS
@@ -286,7 +287,42 @@ function buildSystemPrompt() {
         prompt += `\n\n🔍 SEMANTIC SEARCH ACTIVE: The project "${ctxStats.project}" has ${ctxStats.filesIndexed} files indexed for semantic search. Use find_relevant_files to discover which files relate to a topic — it understands natural language queries like "error handling" or "authentication flow" and returns the most relevant files ranked by similarity. This is MUCH more effective than grep when you don't know exact identifiers.`;
     }
 
+    // Inject live cursor / selection context from the editor
+    prompt += buildCursorPrompt();
+
     return prompt;
+}
+
+/**
+ * Build the cursor/selection context block for the system prompt.
+ * Gives the LLM awareness of where the user's cursor is and what text
+ * is highlighted, enabling prompts like "explain this code" or
+ * "insert a comment at the cursor".
+ */
+function buildCursorPrompt() {
+    const ctx = getCursorContext();
+    if (!ctx) return '';
+
+    let block = `\n\n--- EDITOR CURSOR ---`;
+    block += `\nFile: ${ctx.filePath} (${ctx.totalLines} lines)`;
+    block += `\nCursor: line ${ctx.line}, col ${ctx.col}`;
+
+    if (ctx.selection) {
+        const s = ctx.selection;
+        block += `\nSelection: lines ${s.fromLine}–${s.toLine} (${s.lineCount} line${s.lineCount !== 1 ? 's' : ''})`;
+        block += `\n\`\`\`\n${s.text}\n\`\`\``;
+        if (s.truncated) {
+            block += `\n(Selection truncated for context window — use read_lines for the full range)`;
+        }
+    }
+
+    block += `\nWhen the user says "this code", "here", "the highlighted code", "at cursor", "the selection", or "selected" — they mean the above.`;
+    block += `\nUse insert_lines with line ${ctx.line} to insert at the cursor position.`;
+    if (ctx.selection) {
+        block += ` Use replace_lines or search_replace to edit the selected range.`;
+    }
+
+    return block;
 }
 
 function buildEditPrompt(request) {

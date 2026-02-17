@@ -176,6 +176,36 @@ function initChat(containerEl, inputEl) {
         const input = getInputElement();
         if (input) input.placeholder = 'Ask me to edit code, explain something, or help with an issue...';
     });
+
+    // --- Cursor context indicator ---
+    // Shows the user what cursor/selection info the LLM will receive
+    const cursorEl = document.getElementById('chatCursorContext');
+    if (cursorEl) {
+        const updateIndicator = (ctx) => {
+            if (!ctx) {
+                cursorEl.style.display = 'none';
+                return;
+            }
+            cursorEl.style.display = 'flex';
+            const fileName = ctx.filePath.split('/').pop();
+            if (ctx.selection) {
+                const s = ctx.selection;
+                cursorEl.innerHTML =
+                    `<span class="cursor-icon">📍</span>` +
+                    `<span>${fileName}:</span>` +
+                    `<span class="cursor-selection">lines ${s.fromLine}–${s.toLine} selected (${s.lineCount})</span>`;
+            } else {
+                cursorEl.innerHTML =
+                    `<span class="cursor-icon">📍</span>` +
+                    `<span>${fileName}: line ${ctx.line}, col ${ctx.col}</span>`;
+            }
+        };
+
+        EventBus.on('editor:cursorActivity', updateIndicator);
+        EventBus.on('tab:closed', () => {
+            if (State.openTabs.length === 0) updateIndicator(null);
+        });
+    }
 }
 
 // ============================================

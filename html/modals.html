@@ -152,6 +152,27 @@
     </div>
 </div>
 
+<!-- Rename / Move File Modal -->
+<div class="modal-overlay" id="renameFileModal" role="dialog" aria-modal="true" aria-labelledby="renameFileTitle">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 id="renameFileTitle">✏️ Rename / Move File</h2>
+            <button type="button" class="modal-close" onclick="window.closeRenameModal()" aria-label="Close rename dialog">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="renameFilePath">New path:</label>
+                <input type="text" id="renameFilePath" placeholder="src/components/NewName.js">
+                <small>Change the name to rename, or the directory to move (e.g., lib/utils/helper.js)</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="window.closeRenameModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="window.submitRename()">✅ Rename</button>
+        </div>
+    </div>
+</div>
+
 <!-- Error Log Modal -->
 <div class="modal-overlay" id="errorLogModal" role="dialog" aria-modal="true" aria-labelledby="errorLogTitle">
     <div class="modal" style="max-width: 800px;">
@@ -238,6 +259,7 @@
                     <div class="help-group">
                         <h3>General</h3>
                         <div class="help-row"><span class="help-keys"><kbd>F1</kbd></span><span>Show this help</span></div>
+                        <div class="help-row"><span class="help-keys"><kbd>F2</kbd></span><span>Rename / move current file</span></div>
                         <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>,</kbd></span><span>Open settings</span></div>
                         <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></span><span>Toggle sidebar</span></div>
                         <div class="help-row"><span class="help-keys"><kbd>Ctrl</kbd>+<kbd>J</kbd></span><span>Toggle chat panel</span></div>

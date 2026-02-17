@@ -72,7 +72,8 @@ Combines `peek_scan_file` + `peek_read_lines` to read a specific function from a
 Expose the CodeMirror `EditorView` to plugins so they can add keybindings, extensions, decorations, or custom syntax highlighting.
 
 ### File system event hooks
-Emit events (or run hooks) for file create, rename, delete, and move operations so plugins can react.
+~~Emit events (or run hooks) for file create, rename, delete, and move operations so plugins can react.~~
+✅ **Done in v0.9.34** — `fs:created`, `fs:updated`, `fs:deleted`, `fs:renamed` events on EventBus.
 
 ---
 

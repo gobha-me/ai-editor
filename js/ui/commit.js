@@ -115,6 +115,10 @@ export async function commitAndPush() {
         
         if (results.length > 0) {
             showToast(`Committed ${results.length} file(s)`, 'success');
+            // Emit fs hooks for plugins
+            for (const r of results) {
+                EventBus.emit('fs:updated', { path: r.path, branch: State.currentBranch });
+            }
         }
         if (errors.length > 0) {
             showToast(`${errors.length} file(s) failed to commit`, 'error');
