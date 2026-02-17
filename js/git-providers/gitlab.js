@@ -375,13 +375,13 @@ const gitlabProvider = {
     // FILE CRUD
     // ========================================
 
-    async createFile(connection, owner, repo, path, content, message, branch = 'main') {
+    async createFile(connection, owner, repo, path, content, message, branch = 'main', encoding = 'text') {
         const result = await this.request(connection, 'POST',
             `/projects/${projectId(owner, repo)}/repository/files/${encodePath(path)}`, {
                 branch,
                 content,
                 commit_message: message,
-                encoding: 'text'
+                encoding
             }
         );
         EventBus.emit('git:fileCreated', { connectionId: connection.id, owner, repo, path, branch, content });
@@ -433,10 +433,10 @@ const gitlabProvider = {
         // GitLab's Commits API supports atomic multi-file operations in a single commit!
         // Much better than the sequential approach GitHub/Gitea need.
         const actions = files.map(f => ({
-            action: 'update',
+            action: f.operation === 'update' ? 'update' : 'create',
             file_path: f.path,
             content: f.content,
-            encoding: 'text'
+            encoding: f.encoding || 'text'
         }));
 
         try {
@@ -455,16 +455,22 @@ const gitlabProvider = {
             });
             return { results, errors: [] };
         } catch (error) {
-            // If atomic commit fails, fall back to individual updates
+            // If atomic commit fails, fall back to individual operations
             console.warn('[GitLab] Atomic batch commit failed, falling back to sequential:', error.message);
             const results = [];
             const errors = [];
 
             for (const file of files) {
                 try {
-                    await this.updateFile(connection, owner, repo,
-                        file.path, file.content, message, file.sha, branch
-                    );
+                    if (file.operation === 'update') {
+                        await this.updateFile(connection, owner, repo,
+                            file.path, file.content, message, file.sha, branch
+                        );
+                    } else {
+                        await this.createFile(connection, owner, repo,
+                            file.path, file.content, message, branch, file.encoding || 'text'
+                        );
+                    }
                     results.push({ path: file.path, success: true });
                 } catch (err) {
                     errors.push({ path: file.path, success: false, error: err.message });
