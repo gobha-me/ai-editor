@@ -355,10 +355,14 @@ async function loadProject(connectionId, owner, repo) {
 
         // Get repo info
         const repoInfo = await provider.getRepo(connection, owner, repo);
+        // Use canonical owner/repo from the API response to avoid
+        // mismatches with nested group paths (e.g. GitLab subgroups)
+        const canonicalOwner = repoInfo.owner || owner;
+        const canonicalRepo = repoInfo.name || repo;
         State.currentProject = {
             connectionId,
-            owner,
-            repo,
+            owner: canonicalOwner,
+            repo: canonicalRepo,
             ...repoInfo
         };
 

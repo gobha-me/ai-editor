@@ -31,7 +31,8 @@ export async function refreshProjects() {
             repos.forEach(repo => {
                 const option = document.createElement('option');
                 // Encode connectionId into the value so onProjectChange can extract it
-                option.value = `${repo.connectionId}/${repo.owner}/${repo.name}`;
+                // Use :: delimiter because owner can contain / (GitLab nested groups)
+                option.value = `${repo.connectionId}::${repo.owner}::${repo.name}`;
                 option.textContent = repo.fullName;
                 select.appendChild(option);
             });
@@ -41,7 +42,7 @@ export async function refreshProjects() {
                 optgroup.label = group.label;
                 group.repos.forEach(repo => {
                     const option = document.createElement('option');
-                    option.value = `${repo.connectionId}/${repo.owner}/${repo.name}`;
+                    option.value = `${repo.connectionId}::${repo.owner}::${repo.name}`;
                     option.textContent = repo.fullName;
                     optgroup.appendChild(option);
                 });
@@ -51,7 +52,7 @@ export async function refreshProjects() {
 
         // Re-select current project if one is loaded (e.g. after settings save)
         if (State.currentProject) {
-            const currentValue = `${State.currentProject.connectionId}/${State.currentProject.owner}/${State.currentProject.repo}`;
+            const currentValue = `${State.currentProject.connectionId}::${State.currentProject.owner}::${State.currentProject.repo}`;
             const opt = select.querySelector(`option[value="${currentValue}"]`);
             if (opt) select.value = currentValue;
         }
@@ -126,7 +127,7 @@ export async function switchProject(connectionId, owner, repo, { branch } = {}) 
     // Update project selector to match
     const projectSelect = document.getElementById('projectSelect');
     if (projectSelect) {
-        const selectorValue = `${connectionId}/${owner}/${repo}`;
+        const selectorValue = `${connectionId}::${owner}::${repo}`;
         // If the option exists, select it
         const opt = projectSelect.querySelector(`option[value="${selectorValue}"]`);
         if (opt) projectSelect.value = selectorValue;
@@ -143,15 +144,15 @@ export async function onProjectChange(e) {
     const value = e.target.value;
     if (!value) return;
 
-    // Value format: "connectionId/owner/repo"
-    const parts = value.split('/');
-    if (parts.length < 3) {
+    // Value format: "connectionId::owner::repo" (:: delimiter avoids ambiguity with nested groups)
+    const parts = value.split('::');
+    if (parts.length !== 3) {
         console.error('Invalid project selector value:', value);
         return;
     }
     const connectionId = parts[0];
     const owner = parts[1];
-    const repo = parts.slice(2).join('/');  // Handle repos with slashes in name
+    const repo = parts[2];
     
     try {
         await switchProject(connectionId, owner, repo);
