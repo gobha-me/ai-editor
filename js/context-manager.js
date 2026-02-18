@@ -275,21 +275,34 @@ const ContextManager = {
             // Load embeddings model if not initialized
             await EmbeddingsClient.init();
 
-            // Index files in batches to avoid blocking
-            const batchSize = 5;
-            for (let i = 0; i < files.length; i += batchSize) {
+            // Adaptive concurrency: start moderate, reduce on trouble
+            let concurrency = 5;
+            const MIN_CONCURRENCY = 1;
+            const MAX_CONCURRENCY = 5;
+            const INDEX_TIMEOUT = 60_000; // Background work — 60s, not 15s
+            let consecutiveCleanBatches = 0;
+
+            // Index files with adaptive batching
+            let i = 0;
+            while (i < files.length) {
                 // Abort if project switched (another indexProject call started)
                 if (this._indexGeneration !== generation) {
                     console.log(`[Context] Indexing aborted — project switched (was ${projectKey})`);
                     return indexed;
                 }
 
-                const batch = files.slice(i, i + batchSize);
-                
+                const batch = files.slice(i, i + concurrency);
+                let batchTimeouts = 0;
+                let batchCircuitOpen = false;
+
                 await Promise.all(batch.map(async file => {
                     try {
                         // Use SNAPSHOT owner/repo, not live State.currentProject
-                        const fileData = await Git.getFile(snapshot.owner, snapshot.repo, file.path, snapshot.branch);
+                        // Pass INDEX_TIMEOUT — background work tolerates slow servers
+                        const fileData = await Git.getFile(
+                            snapshot.owner, snapshot.repo, file.path, snapshot.branch,
+                            { timeout: INDEX_TIMEOUT }
+                        );
                         const content = fileData.content;
                         
                         // Skip very large files (content-based check)
@@ -309,12 +322,64 @@ const ContextManager = {
                         });
 
                     } catch (error) {
+                        if (error.circuitOpen) {
+                            batchCircuitOpen = true;
+                        } else if (error.name === 'TimeoutError') {
+                            batchTimeouts++;
+                        }
                         console.error(`[Context] Failed to index ${file.path}:`, error);
                     }
                 }));
 
-                // Small delay between batches
-                await new Promise(resolve => setTimeout(resolve, 10));
+                i += batch.length;
+
+                // Circuit breaker tripped — pause and wait for restore
+                if (batchCircuitOpen) {
+                    console.log(`[Context] Circuit breaker open — pausing indexer, waiting for restore…`);
+                    const restored = await new Promise(resolve => {
+                        const onRestore = () => { resolve(true); cleanup(); };
+                        const timeout = setTimeout(() => { resolve(false); cleanup(); }, 90_000);
+                        const cleanup = () => {
+                            EventBus.off('git:connectionRestored', onRestore);
+                            clearTimeout(timeout);
+                        };
+                        EventBus.on('git:connectionRestored', onRestore);
+                    });
+
+                    if (!restored) {
+                        console.warn(`[Context] Connection not restored after 90s — aborting indexing`);
+                        break;
+                    }
+                    console.log(`[Context] Connection restored — resuming indexer (${files.length - i} files remaining)`);
+                    // Reset concurrency after pause
+                    concurrency = 2;
+                    consecutiveCleanBatches = 0;
+                    continue;
+                }
+
+                // Adaptive concurrency: reduce on timeouts, increase on clean batches
+                if (batchTimeouts > 0) {
+                    const prev = concurrency;
+                    concurrency = Math.max(MIN_CONCURRENCY, Math.floor(concurrency / 2));
+                    if (concurrency !== prev) {
+                        console.log(`[Context] ${batchTimeouts} timeout(s) — reducing concurrency ${prev} → ${concurrency}`);
+                    }
+                    consecutiveCleanBatches = 0;
+                } else {
+                    consecutiveCleanBatches++;
+                    // After 3 clean batches, try increasing concurrency
+                    if (consecutiveCleanBatches >= 3 && concurrency < MAX_CONCURRENCY) {
+                        const prev = concurrency;
+                        concurrency = Math.min(MAX_CONCURRENCY, concurrency + 1);
+                        if (concurrency !== prev) {
+                            console.log(`[Context] 3 clean batches — increasing concurrency ${prev} → ${concurrency}`);
+                        }
+                        consecutiveCleanBatches = 0;
+                    }
+                }
+
+                // Small delay between batches (longer if we had timeouts)
+                await new Promise(resolve => setTimeout(resolve, batchTimeouts > 0 ? 500 : 10));
             }
 
             // Final check: don't save if project switched during last batch

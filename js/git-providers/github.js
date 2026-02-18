@@ -337,9 +337,9 @@ const githubProvider = {
         });
     },
 
-    async getFile(connection, owner, repo, path, ref = 'main') {
+    async getFile(connection, owner, repo, path, ref = 'main', opts = {}) {
         const endpoint = `/repos/${owner}/${repo}/contents/${path}?ref=${ref}`;
-        const file = await this.request(connection, 'GET', endpoint);
+        const file = await this.request(connection, 'GET', endpoint, null, opts.timeout || null);
         const content = file.content ? base64ToUtf8(file.content.replace(/\n/g, '')) : '';
         return {
             name: file.name,

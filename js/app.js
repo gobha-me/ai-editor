@@ -101,6 +101,7 @@ import './tools/commit-tools.js';   // LLM-driven commit from chat
 // --- Plugins ---
 import '../plugins/venice-ai.js';
 import '../plugins/cross-repo-issues.js';
+import '../plugins/release-sync.js';
 import '../plugins/venice-billing.js';
 import '../plugins/openrouter-billing.js';
 

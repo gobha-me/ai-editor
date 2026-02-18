@@ -34,28 +34,126 @@ const DEFAULT_CAPABILITIES = {
 };
 
 // ============================================
+// HEURISTIC CAPABILITY DETECTION
+// ============================================
+
+/**
+ * Infer model capabilities from the model ID/name string.
+ * Covers Ollama, LM Studio, and other OpenAI-compatible endpoints
+ * that don't provide capability metadata in their /models response.
+ * 
+ * This is a best-effort heuristic — not authoritative. Providers with
+ * real metadata (Venice, OpenRouter) bypass this entirely.
+ */
+
+// Models/families known to support function calling / tool use
+const TOOL_PATTERNS = [
+    // Meta Llama 3+
+    /llama[_-]?3/,
+    // IBM Granite 3+
+    /granite[_-]?[34]/,
+    // Nous Hermes (tool-tuned)
+    /hermes[_-]?[23]?/,
+    // Alibaba Qwen 2+
+    /qwen[_-]?2/,
+    // Mistral / Mixtral
+    /mistral|mixtral/,
+    // Cohere Command-R
+    /command[_-]?r/,
+    // Microsoft Phi-3+
+    /phi[_-]?[34]/,
+    // DeepSeek v2+
+    /deepseek[_-]?v[23]|deepseek[_-]?coder[_-]?v2/,
+    // Functionary (purpose-built for tools)
+    /functionary/,
+    // FireFunction
+    /firefunction/,
+    // NexusRaven
+    /nexusraven/,
+    // OpenAI models
+    /^gpt[_-]?[34]/,
+    // Claude models (if proxied)
+    /^claude/,
+    // Gemma 2
+    /gemma[_-]?2/,
+    // GLM / ChatGLM 4+
+    /glm[_-]?4|chatglm[_-]?4/
+];
+
+// Models/families known to support vision
+const VISION_PATTERNS = [
+    /llava|bakllava/,
+    /moondream/,
+    /llama.*vision|vision.*llama/,
+    /minicpm[_-]?v/,
+    /^gpt[_-]?4[_-]?o|^gpt[_-]?4[_-]?turbo/,
+    /^claude[_-]?3/,
+    /gemini/,
+    /qwen.*vl|vl.*qwen/,
+    /phi[_-]?3.*vision|phi[_-]?4.*vision/,
+    /internvl/,
+    /glm[_-]?4v/
+];
+
+// Models/families known to support extended reasoning
+const REASONING_PATTERNS = [
+    /deepseek[_-]?r1/,
+    /qwq/,
+    /^o[1234][_-]|^o[1234]$/
+];
+
+// Models optimized for code generation
+const CODE_PATTERNS = [
+    /codellama|codegemma|code[_-]?llama/,
+    /deepseek[_-]?coder/,
+    /starcoder|star[_-]?coder/,
+    /coder|codestral/,
+    /wizardcoder/,
+    /phind[_-]?codellama/
+];
+
+function _inferCapabilities(modelId) {
+    const id = modelId.toLowerCase();
+    return {
+        supportsFunctionCalling: TOOL_PATTERNS.some(p => p.test(id)),
+        supportsVision: VISION_PATTERNS.some(p => p.test(id)),
+        supportsReasoning: REASONING_PATTERNS.some(p => p.test(id)),
+        supportsResponseSchema: false,
+        supportsWebSearch: false,
+        supportsAudioInput: false,
+        supportsVideoInput: false,
+        supportsLogProbs: false,
+        optimizedForCode: CODE_PATTERNS.some(p => p.test(id))
+    };
+}
+
+// ============================================
 // BASE PROVIDER (OpenAI-compatible)
 // ============================================
 
 const BASE_PROVIDER = {
     id: 'openai',
     name: 'OpenAI / Generic',
-    description: 'Standard OpenAI-compatible API. No extended capability metadata.',
+    description: 'Standard OpenAI-compatible API. Infers model capabilities from names.',
     defaultEndpoint: '',
     settingsKey: null,
 
     parseModels(raw) {
-        return raw.map(m => ({
-            id: m.id || m.name || String(m),
-            name: m.id || m.name || String(m),
-            type: m.type || 'text',
-            owned_by: m.owned_by || null,
-            capabilities: { ...DEFAULT_CAPABILITIES },
-            pricing: null,
-            meta: {
-                contextTokens: m.context_length || m.context_window || null
-            }
-        }));
+        return raw.map(m => {
+            const id = (m.id || m.name || String(m)).toLowerCase();
+
+            return {
+                id: m.id || m.name || String(m),
+                name: m.id || m.name || String(m),
+                type: m.type || 'text',
+                owned_by: m.owned_by || null,
+                capabilities: _inferCapabilities(id),
+                pricing: null,
+                meta: {
+                    contextTokens: m.context_length || m.context_window || null
+                }
+            };
+        });
     },
 
     transformRequest(requestBody, _settings) {

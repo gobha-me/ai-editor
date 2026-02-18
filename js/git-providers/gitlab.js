@@ -331,9 +331,10 @@ const gitlabProvider = {
         });
     },
 
-    async getFile(connection, owner, repo, path, ref = 'main') {
+    async getFile(connection, owner, repo, path, ref = 'main', opts = {}) {
         const file = await this.request(connection, 'GET',
-            `/projects/${projectId(owner, repo)}/repository/files/${encodePath(path)}?ref=${encodeURIComponent(ref)}`
+            `/projects/${projectId(owner, repo)}/repository/files/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+            null, opts.timeout || null
         );
         const content = file.content ? base64ToUtf8(file.content) : '';
         return {

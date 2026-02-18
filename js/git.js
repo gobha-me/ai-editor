@@ -167,9 +167,9 @@ const Git = {
         return provider.getFileTree(connection, owner, repo, ref, path);
     },
 
-    async getFile(owner, repo, path, ref = 'main') {
+    async getFile(owner, repo, path, ref = 'main', opts = {}) {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.getFile(connection, owner, repo, path, ref);
+        return provider.getFile(connection, owner, repo, path, ref, opts);
     },
 
     // ========================================
