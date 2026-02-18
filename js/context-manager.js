@@ -14,6 +14,12 @@ const ContextManager = {
     _queryCount: 0,        // Times findRelevantFiles was called for current index
     _lastQueried: null,    // Timestamp of last query
 
+    // ── Pause / Resume ──
+    _manualPause: false,     // User clicked pause
+    _autoPause: false,       // LLM or file operation auto-paused
+    _pauseResolve: null,     // Resolve function for the pause promise
+    _indexProgress: null,    // { current, total } for UI
+
     // ── File Filtering ──
 
     /** Extensions that should never be indexed (binary/generated/media) */
@@ -50,12 +56,21 @@ const ContextManager = {
         /package-lock\.json$/,
         /yarn\.lock$/,
         /pnpm-lock\.yaml$/,
+        // Swagger / OpenAPI specs (large JSON, no code value)
+        /swagger[s]?\//,
+        /openapi\.(json|ya?ml)$/,
+        /swagger\.(json|ya?ml)$/,
     ],
 
+    /** Max file size (bytes) to download for indexing. Checked from tree metadata BEFORE download. */
+    MAX_INDEX_SIZE: 250_000,  // 250KB — generous for code; data files get caught here
+
     /**
-     * Check if a file should be indexed based on extension and path.
+     * Check if a file should be indexed based on extension, path, and size.
+     * @param {string} path
+     * @param {number} [size] - File size from tree metadata (bytes). 0/undefined = unknown, allow.
      */
-    shouldIndex(path) {
+    shouldIndex(path, size) {
         // Extension check
         const ext = path.split('.').pop()?.toLowerCase();
         if (ext && this.SKIP_EXTENSIONS.has(ext)) return false;
@@ -64,6 +79,9 @@ const ContextManager = {
         for (const pattern of this.SKIP_PATH_PATTERNS) {
             if (pattern.test(path)) return false;
         }
+
+        // Size check (from tree metadata — avoids downloading huge files)
+        if (size && size > this.MAX_INDEX_SIZE) return false;
 
         return true;
     },
@@ -76,7 +94,22 @@ const ContextManager = {
     },
 
     /**
-     * Generate a smart summary of a file for embedding
+     * Target summary size in chars. ~4 chars/token for code → ~6000 chars ≈ 1500 tokens.
+     * Conservative default for BGE-M3 (8192 token limit). The embeddings client
+     * will auto-discover smaller limits via trim-and-retry.
+     */
+    SUMMARY_TARGET_CHARS: 6000,
+
+    /**
+     * Generate a rich summary of a file for embedding.
+     * 
+     * Structure: [file path] [structural signals] [raw content head+tail]
+     * 
+     * The structural signals (imports, exports, function/class declarations,
+     * doc comments, TODOs) anchor the embedding on "what this file IS."
+     * The raw content sample adds semantic depth — the model understands
+     * code patterns even without explicit labels.
+     * 
      * @param {string} path - File path
      * @param {string} content - File content
      * @returns {string} Summary text optimized for embedding
@@ -85,91 +118,215 @@ const ContextManager = {
         if (!content) return `File: ${path}`;
         const ext = path.split('.').pop()?.toLowerCase();
         const lines = content.split('\n');
-        const summary = [];
+        const budget = this.SUMMARY_TARGET_CHARS;
 
-        // Add file path as context
-        summary.push(`File: ${path}`);
+        // ── Phase 1: Structural signals (always included, uncapped) ──
+        const structure = [`File: ${path}`];
 
-        // Extract based on file type
-        if (['js', 'jsx', 'ts', 'tsx', 'mjs'].includes(ext)) {
-            // JavaScript/TypeScript
-            const imports = lines
-                .filter(l => l.trim().startsWith('import ') || l.trim().startsWith('export '))
-                .slice(0, 10);
-            
-            const functions = lines
-                .filter(l => /^(export\s+)?(async\s+)?function\s+\w+/.test(l.trim()) || 
-                            /^(export\s+)?const\s+\w+\s*=\s*(async\s*)?\(/.test(l.trim()))
-                .map(l => l.trim())
-                .slice(0, 15);
-            
-            const classes = lines
-                .filter(l => /^(export\s+)?class\s+\w+/.test(l.trim()))
-                .map(l => l.trim())
-                .slice(0, 10);
+        // Extract structural patterns by language family
+        const extractors = this._getExtractors(ext);
+        for (const { label, patterns, limit } of extractors) {
+            const matches = [];
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                for (const pattern of patterns) {
+                    if (typeof pattern === 'function' ? pattern(trimmed) : pattern.test(trimmed)) {
+                        matches.push(trimmed);
+                        break;
+                    }
+                }
+                if (matches.length >= limit) break;
+            }
+            if (matches.length) structure.push(`${label}: ${matches.join(' | ')}`);
+        }
 
-            if (imports.length) summary.push('Imports/Exports: ' + imports.join(' '));
-            if (functions.length) summary.push('Functions: ' + functions.join(' '));
-            if (classes.length) summary.push('Classes: ' + classes.join(' '));
+        // Cross-language: doc comments, TODOs, important strings
+        const docComments = lines
+            .filter(l => /^\s*(\*|\/\*\*|\/\/\/|#{1,3}\s|"""|'''|\/\/ @)/.test(l))
+            .map(l => l.trim().replace(/^[\/*#'"\s]+/, '').trim())
+            .filter(l => l.length > 10 && l.length < 200)
+            .slice(0, 10);
+        if (docComments.length) structure.push(`Docs: ${docComments.join(' | ')}`);
 
-        } else if (['py'].includes(ext)) {
+        const todos = lines
+            .filter(l => /(?:TODO|FIXME|HACK|XXX|NOTE|WARN)[\s:]/i.test(l))
+            .map(l => l.trim())
+            .slice(0, 5);
+        if (todos.length) structure.push(`Notes: ${todos.join(' | ')}`);
+
+        const structureText = structure.join('\n');
+
+        // ── Phase 2: Raw content to fill remaining budget ──
+        const remaining = budget - structureText.length;
+        if (remaining < 200) return structureText.slice(0, budget);
+
+        // Head gets 70% of remaining budget, tail gets 30%
+        // Head: imports, early code. Tail: exports, module.exports, final definitions.
+        const headBudget = Math.floor(remaining * 0.7);
+        const tailBudget = remaining - headBudget;
+
+        const fullContent = content;
+        let rawSample = '';
+
+        if (fullContent.length <= remaining) {
+            // Small file — include everything
+            rawSample = fullContent;
+        } else {
+            const head = fullContent.slice(0, headBudget);
+            const tail = fullContent.slice(-tailBudget);
+            rawSample = head + '\n…\n' + tail;
+        }
+
+        return structureText + '\n---\n' + rawSample;
+    },
+
+    /**
+     * Get structural extractors for a file extension.
+     * Each extractor: { label, patterns: (regex|function)[], limit }
+     */
+    _getExtractors(ext) {
+        const CODE_EXT = {
+            // JavaScript / TypeScript
+            js: 'js', jsx: 'js', ts: 'js', tsx: 'js', mjs: 'js', cjs: 'js',
             // Python
-            const imports = lines.filter(l => l.trim().startsWith('import ') || l.trim().startsWith('from ')).slice(0, 10);
-            const defs = lines.filter(l => /^(async\s+)?def\s+\w+/.test(l.trim()) || /^class\s+\w+/.test(l.trim())).slice(0, 15);
-            
-            if (imports.length) summary.push('Imports: ' + imports.join(' '));
-            if (defs.length) summary.push('Definitions: ' + defs.join(' '));
-
-        } else if (['java', 'kt', 'scala'].includes(ext)) {
-            // Java/Kotlin/Scala
-            const imports = lines.filter(l => l.trim().startsWith('import ')).slice(0, 10);
-            const classes = lines.filter(l => /^(public|private|protected)?\s*(class|interface|enum)\s+\w+/.test(l.trim())).slice(0, 10);
-            const methods = lines.filter(l => /^(public|private|protected)?\s+\w+\s+\w+\s*\(/.test(l.trim())).slice(0, 15);
-            
-            if (imports.length) summary.push('Imports: ' + imports.join(' '));
-            if (classes.length) summary.push('Classes: ' + classes.join(' '));
-            if (methods.length) summary.push('Methods: ' + methods.join(' '));
-
-        } else if (['go'].includes(ext)) {
+            py: 'py', pyw: 'py', pyi: 'py',
             // Go
-            const imports = lines.filter(l => l.trim().startsWith('import ')).slice(0, 10);
-            const funcs = lines.filter(l => /^func\s+\w+/.test(l.trim())).slice(0, 15);
-            
-            if (imports.length) summary.push('Imports: ' + imports.join(' '));
-            if (funcs.length) summary.push('Functions: ' + funcs.join(' '));
-
-        } else if (['rs'].includes(ext)) {
+            go: 'go',
             // Rust
-            const uses = lines.filter(l => l.trim().startsWith('use ')).slice(0, 10);
-            const items = lines.filter(l => /^(pub\s+)?(fn|struct|enum|trait|impl)\s+\w+/.test(l.trim())).slice(0, 15);
-            
-            if (uses.length) summary.push('Uses: ' + uses.join(' '));
-            if (items.length) summary.push('Items: ' + items.join(' '));
-
-        } else if (['html', 'htm'].includes(ext)) {
+            rs: 'rs',
+            // C / C++
+            c: 'c', h: 'c', cpp: 'c', cxx: 'c', cc: 'c', hpp: 'c', hxx: 'c',
+            // Perl
+            pl: 'pl', pm: 'pl',
+            // Java / Kotlin / Scala
+            java: 'java', kt: 'java', scala: 'java',
+            // Ruby
+            rb: 'rb',
+            // PHP
+            php: 'php',
+            // Shell
+            sh: 'sh', bash: 'sh', zsh: 'sh',
             // HTML
-            const title = content.match(/<title>(.*?)<\/title>/i);
-            if (title) summary.push('Title: ' + title[1]);
-            summary.push('HTML document');
-
-        } else if (['css', 'scss', 'sass', 'less'].includes(ext)) {
+            html: 'html', htm: 'html',
             // CSS
-            const selectors = lines.filter(l => l.trim().endsWith('{') && !l.trim().startsWith('@')).slice(0, 20);
-            if (selectors.length) summary.push('Selectors: ' + selectors.map(s => s.trim()).join(' '));
-
-        } else if (['md', 'markdown'].includes(ext)) {
+            css: 'css', scss: 'css', sass: 'css', less: 'css',
             // Markdown
-            const headers = lines.filter(l => l.trim().startsWith('#')).slice(0, 10);
-            if (headers.length) summary.push('Headers: ' + headers.join(' '));
-        }
+            md: 'md', markdown: 'md',
+            // Config
+            json: 'cfg', yaml: 'cfg', yml: 'cfg', toml: 'cfg', ini: 'cfg',
+        };
 
-        // Add first few lines of actual content as fallback
-        const contentSample = lines.slice(0, 5).join(' ').trim();
-        if (contentSample) {
-            summary.push('Content: ' + contentSample.slice(0, 200));
-        }
+        const family = CODE_EXT[ext] || null;
 
-        return summary.join(' | ').slice(0, 1000); // Limit total summary size
+        switch (family) {
+            case 'js': return [
+                { label: 'Imports', patterns: [l => l.startsWith('import '), l => l.startsWith('require(')], limit: 20 },
+                { label: 'Exports', patterns: [/^export\s+(default\s+)?(function|class|const|let|var|async)\s/], limit: 20 },
+                { label: 'Functions', patterns: [
+                    /^(async\s+)?function\s+\w+/,
+                    /^(const|let|var)\s+\w+\s*=\s*(async\s*)?\(/,
+                    /^(const|let|var)\s+\w+\s*=\s*(async\s*)?\w+\s*=>/,
+                    /^\w+\s*\(.*\)\s*\{/,  // method shorthand
+                ], limit: 30 },
+                { label: 'Classes', patterns: [/^(export\s+)?class\s+\w+/], limit: 10 },
+            ];
+
+            case 'py': return [
+                { label: 'Imports', patterns: [l => l.startsWith('import '), l => l.startsWith('from ')], limit: 20 },
+                { label: 'Definitions', patterns: [
+                    /^(async\s+)?def\s+\w+/,
+                    /^class\s+\w+/,
+                    /^@\w+/,  // decorators
+                ], limit: 30 },
+            ];
+
+            case 'go': return [
+                { label: 'Package', patterns: [/^package\s+\w+/], limit: 1 },
+                { label: 'Imports', patterns: [l => l.startsWith('import ')], limit: 15 },
+                { label: 'Functions', patterns: [/^func\s+(\(.*?\)\s*)?\w+/], limit: 30 },
+                { label: 'Types', patterns: [/^type\s+\w+\s+(struct|interface)/], limit: 15 },
+            ];
+
+            case 'rs': return [
+                { label: 'Uses', patterns: [l => l.startsWith('use ')], limit: 20 },
+                { label: 'Items', patterns: [/^(pub\s+)?(fn|struct|enum|trait|impl|type|mod|const|static)\s+\w+/], limit: 30 },
+                { label: 'Macros', patterns: [/^(pub\s+)?macro_rules!\s+\w+/], limit: 5 },
+            ];
+
+            case 'c': return [
+                { label: 'Includes', patterns: [/^#include\s+[<"]/], limit: 20 },
+                { label: 'Defines', patterns: [/^#define\s+\w+/], limit: 10 },
+                { label: 'Declarations', patterns: [
+                    /^(static|extern|inline|virtual)?\s*(void|int|char|bool|float|double|auto|unsigned|signed|long|short|const|struct|class|enum|union|template|namespace)\s/,
+                    /^(class|struct|enum|union|namespace)\s+\w+/,
+                    /^template\s*</,
+                ], limit: 30 },
+            ];
+
+            case 'pl': return [
+                { label: 'Uses', patterns: [/^use\s+\w+/, /^require\s+/], limit: 15 },
+                { label: 'Subs', patterns: [/^sub\s+\w+/, /^(my|our|local)\s+/], limit: 25 },
+                { label: 'Package', patterns: [/^package\s+\w+/], limit: 3 },
+            ];
+
+            case 'java': return [
+                { label: 'Package', patterns: [/^package\s+/], limit: 1 },
+                { label: 'Imports', patterns: [l => l.startsWith('import ')], limit: 20 },
+                { label: 'Types', patterns: [
+                    /^(public|private|protected|abstract|final)?\s*(class|interface|enum|record)\s+\w+/,
+                ], limit: 10 },
+                { label: 'Methods', patterns: [
+                    /^(public|private|protected|abstract|static|final|override)?\s+\w+[\w<>\[\],\s]+\w+\s*\(/,
+                ], limit: 25 },
+            ];
+
+            case 'rb': return [
+                { label: 'Requires', patterns: [/^require\s+/, /^require_relative\s+/], limit: 15 },
+                { label: 'Definitions', patterns: [/^(def|class|module)\s+\w+/], limit: 25 },
+            ];
+
+            case 'php': return [
+                { label: 'Uses', patterns: [/^use\s+/, /^namespace\s+/], limit: 15 },
+                { label: 'Definitions', patterns: [
+                    /^(public|private|protected|static|abstract|final)?\s*(function|class|interface|trait|enum)\s+\w+/,
+                ], limit: 25 },
+            ];
+
+            case 'sh': return [
+                { label: 'Functions', patterns: [/^\w+\s*\(\)\s*\{/, /^function\s+\w+/], limit: 20 },
+                { label: 'Variables', patterns: [/^(export\s+)?\w+=/], limit: 15 },
+            ];
+
+            case 'html': return [
+                { label: 'Structure', patterns: [
+                    /<title>.*<\/title>/i,
+                    /^<(header|nav|main|section|article|aside|footer|form|table)\b/i,
+                    /^<(h[1-6]|meta|link|script)\b/i,
+                    /\bid=["'][^"']+["']/,
+                ], limit: 20 },
+            ];
+
+            case 'css': return [
+                { label: 'Selectors', patterns: [l => l.endsWith('{') && !l.startsWith('@')], limit: 30 },
+                { label: 'Variables', patterns: [/^\s*--[\w-]+\s*:/], limit: 15 },
+                { label: 'Media', patterns: [/^@media\s+/], limit: 5 },
+            ];
+
+            case 'md': return [
+                { label: 'Headers', patterns: [l => l.startsWith('#')], limit: 20 },
+                { label: 'Links', patterns: [/\[.*\]\(.*\)/], limit: 10 },
+            ];
+
+            case 'cfg': return [
+                { label: 'Keys', patterns: [
+                    /^"?\w+[\w.-]*"?\s*[:=]/,  // JSON/YAML/TOML keys
+                    /^\[[\w.-]+\]/,             // TOML/INI sections
+                ], limit: 30 },
+            ];
+
+            default: return [];
+        }
     },
 
     /**
@@ -204,12 +361,77 @@ const ContextManager = {
         }
     },
 
+    // ── Pause / Resume API ──
+
+    /** @returns {boolean} Whether indexing is effectively paused */
+    get paused() { return this._manualPause || this._autoPause; },
+
+    /**
+     * Toggle manual pause. User-initiated pause overrides auto.
+     */
+    togglePause() {
+        this._manualPause = !this._manualPause;
+        if (!this._manualPause) this._autoPause = false; // manual resume clears auto too
+        this._emitPauseState();
+        if (!this.paused && this._pauseResolve) {
+            this._pauseResolve();
+            this._pauseResolve = null;
+        }
+    },
+
+    /**
+     * Auto-pause for LLM/file operations. Does NOT override manual pause.
+     */
+    autoPause() {
+        if (!this._indexing || this._manualPause) return; // already paused or not running
+        if (!this._autoPause) {
+            this._autoPause = true;
+            this._emitPauseState();
+        }
+    },
+
+    /**
+     * Resume from auto-pause. Manual pause stays.
+     */
+    autoResume() {
+        if (!this._autoPause) return;
+        this._autoPause = false;
+        this._emitPauseState();
+        if (!this.paused && this._pauseResolve) {
+            this._pauseResolve();
+            this._pauseResolve = null;
+        }
+    },
+
+    _emitPauseState() {
+        EventBus.emit('context:pauseChanged', {
+            paused: this.paused,
+            manual: this._manualPause,
+            auto: this._autoPause,
+            indexing: this._indexing,
+            progress: this._indexProgress
+        });
+    },
+
+    /**
+     * Called inside the indexing loop. If paused, awaits resume.
+     * Returns false if indexing should abort (generation changed).
+     */
+    async _waitIfPaused(generation) {
+        while (this.paused) {
+            if (this._indexGeneration !== generation) return false;
+            await new Promise(resolve => { this._pauseResolve = resolve; });
+        }
+        return true;
+    },
+
     /**
      * Index all files in current project
      * @param {boolean} force - Force re-index even if already indexed
+     * @param {boolean} resume - Resume partial index (skip already-indexed files)
      * @returns {Promise<number>} Number of files indexed
      */
-    async indexProject(force = false) {
+    async indexProject(force = false, resume = false) {
         if (!this.isEnabled()) return 0;
         if (!State.currentProject) {
             console.log('[Context] No project loaded');
@@ -234,8 +456,11 @@ const ContextManager = {
             await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        // Check if we've already indexed this project
-        if (!force && this._indexedProject === projectKey && this._fileIndex.size > 0) {
+        // Resume: only valid for the same project with existing partial index
+        const canResume = resume && this._indexedProject === projectKey && this._fileIndex.size > 0;
+
+        // Check if we've already fully indexed this project
+        if (!force && !resume && this._indexedProject === projectKey && this._fileIndex.size > 0) {
             console.log('[Context] Project already indexed');
             return this._fileIndex.size;
         }
@@ -245,141 +470,235 @@ const ContextManager = {
         this._indexGeneration = generation;
 
         this._indexing = true;
-        this._fileIndex.clear();
-        this._queryCount = 0;
-        this._lastQueried = null;
+        this._indexProgress = { current: 0, total: 0 };
+        this._autoPause = false; // Reset auto-pause for new run
 
-        console.log(`[Context] Indexing project: ${projectKey}`);
-        EventBus.emit('context:indexStart', { project: projectKey });
+        if (!canResume) {
+            this._fileIndex.clear();
+            this._queryCount = 0;
+            this._lastQueried = null;
+        }
+
+        console.log(`[Context] ${canResume ? 'Resuming' : 'Indexing'} project: ${projectKey}${canResume ? ` (${this._fileIndex.size} already indexed)` : ''}`);
+        EventBus.emit('context:indexStart', { project: projectKey, resuming: canResume });
+        this._emitPauseState();
 
         try {
             // Filter files from the SNAPSHOT, not live State.fileTree
             const allFiles = snapshot.fileTree.filter(f => f.type === 'file');
-            const eligible = allFiles.filter(f => this.shouldIndex(f.path));
+            const eligible = allFiles.filter(f => this.shouldIndex(f.path, f.size));
             const skipped = allFiles.length - eligible.length;
 
             if (skipped > 0) {
-                console.log(`[Context] Filtered: ${eligible.length} eligible, ${skipped} skipped (binary/vendor/generated)`);
+                // Log any large files that were caught by size filter
+                const sizeSkipped = allFiles.filter(f => 
+                    f.size && f.size > this.MAX_INDEX_SIZE && 
+                    !this.SKIP_EXTENSIONS.has(f.path.split('.').pop()?.toLowerCase())
+                );
+                const sizeNote = sizeSkipped.length 
+                    ? ` (${sizeSkipped.map(f => `${f.path} ${(f.size/1024).toFixed(0)}KB`).join(', ')})` 
+                    : '';
+                console.log(`[Context] Filtered: ${eligible.length} eligible, ${skipped} skipped (binary/vendor/generated/large)${sizeNote}`);
             }
 
             // Respect maxIndexFiles setting (default: 200)
             const maxFiles = State.settings.maxIndexFiles || 200;
-            const files = eligible.slice(0, maxFiles);
+            let files = eligible.slice(0, maxFiles);
             if (eligible.length > maxFiles) {
                 console.warn(`[Context] Capped at ${maxFiles} files (${eligible.length} eligible). Increase maxIndexFiles in settings.`);
             }
 
+            // Resume: skip files already in the index
+            if (canResume) {
+                const before = files.length;
+                files = files.filter(f => !this._fileIndex.has(f.path));
+                console.log(`[Context] Resume: ${before - files.length} already indexed, ${files.length} remaining`);
+            }
+
             const totalFiles = files.length;
             let indexed = 0;
+            let failed = 0;
+            this._indexProgress = { current: 0, total: totalFiles };
 
             // Load embeddings model if not initialized
             await EmbeddingsClient.init();
 
-            // Adaptive concurrency: start moderate, reduce on trouble
-            let concurrency = 5;
-            const MIN_CONCURRENCY = 1;
-            const MAX_CONCURRENCY = 5;
-            const INDEX_TIMEOUT = 60_000; // Background work — 60s, not 15s
-            let consecutiveCleanBatches = 0;
+            // ── Concurrent Pool ──
+            // Unlike Promise.all batches, a pool keeps N workers busy at all times.
+            // When one file completes, the next starts immediately — no waiting
+            // for the slowest file in a group.
+            const INDEX_TIMEOUT = 30_000; // 30s — patient but not hostage
+            let maxConcurrency = 3;
+            let activeCount = 0;
+            let fileIdx = 0;
+            let circuitOpen = false;
+            let consecutiveTimeouts = 0;
+            let consecutiveSuccesses = 0;
+            const ctx = this; // for nested closures
 
-            // Index files with adaptive batching
-            let i = 0;
-            while (i < files.length) {
-                // Abort if project switched (another indexProject call started)
-                if (this._indexGeneration !== generation) {
-                    console.log(`[Context] Indexing aborted — project switched (was ${projectKey})`);
-                    return indexed;
-                }
+            /**
+             * Process a single file. Returns when the file is indexed or fails.
+             */
+            async function processFile(file) {
+                try {
+                    const fileData = await Git.getFile(
+                        snapshot.owner, snapshot.repo, file.path, snapshot.branch,
+                        { timeout: INDEX_TIMEOUT }
+                    );
+                    const content = fileData.content;
 
-                const batch = files.slice(i, i + concurrency);
-                let batchTimeouts = 0;
-                let batchCircuitOpen = false;
+                    await ctx.indexFile(file.path, content);
+                    indexed++;
+                    consecutiveSuccesses++;
+                    consecutiveTimeouts = 0;
 
-                await Promise.all(batch.map(async file => {
-                    try {
-                        // Use SNAPSHOT owner/repo, not live State.currentProject
-                        // Pass INDEX_TIMEOUT — background work tolerates slow servers
-                        const fileData = await Git.getFile(
-                            snapshot.owner, snapshot.repo, file.path, snapshot.branch,
-                            { timeout: INDEX_TIMEOUT }
-                        );
-                        const content = fileData.content;
-                        
-                        // Skip very large files (content-based check)
-                        if (content.length > 500000) {
-                            console.log(`[Context] Skipping large file: ${file.path} (${(content.length / 1024).toFixed(0)}KB)`);
-                            return;
-                        }
-
-                        await this.indexFile(file.path, content);
-                        indexed++;
-
-                        // Emit progress
-                        EventBus.emit('context:indexProgress', {
-                            current: indexed,
-                            total: totalFiles,
-                            percent: Math.round((indexed / totalFiles) * 100)
-                        });
-
-                    } catch (error) {
-                        if (error.circuitOpen) {
-                            batchCircuitOpen = true;
-                        } else if (error.name === 'TimeoutError') {
-                            batchTimeouts++;
-                        }
-                        console.error(`[Context] Failed to index ${file.path}:`, error);
-                    }
-                }));
-
-                i += batch.length;
-
-                // Circuit breaker tripped — pause and wait for restore
-                if (batchCircuitOpen) {
-                    console.log(`[Context] Circuit breaker open — pausing indexer, waiting for restore…`);
-                    const restored = await new Promise(resolve => {
-                        const onRestore = () => { resolve(true); cleanup(); };
-                        const timeout = setTimeout(() => { resolve(false); cleanup(); }, 90_000);
-                        const cleanup = () => {
-                            EventBus.off('git:connectionRestored', onRestore);
-                            clearTimeout(timeout);
-                        };
-                        EventBus.on('git:connectionRestored', onRestore);
+                    ctx._indexProgress = { current: indexed, total: totalFiles };
+                    EventBus.emit('context:indexProgress', {
+                        current: indexed,
+                        total: totalFiles,
+                        percent: Math.round((indexed / totalFiles) * 100)
                     });
 
-                    if (!restored) {
-                        console.warn(`[Context] Connection not restored after 90s — aborting indexing`);
-                        break;
-                    }
-                    console.log(`[Context] Connection restored — resuming indexer (${files.length - i} files remaining)`);
-                    // Reset concurrency after pause
-                    concurrency = 2;
-                    consecutiveCleanBatches = 0;
-                    continue;
-                }
-
-                // Adaptive concurrency: reduce on timeouts, increase on clean batches
-                if (batchTimeouts > 0) {
-                    const prev = concurrency;
-                    concurrency = Math.max(MIN_CONCURRENCY, Math.floor(concurrency / 2));
-                    if (concurrency !== prev) {
-                        console.log(`[Context] ${batchTimeouts} timeout(s) — reducing concurrency ${prev} → ${concurrency}`);
-                    }
-                    consecutiveCleanBatches = 0;
-                } else {
-                    consecutiveCleanBatches++;
-                    // After 3 clean batches, try increasing concurrency
-                    if (consecutiveCleanBatches >= 3 && concurrency < MAX_CONCURRENCY) {
-                        const prev = concurrency;
-                        concurrency = Math.min(MAX_CONCURRENCY, concurrency + 1);
-                        if (concurrency !== prev) {
-                            console.log(`[Context] 3 clean batches — increasing concurrency ${prev} → ${concurrency}`);
+                    // Ramp up after sustained success
+                    if (consecutiveSuccesses >= 10 && maxConcurrency < 5) {
+                        const prev = maxConcurrency;
+                        maxConcurrency = Math.min(5, maxConcurrency + 1);
+                        if (maxConcurrency !== prev) {
+                            console.log(`[Context] 10 consecutive OK — concurrency ${prev} → ${maxConcurrency}`);
                         }
-                        consecutiveCleanBatches = 0;
+                        consecutiveSuccesses = 0;
+                    }
+
+                    return 'ok';
+
+                } catch (error) {
+                    if (error.circuitOpen) {
+                        failed++;
+                        circuitOpen = true;
+                        return 'circuit';
+                    } else if (error.status === 404) {
+                        // File in tree but not on this branch/ref — normal during branch switches
+                        console.log(`[Context] Skipping ${file.path} (not found on branch)`);
+                        return 'skip';
+                    } else if (error.name === 'TimeoutError') {
+                        failed++;
+                        consecutiveTimeouts++;
+                        consecutiveSuccesses = 0;
+                        // Reduce concurrency on timeouts
+                        if (consecutiveTimeouts >= 2 && maxConcurrency > 1) {
+                            const prev = maxConcurrency;
+                            maxConcurrency = Math.max(1, maxConcurrency - 1);
+                            if (maxConcurrency !== prev) {
+                                console.log(`[Context] ${consecutiveTimeouts} timeout(s) — concurrency ${prev} → ${maxConcurrency}`);
+                            }
+                        }
+                        return 'timeout';
+                    }
+                    failed++;
+                    console.error(`[Context] Failed to index ${file.path}:`, error);
+                    return 'error';
+                }
+            }
+
+            // Pool driver: resolves when all files processed or aborted
+            await new Promise((resolvePool) => {
+                function pump() {
+                    // Drain condition
+                    if (fileIdx >= files.length && activeCount === 0) {
+                        return resolvePool();
+                    }
+
+                    // Abort on generation change
+                    if (ctx._indexGeneration !== generation) {
+                        if (activeCount === 0) resolvePool();
+                        return;
+                    }
+
+                    // Circuit breaker — stop launching new work
+                    if (circuitOpen) {
+                        if (activeCount === 0) resolvePool();
+                        return;
+                    }
+
+                    // Launch workers up to current maxConcurrency
+                    while (activeCount < maxConcurrency && fileIdx < files.length && !circuitOpen) {
+                        // Pause check — if paused, schedule a retry instead of blocking the pool
+                        if (ctx.paused) {
+                            const onResume = () => {
+                                EventBus.off('context:pauseChanged', onResume);
+                                pump();
+                            };
+                            EventBus.on('context:pauseChanged', onResume);
+                            return; // Stop pumping until resumed
+                        }
+
+                        const file = files[fileIdx++];
+                        activeCount++;
+
+                        processFile(file).then((result) => {
+                            activeCount--;
+                            if (result === 'timeout') {
+                                // Small delay after timeout before starting next
+                                setTimeout(pump, 300);
+                            } else {
+                                pump();
+                            }
+                        });
                     }
                 }
 
-                // Small delay between batches (longer if we had timeouts)
-                await new Promise(resolve => setTimeout(resolve, batchTimeouts > 0 ? 500 : 10));
+                pump();
+            });
+
+            // Circuit breaker recovery
+            if (circuitOpen) {
+                console.log(`[Context] Circuit breaker open — waiting for connection restore…`);
+                const restored = await new Promise(resolve => {
+                    const onRestore = () => { resolve(true); cleanup(); };
+                    const timer = setTimeout(() => { resolve(false); cleanup(); }, 90_000);
+                    const cleanup = () => {
+                        EventBus.off('git:connectionRestored', onRestore);
+                        clearTimeout(timer);
+                    };
+                    EventBus.on('git:connectionRestored', onRestore);
+                });
+
+                if (restored && fileIdx < files.length) {
+                    console.log(`[Context] Connection restored — resuming (${files.length - fileIdx} files remaining)`);
+                    circuitOpen = false;
+                    maxConcurrency = 2;
+                    consecutiveTimeouts = 0;
+
+                    // Run the pool again for remaining files
+                    await new Promise((resolvePool) => {
+                        function pump() {
+                            if (fileIdx >= files.length && activeCount === 0) return resolvePool();
+                            if (ctx._indexGeneration !== generation) { if (activeCount === 0) resolvePool(); return; }
+                            if (circuitOpen) { if (activeCount === 0) resolvePool(); return; }
+
+                            while (activeCount < maxConcurrency && fileIdx < files.length && !circuitOpen) {
+                                if (ctx.paused) {
+                                    const onResume = () => { EventBus.off('context:pauseChanged', onResume); pump(); };
+                                    EventBus.on('context:pauseChanged', onResume);
+                                    return;
+                                }
+                                const file = files[fileIdx++];
+                                activeCount++;
+                                processFile(file).then((result) => {
+                                    activeCount--;
+                                    result === 'timeout' ? setTimeout(pump, 300) : pump();
+                                });
+                            }
+                        }
+                        pump();
+                    });
+                } else if (!restored) {
+                    console.warn(`[Context] Connection not restored after 90s — stopping`);
+                }
+            }
+
+            if (failed > 0) {
+                console.log(`[Context] Indexing finished with ${failed} failures`);
             }
 
             // Final check: don't save if project switched during last batch
@@ -389,14 +708,15 @@ const ContextManager = {
             }
 
             this._indexedProject = projectKey;
-            console.log(`[Context] Indexed ${indexed} files`);
+            const totalIndexed = this._fileIndex.size; // includes resumed + new
+            console.log(`[Context] Indexed ${indexed} files${canResume ? ` (${totalIndexed} total)` : ''}`);
 
             // Persist to storage
             await this.saveIndexToStorage();
 
             EventBus.emit('context:indexComplete', {
                 project: projectKey,
-                filesIndexed: indexed,
+                filesIndexed: totalIndexed,
                 totalFiles: allFiles.length,
                 eligible: eligible.length,
                 skipped
@@ -413,6 +733,9 @@ const ContextManager = {
             // Only clear _indexing if we're still the active generation
             if (this._indexGeneration === generation) {
                 this._indexing = false;
+                this._indexProgress = null;
+                this._autoPause = false;
+                this._emitPauseState();
             }
         }
     },
@@ -434,7 +757,6 @@ const ContextManager = {
 
             try {
                 const fileData = await Git.getFile(owner, repo, path, branch);
-                if (fileData.content.length > 500000) continue;
                 await this.indexFile(path, fileData.content);
                 updated++;
             } catch (e) {

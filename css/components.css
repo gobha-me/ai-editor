@@ -224,6 +224,66 @@
     font-weight: 600;
 }
 
+/* ---- Index Indicator ---- */
+
+.index-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    animation: index-fade-in 0.2s ease-out;
+}
+
+@keyframes index-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.index-indicator .index-indicator-text {
+    font-variant-numeric: tabular-nums;
+}
+
+.index-indicator .index-indicator-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 1px 2px;
+    border-radius: 3px;
+    color: var(--text-secondary);
+    transition: background 0.15s;
+}
+
+.index-indicator .index-indicator-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.index-indicator.index-paused {
+    border-color: var(--warning, #f0ad4e);
+    color: var(--warning, #f0ad4e);
+}
+
+.index-indicator.index-auto-paused {
+    opacity: 0.7;
+}
+
+.index-indicator.index-partial {
+    border-color: var(--info, #5bc0de);
+    color: var(--text-secondary);
+}
+
+.index-indicator.index-partial .index-indicator-btn {
+    color: var(--info, #5bc0de);
+}
+
 /* Role selector in chat header */
 #roleSelect {
     width: auto;

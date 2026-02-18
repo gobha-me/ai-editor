@@ -74,6 +74,30 @@ async function resolveIssueContext(owner, repo) {
 // ============================================
 // GIT API (provider-agnostic)
 // ============================================
+// WRITE GUARD — emits events for indexer auto-pause
+// ============================================
+
+let _writeDepth = 0;
+
+/**
+ * Wrap a write operation with git:writeStart/writeEnd events.
+ * Supports nesting (batchCommit internally calling createFile, etc.)
+ * so the indexer only resumes after ALL writes finish.
+ */
+async function _writeGuard(fn) {
+    _writeDepth++;
+    if (_writeDepth === 1) EventBus.emit('git:writeStart');
+    try {
+        return await fn();
+    } finally {
+        _writeDepth--;
+        if (_writeDepth === 0) EventBus.emit('git:writeEnd');
+    }
+}
+
+// ============================================
+// PUBLIC API
+// ============================================
 
 /**
  * Provider-agnostic git API.
@@ -192,27 +216,27 @@ const Git = {
 
     async createFile(owner, repo, path, content, message, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.createFile(connection, owner, repo, path, content, message, branch);
+        return _writeGuard(() => provider.createFile(connection, owner, repo, path, content, message, branch));
     },
 
     async updateFile(owner, repo, path, content, message, sha, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.updateFile(connection, owner, repo, path, content, message, sha, branch);
+        return _writeGuard(() => provider.updateFile(connection, owner, repo, path, content, message, sha, branch));
     },
 
     async deleteFile(owner, repo, path, message, sha, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.deleteFile(connection, owner, repo, path, message, sha, branch);
+        return _writeGuard(() => provider.deleteFile(connection, owner, repo, path, message, sha, branch));
     },
 
     async renameFile(owner, repo, oldPath, newPath, message, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.renameFile(connection, owner, repo, oldPath, newPath, message, branch);
+        return _writeGuard(() => provider.renameFile(connection, owner, repo, oldPath, newPath, message, branch));
     },
 
     async batchCommitFiles(owner, repo, files, message, branch = 'main') {
         const { provider, connection } = resolveCurrentConnection();
-        return provider.batchCommitFiles(connection, owner, repo, files, message, branch);
+        return _writeGuard(() => provider.batchCommitFiles(connection, owner, repo, files, message, branch));
     },
 
     // ========================================

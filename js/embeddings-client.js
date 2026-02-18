@@ -129,8 +129,16 @@ const EmbeddingsClient = {
     },
 
     /**
-     * Generate embedding for a text string
-     * Routes to local or remote implementation
+     * Discovered max input size (chars) for the current model.
+     * Starts at null (unknown), learned from errors, persists for session.
+     * Prevents repeated oversized requests after first failure.
+     */
+    _maxInputChars: null,
+
+    /**
+     * Generate embedding for a text string.
+     * Auto-trims on token limit errors and learns the model's limit.
+     * 
      * @param {string} text - Text to embed
      * @returns {Promise<Array|null>} Embedding vector
      */
@@ -142,16 +150,136 @@ const EmbeddingsClient = {
             if (!success) return null;
         }
 
-        try {
-            if (this._mode === 'local') {
-                return await this._embedLocal(text);
-            } else {
-                return await this._embedRemote(text);
+        // Pre-trim if we've already discovered this model's limit
+        let input = text;
+        if (this._maxInputChars && input.length > this._maxInputChars) {
+            input = this._trimToLimit(input, this._maxInputChars);
+        }
+
+        // Try embed, with up to 3 retries at progressively smaller sizes
+        const MAX_RETRIES = 3;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                if (this._mode === 'local') {
+                    return await this._embedLocal(input);
+                } else {
+                    return await this._embedRemote(input);
+                }
+            } catch (error) {
+                if (attempt >= MAX_RETRIES) {
+                    console.error(`[Embeddings] Failed after ${MAX_RETRIES} retries (${this._mode} mode):`, error);
+                    return null;
+                }
+
+                const limit = this._parseTokenLimitError(error);
+                if (limit) {
+                    // Discovered exact token limit — convert to chars
+                    // ~4 chars/token for code, use 3.5 to be conservative
+                    const charLimit = Math.floor(limit * 3.5);
+                    this._maxInputChars = charLimit;
+                    input = this._trimToLimit(input, charLimit);
+                    console.log(`[Embeddings] Token limit hit (${limit} tokens) — trimming to ~${charLimit} chars, retry ${attempt + 1}/${MAX_RETRIES}`);
+                } else if (this._isOverSizeError(error)) {
+                    // Size error but can't parse limit — halve and retry
+                    const halved = Math.floor(input.length / 2);
+                    this._maxInputChars = halved;
+                    input = this._trimToLimit(input, halved);
+                    console.log(`[Embeddings] Size error (unparseable) — halving to ${halved} chars, retry ${attempt + 1}/${MAX_RETRIES}`);
+                } else {
+                    // Not a size error — don't retry
+                    console.error(`[Embeddings] Failed to generate embedding (${this._mode} mode):`, error);
+                    return null;
+                }
             }
-        } catch (error) {
-            console.error(`[Embeddings] Failed to generate embedding (${this._mode} mode):`, error);
+        }
+        return null;
+    },
+
+    /**
+     * Trim text to a char limit, preserving structure.
+     * Keeps the structural header (before ---) intact, trims raw content.
+     */
+    _trimToLimit(text, charLimit) {
+        if (text.length <= charLimit) return text;
+
+        const divider = text.indexOf('\n---\n');
+        if (divider === -1) {
+            // No structure/content split — just truncate
+            return text.slice(0, charLimit);
+        }
+
+        const structure = text.slice(0, divider);
+        const content = text.slice(divider + 5); // skip \n---\n
+
+        if (structure.length >= charLimit) {
+            // Structure alone exceeds limit — truncate it
+            return structure.slice(0, charLimit);
+        }
+
+        // Fit content into remaining budget, head-biased
+        const contentBudget = charLimit - structure.length - 5; // 5 for \n---\n
+        if (contentBudget < 100) return structure;
+
+        const headBudget = Math.floor(contentBudget * 0.7);
+        const tailBudget = contentBudget - headBudget;
+
+        const head = content.slice(0, headBudget);
+        const tail = content.slice(-tailBudget);
+        return structure + '\n---\n' + head + '\n…\n' + tail;
+    },
+
+    /**
+     * Parse a token limit error from various API formats.
+     * Returns the max token count if this is a limit error, null otherwise.
+     */
+    _parseTokenLimitError(error) {
+        const msg = error?.message || '';
+
+        // Common patterns across providers:
+        // "This model's maximum context length is 8192 tokens"
+        // "input must have fewer than 8192 tokens"
+        // "maximum token length exceeded (8192)"
+        // "token limit: 512"
+        // Ollama: "too many tokens: 9500 > 8192"
+        const patterns = [
+            /maximum\s+(?:context\s+)?(?:length|tokens?)\s+(?:is|of)\s+(\d+)/i,
+            /fewer\s+than\s+(\d+)\s+tokens/i,
+            /token\s+limit[:\s]+(\d+)/i,
+            /(?:exceeded|too many tokens).*?>\s*(\d+)/i,
+            /max[_\s]tokens?\s*[:=]\s*(\d+)/i,
+        ];
+
+        for (const pattern of patterns) {
+            const match = msg.match(pattern);
+            if (match) return parseInt(match[1], 10);
+        }
+
+        // Also check for HTTP 413/400 with "too large" style messages
+        if ((error?.status === 413 || error?.status === 400) && /too (large|long|many)/i.test(msg)) {
+            // Can't determine exact limit — caller should use halving fallback
             return null;
         }
+
+        return null;
+    },
+
+    /**
+     * Check if an error is size-related (but we can't parse the exact limit).
+     */
+    _isOverSizeError(error) {
+        const msg = error?.message || '';
+        const status = error?.status;
+
+        // HTTP 413 Payload Too Large
+        if (status === 413) return true;
+
+        // 400 with size-related keywords
+        if (status === 400 && /too (large|long|many)|exceeds?|overflow|token|length|limit/i.test(msg)) return true;
+
+        // Ollama-style: "too many tokens"
+        if (/too many tokens/i.test(msg)) return true;
+
+        return false;
     },
 
     /**
@@ -169,7 +297,7 @@ const EmbeddingsClient = {
     },
 
     /**
-     * Generate embedding using Venice.ai API (remote)
+     * Generate embedding using remote API (Venice.ai, Ollama, OpenAI-compatible)
      */
     async _embedRemote(text) {
         const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/embeddings`;
@@ -189,8 +317,10 @@ const EmbeddingsClient = {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Embeddings API error: ${response.status} - ${error}`);
+            const errorText = await response.text();
+            const err = new Error(`Embeddings API error: ${response.status} - ${errorText}`);
+            err.status = response.status;
+            throw err;
         }
 
         const data = await response.json();
@@ -283,6 +413,7 @@ EventBus.on('settings:saved', async () => {
         if (newMode !== EmbeddingsClient._mode) {
             console.log(`[Embeddings] Mode changed from ${EmbeddingsClient._mode} to ${newMode}, reinitializing...`);
             EmbeddingsClient._initialized = false;
+            EmbeddingsClient._maxInputChars = null; // Reset discovered limit for new model
             embeddingModel = null;
             pipeline = null;
             await EmbeddingsClient.init();

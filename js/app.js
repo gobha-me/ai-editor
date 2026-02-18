@@ -79,6 +79,7 @@ import {
 import { initPanelResize } from './resize-manager.js';
 import { initAccessibility, announce } from './accessibility.js';
 import { initOfflineIndicator } from './offline-indicator.js';
+import { initIndexIndicator } from './index-indicator.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -1001,6 +1002,7 @@ async function init() {
     initZipDragDrop();
     initAccessibility();
     initOfflineIndicator();
+    initIndexIndicator();
     initMobile();
 
     // Screen reader announcements for key state changes
