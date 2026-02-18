@@ -454,8 +454,8 @@ const githubProvider = {
     // ISSUES
     // ========================================
 
-    async listIssues(connection, owner, repo, state = 'open', labels = '') {
-        let endpoint = `/repos/${owner}/${repo}/issues?state=${state}&per_page=50&sort=updated`;
+    async listIssues(connection, owner, repo, state = 'open', labels = '', page = 1) {
+        let endpoint = `/repos/${owner}/${repo}/issues?state=${state}&per_page=100&sort=created&direction=asc&page=${page}`;
         if (labels) endpoint += `&labels=${encodeURIComponent(labels)}`;
         const items = await this.request(connection, 'GET', endpoint);
 

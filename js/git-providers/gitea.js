@@ -398,8 +398,8 @@ const giteaProvider = {
     // ISSUES
     // ========================================
 
-    async listIssues(connection, owner, repo, state = 'open', labels = '') {
-        let endpoint = `/repos/${owner}/${repo}/issues?state=${state}&type=issues&limit=50`;
+    async listIssues(connection, owner, repo, state = 'open', labels = '', page = 1) {
+        let endpoint = `/repos/${owner}/${repo}/issues?state=${state}&type=issues&limit=100&sort=oldest&page=${page}`;
         if (labels) endpoint += `&labels=${encodeURIComponent(labels)}`;
         const issues = await this.request(connection, 'GET', endpoint);
         return (issues || []).map(i => {

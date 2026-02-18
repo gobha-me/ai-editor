@@ -15,15 +15,17 @@ export function registerIssueTools(registry) {
     // ========================================
     // list_issues
     // ========================================
-    registry.register('list_issues', async ({ state = 'open', labels = '' } = {}) => {
+    registry.register('list_issues', async ({ state = 'open', labels = '', page = 1 } = {}) => {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
         const { owner, repo } = State.currentProject;
         try {
-            const issues = await Git.listIssues(owner, repo, state, labels);
-            return {
+            const issues = await Git.listIssues(owner, repo, state, labels, page);
+            const result = {
                 project: `${owner}/${repo}`,
+                state_filter: state,
+                page,
                 count: issues.length,
                 issues: issues.map(i => ({
                     number: i.number,
@@ -34,6 +36,13 @@ export function registerIssueTools(registry) {
                     assignee: i.assignees?.[0] || null
                 }))
             };
+            // Tell the LLM if there may be more pages
+            if (issues.length >= 100) {
+                result.has_more = true;
+                result.next_page = page + 1;
+                result.hint = `This page returned 100 issues (the maximum). Call list_issues with page=${page + 1} to see more. Use labels parameter to filter.`;
+            }
+            return result;
         } catch (error) {
             return { error: `Failed to list issues: ${error.message}` };
         }
@@ -41,7 +50,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'list_issues',
-            description: 'List issues for the current project. Returns open issues by default.',
+            description: 'List issues for the current project, sorted oldest-first. Returns up to 100 per page. Use page parameter for pagination.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -53,6 +62,10 @@ export function registerIssueTools(registry) {
                     labels: {
                         type: 'string',
                         description: 'Comma-separated label names to filter by'
+                    },
+                    page: {
+                        type: 'integer',
+                        description: 'Page number for pagination (default: 1, 100 issues per page, oldest first)'
                     }
                 },
                 required: []
@@ -80,7 +93,7 @@ export function registerIssueTools(registry) {
                 console.warn(`Could not fetch comments for issue #${number}:`, e.message);
             }
 
-            return {
+            const result = {
                 number: issue.number,
                 title: issue.title,
                 body: issue.body,
@@ -88,12 +101,18 @@ export function registerIssueTools(registry) {
                 labels: issue.labels || [],
                 assignee: issue.assignees?.[0] || null,
                 created: issue.createdAt,
+                total_comments: comments.length,
                 comments: comments.slice(0, 20).map(c => ({
                     user: c.user,
                     body: c.body,
                     created: c.createdAt
                 }))
             };
+            if (comments.length > 20) {
+                result.comments_truncated = true;
+                result.hint = `Showing oldest 20 of ${comments.length} comments. The newest ${comments.length - 20} are omitted.`;
+            }
+            return result;
         } catch (error) {
             if (error.status === 404) {
                 return { error: `Issue #${number} not found. Use list_issues to see available issues.` };

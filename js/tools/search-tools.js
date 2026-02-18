@@ -60,10 +60,19 @@ export function registerSearchTools(registry) {
             }
             return {
                 query, files_searched: Math.min(files.length, 50),
+                total_files_in_scope: files.length,
                 results,
                 message: results.length > 0
                     ? `Found "${query}" in ${results.length} file(s)`
-                    : `No matches for "${query}"`
+                    : `No matches for "${query}"`,
+                ...(files.length > 50 ? {
+                    files_truncated: true,
+                    hint: `Only searched first 50 of ${files.length} files in scope. Use the 'path' parameter to narrow scope (e.g., path="js/tools/") for more targeted results.`
+                } : {}),
+                ...(results.length >= max_results ? {
+                    results_capped: true,
+                    hint_results: `Hit max_results limit (${max_results}). Increase max_results or narrow scope with 'path' to find more matches.`
+                } : {})
             };
         } catch (error) {
             return { error: `Search failed: ${error.message}` };

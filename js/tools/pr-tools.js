@@ -94,8 +94,9 @@ export function registerPRTools(registry) {
         const { owner, repo } = State.currentProject;
         try {
             const prs = await Git.listMergeRequests(owner, repo, state);
-            return {
+            const result = {
                 project: `${owner}/${repo}`,
+                state_filter: state,
                 count: prs.length,
                 pull_requests: prs.map(pr => ({
                     number: pr.number,
@@ -107,6 +108,11 @@ export function registerPRTools(registry) {
                     url: pr.url
                 }))
             };
+            if (prs.length >= 50) {
+                result.has_more = true;
+                result.hint = `Returned 50 PRs (the page limit). There may be more. Use read_pull_request on specific PR numbers for details.`;
+            }
+            return result;
         } catch (error) {
             return { error: `Failed to list pull requests: ${error.message}` };
         }
@@ -159,16 +165,18 @@ export function registerPRTools(registry) {
 
             // Truncate patches if total is too large (keep it under ~8K chars for tool results)
             let totalPatchLen = 0;
+            let patchesTruncated = 0;
             const truncatedFiles = files.map(f => {
                 const patch = f.patch || '';
                 totalPatchLen += patch.length;
                 if (totalPatchLen > 8000) {
+                    patchesTruncated++;
                     return { ...f, patch: `[truncated — ${patch.length} chars, ${f.additions}+ ${f.deletions}-]` };
                 }
                 return f;
             });
 
-            return {
+            const result = {
                 pr: {
                     number: pr.number,
                     title: pr.title,
@@ -202,6 +210,11 @@ export function registerPRTools(registry) {
                     date: c.createdAt
                 }))
             };
+            if (patchesTruncated > 0) {
+                result.patches_truncated = patchesTruncated;
+                result.hint = `${patchesTruncated} file diff(s) were truncated to limit response size. Use read_file on individual files to see their full current content, or check out the PR branch to review changes.`;
+            }
+            return result;
         } catch (error) {
             if (error.status === 404) {
                 return { error: `Pull request #${prNum} not found. Use list_pull_requests to see available PRs.` };

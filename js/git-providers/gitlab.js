@@ -509,12 +509,12 @@ const gitlabProvider = {
     // ISSUES
     // ========================================
 
-    async listIssues(connection, owner, repo, state = 'open', labels = '') {
+    async listIssues(connection, owner, repo, state = 'open', labels = '', page = 1) {
         let openedState = state;
         // GitLab uses 'opened' not 'open'
         if (state === 'open') openedState = 'opened';
 
-        let endpoint = `/projects/${projectId(owner, repo)}/issues?state=${openedState}&per_page=50&order_by=updated_at`;
+        let endpoint = `/projects/${projectId(owner, repo)}/issues?state=${openedState}&per_page=100&order_by=created_at&sort=asc&page=${page}`;
         if (labels) endpoint += `&labels=${encodeURIComponent(labels)}`;
         const items = await this.request(connection, 'GET', endpoint);
 

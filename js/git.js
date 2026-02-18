@@ -219,9 +219,9 @@ const Git = {
     // ISSUES
     // ========================================
 
-    async listIssues(owner, repo, state = 'open', labels = '') {
+    async listIssues(owner, repo, state = 'open', labels = '', page = 1) {
         const ctx = await resolveIssueContext(owner, repo);
-        return ctx.provider.listIssues(ctx.connection, ctx.owner, ctx.repo, state, labels);
+        return ctx.provider.listIssues(ctx.connection, ctx.owner, ctx.repo, state, labels, page);
     },
 
     async getIssue(owner, repo, number) {

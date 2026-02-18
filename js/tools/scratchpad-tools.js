@@ -64,10 +64,11 @@ export function registerScratchpadTools(registry) {
         }
 
         const val = (content || '').slice(0, lim.maxValueLen);
+        const wasTruncated = (content || '').length > lim.maxValueLen;
         pad[k] = val;
         State.scratchpad = pad;
 
-        return {
+        const result = {
             success: true,
             key: k,
             length: val.length,
@@ -76,6 +77,12 @@ export function registerScratchpadTools(registry) {
             max_entries: lim.maxKeys,
             message: `Wrote "${k}" (${val.length}/${lim.maxValueLen} chars)`
         };
+        if (wasTruncated) {
+            result.truncated = true;
+            result.original_length = (content || '').length;
+            result.hint = `Content was truncated from ${(content || '').length} to ${lim.maxValueLen} chars. Split across multiple keys if you need to store more.`;
+        }
+        return result;
     }, {
         type: 'function',
         function: {
