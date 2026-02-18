@@ -211,22 +211,38 @@ const ContextManager = {
      */
     async indexProject(force = false) {
         if (!this.isEnabled()) return 0;
-        if (this._indexing) {
-            console.log('[Context] Already indexing, skipping');
-            return 0;
-        }
         if (!State.currentProject) {
             console.log('[Context] No project loaded');
             return 0;
         }
 
-        const projectKey = `${State.currentProject.owner}/${State.currentProject.repo}@${State.currentBranch}`;
+        // Snapshot the project context NOW — these won't change mid-loop
+        const snapshot = {
+            connectionId: State.currentProject.connectionId,
+            owner: State.currentProject.owner,
+            repo: State.currentProject.repo,
+            branch: State.currentBranch,
+            fileTree: [...State.fileTree]  // shallow copy of tree array
+        };
+        const projectKey = `${snapshot.owner}/${snapshot.repo}@${snapshot.branch}`;
+
+        // If another indexing run is in progress, cancel it
+        if (this._indexing) {
+            console.log(`[Context] Cancelling in-progress indexing for new project: ${projectKey}`);
+            this._indexGeneration = (this._indexGeneration || 0) + 1;
+            // Wait briefly for the old run to notice the cancellation
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
 
         // Check if we've already indexed this project
         if (!force && this._indexedProject === projectKey && this._fileIndex.size > 0) {
             console.log('[Context] Project already indexed');
             return this._fileIndex.size;
         }
+
+        // Generation counter: if this changes mid-loop, another indexProject call has started
+        const generation = (this._indexGeneration || 0) + 1;
+        this._indexGeneration = generation;
 
         this._indexing = true;
         this._fileIndex.clear();
@@ -237,8 +253,8 @@ const ContextManager = {
         EventBus.emit('context:indexStart', { project: projectKey });
 
         try {
-            // Filter files: type, extension, path patterns
-            const allFiles = State.fileTree.filter(f => f.type === 'file');
+            // Filter files from the SNAPSHOT, not live State.fileTree
+            const allFiles = snapshot.fileTree.filter(f => f.type === 'file');
             const eligible = allFiles.filter(f => this.shouldIndex(f.path));
             const skipped = allFiles.length - eligible.length;
 
@@ -262,13 +278,18 @@ const ContextManager = {
             // Index files in batches to avoid blocking
             const batchSize = 5;
             for (let i = 0; i < files.length; i += batchSize) {
+                // Abort if project switched (another indexProject call started)
+                if (this._indexGeneration !== generation) {
+                    console.log(`[Context] Indexing aborted — project switched (was ${projectKey})`);
+                    return indexed;
+                }
+
                 const batch = files.slice(i, i + batchSize);
                 
                 await Promise.all(batch.map(async file => {
                     try {
-                        // Fetch file content
-                        const { owner, repo } = State.currentProject;
-                        const fileData = await Git.getFile(owner, repo, file.path, State.currentBranch);
+                        // Use SNAPSHOT owner/repo, not live State.currentProject
+                        const fileData = await Git.getFile(snapshot.owner, snapshot.repo, file.path, snapshot.branch);
                         const content = fileData.content;
                         
                         // Skip very large files (content-based check)
@@ -296,6 +317,12 @@ const ContextManager = {
                 await new Promise(resolve => setTimeout(resolve, 10));
             }
 
+            // Final check: don't save if project switched during last batch
+            if (this._indexGeneration !== generation) {
+                console.log(`[Context] Indexing completed but project already switched — discarding`);
+                return 0;
+            }
+
             this._indexedProject = projectKey;
             console.log(`[Context] Indexed ${indexed} files`);
 
@@ -318,7 +345,10 @@ const ContextManager = {
             return 0;
 
         } finally {
-            this._indexing = false;
+            // Only clear _indexing if we're still the active generation
+            if (this._indexGeneration === generation) {
+                this._indexing = false;
+            }
         }
     },
 
