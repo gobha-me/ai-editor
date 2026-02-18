@@ -61,51 +61,20 @@ export async function openPRDetailModal(prNumber) {
     const { owner, repo } = State.currentProject;
 
     try {
-        // Fetch PR details, files, comments, and CI in parallel
-        const [pr, files, comments] = await Promise.all([
-            Git.getPullRequest(owner, repo, prNumber),
-            Git.getPullRequestFiles(owner, repo, prNumber).catch(() => []),
-            Git.getPullRequestComments(owner, repo, prNumber).catch(() => [])
-        ]);
+        // Phase 1: Fetch PR details — this is fast and gives us everything for the header
+        const pr = await Git.getPullRequest(owner, repo, prNumber);
 
-        let ci = { state: 'unknown', statuses: [] };
-        try {
-            ci = await Git.getCommitStatus(owner, repo, pr.head);
-        } catch { /* no CI */ }
+        _currentPR = { ...pr, files: [], comments: [], ci: { state: 'pending', statuses: [] } };
 
-        _currentPR = { ...pr, files, comments, ci };
-
-        // Title
+        // Render header immediately — no waiting for files/comments/CI
         document.getElementById('prDetailTitle').textContent = `#${pr.number}: ${pr.title}`;
 
-        // External link (now in header)
         const extLink = document.getElementById('prDetailExternalLink');
-        if (pr.url) {
-            extLink.href = pr.url;
-            extLink.style.display = '';
-        } else {
-            extLink.style.display = 'none';
-        }
+        if (pr.url) { extLink.href = pr.url; extLink.style.display = ''; }
+        else { extLink.style.display = 'none'; }
 
-        // Meta badges
-        const meta = document.getElementById('prDetailMeta');
-        const stateBadge = pr.merged
-            ? '<span class="badge-state badge-state-merged">🟣 Merged</span>'
-            : pr.state === 'open'
-                ? '<span class="badge-state badge-state-open">🟢 Open</span>'
-                : '<span class="badge-state badge-state-closed">🔴 Closed</span>';
-
-        const ciIcon = CI_ICONS[ci.state] || '⚪';
-        const ciBadge = `<span class="pr-ci-live" title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
-
-        const mergeableBadge = pr.merged ? '' : pr.mergeable
-            ? '<span style="color: var(--success);">✅ Mergeable</span>'
-            : '<span style="color: var(--warning);">⚠️ Conflicts</span>';
-
-        const stats = `<span class="modal-meta-item">+${pr.additions || 0} −${pr.deletions || 0} · ${pr.changed_files || files.length} files</span>`;
-        const author = `<span class="modal-meta-item">by ${escapeHtml(pr.user || 'unknown')}</span>`;
-
-        meta.innerHTML = [stateBadge, ciBadge, mergeableBadge, stats, author].filter(Boolean).join('<span class="meta-sep">·</span>');
+        // Meta badges (CI starts as pending spinner)
+        _renderPRMeta(pr, { state: 'pending', statuses: [] });
 
         // Branches
         document.getElementById('prDetailBranches').innerHTML = `<code>${escapeHtml(pr.head)}</code> <span class="branch-arrow">→</span> <code>${escapeHtml(pr.base)}</code>`;
@@ -114,31 +83,49 @@ export async function openPRDetailModal(prNumber) {
         const bodyEl = document.getElementById('prDetailBody');
         bodyEl.innerHTML = pr.body ? renderMarkdown(pr.body) : '<em style="color: var(--text-muted);">No description</em>';
 
-        // Changed files with expandable diffs
-        _renderPRFiles(files);
-
-        // Comments
-        _renderPRComments(comments);
-
-        // Show merge controls only if PR is open and not merged
+        // Merge controls
         const mergeControls = document.getElementById('prDetailMergeControls');
-        if (pr.state === 'open' && !pr.merged) {
-            mergeControls.style.display = '';
-        } else {
-            mergeControls.style.display = 'none';
-        }
+        mergeControls.style.display = (pr.state === 'open' && !pr.merged) ? '' : 'none';
 
-        // Show comment section for open and closed PRs (not useful for merged already commented)
         const addComment = document.getElementById('prDetailAddComment');
         if (addComment) {
             addComment.style.display = (pr.state === 'open' || !pr.merged) ? '' : 'none';
         }
 
-        // Start CI polling if status is non-terminal
-        _stopCiPolling();
-        if (pr.state === 'open' && !pr.merged && !CI_TERMINAL.has(ci.state)) {
-            _startCiPolling(owner, repo, pr.head);
-        }
+        // Show loading placeholders for files & comments
+        document.getElementById('prDetailFiles').innerHTML = '<span style="color: var(--text-muted); font-size: var(--font-sm);">Loading files…</span>';
+        document.getElementById('prDetailComments').innerHTML = '<span style="color: var(--text-muted); font-size: var(--font-sm);">Loading comments…</span>';
+
+        // Phase 2: Fire files, comments, CI in parallel — render each as it arrives
+        const filesPromise = Git.getPullRequestFiles(owner, repo, prNumber).catch(() => []);
+        const commentsPromise = Git.getPullRequestComments(owner, repo, prNumber).catch(() => []);
+        const ciPromise = Git.getCommitStatus(owner, repo, pr.head).catch(() => ({ state: 'unknown', statuses: [] }));
+
+        filesPromise.then(files => {
+            if (!_currentPR || _currentPR.number !== prNumber) return;
+            _currentPR.files = files;
+            _renderPRFiles(files);
+        });
+
+        commentsPromise.then(comments => {
+            if (!_currentPR || _currentPR.number !== prNumber) return;
+            _currentPR.comments = comments;
+            _renderPRComments(comments);
+        });
+
+        ciPromise.then(ci => {
+            if (!_currentPR || _currentPR.number !== prNumber) return;
+            _currentPR.ci = ci;
+            _renderPRMeta(pr, ci);
+            // Start CI polling if non-terminal
+            _stopCiPolling();
+            if (pr.state === 'open' && !pr.merged && !CI_TERMINAL.has(ci.state)) {
+                _startCiPolling(owner, repo, pr.head);
+            }
+        });
+
+        // Wait for all to settle so errors are caught
+        await Promise.all([filesPromise, commentsPromise, ciPromise]);
 
     } catch (error) {
         console.error(`Failed to load PR #${prNumber}:`, error);
@@ -147,6 +134,27 @@ export async function openPRDetailModal(prNumber) {
 }
 
 // ── Render helpers ──
+
+function _renderPRMeta(pr, ci) {
+    const meta = document.getElementById('prDetailMeta');
+    const stateBadge = pr.merged
+        ? '<span class="badge-state badge-state-merged">🟣 Merged</span>'
+        : pr.state === 'open'
+            ? '<span class="badge-state badge-state-open">🟢 Open</span>'
+            : '<span class="badge-state badge-state-closed">🔴 Closed</span>';
+
+    const ciIcon = CI_ICONS[ci.state] || '⚪';
+    const ciBadge = `<span class="pr-ci-live" title="CI: ${ci.state}">${ciIcon} CI ${ci.state}</span>`;
+
+    const mergeableBadge = pr.merged ? '' : pr.mergeable
+        ? '<span style="color: var(--success);">✅ Mergeable</span>'
+        : '<span style="color: var(--warning);">⚠️ Conflicts</span>';
+
+    const stats = `<span class="modal-meta-item">+${pr.additions || 0} −${pr.deletions || 0} · ${pr.changed_files || 0} files</span>`;
+    const author = `<span class="modal-meta-item">by ${escapeHtml(pr.user || 'unknown')}</span>`;
+
+    meta.innerHTML = [stateBadge, ciBadge, mergeableBadge, stats, author].filter(Boolean).join('<span class="meta-sep">·</span>');
+}
 
 function _renderPRFiles(files) {
     const container = document.getElementById('prDetailFiles');

@@ -393,29 +393,40 @@ async function loadProject(connectionId, owner, repo) {
         // Get file tree
         State.fileTree = await provider.getFileTree(connection, owner, repo, State.currentBranch);
 
-        // Load issues and workflows non-blocking
-        try {
-            State.issues = await provider.listIssues(connection, owner, repo);
-        } catch (e) {
-            console.warn('Failed to load issues:', e.message);
-            State.issues = [];
-        }
+        // Load issues and PRs non-blocking — don't delay project:loaded
+        // They render independently when they arrive.
+        (async () => {
+            try {
+                State.issues = await provider.listIssues(connection, owner, repo);
+            } catch (e) {
+                console.warn('Failed to load issues:', e.message);
+                State.issues = [];
+            }
+            EventBus.emit('issues:render');
+        })();
 
-        try {
-            const prs = await provider.listMergeRequests(connection, owner, repo, 'open');
-            // Fetch CI status for each PR in parallel
-            State.pullRequests = await Promise.all(prs.map(async (pr) => {
-                try {
-                    const status = await provider.getCommitStatus(connection, owner, repo, pr.head);
-                    return { ...pr, ciState: status.state, ciStatuses: status.statuses };
-                } catch {
-                    return { ...pr, ciState: 'unknown', ciStatuses: [] };
-                }
-            }));
-        } catch (e) {
-            console.warn('Failed to load pull requests:', e.message);
-            State.pullRequests = [];
-        }
+        (async () => {
+            try {
+                const prs = await provider.listMergeRequests(connection, owner, repo, 'open');
+                // Set PRs immediately so the list renders fast
+                State.pullRequests = prs.map(pr => ({ ...pr, ciState: 'pending', ciStatuses: [] }));
+                EventBus.emit('prs:render');
+
+                // Backfill CI status in parallel, re-render when done
+                State.pullRequests = await Promise.all(prs.map(async (pr) => {
+                    try {
+                        const status = await provider.getCommitStatus(connection, owner, repo, pr.head);
+                        return { ...pr, ciState: status.state, ciStatuses: status.statuses };
+                    } catch {
+                        return { ...pr, ciState: 'unknown', ciStatuses: [] };
+                    }
+                }));
+                EventBus.emit('prs:render');
+            } catch (e) {
+                console.warn('Failed to load pull requests:', e.message);
+                State.pullRequests = [];
+            }
+        })();
 
         EventBus.emit('git:projectLoaded', State.currentProject);
         return State.currentProject;

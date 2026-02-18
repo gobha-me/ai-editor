@@ -507,11 +507,13 @@ export async function refreshPullRequests() {
     const { owner, repo } = State.currentProject;
 
     try {
-        // Fetch all open PRs
+        // Phase 1: Fetch PR list and render immediately
         const prs = await Git.listMergeRequests(owner, repo, 'open');
+        State.pullRequests = prs.map(pr => ({ ...pr, ciState: 'pending', ciStatuses: [] }));
+        renderPullRequests();
 
-        // Fetch CI status for each PR's head branch (parallel)
-        const withStatus = await Promise.all(prs.map(async (pr) => {
+        // Phase 2: Backfill CI status in parallel, then re-render
+        State.pullRequests = await Promise.all(prs.map(async (pr) => {
             try {
                 const status = await Git.getCommitStatus(owner, repo, pr.head);
                 return { ...pr, ciState: status.state, ciStatuses: status.statuses };
@@ -519,14 +521,12 @@ export async function refreshPullRequests() {
                 return { ...pr, ciState: 'unknown', ciStatuses: [] };
             }
         }));
-
-        State.pullRequests = withStatus;
+        renderPullRequests();
     } catch (e) {
         console.warn('[PRs] Failed to refresh:', e.message);
         State.pullRequests = [];
+        renderPullRequests();
     }
-
-    renderPullRequests();
 }
 
 /**
@@ -783,6 +783,7 @@ export function initProjectListeners() {
 
     // Events from extracted modules (avoids circular imports)
     EventBus.on('issues:render', renderIssues);
+    EventBus.on('prs:render', renderPullRequests);
     EventBus.on('project:refreshAfterMerge', async () => {
         await refreshPullRequests();
         await refreshBranches();

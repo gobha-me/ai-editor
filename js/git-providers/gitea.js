@@ -560,13 +560,11 @@ const giteaProvider = {
     },
 
     async getPullRequestComments(connection, owner, repo, number) {
-        // Gitea has review comments on /pulls/{number}/comments
-        let reviewComments = [];
-        try {
-            const comments = await this.request(connection, 'GET',
+        // Fetch review comments and general comments in parallel
+        const [reviewComments, generalComments] = await Promise.all([
+            this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/pulls/${number}/comments`
-            );
-            reviewComments = (comments || []).map(c => ({
+            ).then(comments => (comments || []).map(c => ({
                 id: c.id,
                 body: c.body,
                 user: c.user.login,
@@ -574,23 +572,18 @@ const giteaProvider = {
                 path: c.path,
                 line: c.line || c.old_position,
                 type: 'review'
-            }));
-        } catch { /* no review comments */ }
+            }))).catch(() => []),
 
-        // General comments via issues API
-        let generalComments = [];
-        try {
-            const comments = await this.request(connection, 'GET',
+            this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/issues/${number}/comments`
-            );
-            generalComments = (comments || []).map(c => ({
+            ).then(comments => (comments || []).map(c => ({
                 id: c.id,
                 body: c.body,
                 user: c.user.login,
                 createdAt: c.created_at,
                 type: 'general'
-            }));
-        } catch { /* no general comments */ }
+            }))).catch(() => [])
+        ]);
 
         return [...reviewComments, ...generalComments]
             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));

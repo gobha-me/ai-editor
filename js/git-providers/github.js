@@ -636,13 +636,11 @@ const githubProvider = {
     },
 
     async getPullRequestComments(connection, owner, repo, number) {
-        // PR review comments (line-level)
-        let reviewComments = [];
-        try {
-            const comments = await this.request(connection, 'GET',
+        // Fetch review comments and general comments in parallel
+        const [reviewComments, generalComments] = await Promise.all([
+            this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/pulls/${number}/comments?per_page=100`
-            );
-            reviewComments = (comments || []).map(c => ({
+            ).then(comments => (comments || []).map(c => ({
                 id: c.id,
                 body: c.body,
                 user: c.user.login,
@@ -650,23 +648,18 @@ const githubProvider = {
                 path: c.path,
                 line: c.line || c.original_line,
                 type: 'review'
-            }));
-        } catch { /* no review comments */ }
+            }))).catch(() => []),
 
-        // General PR comments (issue comments API)
-        let generalComments = [];
-        try {
-            const comments = await this.request(connection, 'GET',
+            this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/issues/${number}/comments?per_page=100`
-            );
-            generalComments = (comments || []).map(c => ({
+            ).then(comments => (comments || []).map(c => ({
                 id: c.id,
                 body: c.body,
                 user: c.user.login,
                 createdAt: c.created_at,
                 type: 'general'
-            }));
-        } catch { /* no general comments */ }
+            }))).catch(() => [])
+        ]);
 
         return [...reviewComments, ...generalComments]
             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
