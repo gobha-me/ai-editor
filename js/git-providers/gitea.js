@@ -12,7 +12,7 @@
 
 import { EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
-import { circuitBreakerGuard, markReachable, markUnreachable } from './base.js';
+import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
 
 // ============================================
 // ENCODING UTILITIES (shared)
@@ -62,18 +62,25 @@ const giteaProvider = {
         return `${connection.url.replace(/\/$/, '')}/api/v1`;
     },
 
-    /** Default request timeout (ms). Prevents hanging when server is unreachable. */
-    REQUEST_TIMEOUT: 15000,
+    /** Default request timeout (ms) for lightweight reads. */
+    REQUEST_TIMEOUT: 15_000,
+    /** Extended timeout for write operations (create, update, delete). */
+    WRITE_TIMEOUT: 30_000,
+    /** Heavy timeout for batch commits, large tree fetches, etc. */
+    HEAVY_TIMEOUT: 60_000,
+    /** Lightweight endpoint for health probes (no auth needed). */
+    HEALTH_ENDPOINT: '/version',
 
-    async request(connection, method, endpoint, data = null) {
+    async request(connection, method, endpoint, data = null, timeout = null) {
         // Circuit breaker: short-circuit if connection is down and cooldown active
         circuitBreakerGuard(connection);
 
+        const effectiveTimeout = timeout || (method === 'GET' ? this.REQUEST_TIMEOUT : this.WRITE_TIMEOUT);
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
             headers: this.getHeaders(connection),
-            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
+            signal: AbortSignal.timeout(effectiveTimeout)
         };
 
         if (data && method !== 'GET') {
@@ -101,7 +108,22 @@ const giteaProvider = {
             if (!error.status && !error.circuitOpen) {
                 error.url = url;
                 error.endpoint = endpoint;
-                markUnreachable(connection, 'gitea', error.message);
+                const isTimeout = error.name === 'TimeoutError' || error.message?.includes('timed out');
+                if (isTimeout) {
+                    // Server might be alive but slow — probe health endpoint
+                    const alive = await healthProbe(
+                        this.getBaseUrl(connection),
+                        this.getHeaders(connection),
+                        this.HEALTH_ENDPOINT
+                    );
+                    if (alive) {
+                        console.log(`[Gitea] Timeout on ${endpoint} but health probe OK — server is slow, not dead`);
+                    } else {
+                        markUnreachable(connection, 'gitea', error.message);
+                    }
+                } else {
+                    markUnreachable(connection, 'gitea', error.message);
+                }
             }
             throw error;
         }
@@ -112,7 +134,7 @@ const giteaProvider = {
     // ========================================
 
     async listRepos(connection) {
-        const repos = await this.request(connection, 'GET', '/user/repos');
+        const repos = await this.request(connection, 'GET', '/user/repos', null, this.HEAVY_TIMEOUT);
         return repos.map(r => ({
             id: r.id,
             owner: r.owner.login,
@@ -348,7 +370,8 @@ const giteaProvider = {
         const response = await this.request(
             connection, 'POST',
             `/repos/${owner}/${repo}/contents`,
-            payload
+            payload,
+            this.HEAVY_TIMEOUT
         );
 
         // Normalize to { results, errors } shape for backward compat.
@@ -649,7 +672,7 @@ const giteaProvider = {
         const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/git/commits/${sha}.diff`;
         const resp = await fetch(url, {
             headers: this.getHeaders(connection),
-            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
+            signal: AbortSignal.timeout(this.WRITE_TIMEOUT)
         });
         if (!resp.ok) return null;
         return resp.text();

@@ -18,7 +18,7 @@
  */
 
 import { EventBus } from '../core.js';
-import { circuitBreakerGuard, markReachable, markUnreachable } from './base.js';
+import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -95,18 +95,25 @@ const gitlabProvider = {
         return url.replace(/\/api\/v4$/, '');
     },
 
-    /** Default request timeout (ms). */
-    REQUEST_TIMEOUT: 15000,
+    /** Default request timeout (ms) for lightweight reads. */
+    REQUEST_TIMEOUT: 15_000,
+    /** Extended timeout for write operations. */
+    WRITE_TIMEOUT: 30_000,
+    /** Heavy timeout for batch commits, large listings, etc. */
+    HEAVY_TIMEOUT: 60_000,
+    /** Lightweight endpoint for health probes. */
+    HEALTH_ENDPOINT: '/version',
 
-    async request(connection, method, endpoint, data = null) {
+    async request(connection, method, endpoint, data = null, timeout = null) {
         // Circuit breaker: short-circuit if connection is down and cooldown active
         circuitBreakerGuard(connection);
 
+        const effectiveTimeout = timeout || (method === 'GET' ? this.REQUEST_TIMEOUT : this.WRITE_TIMEOUT);
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
             headers: this.getHeaders(connection),
-            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
+            signal: AbortSignal.timeout(effectiveTimeout)
         };
 
         if (data && method !== 'GET') {
@@ -151,7 +158,21 @@ const gitlabProvider = {
             if (!error.status && !error.circuitOpen) {
                 error.url = url;
                 error.endpoint = endpoint;
-                markUnreachable(connection, 'gitlab', error.message);
+                const isTimeout = error.name === 'TimeoutError' || error.message?.includes('timed out');
+                if (isTimeout) {
+                    const alive = await healthProbe(
+                        this.getBaseUrl(connection),
+                        this.getHeaders(connection),
+                        this.HEALTH_ENDPOINT
+                    );
+                    if (alive) {
+                        console.log(`[GitLab] Timeout on ${endpoint} but health probe OK — server is slow, not dead`);
+                    } else {
+                        markUnreachable(connection, 'gitlab', error.message);
+                    }
+                } else {
+                    markUnreachable(connection, 'gitlab', error.message);
+                }
             }
             throw error;
         }
@@ -164,7 +185,7 @@ const gitlabProvider = {
     async listRepos(connection) {
         // Fetch projects the user is a member of, sorted by last activity
         const repos = await this.request(connection, 'GET',
-            '/projects?membership=true&order_by=last_activity_at&per_page=100'
+            '/projects?membership=true&order_by=last_activity_at&per_page=100', null, this.HEAVY_TIMEOUT
         );
         return repos.map(r => ({
             id: r.id,
@@ -279,7 +300,7 @@ const gitlabProvider = {
             let endpoint = `/projects/${projectId(owner, repo)}/repository/tree?ref=${encodeURIComponent(ref)}&recursive=true&per_page=${perPage}&page=${page}`;
             if (path) endpoint += `&path=${encodeURIComponent(path)}`;
 
-            const items = await this.request(connection, 'GET', endpoint);
+            const items = await this.request(connection, 'GET', endpoint, null, this.HEAVY_TIMEOUT);
             if (!items || items.length === 0) break;
 
             allItems.push(...items);
@@ -443,7 +464,8 @@ const gitlabProvider = {
                     branch,
                     commit_message: message,
                     actions
-                }
+                },
+                this.HEAVY_TIMEOUT
             );
 
             const results = files.map(f => ({ path: f.path, success: true }));

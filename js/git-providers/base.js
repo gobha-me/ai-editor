@@ -615,3 +615,36 @@ export function markReachable(connection, provider) {
         console.log(`[${provider}] Connection restored: ${connection.url}`);
     }
 }
+
+// ============================================
+// HEALTH PROBE
+// ============================================
+
+/** Timeout for the lightweight health probe (ms). */
+const HEALTH_PROBE_TIMEOUT = 5_000;
+
+/**
+ * Lightweight health probe — raw fetch to a provider's health endpoint.
+ * Bypasses circuit breaker and request() entirely.
+ *
+ * Called after a timeout to distinguish "server is slow" from "server is dead."
+ *   - Returns true  → server is alive, operation was just slow (don't trip breaker)
+ *   - Returns false → server is genuinely unreachable (trip the breaker)
+ *
+ * @param {string} baseUrl  — provider's API base URL
+ * @param {object} headers  — provider's auth headers
+ * @param {string} endpoint — lightweight health endpoint (e.g. '/version')
+ * @returns {Promise<boolean>}
+ */
+export async function healthProbe(baseUrl, headers, endpoint) {
+    try {
+        const resp = await fetch(`${baseUrl}${endpoint}`, {
+            method: 'GET',
+            headers,
+            signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT)
+        });
+        return resp.ok || resp.status === 401;  // 401 = server is up, token issue
+    } catch {
+        return false;
+    }
+}

@@ -17,7 +17,7 @@
  */
 
 import { EventBus } from '../core.js';
-import { circuitBreakerGuard, markReachable, markUnreachable } from './base.js';
+import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -74,18 +74,25 @@ const githubProvider = {
         return `${url}/api/v3`;
     },
 
-    /** Default request timeout (ms). */
-    REQUEST_TIMEOUT: 15000,
+    /** Default request timeout (ms) for lightweight reads. */
+    REQUEST_TIMEOUT: 15_000,
+    /** Extended timeout for write operations. */
+    WRITE_TIMEOUT: 30_000,
+    /** Heavy timeout for batch commits, large listings, etc. */
+    HEAVY_TIMEOUT: 60_000,
+    /** Lightweight endpoint for health probes. */
+    HEALTH_ENDPOINT: '/rate_limit',
 
-    async request(connection, method, endpoint, data = null) {
+    async request(connection, method, endpoint, data = null, timeout = null) {
         // Circuit breaker: short-circuit if connection is down and cooldown active
         circuitBreakerGuard(connection);
 
+        const effectiveTimeout = timeout || (method === 'GET' ? this.REQUEST_TIMEOUT : this.WRITE_TIMEOUT);
         const url = `${this.getBaseUrl(connection)}${endpoint}`;
         const options = {
             method,
             headers: this.getHeaders(connection),
-            signal: AbortSignal.timeout(this.REQUEST_TIMEOUT)
+            signal: AbortSignal.timeout(effectiveTimeout)
         };
 
         if (data && method !== 'GET') {
@@ -135,7 +142,21 @@ const githubProvider = {
             if (!error.status && !error.circuitOpen) {
                 error.url = url;
                 error.endpoint = endpoint;
-                markUnreachable(connection, 'github', error.message);
+                const isTimeout = error.name === 'TimeoutError' || error.message?.includes('timed out');
+                if (isTimeout) {
+                    const alive = await healthProbe(
+                        this.getBaseUrl(connection),
+                        this.getHeaders(connection),
+                        this.HEALTH_ENDPOINT
+                    );
+                    if (alive) {
+                        console.log(`[GitHub] Timeout on ${endpoint} but health probe OK — server is slow, not dead`);
+                    } else {
+                        markUnreachable(connection, 'github', error.message);
+                    }
+                } else {
+                    markUnreachable(connection, 'github', error.message);
+                }
             }
             throw error;
         }
@@ -148,7 +169,7 @@ const githubProvider = {
     async listRepos(connection) {
         // Fetch user repos (owned + collaborator), sorted by recent push
         const repos = await this.request(connection, 'GET',
-            '/user/repos?sort=pushed&per_page=100&type=all'
+            '/user/repos?sort=pushed&per_page=100&type=all', null, this.HEAVY_TIMEOUT
         );
         return repos.map(r => ({
             id: r.id,
@@ -257,7 +278,7 @@ const githubProvider = {
         // Much more efficient than walking directories one by one.
         try {
             const data = await this.request(connection, 'GET',
-                `/repos/${owner}/${repo}/git/trees/${ref}?recursive=true`
+                `/repos/${owner}/${repo}/git/trees/${ref}?recursive=true`, null, this.HEAVY_TIMEOUT
             );
 
             let tree = (data.tree || [])
