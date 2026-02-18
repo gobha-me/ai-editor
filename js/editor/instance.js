@@ -253,9 +253,16 @@ export function getCursorContext() {
 }
 
 export function replaceSelection(text) {
-    if (!editorInstance) return;
+    if (!editorInstance) return null;
     
-    const selection = editorInstance.state.selection.main;
+    const state = editorInstance.state;
+    const selection = state.selection.main;
+    if (selection.empty) return { error: 'No selection — nothing to replace' };
+
+    const oldText = state.sliceDoc(selection.from, selection.to);
+    const fromLine = state.doc.lineAt(selection.from);
+    const toLine = state.doc.lineAt(selection.to);
+
     editorInstance.dispatch({
         changes: {
             from: selection.from,
@@ -263,27 +270,162 @@ export function replaceSelection(text) {
             insert: text
         }
     });
+
+    // After dispatch, get updated context
+    const newState = editorInstance.state;
+    const newDoc = newState.doc;
+    const cursorLine = newDoc.lineAt(newState.selection.main.head);
+
+    // Surrounding lines after edit
+    const ctxStart = Math.max(1, fromLine.number - 2);
+    const ctxEnd = Math.min(newDoc.lines, cursorLine.number + 2);
+    const surroundingLines = [];
+    for (let i = ctxStart; i <= ctxEnd; i++) {
+        surroundingLines.push(`${i}: ${newDoc.line(i).text}`);
+    }
+
+    return {
+        replacedFromLine: fromLine.number,
+        replacedToLine: toLine.number,
+        oldLength: oldText.length,
+        newLength: text.length,
+        cursorLine: cursorLine.number,
+        cursorCol: newState.selection.main.head - cursorLine.from + 1,
+        totalLines: newDoc.lines,
+        surroundingLines: surroundingLines.join('\n')
+    };
 }
 
 export function insertAtCursor(text) {
-    if (!editorInstance) return;
+    if (!editorInstance) return null;
     
-    const pos = editorInstance.state.selection.main.head;
+    const state = editorInstance.state;
+    const pos = state.selection.main.head;
+    const beforeLine = state.doc.lineAt(pos);
+
     editorInstance.dispatch({
         changes: { from: pos, insert: text },
         selection: { anchor: pos + text.length }
     });
+
+    // After dispatch, get context
+    const newState = editorInstance.state;
+    const newDoc = newState.doc;
+    const cursorLine = newDoc.lineAt(newState.selection.main.head);
+    const insertedLines = text.split('\n').length;
+
+    const ctxStart = Math.max(1, beforeLine.number - 2);
+    const ctxEnd = Math.min(newDoc.lines, cursorLine.number + 2);
+    const surroundingLines = [];
+    for (let i = ctxStart; i <= ctxEnd; i++) {
+        surroundingLines.push(`${i}: ${newDoc.line(i).text}`);
+    }
+
+    return {
+        insertedAt: { line: beforeLine.number, col: pos - beforeLine.from + 1 },
+        insertedChars: text.length,
+        insertedLines,
+        cursorLine: cursorLine.number,
+        cursorCol: newState.selection.main.head - cursorLine.from + 1,
+        totalLines: newDoc.lines,
+        surroundingLines: surroundingLines.join('\n')
+    };
 }
 
-export function goToLine(line) {
-    if (!editorInstance) return;
+export function goToLine(line, col = 1) {
+    if (!editorInstance) return null;
     
-    const lineInfo = editorInstance.state.doc.line(Math.min(line, editorInstance.state.doc.lines));
+    const doc = editorInstance.state.doc;
+    const clampedLine = Math.max(1, Math.min(line, doc.lines));
+    const lineInfo = doc.line(clampedLine);
+    const lineText = lineInfo.text;
+    const clampedCol = Math.max(1, Math.min(col, lineText.length + 1));
+    const pos = lineInfo.from + clampedCol - 1;
+
     editorInstance.dispatch({
-        selection: { anchor: lineInfo.from },
+        selection: { anchor: pos },
         scrollIntoView: true
     });
     editorInstance.focus();
+
+    // Extract word before and after cursor position within the line
+    const before = lineText.slice(0, clampedCol - 1);
+    const after = lineText.slice(clampedCol - 1);
+    const wordBefore = before.match(/(\S+)\s*$/)?.[1] || null;
+    const wordAfter = after.match(/^(\S+)/)?.[1] || null;
+
+    // Surrounding lines (3 before, 3 after)
+    const ctxStart = Math.max(1, clampedLine - 3);
+    const ctxEnd = Math.min(doc.lines, clampedLine + 3);
+    const surroundingLines = [];
+    for (let i = ctxStart; i <= ctxEnd; i++) {
+        const l = doc.line(i);
+        const marker = i === clampedLine ? ' →' : '  ';
+        surroundingLines.push(`${marker} ${i}: ${l.text}`);
+    }
+
+    return {
+        line: clampedLine,
+        col: clampedCol,
+        lineContent: lineText,
+        wordBefore,
+        wordAfter,
+        totalLines: doc.lines,
+        surroundingLines: surroundingLines.join('\n')
+    };
+}
+
+/**
+ * Select a range in the editor by line:col coordinates.
+ * @param {number} fromLine - Start line (1-indexed)
+ * @param {number} [fromCol=1] - Start column (1-indexed)
+ * @param {number} [toLine=fromLine] - End line (1-indexed)
+ * @param {number} [toCol] - End column (1-indexed, defaults to end of toLine)
+ * @returns {object|null} { fromLine, fromCol, toLine, toCol, text, lineCount }
+ */
+export function selectRange(fromLine, fromCol = 1, toLine, toCol) {
+    if (!editorInstance) return null;
+
+    const doc = editorInstance.state.doc;
+    const fLine = Math.max(1, Math.min(fromLine, doc.lines));
+    const tLine = Math.max(fLine, Math.min(toLine ?? fLine, doc.lines));
+
+    const fLineInfo = doc.line(fLine);
+    const tLineInfo = doc.line(tLine);
+
+    const fCol = Math.max(1, Math.min(fromCol, fLineInfo.text.length + 1));
+    const tColDefault = tLineInfo.text.length + 1; // end of line
+    const tCol = Math.max(1, Math.min(toCol ?? tColDefault, tLineInfo.text.length + 1));
+
+    const from = fLineInfo.from + fCol - 1;
+    const to = tLineInfo.from + tCol - 1;
+
+    editorInstance.dispatch({
+        selection: { anchor: from, head: to },
+        scrollIntoView: true
+    });
+    editorInstance.focus();
+
+    let text = editorInstance.state.sliceDoc(from, to);
+    let truncated = false;
+    const lineCount = tLine - fLine + 1;
+
+    if (text.length > MAX_SELECTION_CHARS) {
+        const half = Math.floor(MAX_SELECTION_CHARS / 2);
+        text = text.slice(0, half) + `\n... (${lineCount} lines, truncated) ...\n` + text.slice(-half);
+        truncated = true;
+    }
+
+    return {
+        fromLine: fLine,
+        fromCol: fCol,
+        toLine: tLine,
+        toCol: tCol,
+        lineCount,
+        text,
+        truncated,
+        totalLines: doc.lines
+    };
 }
 
 export function highlightRange(from, to) {

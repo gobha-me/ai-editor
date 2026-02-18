@@ -25,6 +25,7 @@ export {
     replaceSelection,
     insertAtCursor,
     goToLine,
+    selectRange,
     highlightRange,
     focus,
     applyEdit,
