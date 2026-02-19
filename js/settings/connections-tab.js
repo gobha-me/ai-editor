@@ -262,11 +262,12 @@ function showTestResult(el, type, message) {
 /**
  * Remove a connection after confirmation.
  */
-export function removeConnection(connId) {
+export async function removeConnection(connId) {
     const conn = GitProviderRegistry.listConnections().find(c => c.id === connId);
     if (!conn) return;
 
-    if (!confirm(`Remove connection "${conn.label}"?`)) return;
+    const { showConfirm } = await import('../ui/dialogs.js');
+    if (!await showConfirm(`Remove connection "${conn.label}"?`, { title: 'Remove Connection', okLabel: 'Remove', variant: 'danger' })) return;
 
     GitProviderRegistry.removeConnection(connId);
     hideConnectionEditor();

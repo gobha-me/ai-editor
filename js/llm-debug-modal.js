@@ -119,8 +119,9 @@ export function closeLLMDebug() {
     document.getElementById('llmDebugModal').classList.remove('active');
 }
 
-export function clearLLMDebug() {
-    if (confirm('Clear all debug logs?')) {
+export async function clearLLMDebug() {
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (await showConfirm('Clear all debug logs?', { title: 'Clear Logs', okLabel: 'Clear', variant: 'danger' })) {
         LLMDebug.clear();
         renderLLMDebug();
     }
@@ -128,7 +129,7 @@ export function clearLLMDebug() {
 
 export function copyLLMDebug() {
     const text = LLMDebug.exportText();
-    navigator.clipboard.writeText(text).then(() => alert('Debug log copied!')).catch(e => console.error(e));
+    navigator.clipboard.writeText(text).then(() => window.showToast?.('Debug log copied', 'success')).catch(e => console.error(e));
 }
 
 export function exportLLMDebug() {

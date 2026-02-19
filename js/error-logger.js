@@ -230,7 +230,7 @@ export function openErrorLog() {
     const errorLogModal = document.getElementById('errorLogModal');
     if (!errorLogModal) {
         console.error('[ErrorLogger] Error log modal element not found - cannot open error log');
-        alert('Error: Error log modal not found in the page. The page may not have loaded correctly.');
+        window.showToast?.('Error log modal not found — page may not have loaded correctly', 'error');
         return;
     }
     
@@ -248,8 +248,9 @@ export function closeErrorLog() {
     errorLogModal.classList.remove('active');
 }
 
-export function clearErrorLog() {
-    if (confirm('Clear all error logs?')) {
+export async function clearErrorLog() {
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (await showConfirm('Clear all error logs?', { title: 'Clear Logs', okLabel: 'Clear', variant: 'danger' })) {
         ErrorLogger.clear();
         ErrorLogger.render();
     }
@@ -258,18 +259,10 @@ export function clearErrorLog() {
 export function copyErrorLog() {
     const text = ErrorLogger.exportText();
     navigator.clipboard.writeText(text).then(() => {
-        if (window.showToast) {
-            window.showToast('Error log copied to clipboard', 'success');
-        } else {
-            alert('Error log copied to clipboard!');
-        }
+        window.showToast?.('Error log copied to clipboard', 'success');
     }).catch(err => {
         console.error('Failed to copy:', err);
-        if (window.showToast) {
-            window.showToast('Failed to copy error log', 'error');
-        } else {
-            alert('Failed to copy error log to clipboard');
-        }
+        window.showToast?.('Failed to copy error log', 'error');
     });
 }
 

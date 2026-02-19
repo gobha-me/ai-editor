@@ -48,6 +48,7 @@ import {
     renderPullRequests, 
     refreshPullRequests,
     initProjectListeners,
+    openIssueTab,
     openIssueDetailModal,
     closeIssueDetailModal,
     openCreatePRModal,
@@ -279,6 +280,7 @@ window.openNewBranchModal = openNewBranchModal;
 window.closeNewBranchModal = closeNewBranchModal;
 window.createNewBranch = createNewBranch;
 
+window.openIssueTab = openIssueTab;
 window.openIssueDetailModal = openIssueDetailModal;
 window.focusIssue = focusIssue;
 window.unfocusIssue = unfocusIssue;
@@ -825,7 +827,7 @@ function setupEventListeners() {
     // Issue focus bar
     safeAdd('btnIssueFocusDismiss', 'click', unfocusIssue);
     safeAdd('btnIssueFocusExpand', 'click', () => {
-        if (State.focusedIssue) openIssueDetailModal(State.focusedIssue.number);
+        if (State.focusedIssue) openIssueTab(State.focusedIssue.number, { pin: true });
     });
     // Accept/Deny/Comment/Work wired via EventBus from project-manager
 

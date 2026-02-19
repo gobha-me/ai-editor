@@ -94,7 +94,7 @@ export function closeAllModals() {
 // DRAFT MANAGEMENT
 // ============================================
 
-export function clearAllDrafts() {
+export async function clearAllDrafts() {
     const drafts = Storage.listDrafts();
     const count = drafts.length;
     
@@ -103,7 +103,8 @@ export function clearAllDrafts() {
         return;
     }
     
-    if (!confirm(`Clear ALL ${count} draft(s) from storage? This cannot be undone.\n\nThis will remove any unsaved changes stored locally.`)) {
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (!await showConfirm(`Clear ALL ${count} draft(s) from storage?\n\nThis will remove any unsaved changes stored locally.`, { title: 'Clear Drafts', okLabel: 'Clear All', variant: 'danger' })) {
         return;
     }
     
@@ -125,7 +126,7 @@ export function clearAllDrafts() {
     console.log(`[DRAFTS] Cleared ${count} drafts`);
 }
 
-export function clearProjectDrafts() {
+export async function clearProjectDrafts() {
     if (!State.currentProject) {
         showToast('No project selected', 'warning');
         return;
@@ -142,7 +143,8 @@ export function clearProjectDrafts() {
         return;
     }
     
-    if (!confirm(`Clear ${count} draft(s) for ${owner}/${repo}? This cannot be undone.`)) {
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (!await showConfirm(`Clear ${count} draft(s) for ${owner}/${repo}? This cannot be undone.`, { title: 'Clear Project Drafts', okLabel: 'Clear', variant: 'danger' })) {
         return;
     }
     

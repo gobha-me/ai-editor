@@ -1,9 +1,11 @@
 /**
- * AI Editor - Issue Detail Modal & Triage
+ * AI Editor - Issue Detail (Tab + Modal + Triage)
  *
- * Issue detail view, branch workflow (start work on issue),
- * conversational triage (focus bar, accept/deny/comment), and
- * helper utilities.
+ * v0.9.39: Issues now open as editor tabs instead of modals.
+ *   - openIssueTab(n)        — primary entry: opens issue in a tab
+ *   - renderIssueTabContent() — renders full detail into editor container
+ *   - openIssueDetailModal()  — legacy modal (still available)
+ *   - focusIssue() / unfocusIssue() — chat triage bar (unchanged)
  *
  * Extracted from project-manager.js for readability.
  * All public exports are re-exported from project-manager.js so
@@ -16,9 +18,399 @@ import { State, EventBus } from './core.js';
 import { Git } from './git.js';
 import { renderMarkdown } from './secondary-pane.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import { registerTabRenderer } from './tab-manager.js';
+import { showConfirm, showPrompt } from './ui/dialogs.js';
 
 // ============================================
-// ISSUE DETAIL MODAL + BRANCH WORKFLOW
+// ISSUE TABS (v0.9.39)
+// ============================================
+
+/**
+ * Open an issue as an editor tab.
+ * If the issue is already open, switches to it.
+ * Single-click opens as preview; called with pin=true to make permanent.
+ * @param {number} issueNumber
+ * @param {object} [opts]
+ * @param {boolean} [opts.pin=false]  - If true, open as permanent (not preview)
+ * @param {boolean} [opts.focus=true] - If true, switch to the tab after creating
+ */
+export async function openIssueTab(issueNumber, opts = {}) {
+    const { pin = false, focus = true } = opts;
+    if (!State.currentProject) return;
+
+    // Already open? Switch to it.
+    const existingIdx = State.openTabs.findIndex(
+        t => t.type === 'issue' && t.issueNumber === issueNumber
+    );
+    if (existingIdx >= 0) {
+        const { switchToTab } = await import('./tab-manager.js');
+        await switchToTab(existingIdx);
+        if (pin) {
+            State.openTabs[existingIdx].isPreview = false;
+            const { renderEditorTabs } = await import('./tab-manager.js');
+            renderEditorTabs();
+        }
+        return;
+    }
+
+    // Save current file tab state
+    if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+        const cur = State.openTabs[State.activeTabIndex];
+        if (!cur.type || cur.type === 'file') {
+            cur.content = State.editorContent;
+            cur.dirty = State.editorDirty;
+        }
+    }
+
+    const isPreview = !pin;
+    const newTab = {
+        type: 'issue',
+        path: `issue:${issueNumber}`,   // synthetic path for dedup
+        issueNumber,
+        issueData: null,                // filled on render
+        isPreview,
+        dirty: false
+    };
+
+    if (isPreview) {
+        // Replace existing preview tab (any type)
+        const previewIdx = State.openTabs.findIndex(t => t.isPreview);
+        if (previewIdx >= 0) {
+            State.openTabs[previewIdx] = newTab;
+            State.activeTabIndex = previewIdx;
+        } else {
+            State.openTabs.push(newTab);
+            State.activeTabIndex = State.openTabs.length - 1;
+        }
+    } else {
+        State.openTabs.push(newTab);
+        State.activeTabIndex = State.openTabs.length - 1;
+    }
+
+    if (focus) {
+        const { switchToTab } = await import('./tab-manager.js');
+        await switchToTab(State.activeTabIndex);
+    }
+}
+
+/**
+ * Render issue content into the editor container (called by tab renderer).
+ * Fetches full issue data + comments, then builds the in-tab view.
+ * @param {HTMLElement} container
+ * @param {object} tab - The tab object from State.openTabs
+ */
+async function renderIssueTabContent(container, tab) {
+    const issueNumber = tab.issueNumber;
+    const { owner, repo } = State.currentProject || {};
+    if (!owner || !repo) {
+        container.innerHTML = _issueTabShell(issueNumber, '<p style="color:var(--text-muted)">No project selected</p>');
+        return;
+    }
+
+    // Show loading state
+    container.innerHTML = _issueTabShell(issueNumber, `
+        <div class="issue-tab-loading">
+            <span class="spinner-dot"></span> Loading issue #${issueNumber}…
+        </div>
+    `);
+
+    try {
+        const issue = await Git.getIssue(owner, repo, issueNumber);
+        let comments = [];
+        try {
+            comments = await Git.getIssueComments(owner, repo, issueNumber);
+        } catch (e) {
+            console.warn(`[IssueTab] Could not fetch comments for #${issueNumber}:`, e.message);
+        }
+
+        const data = { ...issue, comments };
+        tab.issueData = data;
+
+        // Re-render tab bar to pick up the title
+        const { renderEditorTabs } = await import('./tab-manager.js');
+        renderEditorTabs();
+
+        // Build full view
+        container.innerHTML = _buildIssueTabView(data);
+
+        // Wire action buttons
+        _wireIssueTabActions(container, data);
+
+    } catch (err) {
+        console.error(`[IssueTab] Failed to load #${issueNumber}:`, err);
+        container.innerHTML = _issueTabShell(issueNumber, `
+            <div class="issue-tab-error">
+                <p>Failed to load issue #${issueNumber}</p>
+                <p style="color:var(--text-muted); font-size: var(--font-md);">${escapeHtml(err.message)}</p>
+                <button class="btn btn-secondary" onclick="window.openIssueTab(${issueNumber})">Retry</button>
+            </div>
+        `);
+    }
+}
+
+// Register the renderer with the tab manager
+registerTabRenderer('issue', renderIssueTabContent);
+
+// ── Issue tab HTML builders ───────────────────────────────
+
+function _issueTabShell(issueNumber, body) {
+    return `
+        <div class="issue-tab-content" data-issue="${issueNumber}">
+            ${body}
+        </div>
+    `;
+}
+
+function _buildIssueTabView(issue) {
+    const stateClass = issue.state === 'open' ? 'badge-state-open' : 'badge-state-closed';
+    const stateIcon = issue.state === 'open' ? '🟢' : '🔴';
+    const stateLabel = issue.state ? issue.state.charAt(0).toUpperCase() + issue.state.slice(1) : '';
+
+    const assignee = issue.assignees?.[0] || issue.assignee;
+    const assigneeName = typeof assignee === 'string' ? assignee : assignee?.login || assignee?.username || null;
+    const created = issue.createdAt ? new Date(issue.createdAt).toLocaleDateString() : '';
+
+    // Labels
+    const labelsHtml = (issue.labels || []).map(l => {
+        const name = typeof l === 'string' ? l : l.name || l;
+        const color = (typeof l === 'object' && l.color) ? l.color : null;
+        const style = color ? `background: #${color}; color: ${_contrastColor(color)}` : '';
+        return `<span class="issue-label" style="${style}">${escapeHtml(name)}</span>`;
+    }).join('');
+
+    // Meta badges
+    const metaParts = [];
+    if (issue.state) metaParts.push(`<span class="badge-state ${stateClass}">${stateIcon} ${stateLabel}</span>`);
+    if (assigneeName) metaParts.push(`<span class="modal-meta-item">👤 ${escapeHtml(assigneeName)}</span>`);
+    if (created) metaParts.push(`<span class="modal-meta-item">📅 ${created}</span>`);
+
+    // Body
+    const bodyHtml = issue.body
+        ? renderMarkdown(issue.body)
+        : '<em style="color: var(--text-muted);">No description</em>';
+
+    // Comments
+    const comments = issue.comments || [];
+    let commentsHtml = '';
+    if (comments.length > 0) {
+        const commentItems = comments.map((c, i) => {
+            const user = escapeHtml(c.user || 'unknown');
+            const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '';
+            const cBody = renderMarkdown(c.body || '');
+            const open = i === 0 ? ' open' : '';
+            const preview = (c.body || '').length > 100 ? escapeHtml((c.body || '').substring(0, 80).replace(/\n/g, ' ')) + '…' : '';
+            return `
+                <details${open} class="modal-comment-item issue-comment-collapsible">
+                    <summary>
+                        <span class="comment-chevron">▶</span>
+                        <strong>${user}</strong> · ${date}
+                        <span class="comment-preview">${preview}</span>
+                    </summary>
+                    <div class="comment-body preview-markdown">${cBody}</div>
+                </details>
+            `;
+        }).join('');
+
+        commentsHtml = `
+            <details class="issue-detail-section" open>
+                <summary class="modal-section-header">
+                    <span class="section-chevron">▶</span>
+                    Comments (${comments.length})
+                    ${comments.length > 1 ? `<span style="margin-left:auto;"><button type="button" class="btn btn-secondary btn-xs issue-tab-toggle-comments">Expand All</button></span>` : ''}
+                </summary>
+                <div class="issue-detail-comments">${commentItems}</div>
+            </details>
+        `;
+    }
+
+    // Branch info
+    const branchName = issueBranchName(issue.number, issue.title);
+    const existingBranch = State.branches.find(b => b.name === branchName);
+    const isOnBranch = State.currentBranch === branchName;
+    let branchInfoHtml = '';
+    let startBtnLabel = '✏️ Start Work';
+    let startBtnDisabled = false;
+
+    if (isOnBranch) {
+        branchInfoHtml = `<div class="issue-detail-branch-info branch-active">✅ Currently on branch: <strong>${escapeHtml(branchName)}</strong></div>`;
+        startBtnLabel = '✅ Already Active';
+        startBtnDisabled = true;
+    } else if (existingBranch) {
+        branchInfoHtml = `<div class="issue-detail-branch-info branch-exists">🔀 Branch exists: <strong>${escapeHtml(branchName)}</strong> — Start Work will switch to it</div>`;
+        startBtnLabel = '🔀 Switch & Start';
+    } else {
+        const baseBranch = State.currentProject?.defaultBranch || 'main';
+        branchInfoHtml = `<div class="issue-detail-branch-info branch-create">🌱 Will create: <strong>${escapeHtml(branchName)}</strong> from <strong>${escapeHtml(baseBranch)}</strong></div>`;
+    }
+
+    // External link
+    const extLink = issue.url
+        ? `<a href="${escapeAttr(issue.url)}" target="_blank" class="btn btn-secondary btn-sm" title="Open in browser" style="text-decoration:none;">🌐 Open in Browser</a>`
+        : '';
+
+    return `
+        <div class="issue-tab-content" data-issue="${issue.number}">
+            <div class="issue-tab-header">
+                <h2 class="issue-tab-title">#${issue.number}: ${escapeHtml(issue.title)}</h2>
+                <div class="issue-tab-header-actions">
+                    ${extLink}
+                    <button type="button" class="btn btn-secondary btn-sm issue-tab-refresh" title="Refresh">🔄</button>
+                </div>
+            </div>
+
+            <div class="issue-tab-meta">
+                ${metaParts.join('<span class="meta-sep">·</span>')}
+                ${labelsHtml ? `<span class="issue-tab-labels">${labelsHtml}</span>` : ''}
+            </div>
+
+            <details class="issue-detail-section" open>
+                <summary class="modal-section-header">
+                    <span class="section-chevron">▶</span>
+                    Description
+                </summary>
+                <div class="issue-detail-body preview-markdown">${bodyHtml}</div>
+            </details>
+
+            ${commentsHtml}
+
+            ${branchInfoHtml}
+
+            <div class="issue-tab-actions">
+                <button type="button" class="btn btn-primary issue-tab-start-work" ${startBtnDisabled ? 'disabled' : ''}>
+                    ${startBtnLabel}
+                </button>
+                <button type="button" class="btn btn-sm btn-accept issue-tab-accept" title="Accept — comment and keep open">✅ Accept</button>
+                <button type="button" class="btn btn-sm btn-deny issue-tab-deny" title="Deny — close with comment">❌ Deny</button>
+                <button type="button" class="btn btn-sm btn-comment issue-tab-comment" title="Add comment">💬 Comment</button>
+            </div>
+        </div>
+    `;
+}
+
+// ── Wire up action buttons in the tab ──────────────────────
+
+function _wireIssueTabActions(container, issue) {
+    const root = container.querySelector('.issue-tab-content');
+    if (!root) return;
+
+    // Start Work
+    const startBtn = root.querySelector('.issue-tab-start-work');
+    if (startBtn && !startBtn.disabled) {
+        startBtn.addEventListener('click', () => startWorkOnIssue(issue));
+    }
+
+    // Refresh
+    const refreshBtn = root.querySelector('.issue-tab-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            // Find and re-render the tab
+            const idx = State.openTabs.findIndex(t => t.type === 'issue' && t.issueNumber === issue.number);
+            if (idx >= 0) {
+                import('./tab-manager.js').then(({ switchToTab }) => switchToTab(idx));
+            }
+        });
+    }
+
+    // Toggle all comments
+    const toggleBtn = root.querySelector('.issue-tab-toggle-comments');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const details = root.querySelectorAll('details.issue-comment-collapsible');
+            const allOpen = [...details].every(d => d.open);
+            details.forEach(d => d.open = !allOpen);
+            toggleBtn.textContent = allOpen ? 'Expand All' : 'Collapse All';
+        });
+    }
+
+    // Accept
+    const acceptBtn = root.querySelector('.issue-tab-accept');
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', () => _tabQuickAction(issue, 'accept'));
+    }
+
+    // Deny
+    const denyBtn = root.querySelector('.issue-tab-deny');
+    if (denyBtn) {
+        denyBtn.addEventListener('click', () => _tabQuickAction(issue, 'deny'));
+    }
+
+    // Comment
+    const commentBtn = root.querySelector('.issue-tab-comment');
+    if (commentBtn) {
+        commentBtn.addEventListener('click', () => _tabQuickAction(issue, 'comment'));
+    }
+}
+
+/**
+ * Quick action from within the issue tab (accept / deny / comment).
+ * Reuses the logic from the focus bar actions.
+ */
+async function _tabQuickAction(issue, action) {
+    if (!State.currentProject) return;
+    const { owner, repo } = State.currentProject;
+
+    if (action === 'accept') {
+        const comment = await showPrompt(`Add a comment (optional):`, {
+            title: `✅ Accept #${issue.number}`,
+            okLabel: 'Accept',
+            placeholder: 'Accepted — will address this.',
+        });
+        if (comment === null) return;
+        try {
+            const body = comment || 'Accepted — will address this.';
+            await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, `✅ **Accepted**\n\n${body}`));
+            EventBus.emit('issues:refresh');
+            window.showToast(`Accepted #${issue.number}`, 'success');
+            _refreshCurrentIssueTab(issue.number);
+        } catch (e) {
+            window.showToast(`Failed to accept: ${e.message}`, 'error');
+        }
+    } else if (action === 'deny') {
+        const comment = await showPrompt(`Reason for denying (required):`, {
+            title: `❌ Deny #${issue.number}`,
+            okLabel: 'Deny',
+            required: true,
+        });
+        if (!comment) return;
+        try {
+            await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, `❌ **Denied**\n\n${comment}`));
+            await _retryOp(() => Git.updateIssueState(owner, repo, issue.number, 'closed'));
+            EventBus.emit('issues:refresh');
+            window.showToast(`Denied & closed #${issue.number}`, 'success');
+            _refreshCurrentIssueTab(issue.number);
+        } catch (e) {
+            window.showToast(`Failed to deny: ${e.message}`, 'error');
+        }
+    } else if (action === 'comment') {
+        const comment = await showPrompt(`Comment on #${issue.number}:`, {
+            title: `💬 Add Comment`,
+            okLabel: 'Post Comment',
+            required: true,
+            placeholder: 'Write your comment…',
+        });
+        if (!comment) return;
+        try {
+            await _retryOp(() => Git.createIssueComment(owner, repo, issue.number, comment));
+            EventBus.emit('issues:refresh');
+            window.showToast(`Comment posted on #${issue.number}`, 'success');
+            _refreshCurrentIssueTab(issue.number);
+        } catch (e) {
+            window.showToast(`Failed to comment: ${e.message}`, 'error');
+        }
+    }
+}
+
+/** Re-render an open issue tab after data changes. */
+function _refreshCurrentIssueTab(issueNumber) {
+    const idx = State.openTabs.findIndex(t => t.type === 'issue' && t.issueNumber === issueNumber);
+    if (idx >= 0 && idx === State.activeTabIndex) {
+        import('./tab-manager.js').then(({ switchToTab }) => switchToTab(idx));
+    }
+}
+
+// ============================================
+// ISSUE DETAIL MODAL + BRANCH WORKFLOW (legacy)
 // ============================================
 
 /** Currently viewed issue in the modal (full data, not just State.issues summary) */
@@ -492,7 +884,11 @@ export async function acceptFocusedIssue() {
     const issue = State.focusedIssue;
     if (!issue || !State.currentProject) return;
 
-    const comment = prompt(`Accept #${issue.number}: ${issue.title}\n\nAdd a comment (optional):`);
+    const comment = await showPrompt(`Add a comment (optional):`, {
+        title: `✅ Accept #${issue.number}`,
+        okLabel: 'Accept',
+        placeholder: 'Accepted — will address this.',
+    });
     if (comment === null) return;  // Cancelled
 
     const { owner, repo } = State.currentProject;
@@ -519,7 +915,11 @@ export async function denyFocusedIssue() {
     const issue = State.focusedIssue;
     if (!issue || !State.currentProject) return;
 
-    const comment = prompt(`Deny #${issue.number}: ${issue.title}\n\nReason (required):`);
+    const comment = await showPrompt(`Reason for denying (required):`, {
+        title: `❌ Deny #${issue.number}`,
+        okLabel: 'Deny',
+        required: true,
+    });
     if (!comment) return;  // Cancelled or empty
 
     const { owner, repo } = State.currentProject;
@@ -556,7 +956,12 @@ export async function commentOnFocusedIssue() {
     const issue = State.focusedIssue;
     if (!issue || !State.currentProject) return;
 
-    const comment = prompt(`Comment on #${issue.number}: ${issue.title}`);
+    const comment = await showPrompt(`Comment on #${issue.number}:`, {
+        title: `💬 Add Comment`,
+        okLabel: 'Post Comment',
+        required: true,
+        placeholder: 'Write your comment…',
+    });
     if (!comment) return;
 
     const { owner, repo } = State.currentProject;

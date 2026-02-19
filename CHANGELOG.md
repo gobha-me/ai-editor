@@ -2,6 +2,66 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.39-1] - 2026-02-19
+
+### Added
+- **Themed dialog system** (`js/ui/dialogs.js`): `showAlert()`, `showConfirm()`,
+  and `showPrompt()` — Promise-based replacements for native `alert()`,
+  `confirm()`, and `prompt()`. Styled to match editor theme with proper
+  backdrop, animation, keyboard support (Esc, Enter, Ctrl+Enter for
+  textarea), and focus management.
+- **Prompt dialog for issue actions**: Accept, Deny, and Comment actions
+  now use a proper themed modal with title, textarea, and
+  contextual button labels instead of browser `prompt()`.
+
+### Changed
+- **Eliminated all native browser dialogs** — removed every `alert()`,
+  `confirm()`, and `prompt()` call across 12 files:
+  - `issue-detail.js` (6 prompt → showPrompt)
+  - `tab-manager.js` (confirm → showConfirm, closeTab now async)
+  - `error-logger.js` (confirm + 3 alert → showConfirm + showToast)
+  - `llm-debug-modal.js` (confirm + alert → showConfirm + showToast)
+  - `search-panel.js` (confirm → showConfirm)
+  - `storage-metrics.js` (2 confirm → showConfirm)
+  - `ui-helpers.js` (2 confirm → showConfirm)
+  - `settings/plugins-tab.js` (confirm → showConfirm)
+  - `settings/connections-tab.js` (confirm → showConfirm)
+  - `project-manager.js` (confirm → showConfirm)
+  - `zip-upload.js` (confirm → showConfirm)
+  - `ui/revert.js` (2 confirm → showConfirm)
+  - `file-tree.js` (2 confirm → showConfirm)
+- **Destructive confirms use red button**: Delete, Clear, Revert, Deny
+  actions render with `variant: 'danger'` for a red confirm button.
+- **Issue tab action buttons restyled**: Start Work, Accept, Deny, and
+  Comment buttons now use themed hover states with semantic colors
+  matching the rest of the editor UI.
+
+## [0.9.39] - 2026-02-19
+
+### Added
+- **Issue tabs**: Issues now open as editor tabs instead of being crushed
+  in the chat window or a blocking modal. Clicking an issue in the sidebar
+  opens it as a preview tab in the editor pane — same pattern as files.
+  Double-click to pin. Full issue detail, comments, labels, branch info,
+  and action buttons (Accept, Deny, Comment, Start Work) are all rendered
+  in-tab with room to breathe.
+- **Typed tab system**: `tab-manager.js` now supports a `registerTabRenderer()`
+  API for custom tab types beyond files. Issue tabs are the first consumer;
+  the pattern is ready for PR tabs or other views.
+- **Tab visual distinction**: Issue tabs show a 🔖 icon and accent-colored
+  left border + label so they're visually distinguishable from file tabs.
+- **In-tab actions**: Accept, Deny, Comment, and Start Work buttons in the
+  issue tab body — no more switching to the focus bar or modal to triage.
+- **Refresh button**: Each issue tab has a 🔄 button to re-fetch data.
+
+### Changed
+- Sidebar issue click now opens a tab (was: chat focus bar)
+- Focus bar "📄 Full details" button now opens a pinned tab (was: modal)
+- `State.openTabs` entries now support a `type` field (`'file'` | `'issue'`)
+- `switchToTab()` routes to registered renderers for non-file tab types
+- Editor toolbar buttons (Preview, Diff, Blame) are auto-disabled when
+  viewing non-file tabs
+
 ## [0.9.28-3] - 2026-02-13
 
 ### Fixed

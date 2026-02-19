@@ -9,6 +9,7 @@ import { getFileIcon } from '../editor.js';
 import { renderEditorTabs } from '../tab-manager.js';
 import { escapeHtml } from '../utils/html.js';
 import { showToast, updateStatusBar, updateCommitButton, updateRevertButton } from '../ui-helpers.js';
+import { showConfirm } from './dialogs.js';
 
 // ============================================
 // REVERT ENTRY POINT
@@ -44,7 +45,7 @@ async function revertSingleTab(tab) {
         return;
     }
 
-    if (!confirm(`Revert "${tab.path}" to last committed version? All local changes will be lost.`)) {
+    if (!await showConfirm(`Revert "${tab.path.split('/').pop()}" to last committed version? All local changes will be lost.`, { title: 'Revert File', okLabel: 'Revert', variant: 'danger' })) {
         return;
     }
 
@@ -119,7 +120,7 @@ export async function revertAllFiles() {
         return;
     }
     
-    if (!confirm(`Revert ALL ${dirtyTabs.length} file(s) to last committed version? This cannot be undone.`)) {
+    if (!await showConfirm(`Revert ALL ${dirtyTabs.length} file(s) to last committed version? This cannot be undone.`, { title: 'Revert All', okLabel: 'Revert All', variant: 'danger' })) {
         return;
     }
     

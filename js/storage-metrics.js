@@ -234,11 +234,12 @@ function _renderKeyList(items, totalBytes) {
 
     // Wire per-index delete buttons
     container.querySelectorAll('.btn-delete-embedding').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const key = btn.dataset.key;
             const projectName = key.replace('embeddings-index-', '');
-            if (!confirm(`Delete embedding index for "${projectName}"?`)) return;
+            const { showConfirm } = await import('./ui/dialogs.js');
+            if (!await showConfirm(`Delete embedding index for "${projectName}"?`, { title: 'Delete Index', okLabel: 'Delete', variant: 'danger' })) return;
 
             Storage.remove(key);
 
@@ -351,11 +352,12 @@ function _renderCleanupActions(totals, items) {
 
     // Wire handlers
     container.querySelectorAll('.storage-cleanup-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const action = actions[parseInt(btn.dataset.idx)];
             if (!action) return;
 
-            if (!confirm(`Clear all ${action.category} data? This cannot be undone.`)) return;
+            const { showConfirm } = await import('./ui/dialogs.js');
+            if (!await showConfirm(`Clear all ${action.category} data? This cannot be undone.`, { title: 'Clear Data', okLabel: 'Clear All', variant: 'danger' })) return;
 
             for (const key of action.keys) {
                 Storage.remove(key);

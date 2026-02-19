@@ -93,6 +93,163 @@
     color: var(--error);
 }
 
+/* ── Typed tab variants ───────────────────── */
+
+.editor-tab .tab-icon {
+    font-size: var(--font-sm);
+    flex-shrink: 0;
+}
+
+.editor-tab.tab-issue {
+    border-left: 2px solid var(--accent);
+}
+
+.editor-tab.tab-issue .tab-name {
+    color: var(--accent);
+}
+
+.editor-tab.tab-issue.active .tab-name {
+    color: var(--accent-hover);
+}
+
+/* ── Issue tab content (rendered in editorContainer) ── */
+
+.issue-tab-content {
+    height: 100%;
+    overflow-y: auto;
+    padding: 1.25rem 1.5rem;
+    font-size: var(--font-base);
+    color: var(--text-primary);
+    line-height: 1.55;
+}
+
+.issue-tab-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.issue-tab-title {
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.issue-tab-header-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.issue-tab-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-size: var(--font-md);
+}
+
+.issue-tab-labels {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.issue-tab-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Action button base (in tab view) */
+.issue-tab-actions .btn {
+    padding: 0.4rem 0.85rem;
+    font-size: var(--font-md);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.issue-tab-actions .btn:hover {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.issue-tab-actions .issue-tab-start-work {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.issue-tab-actions .issue-tab-start-work:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.issue-tab-actions .issue-tab-start-work:disabled {
+    opacity: 0.5;
+    cursor: default;
+    box-shadow: none;
+}
+
+.issue-tab-actions .issue-tab-accept:hover {
+    background: rgba(34, 134, 58, 0.12);
+    border-color: #22863a;
+    color: #4ec9b0;
+}
+
+.issue-tab-actions .issue-tab-deny:hover {
+    background: rgba(203, 37, 54, 0.12);
+    border-color: #cb2536;
+    color: #f14c4c;
+}
+
+.issue-tab-actions .issue-tab-comment:hover {
+    background: rgba(14, 125, 202, 0.12);
+    border-color: var(--accent);
+    color: var(--accent-hover);
+}
+
+.issue-tab-loading,
+.issue-tab-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60%;
+    gap: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.spinner-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-dot 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+/* Reuse existing issue-detail-section, preview-markdown, etc. from modals.css */
+
 .editor-container {
     flex: 1;
     overflow: hidden;

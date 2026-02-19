@@ -1945,3 +1945,130 @@ details[open] > .modal-section-header .section-chevron {
         flex-direction: column;
     }
 }
+
+/* ============================================
+   THEMED DIALOGS (v0.9.39-1)
+   Replaces native alert / confirm / prompt
+   ============================================ */
+
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;  /* above all other modals */
+    animation: dialog-fade-in 0.12s ease-out;
+}
+
+.dialog-overlay.active {
+    display: flex;
+}
+
+@keyframes dialog-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.dialog-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 420px;
+    min-width: 280px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    animation: dialog-slide-in 0.15s ease-out;
+}
+
+@keyframes dialog-slide-in {
+    from { transform: translateY(-12px) scale(0.97); opacity: 0; }
+    to   { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    min-height: 0;
+}
+
+.dialog-header:has(.dialog-title:empty) {
+    /* Hide border when there's no title */
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.dialog-title {
+    font-size: var(--font-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dialog-title:empty {
+    display: none;
+}
+
+.dialog-body {
+    padding: 1rem;
+}
+
+.dialog-message {
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.dialog-input-wrap {
+    margin-top: 0.75rem;
+}
+
+.dialog-input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--font-base);
+    font-family: inherit;
+    resize: vertical;
+    min-height: 2.5rem;
+    max-height: 200px;
+    transition: border-color 0.15s;
+}
+
+.dialog-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.dialog-input.dialog-input-error {
+    border-color: var(--error);
+    animation: dialog-shake 0.3s ease;
+}
+
+@keyframes dialog-shake {
+    0%, 100% { transform: translateX(0); }
+    25%      { transform: translateX(-4px); }
+    75%      { transform: translateX(4px); }
+}
+
+.dialog-footer {
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.dialog-footer .btn {
+    min-width: 72px;
+    justify-content: center;
+}

@@ -212,7 +212,11 @@ async function doReplaceAll() {
     };
 
     const filePaths = Object.keys(_lastResults.files);
-    const confirmed = confirm(`Replace all ${_lastResults.totalMatches} matches across ${filePaths.length} files?`);
+    const { showConfirm } = await import('./ui/dialogs.js');
+    const confirmed = await showConfirm(
+        `Replace all ${_lastResults.totalMatches} matches across ${filePaths.length} files?`,
+        { title: 'Replace All', okLabel: 'Replace All', variant: 'danger' }
+    );
     if (!confirmed) return;
 
     _showStatus('Replacing...');

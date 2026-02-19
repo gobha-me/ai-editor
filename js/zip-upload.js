@@ -81,9 +81,10 @@ export function openZipUpload() {
     modal.classList.add('active');
 }
 
-export function closeZipUpload() {
+export async function closeZipUpload() {
     if (isUploading) {
-        if (!confirm('Upload in progress. Cancel?')) return;
+        const { showConfirm } = await import('./ui/dialogs.js');
+        if (!await showConfirm('Upload in progress. Cancel?', { title: 'Cancel Upload', okLabel: 'Cancel Upload', variant: 'danger' })) return;
     }
     
     const modal = document.getElementById('zipUploadModal');

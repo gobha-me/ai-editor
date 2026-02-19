@@ -1,84 +1,124 @@
 // ============================================
-// TAB MANAGER
+// TAB MANAGER  (v0.9.39 — typed tabs: file, issue)
 // ============================================
 
 import { State, EventBus } from './core.js';
 import { createEditor } from './editor.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import { showConfirm } from './ui/dialogs.js';
 
-// Switch to a specific tab
-export async function switchToTab(index) {
-    if (index < 0 || index >= State.openTabs.length) return;
-    
-    // Save current tab state if there's an active tab
-    if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
-        State.openTabs[State.activeTabIndex].content = State.editorContent;
-        State.openTabs[State.activeTabIndex].dirty = State.editorDirty;
-    }
-    
-    State.activeTabIndex = index;
-    const tab = State.openTabs[index];
-    
-    // Update current file state
-    State.currentFile = {
-        path: tab.path,
-        content: tab.originalContent || tab.content,
-        sha: tab.sha
-    };
-    State.editorContent = tab.content;
-    State.editorDirty = tab.dirty;
-    
-    // Create editor with tab content
-    await createEditor(
-        document.getElementById('editorContainer'),
-        tab.content,
-        tab.path
-    );
-    
-    // Restore dirty state (createEditor resets editorDirty to false)
-    State.editorDirty = tab.dirty;
-    
-    renderEditorTabs();
-    
-    // Trigger event for other modules to update
-    EventBus.emit('tab:switched', { index, tab });
-    
-    // Highlight active file in tree
-    document.querySelectorAll('.tree-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.path === tab.path);
-    });
+// ── Custom tab renderer registry ──────────────────────────
+// Keyed by tab type string (e.g. 'issue').
+// Value: async (container: HTMLElement, tab: object) => void
+const _tabRenderers = {};
+
+/**
+ * Register a renderer for a custom (non-file) tab type.
+ * Called once at init time by feature modules (e.g. issue-detail.js).
+ * @param {string} type - Tab type key ('issue', 'pr', …)
+ * @param {(container: HTMLElement, tab: object) => Promise<void>} renderer
+ */
+export function registerTabRenderer(type, renderer) {
+    _tabRenderers[type] = renderer;
 }
 
-// Close a tab
-export function closeTab(index, event) {
-    if (event) {
-        event.stopPropagation();
-    }
-    
+// ── Switch tab ────────────────────────────────────────────
+
+export async function switchToTab(index) {
     if (index < 0 || index >= State.openTabs.length) return;
-    
-    const tab = State.openTabs[index];
-    
-    // Warn if dirty
-    if (tab.dirty && !confirm(`${tab.path} has unsaved changes. Close anyway?`)) {
-        return;
+
+    // Save current tab state if it's a file tab
+    if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
+        const prev = State.openTabs[State.activeTabIndex];
+        if (!prev.type || prev.type === 'file') {
+            prev.content = State.editorContent;
+            prev.dirty = State.editorDirty;
+        }
     }
-    
-    // Remove tab
+
+    State.activeTabIndex = index;
+    const tab = State.openTabs[index];
+    const tabType = tab.type || 'file';
+    const container = document.getElementById('editorContainer');
+
+    if (tabType !== 'file' && _tabRenderers[tabType]) {
+        // ── Custom tab (issue, pr, …) ──
+        State.currentFile = null;
+        State.editorContent = '';
+        State.editorDirty = false;
+        _setEditorToolbar(false);
+
+        // Close secondary pane — not meaningful for non-file tabs
+        import('./secondary-pane.js').then(({ closeSecondaryPane }) => closeSecondaryPane()).catch(() => {});
+
+        await _tabRenderers[tabType](container, tab);
+    } else {
+        // ── File tab ──
+        State.currentFile = {
+            path: tab.path,
+            content: tab.originalContent || tab.content,
+            sha: tab.sha
+        };
+        State.editorContent = tab.content;
+        State.editorDirty = tab.dirty;
+        _setEditorToolbar(true);
+
+        await createEditor(container, tab.content, tab.path);
+        State.editorDirty = tab.dirty;  // createEditor resets this
+    }
+
+    renderEditorTabs();
+    EventBus.emit('tab:switched', { index, tab });
+
+    // Highlight active file in tree (file tabs only)
+    if (tabType === 'file') {
+        document.querySelectorAll('.tree-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.path === tab.path);
+        });
+    } else {
+        document.querySelectorAll('.tree-item.active').forEach(el => el.classList.remove('active'));
+    }
+}
+
+/** Enable / disable editor toolbar buttons (Preview, Diff, Blame). */
+function _setEditorToolbar(enabled) {
+    for (const id of ['btnTogglePreview', 'btnToggleDiff', 'btnToggleBlame']) {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = !enabled;
+    }
+}
+
+// ── Close tab ─────────────────────────────────────────────
+
+export async function closeTab(index, event) {
+    if (event) event.stopPropagation();
+    if (index < 0 || index >= State.openTabs.length) return;
+
+    const tab = State.openTabs[index];
+    const tabType = tab.type || 'file';
+
+    // Only warn about unsaved changes for file tabs
+    if (tabType === 'file' && tab.dirty) {
+        const discard = await showConfirm(`"${tab.path.split('/').pop()}" has unsaved changes. Close anyway?`, {
+            title: 'Unsaved Changes',
+            okLabel: 'Discard',
+            variant: 'danger',
+        });
+        if (!discard) return;
+    }
+
     State.openTabs.splice(index, 1);
-    EventBus.emit('tab:closed', { path: tab.path });
-    
-    // Adjust active index
+    EventBus.emit('tab:closed', { path: tab.path, type: tabType, issueNumber: tab.issueNumber });
+
     if (State.openTabs.length === 0) {
         State.activeTabIndex = -1;
         State.currentFile = null;
         State.editorContent = '';
         State.editorDirty = false;
-        
-        // Close secondary pane (diff/preview are invalid with no file open)
-        import('./secondary-pane.js').then(({ closeSecondaryPane }) => closeSecondaryPane());
-        
-        // Show welcome screen
+        _setEditorToolbar(false);
+
+        import('./secondary-pane.js').then(({ closeSecondaryPane }) => closeSecondaryPane()).catch(() => {});
+
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
@@ -90,7 +130,6 @@ export function closeTab(index, event) {
         renderEditorTabs();
         EventBus.emit('statusBar:update');
     } else if (index <= State.activeTabIndex) {
-        // Switch to previous or next tab
         const newIndex = Math.min(State.activeTabIndex, State.openTabs.length - 1);
         if (newIndex !== State.activeTabIndex || index === State.activeTabIndex) {
             State.activeTabIndex = Math.max(0, newIndex - (index < State.activeTabIndex ? 1 : 0));
@@ -103,7 +142,8 @@ export function closeTab(index, event) {
     }
 }
 
-// Pin a preview tab (convert to permanent)
+// ── Pin tab ───────────────────────────────────────────────
+
 export function pinTab(index) {
     if (index >= 0 && index < State.openTabs.length) {
         State.openTabs[index].isPreview = false;
@@ -111,10 +151,26 @@ export function pinTab(index) {
     }
 }
 
-// Render all editor tabs
+// ── Tab display helpers ───────────────────────────────────
+
+/** Return icon + label for a tab based on its type. */
+function _tabDisplay(tab) {
+    switch (tab.type) {
+        case 'issue': {
+            const title = tab.issueData?.title || '';
+            const short = title.length > 28 ? title.slice(0, 26) + '…' : title;
+            return { icon: '🔖', label: `#${tab.issueNumber}` + (short ? `: ${short}` : '') };
+        }
+        default:
+            return { icon: '', label: tab.path ? tab.path.split('/').pop() : 'Untitled' };
+    }
+}
+
+// ── Render tabs bar ───────────────────────────────────────
+
 export function renderEditorTabs() {
     const tabsContainer = document.getElementById('editorTabs');
-    
+
     if (State.openTabs.length === 0) {
         tabsContainer.innerHTML = `
             <div class="editor-tab active" role="tab" aria-selected="true" tabindex="0">
@@ -123,41 +179,47 @@ export function renderEditorTabs() {
         `;
         return;
     }
-    
+
     tabsContainer.innerHTML = State.openTabs.map((tab, index) => {
-        const fileName = tab.path.split('/').pop();
         const isActive = index === State.activeTabIndex;
+        const tabType = tab.type || 'file';
         const previewClass = tab.isPreview ? 'preview' : '';
         const activeClass = isActive ? 'active' : '';
-        
+        const typeClass = tabType !== 'file' ? `tab-${tabType}` : '';
+        const { icon, label } = _tabDisplay(tab);
+        const showDirty = tabType === 'file' && tab.dirty;
+
         return `
-            <div class="editor-tab ${activeClass} ${previewClass}" 
+            <div class="editor-tab ${activeClass} ${previewClass} ${typeClass}"
                  role="tab"
                  tabindex="${isActive ? '0' : '-1'}"
                  aria-selected="${isActive}"
-                 aria-label="${escapeAttr(fileName)}${tab.dirty ? ', modified' : ''}${tab.isPreview ? ', preview' : ''}"
+                 aria-label="${escapeAttr(label)}${showDirty ? ', modified' : ''}${tab.isPreview ? ', preview' : ''}"
                  onclick="window.switchToTab(${index})"
                  ondblclick="window.pinTab(${index})"
-                 title="${escapeAttr(tab.path)}">
-                <span class="tab-name">${escapeHtml(fileName)}</span>
-                <span class="modified" aria-hidden="true" style="display: ${tab.dirty ? 'inline' : 'none'}">●</span>
-                <button class="close" onclick="window.closeTab(${index}, event)" title="Close" aria-label="Close ${escapeAttr(fileName)}">×</button>
+                 title="${escapeAttr(label)}">
+                ${icon ? `<span class="tab-icon" aria-hidden="true">${icon}</span>` : ''}
+                <span class="tab-name">${escapeHtml(label)}</span>
+                <span class="modified" aria-hidden="true" style="display: ${showDirty ? 'inline' : 'none'}">●</span>
+                <button class="close" onclick="window.closeTab(${index}, event)" title="Close" aria-label="Close ${escapeAttr(label)}">×</button>
             </div>
         `;
     }).join('');
 }
 
-// Update current tab's dirty state when editor changes
+// ── Editor change listener ────────────────────────────────
+
 export function initTabChangeListener() {
     EventBus.on('editor:change', () => {
         if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
-            State.openTabs[State.activeTabIndex].dirty = true;
-            State.openTabs[State.activeTabIndex].content = State.editorContent;
-            // Pin the tab if it was a preview (editing pins it)
-            if (State.openTabs[State.activeTabIndex].isPreview) {
-                State.openTabs[State.activeTabIndex].isPreview = false;
+            const tab = State.openTabs[State.activeTabIndex];
+            // Only track dirty state for file tabs
+            if (!tab.type || tab.type === 'file') {
+                tab.dirty = true;
+                tab.content = State.editorContent;
+                if (tab.isPreview) tab.isPreview = false;
+                renderEditorTabs();
             }
-            renderEditorTabs();
         }
     });
 }

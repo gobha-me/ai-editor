@@ -309,7 +309,8 @@ export async function onTreeItemClick(path, type, isDoubleClick = false) {
 
 // Delete file
 export async function deleteFile(path) {
-    if (!confirm(`Delete ${path}?`)) return;
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (!await showConfirm(`Delete ${path.split('/').pop()}?`, { title: 'Delete File', okLabel: 'Delete', variant: 'danger' })) return;
 
     const { owner, repo } = State.currentProject;
     const file = State.fileTree.find(f => f.path === path);
@@ -344,7 +345,8 @@ export async function deleteFolder(folderPath) {
         return;
     }
 
-    if (!confirm(`Delete folder "${folderPath}" and all ${fileCount} file${fileCount !== 1 ? 's' : ''} inside it?`)) return;
+    const { showConfirm } = await import('./ui/dialogs.js');
+    if (!await showConfirm(`Delete folder "${folderPath}" and all ${fileCount} file${fileCount !== 1 ? 's' : ''} inside it?`, { title: 'Delete Folder', okLabel: 'Delete', variant: 'danger' })) return;
 
     const { owner, repo } = State.currentProject;
 

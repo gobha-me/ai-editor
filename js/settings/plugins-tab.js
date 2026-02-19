@@ -160,9 +160,10 @@ export function populatePluginsTab() {
 
     // Uninstall buttons
     container.querySelectorAll('[data-uninstall-url]').forEach(el => {
-        el.addEventListener('click', () => {
+        el.addEventListener('click', async () => {
             const url = el.dataset.uninstallUrl;
-            if (!confirm('Uninstall this plugin? It will be disabled immediately and fully removed on reload.')) return;
+            const { showConfirm } = await import('../ui/dialogs.js');
+            if (!await showConfirm('Uninstall this plugin? It will be disabled immediately and fully removed on reload.', { title: 'Uninstall Plugin', okLabel: 'Uninstall', variant: 'danger' })) return;
             const result = uninstallPlugin(url);
             if (result.success) {
                 window.showToast?.('Plugin uninstalled — reload to fully remove', 'success');

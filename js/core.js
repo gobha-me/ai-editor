@@ -297,7 +297,7 @@ const State = {
     models: [],                // [{ id, name, capabilities, pricing, meta }]
     
     // Editor state - Multi-tab support
-    openTabs: [],              // [{ path, content, originalContent, sha, dirty, isPreview }]
+    openTabs: [],              // [{ path, content, originalContent, sha, dirty, isPreview, type?: 'file'|'issue', issueNumber?, issueData? }]
     activeTabIndex: -1,        // Index of currently active tab
     editorContent: '',         // Current buffer
     editorDirty: false,        // Has unsaved changes

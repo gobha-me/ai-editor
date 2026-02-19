@@ -326,7 +326,8 @@ export async function clearProject() {
     const dirtyTabs = State.openTabs.filter(t => t.dirty);
     if (dirtyTabs.length > 0) {
         const paths = dirtyTabs.map(t => t.path.split('/').pop()).join(', ');
-        if (!confirm(`You have unsaved changes in: ${paths}\n\nDiscard and clear project?`)) {
+        const { showConfirm } = await import('./ui/dialogs.js');
+        if (!await showConfirm(`You have unsaved changes in: ${paths}\n\nDiscard and clear project?`, { title: 'Unsaved Changes', okLabel: 'Discard', variant: 'danger' })) {
             return;
         }
     }
@@ -427,8 +428,8 @@ export function renderIssues() {
         
         return `
             <div class="issue-item${activeClass}" role="listitem" tabindex="0"
-                 onclick="window.focusIssue(${issue.number})"
-                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.focusIssue(${issue.number})}"
+                 onclick="window.openIssueTab(${issue.number})"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openIssueTab(${issue.number})}"
                  aria-label="Issue #${issue.number}: ${escapeAttr(issue.title)}">
                 <div class="issue-number">#${issue.number}</div>
                 <div class="issue-title">${escapeHtml(issue.title)}</div>
@@ -668,6 +669,7 @@ import {
 // ============================================
 
 import {
+    openIssueTab,
     openIssueDetailModal,
     closeIssueDetailModal,
     startWorkOnIssue,
@@ -836,6 +838,7 @@ export {
     generatePRComment,
     submitPRComment,
     // Issue detail (from issue-detail.js)
+    openIssueTab,
     openIssueDetailModal,
     closeIssueDetailModal,
     startWorkOnIssue,
