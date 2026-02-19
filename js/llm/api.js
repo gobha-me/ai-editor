@@ -19,7 +19,7 @@
  * @typedef {Object} LLMChatOptions
  * @property {string}    [model]
  * @property {boolean}   [stream=true]
- * @property {number}    [maxTokens=4096]
+ * @property {number}    [maxTokens] - If omitted, resolved dynamically from model metadata
  * @property {number}    [temperature=0.7]
  * @property {ToolDefinition[]|null} [tools=null]
  * @property {((token: string, full: string) => void)|null} [onToken=null]
@@ -53,7 +53,7 @@
 /**
  * @typedef {Object} RequestBodyOptions
  * @property {boolean}              [stream=true]
- * @property {number}               [maxTokens=4096]
+ * @property {number}               [maxTokens] - If omitted, resolved from model metadata
  * @property {number}               [temperature=0.7]
  * @property {ToolDefinition[]|null} [tools=null]
  */
@@ -71,6 +71,51 @@ import {
 } from '../prompts.js';
 
 // ============================================
+// MAX TOKENS RESOLUTION
+// ============================================
+
+/**
+ * Purpose-based output token budgets as fraction of model context window.
+ * Each entry: [fraction of context, absolute cap]
+ */
+const TOKEN_BUDGETS = {
+    chat:    [0.25, 16384],  // General conversation
+    edit:    [0.40, 16384],  // Code generation needs room
+    commit:  [0.05,  1024],  // Commit messages are tiny
+    comment: [0.05,   512],  // PR comments are tiny
+    notes:   [0.15,  4096],  // Release notes, analysis
+    summary: [0.10,  2048],  // Conversation summaries
+};
+
+/**
+ * Resolve max_tokens for a request.
+ * Priority: user setting > purpose-based calculation > fallback.
+ *
+ * @param {string} [modelId] - Model ID to look up (defaults to current)
+ * @param {string} [purpose='chat'] - One of: chat, edit, commit, comment, notes, summary
+ * @returns {number}
+ */
+export function resolveMaxTokens(modelId, purpose = 'chat') {
+    // 1. User manual override always wins
+    const userMax = State.settings.advancedParams?.max_tokens;
+    if (userMax && userMax > 0) return userMax;
+
+    // 2. Look up model context window
+    const id = modelId || State.settings.llmModel;
+    const model = (State.models || []).find(m => m.id === id);
+    const contextTokens = model?.meta?.contextTokens;
+
+    if (contextTokens && contextTokens > 0) {
+        const [fraction, cap] = TOKEN_BUDGETS[purpose] || TOKEN_BUDGETS.chat;
+        return Math.min(Math.floor(contextTokens * fraction), cap);
+    }
+
+    // 3. Fallback — no model metadata available
+    const fallbacks = { chat: 4096, edit: 8192, commit: 1024, comment: 512, notes: 2048, summary: 2048 };
+    return fallbacks[purpose] || 4096;
+}
+
+// ============================================
 // REQUEST BODY BUILDER
 // ============================================
 
@@ -84,7 +129,7 @@ import {
 export function buildRequestBody(model, messages, options = {}) {
     const {
         stream = true,
-        maxTokens = 4096,
+        maxTokens,
         temperature = 0.7,
         tools = null
     } = options;
@@ -94,7 +139,7 @@ export function buildRequestBody(model, messages, options = {}) {
     const requestBody = {
         model,
         messages: sanitizedMessages,
-        max_tokens: maxTokens,
+        max_tokens: maxTokens ?? resolveMaxTokens(model, 'chat'),
         temperature,
         stream
     };
@@ -250,7 +295,7 @@ export const LLM = {
         const {
             model = State.settings.llmModel,
             stream = true,
-            maxTokens = 4096,
+            maxTokens,
             temperature = 0.7,
             tools = null,
             onToken = null
@@ -635,7 +680,7 @@ export async function generateEdit(request, onToken = null) {
     const result = await LLM.chat(messages, { 
         onToken,
         stream: true,
-        maxTokens: 8192
+        maxTokens: resolveMaxTokens(undefined, 'edit')
     });
 
     const codeMatch = result.content.match(/```[\w]*\n([\s\S]*?)```/);
@@ -705,7 +750,7 @@ export async function analyzeIssue(issue, onToken = null) {
     ], {
         onToken,
         stream: true,
-        maxTokens: 4096
+        maxTokens: resolveMaxTokens(undefined, 'notes')
     });
 
     return result.content;

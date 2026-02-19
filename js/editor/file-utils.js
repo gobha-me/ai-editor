@@ -82,16 +82,28 @@ const TEXT_FILENAMES = new Set([
 
 /**
  * Returns true if the filename is a *known* text file by extension/name.
- * Used by zip-upload for auto-select heuristic.
+ * Used by zip-upload for auto-select heuristic and file-open binary guard.
  */
 export function isTextFile(filename) {
     const ext = filename.split('.').pop().toLowerCase();
     const name = filename.toLowerCase();
     const basename = name.split('/').pop();
 
-    return TEXT_EXTENSIONS.has(ext)
-        || TEXT_FILENAMES.has(basename)
-        || name.startsWith('.');   // Hidden config files (dotfiles)
+    // 1. Known text extension (covers most files)
+    if (TEXT_EXTENSIONS.has(ext)) return true;
+
+    // 2. Exact known filename (Makefile, Dockerfile, etc.)
+    if (TEXT_FILENAMES.has(basename)) return true;
+
+    // 3. Compound names: Dockerfile.frontend, Makefile.inc, Gemfile.lock
+    //    Check if the stem (before first dot) is a known text filename
+    const stem = basename.split('.')[0];
+    if (stem && TEXT_FILENAMES.has(stem)) return true;
+
+    // 4. Hidden config files (dotfiles like .env.local, .config)
+    if (basename.startsWith('.')) return true;
+
+    return false;
 }
 
 // ============================================

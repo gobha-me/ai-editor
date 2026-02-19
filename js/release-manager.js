@@ -10,7 +10,7 @@
 
 import { State, EventBus } from './core.js';
 import { Git } from './git.js';
-import { LLM } from './llm.js';
+import { LLM, resolveMaxTokens } from './llm.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 
 // ============================================
@@ -285,7 +285,7 @@ export async function generateReleaseNotes() {
             model: commitModel,
             stream: true,
             temperature: 0.3,
-            maxTokens: 2048,
+            maxTokens: resolveMaxTokens(commitModel, 'notes'),
             onToken: (token, full) => {
                 accumulated = full;
                 notesArea.value = full;

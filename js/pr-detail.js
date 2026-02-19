@@ -15,7 +15,7 @@ import { State, EventBus } from './core.js';
 import { Git } from './git.js';
 import { renderMarkdown } from './secondary-pane.js';
 import { escapeHtml } from './utils/html.js';
-import { LLM } from './llm.js';
+import { LLM, resolveMaxTokens } from './llm.js';
 
 // ============================================
 // CI STATUS ICONS (shared with PR list in project-manager)
@@ -458,7 +458,7 @@ Keep it under 200 words. Do NOT use markdown headers. Respond with ONLY the revi
         ], {
             stream: false,
             temperature: 0.4,
-            maxTokens: 400,
+            maxTokens: resolveMaxTokens(commitModel, 'comment'),
             model: commitModel
         });
 

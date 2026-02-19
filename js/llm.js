@@ -23,6 +23,7 @@ export {
     LLM,
     LLMTools,
     buildRequestBody,
+    resolveMaxTokens,
     generateEdit,
     generateCommitMessage,
     analyzeIssue

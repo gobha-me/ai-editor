@@ -33,6 +33,14 @@ let currentZipName = '';
 // Extensions that are text but not auto-selected by default
 const DEFAULT_OFF_EXTENSIONS = new Set(['svg', 'xml', 'csv', 'tsv']);
 
+// Binary extensions that are valid web assets — auto-select these
+const WEB_ASSET_EXTENSIONS = new Set([
+    // Images (favicon, logos, photos)
+    'png', 'jpg', 'jpeg', 'gif', 'ico', 'webp', 'avif',
+    // Fonts
+    'woff', 'woff2', 'ttf', 'eot', 'otf',
+]);
+
 // ============================================
 // MODAL LIFECYCLE
 // ============================================
@@ -122,8 +130,9 @@ export async function handleZipFile(file) {
             const ext = fileName.split('.').pop().toLowerCase();
             const binary = !isTextFile(fileName);
             
-            // Text files auto-select unless in default-off list
-            const autoSelect = !binary && !DEFAULT_OFF_EXTENSIONS.has(ext);
+            // Web assets (images, fonts) auto-select even though they're binary
+            const isWebAsset = binary && WEB_ASSET_EXTENSIONS.has(ext);
+            const autoSelect = (!binary || isWebAsset) && !DEFAULT_OFF_EXTENSIONS.has(ext);
             
             const promise = (async () => {
                 try {
@@ -218,13 +227,17 @@ function _renderFilePreview(zipName) {
     preview.style.display = '';
     
     const textFiles = extractedFiles.filter(f => !f.isBinary);
-    const binaryFiles = extractedFiles.filter(f => f.isBinary);
+    const webAssets = extractedFiles.filter(f => f.isBinary && WEB_ASSET_EXTENSIONS.has(f.path.split('.').pop()?.toLowerCase()));
+    const otherBinary = extractedFiles.filter(f => f.isBinary && !WEB_ASSET_EXTENSIONS.has(f.path.split('.').pop()?.toLowerCase()));
     const totalSize = extractedFiles.reduce((sum, f) => sum + f.size, 0);
     
     let statsHtml = `📦 <strong>${escapeHtml(zipName)}</strong> — `;
-    statsHtml += `${textFiles.length} text file${textFiles.length !== 1 ? 's' : ''}`;
-    if (binaryFiles.length > 0) {
-        statsHtml += `, ${binaryFiles.length} binary`;
+    statsHtml += `${textFiles.length} text`;
+    if (webAssets.length > 0) {
+        statsHtml += `, ${webAssets.length} asset${webAssets.length !== 1 ? 's' : ''}`;
+    }
+    if (otherBinary.length > 0) {
+        statsHtml += `, ${otherBinary.length} binary`;
     }
     statsHtml += ` · ${_formatSize(totalSize)}`;
     stats.innerHTML = statsHtml;
@@ -234,7 +247,8 @@ function _renderFilePreview(zipName) {
     // Auto-generate commit message
     const commitMsg = document.getElementById('zipCommitMessage');
     if (commitMsg && !commitMsg.value) {
-        commitMsg.value = `Upload ${textFiles.length} files from ${zipName}`;
+        const selectedCount = extractedFiles.filter(f => f.selected).length;
+        commitMsg.value = `Upload ${selectedCount} files from ${zipName}`;
     }
     
     _updateUploadButton();
@@ -245,14 +259,18 @@ function _renderFileList() {
     if (!fileList) return;
     
     fileList.innerHTML = extractedFiles.map((f, i) => {
-        const icon = f.isBinary ? '📎' : _getIcon(f.path);
+        const ext = f.path.split('.').pop()?.toLowerCase();
+        const isWebAsset = f.isBinary && WEB_ASSET_EXTENSIONS.has(ext);
+        const icon = isWebAsset ? '🖼️' : f.isBinary ? '📎' : _getIcon(f.path);
         const sizeStr = _formatSize(f.size);
         const checkedAttr = f.selected ? 'checked' : '';
         const binaryClass = f.isBinary ? ' zip-file-binary' : '';
         
         // Diff status badge
         let diffBadge = '';
-        if (f.isBinary) {
+        if (isWebAsset) {
+            diffBadge = '<span class="zip-file-badge">asset</span>';
+        } else if (f.isBinary) {
             diffBadge = '<span class="zip-file-badge">binary</span>';
         } else if (f.diffStatus === 'new') {
             diffBadge = '<span class="zip-file-badge zip-badge-new">new</span>';
