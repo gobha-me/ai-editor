@@ -110,8 +110,8 @@ function renderTreeNodes(nodes, depth) {
                     <span class="icon" aria-hidden="true">${icon}</span>
                     <span class="name" id="${itemId}">${escapeHtml(node.name)}${isDir ? '<span class="sr-only">, folder</span>' : ''}</span>
                     <div class="actions">
-                        ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.openRenameModal('${escapeAttr(node.path)}')" title="Rename / Move" aria-label="Rename ${escapeAttr(node.name)}">✏️</button>` : ''}
-                        ${!isDir ? `<button type="button" onclick="event.stopPropagation(); window.deleteFile('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>` : ''}
+                        <button type="button" onclick="event.stopPropagation(); window.openRenameModal('${escapeAttr(node.path)}', ${isDir})" title="Rename / Move" aria-label="Rename ${escapeAttr(node.name)}">✏️</button>
+                        <button type="button" onclick="event.stopPropagation(); window.${isDir ? 'deleteFolder' : 'deleteFile'}('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>
                     </div>
                 </div>
             `;
@@ -321,17 +321,7 @@ export async function deleteFile(path) {
         Storage.clearDraft(owner, repo, State.currentBranch, path);
         
         // Close tab if open
-        const tabIndex = State.openTabs.findIndex(t => t.path === path);
-        if (tabIndex >= 0) {
-            State.openTabs.splice(tabIndex, 1);
-            if (State.activeTabIndex >= tabIndex) {
-                State.activeTabIndex = Math.max(0, State.activeTabIndex - 1);
-            }
-            if (State.openTabs.length > 0) {
-                const { switchToTab } = await import('./tab-manager.js');
-                await switchToTab(State.activeTabIndex);
-            }
-        }
+        await _closeTabForPath(path);
         
         // Refresh file tree
         const { EventBus } = await import('./core.js');
@@ -341,5 +331,63 @@ export async function deleteFile(path) {
         window.showToast('File deleted', 'success');
     } catch (error) {
         window.showToast('Failed to delete file', 'error');
+    }
+}
+
+// Delete folder (recursive)
+export async function deleteFolder(folderPath) {
+    const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+    const fileCount = (State.fileTree || []).filter(f => f.type === 'file' && f.path.startsWith(prefix)).length;
+
+    if (fileCount === 0) {
+        window.showToast('Folder is empty', 'warning');
+        return;
+    }
+
+    if (!confirm(`Delete folder "${folderPath}" and all ${fileCount} file${fileCount !== 1 ? 's' : ''} inside it?`)) return;
+
+    const { owner, repo } = State.currentProject;
+
+    try {
+        const result = await Git.deleteFolder(
+            owner, repo, folderPath,
+            `Delete folder ${folderPath} (${fileCount} files)`,
+            State.currentBranch
+        );
+
+        // Close all tabs for files in this folder
+        const affectedFiles = (State.fileTree || []).filter(f => f.type === 'file' && f.path.startsWith(prefix));
+        for (const file of affectedFiles) {
+            Storage.clearDraft(owner, repo, State.currentBranch, file.path);
+            await _closeTabForPath(file.path);
+        }
+
+        const { EventBus } = await import('./core.js');
+        EventBus.emit('fs:deleted', { path: folderPath, branch: State.currentBranch, isFolder: true });
+        EventBus.emit('tree:refresh');
+
+        if (result.errors > 0) {
+            window.showToast(`Deleted ${result.deleted} files, ${result.errors} failed`, 'warning');
+        } else {
+            window.showToast(`Deleted folder (${result.deleted} files)`, 'success');
+        }
+    } catch (error) {
+        console.error('Folder delete failed:', error);
+        window.showToast(`Failed to delete folder: ${error.message}`, 'error');
+    }
+}
+
+/** Close tab for a given path if open, adjusting active index */
+async function _closeTabForPath(path) {
+    const tabIndex = State.openTabs.findIndex(t => t.path === path);
+    if (tabIndex < 0) return;
+
+    State.openTabs.splice(tabIndex, 1);
+    if (State.activeTabIndex >= tabIndex) {
+        State.activeTabIndex = Math.max(0, State.activeTabIndex - 1);
+    }
+    if (State.openTabs.length > 0) {
+        const { switchToTab } = await import('./tab-manager.js');
+        await switchToTab(State.activeTabIndex);
     }
 }

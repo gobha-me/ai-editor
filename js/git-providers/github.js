@@ -432,11 +432,20 @@ const githubProvider = {
 
         for (const file of files) {
             try {
-                const result = await this.updateFile(
-                    connection, owner, repo,
-                    file.path, file.content, message, file.sha, branch
-                );
-                results.push({ path: file.path, success: true, newSha: result.content?.sha });
+                const op = file.operation || (file.sha ? 'update' : 'create');
+                if (op === 'delete') {
+                    await this.deleteFile(
+                        connection, owner, repo,
+                        file.path, message, file.sha, branch
+                    );
+                    results.push({ path: file.path, success: true });
+                } else {
+                    const result = await this.updateFile(
+                        connection, owner, repo,
+                        file.path, file.content, message, file.sha, branch
+                    );
+                    results.push({ path: file.path, success: true, newSha: result.content?.sha });
+                }
             } catch (error) {
                 errors.push({ path: file.path, success: false, error: error.message });
             }

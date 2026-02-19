@@ -239,6 +239,95 @@ const Git = {
         return _writeGuard(() => provider.batchCommitFiles(connection, owner, repo, files, message, branch));
     },
 
+    /**
+     * Delete a folder recursively by deleting all files under it in one batch commit.
+     * Git has no folder concept — removing all files removes the folder.
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} folderPath - Folder path (no trailing slash)
+     * @param {string} message - Commit message
+     * @param {string} branch
+     * @returns {Promise<{deleted: number, errors: number}>}
+     */
+    async deleteFolder(owner, repo, folderPath, message, branch = 'main') {
+        const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+        const files = (State.fileTree || []).filter(f => f.type === 'file' && f.path.startsWith(prefix));
+
+        if (files.length === 0) {
+            throw new Error(`No files found under ${folderPath}`);
+        }
+
+        const batch = files.map(f => ({
+            path: f.path,
+            sha: f.sha,
+            operation: 'delete'
+        }));
+
+        const { provider, connection } = resolveCurrentConnection();
+        const result = await _writeGuard(() =>
+            provider.batchCommitFiles(connection, owner, repo, batch, message, branch)
+        );
+
+        EventBus.emit('git:folderDeleted', { owner, repo, folderPath, branch, count: files.length });
+        return { deleted: result.results?.length || 0, errors: result.errors?.length || 0 };
+    },
+
+    /**
+     * Rename/move a folder recursively.
+     * Downloads all files, creates them at new paths, deletes old paths — in one batch.
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} oldFolder - Old folder path (no trailing slash)
+     * @param {string} newFolder - New folder path (no trailing slash)
+     * @param {string} message - Commit message
+     * @param {string} branch
+     * @returns {Promise<{moved: number, errors: number}>}
+     */
+    async renameFolder(owner, repo, oldFolder, newFolder, message, branch = 'main') {
+        const prefix = oldFolder.endsWith('/') ? oldFolder : oldFolder + '/';
+        const files = (State.fileTree || []).filter(f => f.type === 'file' && f.path.startsWith(prefix));
+
+        if (files.length === 0) {
+            throw new Error(`No files found under ${oldFolder}`);
+        }
+
+        // Download all file contents in parallel (bounded concurrency)
+        const CONCURRENCY = 5;
+        const fileContents = new Array(files.length);
+        for (let i = 0; i < files.length; i += CONCURRENCY) {
+            const batch = files.slice(i, i + CONCURRENCY);
+            const results = await Promise.all(batch.map(f =>
+                this.getFile(owner, repo, f.path, branch).catch(err => {
+                    console.warn(`[Git] Failed to read ${f.path} for rename:`, err.message);
+                    return null;
+                })
+            ));
+            results.forEach((r, j) => { fileContents[i + j] = r; });
+        }
+
+        // Build batch: create at new paths, delete at old paths
+        const batch = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const content = fileContents[i];
+            if (!content) continue; // Skip files we couldn't read
+
+            const newPath = newFolder + file.path.slice(oldFolder.length);
+            batch.push({ path: newPath, content: content.content, operation: 'create' });
+            batch.push({ path: file.path, sha: file.sha, operation: 'delete' });
+        }
+
+        const { provider, connection } = resolveCurrentConnection();
+        const result = await _writeGuard(() =>
+            provider.batchCommitFiles(connection, owner, repo, batch, message, branch)
+        );
+
+        EventBus.emit('git:folderRenamed', { owner, repo, oldFolder, newFolder, branch, count: files.length });
+        return { moved: Math.floor((result.results?.length || 0) / 2), errors: result.errors?.length || 0 };
+    },
+
     // ========================================
     // ISSUES
     // ========================================

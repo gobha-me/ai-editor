@@ -451,13 +451,16 @@ const gitlabProvider = {
 
     async batchCommitFiles(connection, owner, repo, files, message, branch = 'main') {
         // GitLab's Commits API supports atomic multi-file operations in a single commit!
-        // Much better than the sequential approach GitHub/Gitea need.
-        const actions = files.map(f => ({
-            action: f.operation === 'update' ? 'update' : 'create',
-            file_path: f.path,
-            content: f.content,
-            encoding: f.encoding || 'text'
-        }));
+        const actions = files.map(f => {
+            const op = f.operation || (f.sha ? 'update' : 'create');
+            const action = { action: op, file_path: f.path };
+            // Delete actions don't need content
+            if (op !== 'delete') {
+                action.content = f.content;
+                action.encoding = f.encoding || 'text';
+            }
+            return action;
+        });
 
         try {
             await this.request(connection, 'POST',
@@ -483,7 +486,12 @@ const gitlabProvider = {
 
             for (const file of files) {
                 try {
-                    if (file.operation === 'update') {
+                    const op = file.operation || (file.sha ? 'update' : 'create');
+                    if (op === 'delete') {
+                        await this.deleteFile(connection, owner, repo,
+                            file.path, message, file.sha, branch
+                        );
+                    } else if (op === 'update') {
                         await this.updateFile(connection, owner, repo,
                             file.path, file.content, message, file.sha, branch
                         );

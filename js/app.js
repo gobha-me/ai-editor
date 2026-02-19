@@ -19,7 +19,7 @@ import { QuickOpen, initQuickOpen } from './quick-open.js';
 import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
-import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile } from './file-tree.js';
+import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile, deleteFolder } from './file-tree.js';
 import { togglePreviewPane, toggleDiffPane, toggleBlamePane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
 import { 
     toggleSidebar, 
@@ -264,6 +264,7 @@ window.pinTab = pinTab;
 window.handleTreeClick = handleTreeClick;
 window.onTreeItemClick = onTreeItemClick;
 window.deleteFile = deleteFile;
+window.deleteFolder = deleteFolder;
 
 window.closeSecondaryPane = closeSecondaryPane;
 window.toggleSecondaryFullscreen = toggleSecondaryFullscreen;
