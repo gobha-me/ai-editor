@@ -190,7 +190,7 @@ export function registerIssueTools(registry) {
     // ========================================
     // update_issue
     // ========================================
-    registry.register('update_issue', async ({ number, title, body, state }) => {
+    registry.register('update_issue', async ({ number, title, state, labels }) => {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
@@ -198,8 +198,8 @@ export function registerIssueTools(registry) {
         try {
             const fields = {};
             if (title !== undefined) fields.title = title;
-            if (body !== undefined) fields.body = body;
             if (state !== undefined) fields.state = state;
+            if (labels !== undefined) fields.labels = labels;
 
             const result = await Git.updateIssue(owner, repo, number, fields);
             EventBus.emit('issues:refresh');
@@ -217,7 +217,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'update_issue',
-            description: 'Update an existing issue (title, body, state, or labels).',
+            description: 'Update issue METADATA only: title, state (open/close), or labels. This does NOT add content to the issue — to post an update, response, or any new information on an issue, use add_issue_comment instead.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -229,14 +229,15 @@ export function registerIssueTools(registry) {
                         type: 'string',
                         description: 'New title (optional)'
                     },
-                    body: {
-                        type: 'string',
-                        description: 'New body (optional)'
-                    },
                     state: {
                         type: 'string',
                         enum: ['open', 'closed'],
                         description: 'Set issue state (optional)'
+                    },
+                    labels: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Replace labels with this list (optional)'
                     }
                 },
                 required: ['number']
@@ -268,7 +269,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'add_issue_comment',
-            description: 'Add a comment to an existing issue.',
+            description: 'Post a comment on an issue. Use this to add updates, responses, analysis, questions, status reports, or any new content to an existing issue. This is the correct tool whenever you want to contribute information to an issue — update_issue only changes metadata.',
             parameters: {
                 type: 'object',
                 properties: {

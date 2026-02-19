@@ -2,6 +2,26 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.39-2] - 2026-02-19
+
+### Fixed
+- **LLM overwrites issue descriptions**: `update_issue` tool had a `body`
+  parameter that replaced the user's entire issue description. The LLM
+  would reach for `update_issue({ body: "..." })` instead of
+  `add_issue_comment()` when asked to "update an issue" with new info.
+  Removed `body` from `update_issue` — it is now metadata-only
+  (title, state, labels).
+
+### Changed
+- **`update_issue` tool**: Removed `body` parameter entirely. Added
+  `labels` array parameter (was documented but missing from schema).
+  Description now explicitly says "metadata only" and directs the LLM
+  to `add_issue_comment` for posting content.
+- **`add_issue_comment` tool**: Description expanded to clarify this is
+  the correct tool for updates, responses, analysis, status reports,
+  and any new content on an issue.
+- Updated `docs/TOOLS.md` to match.
+
 ## [0.9.39-1] - 2026-02-19
 
 ### Added

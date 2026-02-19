@@ -186,18 +186,18 @@ create_issue({
 ```
 
 ### `update_issue`
-Update an existing issue (title, body, state).
+Update issue metadata only (title, state, labels). Does **not** modify the issue body — use `add_issue_comment` to post new content.
 ```javascript
 update_issue({
   number: 32,
   title: "Updated title",  // optional
-  body: "New body",        // optional
-  state: "closed"          // optional: "open" | "closed"
+  state: "closed",         // optional: "open" | "closed"
+  labels: ["bug", "p1"]    // optional: replaces label list
 })
 ```
 
 ### `add_issue_comment`
-Add a comment to an existing issue.
+Post a comment on an issue. Use this to add updates, responses, analysis, or any new information.
 ```javascript
 add_issue_comment({
   number: 32,
