@@ -94,12 +94,54 @@ export const ToolRegistry = {
     },
     
     /**
+     * Check whether the active role is allowed to invoke a given tool.
+     * @param {string} name - Tool name
+     * @returns {{ allowed: boolean, reason?: string }}
+     */
+    checkRoleAccess(name) {
+        const activeRole = State.settings.role;
+        
+        // 'full' role bypasses all restrictions
+        if (activeRole === 'full') {
+            return { allowed: true };
+        }
+        
+        const def = this.definitions.find(
+            d => d.function?.name === name
+        );
+        if (!def) {
+            // Unknown tool — let execute() handle the "not found" error
+            return { allowed: true };
+        }
+        
+        const toolRoles = def._registeredRoles || [];
+        if (toolRoles.includes('all') || toolRoles.includes(activeRole)) {
+            return { allowed: true };
+        }
+        
+        return {
+            allowed: false,
+            reason: `Role '${activeRole}' is not permitted to use tool '${name}'. ` +
+                    `Allowed roles: ${toolRoles.join(', ')}. ` +
+                    `Switch to an appropriate role or use a different tool.`
+        };
+    },
+    
+    /**
      * Execute a registered tool by name.
+     * Enforces role-based access control before invoking the handler.
      * @param {string} name
      * @param {Object} args
      * @returns {Promise<Object>}
      */
     async execute(name, args) {
+        // === ROLE ENFORCEMENT (server-side gate) ===
+        const access = this.checkRoleAccess(name);
+        if (!access.allowed) {
+            console.warn(`[ToolRegistry] 🚫 Role violation: ${name} blocked for role '${State.settings.role}'`);
+            return { error: access.reason };
+        }
+        
         const handler = this.handlers.get(name);
         if (!handler) {
             return { error: `Unknown tool: '${name}'. Use get_project_tree or list_issues to see what's available.` };
