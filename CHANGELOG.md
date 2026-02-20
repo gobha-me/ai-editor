@@ -2,7 +2,7 @@
 
 All notable changes to AI Editor are documented here.
 
-## [0.9.39-2] - 2026-02-19
+## [0.9.40] - 2026-02-20
 
 ### Fixed
 - **LLM overwrites issue descriptions**: `update_issue` tool had a `body`
@@ -11,6 +11,30 @@ All notable changes to AI Editor are documented here.
   `add_issue_comment()` when asked to "update an issue" with new info.
   Removed `body` from `update_issue` — it is now metadata-only
   (title, state, labels).
+- **Multi-tab data corruption**: Two browser tabs of the editor would
+  stomp each other's chat history, session state, summarizer context,
+  and active conversation. Now 5 session-volatile keys are scoped per
+  tab using a tab ID from `sessionStorage`.
+- **scratchpad-tools**: `chatSummaryInfo` was read via direct
+  `localStorage.getItem()` without the `ai-editor-` prefix — always
+  returned null. Fixed to use `Storage.get()`.
+
+### Added
+- **Tab isolation** in `Storage` (`core.js`):
+  - `_tabId` from `sessionStorage` (persists on refresh, unique per tab)
+  - `_resolveKey()` transparently prefixes tab-scoped keys: `~t{id}~key`
+  - `_parseTabKey()` reverse parser for cache iteration
+  - Tab registry with 60 s heartbeat for stale detection
+  - `beforeunload` marks tab as "closing"; refresh clears the flag
+  - `_cleanStaleTabs()` on init removes data for dead tabs (>5 min stale
+    or marked closing)
+  - `_migrateTabScopedKeys()` one-time upgrade: moves unscoped volatile
+    keys into the first tab's scope
+  - `keys()` filters to show only this tab's scoped data + shared data
+- **Tab-scoped keys**: `chatHistory`, `chatSummaryInfo`, `chatPruneStash`,
+  `activeConversation`, `session`
+- **Shared keys** (unchanged): `settings`, `models`, `conversations`,
+  `conv-*`, `draft-*`, `pluginState`, `searchHistory`, layout widths
 
 ### Changed
 - **`update_issue` tool**: Removed `body` parameter entirely. Added
@@ -20,7 +44,11 @@ All notable changes to AI Editor are documented here.
 - **`add_issue_comment` tool**: Description expanded to clarify this is
   the correct tool for updates, responses, analysis, status reports,
   and any new content on an issue.
-- Updated `docs/TOOLS.md` to match.
+- **`Storage.get/set/remove`**: Now route through `_resolveKey()` for
+  transparent tab scoping. External API unchanged.
+- **`Storage.keys()`**: Returns bare (unprefixed) keys for this tab's
+  scoped data; hides other tabs' keys entirely.
+- Updated `docs/TOOLS.md` to match issue tool changes.
 
 ## [0.9.39-1] - 2026-02-19
 

@@ -12,7 +12,7 @@
  *   custom:       15 keys, 1000 chars/value,  4K auto-inject  (user values)
  */
 
-import { State } from '../core.js';
+import { State, Storage } from '../core.js';
 
 /**
  * Scratchpad limits per summarizer mode (scaled to context capability).
@@ -238,7 +238,7 @@ export function buildScratchpadPrompt() {
             // Try to read actual coveredCount from storage
             let coveredCount = 0;
             try {
-                const info = JSON.parse(localStorage.getItem('chatSummaryInfo') || 'null');
+                const info = Storage.get('chatSummaryInfo');
                 coveredCount = info?.coveredCount || 0;
             } catch { /* ignore */ }
 

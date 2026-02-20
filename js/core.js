@@ -354,6 +354,14 @@ const State = {
  * remove() deletes from _cache + IDB + localStorage.
  * 
  * Migration: On first init(), localStorage data is bulk-copied to IDB.
+ * 
+ * Tab isolation (0.9.39-2):
+ *   Session-volatile keys (chatHistory, session, chatSummaryInfo,
+ *   chatPruneStash, activeConversation) are scoped per browser tab
+ *   using a tab ID from sessionStorage. Two tabs editing different
+ *   projects won't stomp each other's chat or session state.
+ *   Shared keys (settings, drafts, conversations, etc.) are unaffected.
+ *   Stale tab data is cleaned on init (heartbeat > 5 min or closing flag).
  */
 const Storage = {
     _prefix: 'ai-editor-',
@@ -361,6 +369,68 @@ const Storage = {
     _idb: null,             // IDB module reference (lazy-loaded)
     _idbReady: false,       // true after successful IDB init
     _initPromise: null,     // Deduplication for concurrent init calls
+
+    // ── Tab isolation (0.9.39-2) ──────────────────────────────
+    // These keys are session-volatile: each browser tab gets its own
+    // copy so two tabs never stomp each other's chat, session, etc.
+    // Everything else (settings, drafts, conversations) stays shared.
+    _tabId: null,
+    _TAB_SCOPED: new Set([
+        'chatHistory',
+        'chatSummaryInfo',
+        'chatPruneStash',
+        'activeConversation',
+        'session',
+    ]),
+    _TAB_PFX: '~t',        // prefix marker for scoped keys
+    _TAB_SEP: '~',          // separator between tabId and key
+
+    /** Generate or retrieve a stable tab ID from sessionStorage. */
+    _initTabId() {
+        const SK = 'ai-editor-tab-id';
+        let id = sessionStorage.getItem(SK);
+        if (!id) {
+            id = Math.random().toString(36).slice(2, 10);
+            sessionStorage.setItem(SK, id);
+        }
+        this._tabId = id;
+
+        // If beforeunload marked us "closing" but we're back → refresh, clear the flag
+        try {
+            const raw = localStorage.getItem(this._prefix + '_tabRegistry');
+            if (raw) {
+                const reg = JSON.parse(raw);
+                if (reg[id]?.closing) {
+                    reg[id] = { ts: Date.now(), closing: false };
+                    localStorage.setItem(this._prefix + '_tabRegistry', JSON.stringify(reg));
+                }
+            }
+        } catch { /* ignore */ }
+    },
+
+    /**
+     * Resolve a caller-facing key to its internal (possibly tab-scoped) key.
+     * Shared keys pass through unchanged. Tab-scoped keys become ~t{id}~{key}.
+     */
+    _resolveKey(key) {
+        if (this._tabId && this._TAB_SCOPED.has(key)) {
+            return `${this._TAB_PFX}${this._tabId}${this._TAB_SEP}${key}`;
+        }
+        return key;
+    },
+
+    /**
+     * Parse a raw internal key. Returns { tabId, key } if tab-scoped, else null.
+     */
+    _parseTabKey(rawKey) {
+        if (!rawKey.startsWith(this._TAB_PFX)) return null;
+        const sep = rawKey.indexOf(this._TAB_SEP, this._TAB_PFX.length);
+        if (sep < 0) return null;
+        return {
+            tabId: rawKey.slice(this._TAB_PFX.length, sep),
+            key:   rawKey.slice(sep + 1),
+        };
+    },
 
     /**
      * Initialize storage. Must be awaited before loadSettings().
@@ -375,6 +445,9 @@ const Storage = {
     },
 
     async _doInit() {
+        // Establish tab identity first (synchronous, from sessionStorage)
+        this._initTabId();
+
         try {
             const { IDB } = await import('./storage/idb.js');
             await IDB.open();
@@ -401,6 +474,14 @@ const Storage = {
             // Populate cache from localStorage
             this._loadCacheFromLocalStorage();
         }
+
+        // Tab isolation lifecycle (after cache is populated)
+        this._migrateTabScopedKeys();
+        this._registerTab();
+        this._cleanStaleTabs();
+        this._startHeartbeat();
+        this._initBeforeUnload();
+        console.log(`[Storage] Tab ${this._tabId} registered`);
     },
 
     /**
@@ -457,14 +538,15 @@ const Storage = {
      * @returns {T}
      */
     get(key, defaultValue = null) {
+        const resolved = this._resolveKey(key);
         // Primary: in-memory cache (populated by init)
-        if (this._cache.has(key)) {
-            return this._cache.get(key);
+        if (this._cache.has(resolved)) {
+            return this._cache.get(resolved);
         }
         // Pre-init fallback: read directly from localStorage
         // This ensures module-scope code that runs before init() still works
         try {
-            const item = localStorage.getItem(this._prefix + key);
+            const item = localStorage.getItem(this._prefix + resolved);
             return item ? JSON.parse(item) : defaultValue;
         } catch (e) {
             console.error('Storage get error:', e);
@@ -480,18 +562,19 @@ const Storage = {
      * @param {*} value
      */
     set(key, value) {
+        const resolved = this._resolveKey(key);
         // 1. Always update in-memory cache (immediate, synchronous)
-        this._cache.set(key, value);
+        this._cache.set(resolved, value);
 
         // 2. Async persist to IDB (fire-and-forget)
         if (this._idbReady && this._idb) {
-            this._idb.set(key, value).catch(e =>
-                console.warn(`[Storage] IDB write failed for "${key}":`, e.message)
+            this._idb.set(resolved, value).catch(e =>
+                console.warn(`[Storage] IDB write failed for "${resolved}":`, e.message)
             );
         }
 
         // 3. Write-through to localStorage (with quota handling)
-        this._writeLocalStorage(key, value);
+        this._writeLocalStorage(resolved, value);
     },
 
     /**
@@ -504,7 +587,7 @@ const Storage = {
         } catch (e) {
             if (e.name === 'QuotaExceededError') {
                 // Recovery pass 1: prune chat history (largest consumer)
-                const chatKey = this._prefix + 'chatHistory';
+                const chatKey = this._prefix + this._resolveKey('chatHistory');
                 try {
                     const raw = localStorage.getItem(chatKey);
                     if (raw) {
@@ -585,16 +668,17 @@ const Storage = {
      * @param {string} key
      */
     remove(key) {
+        const resolved = this._resolveKey(key);
         // Remove from all three layers
-        this._cache.delete(key);
+        this._cache.delete(resolved);
 
         if (this._idbReady && this._idb) {
-            this._idb.remove(key).catch(e =>
-                console.warn(`[Storage] IDB remove failed for "${key}":`, e.message)
+            this._idb.remove(resolved).catch(e =>
+                console.warn(`[Storage] IDB remove failed for "${resolved}":`, e.message)
             );
         }
 
-        localStorage.removeItem(this._prefix + key);
+        localStorage.removeItem(this._prefix + resolved);
     },
 
     /**
@@ -605,9 +689,21 @@ const Storage = {
      */
     keys(prefix = '') {
         const result = [];
-        for (const key of this._cache.keys()) {
-            if (!prefix || key.startsWith(prefix)) {
-                result.push(key);
+        for (const rawKey of this._cache.keys()) {
+            const parsed = this._parseTabKey(rawKey);
+            if (parsed) {
+                // Tab-scoped: only show keys belonging to this tab, unprefixed
+                if (parsed.tabId === this._tabId) {
+                    if (!prefix || parsed.key.startsWith(prefix)) {
+                        result.push(parsed.key);
+                    }
+                }
+                // Other tabs' keys are invisible
+            } else {
+                // Shared key
+                if (!prefix || rawKey.startsWith(prefix)) {
+                    result.push(rawKey);
+                }
             }
         }
         return result;
@@ -696,6 +792,116 @@ const Storage = {
             }
         }
         return drafts;
+    },
+
+    // ── Tab isolation lifecycle ───────────────────────────────
+
+    /**
+     * One-time migration: move unscoped tab-volatile keys → this tab's scope.
+     * Handles the upgrade from pre-isolation storage to per-tab storage.
+     */
+    _migrateTabScopedKeys() {
+        let migrated = 0;
+        for (const key of this._TAB_SCOPED) {
+            const resolved = this._resolveKey(key);
+            if (!this._cache.has(resolved) && this._cache.has(key)) {
+                // Unscoped key exists but scoped doesn't — adopt it
+                const value = this._cache.get(key);
+                this._cache.set(resolved, value);
+                if (this._idbReady && this._idb) {
+                    this._idb.set(resolved, value).catch(() => {});
+                    this._idb.remove(key).catch(() => {});
+                }
+                this._cache.delete(key);
+                localStorage.removeItem(this._prefix + key);
+                migrated++;
+            }
+        }
+        if (migrated > 0) {
+            console.log(`[Storage] Migrated ${migrated} key(s) to tab scope (tab ${this._tabId})`);
+        }
+    },
+
+    /** Register this tab in the shared registry with a heartbeat timestamp. */
+    _registerTab() {
+        const key = '_tabRegistry';
+        const reg = this._cache.get(key) || {};
+        reg[this._tabId] = { ts: Date.now(), closing: false };
+        // Write through all layers (key is not tab-scoped)
+        this._cache.set(key, reg);
+        if (this._idbReady && this._idb) {
+            this._idb.set(key, reg).catch(() => {});
+        }
+        try { localStorage.setItem(this._prefix + key, JSON.stringify(reg)); } catch { /* ignore */ }
+    },
+
+    /**
+     * Clean up scoped data from tabs that are no longer alive.
+     * A tab is stale if: marked "closing" (tab closed, not refreshed)
+     * or its heartbeat is older than 5 minutes (crash / kill).
+     */
+    _cleanStaleTabs() {
+        const key = '_tabRegistry';
+        const reg = this._cache.get(key) || {};
+        const STALE_MS = 5 * 60 * 1000;
+        const now = Date.now();
+        const staleIds = [];
+
+        for (const [id, info] of Object.entries(reg)) {
+            if (id === this._tabId) continue;
+            const ts = typeof info === 'number' ? info : info?.ts || 0;
+            const closing = typeof info === 'object' && info?.closing;
+            if (closing || (now - ts) > STALE_MS) {
+                staleIds.push(id);
+            }
+        }
+        if (staleIds.length === 0) return;
+
+        // Remove scoped keys for each stale tab
+        for (const staleId of staleIds) {
+            const pfx = `${this._TAB_PFX}${staleId}${this._TAB_SEP}`;
+            for (const rawKey of [...this._cache.keys()]) {
+                if (rawKey.startsWith(pfx)) {
+                    this._cache.delete(rawKey);
+                    if (this._idbReady && this._idb) {
+                        this._idb.remove(rawKey).catch(() => {});
+                    }
+                    localStorage.removeItem(this._prefix + rawKey);
+                }
+            }
+            delete reg[staleId];
+        }
+
+        // Persist cleaned registry
+        this._cache.set(key, reg);
+        if (this._idbReady && this._idb) {
+            this._idb.set(key, reg).catch(() => {});
+        }
+        try { localStorage.setItem(this._prefix + key, JSON.stringify(reg)); } catch { /* ignore */ }
+        console.log(`[Storage] Cleaned ${staleIds.length} stale tab(s): ${staleIds.join(', ')}`);
+    },
+
+    /** Heartbeat: update registry timestamp every 60 s so stale detection works. */
+    _startHeartbeat() {
+        setInterval(() => this._registerTab(), 60_000);
+    },
+
+    /**
+     * On beforeunload, mark this tab as "closing" in the registry.
+     * If the tab is actually refreshing (not closing), _initTabId()
+     * detects the sessionStorage survived and clears the flag.
+     */
+    _initBeforeUnload() {
+        window.addEventListener('beforeunload', () => {
+            try {
+                const raw = localStorage.getItem(this._prefix + '_tabRegistry');
+                const reg = raw ? JSON.parse(raw) : {};
+                if (reg[this._tabId]) {
+                    reg[this._tabId] = { ts: Date.now(), closing: true };
+                    localStorage.setItem(this._prefix + '_tabRegistry', JSON.stringify(reg));
+                }
+            } catch { /* can't do much in beforeunload */ }
+        });
     }
 };
 
