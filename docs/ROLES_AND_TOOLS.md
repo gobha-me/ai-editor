@@ -70,6 +70,32 @@ Tools explicitly declare which roles can access them via the `roles` field at re
 
 ---
 
+### 🧩 Plugin Developer (`plugin-dev`)
+**Description:** Plugin editor tools (read/write/run plugin source) plus read-only code access and SDK reference. Auto-activated when a plugin editor tab is open.
+
+**Allowed Tools:**
+- **Plugin Editor:** read_plugin_source, write_plugin_source, run_plugin, list_user_plugins
+- **File Operations (Read):** read_current_file, read_file, read_lines, open_file, list_open_tabs
+- **Project Navigation (Read):** get_project_tree, scan_file, read_function, find_references
+- **Search:** search_in_files
+- **Scratchpad:** scratchpad_read, scratchpad_write, scratchpad_list
+- **Documentation:** read_docs (includes Plugin SDK reference)
+- **Issues (Read-Only):** list_issues, read_issue
+
+**Restricted:**
+- Cannot edit project files (no replace_lines, insert_lines, delete_lines)
+- Cannot create/delete project files
+- Cannot create/update issues or PRs
+- Cannot commit
+
+**Auto-activation:** When a plugin editor tab becomes active, the role auto-switches to `plugin-dev` and restores the previous role when switching away.
+
+**System prompt:** Includes the full Plugin SDK API reference (hooks, events, state, storage, UI registration).
+
+**Use Case:** Building and debugging plugins in the built-in plugin editor
+
+---
+
 ## Tool Reference by Category
 
 ### File Operations (Read)
@@ -110,6 +136,14 @@ Access varies by role.
 - `create_issue` - Create new issue (roles: `pm`)
 - `update_issue` - Update existing issue (roles: `pm`)
 - `add_issue_comment` - Comment on issue (roles: `pm`, `reviewer`)
+
+### Plugin Editor
+Only available in `plugin-dev` role. Auto-activated when a plugin editor tab is open.
+
+- `read_plugin_source` - Read current plugin editor source (roles: `plugin-dev`)
+- `write_plugin_source` - Replace full plugin source (roles: `plugin-dev`)
+- `run_plugin` - Save + hot-reload plugin (roles: `plugin-dev`)
+- `list_user_plugins` - List user-created plugins (roles: `plugin-dev`)
 
 ---
 

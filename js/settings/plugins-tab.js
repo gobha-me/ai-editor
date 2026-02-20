@@ -5,6 +5,7 @@
 import { Plugins } from '../core.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { installPlugin, uninstallPlugin, getInstalledPlugins } from '../plugin-loader.js';
+import { getUserPlugins } from '../plugin-editor.js';
 
 /**
  * Populate the Plugins tab with install UI + all registered plugins.
@@ -18,6 +19,8 @@ export function populatePluginsTab() {
     const plugins = Plugins.list();
     const installed = getInstalledPlugins();
     const installedIds = new Set(installed.map(p => p.pluginId));
+    const userPlugins = getUserPlugins();
+    const userIds = new Set(Object.keys(userPlugins));
 
     // ------------------------------------------
     // Install section (uses .connection-editor for container)
@@ -33,8 +36,11 @@ export function populatePluginsTab() {
                 </button>
             </div>
             <div class="plugin-install-status" id="pluginInstallStatus"></div>
-            <div class="plugin-install-hint">
-                External plugins use <code>window.AIEditor</code> to access Plugins, EventBus, State, etc.
+            <div class="plugin-install-hint" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>External plugins use <code>window.AIEditor</code> to access Plugins, EventBus, State, etc.</span>
+                <button type="button" class="btn btn-primary" id="btnCreatePlugin" style="white-space: nowrap; margin-left: 0.5rem;">
+                    🧩 Create Plugin
+                </button>
             </div>
         </div>
     `;
@@ -67,6 +73,35 @@ export function populatePluginsTab() {
             `;
         }).join('');
         externalHtml += '<div style="margin-bottom: 1rem;"></div>';
+    }
+
+    // ------------------------------------------
+    // User-created plugins section
+    // ------------------------------------------
+    let userHtml = '';
+    const userEntries = Object.entries(userPlugins);
+    if (userEntries.length > 0) {
+        userHtml = `<div class="plugin-section-header">User-Created Plugins</div>`;
+        userHtml += userEntries.map(([id, entry]) => {
+            const plugin = Plugins.get(id);
+            const enabled = plugin?.enabled ?? false;
+            const statusDot = enabled
+                ? '<span style="color: var(--success);" title="Enabled">●</span>'
+                : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
+            return `
+                <div class="connection-card" data-user-plugin-id="${escapeAttr(id)}">
+                    <div class="connection-card-icon">✏️</div>
+                    <div class="connection-card-info">
+                        <div class="connection-card-label">${statusDot} ${escapeHtml(entry.name || id)}</div>
+                        <div class="connection-card-meta plugin-external-meta">Saved ${new Date(entry.savedAt).toLocaleDateString()}</div>
+                    </div>
+                    <div class="connection-card-actions">
+                        <button type="button" data-edit-plugin="${escapeAttr(id)}" title="Edit">✏️</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        userHtml += '<div style="margin-bottom: 1rem;"></div>';
     }
 
     // ------------------------------------------
@@ -139,24 +174,26 @@ export function populatePluginsTab() {
     }
 
     // Empty state
-    if (plugins.length === 0 && installed.length === 0) {
+    if (plugins.length === 0 && installed.length === 0 && userEntries.length === 0) {
         container.innerHTML = installHtml + `
             <div class="connections-empty">
                 <div class="connections-empty-icon">🧩</div>
                 <div>No plugins registered.</div>
-                <div style="margin-top: 0.25rem; font-size: var(--font-sm);">Place plugin files in <code>plugins/</code> or install from URL above.</div>
+                <div style="margin-top: 0.25rem; font-size: var(--font-sm);">Place plugin files in <code>plugins/</code>, install from URL, or create one above.</div>
             </div>
         `;
         _wireInstallButton(container);
+        _wireCreateButton(container);
         return;
     }
 
-    container.innerHTML = installHtml + externalHtml + builtinHtml;
+    container.innerHTML = installHtml + externalHtml + userHtml + builtinHtml;
 
     // ------------------------------------------
     // Wire event handlers
     // ------------------------------------------
     _wireInstallButton(container);
+    _wireCreateButton(container);
 
     // Uninstall buttons
     container.querySelectorAll('[data-uninstall-url]').forEach(el => {
@@ -265,5 +302,26 @@ function _wireInstallButton(container) {
     btn.addEventListener('click', doInstall);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') doInstall();
+    });
+}
+
+/**
+ * Wire the Create Plugin button and Edit buttons for user plugins.
+ * @param {HTMLElement} container
+ */
+function _wireCreateButton(container) {
+    container.querySelector('#btnCreatePlugin')?.addEventListener('click', async () => {
+        const { openPluginEditor } = await import('../plugin-editor.js');
+        window.closeSettings?.();
+        openPluginEditor(null);
+    });
+
+    container.querySelectorAll('[data-edit-plugin]').forEach(el => {
+        el.addEventListener('click', async () => {
+            const id = el.dataset.editPlugin;
+            const { openPluginEditor } = await import('../plugin-editor.js');
+            window.closeSettings?.();
+            openPluginEditor(id);
+        });
     });
 }

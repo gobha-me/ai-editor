@@ -34,6 +34,7 @@ export async function switchToTab(index) {
             prev.content = State.editorContent;
             prev.dirty = State.editorDirty;
         }
+        // Plugin editor saves its own source via CM update listener
     }
 
     State.activeTabIndex = index;
@@ -97,9 +98,12 @@ export async function closeTab(index, event) {
     const tab = State.openTabs[index];
     const tabType = tab.type || 'file';
 
-    // Only warn about unsaved changes for file tabs
-    if (tabType === 'file' && tab.dirty) {
-        const discard = await showConfirm(`"${tab.path.split('/').pop()}" has unsaved changes. Close anyway?`, {
+    // Warn about unsaved changes for file and plugin-editor tabs
+    if ((tabType === 'file' || tabType === 'plugin-editor') && tab.dirty) {
+        const label = tabType === 'plugin-editor'
+            ? (tab.pluginName || 'plugin')
+            : tab.path.split('/').pop();
+        const discard = await showConfirm(`"${label}" has unsaved changes. Close anyway?`, {
             title: 'Unsaved Changes',
             okLabel: 'Discard',
             variant: 'danger',
@@ -161,6 +165,11 @@ function _tabDisplay(tab) {
             const short = title.length > 28 ? title.slice(0, 26) + '…' : title;
             return { icon: '🔖', label: `#${tab.issueNumber}` + (short ? `: ${short}` : '') };
         }
+        case 'plugin-editor': {
+            const name = tab.pluginName || 'New Plugin';
+            const short = name.length > 28 ? name.slice(0, 26) + '…' : name;
+            return { icon: '🧩', label: short };
+        }
         default:
             return { icon: '', label: tab.path ? tab.path.split('/').pop() : 'Untitled' };
     }
@@ -187,7 +196,7 @@ export function renderEditorTabs() {
         const activeClass = isActive ? 'active' : '';
         const typeClass = tabType !== 'file' ? `tab-${tabType}` : '';
         const { icon, label } = _tabDisplay(tab);
-        const showDirty = tabType === 'file' && tab.dirty;
+        const showDirty = (tabType === 'file' || tabType === 'plugin-editor') && tab.dirty;
 
         return `
             <div class="editor-tab ${activeClass} ${previewClass} ${typeClass}"

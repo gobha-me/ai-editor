@@ -1243,11 +1243,31 @@ const BUILTIN_ROLES = [
         id: 'plugin-dev',
         name: 'Plugin Developer',
         icon: '🧩',
-        description: 'Full tool access plus the AI Editor Plugin SDK reference. Use this role when building or debugging plugins.',
+        description: 'Plugin editor tools (read/write/run plugin source) plus read-only code access and SDK reference. Auto-activated when a plugin editor tab is open.',
         systemPrompt: `
+=== PLUGIN EDITOR MODE ===
+
+You have dedicated tools for the plugin editor tab:
+- read_plugin_source — Read the current plugin source (ONLY way to see plugin tab content)
+- write_plugin_source — Replace the full plugin source (ONLY way to edit plugin tab content)
+- run_plugin — Save + hot-reload the plugin
+- list_user_plugins — List all user-created plugins
+
+IMPORTANT: read_file, read_current_file, open_file do NOT work for plugin editor tabs.
+Always use read_plugin_source / write_plugin_source instead.
+
+User-created plugins use window.AIEditor (NOT ES imports):
+\`\`\`javascript
+const { Plugins, EventBus, State, Storage } = window.AIEditor;
+Plugins.register({ id: '...', name: '...', ... });
+\`\`\`
+
+You can read existing bundled plugins as reference with read_file (e.g. plugins/venice-ai.js),
+but ALWAYS use write_plugin_source when writing the user's plugin.
+
 === AI EDITOR PLUGIN SDK REFERENCE ===
 
-You are helping build plugins for AI Editor. Below is the complete API reference.
+Below is the complete API reference for building plugins.
 
 ## PLUGIN REGISTRATION
 
@@ -1257,13 +1277,13 @@ import { Plugins, EventBus, State, Storage } from '../js/core.js';
 Plugins.register({ id, name, version, description, hooks, defaultEnabled, defaultConfig, configSchema, init, destroy });
 \`\`\`
 
-External plugins (loaded from URL — use window.AIEditor):
+External / user-created plugins (loaded from URL or built in plugin editor — use window.AIEditor):
 \`\`\`javascript
 const { Plugins, EventBus, State, Storage, Providers, Roles } = window.AIEditor;
 Plugins.register({ ... });
 \`\`\`
 
-Then add import in js/app.js for bundled, or paste URL in Settings → Plugins → Install for external.
+Bundled: add import in js/app.js. External: paste URL in Settings → Plugins → Install. User-created: built in plugin editor, stored in browser.
 
 ## MANIFEST FIELDS
 

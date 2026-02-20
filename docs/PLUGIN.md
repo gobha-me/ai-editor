@@ -59,6 +59,21 @@ Plugins.register({
 
 Users install this by pasting the URL in Settings → Plugins → "Install Plugin from URL".
 
+### Built-in Plugin Editor (v0.9.42+)
+
+The fastest way to create a plugin — no external tools needed:
+
+1. Go to **Settings → Plugins → 🧩 Create Plugin**
+2. A dedicated editor tab opens with full CodeMirror syntax highlighting
+3. Edit the template, then **Ctrl+S** to save or **Ctrl+Enter** to save & hot-reload
+4. Your plugin is stored in the browser and loads automatically on startup
+
+Built-in plugins use the same `window.AIEditor` API as external plugins.
+
+**LLM assistance:** When a plugin editor tab is active, the chat role auto-switches to **Plugin Developer**, which gives the LLM the full SDK reference and dedicated tools (`read_plugin_source`, `write_plugin_source`, `run_plugin`) to read and edit your plugin directly.
+
+**Settings export:** User-created plugin source code is included in Settings → Export, so you can transfer plugins between browsers or back them up.
+
 ---
 
 ## Plugin Manifest

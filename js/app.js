@@ -7,6 +7,7 @@ import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
+import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
 import { openMarkdownModal, closeMarkdownModal } from './markdown-modal.js';
 import { initMobile } from './mobile.js';
@@ -1031,6 +1032,13 @@ async function init() {
     if (extResult.loaded > 0 || extResult.failed > 0) {
         console.log(`[plugins] External: ${extResult.loaded} loaded, ${extResult.failed} failed`);
         // Re-render toolbar in case new plugins added buttons
+        initPluginToolbar();
+    }
+
+    // Load user-created plugins (from Storage, built with plugin editor)
+    const userResult = await loadUserPlugins();
+    if (userResult.loaded > 0 || userResult.failed > 0) {
+        console.log(`[plugins] User-created: ${userResult.loaded} loaded, ${userResult.failed} failed`);
         initPluginToolbar();
     }
 

@@ -2,6 +2,61 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.42] - 2026-02-20
+
+### Added
+- **Built-in Plugin Editor** — Create, edit, and test plugins without
+  leaving the editor:
+  - Settings → Plugins → "Create Plugin" opens a dedicated tab with
+    full CodeMirror syntax highlighting (JavaScript mode, dark theme)
+  - Ctrl+S saves source to Storage, Ctrl+Enter saves & runs (hot-reload)
+  - User plugins stored in `userPlugins` Storage key, loaded on startup
+    via same blob-URL import() mechanism as URL-installed plugins
+  - Edit button (✏️) on user-created plugin cards in Settings
+  - Unsaved changes warning on tab close
+  - Delete button removes source from Storage and disables plugin
+  - New "User-Created Plugins" section in Settings → Plugins tab
+  - Plugin template pre-populated with hooks, config schema, and docs
+
+- **Plugin Editor LLM Tools** — Dedicated tools for the plugin-dev role:
+  - `read_plugin_source` — Read current plugin editor content (numbered)
+  - `write_plugin_source` — Replace full plugin source in the editor
+  - `run_plugin` — Save + hot-reload via blob import
+  - `list_user_plugins` — List all user-created plugins with status
+  - Auto-role switching: entering a plugin editor tab switches to
+    `plugin-dev` role, leaving restores previous role
+  - System prompt includes tool usage instructions + full SDK reference
+
+- **Plugin-dev role scoping** — `plugin-dev` no longer gets "full"
+  tool access. Scoped to: read-only file/project/search/scratchpad
+  tools (roles: 'all'), plugin editor tools (roles: 'plugin-dev'),
+  and read_docs. No file editing, commits, issue creation, or PRs.
+
+- **Settings Export includes Plugin State** — Export/import now covers:
+  - `pluginState`: enabled/disabled status + config for all plugins
+  - `installedPlugins`: external plugin URLs (re-fetched on reload)
+  - `userPlugins`: full source code of user-created plugins
+  - Import merges gracefully — doesn't overwrite existing plugins,
+    skips duplicate URLs, unknown plugin IDs sit harmlessly in storage
+    until their plugin registers
+  - Settings export version bumped to 1.1
+
+### Changed
+- **Tab manager**: `_tabDisplay()` handles `plugin-editor` tab type
+  (🧩 icon). Dirty indicator shown for plugin editor tabs. Close-tab
+  warns about unsaved changes for plugin editor tabs.
+- **Tool registry**: `plugin-dev` removed from "return everything"
+  shortcut — now properly filtered through role-based access control
+- **Plugin-dev role description**: Updated to reflect scoped tools and
+  auto-activation behavior
+
+### Docs
+- **PLUGIN.md**: New "Built-in Plugin Editor" quick start section
+- **TOOLS.md**: Plugin Editor tools section + updated role table
+- **ROLES_AND_TOOLS.md**: Full Plugin Developer role definition with
+  tool list, restrictions, and auto-activation docs
+- **Help modal**: Plugin editor hotkeys (Ctrl+S, Ctrl+Enter)
+
 ## [0.9.41] - 2026-02-20
 
 ### Fixed

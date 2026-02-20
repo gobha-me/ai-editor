@@ -19,6 +19,7 @@ import { registerMultiFileTools } from '../tools/multifile-tools.js';
 import { registerSearchReplaceTools } from '../tools/search-replace-tools.js';
 import { registerEvalTools } from '../tools/eval-tools.js';
 import { registerCursorTools } from '../tools/cursor-tools.js';
+import { registerPluginTools } from '../tools/plugin-tools.js';
 
 // Import submodules
 import { 
@@ -65,6 +66,7 @@ registerMultiFileTools(ToolRegistry);
 registerSearchReplaceTools(ToolRegistry);
 registerEvalTools(ToolRegistry);
 registerCursorTools(ToolRegistry);
+registerPluginTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION

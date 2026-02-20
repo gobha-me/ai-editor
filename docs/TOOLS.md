@@ -313,6 +313,36 @@ Not all tools are available to all roles. The tool registry enforces role-based 
 | `create_issue`, `update_issue` | PM |
 | `add_issue_comment` | PM, Reviewer |
 | `create_pull_request` | Coder, PM |
+| `read_plugin_source`, `write_plugin_source` | Plugin Developer |
+| `run_plugin`, `list_user_plugins` | Plugin Developer |
+
+## 🧩 Plugin Editor Tools
+
+Available only in the **Plugin Developer** role (auto-activated when a plugin editor tab is open).
+
+### `read_plugin_source`
+Read the source code of the plugin currently open in the plugin editor tab. Returns numbered lines. **This is the only way to read plugin tab content** — `read_file` and `read_current_file` do not work for plugin tabs.
+```javascript
+read_plugin_source()
+```
+
+### `write_plugin_source`
+Replace the full source code in the active plugin editor tab. Must provide the complete source.
+```javascript
+write_plugin_source({ source: "const { Plugins } = window.AIEditor;\n..." })
+```
+
+### `run_plugin`
+Save the current plugin source to storage and hot-reload it (register + initialize). Equivalent to pressing "▶ Run" in the toolbar.
+```javascript
+run_plugin()
+```
+
+### `list_user_plugins`
+List all user-created plugins with their enabled/registered status.
+```javascript
+list_user_plugins()
+```
 
 ---
 

@@ -248,6 +248,122 @@
     50%      { opacity: 1;   transform: scale(1.2); }
 }
 
+/* ── Plugin Editor Tab ────────────────────── */
+
+.editor-tab.tab-plugin-editor {
+    border-top: 2px solid var(--accent);
+}
+.editor-tab.tab-plugin-editor .tab-name {
+    font-style: italic;
+}
+.editor-tab.tab-plugin-editor.active .tab-name {
+    font-style: normal;
+    font-weight: 600;
+}
+
+.plugin-editor-tab-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.plugin-editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+    gap: 0.5rem;
+}
+
+.plugin-editor-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: var(--font-base);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.plugin-editor-icon {
+    font-size: 1.1em;
+}
+
+.plugin-editor-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.plugin-editor-actions .btn {
+    font-size: var(--font-sm);
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.plugin-editor-actions .btn:hover {
+    background: var(--bg-hover);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.plugin-editor-actions .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.plugin-editor-actions .btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.plugin-editor-actions .btn-danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+}
+
+.plugin-editor-actions .btn-danger:hover {
+    background: #d64545;
+    border-color: #d64545;
+}
+
+.plugin-editor-cm {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+}
+
+.plugin-editor-cm .cm-editor {
+    height: 100%;
+}
+
+.plugin-editor-status {
+    padding: 0.35rem 1rem;
+    font-size: var(--font-sm);
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+    min-height: 1.5em;
+}
+
+.plugin-editor-status-success { color: var(--success); }
+.plugin-editor-status-error   { color: var(--error); }
+.plugin-editor-status-warning { color: var(--warning); }
+.plugin-editor-status-info    { color: var(--text-muted); }
+
 /* Reuse existing issue-detail-section, preview-markdown, etc. from modals.css */
 
 .editor-container {

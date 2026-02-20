@@ -7,6 +7,8 @@
 import { State, Storage, ProviderRegistry } from '../core.js';
 import { GitProviderRegistry } from '../git-providers/index.js';
 import { collectProviderSettings } from './llm-tab.js';
+import { getInstalledPlugins } from '../plugin-loader.js';
+import { getUserPlugins } from '../plugin-editor.js';
 
 /**
  * Helper to get numeric value from input (returns undefined if empty).
@@ -227,10 +229,17 @@ export function exportSettings() {
         role: State.settings.role,
         disabledModels: State.settings.disabledModels || [],
         
+        // Plugins
+        pluginState: Storage.get('pluginState') || {},
+        installedPlugins: getInstalledPlugins().map(p => ({
+            url: p.url, pluginId: p.pluginId, name: p.name
+        })),
+        userPlugins: getUserPlugins(),
+        
         // Metadata
         exportedAt: new Date().toISOString(),
         exportedFrom: 'AI Editor',
-        version: '1.0'
+        version: '1.1'
     };
 
     const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
@@ -268,18 +277,68 @@ export async function importSettings() {
                 const imported = JSON.parse(text);
 
                 // Validate it looks like a settings file (has at least one recognizable key)
-                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams'];
+                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams', 'pluginState', 'userPlugins'];
                 const hasValidKey = knownKeys.some(k => k in imported);
                 if (!hasValidKey) {
                     throw new Error('Invalid settings file: no recognized settings keys found');
                 }
 
-                // Apply settings (excluding metadata)
-                const { exportedAt, exportedFrom, version, ...settingsToApply } = imported;
+                // Apply settings (excluding metadata and plugin data)
+                const {
+                    exportedAt, exportedFrom, version,
+                    pluginState: importedPluginState,
+                    installedPlugins: importedInstalledPlugins,
+                    userPlugins: importedUserPlugins,
+                    ...settingsToApply
+                } = imported;
                 Object.assign(State.settings, settingsToApply);
 
-                // Save to localStorage
+                // Save core settings
                 Storage.set('settings', State.settings);
+
+                // Restore plugin state (enabled/disabled + config per plugin)
+                // Merges with existing — doesn't overwrite plugins not in the export
+                if (importedPluginState && typeof importedPluginState === 'object') {
+                    const current = Storage.get('pluginState') || {};
+                    Object.assign(current, importedPluginState);
+                    Storage.set('pluginState', current);
+                    console.log('[Settings] Restored plugin state for', Object.keys(importedPluginState).length, 'plugin(s)');
+                }
+
+                // Restore installed plugin URLs (will attempt to fetch on reload)
+                if (Array.isArray(importedInstalledPlugins) && importedInstalledPlugins.length > 0) {
+                    const current = Storage.get('installedPlugins') || [];
+                    const existingUrls = new Set(current.map(p => p.url));
+                    let added = 0;
+                    for (const entry of importedInstalledPlugins) {
+                        if (entry.url && !existingUrls.has(entry.url)) {
+                            current.push({
+                                url: entry.url,
+                                pluginId: entry.pluginId || null,
+                                name: entry.name || entry.pluginId || 'Unknown',
+                                installedAt: new Date().toISOString(),
+                                error: null
+                            });
+                            added++;
+                        }
+                    }
+                    Storage.set('installedPlugins', current);
+                    if (added > 0) console.log(`[Settings] Restored ${added} external plugin URL(s)`);
+                }
+
+                // Restore user-created plugins (source code)
+                if (importedUserPlugins && typeof importedUserPlugins === 'object') {
+                    const current = Storage.get('userPlugins') || {};
+                    let added = 0;
+                    for (const [id, entry] of Object.entries(importedUserPlugins)) {
+                        if (entry.source && !current[id]) {
+                            current[id] = entry;
+                            added++;
+                        }
+                    }
+                    Storage.set('userPlugins', current);
+                    if (added > 0) console.log(`[Settings] Restored ${added} user-created plugin(s)`);
+                }
 
                 console.log('[Settings] Imported settings from:', file.name);
                 window.showToast('Settings imported successfully! Reloading...', 'success');
