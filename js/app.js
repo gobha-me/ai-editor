@@ -11,7 +11,8 @@ import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
 import { openMarkdownModal, closeMarkdownModal } from './markdown-modal.js';
 import { initMobile } from './mobile.js';
-import { initGitProviders, GitProviderRegistry } from './git.js';
+import { initGitProviders, GitProviderRegistry, Git } from './git.js';
+import { IgnoreManager } from './ignore.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
@@ -816,6 +817,34 @@ function setupEventListeners() {
     safeAdd('btnRefreshProjects', 'click', refreshProjects);
     safeAdd('btnClearProject', 'click', clearProject);
     safeAdd('btnNewBranch', 'click', openNewBranchModal);
+    safeAdd('btnDownloadZip', 'click', async () => {
+        if (!State.currentProject) {
+            showToast('No project loaded', 'warning');
+            return;
+        }
+        const { owner, repo } = State.currentProject;
+        const branch = State.currentBranch || 'main';
+        const btn = document.getElementById('btnDownloadZip');
+        try {
+            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+            showToast(`Downloading ${owner}/${repo} @ ${branch}…`, 'info');
+            const blob = await Git.downloadArchive(owner, repo, branch);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${repo}-${branch}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showToast('Download started', 'success');
+        } catch (err) {
+            console.error('[Download] Archive failed:', err);
+            showToast(`Download failed: ${err.message}`, 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '📥'; }
+        }
+    });
     safeAdd('btnRefreshFiles', 'click', () => {
         EventBus.emit('tree:refresh');
         EventBus.emit('branches:refresh');
@@ -936,6 +965,7 @@ async function init() {
     // Load settings
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
+    IgnoreManager.init(); // Must run after loadSettings — reads ignorePatterns from State.settings
     applyVisualSettings();
     initPanelResize();
     

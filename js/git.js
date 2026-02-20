@@ -461,6 +461,11 @@ const Git = {
     async createRelease(owner, repo, opts) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.createRelease(connection, owner, repo, opts);
+    },
+
+    async downloadArchive(owner, repo, ref = 'main') {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.downloadArchive(connection, owner, repo, ref);
     }
 };
 

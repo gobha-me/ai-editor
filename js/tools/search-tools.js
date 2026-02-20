@@ -5,6 +5,7 @@
 
 import { State } from '../core.js';
 import { Git } from '../git.js';
+import { IgnoreManager } from '../ignore.js';
 
 /**
  * Register all search-related tools.
@@ -24,6 +25,7 @@ export function registerSearchTools(registry) {
         try {
             let files = State.fileTree.filter(f => f.type !== 'dir');
             if (path) files = files.filter(f => f.path.startsWith(path));
+            files = files.filter(f => !IgnoreManager.isIgnored(f.path, f.size));
 
             const textExts = new Set([
                 'js','ts','jsx','tsx','py','go','rs','c','cpp','h','hpp',

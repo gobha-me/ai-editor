@@ -1078,6 +1078,76 @@ const Plugins = {
         return this._modals[modalId];
     },
 
+    /**
+     * Convenience wrapper around ToolRegistry.register().
+     * Lazily imports the registry to avoid circular deps (core ← registry ← core).
+     *
+     * @param {string} pluginId - Owning plugin ID (for logging)
+     * @param {Object} opts
+     * @param {string} opts.name - Tool name (snake_case)
+     * @param {string} opts.description - Description shown to the LLM
+     * @param {Object} opts.parameters - JSON Schema for tool arguments
+     * @param {string|string[]} opts.roles - 'all' or array of role IDs
+     * @param {(args: Object) => Promise<Object>} opts.handler - Tool handler
+     */
+    async registerTool(pluginId, { name, description, parameters, roles, handler }) {
+        if (!name || !handler) {
+            console.error(`[Plugins.registerTool] ${pluginId}: name and handler required`);
+            return false;
+        }
+        try {
+            const { ToolRegistry } = await import('./tools/registry.js');
+            ToolRegistry.register(name, handler, {
+                type: 'function',
+                function: {
+                    name,
+                    description: description || `Tool provided by plugin: ${pluginId}`,
+                    parameters: parameters || { type: 'object', properties: {}, required: [] }
+                },
+                roles: roles || 'all'
+            });
+            console.log(`[Plugins] Tool registered: ${name} (plugin: ${pluginId})`);
+            EventBus.emit('plugin:toolRegistered', { pluginId, name });
+            return true;
+        } catch (err) {
+            console.error(`[Plugins.registerTool] ${pluginId}: failed to register ${name}:`, err);
+            return false;
+        }
+    },
+
+    /**
+     * Inject a scoped <style> tag for a plugin.
+     * Multiple calls with the same pluginId replace the previous sheet.
+     *
+     * @param {string} pluginId - Owning plugin ID (used as style element ID)
+     * @param {string} cssText - Raw CSS to inject
+     */
+    injectCSS(pluginId, cssText) {
+        if (!pluginId || !cssText) return;
+        const styleId = `plugin-css-${pluginId}`;
+        let el = document.getElementById(styleId);
+        if (!el) {
+            el = document.createElement('style');
+            el.id = styleId;
+            el.setAttribute('data-plugin', pluginId);
+            document.head.appendChild(el);
+        }
+        el.textContent = cssText;
+        console.log(`[Plugins] CSS injected: ${pluginId} (${cssText.length} chars)`);
+    },
+
+    /**
+     * Remove injected CSS for a plugin.
+     * @param {string} pluginId
+     */
+    removeCSS(pluginId) {
+        const el = document.getElementById(`plugin-css-${pluginId}`);
+        if (el) {
+            el.remove();
+            console.log(`[Plugins] CSS removed: ${pluginId}`);
+        }
+    },
+
     _persistState() {
         const state = {};
         for (const [id, plugin] of Object.entries(this._registered)) {
@@ -1361,7 +1431,7 @@ Editor: editor:change, editor:loaded, editor:loading, editor:created, editor:err
 Files: file:opened, file:created, file:deleted, file:renamed, tab:switched, tab:closed
 Git: git:fileUpdated, git:projectLoaded, branch:switch, branch:created, branches:refresh, tree:refresh, context:prMerged
 LLM: llm:generating (bool), model:changed, cost:updated, debug:exchange, debug:exchangeDone
-Plugin: plugin:registered, plugin:initialized, plugin:configChanged, plugin:enabledChanged, plugin:buttonRegistered, plugin:modalRegistered
+Plugin: plugin:registered, plugin:initialized, plugin:configChanged, plugin:enabledChanged, plugin:buttonRegistered, plugin:modalRegistered, plugin:toolRegistered
 Issues: issues:loaded, issue:created, issue:updated
 Conversations: conversation:created, conversation:loaded, conversation:deleted, conversation:renamed
 
@@ -1382,15 +1452,33 @@ State.issues — array of issue objects
 Storage.get(key, defaultValue) / Storage.set(key, value) / Storage.remove(key)
 Namespace keys with plugin ID: Storage.set('my-plugin:cache', data)
 
-## ADDITIONAL REGISTRIES (public but no settings UI integration)
+## ADDITIONAL REGISTRIES
 
-ToolRegistry.register(name, handler, definition) — Add LLM tools. definition needs roles field ('all' or ['coder','pm',...]).
-Providers.register(provider) — Add LLM providers.
+Plugins.registerTool('my-plugin', { name, description, parameters, roles, handler }) — Add LLM tools (convenience wrapper, auto-formats definition).
+Plugins.injectCSS('my-plugin', cssText) — Inject a scoped <style> tag. Call again to replace. Plugins.removeCSS('my-plugin') to remove.
+Providers.register(provider) — Add LLM providers (no settings UI auto-discovery).
 Roles.register({ id, name, icon, description }) — Add custom roles.
+
+### Plugins.registerTool() example
+\`\`\`javascript
+await Plugins.registerTool('my-plugin', {
+    name: 'fetch_weather',
+    description: 'Get current weather for a city',
+    parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+    roles: 'all',
+    handler: async ({ city }) => ({ temp: 72, conditions: 'sunny', city })
+});
+\`\`\`
+
+### Plugins.injectCSS() example
+\`\`\`javascript
+Plugins.injectCSS('my-plugin', \`
+    .my-plugin-badge { background: var(--accent); color: white; padding: 2px 6px; border-radius: 3px; }
+\`);
+\`\`\`
 
 ## WHAT IS NOT POSSIBLE
 
-- No CSS injection API (can't add themes/styles)
 - No DOM slot injection (SlotManager not implemented)
 - No CodeMirror extension bridge (can't add editor keybindings/syntax)
 - No plugin settings tab slots (only auto-generated configSchema)

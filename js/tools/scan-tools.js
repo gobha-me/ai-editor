@@ -7,6 +7,7 @@
 import { State } from '../core.js';
 import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
+import { IgnoreManager } from '../ignore.js';
 
 /**
  * Find the end of a function by matching braces
@@ -377,6 +378,7 @@ export function registerScanTools(registry) {
             if (scope) {
                 files = files.filter(f => f.path.startsWith(scope));
             }
+            files = files.filter(f => !IgnoreManager.isIgnored(f.path, f.size));
             
             // Only search text files
             const textExts = new Set([

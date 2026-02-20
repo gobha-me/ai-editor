@@ -6,6 +6,7 @@
 import { State, EventBus, Storage } from './core.js';
 import { EmbeddingsClient } from './embeddings-client.js';
 import { Git } from './git.js';
+import { IgnoreManager } from './ignore.js';
 
 const ContextManager = {
     _fileIndex: new Map(), // path -> { path, summary, embedding, lastIndexed }
@@ -22,68 +23,17 @@ const ContextManager = {
 
     // ── File Filtering ──
 
-    /** Extensions that should never be indexed (binary/generated/media) */
-    SKIP_EXTENSIONS: new Set([
-        // Images
-        'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp', 'bmp', 'tiff',
-        // Fonts
-        'woff', 'woff2', 'ttf', 'eot', 'otf',
-        // Media
-        'mp3', 'mp4', 'wav', 'ogg', 'webm', 'avi', 'mov',
-        // Archives
-        'zip', 'tar', 'gz', 'bz2', 'rar', '7z',
-        // Compiled/binary
-        'wasm', 'pyc', 'pyo', 'class', 'o', 'so', 'dylib', 'dll', 'exe',
-        // Maps & minified
-        'map',
-        // Data blobs
-        'sqlite', 'db', 'bin', 'dat',
-        // Lockfiles (huge, no semantic value)
-        'lock',
-        // PDF/office
-        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-    ]),
-
-    /** Path patterns to exclude (directories & specific files) */
-    SKIP_PATH_PATTERNS: [
-        /node_modules\//,
-        /vendor\//,
-        /\.git\//,
-        /dist\//,
-        /build\//,
-        /\.min\.(js|css)$/,
-        /bundle\.(js|css)$/,
-        /package-lock\.json$/,
-        /yarn\.lock$/,
-        /pnpm-lock\.yaml$/,
-        // Swagger / OpenAPI specs (large JSON, no code value)
-        /swagger[s]?\//,
-        /openapi\.(json|ya?ml)$/,
-        /swagger\.(json|ya?ml)$/,
-    ],
-
     /** Max file size (bytes) to download for indexing. Checked from tree metadata BEFORE download. */
     MAX_INDEX_SIZE: 250_000,  // 250KB — generous for code; data files get caught here
 
     /**
-     * Check if a file should be indexed based on extension, path, and size.
+     * Check if a file should be indexed based on ignore patterns and size.
+     * Delegates to IgnoreManager for pattern matching.
      * @param {string} path
      * @param {number} [size] - File size from tree metadata (bytes). 0/undefined = unknown, allow.
      */
     shouldIndex(path, size) {
-        // Extension check
-        const ext = path.split('.').pop()?.toLowerCase();
-        if (ext && this.SKIP_EXTENSIONS.has(ext)) return false;
-
-        // Path pattern check
-        for (const pattern of this.SKIP_PATH_PATTERNS) {
-            if (pattern.test(path)) return false;
-        }
-
-        // Size check (from tree metadata — avoids downloading huge files)
-        if (size && size > this.MAX_INDEX_SIZE) return false;
-
-        return true;
+        return !IgnoreManager.isIgnored(path, size);
     },
 
     /**
@@ -490,10 +440,10 @@ const ContextManager = {
             const skipped = allFiles.length - eligible.length;
 
             if (skipped > 0) {
-                // Log any large files that were caught by size filter
+                // Log any large files that were caught only by size filter
                 const sizeSkipped = allFiles.filter(f => 
-                    f.size && f.size > this.MAX_INDEX_SIZE && 
-                    !this.SKIP_EXTENSIONS.has(f.path.split('.').pop()?.toLowerCase())
+                    f.size && f.size > IgnoreManager.MAX_FILE_SIZE && 
+                    !IgnoreManager.isIgnored(f.path, 0)  // would pass if not for size
                 );
                 const sizeNote = sizeSkipped.length 
                     ? ` (${sizeSkipped.map(f => `${f.path} ${(f.size/1024).toFixed(0)}KB`).join(', ')})` 

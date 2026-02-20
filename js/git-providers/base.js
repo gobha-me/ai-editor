@@ -518,6 +518,24 @@ const BASE_GIT_PROVIDER = {
     },
 
     // ========================================
+    // ARCHIVE DOWNLOAD
+    // ========================================
+
+    /**
+     * Download the repository as a zip archive for the given ref (branch/tag/sha).
+     * Returns a Blob that the caller can save as a file.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} [ref='main'] - Branch name, tag, or commit SHA
+     * @returns {Promise<Blob>}
+     */
+    async downloadArchive(connection, owner, repo, ref = 'main') {
+        notSupported(this.name, 'downloadArchive');
+    },
+
+    // ========================================
     // UI EXTENSIONS (declarative)
     // ========================================
 

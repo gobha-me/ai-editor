@@ -349,6 +349,47 @@
 </div>
 
 <!-- Roles Tab -->
+
+<!-- Ignore Tab -->
+<div class="settings-tab-content" id="tabIgnore">
+    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Patterns that hide files from LLM tools (search, tree, scan, context indexing).
+        Uses <strong>.gitignore syntax</strong>: <code>node_modules/</code> for directories, <code>*.png</code> for globs, <code>!keep.png</code> to un-ignore.
+    </p>
+    <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
+        These patterns <em>do not</em> affect the file tree sidebar or explicit <code>read_file</code> calls — only what the LLM can discover on its own.
+        Per-project overrides go in a <code>.aieditorignore</code> file at the repo root.
+    </small>
+
+    <div class="form-group">
+        <label for="settingIgnorePatterns" style="font-weight: 600;">Global Ignore Patterns:</label>
+        <textarea id="settingIgnorePatterns"
+            spellcheck="false"
+            style="width: 100%; height: 320px; font-family: var(--font-mono); font-size: var(--font-sm);
+                   background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border);
+                   border-radius: 4px; padding: 0.75rem; resize: vertical; line-height: 1.5;
+                   tab-size: 4; white-space: pre; overflow-wrap: normal; overflow-x: auto;"
+            placeholder="# Add patterns here (gitignore syntax)"></textarea>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+        <button type="button" class="btn btn-secondary" id="btnResetIgnore">↩ Reset to Defaults</button>
+        <span id="ignoreStats" style="font-size: var(--font-sm); color: var(--text-muted); margin-left: auto;"></span>
+    </div>
+
+    <div id="projectIgnoreInfo" style="margin-top: 1.25rem; display: none;">
+        <div style="border-top: 1px solid var(--border); padding-top: 1rem;">
+            <label style="font-weight: 600;">Project: <code>.aieditorignore</code></label>
+            <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
+                These patterns are loaded from the current project and merged after global patterns.
+            </small>
+            <pre id="projectIgnoreContent" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;
+                font-size: var(--font-sm); font-family: var(--font-mono); max-height: 150px; overflow: auto;
+                border: 1px solid var(--border); margin: 0; white-space: pre-wrap;"></pre>
+        </div>
+    </div>
+</div>
+
 <div class="settings-tab-content" id="tabRoles">
     <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Choose a role to control which tools the AI can use. Limiting tools reduces prompt token usage and can improve response quality.

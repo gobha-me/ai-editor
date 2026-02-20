@@ -1018,6 +1018,17 @@ const gitlabProvider = {
         };
     },
 
+    async downloadArchive(connection, owner, repo, ref = 'main') {
+        const url = `${this.getBaseUrl(connection)}/projects/${projectId(owner, repo)}/repository/archive.zip?sha=${encodeURIComponent(ref)}`;
+        const response = await fetch(url, {
+            headers: { 'PRIVATE-TOKEN': connection.token }
+        });
+        if (!response.ok) {
+            throw new Error(`GitLab archive download failed: ${response.status}`);
+        }
+        return response.blob();
+    },
+
     // ========================================
     // UI EXTENSIONS
     // ========================================

@@ -194,6 +194,54 @@ async init(config) {
 
 The `render` function receives a DOM element. You own the content — render whatever you want.
 
+### LLM Tools
+
+Register custom tools that the AI assistant can call:
+
+```javascript
+async init(config) {
+    await Plugins.registerTool('my-plugin', {
+        name: 'lookup_user',
+        description: 'Look up a user by username',
+        parameters: {
+            type: 'object',
+            properties: {
+                username: { type: 'string', description: 'The username to look up' }
+            },
+            required: ['username']
+        },
+        roles: 'all',  // or ['coder', 'pm']
+        handler: async ({ username }) => {
+            // Return any JSON-serializable object
+            return { name: 'Alice', email: 'alice@example.com' };
+        }
+    });
+    return {};
+}
+```
+
+The `parameters` field uses [JSON Schema](https://json-schema.org/) format. The `roles` field controls which roles can access the tool (`'all'` or an array of role IDs).
+
+### CSS Injection
+
+Add custom styles. Multiple calls with the same plugin ID replace the previous stylesheet:
+
+```javascript
+async init(config) {
+    Plugins.injectCSS('my-plugin', `
+        .my-plugin-highlight { background: var(--accent); color: white; padding: 2px 6px; border-radius: 3px; }
+        .my-plugin-panel { border: 1px solid var(--border); padding: 1rem; }
+    `);
+    return {};
+}
+
+async destroy(instance) {
+    Plugins.removeCSS('my-plugin');
+}
+```
+
+Use CSS custom properties (`var(--accent)`, `var(--bg-primary)`, etc.) to respect the active theme.
+
 ---
 
 ## Configuration
@@ -342,33 +390,34 @@ What the plugin system **can do today** — and what it can't.
 | **React to model changes** | `onModelChange` hook — runs when user switches LLM model | v0.9.32-8 |
 | **Toolbar buttons** | `registerButton()` — adds a button to the plugin dropdown menu | v0.8.x |
 | **Modal dialogs** | `registerModal()` — full custom HTML modal with render function | v0.8.x |
+| **Register LLM tools** | `registerTool()` — add tools the AI assistant can call | v1.0.0 |
+| **Inject CSS** | `injectCSS()` / `removeCSS()` — scoped stylesheet injection | v1.0.0 |
 | **Plugin configuration** | `configSchema` + `defaultConfig` — auto-generated settings UI | v0.8.x |
 | **Event system** | `EventBus.on()` — subscribe to 60+ editor events (chat, editor, git, etc.) | v0.8.x |
 | **Persistent state** | `Storage.get/set` — survives reloads, namespaced by plugin | v0.8.x |
 | **Enable/disable** | Users toggle plugins on/off in Settings → Plugins | v0.8.x |
 | **External plugins** | Load from URL via `window.AIEditor` — no build step | v0.8.x |
+| **Built-in plugin editor** | CodeMirror tab with save, hot-reload, and LLM assistance | v0.9.42 |
 | **Custom roles** | `Roles.register()` — add new roles dynamically | v0.8.x |
 
-### ⚠️ Possible But Not Bridged
+### ⚠️ Works But No Settings UI
 
-These registries exist and are public, but there's no plugin convenience API or settings UI support:
+These registries are functional but the settings UI doesn't auto-discover them:
 
 | Capability | Registry | Limitation |
 |---|---|---|
-| **Register LLM tools** | `ToolRegistry.register(name, handler, definition)` | Works, but the tool needs a valid role and the settings UI doesn't show plugin-registered tools. You must import `ToolRegistry` directly. |
-| **Register LLM providers** | `Providers.register(provider)` | Works, but the settings dropdown is populated from `ProviderRegistry` and won't automatically show new providers. |
+| **Register LLM providers** | `Providers.register(provider)` | Works, but the settings dropdown won't automatically show new providers. |
 | **Register git providers** | `GitProviderRegistry.register(provider)` | Same — must implement the base interface, but settings UI won't list it. |
+| **Plugin-registered tools** | `Plugins.registerTool()` | Works, but there's no UI to view/manage plugin-registered tools. |
 
 ### ❌ Not Currently Possible
 
 | Capability | Why |
 |---|---|
-| **CSS themes / style injection** | No CSS injection API. Plugins can't add stylesheets. |
 | **Settings panel tabs** | No slot for plugins to add custom tabs to the settings modal. |
 | **DOM slot injection** | `SlotManager` is referenced in docs but was never implemented. Plugins can only inject UI via modals and toolbar buttons. |
 | **Tool configuration UI** | Users can't enable/disable individual tools or assign tools to roles from the UI. |
 | **Modify editor (CodeMirror) behavior** | No hook into the CodeMirror instance. Plugins can't add keybindings, syntax highlighting, or editor extensions. |
-| **File system events** | No hook for file create/rename/delete — plugins must poll or listen to git events. |
 
 ### Hook Data Shapes (Reference)
 

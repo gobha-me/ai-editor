@@ -151,7 +151,7 @@ delete_file({
 ## 📋 Project Tools
 
 ### `get_project_tree`
-Get file tree structure. Optionally filter by directory path.
+Get file tree structure. Optionally filter by directory path. Respects ignore patterns (Settings → Ignore).
 ```javascript
 get_project_tree({ path: "src/" })  // path is optional
 ```

@@ -9,6 +9,7 @@ import { GitProviderRegistry } from '../git-providers/index.js';
 import { collectProviderSettings } from './llm-tab.js';
 import { getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
+import { IgnoreManager } from '../ignore.js';
 
 /**
  * Helper to get numeric value from input (returns undefined if empty).
@@ -170,6 +171,12 @@ export function collectAndSave() {
         State.settings[settingsKey] = values;
     }
 
+    // Ignore patterns
+    const ignorePatternsEl = document.getElementById('settingIgnorePatterns');
+    if (ignorePatternsEl) {
+        IgnoreManager.setGlobalPatterns(ignorePatternsEl.value);
+    }
+
     // Sync main page role selector
     const roleSelectEl = document.getElementById('roleSelect');
     if (roleSelectEl) {
@@ -228,6 +235,7 @@ export function exportSettings() {
         // Other
         role: State.settings.role,
         disabledModels: State.settings.disabledModels || [],
+        ignorePatterns: State.settings.ignorePatterns,
         
         // Plugins
         pluginState: Storage.get('pluginState') || {},

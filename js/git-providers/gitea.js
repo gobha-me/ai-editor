@@ -929,6 +929,18 @@ const giteaProvider = {
         }
     },
 
+    async downloadArchive(connection, owner, repo, ref = 'main') {
+        const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/archive/${encodeURIComponent(ref)}.zip`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `token ${connection.token}` },
+            signal: AbortSignal.timeout(this.HEAVY_TIMEOUT)
+        });
+        if (!response.ok) {
+            throw new Error(`Gitea archive download failed: ${response.status}`);
+        }
+        return response.blob();
+    },
+
     // ========================================
     // UI EXTENSIONS
     // ========================================

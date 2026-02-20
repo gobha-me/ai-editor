@@ -5,6 +5,7 @@
 
 import { State, EventBus } from '../core.js';
 import { Git } from '../git.js';
+import { IgnoreManager } from '../ignore.js';
 
 /**
  * Register all project-related tools.
@@ -126,6 +127,8 @@ export function registerProjectTools(registry) {
         if (path) {
             files = files.filter(f => f.path.startsWith(path));
         }
+        // Filter ignored files/dirs from LLM view (sidebar still shows everything)
+        files = files.filter(f => !IgnoreManager.isIgnored(f.path, f.size));
         return {
             project: `${State.currentProject.owner}/${State.currentProject.repo}`,
             branch: State.currentBranch,

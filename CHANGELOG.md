@@ -2,6 +2,66 @@
 
 All notable changes to AI Editor are documented here.
 
+## [1.0.0] - 2026-02-20
+
+### Added
+- **`Plugins.registerTool()`** — Convenience wrapper for registering LLM
+  tools from plugins. Auto-formats the tool definition and handles
+  ToolRegistry import via lazy `import()` to avoid circular deps.
+  ```javascript
+  await Plugins.registerTool('my-plugin', {
+      name: 'fetch_weather',
+      description: 'Get weather for a city',
+      parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      roles: 'all',
+      handler: async ({ city }) => ({ temp: 72, city })
+  });
+  ```
+
+- **`Plugins.injectCSS()` / `Plugins.removeCSS()`** — Scoped `<style>`
+  tag injection for plugins. Multiple calls with the same plugin ID
+  replace the previous stylesheet. Enables theme plugins, custom UI
+  styling, and visual tweaks without modifying core CSS.
+  ```javascript
+  Plugins.injectCSS('my-plugin', `.my-class { color: var(--accent); }`);
+  Plugins.removeCSS('my-plugin');  // cleanup in destroy()
+  ```
+
+- **`plugin:toolRegistered`** EventBus event — Emitted when a plugin
+  registers a tool via `Plugins.registerTool()`.
+
+- **Download project as zip** — 📥 button in the branch selector row
+  downloads the current project/branch as a zip archive. Supported on
+  all remote providers (Gitea, GitHub, GitLab). Shows progress toast,
+  triggers browser save dialog with `{repo}-{branch}.zip` filename.
+
+- **Ignore patterns** — New Settings → Ignore tab with gitignore-syntax
+  patterns that control what the LLM can discover via tools (`get_project_tree`,
+  `search_in_files`, `find_references`, context indexing). Defaults ship
+  with sensible exclusions (node_modules, binaries, lockfiles, etc.).
+  Per-project `.aieditorignore` file at repo root merges on top.
+  File tree sidebar and explicit `read_file` are unaffected — only
+  the LLM's autonomous discovery is scoped.
+  - `js/ignore.js` — shared module with pattern compiler, three-layer
+    merge (defaults → global settings → project `.aieditorignore`)
+  - Context manager refactored to delegate to `IgnoreManager.isIgnored()`
+  - Settings export/import includes `ignorePatterns`
+
+### Changed
+- **Plugin SDK "What Is Not Possible"** — Removed "CSS injection" and
+  "file system events" entries (both now implemented). Remaining:
+  SlotManager, CodeMirror bridge, plugin settings tabs, provider
+  settings UI auto-discovery.
+
+### Docs
+- **PLUGIN.md**: New "LLM Tools" and "CSS Injection" sections with
+  full examples. Updated capability tables — registerTool and injectCSS
+  moved from "Possible But Not Bridged" to "What Works".
+- **PLAN.md**: Rewritten as 1.0 release roadmap. Completed items in a
+  table, remaining items organized as "Future Work" by category.
+- **Plugin-dev role systemPrompt**: Documents `registerTool()` and
+  `injectCSS()` with examples. Updated "WHAT IS NOT POSSIBLE" list.
+
 ## [0.9.42] - 2026-02-20
 
 ### Added

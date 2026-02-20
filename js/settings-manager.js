@@ -7,6 +7,7 @@
 
 import { State, Providers, ProviderRegistry, saveSettings as coreSaveSettings } from './core.js';
 import { ContextManager } from './context-manager.js';
+import { IgnoreManager } from './ignore.js';
 import { EmbeddingsClient } from './embeddings-client.js';
 import { injectTemplate } from './template-loader.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
@@ -230,6 +231,24 @@ function populateSettingsForm() {
     populateAdvancedParams();
     initModelsTabEvents();
 
+    // --- Ignore Tab ---
+    const ignoreTextarea = document.getElementById('settingIgnorePatterns');
+    if (ignoreTextarea) {
+        ignoreTextarea.value = IgnoreManager.getGlobalPatterns();
+    }
+    const resetIgnoreBtn = document.getElementById('btnResetIgnore');
+    if (resetIgnoreBtn) {
+        resetIgnoreBtn.onclick = () => {
+            IgnoreManager.resetToDefaults();
+            const ta = document.getElementById('settingIgnorePatterns');
+            if (ta) ta.value = IgnoreManager.getGlobalPatterns();
+            _updateIgnoreStats();
+            window.showToast('Ignore patterns reset to defaults', 'success');
+        };
+    }
+    _updateIgnoreStats();
+    _updateProjectIgnoreDisplay();
+
     // --- Settings tab switching ---
     // Scope to settings modal only — help modal has its own .settings-tab elements
     const settingsModal = document.getElementById('settingsModal');
@@ -259,6 +278,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabModels') populateModelsTab();
             // Refresh Plugins tab when switching to it
             if (tab.dataset.tab === 'tabPlugins') populatePluginsTab();
+            // Refresh Ignore stats when switching to it
+            if (tab.dataset.tab === 'tabIgnore') { _updateIgnoreStats(); _updateProjectIgnoreDisplay(); }
             // Render Storage metrics when switching to it
             if (tab.dataset.tab === 'tabStorage') renderStorageMetrics();
             
@@ -313,6 +334,30 @@ window.scrollSettingsTabs = function(direction) {
     const step = container.clientWidth * 0.6;
     container.scrollBy({ left: direction * step, behavior: 'smooth' });
 };
+
+// ── Ignore tab helpers ──
+
+function _updateIgnoreStats() {
+    const el = document.getElementById('ignoreStats');
+    if (!el) return;
+    const stats = IgnoreManager.stats();
+    const parts = [`${stats.total} active rules`];
+    if (stats.project > 0) parts.push(`(${stats.project} from .aieditorignore)`);
+    el.textContent = parts.join(' ');
+}
+
+function _updateProjectIgnoreDisplay() {
+    const container = document.getElementById('projectIgnoreInfo');
+    const content = document.getElementById('projectIgnoreContent');
+    if (!container || !content) return;
+    const projectPatterns = IgnoreManager.getProjectPatterns();
+    if (projectPatterns.trim()) {
+        content.textContent = projectPatterns;
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+    }
+}
 
 // ── Re-exports for external consumers ──
 

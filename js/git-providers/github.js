@@ -919,6 +919,16 @@ const githubProvider = {
         }
     },
 
+    async downloadArchive(connection, owner, repo, ref = 'main') {
+        const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/zipball/${encodeURIComponent(ref)}`;
+        const headers = { ...this.getHeaders(connection), 'Accept': 'application/vnd.github+json' };
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+            throw new Error(`GitHub archive download failed: ${response.status}`);
+        }
+        return response.blob();
+    },
+
     // ========================================
     // UI EXTENSIONS
     // ========================================
