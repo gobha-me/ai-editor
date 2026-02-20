@@ -308,6 +308,21 @@ const ProviderRegistry = {
     async fetchBalance(settings) {
         const provider = this.get(settings.apiProvider);
         return provider.fetchBalance(settings);
+    },
+
+    /**
+     * Run async enrichment on parsed models (e.g. Ollama /api/show).
+     * No-op if the active provider doesn't implement enrichModels().
+     * @param {Array} models - Parsed model array
+     * @param {Object} settings - Full State.settings object
+     * @returns {Promise<Array>} Enriched models
+     */
+    async enrichModels(models, settings) {
+        const provider = this.get(settings.apiProvider);
+        if (typeof provider.enrichModels === 'function') {
+            return provider.enrichModels(models, settings);
+        }
+        return models;
     }
 };
 

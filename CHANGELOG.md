@@ -2,6 +2,49 @@
 
 All notable changes to AI Editor are documented here.
 
+## [0.9.41] - 2026-02-20
+
+### Fixed
+- **Chat defaulting to wrong repo context** (Issue #4): LLM used
+  `peek_project_tree` for the current project (inventing connectionId/
+  owner/repo) instead of using `get_project_tree` or `read_file`.
+  Three-layer fix:
+  1. Tool guard: `peek_project_tree` and `peek_project_file` now reject
+     calls targeting the current project with a corrective error message
+  2. Prompt hardening: cross-project instructions now say "ONLY when the
+     user explicitly asks about a DIFFERENT project" and warn against
+     guessing connectionId values
+  3. Context injection: `connectionId` now included in the "Current
+     context" block so the LLM has it available when needed
+- **Ollama model capabilities not detected** (Issue #3): Models like
+  `granite4:latest` have tool support but the regex heuristic didn't
+  always detect it. New Ollama provider queries `/api/show` for real
+  capability metadata.
+
+### Added
+- **Ollama provider** (`js/providers/ollama.js`):
+  - Auto-detects capabilities via native `/api/show` endpoint (tools,
+    vision, context length, quantization, parameter size, family)
+  - Parallel enrichment with concurrency cap (6 models at a time)
+  - 5 s timeout per model — falls back to defaults on failure
+  - Derives native API base by stripping `/v1` from endpoint
+  - Select "Ollama" in Settings → LLM → Provider to use it
+- **`ProviderRegistry.enrichModels()`**: New async hook called after
+  `parseModels()`. Providers can implement `enrichModels(models, settings)`
+  to augment model data with async API calls. No-op for providers that
+  don't implement it.
+
+### Changed
+- **`peek_project_tree`**: Description strengthened — "NEVER use this for
+  the current project", "You MUST call list_projects first". Rejects calls
+  where owner/repo matches current project.
+- **`peek_project_file`**: Same guard and description hardening.
+- **System prompt**: Current context block now includes `Connection:
+  {{connectionId}}`. Cross-project workflow section emphasizes calling
+  `list_projects` first and never guessing connection values.
+- **`listModels()`** (`js/llm/api.js`): Now calls `enrichModels()` after
+  parsing, enabling providers to augment capabilities asynchronously.
+
 ## [0.9.40] - 2026-02-20
 
 ### Fixed

@@ -27,6 +27,15 @@ export function registerXRefTools(registry) {
     // peek_project_tree
     // ========================================
     registry.register('peek_project_tree', async ({ connectionId, owner, repo, branch = 'main', path = '' }) => {
+        // Guard: reject if targeting the current project (LLM should use get_project_tree)
+        if (State.currentProject &&
+            State.currentProject.owner === owner &&
+            State.currentProject.repo === repo) {
+            return {
+                error: `"${owner}/${repo}" IS the current project. Use get_project_tree to browse it, or read_file / read_lines to view files. peek_project_tree is only for OTHER projects.`
+            };
+        }
+
         try {
             const { provider, connection } = GitProviderRegistry.resolve(connectionId);
             const tree = await provider.getFileTree(connection, owner, repo, branch, path);
@@ -57,7 +66,7 @@ export function registerXRefTools(registry) {
         type: 'function',
         function: {
             name: 'peek_project_tree',
-            description: 'Browse the file tree of ANOTHER project without switching away from the current project. Use list_projects first to get connectionId, owner, and repo. Returns the same format as get_project_tree.',
+            description: 'Browse the file tree of a DIFFERENT project without switching away from the current one. NEVER use this for the current project — use get_project_tree instead. You MUST call list_projects first to get the correct connectionId, owner, and repo — do not guess these values. Returns the same format as get_project_tree.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -92,6 +101,15 @@ export function registerXRefTools(registry) {
     // peek_project_file
     // ========================================
     registry.register('peek_project_file', async ({ connectionId, owner, repo, path, branch = 'main', full = false }) => {
+        // Guard: reject if targeting the current project
+        if (State.currentProject &&
+            State.currentProject.owner === owner &&
+            State.currentProject.repo === repo) {
+            return {
+                error: `"${owner}/${repo}" IS the current project. Use read_file or read_lines to view its files. peek_project_file is only for OTHER projects.`
+            };
+        }
+
         try {
             const { provider, connection } = GitProviderRegistry.resolve(connectionId);
             const file = await provider.getFile(connection, owner, repo, path, branch);
@@ -144,7 +162,7 @@ export function registerXRefTools(registry) {
         type: 'function',
         function: {
             name: 'peek_project_file',
-            description: 'Read a file from ANOTHER project without switching away from the current project. This is read-only — you cannot edit files in the reference project. Use list_projects to get connectionId/owner/repo, then peek_project_tree to find the file path. Large files (200+ lines) are truncated unless full=true.',
+            description: 'Read a file from a DIFFERENT project without switching away from the current one. NEVER use this for the current project — use read_file or read_lines instead. Read-only — you cannot edit files in the reference project. You MUST call list_projects first to get connectionId/owner/repo — do not guess these values. Large files (200+ lines) are truncated unless full=true.',
             parameters: {
                 type: 'object',
                 properties: {

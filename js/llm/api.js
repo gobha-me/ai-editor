@@ -198,6 +198,13 @@ export const LLM = {
             .filter(m => m.type === 'text' || !m.type)
             .sort((a, b) => a.id.localeCompare(b.id));
 
+        // Async enrichment (e.g. Ollama /api/show for real capabilities)
+        try {
+            State.models = await Providers.enrichModels(State.models, State.settings);
+        } catch (e) {
+            console.warn('[LLM] Model enrichment failed (using defaults):', e.message);
+        }
+
         Storage.set('models', State.models);
         EventBus.emit('llm:modelsLoaded', State.models);
         return State.models;

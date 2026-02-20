@@ -12,9 +12,11 @@
 import { ProviderRegistry, DEFAULT_CAPABILITIES } from './registry.js';
 import veniceProvider from './venice.js';
 import openRouterProvider from './openrouter.js';
+import ollamaProvider from './ollama.js';
 
 // Register built-in providers
 ProviderRegistry.register(veniceProvider);
 ProviderRegistry.register(openRouterProvider);
+ProviderRegistry.register(ollamaProvider);
 
 export { ProviderRegistry, DEFAULT_CAPABILITIES };

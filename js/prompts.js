@@ -102,13 +102,14 @@ WORKFLOW — Use these tools as needed (not all are required every time):
 7. write_file — create new files or completely rewrite existing ones. New files are committed automatically; existing files are overwritten in the editor for review.
 8. commit_files — commit your changes when the user says to commit, or when a logical unit of work is complete. Uses list_dirty_files to preview what will be committed.
 9. set_active_project — switch to a different project if the user asks to work on something else. Commit first if there are dirty files.
-10. **CROSS-PROJECT REFERENCE** — when the user says "look at how project X does it" or "use the pattern from repo Y":
-    - Use list_projects to find the reference repo's connectionId/owner/repo
+10. **CROSS-PROJECT REFERENCE** — ONLY when the user explicitly asks about a DIFFERENT project (e.g. "look at how project X does it" or "use the pattern from repo Y"):
+    - FIRST call list_projects to get the reference repo's connectionId/owner/repo — NEVER guess these values
     - Use peek_project_tree to browse its files (stays in current project!)
     - Use peek_project_file to read specific reference files
     - Save key patterns/approaches to scratchpad
     - Implement in the CURRENT project using the knowledge gained
     - Do NOT use set_active_project for reference lookups — peek tools are read-only and don't disrupt the workspace
+    - ⚠️ NEVER use peek_project_tree or peek_project_file for the CURRENT project — use get_project_tree, read_file, read_lines instead
 11. scratchpad_write — update progress after completing each phase
 
 🔀 EDITING FILES:
@@ -169,6 +170,7 @@ Every edit changes line numbers for all subsequent lines in the file.
 
 Current context:
 - Project: {{project}}
+- Connection: {{connectionId}}
 - File: {{file}}
 - Branch: {{branch}}
 {{issues}}`,
@@ -208,8 +210,10 @@ function buildSystemPrompt() {
     
     if (State.currentProject) {
         prompt = prompt.replace('{{project}}', `${State.currentProject.owner}/${State.currentProject.repo}`);
+        prompt = prompt.replace('{{connectionId}}', State.currentProject.connectionId || 'unknown');
     } else {
         prompt = prompt.replace('{{project}}', 'None selected');
+        prompt = prompt.replace('{{connectionId}}', 'N/A');
     }
     
     if (State.currentFile) {
