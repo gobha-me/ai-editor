@@ -23,49 +23,56 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 
 **Three-panel layout** — file browser, CodeMirror 6 editor, AI chat — with everything stored in your Git host. No separate database, no cloud sync, no accounts.
 
-**The AI assistant has 28 tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; and cross-project reference. It makes surgical line-based edits in your buffer — you review before committing.
+**The AI assistant has 52 tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; cross-project reference; code evaluation; and plugin development. It makes surgical line-based edits in your buffer — you review before committing.
 
 **Multi-provider Git** — Gitea, GitHub, and GitLab connections, multiple active simultaneously. Your self-hosted Gitea and your GitHub repos side by side.
 
-**Multi-provider LLM** — Venice, OpenRouter, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings.
+**Multi-provider LLM** — Venice, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings. Ollama gets dedicated capability detection via `/api/show`.
 
-**Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, and configurable settings. Install from URL or bundle locally. See [docs/PLUGIN.md](docs/PLUGIN.md).
+**Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL. See [docs/PLUGIN.md](docs/PLUGIN.md).
 
 **Mobile responsive** — full mobile layout with bottom tab bar, swipe gestures, soft keyboard detection, and PWA support.
 
 ## Features
 
 ### Editor
-- CodeMirror 6 with syntax highlighting for 15+ languages
+- CodeMirror 6 with syntax highlighting for 19 languages (JS, TS, JSX, TSX, Python, Go, Rust, C, C++, Java, PHP, SQL, HTML, CSS, SCSS, JSON, XML, Markdown)
 - Quick Open (Ctrl+P) with fuzzy matching
 - Multi-tab editing with preview/pin tabs
 - Project-wide search & replace with regex (Web Worker)
 - Live preview for HTML, Markdown, SVG
 - Side-by-side diff view with inline toggle
-- Git blame with commit-colored gutter
+- Git blame with commit-colored gutter and file history
 - Resizable panels with drag handles
 
 ### Git
-- Full CRUD: create, rename, delete files
+- Full CRUD: create, rename, delete files and folders
 - Branch management with protected branch enforcement
 - AI-generated commit messages
-- Pull request creation, review, and merge
+- Pull request creation, review, and merge with CI/CD status polling
 - Issue management with triage mode
-- CI/CD status polling in PR modal
+- Release manager with AI-generated release notes
 - Zip upload with batch commit (atomic)
+- Download project/branch as zip
 
 ### AI Assistant
-- 28 LLM tools organized by category
+- 52 LLM tools organized by role
 - `scan_file` / `read_function` for token-efficient reads
-- Cross-project reference (`peek_project_tree`, `peek_project_file`)
+- Cross-project reference (`peek_project_tree`, `peek_project_file`, `peek_read_lines`)
 - Multi-file editing (`edit_file`, `write_file`) without manual open
 - Image/screenshot paste for vision models
 - Conversation persistence — switch between saved chats
 - History summarization with prune/undo
 - Scratchpad for persistent notes across summarization
-- Role-based tool filtering
+- 5 built-in roles: Full Access, Coder, Project Manager, Reviewer, Plugin Developer
 - Edit tracker (detects stale line numbers)
 - LLM debug modal for inspecting raw requests
+- Configurable ignore patterns (gitignore syntax) to scope what tools can discover
+
+### Settings
+- Settings export/import (JSON) including plugin state and user plugins
+- Gitignore-style ignore patterns with per-project `.aieditorignore` override
+- Semantic context indexing with configurable embedding provider
 
 ### Accessibility
 - Full keyboard navigation for file tree, editor tabs, and settings
@@ -81,11 +88,14 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 - PWA meta tags for home screen install
 
 ### Plugins
-- Lifecycle hooks: `beforeSend`, `afterResponse`, `onModelChange`
-- Toolbar button and modal registration
-- Configurable settings with schema
-- Install external plugins from URL
-- Ships with: Venice AI, Venice Billing, OpenRouter Billing, Cross-Repo Issues
+- Lifecycle hooks: `beforeSend`, `afterResponse`, `onModelChange`, `resolveIssueConnection`
+- Toolbar button and modal dialog registration
+- `registerTool()` — add custom LLM tools
+- `injectCSS()` / `removeCSS()` — scoped stylesheet injection
+- Configurable settings with auto-generated UI from schema
+- Built-in plugin editor with CodeMirror, hot-reload, and auto-role switching
+- Install external plugins from URL via `window.AIEditor`
+- Ships with: Venice AI, Venice Billing, OpenRouter Billing, Cross-Repo Issues, Release Sync
 
 See [docs/PLUGIN.md](docs/PLUGIN.md) for the authoring guide.
 
@@ -95,7 +105,7 @@ Press **Ctrl+,** or click the ⚙️ button.
 
 ### 1. Git Connection (Connections tab)
 
-Click **+ Add Connection**, select a provider, enter your instance URL and token.
+Click **+ Add Connection**, select a provider (Gitea, GitHub, or GitLab), enter your instance URL and token.
 
 See [REPOS.md](REPOS.md) for minimum token permissions per provider, setup walkthroughs, and what API access the editor requires.
 
@@ -103,16 +113,16 @@ See [REPOS.md](REPOS.md) for minimum token permissions per provider, setup walkt
 
 | Setting | Description |
 |---------|-------------|
-| Provider | Venice, OpenRouter, or Custom (any OpenAI-compatible) |
+| Provider | Venice, OpenRouter, Ollama, or Custom (any OpenAI-compatible) |
 | Endpoint | Auto-filled per provider, or your custom URL |
-| API Key | Your API key |
+| API Key | Your API key (not required for Ollama) |
 | Model | Default model for chat |
 | Commit Model | Optional cheaper model for commit messages |
 | Summarizer Model | Optional lightweight model for chat compression |
 
 ### 3. Roles (Roles tab)
 
-Roles control which tools the AI can access. The default role exposes all tools. Create restricted roles for read-only or code-only workflows.
+Roles control which tools the AI can access. Five built-in roles range from Full Access (all 52 tools) to Reviewer (read-only). The Plugin Developer role auto-activates when a plugin editor tab is open. Plugins can register additional roles via `Roles.register()`.
 
 ## Keyboard Shortcuts
 
@@ -135,7 +145,7 @@ Roles control which tools the AI can access. The default role exposes all tools.
 
 ## Deployment
 
-Static site served by nginx. No build step — the Dockerfile bundles vendor dependencies (CodeMirror, marked, DOMPurify) at build time.
+Static site served by nginx. No build step — the Dockerfile bundles vendor dependencies (CodeMirror, marked, DOMPurify, JSZip, htmx) at build time.
 
 ### Docker
 
@@ -154,7 +164,7 @@ docker run -p 80:8000 -e BASE_PATH=/dev ai-editor         # /dev
 
 ### Kubernetes
 
-Deployment manifest included (`deployment.yaml`). The CI/CD pipeline automates:
+Deployment manifest included (`k8s/deployment.yaml`). The CI/CD pipeline automates:
 
 | Trigger | Image tag | BASE_PATH |
 |---------|-----------|-----------|
@@ -181,24 +191,27 @@ ai-editor/
 ├── css/                    # Design system (CSS variables, no build)
 ├── html/                   # UI partials (loaded by template-loader)
 ├── js/
-│   ├── app.js              # Bootstrap
+│   ├── app.js              # Bootstrap and event wiring
 │   ├── core.js             # State, EventBus, Storage, Plugins, Roles
-│   ├── chat/               # Chat subsystem (8 modules)
-│   ├── git-providers/      # Gitea, GitHub, GitLab backends
-│   ├── providers/          # LLM provider configs
-│   ├── tools/              # 28 LLM tool definitions
-│   ├── settings/           # Settings panel modules (7 files)
-│   └── ...                 # Editor, search, diff, resize, etc.
-├── plugins/                # Bundled plugins
-├── docs/                   # Architecture, tools, plugin guide
-└── .gitea/workflows/       # CI/CD pipeline
+│   ├── ignore.js           # Gitignore-style pattern engine
+│   ├── chat/               # Chat subsystem (9 modules)
+│   ├── editor/             # CodeMirror setup, blame, diff, preview
+│   ├── git-providers/      # Gitea, GitHub, GitLab, local backends
+│   ├── providers/          # LLM provider configs (Venice, OpenRouter, Ollama, generic)
+│   ├── tools/              # 52 LLM tool definitions
+│   ├── settings/           # Settings panel modules (6 files)
+│   └── ...                 # Search, resize, managers, workers, etc.
+├── plugins/                # 5 bundled plugins
+├── tests/                  # Browser-based test suite
+├── docs/                   # Architecture, tools, plugin guide, roadmap
+└── k8s/                    # Kubernetes deployment manifest
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full module map and data flow.
 
 ## Built With AI
 
-The vast majority of this codebase was written by [Claude Opus 4.6](https://www.anthropic.com/), Anthropic's AI assistant. The human ([Jeff Smith](https://github.com/gobha-me)) served as architect, engineer, and tester — setting direction, making architectural decisions, reviewing every change, and testing in the browser. Claude wrote the code.
+The vast majority of this codebase was written by [Claude](https://www.anthropic.com/), Anthropic's AI assistant. The human ([Jeff Smith](https://github.com/gobha-me)) served as architect, engineer, and tester — setting direction, making architectural decisions, reviewing every change, and testing in the browser. Claude wrote the code.
 
 This project was built over ~11 days of evening sessions through claude.ai's chat interface. The development process is documented in detail in [this Medium article](https://medium.com/@xcaliberalgo/i-built-a-30-000-line-code-editor-in-11-days-my-co-developer-was-an-ai-f2bef1b4ecc6).
 

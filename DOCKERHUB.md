@@ -16,17 +16,17 @@ Open `http://localhost:8080`, press `Ctrl+,` to configure a Git connection and L
 
 **Three-panel layout** — file browser, CodeMirror 6 editor, AI chat — with everything stored in your Git host. No database, no cloud sync, no accounts.
 
-**25+ AI tools** — The assistant reads, edits, creates, and deletes files; searches the project; manages issues and pull requests; handles cross-project reference. It makes surgical line-based edits in your buffer — you review before committing.
+**52 AI tools** — The assistant reads, edits, creates, and deletes files; searches the project; manages issues and pull requests; handles cross-project reference; evaluates code; and builds plugins. It makes surgical line-based edits in your buffer — you review before committing.
 
 **Multi-provider Git** — Gitea, GitHub, and GitLab. Multiple connections active simultaneously. Your self-hosted Gitea and your GitHub repos side by side.
 
-**Multi-provider LLM** — Venice, OpenRouter, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings.
+**Multi-provider LLM** — Venice, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings.
 
-**Plugin system** — Manifest-based with lifecycle hooks, toolbar buttons, modal UI, and configurable settings. Install from URL or bundle locally.
+**Plugin system** — Manifest-based with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL.
 
 ## Features
 
-- CodeMirror 6 with syntax highlighting for 15+ languages
+- CodeMirror 6 with syntax highlighting for 19 languages
 - Quick Open (`Ctrl+P`) with fuzzy matching
 - Multi-tab editing with preview/pin tabs
 - Project-wide regex search & replace (Web Worker)
@@ -36,10 +36,15 @@ Open `http://localhost:8080`, press `Ctrl+,` to configure a Git connection and L
 - AI-generated commit messages
 - Branch management with protected branch enforcement
 - Pull request creation, review, and merge with CI/CD status
+- Release manager with AI-generated release notes
 - Issue management with triage mode
 - Conversation persistence with history summarization
 - Image/screenshot paste for vision models
+- Download project/branch as zip
+- Settings export/import with plugin state
+- Gitignore-style ignore patterns for LLM tool scoping
 - Resizable panels, mobile responsive layout
+- Built-in plugin editor with hot-reload
 
 ## Configuration
 
@@ -53,9 +58,9 @@ Click **+ Add Connection**, select a provider (Gitea / GitHub / GitLab), enter y
 
 | Setting | Description |
 |---------|-------------|
-| Provider | Venice, OpenRouter, or Custom (any OpenAI-compatible) |
+| Provider | Venice, OpenRouter, Ollama, or Custom (any OpenAI-compatible) |
 | Endpoint | Auto-filled per provider, or your custom URL |
-| API Key | Your API key |
+| API Key | Your API key (not required for Ollama) |
 | Model | Default model for chat |
 | Commit Model | Optional: cheaper model for commit messages |
 
@@ -91,7 +96,7 @@ docker run -d -p 8003:8000 gobha/ai-editor:latest
 
 ## Kubernetes
 
-A Kubernetes deployment manifest is included in the repository with Ingress definitions for 3-environment promotion (dev → test → production).
+A Kubernetes deployment manifest is included in the repository (`k8s/deployment.yaml`) with Ingress definitions for 3-environment promotion (dev → test → production).
 
 ## Image Details
 
@@ -99,7 +104,7 @@ A Kubernetes deployment manifest is included in the repository with Ingress defi
 - **Architecture**: `linux/amd64`
 - **Port**: `8000`
 - **Size**: ~30MB
-- **Runtime dependencies**: None — all vendor libraries (CodeMirror, marked, DOMPurify, JSZip) are bundled at build time. The container requires no internet access to serve the application.
+- **Runtime dependencies**: None — all vendor libraries (CodeMirror, marked, DOMPurify, JSZip, htmx) are bundled at build time. The container requires no internet access to serve the application.
 
 ## Links
 
