@@ -59,6 +59,15 @@ RUN test -s codemirror-bundle.js \
 # --------------------------------------------------
 FROM nginx:1-alpine
 
+# OCI image metadata — overrides inherited nginx base image labels
+LABEL org.opencontainers.image.title="AI Editor" \
+      org.opencontainers.image.description="Browser-based code editor with integrated AI assistance" \
+      org.opencontainers.image.url="https://github.com/gobha-me/ai-editor" \
+      org.opencontainers.image.source="https://github.com/gobha-me/ai-editor" \
+      org.opencontainers.image.vendor="gobha-me" \
+      org.opencontainers.image.licenses="MIT" \
+      maintainer=""
+
 # Runtime configuration: set BASE_PATH to serve from a sub-path
 # Examples: / (root), /editor, /test, /dev
 ENV BASE_PATH=/

@@ -53,6 +53,12 @@ All notable changes to AI Editor are documented here.
   SlotManager, CodeMirror bridge, plugin settings tabs, provider
   settings UI auto-discovery.
 
+### Fixed
+- **Dockerfile labels** — Added OCI metadata labels
+  (`org.opencontainers.image.*`) and blanked inherited `maintainer`.
+  Without this, container registries displayed "NGINX Docker
+  Maintainers" as the image author.
+
 ### Docs
 - **PLUGIN.md**: New "LLM Tools" and "CSS Injection" sections with
   full examples. Updated capability tables — registerTool and injectCSS
