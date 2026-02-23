@@ -2,6 +2,53 @@
 
 All notable changes to AI Editor are documented here.
 
+## [1.0.4] - 2026-02-23
+
+### Security
+
+- **P0 — DOMPurify bypass patched** — Three independent markdown renderers
+  (`chat/messages.js`, `secondary-pane.js`, `markdown-modal.js`) had a
+  conditional pattern that returned raw `marked.parse()` output to `innerHTML`
+  when DOMPurify was unavailable. All three now fail closed — escaping content
+  rather than passing through unsanitized HTML. This affects rendering of LLM
+  responses, Git issue/PR bodies, and comments.
+
+- **P1 — Regex markdown fallback XSS fixed** — The `renderMarkdown()` fallback
+  in `secondary-pane.js` applied regex formatting to raw input without
+  escaping first, allowing injection via headings, inline code, links, and
+  images. Now calls `escapeHtml()` before regex processing, matching the
+  existing safe pattern in `chat/messages.js`.
+
+- **P2a — Error messages escaped** — `e.message` and `docPath` strings from
+  API errors and fetch failures were injected into `innerHTML` without
+  escaping in `release-manager.js`, `app.js`, and `markdown-modal.js`. All
+  error paths now use `escapeHtml()`. Release URL attribute also now uses
+  `escapeAttr()`.
+
+- **P2b — Image filename escaped** — Pasted/dropped image filenames in
+  `chat/input.js` were injected into a `title` attribute without
+  `escapeAttr()`, allowing attribute breakout from crafted filenames.
+
+- **P2c — Plugin metadata escaped** — Role names, descriptions, icons, and
+  tool definitions from plugins were rendered unescaped in
+  `settings/roles-tab.js`. A malicious plugin could inject HTML via
+  `Roles.register()` or tool registration. All plugin-provided strings now
+  pass through `escapeHtml()` / `escapeAttr()`.
+
+- **P3a — Label color CSS injection fixed** — `issue-detail.js` injected
+  Git API label colors directly into `style` attributes. Crafted color values
+  could inject arbitrary CSS. Now stripped to hex characters only via
+  `replace(/[^0-9a-fA-F]/g, '')`.
+
+- **P3b — Issue state escaped** — `issue.state` from Git APIs was injected
+  into `innerHTML` without escaping. Now uses `escapeHtml()`.
+
+### Changed
+- **CI: Security lint step** — Gitea CI workflow now includes a pre-build
+  security lint that checks for DOMPurify bypass patterns (`return raw;`)
+  and verifies vendor security libraries are referenced in the Dockerfile.
+  Fails the build if regressions are detected.
+
 ## [1.0.0] - 2026-02-20
 
 ### Added

@@ -16,6 +16,7 @@ import { IgnoreManager } from './ignore.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
+import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
 import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
@@ -240,7 +241,7 @@ async function _loadHelpDoc(panel, docPath) {
         panel.dataset.loaded = '1';
     } catch (err) {
         console.warn(`[Help] Failed to load ${docPath}:`, err.message);
-        panel.innerHTML = `<div class="help-doc-error">Could not load ${docPath}<br><small>${err.message}</small></div>`;
+        panel.innerHTML = `<div class="help-doc-error">Could not load ${escapeHtml(docPath)}<br><small>${escapeHtml(err.message)}</small></div>`;
     }
 }
 

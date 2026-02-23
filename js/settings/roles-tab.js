@@ -4,6 +4,7 @@
 
 import { State, Roles } from '../core.js';
 import { ToolRegistry } from '../tools/registry.js';
+import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 /**
  * Populate role selection cards and wire click handlers.
@@ -18,10 +19,10 @@ export function populateRoleCards() {
     const currentRole = State.settings.role || 'full';
     
     container.innerHTML = Roles.list().map(role => `
-        <div class="role-card ${role.id === currentRole ? 'active' : ''}" data-role="${role.id}">
-            <div class="role-card-icon">${role.icon}</div>
-            <div class="role-card-name">${role.name}</div>
-            <div class="role-card-desc">${role.description}</div>
+        <div class="role-card ${role.id === currentRole ? 'active' : ''}" data-role="${escapeAttr(role.id)}">
+            <div class="role-card-icon">${escapeHtml(role.icon)}</div>
+            <div class="role-card-name">${escapeHtml(role.name)}</div>
+            <div class="role-card-desc">${escapeHtml(role.description)}</div>
         </div>
     `).join('');
 
@@ -72,8 +73,8 @@ export function updateRoleToolsList(roleId) {
         
         return `<div class="role-tool-item ${enabled ? 'enabled' : 'disabled'}">
             <span>${enabled ? '✅' : '⬜'}</span>
-            <span><strong>${name}</strong> — ${desc.slice(0, 60)}${desc.length > 60 ? '…' : ''}</span>
-            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">[${roles.join(', ')}]</span>
+            <span><strong>${escapeHtml(name)}</strong> — ${escapeHtml(desc.slice(0, 60))}${desc.length > 60 ? '…' : ''}</span>
+            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">[${escapeHtml(roles.join(', '))}]</span>
         </div>`;
     }).join('');
 

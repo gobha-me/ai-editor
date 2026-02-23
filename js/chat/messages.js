@@ -566,7 +566,9 @@ export function formatMessageContent(content) {
             if (typeof DOMPurify !== 'undefined') {
                 return DOMPurify.sanitize(raw);
             }
-            return raw;
+            // SECURITY: DOMPurify not loaded — escape rather than pass through raw HTML
+            console.warn('[SECURITY] DOMPurify not loaded — falling back to escaped output');
+            return escapeHtml(content);
         } catch (e) {
             console.warn('Marked parse error, falling back to basic formatting:', e);
         }

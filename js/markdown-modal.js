@@ -49,7 +49,7 @@ export async function openMarkdownModal(path, title) {
         }
         bodyEl.innerHTML = html;
     } catch (err) {
-        bodyEl.innerHTML = `<p style="color: var(--error);">⚠️ ${err.message}</p>`;
+        bodyEl.innerHTML = `<p style="color: var(--error);">⚠️ ${_escapeHtml(err.message)}</p>`;
     }
 
     // Focus the close button for keyboard users
@@ -121,7 +121,19 @@ function _renderMarkdown(md) {
 
     if (typeof DOMPurify !== 'undefined') {
         html = DOMPurify.sanitize(html);
+    } else {
+        // SECURITY: DOMPurify not loaded — escape rather than pass through raw HTML
+        console.warn('[SECURITY] DOMPurify not loaded — falling back to escaped output');
+        html = _escapeHtml(md);
     }
 
     return html;
+}
+
+/** Local escape — avoids adding an import for this single use */
+function _escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
 }

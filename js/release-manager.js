@@ -49,7 +49,7 @@ export async function openReleaseModal() {
         _setStatus('');
     } catch (e) {
         console.error('[Release] Failed to load data:', e);
-        _setStatus(`Error: ${e.message}`, true);
+        _setStatus(`Error: ${escapeHtml(e.message)}`, true);
     }
 }
 
@@ -304,7 +304,7 @@ export async function generateReleaseNotes() {
 
     } catch (e) {
         console.error('[Release] Generation failed:', e);
-        _setStatus(`Error: ${e.message}`, true);
+        _setStatus(`Error: ${escapeHtml(e.message)}`, true);
         notesArea.value = `Failed to generate: ${e.message}`;
     } finally {
         _loading = false;
@@ -359,19 +359,19 @@ export async function createRelease() {
         });
 
         window.showToast(`Release ${tag} created!`, 'success');
-        _setStatus(`✅ Release created: ${tag}`);
+        _setStatus(`✅ Release created: ${escapeHtml(tag)}`);
 
         // Refresh tags in case the tag was new
         _tags = await Git.listTags(owner, repo).catch(() => _tags);
 
         if (result.url) {
-            _setStatus(`✅ <a href="${result.url}" target="_blank" rel="noopener">View release → ${escapeHtml(tag)}</a>`);
+            _setStatus(`✅ <a href="${escapeAttr(result.url)}" target="_blank" rel="noopener">View release → ${escapeHtml(tag)}</a>`);
         }
 
     } catch (e) {
         console.error('[Release] Create failed:', e);
         window.showToast(`Failed to create release: ${e.message}`, 'error');
-        _setStatus(`Error: ${e.message}`, true);
+        _setStatus(`Error: ${escapeHtml(e.message)}`, true);
     } finally {
         if (createBtn) {
             createBtn.disabled = false;

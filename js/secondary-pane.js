@@ -481,15 +481,18 @@ export function renderMarkdown(md) {
             if (typeof DOMPurify !== 'undefined') {
                 return DOMPurify.sanitize(raw);
             }
-            return raw;
+            // SECURITY: DOMPurify not loaded — escape rather than pass through raw HTML
+            console.warn('[SECURITY] DOMPurify not loaded — falling back to escaped output');
+            return escapeHtml(md);
         } catch (e) {
             console.warn('Marked parse error in preview, falling back:', e);
         }
     }
 
-    // Fallback: basic regex markdown
-    let html = md
-        .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code class="lang-${lang}">${escapeHtml(code.trim())}</code></pre>`)
+    // Fallback: basic regex markdown — escape FIRST, then apply formatting
+    let html = escapeHtml(md);
+    html = html
+        .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code class="lang-${lang}">${code.trim()}</code></pre>`)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/^######\s(.+)$/gm, '<h6>$1</h6>')
         .replace(/^#####\s(.+)$/gm, '<h5>$1</h5>')
@@ -500,10 +503,8 @@ export function renderMarkdown(md) {
         .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
         .replace(/^---+$/gm, '<hr>')
-        .replace(/^>\s(.+)$/gm, '<blockquote>$1</blockquote>')
+        .replace(/^&gt;\s(.+)$/gm, '<blockquote>$1</blockquote>')
         .replace(/^[-*]\s(.+)$/gm, '<li>$1</li>')
         .replace(/^(?!<[hpuolibdcas]|<\/)(.+)$/gm, '<p>$1</p>');
     html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, '<ul>$&</ul>');

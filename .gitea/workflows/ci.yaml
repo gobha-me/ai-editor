@@ -49,6 +49,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ── Security Lint ────────────────────────────
+      - name: Security lint — innerHTML audit
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking for unsafe innerHTML patterns"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          ERRORS=0
+
+          # P0: DOMPurify conditional — must never fall through to raw
+          if grep -rn 'return raw;' js/ --include="*.js" | grep -v 'node_modules' | grep -q .; then
+            echo "❌ FAIL: Found 'return raw;' — DOMPurify bypass detected"
+            grep -rn 'return raw;' js/ --include="*.js" | grep -v 'node_modules'
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✅ No DOMPurify bypass patterns found"
+          fi
+
+          # Verify vendor security libs are in Dockerfile
+          if ! grep -q 'purify.min.js' Dockerfile; then
+            echo "❌ FAIL: DOMPurify not referenced in Dockerfile"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✅ DOMPurify referenced in Dockerfile"
+          fi
+
+          if [[ $ERRORS -gt 0 ]]; then
+            echo ""
+            echo "❌ Security lint failed with $ERRORS error(s)"
+            exit 1
+          fi
+          echo "✅ Security lint passed"
         
       - name: Add /tools to PATH
         run: echo "/tools" >> $GITHUB_PATH

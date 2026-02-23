@@ -5,6 +5,7 @@
 
 import { State, EventBus } from '../core.js';
 import { LLM } from '../llm.js';
+import { escapeAttr } from '../utils/html.js';
 import { cancelToolLoop } from './state.js';
 import { addMessage } from './messages.js';
 import {
@@ -151,7 +152,7 @@ export function renderImagePreview() {
 
     strip.style.display = '';
     strip.innerHTML = images.map((img, i) => `
-        <div class="image-preview-thumb" title="${img.name} (${_fmtSize(img.size)})">
+        <div class="image-preview-thumb" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
             <img src="${img.dataUrl}" alt="Attached image ${i + 1}">
             <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
                     title="Remove" aria-label="Remove image">✕</button>

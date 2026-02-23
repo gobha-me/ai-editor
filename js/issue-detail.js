@@ -484,7 +484,9 @@ export async function openIssueDetailModal(issueNumber) {
         if (issue.labels?.length) {
             labelsEl.innerHTML = issue.labels.map(l => {
                 const name = typeof l === 'string' ? l : l.name || l;
-                const color = (typeof l === 'object' && l.color) ? l.color : null;
+                const rawColor = (typeof l === 'object' && l.color) ? l.color : null;
+                // SECURITY: Sanitize color to hex-only to prevent CSS injection
+                const color = rawColor ? rawColor.replace(/[^0-9a-fA-F]/g, '').slice(0, 6) : null;
                 const style = color ? `background: #${color}; color: ${_contrastColor(color)}` : '';
                 return `<span class="issue-label" style="${style}">${escapeHtml(name)}</span>`;
             }).join('');
@@ -504,7 +506,8 @@ export async function openIssueDetailModal(issueNumber) {
         if (issue.state) {
             const stateClass = issue.state === 'open' ? 'badge-state-open' : 'badge-state-closed';
             const stateIcon = issue.state === 'open' ? '🟢' : '🔴';
-            metaParts.push(`<span class="badge-state ${stateClass}">${stateIcon} ${issue.state.charAt(0).toUpperCase() + issue.state.slice(1)}</span>`);
+            const safeState = escapeHtml(issue.state);
+            metaParts.push(`<span class="badge-state ${stateClass}">${stateIcon} ${safeState.charAt(0).toUpperCase() + safeState.slice(1)}</span>`);
         }
         if (assigneeName) {
             metaParts.push(`<span class="modal-meta-item">👤 ${escapeHtml(assigneeName)}</span>`);
