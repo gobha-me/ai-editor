@@ -144,14 +144,53 @@
                     <th style="padding: 0.4rem 0.5rem; text-align: center; border-bottom: 1px solid var(--border);">Capabilities</th>
                     <th style="padding: 0.4rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border);">Price ($/M)</th>
                     <th style="padding: 0.4rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border);">Context</th>
+                    <th style="padding: 0.4rem 0.5rem; text-align: center; border-bottom: 1px solid var(--border); width: 36px;"></th>
                 </tr>
             </thead>
             <tbody id="modelsTableBody">
-                <tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">
                     No models loaded. Fetch models from the LLM tab first.
                 </td></tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Per-model edit panel (shown inline below the selected row) -->
+    <div id="modelEditPanel" style="display:none; border: 1px solid var(--border); border-radius: 4px; padding: 1rem; margin-top: 0.5rem; background: var(--bg-secondary);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <strong id="modelEditPanelTitle" style="font-size: var(--font-md);"></strong>
+            <button type="button" id="modelEditPanelClose" style="background:none; border:none; cursor:pointer; font-size: 1.1rem; color: var(--text-muted);" title="Close">✕</button>
+        </div>
+        <div style="margin-bottom: 0.75rem;">
+            <div style="font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em;">Capabilities</div>
+            <div id="modelEditCapabilities" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
+        </div>
+        <div style="display: flex; gap: 1.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+            <div>
+                <label style="font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Context Window (tokens)
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.3rem;">
+                    <input type="number" id="modelEditContextTokens" min="1024" max="2097152" step="1024"
+                        style="width: 130px; padding: 0.3rem 0.5rem; font-size: var(--font-md);">
+                    <span id="modelEditContextDefault" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
+                </div>
+            </div>
+            <div>
+                <label style="font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Max Output (tokens)
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.3rem;">
+                    <input type="number" id="modelEditOutputTokens" min="256" max="131072" step="256"
+                        style="width: 130px; padding: 0.3rem 0.5rem; font-size: var(--font-md);">
+                    <span id="modelEditOutputDefault" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
+                </div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button type="button" class="btn btn-primary" id="modelEditSave">Save</button>
+            <button type="button" class="btn btn-secondary" id="modelEditReset">Reset to defaults</button>
+        </div>
     </div>
 
     <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">

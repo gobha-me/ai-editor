@@ -69,6 +69,7 @@
  * @property {string}               llmModel
  * @property {string}               commitModel
  * @property {string[]}             disabledModels
+ * @property {Object}               modelOverrides
  * @property {string}               apiProvider
  * @property {VeniceParameters}     veniceParameters
  * @property {OpenRouterParameters} openRouterParameters
@@ -238,6 +239,7 @@ const State = {
         llmModel: 'gpt-4',
         commitModel: '',           // Optional small/fast model for utility tasks (commit msgs, summaries)
         disabledModels: [],        // Model IDs hidden from chat selector (blacklist)
+        modelOverrides: {},        // Per-model capability/context overrides: { [modelId]: { capabilities?: {}, contextTokens?: number } }
         apiProvider: 'openai',     // Provider plugin key: openai | venice | openrouter
         
         // Venice.ai-specific parameters (only used when apiProvider === 'venice')

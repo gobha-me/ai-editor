@@ -330,4 +330,56 @@ const ProviderRegistry = {
 let _activeProviderId = 'openai';
 ProviderRegistry.setActiveProvider = (id) => { _activeProviderId = id; };
 
-export { ProviderRegistry, DEFAULT_CAPABILITIES };
+/**
+ * Apply per-model capability/context overrides stored in State.settings.modelOverrides
+ * onto the live State.models array.  Call this after fetching models and whenever an
+ * override is saved so every consumer (status bar, selects, chat) sees merged values.
+ *
+ * @param {Array}  models    - State.models array (mutated in-place)
+ * @param {Object} overrides - State.settings.modelOverrides map
+ */
+function applyModelOverrides(models, overrides) {
+    if (!Array.isArray(models)) return;
+    const ov = (overrides && typeof overrides === 'object') ? overrides : {};
+
+    for (const model of models) {
+        // Snapshot originals on first call so reset can restore without a full refetch
+        if (!model._baseCapabilities) {
+            model._baseCapabilities = { ...(model.capabilities || {}) };
+        }
+        if (model._baseContextTokens === undefined) {
+            model._baseContextTokens = model.meta?.contextTokens ?? null;
+        }
+        if (model._baseOutputTokens === undefined) {
+            model._baseOutputTokens = model.meta?.outputTokens ?? null;
+        }
+
+        const entry = ov[model.id];
+        if (entry) {
+            // Merge capability overrides on top of base
+            model.capabilities = entry.capabilities && typeof entry.capabilities === 'object'
+                ? { ...model._baseCapabilities, ...entry.capabilities }
+                : { ...model._baseCapabilities };
+            // Override context window and max output tokens
+            model.meta = {
+                ...(model.meta || {}),
+                contextTokens: typeof entry.contextTokens === 'number'
+                    ? entry.contextTokens
+                    : model._baseContextTokens,
+                outputTokens: typeof entry.outputTokens === 'number'
+                    ? entry.outputTokens
+                    : model._baseOutputTokens,
+            };
+        } else {
+            // No override — restore to base values
+            model.capabilities = { ...model._baseCapabilities };
+            model.meta = {
+                ...(model.meta || {}),
+                contextTokens: model._baseContextTokens,
+                outputTokens: model._baseOutputTokens,
+            };
+        }
+    }
+}
+
+export { ProviderRegistry, DEFAULT_CAPABILITIES, applyModelOverrides };

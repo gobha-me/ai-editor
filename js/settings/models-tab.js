@@ -2,9 +2,10 @@
 // SETTINGS — MODELS TAB
 // ============================================
 
-import { State } from '../core.js';
+import { State, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 import { showModelCapabilities, populateCommitModelSelect } from './llm-tab.js';
+import { applyModelOverrides, DEFAULT_CAPABILITIES } from '../providers/registry.js';
 
 /**
  * Populate the model select dropdowns (default model + commit model).
@@ -26,7 +27,7 @@ export function populateSettingsModelSelects(models) {
             const hints = [];
             if (m.capabilities?.supportsFunctionCalling) hints.push('🔧');
             if (m.capabilities?.supportsReasoning) hints.push('🧠');
-            if (m.pricing) hints.push(`$${m.pricing.input ?? '?'}`);
+            if (m.pricing) hints.push(`${m.pricing.input ?? '?'}`);
             opt.textContent = (m.name || m.id) + (hints.length ? ' (' + hints.join(' ') + ')' : '');
             defaultSelect.appendChild(opt);
         });
@@ -150,7 +151,7 @@ export function populateModelsTab() {
 
     const models = State.models || [];
     if (models.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+        tbody.innerHTML = `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">
             No models loaded. Fetch models from the LLM tab first.
         </td></tr>`;
         _updateModelCount();
@@ -188,17 +189,26 @@ export function populateModelsTab() {
         // Pricing
         let priceCell = '<span style="color: var(--text-muted);">—</span>';
         if (model.pricing) {
-            priceCell = `$${model.pricing.input ?? '?'} / $${model.pricing.output ?? '?'}`;
+            priceCell = `${model.pricing.input ?? '?'} / ${model.pricing.output ?? '?'}`;
         }
 
-        // Context
+        // Context / output tokens
+        const ctxK  = model.meta?.contextTokens ? `${(model.meta.contextTokens / 1000).toFixed(0)}K` : null;
+        const outK  = model.meta?.outputTokens  ? `${(model.meta.outputTokens  / 1000).toFixed(0)}K` : null;
         let ctxCell = '<span style="color: var(--text-muted);">—</span>';
-        if (model.meta?.contextTokens) {
-            ctxCell = `${(model.meta.contextTokens / 1000).toFixed(0)}K`;
+        if (ctxK || outK) {
+            const parts = [];
+            if (ctxK) parts.push(`<span title="Context window">${ctxK}</span>`);
+            if (outK) parts.push(`<span title="Max output" style="color: var(--text-muted);">↑${outK}</span>`);
+            ctxCell = parts.join(' / ');
         }
 
         const rowStyle = isEnabled ? '' : 'opacity: 0.5;';
         const rowBg = !hasTools ? 'background: color-mix(in srgb, var(--bg-primary) 95%, #ff6b35);' : '';
+        const hasOverride = !!(State.settings.modelOverrides || {})[model.id];
+        const overrideDot = hasOverride
+            ? '<span title="Has custom overrides" style="color: var(--accent); margin-left: 3px;">✎</span>'
+            : '';
 
         rows.push(`<tr style="${rowStyle} ${rowBg}" data-model-id="${model.id}">
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border);">
@@ -206,7 +216,7 @@ export function populateModelsTab() {
                     ${isEnabled ? 'checked' : ''}>
             </td>
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border);">
-                <div style="font-weight: 500;">${model.name || model.id}</div>
+                <div style="font-weight: 500;">${model.name || model.id}${overrideDot}</div>
                 ${model.name !== model.id ? `<div style="font-size: var(--font-xs); color: var(--text-muted); word-break: break-all;">${model.id}</div>` : ''}
             </td>
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: center;">
@@ -218,11 +228,16 @@ export function populateModelsTab() {
             <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-size: var(--font-sm);">
                 ${ctxCell}
             </td>
+            <td style="padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: center;">
+                <button type="button" class="model-edit-btn" data-model-id="${model.id}"
+                    title="Edit capabilities &amp; context"
+                    style="background:none; border:none; cursor:pointer; font-size: 0.95rem; color: var(--text-muted); padding: 0 2px;">✎</button>
+            </td>
         </tr>`);
     }
 
     tbody.innerHTML = rows.length > 0 ? rows.join('') : 
-        `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+        `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">
             No models match the current filters.
         </td></tr>`;
 
@@ -263,6 +278,172 @@ function _onModelToggle(e) {
     );
 }
 
+// ── Per-model edit panel ──────────────────────────────────────────────────────
+
+/** Labels for every capability flag (matches DEFAULT_CAPABILITIES keys) */
+const CAP_LABELS = {
+    supportsFunctionCalling: '🔧 Tool Use',
+    supportsVision:          '👁 Vision',
+    supportsReasoning:       '🧠 Reasoning',
+    supportsResponseSchema:  '📐 Schema',
+    supportsWebSearch:       '🌐 Web Search',
+    supportsAudioInput:      '🎙 Audio',
+    supportsVideoInput:      '🎬 Video',
+    supportsLogProbs:        '📊 LogProbs',
+    optimizedForCode:        '💻 Code',
+};
+
+/** ID of the model currently open in the edit panel, or null */
+let _editingModelId = null;
+
+/**
+ * Highlight the active edit row and clear any previous highlight.
+ * @param {string|null} modelId
+ */
+function _setEditRowHighlight(modelId) {
+    document.querySelectorAll('tr.model-edit-active').forEach(r => r.classList.remove('model-edit-active'));
+    if (modelId) {
+        const tbody = document.getElementById('modelsTableBody');
+        const row = tbody?.querySelector(`tr[data-model-id="${CSS.escape(modelId)}"]`);
+        if (row) row.classList.add('model-edit-active');
+    }
+}
+
+/**
+ * Open the edit panel for the given model ID.
+ * The panel lives below the table in the HTML and is shown/hidden in place —
+ * no DOM moving, so it can never be destroyed by tbody.innerHTML rewrites.
+ * @param {string} modelId
+ */
+function _openEditPanel(modelId) {
+    const model = (State.models || []).find(m => m.id === modelId);
+    if (!model) return;
+
+    _editingModelId = modelId;
+    const overrides = (State.settings.modelOverrides || {})[modelId] || {};
+    const mergedCaps = { ...DEFAULT_CAPABILITIES, ...(model.capabilities || {}), ...(overrides.capabilities || {}) };
+
+    // Title
+    const title = document.getElementById('modelEditPanelTitle');
+    if (title) title.textContent = model.name || modelId;
+
+    // Capability toggles
+    const capsContainer = document.getElementById('modelEditCapabilities');
+    if (capsContainer) {
+        capsContainer.innerHTML = Object.entries(CAP_LABELS).map(([key, label]) => {
+            const isOverridden = overrides.capabilities && key in overrides.capabilities;
+            const checked = mergedCaps[key] ? 'checked' : '';
+            const accentStyle = isOverridden ? 'color: var(--accent); font-weight: 600;' : '';
+            return `<label style="display:inline-flex; align-items:center; gap:4px; font-size:var(--font-sm); cursor:pointer; ${accentStyle}">
+                <input type="checkbox" class="model-edit-cap" data-cap="${key}" ${checked}> ${label}
+            </label>`;
+        }).join('');
+    }
+
+    // Context tokens
+    const ctxInput   = document.getElementById('modelEditContextTokens');
+    const ctxDefault = document.getElementById('modelEditContextDefault');
+    const baseCtx    = model._baseContextTokens ?? model.meta?.contextTokens ?? null;
+    const overrideCtx = typeof overrides.contextTokens === 'number' ? overrides.contextTokens : null;
+    if (ctxInput) ctxInput.value = overrideCtx !== null ? overrideCtx : (baseCtx ?? '');
+    if (ctxDefault) {
+        ctxDefault.textContent = overrideCtx !== null
+            ? `(default: ${baseCtx !== null ? Math.round(baseCtx / 1000) + 'K' : 'unknown'})`
+            : baseCtx !== null ? `(${Math.round(baseCtx / 1000)}K)` : '';
+        ctxDefault.style.color = overrideCtx !== null ? 'var(--accent)' : '';
+    }
+
+    // Output tokens
+    const outInput   = document.getElementById('modelEditOutputTokens');
+    const outDefault = document.getElementById('modelEditOutputDefault');
+    const baseOut    = model._baseOutputTokens ?? model.meta?.outputTokens ?? null;
+    const overrideOut = typeof overrides.outputTokens === 'number' ? overrides.outputTokens : null;
+    if (outInput) outInput.value = overrideOut !== null ? overrideOut : (baseOut ?? '');
+    if (outDefault) {
+        outDefault.textContent = overrideOut !== null
+            ? `(default: ${baseOut !== null ? Math.round(baseOut / 1000) + 'K' : 'unknown'})`
+            : baseOut !== null ? `(${Math.round(baseOut / 1000)}K)` : '';
+        outDefault.style.color = overrideOut !== null ? 'var(--accent)' : '';
+    }
+
+    // Show panel — it stays in place below the table, no DOM move needed
+    const panel = document.getElementById('modelEditPanel');
+    if (panel) panel.style.display = '';
+
+    _setEditRowHighlight(modelId);
+}
+
+function _closeEditPanel() {
+    const panel = document.getElementById('modelEditPanel');
+    if (panel) panel.style.display = 'none';
+    _setEditRowHighlight(null);
+    _editingModelId = null;
+}
+
+function _saveEditPanel() {
+    const modelId = _editingModelId;
+    if (!modelId) return;
+    const model = (State.models || []).find(m => m.id === modelId);
+    if (!model) return;
+
+    // Read capability toggles — only store values that differ from the base model
+    const capCheckboxes = document.querySelectorAll('#modelEditCapabilities .model-edit-cap');
+    const capOverrides = {};
+    capCheckboxes.forEach(cb => {
+        const key  = cb.dataset.cap;
+        const base = (model._baseCapabilities || model.capabilities || {})[key] ?? (DEFAULT_CAPABILITIES[key] ?? false);
+        if (cb.checked !== base) capOverrides[key] = cb.checked;
+    });
+
+    // Read context tokens — only store if different from base
+    const ctxInput = document.getElementById('modelEditContextTokens');
+    const rawCtx   = ctxInput ? parseInt(ctxInput.value, 10) : NaN;
+    const baseCtx  = model._baseContextTokens ?? model.meta?.contextTokens ?? null;
+    const ctxOverride = !isNaN(rawCtx) && rawCtx !== baseCtx ? rawCtx : undefined;
+
+    // Read output tokens — only store if different from base
+    const outInput = document.getElementById('modelEditOutputTokens');
+    const rawOut   = outInput ? parseInt(outInput.value, 10) : NaN;
+    const baseOut  = model._baseOutputTokens ?? model.meta?.outputTokens ?? null;
+    const outOverride = !isNaN(rawOut) && rawOut !== baseOut ? rawOut : undefined;
+
+    // Build override entry — omit keys that match base so storage stays minimal
+    const allOverrides = State.settings.modelOverrides || {};
+    const entry = {};
+    if (Object.keys(capOverrides).length > 0) entry.capabilities = capOverrides;
+    if (ctxOverride !== undefined) entry.contextTokens = ctxOverride;
+    if (outOverride !== undefined) entry.outputTokens  = outOverride;
+
+    if (Object.keys(entry).length > 0) {
+        allOverrides[modelId] = entry;
+    } else {
+        delete allOverrides[modelId];
+    }
+    State.settings.modelOverrides = allOverrides;
+    Storage.set('settings', State.settings);
+
+    applyModelOverrides(State.models, State.settings.modelOverrides);
+
+    _closeEditPanel();
+    populateModelsTab();
+    window.showToast('Model overrides saved', 'success');
+}
+
+function _resetEditPanel() {
+    const modelId = _editingModelId;
+    if (!modelId) return;
+    const allOverrides = State.settings.modelOverrides || {};
+    delete allOverrides[modelId];
+    State.settings.modelOverrides = allOverrides;
+    Storage.set('settings', State.settings);
+
+    applyModelOverrides(State.models, State.settings.modelOverrides);
+
+    _closeEditPanel();
+    populateModelsTab();
+    window.showToast('Model reset to defaults', 'info');
+}
+
 export function initModelsTabEvents() {
     const container = document.getElementById('modelsListContainer');
     if (container) container.addEventListener('change', _onModelToggle);
@@ -298,4 +479,28 @@ export function initModelsTabEvents() {
             .map(m => m.id);
         populateModelsTab();
     });
+
+    // Edit panel — delegate from the stable #modelsListContainer ancestor so it
+    // survives tbody.innerHTML rewrites done by populateModelsTab().
+    const listContainer = document.getElementById('modelsListContainer');
+    if (listContainer) {
+        listContainer.addEventListener('click', e => {
+            const btn = e.target.closest('.model-edit-btn');
+            if (!btn) return;
+            const modelId = btn.dataset.modelId;
+            if (_editingModelId === modelId) {
+                _closeEditPanel();
+            } else {
+                _openEditPanel(modelId);
+            }
+        });
+    }
+
+    // Edit panel buttons — panel never moves so these listeners stay valid forever
+    const saveBtn  = document.getElementById('modelEditSave');
+    const resetBtn = document.getElementById('modelEditReset');
+    const closeBtn = document.getElementById('modelEditPanelClose');
+    if (saveBtn)  saveBtn.addEventListener('click', _saveEditPanel);
+    if (resetBtn) resetBtn.addEventListener('click', _resetEditPanel);
+    if (closeBtn) closeBtn.addEventListener('click', _closeEditPanel);
 }

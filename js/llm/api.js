@@ -59,6 +59,7 @@
  */
 
 import { State, EventBus, Storage, Providers, ProviderRegistry, Plugins, Roles } from '../core.js';
+import { applyModelOverrides } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
@@ -204,6 +205,9 @@ export const LLM = {
         } catch (e) {
             console.warn('[LLM] Model enrichment failed (using defaults):', e.message);
         }
+
+        // Apply any user-saved capability/context overrides
+        applyModelOverrides(State.models, State.settings.modelOverrides);
 
         Storage.set('models', State.models);
         EventBus.emit('llm:modelsLoaded', State.models);
