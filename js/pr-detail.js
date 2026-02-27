@@ -87,6 +87,19 @@ export async function openPRDetailModal(prNumber) {
         const mergeControls = document.getElementById('prDetailMergeControls');
         mergeControls.style.display = (pr.state === 'open' && !pr.merged) ? '' : 'none';
 
+        // Always reset the merge button to its default state when loading any PR.
+        // Without this, a successful merge on a previous PR leaves the button
+        // disabled with "✅ Merged!" text — and that stale state persists when
+        // a new PR is opened in the same session (issue #10).
+        const mergeBtn = document.getElementById('btnMergePR');
+        if (mergeBtn) {
+            mergeBtn.disabled = false;
+            mergeBtn.textContent = '✅ Merge';
+            mergeBtn.dataset.confirming = '';
+            mergeBtn.classList.remove('btn-danger');
+            mergeBtn.classList.add('btn-primary');
+        }
+
         const addComment = document.getElementById('prDetailAddComment');
         if (addComment) {
             addComment.style.display = (pr.state === 'open' || !pr.merged) ? '' : 'none';
