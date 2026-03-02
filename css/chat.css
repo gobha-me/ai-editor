@@ -1085,6 +1085,39 @@
     opacity: 1;
 }
 
+/* Text file attachment badge */
+.image-preview-thumb.text-file-badge {
+    width: auto;
+    max-width: 180px;
+    height: auto;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary, #f5f5f5);
+    font-size: 0.75rem;
+}
+.text-file-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.text-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #333);
+}
+.text-file-badge .image-preview-remove {
+    position: static;
+    opacity: 0.6;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.text-file-badge:hover .image-preview-remove {
+    opacity: 1;
+}
+
 /* Drag-over highlight on textarea */
 .chat-input-wrapper textarea.drag-over {
     border-color: var(--accent);

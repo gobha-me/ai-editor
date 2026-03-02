@@ -4,7 +4,7 @@
  */
 
 import { State, EventBus, Storage } from '../core.js';
-import { LLM, LLMTools, generateEdit, generateCommitMessage, buildSystemPrompt, stripThinkBlocks } from '../llm.js';
+import { LLM, LLMTools, generateEdit, generateCommitMessage, buildSystemPrompt, stripThinkBlocks, getContextScale } from '../llm.js';
 import { applyEdit, computeSimpleDiff } from '../editor.js';
 import { 
     addMessage, 
@@ -49,7 +49,7 @@ export async function handleUserInputDirect(input) {
     if (!input && images.length === 0) return;
     if (State.isGenerating) return;
 
-    // Build message content — multimodal array if images present, plain string otherwise
+    // Build message content — multimodal array if attachments present, plain string otherwise
     let messageContent;
     if (images.length > 0) {
         messageContent = [];
@@ -57,10 +57,19 @@ export async function handleUserInputDirect(input) {
             messageContent.push({ type: 'text', text: input });
         }
         for (const img of images) {
-            messageContent.push({
-                type: 'image_url',
-                image_url: { url: img.dataUrl }
-            });
+            if (img.type === 'text' && img.textContent) {
+                // Text file — include as labelled text block
+                messageContent.push({
+                    type: 'text',
+                    text: `--- Attached file: ${img.name} ---\n${img.textContent}\n--- End of ${img.name} ---`
+                });
+            } else if (img.dataUrl) {
+                // Image — include as image_url
+                messageContent.push({
+                    type: 'image_url',
+                    image_url: { url: img.dataUrl }
+                });
+            }
         }
         // Clear pending images and preview strip
         clearPendingImages();
@@ -483,7 +492,7 @@ export async function handleGeneralRequest(input) {
                     
                     let toolResult;
                     if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
-                                          'edit_file', 'write_file', 'search_replace', 'delete_file',
+                                          'edit_file', 'write_file', 'delete_file',
                                           'update_issue', 'add_issue_comment'].includes(toolName)) {
                         // Return cached result for read-only tools with a note
                         toolResult = {
@@ -509,7 +518,7 @@ export async function handleGeneralRequest(input) {
                         // Invalidate cached reads when a write tool modifies a file
                         // or when open_file changes the active file (stales read_current_file)
                         if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'open_file',
-                             'edit_file', 'write_file', 'search_replace', 'delete_file'].includes(toolName)) {
+                             'edit_file', 'write_file', 'delete_file'].includes(toolName)) {
                             const affectedPath = args.path || State.currentFile?.path;
                             if (affectedPath) {
                                 for (const [key] of toolCallCache) {
@@ -525,7 +534,7 @@ export async function handleGeneralRequest(input) {
                         
                         // Cache successful read-only results (skip write tools)
                         if (!toolResult?.error && !['replace_lines', 'insert_lines', 'delete_lines', 
-                             'create_file', 'edit_file', 'write_file', 'search_replace', 'delete_file',
+                             'create_file', 'edit_file', 'write_file', 'delete_file',
                              'update_issue', 'add_issue_comment'].includes(toolName)) {
                             toolCallCache.set(cacheKey, toolResult);
                         }
@@ -542,9 +551,9 @@ export async function handleGeneralRequest(input) {
                     });
 
                     if (toolCallSource === 'structured') {
-                        // Truncate large tool results BEFORE sending to API
-                        // 12K chars ≈ 300 lines of code — enough for most single-file reads.
-                        // For truly massive results, keep head+tail so the model has actionable data.
+                        // Truncate large tool results BEFORE sending to API.
+                        // Base budget: 12K chars ≈ 300 lines of code.
+                        // Scales with context tier: 2× for 128K, 4× for 512K, 8× for 1M+.
                         let toolContent = JSON.stringify(toolResult);
                         
                         // GUARANTEE: tool content is never empty
@@ -552,7 +561,8 @@ export async function handleGeneralRequest(input) {
                             toolContent = JSON.stringify({ error: `Tool '${toolName}' returned empty result. Try a different approach.` });
                         }
                         
-                        const TOOL_RESULT_LIMIT = 12000;
+                        const { scale } = getContextScale();
+                        const TOOL_RESULT_LIMIT = 12000 * scale;
                         
                         if (toolContent.length > TOOL_RESULT_LIMIT) {
                             try {
@@ -560,8 +570,8 @@ export async function handleGeneralRequest(input) {
                                 if (truncated.content && truncated.content.length > TOOL_RESULT_LIMIT) {
                                     // Smart truncation: keep head + tail of file content
                                     const lines = truncated.content.split('\n');
-                                    const headLines = Math.min(150, Math.floor(lines.length * 0.6));
-                                    const tailLines = Math.min(60, Math.floor(lines.length * 0.25));
+                                    const headLines = Math.min(150 * scale, Math.floor(lines.length * 0.6));
+                                    const tailLines = Math.min(60 * scale, Math.floor(lines.length * 0.25));
                                     const head = lines.slice(0, headLines).join('\n');
                                     const tail = lines.slice(-tailLines).join('\n');
                                     truncated.content = head + 
@@ -571,13 +581,13 @@ export async function handleGeneralRequest(input) {
                                 }
                                 if (truncated.results && Array.isArray(truncated.results) && JSON.stringify(truncated.results).length > TOOL_RESULT_LIMIT) {
                                     const matchCount = truncated.results.reduce((sum, r) => sum + (r.matches?.length || 0), 0);
-                                    // Keep first 8 file results with paths
-                                    const kept = truncated.results.slice(0, 8).map(r => ({
+                                    const keepCount = 8 * scale;
+                                    const kept = truncated.results.slice(0, keepCount).map(r => ({
                                         path: r.path, matchCount: r.matches?.length || 0,
                                         firstMatch: r.matches?.[0]?.snippet || r.matches?.[0]?.lineContent || ''
                                     }));
                                     truncated.results = kept;
-                                    truncated._note = `${matchCount} total matches, showing first 8 files`;
+                                    truncated._note = `${matchCount} total matches, showing first ${keepCount} files`;
                                 }
                                 if (truncated.files && Array.isArray(truncated.files) && JSON.stringify(truncated.files).length > TOOL_RESULT_LIMIT) {
                                     truncated.files = [`[${truncated.files.length} files]`];
@@ -587,11 +597,15 @@ export async function handleGeneralRequest(input) {
                                 toolContent = toolContent.substring(0, TOOL_RESULT_LIMIT) + '... [truncated]';
                             }
                         }
-                        
                         structuredResults.push({
                             tool_call_id: toolCall.id,
                             role: 'tool',
-                            content: toolContent
+                            content: toolContent,
+                            _display: {
+                                toolName,
+                                args,
+                                result: toolResult
+                            }
                         });
                     } else {
                         textResults.push({ name: toolName, result: toolResult });

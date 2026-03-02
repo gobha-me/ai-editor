@@ -11,7 +11,8 @@ let inputElement = null;
 let pendingEdit = null;  // { code, explanation } waiting for user approval
 
 // Image attachments pending send
-let pendingImages = [];  // [{ dataUrl, name, size }]
+let pendingImages = [];  // Images [{ dataUrl, name, size, type: 'image' }]let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
+let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
 
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
@@ -112,4 +113,18 @@ export function removePendingImage(index) {
  */
 export function clearPendingImages() {
     pendingImages = [];
+}export function getPendingFiles() {
+    return pendingFiles;
+}
+
+export function addPendingFile(file) {
+    pendingFiles.push(file);
+}
+
+export function removePendingFile(index) {
+    pendingFiles.splice(index, 1);
+}
+
+export function clearPendingFiles() {
+    pendingFiles = [];
 }

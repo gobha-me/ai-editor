@@ -24,6 +24,7 @@ export {
     LLMTools,
     buildRequestBody,
     resolveMaxTokens,
+    getContextScale,
     generateEdit,
     generateCommitMessage,
     analyzeIssue

@@ -49,7 +49,7 @@
  */
 
 import { State, EventBus, Storage } from '../core.js';
-import { LLM } from '../llm.js';
+import { LLM, getContextScale } from '../llm.js';
 
 // ============================================
 // PERCENTAGE-BASED SCALING CONSTANTS
@@ -106,8 +106,9 @@ export const ChatSummarizer = {
 
     /**
      * Compute summarizer params from context window size and mode fill percentage.
-     * Capacity = contextTokens × fillPct / AVG_TOKENS_PER_MSG, clamped [20, 250].
-     * All params scale linearly from capacity with per-param min/max bounds.
+     * Capacity = contextTokens × fillPct / AVG_TOKENS_PER_MSG.
+     * Upper clamp bounds scale with the context tier so 256K+ models
+     * aren't artificially constrained to small-model ceilings.
      * @returns {SummarizerParams}
      */
     _computeParams() {
@@ -117,14 +118,23 @@ export const ChatSummarizer = {
         // No context info → use defaults (safe small-model behavior)
         if (!ctx) return { ...this._defaults };
 
-        const capacity = clamp(Math.floor(ctx * fillPct / AVG_TOKENS_PER_MSG), 20, 250);
+        // Scale upper bounds with context tier (1× / 2× / 4× / 8×)
+        const { scale } = getContextScale();
+
+        const capacity = clamp(
+            Math.floor(ctx * fillPct / AVG_TOKENS_PER_MSG),
+            20, 250 * scale
+        );
 
         return {
-            recentCountBase:  clamp(Math.round(capacity * 0.35), 8, 60),
-            recentCountTools: clamp(Math.round(capacity * 0.60), 16, 100),
-            threshold:        clamp(capacity, 20, 200),
-            interval:         clamp(Math.round(capacity * 0.45), 10, 80),
-            maxChars:         clamp(Math.round(1500 + (capacity / 250) * 2500), 1500, 4000),
+            recentCountBase:  clamp(Math.round(capacity * 0.35),  8,  60 * scale),
+            recentCountTools: clamp(Math.round(capacity * 0.60), 16, 100 * scale),
+            threshold:        clamp(capacity,                     20, 200 * scale),
+            interval:         clamp(Math.round(capacity * 0.45), 10,  80 * scale),
+            maxChars:         clamp(
+                Math.round(1500 + (capacity / (250 * scale)) * (2500 * scale)),
+                1500, 4000 * scale
+            ),
         };
     },
 

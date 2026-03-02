@@ -1009,13 +1009,71 @@ const gitlabProvider = {
     },
 
     async getWorkflowRunLogs(connection, owner, repo, runId) {
-        // Pipeline job logs in GitLab require fetching each job individually.
-        // Return the pipeline URL for the user to view in browser.
-        const webUrl = this.getWebUrl(connection);
-        return {
-            message: 'GitLab pipeline logs are available in the GitLab UI.',
-            url: `${webUrl}/${owner}/${repo}/-/pipelines/${runId}`
-        };
+        // Fetch jobs for the pipeline and aggregate their logs
+        try {
+            const jobs = await this.listWorkflowJobs(connection, owner, repo, runId);
+            if (jobs.length === 0) {
+                const webUrl = this.getWebUrl(connection);
+                return {
+                    message: 'No jobs found for this pipeline.',
+                    url: `${webUrl}/${owner}/${repo}/-/pipelines/${runId}`
+                };
+            }
+            const logParts = [];
+            for (const job of jobs) {
+                const log = await this.getJobLog(connection, owner, repo, job.id);
+                logParts.push(`=== Job: ${job.name} (${job.conclusion || job.status}) ===\n${log || '(no log available)'}`);
+            }
+            const webUrl = this.getWebUrl(connection);
+            return {
+                logs: logParts.join('\n\n'),
+                url: `${webUrl}/${owner}/${repo}/-/pipelines/${runId}`,
+                jobCount: jobs.length
+            };
+        } catch (e) {
+            const webUrl = this.getWebUrl(connection);
+            console.warn('[GitLab] Could not fetch pipeline logs:', e.message);
+            return {
+                message: 'GitLab pipeline logs are available in the GitLab UI.',
+                url: `${webUrl}/${owner}/${repo}/-/pipelines/${runId}`
+            };
+        }
+    },
+
+    async listWorkflowJobs(connection, owner, repo, runId) {
+        try {
+            const pid = `${encodeURIComponent(owner)}%2F${encodeURIComponent(repo)}`;
+            const jobs = await this.request(connection, 'GET',
+                `/projects/${pid}/pipelines/${runId}/jobs`
+            );
+            return (Array.isArray(jobs) ? jobs : []).map(j => ({
+                id: j.id,
+                name: j.name || j.stage || 'job',
+                status: j.status,
+                conclusion: j.status === 'success' ? 'success' : j.status === 'failed' ? 'failure' : j.status,
+                startedAt: j.started_at || null,
+                completedAt: j.finished_at || null
+            }));
+        } catch (e) {
+            console.warn(`[GitLab] Could not list jobs for pipeline ${runId}:`, e.message);
+            return [];
+        }
+    },
+
+    async getJobLog(connection, owner, repo, jobId) {
+        try {
+            const pid = `${encodeURIComponent(owner)}%2F${encodeURIComponent(repo)}`;
+            const url = `${this.getBaseUrl(connection)}/projects/${pid}/jobs/${jobId}/trace`;
+            const resp = await fetch(url, {
+                headers: { 'PRIVATE-TOKEN': connection.token },
+                signal: AbortSignal.timeout(30000)
+            });
+            if (!resp.ok) return null;
+            return await resp.text();
+        } catch (e) {
+            console.warn(`[GitLab] Could not fetch job ${jobId} trace:`, e.message);
+            return null;
+        }
     },
 
     async downloadArchive(connection, owner, repo, ref = 'main') {

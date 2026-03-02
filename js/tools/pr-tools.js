@@ -12,6 +12,7 @@
 
 import { State, EventBus } from '../core.js';
 import { Git } from '../git.js';
+import { getContextScale } from '../llm.js';
 
 /**
  * Register all PR/MR-related tools.
@@ -411,6 +412,128 @@ export function registerPRTools(registry) {
                     ref: {
                         type: 'string',
                         description: 'Branch name or commit SHA (default: current branch)'
+                    }
+                },
+                required: []
+            }
+        },
+        roles: 'all'
+    });
+
+    // ========================================
+    // get_ci_logs
+    // ========================================
+    registry.register('get_ci_logs', async ({ run_id, job_id }) => {
+        if (!State.currentProject) {
+            return { error: 'No project is currently loaded' };
+        }
+        const { owner, repo } = State.currentProject;
+        const { scale } = getContextScale();
+        const LOG_LIMIT = 8000 * scale; // Scale with context window tier
+
+        try {
+            // If a specific job_id is provided, fetch just that job's log
+            if (job_id) {
+                const log = await Git.getJobLog(owner, repo, job_id);
+                if (!log) return { error: `No logs available for job ${job_id}` };
+                const trimmed = log.length > LOG_LIMIT
+                    ? log.slice(-LOG_LIMIT) + '\n... (truncated, showing last ' + LOG_LIMIT + ' chars)'
+                    : log;
+                return { job_id, log: trimmed };
+            }
+
+            // Resolve which run to fetch logs for
+            let targetRunId = run_id;
+            if (!targetRunId) {
+                // Default: find the most recent failed or running workflow run
+                const runs = await Git.listWorkflowRuns(owner, repo);
+                if (!runs || runs.length === 0) {
+                    return { error: 'No workflow runs found for this repository.' };
+                }
+                // Prioritize: failed > running > most recent
+                const failed = runs.find(r => r.conclusion === 'failure');
+                const running = runs.find(r => r.status === 'in_progress' || r.status === 'queued');
+                const target = failed || running || runs[0];
+                targetRunId = target.id;
+            }
+
+            // List jobs for the run
+            const jobs = await Git.listWorkflowJobs(owner, repo, targetRunId);
+            if (jobs.length === 0) {
+                // Fall back to getWorkflowRunLogs (some providers return aggregated logs)
+                const runLogs = await Git.getWorkflowRunLogs(owner, repo, targetRunId);
+                if (runLogs?.logs) {
+                    const trimmed = runLogs.logs.length > LOG_LIMIT
+                        ? runLogs.logs.slice(-LOG_LIMIT) + '\n... (truncated)'
+                        : runLogs.logs;
+                    return { run_id: targetRunId, log: trimmed, url: runLogs.url };
+                }
+                return {
+                    run_id: targetRunId,
+                    error: 'Could not fetch job-level logs.',
+                    hint: 'Try providing a specific job_id, or view logs in the browser.',
+                    url: runLogs?.url || null
+                };
+            }
+
+            // Fetch logs for each job, prioritizing failed ones
+            const sortedJobs = [...jobs].sort((a, b) => {
+                if (a.conclusion === 'failure' && b.conclusion !== 'failure') return -1;
+                if (b.conclusion === 'failure' && a.conclusion !== 'failure') return 1;
+                return 0;
+            });
+
+            const logParts = [];
+            let totalChars = 0;
+            for (const job of sortedJobs) {
+                if (totalChars >= LOG_LIMIT) {
+                    logParts.push(`\n... (${sortedJobs.length - logParts.length} more jobs omitted — use job_id to fetch specific logs)`);
+                    break;
+                }
+                const log = await Git.getJobLog(owner, repo, job.id);
+                const status = job.conclusion || job.status;
+                const header = `=== Job: ${job.name} [${status}] (id: ${job.id}) ===`;
+                if (log) {
+                    const budget = LOG_LIMIT - totalChars;
+                    const trimmedLog = log.length > budget
+                        ? log.slice(-budget) + '\n... (truncated)'
+                        : log;
+                    logParts.push(`${header}\n${trimmedLog}`);
+                    totalChars += header.length + trimmedLog.length;
+                } else {
+                    logParts.push(`${header}\n(no log available)`);
+                    totalChars += header.length + 20;
+                }
+            }
+
+            return {
+                run_id: targetRunId,
+                jobs: jobs.map(j => ({
+                    id: j.id, name: j.name,
+                    status: j.status, conclusion: j.conclusion
+                })),
+                log: logParts.join('\n\n')
+            };
+        } catch (error) {
+            return { error: `Failed to fetch CI logs: ${error.message}` };
+        }
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_ci_logs',
+            description: `Fetch CI/CD pipeline logs for debugging build failures. Without arguments, fetches logs from the most recent failed or running workflow run. Returns job-level log output so you can diagnose errors.
+
+Use get_ci_status first to see which checks passed/failed, then get_ci_logs to read the actual log output.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    run_id: {
+                        type: 'string',
+                        description: 'Workflow run ID to fetch logs for. If omitted, uses the most recent failed or running run.'
+                    },
+                    job_id: {
+                        type: 'string',
+                        description: 'Specific job/task ID to fetch logs for. Use when you need logs from a single job. Job IDs are returned by get_ci_logs when fetching a run.'
                     }
                 },
                 required: []

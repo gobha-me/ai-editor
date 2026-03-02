@@ -232,9 +232,14 @@ export function finalizeStreamingMessage(content, meta = {}) {
 export function renderMessage(message, isLastUserMessage = false) {
     console.log(`[renderMessage] role=${message.role}, content length=${message.content?.length}`);
     
-    // Skip rendering tool messages entirely
+    // Render tool messages using _display metadata
     if (message.role === 'tool') {
-        console.log('[renderMessage] Skipping tool message (not meant for display)');
+        if (message._display) {
+            const { toolName, args, result } = message._display;
+            addToolCallMessage(toolName, args, result);
+        } else {
+            console.log('[renderMessage] Skipping tool message (no _display metadata)');
+        }
         return;
     }
 

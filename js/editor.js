@@ -36,7 +36,7 @@ export {
     replaceRange,
     insertAtLine,
     deleteRange,
-    // Text-based editing (for search-replace tool)
+    // Text-based editing (used by replaceText internal API)
     replaceText
 } from './editor/instance.js';
 

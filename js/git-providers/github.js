@@ -907,14 +907,68 @@ const githubProvider = {
 
     async getWorkflowRunLogs(connection, owner, repo, runId) {
         try {
-            // GitHub returns a redirect to a zip of logs — can't easily consume in browser.
-            // Return the URL instead so the user can download.
+            // Fetch jobs for the run and aggregate their logs
+            const jobs = await this.listWorkflowJobs(connection, owner, repo, runId);
+            if (jobs.length === 0) {
+                return {
+                    message: 'No jobs found for this workflow run.',
+                    url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`
+                };
+            }
+            const logParts = [];
+            for (const job of jobs) {
+                const log = await this.getJobLog(connection, owner, repo, job.id);
+                logParts.push(`=== Job: ${job.name} (${job.conclusion || job.status}) ===\n${log || '(no log available)'}`);
+            }
+            return {
+                logs: logParts.join('\n\n'),
+                url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`,
+                jobCount: jobs.length
+            };
+        } catch (e) {
+            console.warn('[GitHub] Could not fetch workflow logs:', e.message);
             return {
                 message: 'GitHub workflow logs are available as a zip download.',
                 url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`
             };
+        }
+    },
+
+    async listWorkflowJobs(connection, owner, repo, runId) {
+        try {
+            const resp = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/actions/runs/${runId}/jobs`
+            );
+            const jobs = resp?.jobs || [];
+            return jobs.map(j => ({
+                id: j.id,
+                name: j.name || 'job',
+                status: j.status,
+                conclusion: j.conclusion || null,
+                startedAt: j.started_at || null,
+                completedAt: j.completed_at || null
+            }));
         } catch (e) {
-            console.warn('[GitHub] Could not fetch workflow logs:', e.message);
+            console.warn(`[GitHub] Could not list jobs for run ${runId}:`, e.message);
+            return [];
+        }
+    },
+
+    async getJobLog(connection, owner, repo, jobId) {
+        try {
+            // GitHub job logs endpoint returns 302 → plain text log
+            const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`;
+            const resp = await fetch(url, {
+                headers: {
+                    ...this.getHeaders(connection),
+                    'Accept': 'application/vnd.github+json'
+                },
+                signal: AbortSignal.timeout(30000)
+            });
+            if (!resp.ok) return null;
+            return await resp.text();
+        } catch (e) {
+            console.warn(`[GitHub] Could not fetch job ${jobId} logs:`, e.message);
             return null;
         }
     },

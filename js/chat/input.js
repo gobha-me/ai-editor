@@ -18,8 +18,43 @@ import {
 /** Max image size in bytes (5 MB) */
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-/** Accepted MIME types */
-const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+/** Max text file size in bytes (1 MB) */
+const MAX_TEXT_SIZE = 1 * 1024 * 1024;
+
+/** Accepted image MIME types */
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+/** Accepted text MIME types — covers common code and doc formats */
+const TEXT_TYPES = new Set([
+    'text/plain', 'text/markdown', 'text/csv', 'text/html', 'text/css',
+    'text/xml', 'text/yaml', 'text/x-python', 'text/x-c', 'text/x-c++',
+    'text/x-java', 'text/x-rust', 'text/x-go', 'text/x-perl',
+    'application/json', 'application/xml', 'application/yaml',
+    'application/x-yaml', 'application/javascript', 'application/typescript'
+]);
+
+/** File extensions recognized as text when MIME detection is unreliable */
+const TEXT_EXTENSIONS = new Set([
+    'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml', 'toml',
+    'xml', 'html', 'htm', 'css', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx',
+    'py', 'rb', 'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'java', 'kt', 'swift',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+    'sql', 'graphql', 'proto', 'lua', 'pl', 'pm', 'r', 'R',
+    'ini', 'cfg', 'conf', 'env', 'gitignore', 'dockerignore',
+    'Dockerfile', 'Makefile', 'cmake', 'log', 'diff', 'patch'
+]);
+
+/** @returns {boolean} True if the file looks like a text file */
+function _isTextFile(file) {
+    if (TEXT_TYPES.has(file.type)) return true;
+    const ext = (file.name || '').split('.').pop()?.toLowerCase() || '';
+    return TEXT_EXTENSIONS.has(ext);
+}
+
+/** @returns {boolean} True if the file is an accepted image */
+function _isImageFile(file) {
+    return IMAGE_TYPES.has(file.type);
+}
 
 /**
  * Setup input event handlers
@@ -48,19 +83,19 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
         if (!items) return;
 
         for (const item of items) {
-            if (ACCEPTED_TYPES.has(item.type)) {
+            if (IMAGE_TYPES.has(item.type)) {
                 e.preventDefault();
                 const file = item.getAsFile();
-                if (file) _processImageFile(file);
+                if (file) _processFile(file);
                 return;  // Only handle first image
             }
         }
         // If no image, let default text paste happen
     });
 
-    // Drag & drop images onto input
+    // Drag & drop images and text files onto input
     inputElement.addEventListener('dragover', (e) => {
-        if (_hasDragImage(e)) {
+        if (_hasDragFile(e)) {
             e.preventDefault();
             inputElement.classList.add('drag-over');
         }
@@ -71,9 +106,9 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
     inputElement.addEventListener('drop', (e) => {
         inputElement.classList.remove('drag-over');
         const file = e.dataTransfer?.files?.[0];
-        if (file && ACCEPTED_TYPES.has(file.type)) {
+        if (file && (_isImageFile(file) || _isTextFile(file))) {
             e.preventDefault();
-            _processImageFile(file);
+            _processFile(file);
         }
     });
 
@@ -83,10 +118,11 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
         attachBtn.addEventListener('click', () => {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+            // Accept images and common text/code file types
+            input.accept = 'image/png,image/jpeg,image/gif,image/webp,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.go,.rs,.c,.h,.cpp,.java,.sh,.sql,.toml,.ini,.log,.diff,.patch';
             input.onchange = (e) => {
                 const file = e.target.files?.[0];
-                if (file) _processImageFile(file);
+                if (file) _processFile(file);
             };
             input.click();
         });
@@ -94,35 +130,70 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
 }
 
 /**
- * Process an image file into a data URL and add to pending.
+ * Process any accepted file (image or text) and add to pending attachments.
+ * Images → dataUrl (base64).  Text files → plain text content.
+ * Warns (but does not block) if attaching an image and the current model
+ * lacks vision capability.
  * @param {File} file
  */
-function _processImageFile(file) {
-    if (!ACCEPTED_TYPES.has(file.type)) {
-        window.showToast?.('Unsupported image type', 'warning');
-        return;
-    }
-    if (file.size > MAX_IMAGE_SIZE) {
-        window.showToast?.('Image too large (5 MB max)', 'warning');
+function _processFile(file) {
+    const isImage = _isImageFile(file);
+    const isText  = _isTextFile(file);
+
+    if (!isImage && !isText) {
+        window.showToast?.('Unsupported file type. Images and text/code files are accepted.', 'warning');
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-        addPendingImage({
-            dataUrl: reader.result,
-            name: file.name || 'pasted-image',
-            size: file.size
-        });
-        renderImagePreview();
-    };
-    reader.readAsDataURL(file);
+    if (isImage) {
+        if (file.size > MAX_IMAGE_SIZE) {
+            window.showToast?.('Image too large (5 MB max)', 'warning');
+            return;
+        }
+
+        // Vision model gating — warn but allow
+        const model = (State.models || []).find(m => m.id === State.settings.llmModel);
+        if (model && !model.capabilities?.supportsVision) {
+            window.showToast?.('⚠️ Current model does not support vision — image may be ignored by the LLM', 'warning');
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            addPendingImage({
+                dataUrl: reader.result,
+                name: file.name || 'pasted-image',
+                size: file.size,
+                type: 'image'
+            });
+            renderImagePreview();
+        };
+        reader.readAsDataURL(file);
+
+    } else {
+        // Text file
+        if (file.size > MAX_TEXT_SIZE) {
+            window.showToast?.('Text file too large (1 MB max)', 'warning');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            addPendingImage({
+                textContent: reader.result,
+                name: file.name || 'attached-file',
+                size: file.size,
+                type: 'text'
+            });
+            renderImagePreview();
+        };
+        reader.readAsText(file);
+    }
 }
 
 /**
- * Check if a drag event contains an image.
+ * Check if a drag event contains a file we might accept.
  */
-function _hasDragImage(e) {
+function _hasDragFile(e) {
     const types = e.dataTransfer?.types || [];
     return types.includes('Files');
 }
@@ -151,13 +222,27 @@ export function renderImagePreview() {
     }
 
     strip.style.display = '';
-    strip.innerHTML = images.map((img, i) => `
-        <div class="image-preview-thumb" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
-            <img src="${img.dataUrl}" alt="Attached image ${i + 1}">
-            <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
-                    title="Remove" aria-label="Remove image">✕</button>
-        </div>
-    `).join('');
+    strip.innerHTML = images.map((img, i) => {
+        if (img.type === 'text') {
+            // Text file — show filename badge instead of thumbnail
+            return `
+                <div class="image-preview-thumb text-file-badge" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
+                    <span class="text-file-icon">📄</span>
+                    <span class="text-file-name">${escapeAttr(img.name)}</span>
+                    <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
+                            title="Remove" aria-label="Remove file">✕</button>
+                </div>
+            `;
+        }
+        // Image — show thumbnail
+        return `
+            <div class="image-preview-thumb" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
+                <img src="${img.dataUrl}" alt="Attached image ${i + 1}">
+                <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
+                        title="Remove" aria-label="Remove image">✕</button>
+            </div>
+        `;
+    }).join('');
 }
 
 function _fmtSize(bytes) {

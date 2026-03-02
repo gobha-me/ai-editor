@@ -929,6 +929,56 @@ const giteaProvider = {
         }
     },
 
+    async listWorkflowJobs(connection, owner, repo, runId) {
+        try {
+            // Gitea exposes tasks (jobs) for the repo; filter by run if possible.
+            // Try run-specific jobs endpoint first (Gitea 1.22+), fall back to tasks.
+            let jobs = [];
+            try {
+                const resp = await this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/actions/runs/${runId}/jobs`
+                );
+                jobs = Array.isArray(resp) ? resp : (resp?.jobs || []);
+            } catch {
+                // Older Gitea — try the tasks endpoint
+                const tasks = await this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/actions/tasks`
+                );
+                jobs = (Array.isArray(tasks) ? tasks : (tasks?.workflow_jobs || tasks?.tasks || []))
+                    .filter(t => String(t.run_id) === String(runId));
+            }
+
+            return jobs.map(j => ({
+                id: j.id,
+                name: j.name || 'job',
+                status: j.status,
+                conclusion: j.conclusion || null,
+                startedAt: j.started_at || null,
+                completedAt: j.completed_at || null
+            }));
+        } catch (e) {
+            console.warn(`[Gitea] Could not list workflow jobs for run ${runId}:`, e.message);
+            return [];
+        }
+    },
+
+    async getJobLog(connection, owner, repo, jobId) {
+        try {
+            const resp = await fetch(
+                `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`,
+                {
+                    headers: { 'Authorization': `token ${connection.token}` },
+                    signal: AbortSignal.timeout(30000)
+                }
+            );
+            if (!resp.ok) return null;
+            return await resp.text();
+        } catch (e) {
+            console.warn(`[Gitea] Could not fetch job ${jobId} logs:`, e.message);
+            return null;
+        }
+    },
+
     async downloadArchive(connection, owner, repo, ref = 'main') {
         const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/archive/${encodeURIComponent(ref)}.zip`;
         const response = await fetch(url, {

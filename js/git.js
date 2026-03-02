@@ -439,6 +439,16 @@ const Git = {
         return provider.getWorkflowRunLogs(connection, owner, repo, runId);
     },
 
+    async listWorkflowJobs(owner, repo, runId) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.listWorkflowJobs(connection, owner, repo, runId);
+    },
+
+    async getJobLog(owner, repo, jobId) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getJobLog(connection, owner, repo, jobId);
+    },
+
     // ========================================
     // TAGS & RELEASES
     // ========================================

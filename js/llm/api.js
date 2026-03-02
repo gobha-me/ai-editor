@@ -72,12 +72,47 @@ import {
 } from '../prompts.js';
 
 // ============================================
+// CONTEXT-AWARE SCALING
+// ============================================
+
+/**
+ * Tier-based multiplier so every hard ceiling scales with the model's
+ * context window.  Used by output-token caps, summarizer clamps, and
+ * tool-result truncation.
+ *
+ *   ≤ 32 K  →  1×   (current behaviour — safe for small models)
+ *   ≤128 K  →  2×
+ *   ≤512 K  →  4×
+ *    > 512 K →  8×
+ *
+ * @param {string} [modelId] - Model to look up (defaults to current)
+ * @returns {{contextTokens: number|null, scale: number}}
+ */
+export function getContextScale(modelId) {
+    const id = modelId || State.settings.llmModel;
+    const model = (State.models || []).find(m => m.id === id);
+    const ctx = model?.meta?.contextTokens || null;
+
+    if (!ctx || ctx <= 0) return { contextTokens: null, scale: 1 };
+
+    let scale;
+    if (ctx <= 32768)       scale = 1;
+    else if (ctx <= 131072) scale = 2;
+    else if (ctx <= 524288) scale = 4;
+    else                    scale = 8;
+
+    return { contextTokens: ctx, scale };
+}
+
+// ============================================
 // MAX TOKENS RESOLUTION
 // ============================================
 
 /**
- * Purpose-based output token budgets as fraction of model context window.
- * Each entry: [fraction of context, absolute cap]
+ * Purpose-based output token budgets.
+ * Each entry: [fraction of context window, base cap].
+ * The base cap is multiplied by getContextScale().scale at resolution time
+ * so large-context models aren't artificially throttled.
  */
 const TOKEN_BUDGETS = {
     chat:    [0.25, 16384],  // General conversation
@@ -90,7 +125,10 @@ const TOKEN_BUDGETS = {
 
 /**
  * Resolve max_tokens for a request.
- * Priority: user setting > purpose-based calculation > fallback.
+ * Priority: user setting > purpose-based calculation > omit (let provider decide).
+ *
+ * The cap scales with the model's context tier so a 256 K model gets 4×
+ * the headroom of a 32 K model, and a 1 M model gets 8×.
  *
  * @param {string} [modelId] - Model ID to look up (defaults to current)
  * @param {string} [purpose='chat'] - One of: chat, edit, commit, comment, notes, summary
@@ -103,17 +141,20 @@ export function resolveMaxTokens(modelId, purpose = 'chat') {
 
     // 2. Look up model context window
     const id = modelId || State.settings.llmModel;
-    const model = (State.models || []).find(m => m.id === id);
-    const contextTokens = model?.meta?.contextTokens;
+    const { contextTokens, scale } = getContextScale(id);
 
     if (contextTokens && contextTokens > 0) {
-        const [fraction, cap] = TOKEN_BUDGETS[purpose] || TOKEN_BUDGETS.chat;
-        return Math.min(Math.floor(contextTokens * fraction), cap);
+        const [fraction, baseCap] = TOKEN_BUDGETS[purpose] || TOKEN_BUDGETS.chat;
+        const scaledCap = baseCap * scale;
+        return Math.min(Math.floor(contextTokens * fraction), scaledCap);
     }
 
-    // 3. Fallback — no model metadata available
-    const fallbacks = { chat: 4096, edit: 8192, commit: 1024, comment: 512, notes: 2048, summary: 2048 };
-    return fallbacks[purpose] || 4096;
+    // 3. No model metadata available — return 0 so buildRequestBody
+    //    omits max_tokens entirely. Providers like Venice.ai will
+    //    automatically use the maximum supported for the selected model.
+    //    Other OpenAI-compatible providers also handle omitted max_tokens
+    //    by using their own defaults.
+    return 0;
 }
 
 // ============================================
@@ -137,13 +178,21 @@ export function buildRequestBody(model, messages, options = {}) {
 
     const sanitizedMessages = sanitizeMessages(messages);
 
+    // Resolve output token budget: 0 means "let the provider auto-size"
+    const resolvedMaxTokens = maxTokens ?? resolveMaxTokens(model, 'chat');
+
     const requestBody = {
         model,
         messages: sanitizedMessages,
-        max_tokens: maxTokens ?? resolveMaxTokens(model, 'chat'),
         temperature,
-        stream
+        stream: stream === false ? false : true  // Enforce boolean; default always streams
     };
+
+    // Only include max_tokens when we have a concrete budget.
+    // When 0 or absent, providers like Venice.ai auto-select the model maximum.
+    if (resolvedMaxTokens > 0) {
+        requestBody.max_tokens = resolvedMaxTokens;
+    }
 
     if (stream) {
         requestBody.stream_options = { include_usage: true };

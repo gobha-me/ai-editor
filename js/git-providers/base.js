@@ -517,6 +517,22 @@ const BASE_GIT_PROVIDER = {
         return null;
     },
 
+    /**
+     * List jobs/tasks for a workflow run.
+     * @returns {Promise<Array<{id, name, status, conclusion, startedAt, completedAt}>>}
+     */
+    async listWorkflowJobs(connection, owner, repo, runId) {
+        return [];
+    },
+
+    /**
+     * Fetch plain-text log output for a specific job.
+     * @returns {Promise<string|null>} Log text, or null if unavailable
+     */
+    async getJobLog(connection, owner, repo, jobId) {
+        return null;
+    },
+
     // ========================================
     // ARCHIVE DOWNLOAD
     // ========================================

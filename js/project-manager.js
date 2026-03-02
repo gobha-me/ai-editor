@@ -405,13 +405,21 @@ export function initSessionListeners() {
 
 export function renderIssues() {
     const container = document.getElementById('issuesPanel');
+
+    // Update count in sidebar header
+    const header = document.querySelector('[data-collapse="issuesPanelBody"] span');
+    if (header) {
+        header.textContent = State.issues.length > 0
+            ? `▾ Issues (${State.issues.length})`
+            : '▾ Issues';
+    }
     
     if (State.issues.length === 0) {
         container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">No open issues</div>';
         return;
     }
 
-    container.innerHTML = State.issues.slice(0, 15).map(issue => {
+    container.innerHTML = State.issues.map(issue => {
         // Build dependencies display
         let depsHtml = '';
         if (issue.dependencies && issue.dependencies.length > 0) {
@@ -480,7 +488,7 @@ export function renderPullRequests() {
         return;
     }
 
-    container.innerHTML = filtered.slice(0, 15).map(pr => {
+    container.innerHTML = filtered.map(pr => {
         const ciIcon = CI_ICONS[pr.ciState] || '⚪';
         const ciTitle = pr.ciState === 'unknown' ? 'No CI status' : `CI: ${pr.ciState}`;
         const branchInfo = onDefault ? `<span style="color: var(--text-muted);">${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span>` : '';
