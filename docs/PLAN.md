@@ -19,6 +19,25 @@ The following items from the original plan shipped in the 0.9.x / 1.0.x series:
 
 ---
 
+## 1.1.x — Foundations (in progress)
+
+Tracked authoritatively in [`docs/ROADMAP.md`](ROADMAP.md) §1.1.0. What has landed:
+
+| Item | Version | Notes |
+|---|---|---|
+| Turn metadata enrichment | 1.0.5 | `file_ops`, `tool_result_for`, `tool_name`, `tool_args` on tool-result turns ([#170](../../../pulls/170)) |
+| Migration coverage probe | 1.0.5 | `js/chat/metadata-probe.js` + `?debug=metadata` dev flag ([#172](../../../pulls/172)) |
+| Pre-merge version coherence CI lint | 1.0.5 | `.gitea/workflows/ci.yaml` rejects PRs where `js/version.js` and `CHANGELOG.md` disagree ([#173](../../../pulls/173)) |
+| Profile scaffolding + unified `TaskLedger` | 1.0.6 | `js/profiles/` directory, data only — no consumer wires up yet (this PR) |
+
+What's still open per ROADMAP §1.1.0:
+
+- **CI test step** (`node --test` job in `.gitea/workflows/ci.yaml`; port the remaining `.mjs` files off `window.T`).
+- **`docs/LLM_ERROR_RECOVERY.md` retirement** — fold into PLUGIN.md/TOOLS.md or replace with a thin pointer to `js/utils/errors.js`.
+- **Plugin SlotManager** — design only in 1.1.x; implementation deferred to a 1.4.x patch per ROADMAP §1.1.0.
+
+---
+
 ## Future Work
 
 Items that could improve the editor post-1.0. Not committed — captured for reference.

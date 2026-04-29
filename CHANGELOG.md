@@ -4,7 +4,46 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-04-29
+
 ### Added
+- **Profile scaffolding + unified `TaskLedger`** (`js/profiles/`) — data-only
+  module landing the typedef contract from `docs/DESIGN-profiles.md` and
+  `docs/DESIGN-tools.md`. Four files:
+  - `task-ledger.js` — `TaskLedger` typedef + record typedefs
+    (`AdmissionRecord`, `ExclusionRecord`, `ToolAdmissionRecord`,
+    `ToolInvocationRecord`) + `createTaskLedger(...)` empty-state factory
+    + `isTaskLedger(...)` type guard. One ledger struct, four record
+    arrays — chunk admissions/exclusions for retrieval (1.5.0) and tool
+    admissions/invocations for tools (1.4.0).
+  - `profile-contract.js` — `Profile` typedef plus `BudgetSpec`,
+    `RetrievalConfig`, `MemoryConfig`, `CompressionConfig`,
+    `SummarizerConfig`, `ToolsConfig`, `TaskLedgerConfig` sub-typedefs
+    + `isProfile(...)` type guard.
+  - `coder-v1.js` — `CODER_V1` Profile object that mirrors *current*
+    coder-role behavior (single-strategy semantic retrieval, scratchpad-only
+    memory, Rule-5-only compression, all 52 tools loaded). Field-by-field
+    provenance comments link each value back to the source it mirrors
+    (`State.settings.summarizer`, DESIGN docs, ROADMAP decisions).
+  - `index.js` — barrel export.
+
+  Why: the unified TaskLedger ships once now so 1.4.0 (tool admissions /
+  invocations) and 1.5.0 (chunk admissions / exclusions) fill in the same
+  struct rather than each shipping its own ledger schema and a future
+  merge step. Per `docs/ROADMAP.md:114` *"One schema, no migration"* —
+  this lands that schema. The roadmap exit criteria for §1.1.0 is
+  explicit: *"Unified `TaskLedger` typedef + empty-state struct present
+  in `js/profiles/`; no consumer wires up yet."* This PR satisfies that
+  by introducing zero behavior change. The `coder.v1` profile is data
+  only — no subsystem reads it yet. 1.2.0/1.3.0/1.4.0/1.5.0 will each
+  begin reading the relevant slice; 2.0 makes the profile contract
+  load-bearing.
+
+  Tests: `tests/test-profiles.{mjs,js}` — 19 node:test cases plus a
+  parallel browser suite covering ledger empty-state shape, type-guard
+  behavior, coder.v1 budget arithmetic (residual = 12500), and the
+  documented field-by-field provenance against `State.settings`.
+
 - **Pre-merge version coherence CI lint** (`.gitea/workflows/ci.yaml`) — new
   step in the `build-and-deploy` job, runs before the existing security lint.
   Parses the `VERSION` constant from `js/version.js` and the most recent

@@ -137,6 +137,10 @@
                 await import('./test-metadata-coverage.js');
             } catch (e) { errors.push(['Metadata Coverage', e]); }
 
+            try {
+                await import('./test-profiles.js');
+            } catch (e) { errors.push(['Profiles', e]); }
+
             // --- UI & Context (0.9.12) ---
             try {
                 await import('./test-context-filter.js');
