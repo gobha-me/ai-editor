@@ -4,9 +4,13 @@
 
 ## TL;DR
 
-The six new design docs in `docs/DESIGN-*.md` describe a complete intelligence layer rebuild — four peer subsystems (retrieval, memory, compression, tools) coordinated by per-surface profiles, all bound by one principle: **admissibility, not accumulation**.
+The six new design docs in `docs/DESIGN-*.md` describe a complete intelligence layer rebuild — four peer subsystems (retrieval, memory, compression, tools) coordinated by per-surface profiles. The work rests on three load-bearing commitments:
 
-This roadmap sequences that rebuild over the **1.x** line, ships a **2.0** when profiles become the load-bearing abstraction, and interleaves UI work and quick wins along the way. Estimated end-to-end runway: **~6 months** of evening sessions at the historical pace (CHANGELOG suggests 2026-02-12 → 2026-02-23 produced 30+ patch releases — this scope demands less velocity but more depth, so plan calls for biweekly minor releases instead of daily patches).
+1. **Admissibility, not accumulation** — every byte the model sees has earned its place. The DESIGN docs are the contract; subsystems implement it.
+2. **Git-native memory** — memory and conversation state can opt into living in `.aieditor/*` files committed with the repo. The user's notes follow the code across machines and forks, with no backend. **This is a category change, not an incremental improvement** — every other AI-editor's memory either lives in a vendor cloud or dies when you switch machines. (Decision §1.)
+3. **Measurement before scale** — the cost dashboard ships in 1.2.x alongside the first eviction subsystem, not at the end of the arc. Each subsequent track lands against measured baselines, not projected savings.
+
+This roadmap sequences the rebuild over the **1.x** line, ships a **2.0** when profiles become the load-bearing abstraction, and interleaves UI work and quick wins along the way. Estimated end-to-end runway: **~6 months** of evening sessions at the historical pace (CHANGELOG suggests 2026-02-12 → 2026-02-23 produced 30+ patch releases — this scope demands less velocity but more depth, so plan calls for biweekly minor releases instead of daily patches).
 
 ---
 
@@ -105,22 +109,30 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 **What ships:**
 
-- **Turn metadata enrichment.** Existing chat history entries carry `{role, content, timestamp}`. Add `file_ops` (extracted from `read_*`/`edit_*`/`write_*` tool results), `tool_result_for` (linking tool_result turns back to their tool_call turn), `tool_name`, `tool_args`. Backwards-compatible — old turns missing these fields default the rule to `Keep`. **Touchpoints:** `chat/state.js`, `chat/handlers.js`, `tools/edit-tools.js`, `tools/multifile-tools.js`, `tools/scan-tools.js`, `tools/file-tools.js`.
+- **Turn metadata enrichment.** Existing chat history entries carry `{role, content, timestamp}`. Add `file_ops` (extracted from `read_*`/`edit_*`/`write_*` tool results), `tool_result_for` (linking tool_result turns back to their tool_call turn), `tool_name`, `tool_args`. **Read-path only** — new turns going forward are enriched; pre-1.1.0 turns persist with the fields absent and compression treats them as `Keep`-by-default. **Touchpoints:** `chat/state.js`, `chat/handlers.js`, `tools/edit-tools.js`, `tools/multifile-tools.js`, `tools/scan-tools.js`, `tools/file-tools.js`.
+- **Migration coverage probe.** A read-only consistency check that runs at session load: counts how many history turns are missing each enrichment field and surfaces the result in dev mode (`?debug=metadata` query string flips it on). Tells 1.2.0 what its baseline is *before* rules consult the data, so when compression underperforms its 40% target you know whether the rule is wrong or coverage is incomplete. The probe never mutates history.
+- **Unified `TaskLedger` struct (data only).** Lands alongside profile scaffolding — same struct used by tools (1.4.0: `tool_admissions`, `tool_invocations`) and retrieval (1.5.0: chunk `admissions`, `exclusions`). One schema, no migration. Replaces the deferred "tool ledger merges with task ledger" item that previously lived in 1.4.6.
 - **Profile scaffolding (data only).** `js/profiles/` directory with the contract typedef and a `coder.v1` profile that mirrors *current* behavior exactly (no behavior change). Lets later tracks have a place to register configuration without retrofitting.
-- **CI test step.** Add a `node --test` job to `.gitea/workflows/ci.yaml` running the existing `*.mjs` parallel suites (`test-summarizer.mjs`, `test-retry.mjs`, `test-edit-tracker.mjs`, `test-blame-normalize.mjs`). Failing tests block PR merge alongside the existing security lint.
+- **CI test step.** Add a `node --test` job to `.gitea/workflows/ci.yaml` running the existing `*.mjs` parallel suites (`test-summarizer.mjs`, `test-retry.mjs`, `test-edit-tracker.mjs`, `test-blame-normalize.mjs`). Failing tests block PR merge alongside the existing security lint. *Note: those .mjs files currently bind to `window.T` and are browser-only — this step ports them to `node:test` first.*
+- **Pre-merge version coherence check.** Tiny CI lint that compares the version string in `js/version.js` to the latest `## [X.Y.Z]` heading in `CHANGELOG.md` and fails the build if they disagree. Two release-sync drifts in a row (0.9.42 → 1.0.4 → 1.0.5) is enough; one evening to fix forever.
 - **Retire/rewrite `docs/LLM_ERROR_RECOVERY.md`.** Either fold its useful content into a new section in PLUGIN.md / TOOLS.md, or replace with a thin pointer to `js/utils/errors.js`.
 - **Plugin SlotManager — design only.** PLAN.md already flags this; implementation deferred to a 1.4.x patch (it's small once we touch settings/UI), but during 1.1 we lock the contract.
 
-**Why now:** Compression Rules 1, 2, 3 require `file_ops` and `tool_result_for` on turns. Without this enrichment, the rules either no-op (graceful but pointless) or false-positive on missing metadata. CI test step prevents regressions during the bigger tracks. Profile scaffolding is the architectural commitment to the design docs without behavior risk.
+**Why now:** Compression Rules 1, 2, 3 require `file_ops` and `tool_result_for` on turns. Without this enrichment, the rules either no-op (graceful but pointless) or false-positive on missing metadata. The migration probe makes the coverage gap *visible* so 1.2.0's diagnostics can distinguish "no rule applied" from "rule skipped because metadata absent" — without that distinction, when compression underperforms you can't tell whether the rules are wrong or the data isn't there yet. The unified TaskLedger lands now so 1.4.0 and 1.5.0 fill in the same struct rather than shipping two ledger schemas and a migration. CI test step prevents regressions during the bigger tracks. Profile scaffolding is the architectural commitment to the design docs without behavior risk.
+
+**Risk note:** Turn-metadata enrichment is the highest-risk PR in 1.1.0 even though it's *labeled* foundational. The failure mode if backwards-compat slips is silent corruption that doesn't surface until 1.2.0 ships and rules consult partially-enriched turns. The probe is the safeguard. Treat the enrichment + probe as one shippable unit, not two.
 
 **Exit criteria:**
-- All chat-history turns carry `file_ops` when applicable; `chat/messages.js` rendering still works on enriched turns.
-- `node --test` runs in CI, all existing `.mjs` suites pass.
+- All new chat-history turns carry `file_ops` when applicable; `chat/messages.js` rendering still works on enriched and non-enriched turns mixed in the same history.
+- Migration probe surfaces a coverage report in dev mode; `?debug=metadata` makes it visible.
+- Unified `TaskLedger` typedef + empty-state struct present in `js/profiles/`; no consumer wires up yet.
+- `node --test` runs in CI, all existing `.mjs` suites pass after porting.
+- Version coherence check runs in CI and fails when `js/version.js` and `CHANGELOG.md` disagree.
 - `docs/PLAN.md` updates reflect what shipped.
 
 **Size:** ~3-5 PRs over 2 weeks. The Turn enrichment is the biggest piece.
 
-**UI impact:** None visible.
+**UI impact:** None visible to end users. Dev mode only: coverage probe report at `?debug=metadata`.
 
 ---
 
@@ -214,8 +226,9 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 **Exit criteria:**
 - A 50-turn debugging session shows measurable token reduction (target: ≥40% on tool-heavy sessions per design projection; baseline measured before merging).
-- Diagnostics expose every eviction.
+- Diagnostics expose every eviction *and* distinguish "no rule applied" from "rule skipped because metadata absent" (uses the 1.1.0 coverage probe data).
 - No regressions in Rule 5 summarization (existing tests pass, plus new `.mjs` suite for Rules 1/2).
+- **Removability check:** With `js/intelligence/compression/` removed and the system reverted to Rule-5-only, what user-visible behavior degrades? If "nothing measurable on a 50-turn session," the subsystem has not yet earned its complexity and 1.2.1 (cost dashboard) is gated on closing that gap.
 
 **Size:** Single big PR (~1500 lines: compactor + rules + tests + diagnostics) plus 2-3 follow-up PRs for tuning.
 
@@ -225,11 +238,14 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 ---
 
-### 1.2.x — Compression follow-ups [+1-2 weeks]
+### 1.2.x — Compression follow-ups [+2-3 weeks]
 
-- **1.2.1:** Rule 3 (Consumption). Requires `tool_result_for` plumbing from 1.1 to be working in production for ≥1 week.
-- **1.2.2:** Rule 4 (Resolution). Templated marker generation for "debugging spans that ended successfully." Build/test/commit success markers needed; the Git tools already emit success.
-- **1.2.3:** Tune existing Rule 5 to plug into the pipeline cleanly. Measure: compression latency, summarizer call rate (should drop now that Rules 1-4 evict first).
+Each follow-up gates on the previous one delivering measured value, not on a calendar.
+
+- **1.2.1: Cost dashboard.** Cross-provider, per-conversation token-and-cost breakdown — promoted from 1.5.3 because *measurement infrastructure is the first investment, not the last*. Shipping the dashboard immediately after Rules 1+2 land lets us answer the load-bearing question: did Rule 1+2 actually deliver the ≥40% reduction the design projected? If yes, the rest of the roadmap accelerates. If no, we find out in month 2 instead of month 6 and the remaining tracks get re-scoped against measured data, not projected savings. Today the editor has Venice-specific billing in `plugins/venice-billing.js`; this generalizes it. **What ships:** Settings → Cost tab with per-conversation totals (linkable from the conversation drawer), per-tool token spend, per-session totals + 30-day historical, optional budget alerts. Existing Venice plugin stays as a provider-specific overlay. **Gate for 1.2.2:** dashboard produces at least 1 week of real-usage data before Rule 3 ships.
+- **1.2.2: Rule 3 (Consumption).** Gated on the dashboard from 1.2.1 showing concrete Rule 1+2 savings *and* the 1.1.0 `tool_result_for` plumbing exhibiting ≥95% coverage on production sessions for ≥1 week. Without the coverage signal, Rule 3 can't reason about consumed tool calls reliably.
+- **1.2.3: Rule 4 (Resolution).** Templated marker generation for "debugging spans that ended successfully." Build/test/commit success markers needed; the Git tools already emit success. Gated on Rule 3 diagnostics confirming the consumption pattern fires the way the design predicted — if the 1.2.2 numbers don't match, we re-scope rather than ship Rule 4 against an untrusted base.
+- **1.2.4: Rule 5 tuning.** Plug existing summarizer into the pipeline cleanly. Measure: compression latency, summarizer call rate (should drop now that Rules 1-4 evict first). The dashboard from 1.2.1 is the primary witness.
 
 ---
 
@@ -246,13 +262,16 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 - **3 new LLM tools:** `memory_remember`, `memory_recall`, `memory_revise`.
 - **Settings → Memory tab** with list/edit/audit views, agent-proposal toggle.
 
-**Why now:** Pure capability addition with no breaking changes. The Git-native file layer is a unique selling point — every other AI editor's memory dies when you switch machines or repos. Ours commits with the repo.
+**Why now:** **Git-native memory is the load-bearing feature here, not an incidental win.** Every other AI editor's memory either lives in a vendor cloud (Cursor, Claude.ai, ChatGPT memory), in a local-only store that dies when you switch machines (most plugin-style tools), or in a config file that isn't really memory (Cline, Aider rules). Repo-committed memory that round-trips through Git is a *category change* — the user's notes follow the code across machines, branches, and forks, with no backend. This is the reason memory ships before tools even though tools cuts more cost: memory unlocks an externally-tellable story that the rest of the roadmap then trades on. Pure capability addition with no breaking changes.
+
+**Story-completion gap:** `user` scope (1.3.0) lets users feel "we have memory." `workspace` scope (1.3.1) is what lets us tell the *Git-native* story externally — workspace-scoped facts committed to the repo, cross-machine via push/pull. The gap between 1.3.0 and 1.3.1 is the gap between "we have memory" and "we have the demo." Target ≤2 weeks between them; bundle if 1.3.0's UI work doesn't blow up.
 
 **Exit criteria:**
 - `.aieditor/memory/` files round-trip through commit/checkout without corruption.
 - Settings → Memory shows all entries with audit trail.
 - A memory created in chat survives a page reload and reappears in the next session's context.
 - Agent proposals fire only with explicit consent (no silent writes).
+- **Removability check:** With `js/intelligence/memory/` removed and `scratchpad-tools` restored, what user-visible behavior degrades? Memory is the most user-visible subsystem — if removability is "nothing user-noticed" then the UI didn't expose memory enough and 1.3.1 is gated on closing that gap.
 
 **Size:** ~6-8 PRs over 3 weeks. UI is the long pole.
 
@@ -282,15 +301,16 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 - **Static set per profile.** `coder.v1` static set: meta-tools + `read_file`, `read_lines`, `scan_file`, `edit_file`, `commit_files`, `list_dirty_files`. Everything else is discovery-only.
 - **3 meta-tools:** `list_tool_categories`, `list_tools_by_category`, `find_tool` (categorical only in 1.4.0; semantic deferred to 1.4.1).
 - **Lazy schema expansion.** Discovery returns name + 1-line description (~50 tokens); first invocation expands to full schema (~250 tokens).
-- **Sticky admission** via session ledger. Once a tool is invoked, it stays admitted for the rest of the task. (Task boundaries = explicit `/task` markers in 1.4.0; auto-detection in 2.0.)
-- **Diagnostics:** Tool admission decisions surface alongside compression in the LLM debug modal.
+- **Sticky admission** via the **unified `TaskLedger`** scaffolded in 1.1.0. This track fills in `tool_admissions` and `tool_invocations` records on the existing struct — no separate ledger schema, no future merge step. Once a tool is invoked, it stays admitted for the rest of the task. (Task boundaries = explicit `/task` markers in 1.4.0; auto-detection in 2.0.)
+- **Diagnostics:** Tool admission decisions surface alongside compression in the LLM debug modal. Cost dashboard from 1.2.1 grows a "tools per turn" line.
 
 **Why now:** Cuts every-call token cost. With 52 tools at ~200 tokens each, a chat profile loading them all is ~10K tokens of tool definitions per call. Static + discovery cuts that to ~1500 baseline + 200-500 per discovered tool.
 
 **Exit criteria:**
-- Token cost of tool definitions per call measured before/after; target: 70%+ reduction on a typical coder session.
+- Token cost of tool definitions per call measured before/after via the 1.2.1 cost dashboard; target: 70%+ reduction on a typical coder session.
 - Discovery roundtrip works: model calls `list_tools_by_category("file")`, gets `read_file`/`read_lines`/etc. summaries, calls one, it admits in full on the next turn.
 - Authorization filter still respects current role gates (the static set is filtered through role first).
+- **Removability check:** With `js/intelligence/tools/` removed and all tools loaded all the time again, what user-visible behavior degrades? "Cost dashboard shows tools-line spike but everything still works" is acceptable; "model can't find tools" is failure mode the active-tools chip row must address before merge.
 
 **Size:** ~5-7 PRs over 3 weeks. Most of it is the admission layer; the meta-tools themselves are small.
 
@@ -307,7 +327,7 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 - **1.4.3: Test-driven loop.** Agentic mode where the AI iterates on a failing test until CI passes. Loop: read failing test → propose fix → edit → commit → wait CI → read result → loop. Bounded by max iterations, max wall-clock, max tokens-per-iteration. Uses existing `commit_files` + `get_ci_status` + the new idle-timeout from 1.1.1 to handle the wait-for-CI step cleanly. UI: progress card showing iteration N/M with abort button. Builds on the existing tool inventory; no new core capabilities required.
 - **1.4.4: Workspace-scoped settings.** `.aieditor/settings.json` overrides global settings per repo (subset of overridable keys — never API keys). UI: Settings panel marks workspace-overridden values with a "reset to global" button. Auto-stages on commit when enabled and branch isn't protected (matches the memory commit pattern from 1.3.0). Pairs naturally with the rest of the `.aieditor/` directory convention.
 - **1.4.5: Inline AI suggestions (ghost text, hotkey-only).** Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling, no API cost without explicit user action. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control "hotkeyed not automatic" framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
-- **1.4.6:** Tool ledger merges with task ledger (lays groundwork for 2.0); lazy expansion threshold tuning; eviction LRU.
+- **1.4.6:** Lazy expansion threshold tuning; eviction LRU on the static set when memory pressure exceeds budget. (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 fills in fields on the same struct.)
 
 ---
 
@@ -321,6 +341,7 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 - **Two strategies:** Semantic (hybrid k-NN + BM25 + RRF) and Structural (ancestor-walk over `parent_id` metadata).
 - **Composer** with budget accounting, per-strategy quotas, attention-aware ordering (`task` → tail, `system_context` → head, `retrieved`/`history` → body), dedup by ChunkID.
 - **Migration off `js/context-manager.js`.** The legacy module continues to back the existing `find_relevant_files` tool until 1.5.2; the new pipeline runs in parallel during 1.5.0–1.5.1 with feature-flag fallback.
+- **Chunk admission ledger.** This track fills in `admissions` and `exclusions` records on the **unified `TaskLedger`** from 1.1.0 — same struct, third consumer.
 - **Diagnostics:** What strategies fired, chunks per strategy, tokens used vs budget, cache hits.
 
 **Why now:** This is the biggest rebuild. Doing it last means we already know exactly what compression and memory need from retrieval. The contract becomes concrete instead of speculative.
@@ -329,6 +350,7 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 - Existing `find_relevant_files` results (legacy) and new Composer results agree for ≥80% of test queries.
 - New ingest pipeline indexes a project at startup with measurable progress and resumability.
 - Code review on a single attached file ("review src/foo.ts for code smells") matches or beats current behavior on a benchmark set.
+- **Removability check:** With `js/intelligence/retrieval/` removed and `context-manager.js` restored, what user-visible behavior degrades? Cost dashboard's retrieval-strategy breakdown disappears; per-call retrieved tokens jump back to baseline. If neither of those is measurably true on the benchmark, the rebuild didn't earn its complexity.
 
 **Size:** ~10-15 PRs over 6-8 weeks. The longest single track. Several `1.5.0-betaN` tag pushes likely.
 
@@ -343,7 +365,7 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 - **1.5.1:** Thematic strategy (k-means over filtered vectors). Powers "summarize this codebase" properly.
 - **1.5.2:** Legacy `context-manager.js` removed; `find_relevant_files` rewritten to call the new Composer.
-- **1.5.3: Cost dashboard.** Cross-provider, per-conversation breakdown. Today the editor has Venice-specific billing in `plugins/venice-billing.js`; this generalizes it. New Settings → Cost tab: per-conversation totals (linkable from the conversation drawer), per-tool token spend (which tools are expensive on this corpus), per-session totals + 30-day historical, optional budget alerts. Existing Venice plugin stays as a provider-specific overlay. Lands in the retrieval track because the per-strategy diagnostics from 1.5.0 are the primary new data source.
+- **1.5.3: Cost dashboard — retrieval extension.** The dashboard itself shipped in 1.2.1 (cross-provider, per-conversation, per-tool). This patch adds the retrieval-strategy breakdown that 1.5.0's diagnostics now produce: per-strategy hit rates, per-strategy token spend, "this query was expensive because the structural strategy matched 200 chunks" affordances. No new Settings tab — extends the existing Cost tab.
 - **1.5.4:** Query cache, structural expansion cache (per `DESIGN-retrieval.md` §Caching).
 - **1.5.5 (optional, gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
 
@@ -362,10 +384,13 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 **Why now:** All four subsystems are shipping. Profiles consolidate them. By postponing 2.0 until everyone has clarity, we avoid baking speculative profile decisions into the 1.x line.
 
+**Be ready to discover the profile contract is lighter than designed.** `DESIGN-profiles.md` describes profiles as the abstraction across five surfaces (chat, multi-user, RP, coder, KB); ai-editor has one. If by 1.5.x the "profile" reduces to `coder.v1` plus a settings struct plus three knobs, that's a finding to celebrate, not a failure — 2.0 ships a profile contract sized to what the editor actually needs, not the design doc's full surface area. Plugin authors targeting other surfaces still get the contract; we just don't pre-build their use cases.
+
 **Exit criteria:**
 - Settings export from 1.5.x imports cleanly into 2.0 with the migration applied.
 - A user who never touches the profile picker sees no behavior difference (defaults to `coder.v1` or `chat.v1` based on current role).
 - Profile-aware diagnostics: every subsystem's diagnostics surface includes the active profile name + version.
+- **Removability check:** With the profile layer collapsed back to roles, what user-visible behavior degrades? If "nothing — the picker is gone but the editor still works the same," profiles were over-architected and the contract should ship lighter.
 
 **Size:** ~6-10 PRs over 3 weeks. The migration is the risk; everything else is plumbing.
 
@@ -398,7 +423,7 @@ These slot into patch releases of whatever track is current. Some are enabled by
 | 14 | **In-app help renderer** — currently Markdown in a modal | A persistent sidebar pane would make `read_docs`-driven content far more useful | 1.1.x |
 | 15 | **SlotManager (designed but not built)** | Still on PLAN.md; tackling alongside Settings tab UX rework gives plugins the long-promised injection points | 1.4.x |
 | 16 | **Mobile secondary pane** rework — diff/blame on mobile is cramped | The current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over | Cross-cutting; tackle alongside whichever track touches secondary-pane.js |
-| 17 | **Cost dashboard** — generic cross-provider, per-conversation, per-tool breakdown | Replaces Venice-specific dashboard's role; existing plugin stays as a provider overlay | 1.5.3 |
+| 17 | **Cost dashboard** — generic cross-provider, per-conversation, per-tool breakdown | Measurement infrastructure ships *with* the first eviction subsystem so 1.2.0's projected savings get verified immediately. Retrieval-strategy breakdown bolts on in 1.5.3. | 1.2.1 |
 | 18 | **Status bar at the bottom** — extends pill from #4 with tools + retrieval | "Compression: 60% kept · Tools: 8 loaded · Retrieval: 8K/22K" | 1.5.x |
 | 19 | **Profile picker** in chat header (replaces role selector per Decision §2) | One canonical surface | 2.0.0 |
 | 20 | **Issue/PR tab visual hierarchy** — long tabs feel busy | Issue tabs render dense walls of metadata; lo-pri | Cross-cutting; lo-pri |
@@ -433,6 +458,8 @@ Resolved from discussion. These are now load-bearing — implementations of the 
 4. **Memory files auto-stage on commit when repo mode is opt-in AND the current branch isn't protected.** The opt-in is the consent gate; auto-staging is the smooth UX. On protected branches, the memory diff surfaces in the commit modal as an unstageable warning ("create a feature branch to persist memory changes").
 5. **Tool budget defaults to 5000 tokens (per design)**, exposed as a tunable in Settings → Tools. Measure-and-tune happens from real usage, not pre-launch.
 6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches. PR titles convention: `feat(track):`, `fix(area):`, `chore(release):`, `docs(...)`.
+7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone (1.2.0 / 1.3.0 / 1.4.0 / 1.5.0 / 2.0.0) carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the subsystem hasn't earned its place and the *next* minor is gated on closing that gap, not on adding more capability.
+8. **Measurement before scale.** The cost dashboard ships in 1.2.1 (one minor after the first eviction subsystem) — not in 1.5.3 as the design originally sequenced it. Each 1.2.x follow-up gates on the previous one's measured value showing up in the dashboard. If Rule 3 doesn't produce measurable savings on top of Rules 1+2, Rule 4 is re-scoped before it ships.
 
 ---
 
@@ -441,7 +468,10 @@ Resolved from discussion. These are now load-bearing — implementations of the 
 - **Six-month arc** through 2.0, sequenced as foundations → compression → memory → tools → retrieval → profiles.
 - **Biweekly minor releases** as the rhythm; patches as needed inside a track.
 - **Admissibility, not accumulation** as the architectural principle every PR is reviewed against.
-- **No major version bumps** until profiles become the load-bearing configuration surface.
+- **Git-native memory and session state** as the externally-tellable story. Memory + sessions opt into living in `.aieditor/*` files committed with the repo; this is the unique feature the rest of the roadmap trades on.
+- **Measurement before scale.** The cost dashboard ships in 1.2.1 alongside the first eviction subsystem, not at the end of the arc. Each follow-up gates on the previous one delivering measured value, not on a calendar date.
+- **Removability discipline.** Every Phase-1 milestone exit criteria asks: with this subsystem removed, what user-visible behavior degrades? If "nothing measurable," the subsystem has not yet earned its complexity and the next minor is gated on closing that gap. Protects against shipping six well-designed subsystems and discovering in month seven that two of them were architecturally satisfying but didn't change anything users cared about.
+- **No major version bumps** until profiles become the load-bearing configuration surface — *and* the contract is sized to what ai-editor actually uses, not the full design surface (see 2.0.0 "Be ready to discover").
 - **UI investment proportional to capability investment** — every track that ships new behavior ships the UI that surfaces it.
 - **Honest deferrals.** Multi-modal, collaboration, marketplace are not on this roadmap. Adding them would make the arc unrealistic.
 - **The DESIGN docs are the contract.** When implementation diverges from a DESIGN doc, the doc updates first, then the code; not the other way around.
