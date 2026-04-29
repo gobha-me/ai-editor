@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-04-29 · Current released version: **1.0.5** · Authoring branch: `feat/roadmap-1.x`
+> Last updated: 2026-04-29 · Current released version: **1.1.3** · Authoring branch: `feat/roadmap-1.x`
 
 ## TL;DR
 
@@ -278,9 +278,11 @@ Each follow-up gates on the previous one delivering measured value, not on a cal
 **Size:** ~6-8 PRs over 3 weeks. UI is the long pole.
 
 **UI impact (significant):**
-- **New Settings tab: Memory** — list view with scope filter, edit form, audit log expansion, "agent proposal frequency" setting.
-- **Inline `@memory` chip in chat** — typing `@memory` shows a fuzzy-matched picker of existing memories for citation.
-- **Consent prompts** — when an agent proposes a memory, a small inline card in the chat with Accept/Dismiss/Edit buttons. Match the existing themed dialog system.
+- **New Settings tab: Memory** — list view with scope filter, edit form, audit log expansion, "agent proposal frequency" setting. *First Preact + `htm` slow-roll target* (per Decision §9). Existing tabs stay vanilla; the new Memory tab is the proving ground for the framework boundary.
+- **Inline `@memory` chip in chat** — typing `@memory` shows a fuzzy-matched picker of existing memories for citation. Also Preact-rendered (the chip + picker share state with the Settings tab).
+- **Consent prompts** — when an agent proposes a memory, a small inline card in the chat with Accept/Dismiss/Edit buttons. Match the existing themed dialog system. Preact component.
+
+The Memory UX (these three flows) is the scope of the **Touch 1 design engagement** with claude.ai/design (kicked off pre-1.3.0; see Decision §10).
 
 ---
 
@@ -397,9 +399,23 @@ Each follow-up gates on the previous one delivering measured value, not on a cal
 **Size:** ~6-10 PRs over 3 weeks. The migration is the risk; everything else is plumbing.
 
 **UI impact (significant):**
-- **Profile picker** in the chat header. Could be a dropdown with previews showing budget shape, active rule set, tool count.
+- **Profile picker** in the chat header. Could be a dropdown with previews showing budget shape, active rule set, tool count. Preact (per Decision §9 — third slow-roll target after Memory and active-tools chip row).
 - **Settings → Profiles tab** (replaces or augments Roles tab) — view/edit profile presets, see resolved configuration, fork from canonical.
 - **Status-bar profile pill** showing active profile + version. Click to switch.
+
+---
+
+### 3.0 — Uniform UI consolidation [stub; not scoped]
+
+**Placeholder, not committed work.** By 2.0 we've shipped Preact + `htm` on a handful of new surfaces (Memory tab, `@memory` chip + consent, active-tools chip row, profile picker) while everything else stays vanilla. The 2.0 → 3.0 arc is the moment to evaluate whether a uniform UI story is worth the migration cost.
+
+**Candidate scope** (to be sized when 2.0 is closer):
+- Migrate select high-state existing surfaces to Preact (Settings sidebar, secondary pane, conversation drawer) where the vanilla rebuild patterns have grown brittle.
+- **Plugin Component primitive** — let plugins ship Preact components instead of HTML strings; makes the long-deferred plugin marketplace tractable.
+- **Mobile UI consolidation** (UI #16) — the existing fullscreen-overlay model for ≤768px is cramped; rework using shared Preact primitives.
+- **Theming + design-system pass** — by 3.0 the pile of inline styles in `html/*.html` will deserve a proper component library.
+
+**Why a stub now:** Decision §9 commits Preact-on-new-surfaces only through 2.0; this stub records the future arc so it isn't forgotten, but doesn't pre-scope work that should be designed against measured data after 2.0 ships. Touch 2 of the design engagement (Decision §10) is the natural input here.
 
 ---
 
@@ -462,6 +478,8 @@ Resolved from discussion. These are now load-bearing — implementations of the 
 6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches. PR titles convention: `feat(track):`, `fix(area):`, `chore(release):`, `docs(...)`.
 7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone (1.2.0 / 1.3.0 / 1.4.0 / 1.5.0 / 2.0.0) carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the subsystem hasn't earned its place and the *next* minor is gated on closing that gap, not on adding more capability.
 8. **Measurement before scale.** The cost dashboard ships in 1.2.1 (one minor after the first eviction subsystem) — not in 1.5.3 as the design originally sequenced it. Each 1.2.x follow-up gates on the previous one's measured value showing up in the dashboard. If Rule 3 doesn't produce measurable savings on top of Rules 1+2, Rule 4 is re-scoped before it ships.
+9. **Preact + `htm` allowed for new state-heavy surfaces from 1.3.0 onward; vanilla everywhere else through 2.0.** The "no framework" constraint loosens *narrowly*. Existing tabs / sidebar / file tree / editor frame / chat stay vanilla forever; no migration. New surfaces with non-trivial state — Memory tab (1.3.0, first target), inline `@memory` chip + consent prompts (1.3.0), active-tools chip row (1.4.0), profile picker (2.0) — may be implemented in Preact + `htm/preact` loaded via the vendor bundle (no JSX, no build step, ~5KB gzipped). `State` + `EventBus` remain canonical: components subscribe via a thin store hook, `useState` only for ephemeral UI state. Bigger uniform-UI consolidation (potentially migrating select existing surfaces, plugin Component primitive, mobile rework) is a 2.0 → 3.0 arc. *Implications:* the README's "no framework" pitch updates when the first Preact component ships; vendor bundle gains `preact` + `htm` exports alongside CodeMirror.
+10. **claude.ai/design engages on a two-touch model.** Touch 1 (pre-1.3.0): Memory UX scoped to the three flows in §1.3.0 (consent prompts, Memory tab, commit-modal warning). Kickoff prompt handed off 2026-04-29; result lands in a future session. Touch 2 (between 1.4.x winding down and 2.0.0): consolidation pass — profile picker as new top-level primitive, Settings sidebar (UI #13 deferred here), mobile rework (UI #16), unified status bar (UI #18). Touch 2 happens against measured data from the four shipped subsystems, not speculation; don't pre-design it.
 
 ---
 

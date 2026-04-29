@@ -6,7 +6,7 @@
 ## Design Constraints
 
 - **No build step.** Every `.js` file is a native ES module (`<script type="module">`).
-- **No framework.** DOM manipulation is vanilla JS; CodeMirror is the only large library.
+- **Vanilla JS for existing code; Preact + `htm` allowed for new state-heavy surfaces from 1.3.0 onward** (per `docs/ROADMAP.md` Decision §9). Existing tabs / sidebar / file tree / editor frame / chat stay vanilla and don't get migrated. New surfaces with non-trivial state — Memory tab (1.3.0), inline `@memory` chip, active-tools chip row (1.4.0), profile picker (2.0) — may use Preact + `htm/preact` loaded via the vendor bundle (no JSX, ~5KB gzipped). `useState` is for ephemeral UI state only; app-level state stays in `State` + `EventBus` and components subscribe via a thin store hook.
 - **No package.json.** Vendor scripts are fetched from CDN with SRI hashes.
 - **Single global state.** `State` in `core.js` is the truth; `EventBus` decouples consumers.
 
