@@ -107,6 +107,8 @@ swaggers/
 *.min.css
 bundle.js
 bundle.css
+*.bundle.js
+*.bundle.css
 
 # ── Lockfiles ──
 *.lock

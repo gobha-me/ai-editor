@@ -133,6 +133,10 @@
                 await import('./test-turn-enrich.js');
             } catch (e) { errors.push(['Turn Enrich', e]); }
 
+            try {
+                await import('./test-metadata-coverage.js');
+            } catch (e) { errors.push(['Metadata Coverage', e]); }
+
             // --- UI & Context (0.9.12) ---
             try {
                 await import('./test-context-filter.js');

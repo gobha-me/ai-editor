@@ -3,8 +3,16 @@
  * Validates binary/generated/vendor exclusions and edge cases.
  */
 import { ContextManager } from '../js/context-manager.js';
+import { IgnoreManager, DEFAULT_IGNORE_PATTERNS } from '../js/ignore.js';
 
 const { T } = window;
+
+// Production calls IgnoreManager.init() at app startup, which reads
+// State.settings.ignorePatterns and compiles the rules. In tests, init() is
+// never called, so _compiled stays empty and isIgnored() returns false for
+// everything. Seed the same defaults the production init() would land on.
+IgnoreManager._globalRaw = DEFAULT_IGNORE_PATTERNS;
+IgnoreManager._recompile();
 
 // ============================================
 // Source files (should index)

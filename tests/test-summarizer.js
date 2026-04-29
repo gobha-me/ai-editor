@@ -40,11 +40,15 @@ T.eq(ChatSummarizer.RECENT_COUNT_BASE, 28, '128K balanced: recentBase=28 (80*0.3
 T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 48, '128K balanced: recentTools=48 (80*0.60)');
 T.eq(ChatSummarizer.SUMMARY_INTERVAL, 36, '128K balanced: interval=36 (80*0.45)');
 
-// 1M model, balanced: capacity = 1000000 * 0.50 / 800 = 625 → clamped 250
+// 1M model, balanced: ctx>524K → scale=8 (per getContextScale).
+// capacity = clamp(1000000 * 0.50 / 800, 20, 250*8=2000) = 625
+// threshold = clamp(625, 20, 200*8=1600) = 625
+// recentBase = clamp(round(625*0.35), 8, 60*8=480) = 219
+// recentTools = clamp(round(625*0.60), 16, 100*8=800) = 375
 setMockModel(1000000);
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, '1M balanced: threshold=200 (cap clamps at 250→200)');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 60, '1M balanced: recentBase=60 (max clamp)');
-T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 100, '1M balanced: recentTools=100 (max clamp)');
+T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 625, '1M balanced: threshold=625 (capacity, well under scale-8 cap)');
+T.eq(ChatSummarizer.RECENT_COUNT_BASE, 219, '1M balanced: recentBase=219 (capacity*0.35, well under scale-8 cap)');
+T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 375, '1M balanced: recentTools=375 (capacity*0.60, well under scale-8 cap)');
 
 // 32K model, balanced: capacity = 32000 * 0.50 / 800 = 20
 setMockModel(32000);

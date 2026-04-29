@@ -132,6 +132,14 @@ window.exportLLMDebug = exportLLMDebug;
 
 window.QuickOpen = QuickOpen;
 
+// Dev-mode flag: ?debug=metadata enables the chat-history metadata-coverage
+// probe (see js/chat/metadata-probe.js, docs/ROADMAP.md §1.1.0). Read-only;
+// the flag is global so it can be inspected from the DevTools console.
+{
+    const dbg = new URLSearchParams(window.location.search).get('debug') || '';
+    window.__AIE_DEBUG_METADATA = dbg.split(',').map(s => s.trim()).includes('metadata');
+}
+
 // Help modal
 function openHelpModal() {
     document.getElementById('helpModal')?.classList.add('active');

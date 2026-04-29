@@ -38,6 +38,7 @@ import {
 } from './messages.js';
 import { setupInputHandlers, stopGeneration, removeImage } from './input.js';
 import { exportChat } from './export.js';
+import { probeMetadataCoverage, summarizeCoverage } from './metadata-probe.js';
 import { showToast } from '../ui-helpers.js';
 import { 
     handleUserInputDirect,
@@ -96,6 +97,15 @@ function initChat(containerEl, inputEl) {
         State.chatHistory = savedHistory.slice(-ChatSummarizer.RECENT_COUNT);
     } else {
         State.chatHistory = savedHistory.slice(-50);
+    }
+
+    if (window.__AIE_DEBUG_METADATA) {
+        const report = probeMetadataCoverage(State.chatHistory);
+        console.group('[metadata-probe] coverage');
+        console.info(summarizeCoverage(report));
+        console.table(report.coverage_pct);
+        if (report.tool_result_turns > 0) console.table(report.samples);
+        console.groupEnd();
     }
 
     renderMessages(displayHistory.slice(-50));

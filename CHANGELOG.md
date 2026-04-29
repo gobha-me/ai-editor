@@ -2,6 +2,51 @@
 
 All notable changes to AI Editor are documented here.
 
+## [Unreleased]
+
+### Added
+- **Migration coverage probe** (`js/chat/metadata-probe.js`) — read-only
+  consistency check that surfaces in dev mode via `?debug=metadata`. At
+  session load, counts how many tool-result turns carry the enrichment
+  fields added in the previous turn-metadata work (`tool_name`, `tool_args`,
+  `tool_result_for`, `file_ops`) and reports per-field coverage to the
+  console. Pure module — no Storage, no DOM, no `State` mutation. Tests:
+  `tests/test-metadata-coverage.{mjs,js}`.
+
+  Why: when Compression Phase 1 (1.2.0) starts measuring eviction rates, the
+  probe's coverage signal is what lets us tell "no rule applied" apart from
+  "rule skipped because metadata absent on a pre-#170 turn." Without that
+  distinction, an under-target eviction rate is ambiguous evidence. Per
+  `docs/ROADMAP.md` §1.1.0, the enrichment + probe ship as one shippable
+  unit; this lands the second half.
+
+  Wired in `js/app.js` (parses the query string once at boot, exposes
+  `window.__AIE_DEBUG_METADATA`) and consumed in `js/chat/index.js`
+  `initChat()` after history rehydration. Default-off; zero behavior change
+  when the flag is absent.
+
+### Fixed
+- **`tests/test-context-filter.js`** — Browser test now seeds
+  `IgnoreManager._globalRaw` with `DEFAULT_IGNORE_PATTERNS` and calls
+  `_recompile()` at the top. Production calls `IgnoreManager.init()` at app
+  startup; the test never did, leaving `_compiled = []` so `isIgnored()`
+  returned `false` for every input. 32 of the 35 failing browser tests
+  (binary/media, lock files, path patterns, edge cases) were the same root
+  cause; all green after seeding.
+- **`js/ignore.js` `DEFAULT_IGNORE_PATTERNS`** — Added `*.bundle.js` and
+  `*.bundle.css` alongside the existing bare `bundle.js` / `bundle.css`.
+  The bare patterns are exact-basename matches (gitignore semantics) and
+  miss real-world webpack output like `vendor.bundle.js` and
+  `styles.bundle.css`. Affects new installs only — existing users keep
+  their saved patterns until they reset.
+- **`tests/test-summarizer.js`** — Updated the 3 "1M model, balanced"
+  expectations from `{200, 60, 100}` to `{625, 219, 375}`. The summarizer
+  multiplies its upper clamps by `getContextScale().scale` (1×/2×/4×/8×
+  per `js/llm/api.js` lines 99–102); 1M-ctx models hit scale 8 so capacity
+  (625) sits well under the scaled cap (1600/480/800) and is no longer
+  clamped. Test was written when scale was always 1; production scaling
+  was added later.
+
 ## [1.0.5] - 2026-04-29
 
 ### Added
