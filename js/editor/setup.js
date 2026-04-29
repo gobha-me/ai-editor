@@ -73,6 +73,9 @@ export const CM = {
     // Theme
     oneDark: null,
 
+    // Keybinding modes (populated lazily — null = mode unavailable)
+    vim: null,
+
     // Language modules (populated by loadLanguages)
     languages: {}
 };
@@ -89,7 +92,7 @@ async function loadFromVendorBundle() {
     const bundleUrl = new URL('vendor/codemirror-bundle.js', document.baseURI).href;
     const bundle = await import(bundleUrl);
 
-    const { cmView, cmState, cmBasicSetup, cmCommands, cmLanguage, cmLint, cmAutocomplete, cmSearch, cmOneDark } = bundle;
+    const { cmView, cmState, cmBasicSetup, cmCommands, cmLanguage, cmLint, cmAutocomplete, cmSearch, cmOneDark, cmVim } = bundle;
 
     CM.EditorView = cmView.EditorView;
     CM.EditorState = cmState.EditorState;
@@ -128,6 +131,9 @@ async function loadFromVendorBundle() {
     CM.searchKeymap = cmSearch.searchKeymap;
 
     CM.oneDark = cmOneDark.oneDark;
+
+    // Keybinding modes (Vim from @replit/codemirror-vim; null when unavailable)
+    CM.vim = cmVim || null;
 
     // Gutter & decoration APIs (for blame gutter extension)
     CM.gutter = cmView.gutter;
@@ -324,6 +330,15 @@ export async function loadCodeMirror() {
             // Theme
             const cmOneDark = await import(`${CDN}/@codemirror/theme-one-dark@6`);
             CM.oneDark = cmOneDark?.oneDark;
+
+            // Keybinding modes — best-effort, must not block editor load
+            try {
+                const cmVim = await import(`${CDN}/@replit/codemirror-vim@6`);
+                CM.vim = cmVim || null;
+            } catch (e) {
+                console.warn('[Editor] Vim mode not available from CDN:', e?.message || e);
+                CM.vim = null;
+            }
 
             // Gutter & decoration APIs (for blame gutter extension)
             CM.gutter = cmView?.gutter;

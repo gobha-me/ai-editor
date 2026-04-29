@@ -1274,3 +1274,31 @@
         max-width: 14em;
     }
 }
+
+/* ============================================
+ * Vim mode (@replit/codemirror-vim) — ex-command panel
+ * ============================================
+ * The panel renders as `.cm-vim-panel.cm-panel` at the bottom of the editor
+ * with a transparent background and a bare `<input>` for typing `:w`, `:q`,
+ * `/search`, etc. The library leaves the input unstyled, so the UA default
+ * `color: black` makes it nearly invisible against oneDark. Match it to the
+ * panel's foreground and use the editor's monospace stack.
+ */
+.cm-vim-panel {
+    background: var(--bg-secondary, #1e1f29);
+    border-top: 1px solid var(--border, #444);
+    color: var(--text-primary, #e0e0e0);
+    padding: 4px 8px;
+    font-family: var(--font-mono, monospace);
+    font-size: var(--editor-font-size, 14px);
+}
+
+.cm-vim-panel input {
+    background: transparent;
+    color: inherit;
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: inherit;
+    caret-color: var(--text-primary, #e0e0e0);
+}

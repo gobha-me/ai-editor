@@ -87,6 +87,7 @@
  * @property {boolean}              showIssues
  * @property {boolean}              showPullRequests
  * @property {boolean}              showLineNumbers
+ * @property {'default'|'vim'}      editorKeybindingMode
  * @property {string}               theme
  * @property {SummarizerMode}       summarizerMode
  * @property {SummarizerConfig}     summarizer
@@ -285,6 +286,7 @@ const State = {
         showIssues: true,          // Show issues panel in sidebar
         showPullRequests: true,    // Show pull requests panel in sidebar
         showLineNumbers: true,     // Show line numbers in editor
+        editorKeybindingMode: 'default', // 'default' | 'vim' — keybinding profile for the editor
         theme: 'dark',
 
         // Summarizer Configuration

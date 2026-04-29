@@ -30,6 +30,7 @@ export {
     focus,
     applyEdit,
     setLineNumbersVisible,
+    setKeybindingMode,
     // Section-based editing (for LLM tools)
     getLineInfo,
     getLineRange,

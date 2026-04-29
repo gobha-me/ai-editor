@@ -170,17 +170,19 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 ---
 
-### 1.1.3 — Vim / Emacs keybindings [+3 days]
+### 1.1.3 — Vim keybindings [+3 days]
 
-**What ships:** Bundle `@codemirror/vim` and `@codemirror/legacy-modes/mode/emacs` (or equivalent CM6 extensions); toggle in Settings → Editor between Default / Vim / Emacs. Single global mode (not per-tab). Persists across reloads.
+**What ships:** Bundle `@replit/codemirror-vim` (the maintained CM6 vim extension; the original `@codemirror/vim` package was retired). Toggle in Settings → Appearance between Default / Vim. Single global mode (not per-tab). Persists across reloads. `:w` / `:wq` ex commands wired to the existing commit modal so save behaves the way users expect.
 
 **Why now:** Self-contained, low-risk, broadens audience meaningfully. Easier to land while the bigger tracks are still scoping.
 
-**Exit criteria:** All three modes pass a smoke test (insert/normal/visual for Vim; basic motion + `C-x C-s` for Emacs). Help modal documents the toggle.
+**Emacs deferred — out of scope for this patch.** The roadmap's earlier mention of `@codemirror/legacy-modes/mode/emacs` was a misread — that package is a CM5 syntax-highlighting shim, not keybindings. The maintained CM6 emacs options are third-party (`@replit/codemirror-emacs`) or hand-rolled; neither was demanded enough at scoping time to commit follow-up work. Pick up only if user demand emerges.
+
+**Exit criteria:** Vim mode passes a smoke test (insert/normal/visual transitions; toggle off restores default keymap). Help modal documents the toggle and the common bindings. Settings round-trip persists the mode across reloads.
 
 **Size:** Single PR.
 
-**UI impact:** Settings → Editor gets a "Keybinding mode" radio. F1 help modal lists the mode-specific shortcuts.
+**UI impact:** Settings → Appearance gets a "Keybinding mode" radio (Default / Vim) below the line-number toggle. F1 help modal Hotkeys tab grows a "Vim mode" group.
 
 ---
 
@@ -409,7 +411,7 @@ These slot into patch releases of whatever track is current. Some are enabled by
 |---|---|---|---|
 | 1 | **Idle-timeout label change** in Settings → LLM | Makes the new behavior discoverable | 1.1.1 |
 | 2 | **Settings → Embeddings tab** | Provider selector, filetype filters, in-browser toggle, indexing stats | 1.1.2 |
-| 3 | **Vim/Emacs keybinding toggle** in Settings → Editor | Self-contained power-user feature | 1.1.3 |
+| 3 | **Vim keybinding toggle** in Settings → Appearance | Self-contained power-user feature; Emacs deferred (no CM6 official package) | 1.1.3 |
 | 4 | **Compression diagnostics pill** in status bar (live ratio) + full trace in LLM debug modal | Surface admissibility decisions; per Decision §3 | 1.2.0 |
 | 5 | **Memory management UI** — Settings tab + inline `@memory` chip in chat | Memory is invisible without it | 1.3.0 |
 | 6 | **Cross-device session indicator** — small badge in conversation drawer when a conversation is repo-synced | Visibility for the opt-in repo mode | 1.3.4 |

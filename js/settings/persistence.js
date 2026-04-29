@@ -50,6 +50,9 @@ export function collectAndSave() {
     
     const showLineNumbersEl = document.getElementById('settingShowLineNumbers');
     State.settings.showLineNumbers = showLineNumbersEl ? showLineNumbersEl.checked : false;
+
+    const keybindingModeEl = document.querySelector('input[name="editorKeybindingMode"]:checked');
+    State.settings.editorKeybindingMode = keybindingModeEl ? keybindingModeEl.value : 'default';
     
     const showIssuesEl = document.getElementById('settingShowIssues');
     State.settings.showIssues = showIssuesEl ? showIssuesEl.checked : false;
@@ -233,6 +236,7 @@ export function exportSettings() {
         fontSize: State.settings.fontSize,
         editorFontSize: State.settings.editorFontSize,
         showLineNumbers: State.settings.showLineNumbers,
+        editorKeybindingMode: State.settings.editorKeybindingMode,
         showIssues: State.settings.showIssues,
         showPullRequests: State.settings.showPullRequests,
         

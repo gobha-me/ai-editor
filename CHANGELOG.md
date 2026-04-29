@@ -4,6 +4,150 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-04-29
+
+Opens the **1.1.3 — Vim keybindings** track from `docs/ROADMAP.md` §1.1.3.
+The roadmap originally scoped Default / Vim / Emacs; scoping confirmed the
+mention of `@codemirror/legacy-modes/mode/emacs` was a misread (that package
+is a CM5 syntax-highlighting shim, unrelated to keybindings) and Emacs has
+been dropped from the patch. The maintained CM6 vim extension is
+`@replit/codemirror-vim` (the original `@codemirror/vim` package was retired);
+this release wires it into the existing vendor bundle and CDN-fallback
+loader, surfaces a Default / Vim radio in Settings → Appearance, and
+documents the bindings in the F1 help modal.
+
+### Added
+
+- **`@replit/codemirror-vim` bundled into `vendor/codemirror-bundle.js`**
+  (`vendor/package.json`, `vendor/codemirror-entry.mjs`,
+  `js/editor/setup.js`). The vendor entry exports the new `cmVim`
+  namespace; the loader unpacks it into `CM.vim` after the bundle resolves
+  and falls back to `https://esm.sh/@replit/codemirror-vim@6` when the
+  local bundle is unavailable. Failure to load Vim is non-fatal — `CM.vim`
+  stays `null` and the editor still creates with the default keymap.
+- **`editorKeybindingMode` setting** (`js/core.js`,
+  `js/settings/persistence.js`, `js/settings-manager.js`,
+  `html/settings-tabs.html`). New `'default' | 'vim'` setting under the
+  Appearance tab, below the line-number toggle. Default is `'default'`;
+  legacy installs without the key fall through to default via the
+  existing merge spread in `loadSettings()` — no migration required.
+- **Runtime mode swap via `keymapCompartment`** (`js/editor/instance.js`).
+  Mirrors the existing `lineNumberCompartment` pattern: a fresh
+  Compartment is created in `createEditor()` and seeded from
+  `State.settings.editorKeybindingMode`. The new exported
+  `setKeybindingMode(mode)` calls
+  `editorInstance.dispatch({ effects: keymapCompartment.reconfigure(...) })`
+  so toggling Default ↔ Vim does not rebuild the editor or lose history.
+- **`:w` and `:wq` ex commands wired to the commit modal**
+  (`js/editor/instance.js`). Using `Vim.defineEx` once per session, both
+  commands invoke the existing `window.openCommitModal()` flow so save
+  behaves the way Vim users expect (queue the dirty file for a commit)
+  rather than silently no-op. Registration is idempotent — the flag
+  `vimExCommandsRegistered` short-circuits subsequent calls.
+- **Vim mode help group in the F1 modal Hotkeys tab** (`html/modals.html`).
+  New `<div class="help-group">` documenting Esc / i / a / v, motion
+  (h/j/k/l, w/b, 0/$, gg/G), edit (dd, yy, p/P), undo/redo, search, and
+  the new `:w` / `:wq` save mapping. Header reminds users to enable Vim
+  in Settings → Appearance.
+- **`tests/test-keybindings.mjs`** — four `node:test` cases covering the
+  `editorKeybindingMode` default, Storage round-trip, legacy-install
+  fallback, and explicit-set wins on merge. Picked up by the existing
+  `node --test tests/test-*.mjs` step in CI.
+- **`tests/test-keybindings.js`** — browser-driven smoke that loads
+  CodeMirror, asserts `CM.vim` and `CM.vim.Vim.defineEx` are populated,
+  creates a real `EditorView` in a hidden container, and exercises the
+  Default → Vim → Default round-trip via `setKeybindingMode()`. Wired
+  into `tests/index.html` after the LLM-idle-timeout suite.
+
+### Fixed
+
+- **Vim ex-command input is readable** (`css/editor.css`). The
+  `<input>` inside `.cm-vim-panel` had no styling, so the UA default
+  `color: black` left it nearly invisible against oneDark when typing
+  `:w`, `:q`, `/search`, etc. Added a small block scoping the panel
+  background/color/font to the project's CSS variables and forcing the
+  input to `color: inherit` + monospace.
+- **Vim keymap actually intercepts keystrokes** (`js/editor/instance.js`).
+  The keybinding compartment was pushed onto the extension list *after*
+  `basicSetup`. CM6 evaluates extensions in order — first registration
+  wins — so basicSetup's `defaultKeymap` claimed `Esc`/`i`/`hjkl` before
+  vim's keymap got a chance and Vim mode silently no-op'd. Per
+  `@replit/codemirror-vim`'s README the vim extension must precede
+  basicSetup; reordered. The browser test in `tests/test-keybindings.js`
+  now drives a real `KeyboardEvent` through `view.contentDOM` and
+  asserts the `insertMode` flag flips on `i` / off on `Esc`, so the
+  ordering invariant has a regression test (the dispatch-only test that
+  shipped with the initial commit didn't exercise the keymap).
+- **`EmbeddingsClient.clearCache()` is now an actual nuke**
+  (`js/embeddings-client.js`). Pre-fix it only `.clear()`'d the
+  in-memory `_cache` Map, leaving the Cache-API `transformers-cache`
+  store and the persisted `embeddings-index-*` Storage keys behind —
+  exactly the state that left users staring at a poisoned cache after
+  flipping providers. New behavior: clears the in-memory map, deletes
+  every `embeddings-index-*` Storage key (via `Storage.keys('embeddings-index-')`),
+  deletes the `transformers-cache` Cache-API store, and resets the
+  `embedder.cacheWiped.1.1.3` recovery sentinel. Returns
+  `{ indexes, transformersCache }` for caller diagnostics. Verified end-to-end
+  in preview with planted poisoned entries.
+- **Provider/model switch wipes stale persisted indexes**
+  (`js/embeddings-client.js` `settings:saved` listener). Vectors are
+  model-bound — a 384-dim index from one model can't be queried with
+  vectors from a 768-dim model, and even same-dim indexes from different
+  models live in different embedding spaces. The listener already
+  re-inits when the embedder config sig changes; it now also clears
+  `_cache` and removes every `embeddings-index-*` key so subsequent
+  queries don't return garbage matches against vectors produced by the
+  prior model.
+- **Embedder model picker only shows models for the active provider**
+  (`js/settings/models-tab.js`, `js/settings-manager.js`,
+  `html/settings-tabs.html`). Pre-fix the datalist hard-coded the three
+  Xenova/* options at page load and the "Fetch API Models" button mixed
+  remote results in alongside them — leaving a noisy picker where half
+  the entries were non-functional for whichever provider was active.
+  New `populateEmbeddingModelsByProvider(provider)` runs on settings
+  open and on provider radio change: shows the Xenova/* trio in `local`
+  mode, leaves the list empty in remote mode until "Fetch API Models"
+  fills it from `<endpoint>/models?type=embedding`. The fetch helper
+  itself now bails early with an info toast when local is active
+  instead of silently returning nothing.
+- **Transformers.js in-browser embedder no longer crashes on init**
+  (`js/embeddings-client.js`). `_initLocal()` set
+  `transformers.env.allowLocalModels = true`, which made the library try
+  to fetch model files from `<deployment-origin>/models/<model>/...`
+  before falling back to HuggingFace. The deployment doesn't serve model
+  files, so nginx's SPA fallback returned the index.html page; the
+  library then called `JSON.parse('<!DOCTYPE html>…')` and surfaced as
+  `SyntaxError: Unexpected token '<'`. The flag is now `false` (matching
+  Transformers.js's documented browser default), so the library goes
+  straight to HuggingFace, with the existing `useBrowserCache = true`
+  still serving subsequent loads from IndexedDB. Surfaces a partial
+  closure of the "in-browser embedder validation" item the 1.1.2.x list
+  in `docs/ROADMAP.md` deferred — measurement / hardware-requirements
+  documentation is still owed.
+- **One-time `transformers-cache` wipe for users poisoned by the pre-fix
+  state** (`js/embeddings-client.js`,
+  `_wipePoisonedTransformersCacheOnce()`). Anyone who tried the local
+  embedder before this release ended up with the SPA's `<!DOCTYPE html>…`
+  cached at `<origin>/models/...` keys inside the Cache API's
+  `transformers-cache` store. Those entries kept short-circuiting init
+  even after `allowLocalModels` flipped to `false`. The new helper runs
+  on first `_initLocal()` of a browser, deletes the
+  `transformers-cache` once, and sets a `embedder.cacheWiped.1.1.3` flag
+  in `localStorage` so it never re-runs. No-ops on fresh installs.
+
+### Changed
+
+- **`settings:saved` listener applies the new mode in-place** (`js/app.js`).
+  Hooked into the existing block where `applyLineNumbersVisibility()`
+  fires; calls `setKeybindingMode(State.settings.editorKeybindingMode)`
+  alongside it. Toggling the radio in Settings and clicking Save flips
+  the editor's keybinding mode without a page reload.
+- **`docs/ROADMAP.md` §1.1.3 rewritten to Vim-only scope.** The "What
+  ships" block names `@replit/codemirror-vim` (not the retired
+  `@codemirror/vim`); a new paragraph notes Emacs is deferred and why.
+  UI improvement #3 in the cross-cutting table updated to "Vim
+  keybinding toggle in Settings → Appearance."
+
 ## [1.1.2] - 2026-04-29
 
 Opens the **1.1.2 — Embedder hardening** track from `docs/ROADMAP.md`

@@ -84,9 +84,57 @@ export async function fetchModelsForSettings() {
 }
 
 /**
+ * Local Xenova/* models bundled by Transformers.js. Shown in the datalist
+ * only when the active embeddingProvider is `'local'`.
+ */
+const LOCAL_EMBEDDING_MODELS = [
+    { id: 'Xenova/all-MiniLM-L6-v2',   name: 'all-MiniLM-L6-v2 (Local, ~23MB)' },
+    { id: 'Xenova/bge-small-en-v1.5',  name: 'bge-small-en-v1.5 (Local, ~33MB)' },
+    { id: 'Xenova/bge-base-en-v1.5',   name: 'bge-base-en-v1.5 (Local, ~130MB)' },
+];
+
+/**
+ * Populate the embedder model `<datalist>` with options that belong to the
+ * currently selected provider. Called on settings open and whenever the
+ * provider radio changes — keeps the picker honest so users don't stare
+ * at Xenova/* options on a remote provider (or vice versa).
+ *
+ * Local mode: shows the bundled Xenova/* models, no API call needed.
+ * Remote mode: clears the list; the user must click "Fetch API Models" to
+ * populate it from `<endpoint>/models?type=embedding`.
+ *
+ * @param {string} [provider] — defaults to whatever radio is currently checked.
+ */
+export function populateEmbeddingModelsByProvider(provider) {
+    if (!provider) {
+        provider = document.querySelector('input[name="embeddingProvider"]:checked')?.value || 'local';
+    }
+    const datalist = document.getElementById('embeddingModelsList');
+    if (!datalist) return;
+    if (provider === 'local') {
+        datalist.innerHTML = LOCAL_EMBEDDING_MODELS
+            .map(m => `<option value="${m.id}">${m.name}</option>`)
+            .join('');
+    } else {
+        // Remote: leave empty until Fetch API Models runs.
+        datalist.innerHTML = '';
+    }
+}
+
+/**
  * Fetch embedding models from API and populate the embedding model input/datalist.
+ * Only meaningful for remote providers — bails early with a toast when local is active.
  */
 export async function fetchEmbeddingModelsForSettings() {
+    // Local mode has no API to fetch from — the bundled Xenova/* list is
+    // already in the datalist via populateEmbeddingModelsByProvider().
+    const activeProvider = document.querySelector('input[name="embeddingProvider"]:checked')?.value
+        || State.settings.embeddingProvider || 'local';
+    if (activeProvider === 'local') {
+        window.showToast('Local mode runs in-browser — switch the provider radio above to fetch API models.', 'info');
+        return;
+    }
+
     // Per 1.1.2 the embedder has its own endpoint/key inputs in
     // Settings → Embeddings. Fall back to the chat LLM inputs only if the
     // user hasn't filled the embedder inputs yet (covers the in-modal
@@ -119,30 +167,21 @@ export async function fetchEmbeddingModelsForSettings() {
         // Restore original values (user hasn't saved yet)
         State.settings.embeddingEndpoint = origEndpoint;
         State.settings.embeddingApiKey = origApiKey;
-        
+
         if (embeddingModels.length === 0) {
-            window.showToast('No embedding models found. You can still enter a model ID manually or use local Xenova/* models.', 'warning');
+            window.showToast('No embedding models found at this endpoint. You can still enter a model ID manually.', 'warning');
             return;
         }
-        
-        // Populate the datalist with API models
+
+        // Remote provider — show API models only. Local Xenova/* models are
+        // unrelated here; mixing them in just made the picker noisy.
         const datalist = document.getElementById('embeddingModelsList');
         if (datalist) {
-            // Keep the local models, add API models
-            const localModels = [
-                { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2 (Local, ~23MB)' },
-                { id: 'Xenova/bge-small-en-v1.5', name: 'bge-small-en-v1.5 (Local, ~33MB)' },
-                { id: 'Xenova/bge-base-en-v1.5', name: 'bge-base-en-v1.5 (Local, ~130MB)' }
-            ];
-            
-            const allModels = [
-                ...localModels.map(m => `<option value="${m.id}">${m.name}</option>`),
-                ...embeddingModels.map(m => `<option value="${m.id}">${m.name || m.id} (API)</option>`)
-            ];
-            
-            datalist.innerHTML = allModels.join('');
+            datalist.innerHTML = embeddingModels
+                .map(m => `<option value="${m.id}">${m.name || m.id} (API)</option>`)
+                .join('');
         }
-        
+
         window.showToast(`Found ${embeddingModels.length} API embedding model(s)`, 'success');
     } catch (error) {
         console.error('Failed to fetch embedding models:', error);

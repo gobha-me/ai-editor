@@ -84,11 +84,43 @@ const EmbeddingsClient = {
     },
 
     /**
+     * One-time wipe of the `transformers-cache` Cache-API store. Pre-1.1.3
+     * the embedder ran with `allowLocalModels = true`, which made
+     * Transformers.js fetch model files from `<origin>/models/...` first.
+     * The deployment doesn't serve model files, so the SPA fallback returned
+     * `index.html` and Transformers.js cached the HTML body under the local
+     * URL keys. Once cached, those entries kept short-circuiting subsequent
+     * loads — even after the flag flipped to `false` — because the lib's
+     * cache lookup still hit them. This wipe runs at most once per browser
+     * (gated by a `localStorage` flag) so existing users aren't left in the
+     * poisoned-cache state. Safe on fresh installs (no entries to delete).
+     */
+    async _wipePoisonedTransformersCacheOnce() {
+        const FLAG = 'embedder.cacheWiped.1.1.3';
+        try {
+            if (typeof localStorage === 'undefined' || localStorage.getItem(FLAG)) return;
+            if (typeof caches === 'undefined') {
+                localStorage.setItem(FLAG, '1');
+                return;
+            }
+            const deleted = await caches.delete('transformers-cache');
+            localStorage.setItem(FLAG, '1');
+            if (deleted) {
+                console.log('[Embeddings] Cleared poisoned transformers-cache (one-time 1.1.3 migration)');
+            }
+        } catch (e) {
+            console.warn('[Embeddings] transformers-cache wipe skipped:', e?.message || e);
+        }
+    },
+
+    /**
      * Initialize local mode (Transformers.js)
      */
     async _initLocal(modelName) {
         console.log('[Embeddings] Loading Transformers.js...');
-        
+
+        await this._wipePoisonedTransformersCacheOnce();
+
         // Dynamically import Transformers.js — try local vendor first, then CDN
         try {
             const vendorUrl = new URL('vendor/transformers.min.js', document.baseURI).href;
@@ -96,9 +128,14 @@ const EmbeddingsClient = {
         } catch (_) {
             transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         }
-        
-        // Configure to use local models when possible
-        transformers.env.allowLocalModels = true;
+
+        // We don't serve model files from the deployment host — disable the
+        // local-model lookup so Transformers.js goes straight to HuggingFace
+        // instead of fetching `<origin>/models/<model>/config.json` (which
+        // hits the nginx SPA fallback and returns index.html, then crashes
+        // JSON.parse on `<!DOCTYPE html>...`). The browser cache (IndexedDB)
+        // still avoids re-downloads after first run.
+        transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
 
         console.log(`[Embeddings] Loading local model: ${modelName}`);
@@ -375,12 +412,51 @@ const EmbeddingsClient = {
     },
 
     /**
-     * Clear all cached embeddings
+     * Clear all cached embedder state. Wipes:
+     *   1. The in-memory `_cache` Map (per-text embedding results).
+     *   2. The persisted `embeddings-index-*` Storage keys (per-project file
+     *      vectors built by `ContextManager.buildIndex()`).
+     *   3. The Cache-API `transformers-cache` store (model files fetched
+     *      by Transformers.js — config.json, tokenizer.json, ONNX weights).
+     * Also resets the `embedder.cacheWiped.1.1.3` sentinel so a future
+     * recovery wipe could run again if needed; this is the user pressing
+     * "Clear cache" which is the manual-recovery surface, so we don't keep
+     * the one-time gate set artificially.
+     * @returns {Promise<{indexes: number, transformersCache: boolean}>}
      */
-    clearCache() {
+    async clearCache() {
         this._cache.clear();
-        console.log('[Embeddings] Cache cleared');
+
+        // Persisted per-project indexes — match `embeddings-index-*` keys
+        // written by `ContextManager._persistIndex()`.
+        let indexesRemoved = 0;
+        try {
+            const indexKeys = Storage.keys('embeddings-index-');
+            for (const k of indexKeys) {
+                Storage.remove(k);
+                indexesRemoved++;
+            }
+        } catch (e) {
+            console.warn('[Embeddings] Failed to enumerate Storage indexes:', e?.message || e);
+        }
+
+        // Transformers.js model-file cache — without this, switching models
+        // or recovering from a poisoned init re-uses stale cached entries.
+        let transformersDeleted = false;
+        try {
+            if (typeof caches !== 'undefined') {
+                transformersDeleted = await caches.delete('transformers-cache');
+            }
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem('embedder.cacheWiped.1.1.3');
+            }
+        } catch (e) {
+            console.warn('[Embeddings] Failed to delete transformers-cache:', e?.message || e);
+        }
+
+        console.log(`[Embeddings] Cache cleared (in-memory + ${indexesRemoved} persisted index${indexesRemoved === 1 ? '' : 'es'} + transformers-cache: ${transformersDeleted ? 'wiped' : 'absent'})`);
         EventBus.emit('embeddings:cacheCleared');
+        return { indexes: indexesRemoved, transformersCache: transformersDeleted };
     },
 
     /**
@@ -423,6 +499,24 @@ EventBus.on('settings:saved', async () => {
             EmbeddingsClient._maxInputChars = null; // Reset discovered limit for new model
             embeddingModel = null;
             pipeline = null;
+
+            // Vectors are model-bound: a 384-dim index from one model can't
+            // be queried with vectors from a 768-dim model, and even
+            // same-dim indexes from different models live in different
+            // embedding spaces. Wipe the in-memory and persisted indexes
+            // when the producing model changes so we don't return garbage
+            // matches against stale vectors.
+            EmbeddingsClient._cache.clear();
+            try {
+                const indexKeys = Storage.keys('embeddings-index-');
+                for (const k of indexKeys) Storage.remove(k);
+                if (indexKeys.length > 0) {
+                    console.log(`[Embeddings] Wiped ${indexKeys.length} stale index${indexKeys.length === 1 ? '' : 'es'} after embedder change`);
+                }
+            } catch (e) {
+                console.warn('[Embeddings] Failed to wipe stale indexes on switch:', e?.message || e);
+            }
+
             _lastConfigSig = newSig;
             await EmbeddingsClient.init();
         }

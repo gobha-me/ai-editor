@@ -18,6 +18,8 @@ export let editorInstance = null;
 
 // Compartment for dynamic line number toggling (CM6 best practice)
 let lineNumberCompartment = null;
+// Compartment for dynamic keybinding-mode toggling (Default ↔ Vim)
+let keymapCompartment = null;
 
 // ============================================
 // EDITOR CREATION
@@ -57,17 +59,31 @@ export async function createEditor(container, content, filename) {
 
     // Build extensions array with defensive checks
     const extensions = [];
-    
+
     // Create fresh compartment for line number visibility
     lineNumberCompartment = CM.Compartment ? new CM.Compartment() : null;
-    
+
+    // Keybinding-mode compartment goes FIRST so vim()'s keymap wins over
+    // basicSetup's default keymap. CM6 evaluates extensions in order — the
+    // first registration of a key binding takes precedence — and
+    // @replit/codemirror-vim's README is explicit that vim() must precede
+    // basicSetup. Putting it after would let basicSetup's defaultKeymap
+    // claim Esc/i/h/j/k/l first and Vim mode would silently no-op.
+    keymapCompartment = CM.Compartment ? new CM.Compartment() : null;
+
+    if (keymapCompartment) {
+        const { State: AppState } = await import('../core.js');
+        const mode = AppState.settings.editorKeybindingMode || 'default';
+        extensions.push(keymapCompartment.of(buildKeymapExtension(mode)));
+    }
+
     // Add basicSetup
     if (Array.isArray(CM.basicSetup)) {
         extensions.push(...CM.basicSetup);
     } else if (CM.basicSetup) {
         extensions.push(CM.basicSetup);
     }
-    
+
     // Add line number visibility compartment
     if (lineNumberCompartment) {
         const { State: AppState } = await import('../core.js');
@@ -733,6 +749,87 @@ export function applyEdit(newContent) {
     
     State.editorDirty = true;
     EventBus.emit('editor:editApplied', { original, updated: newContent });
+}
+
+// ============================================
+// KEYBINDING MODE (CM6 Compartment)
+// ============================================
+
+let vimExCommandsRegistered = false;
+
+/**
+ * Register Vim ex commands (`:w`, `:wq`, `:q`) once per session. Wires to the
+ * host's save flow (commit modal) so `:w` does what users expect rather than
+ * silently no-op.
+ */
+function ensureVimExCommands() {
+    if (vimExCommandsRegistered) return;
+    const Vim = CM.vim?.Vim;
+    if (!Vim || typeof Vim.defineEx !== 'function') return;
+    try {
+        Vim.defineEx('write', 'w', () => {
+            if (typeof window !== 'undefined' && typeof window.openCommitModal === 'function') {
+                window.openCommitModal();
+            }
+        });
+        Vim.defineEx('wq', 'wq', () => {
+            if (typeof window !== 'undefined' && typeof window.openCommitModal === 'function') {
+                window.openCommitModal();
+            }
+        });
+        vimExCommandsRegistered = true;
+    } catch (e) {
+        console.warn('[Editor] Failed to register Vim ex commands:', e);
+    }
+}
+
+/**
+ * Build the extension list for a keybinding mode. Returns `[]` for default
+ * (basicSetup's keymap is used). Returns the Vim extension for 'vim'. Falls
+ * back to `[]` when the requested mode is unavailable (e.g., bundle missing).
+ * @param {string} mode - 'default' | 'vim'
+ * @returns {any[]} CM6 extension list
+ */
+function buildKeymapExtension(mode) {
+    if (mode === 'vim') {
+        const factory = CM.vim?.vim;
+        if (typeof factory === 'function') {
+            try {
+                ensureVimExCommands();
+                return [factory()];
+            } catch (e) {
+                console.warn('[Editor] Vim mode failed to initialize:', e);
+                return [];
+            }
+        }
+        console.warn('[Editor] Vim mode requested but @replit/codemirror-vim not loaded');
+        return [];
+    }
+    return [];
+}
+
+/**
+ * Switch the keybinding mode at runtime via the keymap compartment. Safe to
+ * call before the editor is ready — returns false in that case so callers
+ * can decide whether to surface an error.
+ * @param {string} mode - 'default' | 'vim'
+ * @returns {boolean} true if the dispatch ran
+ */
+export function setKeybindingMode(mode) {
+    if (!editorInstance || !keymapCompartment) {
+        console.debug('[Editor] Cannot set keybinding mode — editor or compartment not ready');
+        return false;
+    }
+    try {
+        editorInstance.dispatch({
+            effects: keymapCompartment.reconfigure(buildKeymapExtension(mode))
+        });
+        console.log(`[Editor] Keybinding mode set to ${mode}`);
+        return true;
+    } catch (e) {
+        console.error('[Editor] Failed to set keybinding mode:', e);
+        return false;
+    }
 }
 
 // ============================================

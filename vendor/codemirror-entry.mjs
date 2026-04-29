@@ -19,6 +19,9 @@ export * as cmSearch from '@codemirror/search';
 // Theme
 export * as cmOneDark from '@codemirror/theme-one-dark';
 
+// Keybinding modes
+export * as cmVim from '@replit/codemirror-vim';
+
 // Language modules
 export * as langJavascript from '@codemirror/lang-javascript';
 export * as langPython from '@codemirror/lang-python';

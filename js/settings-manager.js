@@ -25,7 +25,8 @@ import {
 } from './settings/llm-tab.js';
 import {
     populateSettingsModelSelects, fetchModelsForSettings,
-    fetchEmbeddingModelsForSettings, populateModelsTab, initModelsTabEvents
+    fetchEmbeddingModelsForSettings, populateModelsTab, initModelsTabEvents,
+    populateEmbeddingModelsByProvider
 } from './settings/models-tab.js';
 
 // ── Open / Close ──
@@ -154,6 +155,11 @@ function populateSettingsForm() {
     // Checkbox null-safe population
     const showLineNumbersEl = document.getElementById('settingShowLineNumbers');
     if (showLineNumbersEl) showLineNumbersEl.checked = State.settings.showLineNumbers !== false;
+
+    // Keybinding mode radio (Default / Vim) — null-safe; falls through to 'default' on legacy installs
+    const kbMode = State.settings.editorKeybindingMode === 'vim' ? 'vim' : 'default';
+    const kbRadio = document.querySelector(`input[name="editorKeybindingMode"][value="${kbMode}"]`);
+    if (kbRadio) kbRadio.checked = true;
     
     const showIssuesEl = document.getElementById('settingShowIssues');
     if (showIssuesEl) showIssuesEl.checked = State.settings.showIssues !== false;
@@ -222,6 +228,9 @@ function populateSettingsForm() {
     const updateRemoteVisibility = () => {
         const selected = document.querySelector('input[name="embeddingProvider"]:checked')?.value || 'local';
         if (remoteSettings) remoteSettings.style.display = (selected === 'local') ? 'none' : '';
+        // Repopulate the model picker so it only shows options for the
+        // active provider — Xenova/* in local mode, API-fetched in remote.
+        populateEmbeddingModelsByProvider(selected);
     };
     document.querySelectorAll('input[name="embeddingProvider"]').forEach(r => {
         r.onchange = updateRemoteVisibility;

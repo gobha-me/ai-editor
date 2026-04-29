@@ -229,6 +229,25 @@
     <hr>
 
     <div class="form-group">
+        <label style="font-weight: 600;">Keybinding mode:</label>
+        <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
+            Switch the editor's modal/motion model. Applies to all open tabs.
+        </small>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="editorKeybindingMode" id="settingKeybindingDefault" value="default">
+                Default
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="editorKeybindingMode" id="settingKeybindingVim" value="vim">
+                Vim
+            </label>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="form-group">
         <label>
             <input type="checkbox" id="settingShowLineNumbers">
             Show line numbers by default
@@ -398,11 +417,11 @@
         <div class="form-group">
             <label for="settingEmbeddingModel">Embedding model:</label>
             <input type="text" id="settingEmbeddingModel" list="embeddingModelsList" placeholder="Xenova/all-MiniLM-L6-v2">
-            <datalist id="embeddingModelsList">
-                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Local, ~23MB)</option>
-                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Local, ~33MB)</option>
-                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Local, ~130MB)</option>
-            </datalist>
+            <!-- Datalist contents are populated from js/settings/models-tab.js
+                 based on the active embeddingProvider — local Xenova/* models
+                 when 'local', API-fetched models when remote. Mixing them was
+                 confusing because the wrong options always appear non-functional. -->
+            <datalist id="embeddingModelsList"></datalist>
             <button type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
                 🔄 Fetch API Models
             </button>

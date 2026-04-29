@@ -14,7 +14,7 @@ import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry, Git } from './git.js';
 import { IgnoreManager } from './ignore.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
-import { loadCodeMirror, setLineNumbersVisible } from './editor.js';
+import { loadCodeMirror, setLineNumbersVisible, setKeybindingMode } from './editor.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
@@ -924,6 +924,7 @@ function setupSettingsSavedListener() {
     window.addEventListener('settings:saved', () => {
         applyVisualSettings();
         applyLineNumbersVisibility();
+        setKeybindingMode(State.settings.editorKeybindingMode || 'default');
         updateModelStatusBar();
         
         // Refresh data with new settings
