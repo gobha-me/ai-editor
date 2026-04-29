@@ -141,11 +141,16 @@ test('CODER_V1 memory mirrors current scratchpad-only state', () => {
     assert.equal(CODER_V1.memory.propose_after_n_turns, null);
 });
 
-test('CODER_V1 compression carries only Rule 5 (matching current behavior)', () => {
+test('CODER_V1 compression registers Rules 1, 2, and 5 (1.2.0)', () => {
     const c = CODER_V1.compression;
-    assert.equal(c.rules.length, 1);
-    assert.equal(c.rules[0].name, 'summarization');
-    // preserve_recent matches the existing summarizer.recentCountTools default.
+    assert.equal(c.rules.length, 3);
+    const names = c.rules.map(r => r.name);
+    assert.deepEqual(names, ['subsumption', 'invalidation', 'summarization']);
+    // Priorities are sorted ascending; lower runs first.
+    const priorities = c.rules.map(r => r.priority);
+    assert.deepEqual(priorities, [10, 20, 50]);
+    // preserve_recent kept at 24 — see coder-v1.js for the
+    // reconciliation note vs DESIGN's "start at 4" suggestion.
     assert.equal(c.preserve_recent, 24);
     assert.ok(c.summarizer);
     assert.equal(c.summarizer.mode, 'balanced');

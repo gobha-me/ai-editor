@@ -4,6 +4,122 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-29
+
+Opens the **Compression Phase 1** track from `docs/ROADMAP.md` §1.2.0
+— the first eviction subsystem, sized to deliver invisible cost
+savings on long, tool-heavy coder sessions before the cost dashboard
+arrives in 1.2.1 to verify the projection. Implements Rules 1
+(Subsumption) and 2 (Invalidation) per `docs/DESIGN-compression.md`
+§"The Five Rules"; existing summarizer stays in place as Rule 5
+fallback (tighter integration is §1.2.4). Other roles keep current
+Rule-5-only behavior via a profile shim.
+
+### Added
+
+- **`js/intelligence/compression/` module tree** — first occupant of
+  the new `js/intelligence/` umbrella.
+  - `contracts.js`: typedefs (Turn, TurnMetadata, FileOp, Decision,
+    CompressionRule, CompressionRequest, CompressionResult,
+    Diagnostics) per DESIGN-compression.md §"Core Contracts".
+  - `decisions.js`: `Keep` / `Drop` / `Replace` / `Summarize` factories
+    + type guards. Tagged-union `kind` discriminator.
+  - `tokens.js`: cheap `chars / 3.5` token estimator matching the
+    existing `js/chat/summarizer.js` math. Defensive against circular
+    refs. Precomputation at turn ingest is a 1.2.x optimization.
+  - `turn-store.js`: ChatMessage → Turn conversion, round-trip via
+    `metadata.source_index`, synthesized-marker turn factory. Phase-1
+    TurnID = `T${index}` per call; stable hash form lands when the
+    turn store is persisted.
+  - `compactor.js`: async `compress(req)` runs the
+    `docs/DESIGN-compression.md` §"Pipeline Algorithm" — sort rules,
+    per-turn evaluation (skipping `is_summarizer` rules), tool-pair
+    coherence, apply Drop/Replace, optional Rule-5 summarizer loop
+    (50-iter safety cap), final budget drop-oldest fallback.
+  - `rules/subsumption.js`: Rule 1 — drop a tool_result whose single
+    read file-op is fully contained by a later read on the same path,
+    with no intervening write/edit. Reason format
+    `subsumed_by:{B.id}`.
+  - `rules/invalidation.js`: Rule 2 — drop a tool_result whose read
+    range overlaps a later write/edit on the same path. Reason
+    `invalidated_by:{B.id}`.
+  - `rules/summarization.js`: Rule 5 marker (`is_summarizer: true`,
+    no-op `evaluate`) plus `wrapChatSummarizer({ChatSummarizer,
+    callLLM})` factory that builds a SummarizerFn delegating to the
+    existing `js/chat/summarizer.js` `_buildPrompt` /
+    `_basicSummary` paths.
+
+- **Tool-pair coherence pass** in the Compactor — keeps eviction
+  atomic at the assistant-turn level. The LLM API requires every
+  assistant `tool_calls[i].id` be matched by a subsequent `tool`
+  message; if Rules 1/2 drop a tool_result without its matching
+  tool_call also being dropped, the API returns 400. Algorithm: for
+  each assistant.tool_call_ids, count coverage by id; if all
+  uncovered → drop the assistant too (`orphan:all_N_tool_results_
+  evicted`); if some uncovered → revert the partial drops
+  (`tool_pair_coherence_revert`).
+
+- **`js/profiles/resolve.js`** — thin role → CompressionConfig shim.
+  Coder gets Rules 1+2+5; non-coder roles get a Rule-5-only shim
+  preserving current behavior. Designed so 1.4.0 (Tools) and 2.0
+  (Profiles ascend) replace it cleanly.
+
+- **`js/chat/compactor-integration.js`** — `getCompressedContext
+  Messages()` ties State.chatHistory → Compactor → Compressed history
+  → `ChatSummarizer.getContextMessages(compressed)`. Defensive
+  try/catch falls back to summarizer-only on Compactor crash.
+  Records diagnostics on the upcoming `LLMDebug` exchange.
+
+- **LLM Debug Modal — Compression decisions panel.** Per-exchange
+  details panel in `js/llm-debug-modal.js` showing tokens_in/out,
+  compression ratio, evicted_ids with rule+reason, replaced_ids,
+  summarized_spans, **rules_skipped with reason** (the load-bearing
+  diagnostic per ROADMAP §1.2.0 exit criteria — distinguishes "no
+  rule applied" from "rule skipped because metadata absent" by
+  counting tool_result turns lacking file_ops), warnings,
+  rule_errors, and per-rule latency.
+
+- **`LLMDebug.attachCompressionDiagnostics(diag)`** in
+  `js/llm/debug.js` — pins compression diagnostics onto the upcoming
+  LLM exchange (or the active one, if the exchange is already in
+  flight).
+
+- **Tests** — three new node `--test` suites at
+  `tests/test-compression-contracts.mjs` (26 cases),
+  `tests/test-compression-rules.mjs` (41 cases covering Rule 1, Rule
+  2, range primitives, and combined Rule 1+2 fixtures including the
+  DESIGN §"Worked Example" partial trace), `tests/test-compression-
+  pipeline.mjs` (25 cases covering empty/trivial inputs, preserve_
+  recent invariant, decision tally, rules_skipped accounting,
+  rule-throw failure, summarizer failure modes, Rule 5 wiring, tool-
+  pair coherence with single/multi/duplicate/lonely call_id
+  fixtures), and `tests/test-profile-resolve.mjs` (3 cases for the
+  resolver shim).
+
+### Changed
+
+- **`js/profiles/coder-v1.js`** `compression.rules` — was
+  `[{name:'summarization'}]`; now `[{name:'subsumption', priority:10},
+  {name:'invalidation', priority:20}, {name:'summarization',
+  priority:50}]`. `preserve_recent` stays at 24 (matches existing
+  `summarizer.recentCountTools`); the field is documented inline
+  with a reconciliation note vs DESIGN's "start at 4" Open Question
+  — the conservative coder default reflects tool-call density in
+  coder sessions.
+
+- **`ChatSummarizer.getContextMessages(historyOverride?)`** in
+  `js/chat/summarizer.js` — accepts an optional history array to
+  override `State.chatHistory`. Default behavior unchanged. Used by
+  the new Compactor integration so windowing / tool-pair safety /
+  summary-prefix logic runs on the compressed history.
+
+- **`js/chat/handlers.js` `handleGeneralRequest`** — replaces the
+  direct `ChatSummarizer.getContextMessages()` call at the LLM-send
+  seam with `await getCompressedContextMessages()`. Single line; the
+  call is now async.
+
+- **`docs/ROADMAP.md`** header bumped to **1.2.0**.
+
 ## [1.1.4] - 2026-04-29
 
 Opens the **1.1.4 — Supply-chain / glassworm protection** patch from

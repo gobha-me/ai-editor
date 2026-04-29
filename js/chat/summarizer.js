@@ -582,10 +582,12 @@ SUMMARY:`;
     /**
      * Build the message array to send to the LLM.
      * Prepends stored summary + recent messages. Ensures tool call sequences stay intact.
+     *
+     * @param {ChatMessage[]} [historyOverride] Optional pre-compressed history (1.2.0 Compactor integration). When provided, overrides State.chatHistory for window selection only — the summary prefix and tool-pair safety logic still run.
      * @returns {ChatMessage[]}
      */
-    getContextMessages() {
-        const history = State.chatHistory;
+    getContextMessages(historyOverride) {
+        const history = Array.isArray(historyOverride) ? historyOverride : State.chatHistory;
         if (history.length === 0) return [];
 
         const info = Storage.get('chatSummaryInfo', null);

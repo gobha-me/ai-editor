@@ -10,6 +10,112 @@ function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * Render the per-exchange Compactor diagnostics block. Returns HTML
+ * suitable for splicing into the per-exchange details panel. Designed
+ * to be the load-bearing surface for "what did compression actually
+ * do this turn?" per ROADMAP §1.2.0.
+ *
+ * @param {object} diag  CompressionResult.diagnostics
+ * @returns {string}
+ */
+function renderCompressionDiagnostics(diag) {
+    const ratio = typeof diag.compression_ratio === 'number'
+        ? (diag.compression_ratio * 100).toFixed(1) + '%'
+        : 'n/a';
+    const evictedCount = (diag.evicted_ids || []).length;
+    const replacedCount = (diag.replaced_ids || []).length;
+    const summarizedCount = (diag.summarized_spans || []).length;
+
+    let html = '';
+    html += `<details style="margin: 0.5rem 0; border-left: 2px solid #6bf; padding-left: 0.5rem;" open>`;
+    html += `<summary style="cursor: pointer; color: #6bf;"><strong>📉 Compression decisions</strong> `;
+    html += `<span style="color: var(--text-muted);">— ${evictedCount} evicted · ${replacedCount} replaced · ${summarizedCount} summarized · ratio ${ratio}</span>`;
+    html += `</summary>`;
+    html += `<div style="padding: 0.5rem 0;">`;
+
+    // Token totals
+    html += `<div>tokens_in: <strong>${diag.tokens_in}</strong> · tokens_out: <strong>${diag.tokens_out}</strong> · ratio: <strong>${ratio}</strong></div>`;
+
+    // Rules run + per-rule decisions
+    if ((diag.rules_run || []).length > 0) {
+        html += `<div style="margin-top: 4px;">rules_run: ${(diag.rules_run || []).map(esc).join(', ')}</div>`;
+    }
+    if (diag.decisions_by_rule && Object.keys(diag.decisions_by_rule).length > 0) {
+        html += `<div style="margin-top: 4px;">decisions_by_rule:</div>`;
+        for (const [name, counts] of Object.entries(diag.decisions_by_rule)) {
+            const parts = [];
+            for (const [k, v] of Object.entries(counts || {})) {
+                if (v > 0) parts.push(`${k}=${v}`);
+            }
+            html += `<div style="padding-left: 1rem;">${esc(name)}: ${parts.join(' · ') || '(no decisions)'}</div>`;
+        }
+    }
+
+    // rules_skipped — the load-bearing diagnostic.
+    if ((diag.rules_skipped || []).length > 0) {
+        html += `<div style="margin-top: 4px; color: #fa0;">rules_skipped:</div>`;
+        for (const s of diag.rules_skipped) {
+            html += `<div style="padding-left: 1rem; color: #fa0;">${esc(s.rule)}: ${esc(s.reason)} · ${s.count} turns</div>`;
+        }
+    }
+
+    // Evicted ids
+    if ((diag.evicted_ids || []).length > 0) {
+        html += `<details style="margin-top: 4px;"><summary style="cursor: pointer;">evicted_ids (${diag.evicted_ids.length})</summary>`;
+        for (const e of diag.evicted_ids) {
+            html += `<div style="padding-left: 1rem; font-family: monospace;">${esc(e.id)} · ${esc(e.rule)} · ${esc(e.reason)}</div>`;
+        }
+        html += `</details>`;
+    }
+
+    // Replaced ids
+    if ((diag.replaced_ids || []).length > 0) {
+        html += `<details style="margin-top: 4px;"><summary style="cursor: pointer;">replaced_ids (${diag.replaced_ids.length})</summary>`;
+        for (const r of diag.replaced_ids) {
+            html += `<div style="padding-left: 1rem; font-family: monospace;">${esc(r.id)} · ${esc(r.rule)} · ${esc(r.reason)}</div>`;
+        }
+        html += `</details>`;
+    }
+
+    // Summarized spans
+    if ((diag.summarized_spans || []).length > 0) {
+        html += `<div style="margin-top: 4px;">summarized_spans:</div>`;
+        for (const s of diag.summarized_spans) {
+            html += `<div style="padding-left: 1rem; font-family: monospace;">${esc(s.first_id)}..${esc(s.last_id)} · ${s.span_length} turns · ${Math.round(s.latency_ms)}ms</div>`;
+        }
+    }
+
+    // Warnings
+    if ((diag.warnings || []).length > 0) {
+        html += `<div style="margin-top: 4px; color: #fa0;">warnings: ${diag.warnings.map(esc).join(', ')}</div>`;
+    }
+
+    // Rule errors
+    if ((diag.rule_errors || []).length > 0) {
+        html += `<div style="margin-top: 4px; color: #f66;">rule_errors:</div>`;
+        for (const e of diag.rule_errors) {
+            html += `<div style="padding-left: 1rem; color: #f66;">${esc(e.rule)}: ${esc(e.error)}</div>`;
+        }
+    }
+
+    // Latency
+    if (diag.latency_per_rule_ms && Object.keys(diag.latency_per_rule_ms).length > 0) {
+        const parts = [];
+        for (const [name, ms] of Object.entries(diag.latency_per_rule_ms)) {
+            parts.push(`${esc(name)}=${ms.toFixed(2)}ms`);
+        }
+        html += `<div style="margin-top: 4px; color: var(--text-muted);">latency: ${parts.join(' · ')}`;
+        if (diag.summarizer_latency_ms > 0) {
+            html += ` · summarizer=${diag.summarizer_latency_ms.toFixed(0)}ms`;
+        }
+        html += `</div>`;
+    }
+
+    html += `</div></details>`;
+    return html;
+}
+
 export function renderLLMDebug() {
     const container = document.getElementById('llmDebugContent');
     const countEl = document.getElementById('llmDebugCount');
@@ -45,6 +151,15 @@ export function renderLLMDebug() {
             if (m.hasToolCalls) badge += ' +tool_calls';
             if (m.toolCallId) badge += ` id=${m.toolCallId}`;
             html += `<div style="padding: 2px 0;"><span style="color: #6bf; font-weight: bold;">[${esc(badge)}]</span> <span style="color: var(--text-muted);">${esc(m.preview)}</span></div>`;
+        }
+
+        // 1.2.0 — Compression decisions section. Surfaces Compactor
+        // diagnostics per ROADMAP §1.2.0 exit criteria: evicted turn
+        // IDs with reasons, decisions_by_rule, rules_skipped (load-
+        // bearing — distinguishes "no rule applied" from "rule skipped
+        // because metadata absent").
+        if (ex.compression) {
+            html += renderCompressionDiagnostics(ex.compression);
         }
 
         // Result

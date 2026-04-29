@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-04-29 · Current released version: **1.1.4** · Authoring branch: `feat/roadmap-1.x`
+> Last updated: 2026-04-29 · Current released version: **1.2.0** · Authoring branch: `feat/roadmap-1.x`
 
 ## TL;DR
 

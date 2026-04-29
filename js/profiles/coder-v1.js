@@ -103,12 +103,25 @@ export const CODER_V1 = {
     },
 
     compression: {
+        // Phase 1 (1.2.0) ships Rules 1, 2, 5. Rules 3 (Consumption) and
+        // 4 (Resolution) register here as they land in 1.2.2 / 1.2.3.
+        // Resolver (`js/profiles/resolve.js`) maps these name+priority
+        // entries to the runtime `CompressionRule` objects in
+        // `js/intelligence/compression/rules/`.
         rules: [
-            // Rules 1–4 (Subsumption, Invalidation, Consumption, Resolution) register
-            // here as they land in 1.2.x. Rule 5 is the only running rule today.
+            { name: 'subsumption',   priority: 10 },
+            { name: 'invalidation',  priority: 20 },
             { name: 'summarization', priority: 50 },
         ],
-        preserve_recent: 24, // Mirrors State.settings.summarizer.recentCountTools.
+        // preserve_recent reconciliation: the design's Open Question
+        // ("Default preserve_recent value — Start at 4") is the
+        // *future chat.v1* default. Coder keeps the conservative 24 it
+        // inherited from `summarizer.recentCountTools` because tool-
+        // call sequences cluster densely in coder sessions and a 4-turn
+        // protected window would put many active sequences inside the
+        // eviction zone. Tunable from real-usage measurements once the
+        // 1.2.1 cost dashboard ships.
+        preserve_recent: 24,
         summarizer: {
             mode: 'balanced',  // Mirrors State.settings.summarizerMode default.
             promptTemplate: null,

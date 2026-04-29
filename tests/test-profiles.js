@@ -88,9 +88,10 @@ T.eq(CODER_V1.memory.default_scope, 'session', 'memory default_scope is session 
 T.eq(CODER_V1.memory.propose_after_n_turns, null, 'no automatic proposals until 1.3.0 consent UI');
 
 const c = CODER_V1.compression;
-T.eq(c.rules.length, 1, 'only one compression rule registered');
-T.eq(c.rules[0].name, 'summarization', 'the registered rule is Rule 5');
-T.eq(c.preserve_recent, 24, 'preserve_recent matches summarizer.recentCountTools');
+T.eq(c.rules.length, 3, 'Rules 1, 2, 5 registered (1.2.0)');
+T.deepEq(c.rules.map(r => r.name), ['subsumption', 'invalidation', 'summarization'], 'rule names in priority order');
+T.deepEq(c.rules.map(r => r.priority), [10, 20, 50], 'priorities lowest-first');
+T.eq(c.preserve_recent, 24, 'preserve_recent kept at 24 — see coder-v1.js for reconciliation note vs DESIGN start-at-4');
 T.assert(!!c.summarizer, 'summarizer present');
 T.eq(c.summarizer.mode, 'balanced', 'summarizer mode matches default');
 

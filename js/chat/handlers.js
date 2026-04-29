@@ -29,6 +29,7 @@ import { executeToolCall } from './tools.js';
 import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
 import { enrichToolResultTurn } from './turn-enrich.js';
+import { getCompressedContextMessages } from './compactor-integration.js';
 import { withRetry } from '../retry.js';
 
 /**
@@ -298,8 +299,11 @@ export async function handleGeneralRequest(input) {
     const systemPrompt = buildSystemPrompt();
     const roleTools = LLMTools.getToolsForRole();
     
-    // Build initial message thread (summary-aware context).
-    const contextMessages = ChatSummarizer.getContextMessages();
+    // Build initial message thread (compressed + summary-aware context).
+    // Compactor (1.2.0) runs Rules 1+2 over State.chatHistory first;
+    // ChatSummarizer.getContextMessages() then handles windowing,
+    // tool-pair safety, and summary prefix on the compressed result.
+    const contextMessages = await getCompressedContextMessages();
     console.log(`[handleGeneralRequest] Context messages count: ${contextMessages.length}`);
     
     const lastCtx = contextMessages[contextMessages.length - 1];

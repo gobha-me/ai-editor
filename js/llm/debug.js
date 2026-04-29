@@ -38,15 +38,45 @@ export const LLMDebug = {
             thinkEvents: [],
             result: null,
             error: null,
-            durationMs: null
+            durationMs: null,
+            // 1.2.0 — Compactor diagnostics for the most recent
+            // compression pass that fed this exchange.
+            compression: null,
         };
         this._current = exchange;
+        // Drain any compression diagnostics that landed BEFORE the
+        // exchange started (the compactor runs in handlers.js, before
+        // LLM.chat opens the request).
+        if (this._pendingCompression) {
+            exchange.compression = this._pendingCompression;
+            this._pendingCompression = null;
+        }
         this.exchanges.push(exchange);
         if (this.exchanges.length > this.maxExchanges) {
             this.exchanges.shift();
         }
         EventBus.emit('debug:exchange', exchange);
         return exchange;
+    },
+
+    /**
+     * Attach Compactor diagnostics to the *upcoming* exchange. Called
+     * by `js/chat/compactor-integration.js` immediately after
+     * `Compactor.compress()` returns and before `LLM.chat()` opens the
+     * stream, so by the time `startExchange` runs we can pin the
+     * diagnostics onto it. If the compactor runs without an exchange
+     * already in flight (the typical case), we stash on
+     * `_pendingCompression` for the next `startExchange` to pick up.
+     *
+     * @param {object} diagnostics
+     */
+    attachCompressionDiagnostics(diagnostics) {
+        if (!diagnostics) return;
+        if (this._current) {
+            this._current.compression = diagnostics;
+        } else {
+            this._pendingCompression = diagnostics;
+        }
     },
 
     /** Log a raw SSE chunk + what we parsed from it. */

@@ -19,6 +19,8 @@ export { isProfile } from './profile-contract.js';
 
 export { CODER_V1 } from './coder-v1.js';
 
+export { resolveCompressionConfig } from './resolve.js';
+
 /**
  * Re-export the typedefs so consumers can `import('./profiles')` and pick
  * up the type aliases without importing each file individually.
