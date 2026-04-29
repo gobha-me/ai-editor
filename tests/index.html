@@ -129,6 +129,10 @@
                 await import('./test-tools-parse.js');
             } catch (e) { errors.push(['Tools Parse', e]); }
 
+            try {
+                await import('./test-turn-enrich.js');
+            } catch (e) { errors.push(['Turn Enrich', e]); }
+
             // --- UI & Context (0.9.12) ---
             try {
                 await import('./test-context-filter.js');

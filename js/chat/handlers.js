@@ -28,6 +28,7 @@ import { renderImagePreview } from './input.js';
 import { executeToolCall } from './tools.js';
 import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
+import { enrichToolResultTurn } from './turn-enrich.js';
 import { withRetry } from '../retry.js';
 
 /**
@@ -597,7 +598,7 @@ export async function handleGeneralRequest(input) {
                                 toolContent = toolContent.substring(0, TOOL_RESULT_LIMIT) + '... [truncated]';
                             }
                         }
-                        structuredResults.push({
+                        structuredResults.push(enrichToolResultTurn({
                             tool_call_id: toolCall.id,
                             role: 'tool',
                             content: toolContent,
@@ -606,7 +607,7 @@ export async function handleGeneralRequest(input) {
                                 args,
                                 result: toolResult
                             }
-                        });
+                        }, toolName, args, toolResult));
                     } else {
                         textResults.push({ name: toolName, result: toolResult });
                     }
