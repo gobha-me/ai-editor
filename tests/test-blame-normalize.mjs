@@ -1,42 +1,56 @@
 /**
- * Tests for blame feature — validates module exports and blame data shape normalization.
- * These are structure/smoke tests since blame requires a live git server for integration testing.
+ * Tests for blame feature — validates module exports and blame data shape
+ * normalization. These are structure/smoke tests since blame requires a live
+ * git server for integration testing.
+ *
+ * git.js imports State from core.js, which touches `window` at module-eval —
+ * so the shim must load first. The .js sibling (tests/test-blame-normalize.js)
+ * covers the browser suite, including DOM-bound checks that are skipped here.
  */
+import './_node-shim.mjs';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import { Git } from '../js/git.js';
 
-const { T } = window;
+// ============================================
+// Git facade exports
+// ============================================
 
-T.suite('Blame — Git Facade Exports');
+test('Git.getBlame is exported', () => {
+    assert.equal(typeof Git.getBlame, 'function');
+});
 
-T.assert(typeof Git.getBlame === 'function', 'Git.getBlame is exported');
-T.assert(typeof Git.getFileCommits === 'function', 'Git.getFileCommits is exported');
+test('Git.getFileCommits is exported', () => {
+    assert.equal(typeof Git.getFileCommits, 'function');
+});
 
-// These should throw "No project is currently loaded" since no project is active
-T.suite('Blame — Guard Checks (no project loaded)');
+// ============================================
+// Guard checks (no project loaded)
+// ============================================
 
-await T.throwsAsync(
-    () => Git.getBlame('owner', 'repo', 'test.js', 'main'),
-    'getBlame throws when no project loaded'
-);
+test('getBlame throws when no project loaded', async () => {
+    await assert.rejects(
+        () => Git.getBlame('owner', 'repo', 'test.js', 'main')
+    );
+});
 
-await T.throwsAsync(
-    () => Git.getFileCommits('owner', 'repo', 'test.js', 'main'),
-    'getFileCommits throws when no project loaded'
-);
+test('getFileCommits throws when no project loaded', async () => {
+    await assert.rejects(
+        () => Git.getFileCommits('owner', 'repo', 'test.js', 'main')
+    );
+});
 
-T.suite('Blame — Secondary Pane Integration');
+// ============================================
+// Secondary pane integration
+// ============================================
 
-// Verify blame button exists in DOM
-const btnBlame = document.getElementById('btnToggleBlame');
-// The button may not exist since we're in a test page, not the full app.
-// This test validates the concept — in the full app it would pass.
-T.assert(true, 'Blame button expected in editor toolbar (btnToggleBlame)');
+// DOM check skipped under Node — `document.getElementById('btnToggleBlame')`
+// only meaningfully resolves in the full app shell. The .js sibling covers
+// this as a no-op pass; the equivalent here is a skip with a clear comment.
+test.skip('Blame button DOM check — browser-only (see test-blame-normalize.js)', () => {});
 
-// Import blame toggle to verify it's exported
-try {
+test('secondary-pane.js exports toggleBlamePane and getSecondaryPaneMode', async () => {
     const mod = await import('../js/secondary-pane.js');
-    T.assert(typeof mod.toggleBlamePane === 'function', 'toggleBlamePane is exported from secondary-pane');
-    T.assert(typeof mod.getSecondaryPaneMode === 'function', 'getSecondaryPaneMode is exported');
-} catch (e) {
-    T.assert(false, `secondary-pane import failed: ${e.message}`);
-}
+    assert.equal(typeof mod.toggleBlamePane, 'function');
+    assert.equal(typeof mod.getSecondaryPaneMode, 'function');
+});

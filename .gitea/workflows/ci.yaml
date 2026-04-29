@@ -87,6 +87,19 @@ jobs:
 
           echo "✅ Version coherence: $VERSION_JS"
 
+      # ── Node tests ───────────────────────────────
+      # Uses Node already present in the ci-base image (no actions/setup-node
+      # because act clones the action repo from GitHub on every run, which
+      # adds minutes for no benefit). tests/test-smoke.mjs asserts the runner
+      # has Node ≥ 20 so this fails loudly if the base image regresses.
+      - name: Node tests (node --test)
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Running tests/test-*.mjs under node --test"
+          echo "node: $(node --version)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          node --test tests/test-*.mjs
+
       # ── Security Lint ────────────────────────────
       - name: Security lint — innerHTML audit
         run: |

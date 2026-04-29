@@ -67,7 +67,7 @@ Items that could improve the editor post-1.0. Not committed — captured for ref
 
 ### Testing
 
-- **CI test step** — Tests run only in the browser today (`tests/index.html`). The `.mjs` parallel suites (`test-summarizer.mjs`, `test-retry.mjs`, `test-edit-tracker.mjs`) could run under `node --test` in `.gitea/workflows/ci.yaml` before the Docker build. Expand `.mjs` coverage to match the `.js` suites.
+- **Expand `.mjs` coverage to match the `.js` suites** — The `node --test` CI step shipped in 1.0.6 runs only the ported subset (`test-smoke`, `test-retry`, `test-edit-tracker`, `test-summarizer`, `test-blame-normalize`, `test-metadata-coverage`, `test-turn-enrich`). The browser-only `.js` suites (`test-idb`, `test-storage`, `test-eventbus`, `test-html-escape`, `test-llm-pure`, `test-handlers`, `test-tools-parse`, `test-context-filter`, `test-secondary-pane`, `test-dependencies`) still run only under `tests/index.html`. Port them so CI exercises the full surface.
 
 ### Other
 

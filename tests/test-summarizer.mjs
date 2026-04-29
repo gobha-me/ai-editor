@@ -1,23 +1,24 @@
 /**
- * Tests for ChatSummarizer — auto-tune tiers, symbol extraction, tool result handling.
- * Imports the full module graph (core.js → providers → etc.) which is fine in the browser.
+ * Tests for ChatSummarizer — percentage-based scaling, mode differentiation,
+ * symbol extraction, tool result handling.
+ *
+ * Imports the full module graph (core.js → providers → etc.). Under Node
+ * the shim provides minimal browser globals; the .js sibling
+ * (tests/test-summarizer.js) covers the browser suite.
  */
+import './_node-shim.mjs';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import { ChatSummarizer } from '../js/chat/summarizer.js';
 import { State } from '../js/core.js';
 
-const { T } = window;
-
 // ============================================
-// AUTO-TUNE TIERS
+// SETUP
 // ============================================
 
-T.suite('ChatSummarizer — Auto-Tune Tiers');
-
-// Mock State.models for tier testing
 const originalModels = State.models;
 const originalMode = State.settings.summarizerMode;
 
-// Helper to set mock model
 function setMockModel(contextTokens) {
     State.settings.llmModel = 'test-model';
     State.models = [{ id: 'test-model', meta: { contextTokens } }];
@@ -28,67 +29,192 @@ function resetMocks() {
     State.settings.summarizerMode = originalMode;
 }
 
-// Force auto mode for tier tests
-State.settings.summarizerMode = 'auto';
-
-// Small model (<32K)
-setMockModel(8000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', '8K model → Small tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 30, 'Small tier threshold = 30');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 10, 'Small tier recentBase = 10');
-
-// Medium model (32K+)
-setMockModel(32000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Medium (32K+)', '32K model → Medium tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 50, 'Medium tier threshold = 50');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 16, 'Medium tier recentBase = 16');
-
-// Large model (128K+)
-setMockModel(128000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Large (128K+)', '128K model → Large tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Large tier threshold = 80');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 30, 'Large tier recentBase = 30');
-
-// Huge model (500K+)
-setMockModel(1000000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', '1M model → Huge tier');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 200, 'Huge tier threshold = 200');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 60, 'Huge tier recentBase = 60');
-T.eq(ChatSummarizer.RECENT_COUNT_TOOLS, 100, 'Huge tier recentTools = 100');
-
-// Edge case: exactly at boundary
-setMockModel(500000);
-T.eq(ChatSummarizer.getAutoParams().label, 'Huge (500K+)', '500K exactly → Huge tier');
-
-setMockModel(31999);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', '31999 → Small tier (just under 32K)');
-
-// No context info → falls back to Small
-setMockModel(null);
-T.eq(ChatSummarizer.getAutoParams().label, 'Small (<32K)', 'null context → Small tier fallback');
-
-T.suite('ChatSummarizer — Mode Toggle');
-
-// Manual mode should use State.settings.summarizer values
-State.settings.summarizerMode = 'manual';
-State.settings.summarizer = { recentCountBase: 20, threshold: 60 };
-T.eq(ChatSummarizer.mode, 'manual', 'Mode reads from settings');
-T.eq(ChatSummarizer.RECENT_COUNT_BASE, 20, 'Manual mode uses settings.summarizer value');
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 60, 'Manual mode threshold from settings');
-
-// Auto mode should ignore manual settings
-State.settings.summarizerMode = 'auto';
-setMockModel(128000);
-T.eq(ChatSummarizer.SUMMARY_THRESHOLD, 80, 'Auto mode ignores manual settings, uses tier');
+test.after(() => resetMocks());
 
 // ============================================
-// SYMBOL EXTRACTION
+// Percentage-based scaling (balanced = 50%)
 // ============================================
 
-T.suite('ChatSummarizer — _extractSymbols');
+State.settings.summarizerMode = 'balanced';
 
-// JavaScript
-const jsSource = `
+// 128K model, balanced (50%): capacity = 128000 * 0.50 / 800 = 80
+test('128K balanced: threshold=80 (capacity=80)', () => {
+    setMockModel(128000);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 80);
+});
+test('128K balanced: recentBase=28 (80*0.35)', () => {
+    setMockModel(128000);
+    assert.equal(ChatSummarizer.RECENT_COUNT_BASE, 28);
+});
+test('128K balanced: recentTools=48 (80*0.60)', () => {
+    setMockModel(128000);
+    assert.equal(ChatSummarizer.RECENT_COUNT_TOOLS, 48);
+});
+test('128K balanced: interval=36 (80*0.45)', () => {
+    setMockModel(128000);
+    assert.equal(ChatSummarizer.SUMMARY_INTERVAL, 36);
+});
+
+// 1M model, balanced: ctx>524K → scale=8 (per getContextScale).
+// capacity = clamp(1000000 * 0.50 / 800, 20, 250*8=2000) = 625
+test('1M balanced: threshold=625 (capacity, well under scale-8 cap)', () => {
+    setMockModel(1000000);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 625);
+});
+test('1M balanced: recentBase=219 (capacity*0.35, well under scale-8 cap)', () => {
+    setMockModel(1000000);
+    assert.equal(ChatSummarizer.RECENT_COUNT_BASE, 219);
+});
+test('1M balanced: recentTools=375 (capacity*0.60, well under scale-8 cap)', () => {
+    setMockModel(1000000);
+    assert.equal(ChatSummarizer.RECENT_COUNT_TOOLS, 375);
+});
+
+// 32K model, balanced: capacity = 32000 * 0.50 / 800 = 20
+test('32K balanced: threshold=20 (capacity=20)', () => {
+    setMockModel(32000);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 20);
+});
+test('32K balanced: recentBase=8 (min clamp)', () => {
+    setMockModel(32000);
+    assert.equal(ChatSummarizer.RECENT_COUNT_BASE, 8);
+});
+
+// 8K model, balanced: capacity = 8000 * 0.50 / 800 = 5 → clamped 20
+test('8K balanced: threshold=20 (min clamp)', () => {
+    setMockModel(8000);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 20);
+});
+
+// Null context → falls back to defaults
+test('null context → default threshold=30', () => {
+    setMockModel(null);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 30);
+});
+test('null context → default recentBase=10', () => {
+    setMockModel(null);
+    assert.equal(ChatSummarizer.RECENT_COUNT_BASE, 10);
+});
+
+// ============================================
+// Mode differentiation
+// ============================================
+
+test('Aggressive < Balanced < Conservative for threshold and recentBase', () => {
+    setMockModel(128000);
+
+    State.settings.summarizerMode = 'aggressive';
+    const aggrThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+    const aggrRecent = ChatSummarizer.RECENT_COUNT_BASE;
+
+    State.settings.summarizerMode = 'balanced';
+    const balThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+    const balRecent = ChatSummarizer.RECENT_COUNT_BASE;
+
+    State.settings.summarizerMode = 'conservative';
+    const consThreshold = ChatSummarizer.SUMMARY_THRESHOLD;
+    const consRecent = ChatSummarizer.RECENT_COUNT_BASE;
+
+    assert.ok(aggrThreshold < balThreshold, `aggr ${aggrThreshold} < bal ${balThreshold}`);
+    assert.ok(balThreshold < consThreshold, `bal ${balThreshold} < cons ${consThreshold}`);
+    assert.ok(aggrRecent < balRecent, `aggr ${aggrRecent} < bal ${balRecent}`);
+    assert.ok(balRecent < consRecent, `bal ${balRecent} < cons ${consRecent}`);
+});
+
+// Aggressive: 128K * 0.30 / 800 = 48
+test('128K aggressive: threshold=48 (30% fill)', () => {
+    setMockModel(128000);
+    State.settings.summarizerMode = 'aggressive';
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 48);
+});
+
+// Conservative: 128K * 0.75 / 800 = 120
+test('128K conservative: threshold=120 (75% fill)', () => {
+    setMockModel(128000);
+    State.settings.summarizerMode = 'conservative';
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 120);
+});
+
+// ============================================
+// Smooth scaling (no tier cliffs)
+// ============================================
+
+test('Smooth scaling: 64K < 96K < 128K thresholds', () => {
+    State.settings.summarizerMode = 'balanced';
+    setMockModel(64000);
+    const t64 = ChatSummarizer.SUMMARY_THRESHOLD;
+    setMockModel(96000);
+    const t96 = ChatSummarizer.SUMMARY_THRESHOLD;
+    setMockModel(128000);
+    const t128 = ChatSummarizer.SUMMARY_THRESHOLD;
+
+    assert.ok(t64 < t96, `t64 ${t64} < t96 ${t96}`);
+    assert.ok(t96 < t128, `t96 ${t96} < t128 ${t128}`);
+});
+
+test('No tier cliff between 33K and 127K', () => {
+    State.settings.summarizerMode = 'balanced';
+    setMockModel(33000);
+    const t33 = ChatSummarizer.SUMMARY_THRESHOLD;
+    setMockModel(127000);
+    const t127 = ChatSummarizer.SUMMARY_THRESHOLD;
+    assert.ok(t33 < t127, `t33 ${t33} < t127 ${t127}`);
+});
+
+// ============================================
+// getAutoParams API
+// ============================================
+
+test('getAutoParams returns mode, contextTokens, fillPct, label, params', () => {
+    State.settings.summarizerMode = 'balanced';
+    setMockModel(128000);
+    const info = ChatSummarizer.getAutoParams();
+
+    assert.equal(info.mode, 'balanced');
+    assert.equal(info.contextTokens, 128000);
+    assert.equal(info.fillPct, 0.50);
+    assert.ok(info.label.includes('50%'), `Label includes fill%: "${info.label}"`);
+    assert.ok(info.label.includes('128K'), `Label includes context size: "${info.label}"`);
+    assert.equal(info.params.threshold, 80);
+});
+
+// ============================================
+// Legacy mode migration
+// ============================================
+
+test('Legacy "auto" migrates to "balanced"', () => {
+    State.settings.summarizerMode = 'auto';
+    assert.equal(ChatSummarizer.mode, 'balanced');
+});
+test('Legacy "manual" migrates to "custom"', () => {
+    State.settings.summarizerMode = 'manual';
+    assert.equal(ChatSummarizer.mode, 'custom');
+});
+
+// ============================================
+// Custom mode
+// ============================================
+
+test('Custom mode reads from settings.summarizer', () => {
+    State.settings.summarizerMode = 'custom';
+    State.settings.summarizer = { recentCountBase: 20, threshold: 60 };
+    assert.equal(ChatSummarizer.mode, 'custom');
+    assert.equal(ChatSummarizer.RECENT_COUNT_BASE, 20);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 60);
+});
+
+test('Balanced mode ignores custom settings, uses computed', () => {
+    State.settings.summarizerMode = 'balanced';
+    setMockModel(128000);
+    assert.equal(ChatSummarizer.SUMMARY_THRESHOLD, 80);
+});
+
+// ============================================
+// _extractSymbols
+// ============================================
+
+test('Extracts JS function, const, class, async function', () => {
+    const jsSource = `
 export function fetchModels() {
     const models = await LLM.listModels();
 }
@@ -98,14 +224,15 @@ class EventBus {
 }
 async function handleUserInput(input) {}
 `;
-const jsSymbols = ChatSummarizer._extractSymbols(jsSource);
-T.assert(jsSymbols.includes('fetchModels'), 'Extracts JS function');
-T.assert(jsSymbols.includes('ToolRegistry'), 'Extracts JS const');
-T.assert(jsSymbols.includes('EventBus'), 'Extracts JS class');
-T.assert(jsSymbols.includes('handleUserInput'), 'Extracts async function');
+    const jsSymbols = ChatSummarizer._extractSymbols(jsSource);
+    assert.ok(jsSymbols.includes('fetchModels'), 'fetchModels');
+    assert.ok(jsSymbols.includes('ToolRegistry'), 'ToolRegistry');
+    assert.ok(jsSymbols.includes('EventBus'), 'EventBus');
+    assert.ok(jsSymbols.includes('handleUserInput'), 'handleUserInput');
+});
 
-// Python
-const pySource = `
+test('Extracts Python def and class', () => {
+    const pySource = `
 def process_data(items):
     pass
 
@@ -113,72 +240,79 @@ class DataPipeline:
     def run(self):
         pass
 `;
-const pySymbols = ChatSummarizer._extractSymbols(pySource);
-T.assert(pySymbols.includes('process_data'), 'Extracts Python def');
-T.assert(pySymbols.includes('DataPipeline'), 'Extracts Python class');
+    const pySymbols = ChatSummarizer._extractSymbols(pySource);
+    assert.ok(pySymbols.includes('process_data'));
+    assert.ok(pySymbols.includes('DataPipeline'));
+});
 
-// Rust
-const rsSource = `
+test('Extracts Rust fn and pub fn', () => {
+    const rsSource = `
 fn calculate_hash(data: &[u8]) -> u64 {
     0
 }
 pub fn main() {}
 `;
-const rsSymbols = ChatSummarizer._extractSymbols(rsSource);
-T.assert(rsSymbols.includes('calculate_hash'), 'Extracts Rust fn');
-T.assert(rsSymbols.includes('main'), 'Extracts Rust pub fn');
+    const rsSymbols = ChatSummarizer._extractSymbols(rsSource);
+    assert.ok(rsSymbols.includes('calculate_hash'));
+    assert.ok(rsSymbols.includes('main'));
+});
 
-// Empty / noise
-T.deepEq(ChatSummarizer._extractSymbols(''), [], 'Empty source → empty symbols');
-T.deepEq(ChatSummarizer._extractSymbols(null), [], 'null source → empty symbols');
-T.assert(ChatSummarizer._extractSymbols('let x = 5; var y = 10;').length <= 15, 'Caps at 15 symbols');
+test('Empty source → empty symbols', () => {
+    assert.deepEqual(ChatSummarizer._extractSymbols(''), []);
+});
+test('null source → empty symbols', () => {
+    assert.deepEqual(ChatSummarizer._extractSymbols(null), []);
+});
+test('Caps at 15 symbols', () => {
+    assert.ok(ChatSummarizer._extractSymbols('let x = 5; var y = 10;').length <= 15);
+});
 
 // ============================================
-// TOOL RESULT SUMMARIZATION
+// _summarizeToolResult
 // ============================================
 
-T.suite('ChatSummarizer — _summarizeToolResult');
+test('File summary includes path and extracted symbol', () => {
+    const fileResult = {
+        role: 'tool',
+        content: JSON.stringify({
+            path: 'js/app.js',
+            content: 'export function init() {}\nfunction render() {}\nconst VERSION = "1.0";'
+        })
+    };
+    const fileSummary = ChatSummarizer._summarizeToolResult(fileResult);
+    assert.ok(fileSummary.includes('js/app.js'));
+    assert.ok(fileSummary.includes('init'));
+});
 
-// File read result
-const fileResult = {
-    role: 'tool',
-    content: JSON.stringify({
-        path: 'js/app.js',
-        content: 'export function init() {}\nfunction render() {}\nconst VERSION = "1.0";'
-    })
-};
-const fileSummary = ChatSummarizer._summarizeToolResult(fileResult);
-T.assert(fileSummary.includes('js/app.js'), 'File summary includes path');
-T.assert(fileSummary.includes('init'), 'File summary includes extracted symbol');
+test('Error result preserved', () => {
+    const errResult = { role: 'tool', content: JSON.stringify({ error: 'File not found' }) };
+    assert.ok(ChatSummarizer._summarizeToolResult(errResult).includes('File not found'));
+});
 
-// Error result
-const errResult = { role: 'tool', content: JSON.stringify({ error: 'File not found' }) };
-T.assert(ChatSummarizer._summarizeToolResult(errResult).includes('File not found'), 'Error result preserved');
+test('Tree summary includes file count', () => {
+    const treeResult = {
+        role: 'tool',
+        content: JSON.stringify({ files: [{ path: 'a.js' }, { path: 'b.js' }, { path: 'c.js' }] })
+    };
+    const treeSummary = ChatSummarizer._summarizeToolResult(treeResult);
+    assert.ok(treeSummary.includes('3 files'));
+});
 
-// File tree result
-const treeResult = {
-    role: 'tool',
-    content: JSON.stringify({ files: [{ path: 'a.js' }, { path: 'b.js' }, { path: 'c.js' }] })
-};
-const treeSummary = ChatSummarizer._summarizeToolResult(treeResult);
-T.assert(treeSummary.includes('3 files'), 'Tree summary includes count');
+test('Search summary includes match count and file count', () => {
+    const searchResult = {
+        role: 'tool',
+        content: JSON.stringify({ matches: [
+            { path: 'foo.js', line: 10 },
+            { path: 'foo.js', line: 20 },
+            { path: 'bar.js', line: 5 }
+        ]})
+    };
+    const searchSummary = ChatSummarizer._summarizeToolResult(searchResult);
+    assert.ok(searchSummary.includes('3 matches'));
+    assert.ok(searchSummary.includes('2 files'));
+});
 
-// Search result
-const searchResult = {
-    role: 'tool',
-    content: JSON.stringify({ matches: [
-        { path: 'foo.js', line: 10 },
-        { path: 'foo.js', line: 20 },
-        { path: 'bar.js', line: 5 }
-    ]})
-};
-const searchSummary = ChatSummarizer._summarizeToolResult(searchResult);
-T.assert(searchSummary.includes('3 matches'), 'Search summary includes match count');
-T.assert(searchSummary.includes('2 files'), 'Search summary includes file count');
-
-// Null content
-const nullResult = { role: 'tool', content: null };
-T.eq(ChatSummarizer._summarizeToolResult(nullResult), null, 'Null content returns null');
-
-// Restore
-resetMocks();
+test('Null content returns null', () => {
+    const nullResult = { role: 'tool', content: null };
+    assert.equal(ChatSummarizer._summarizeToolResult(nullResult), null);
+});

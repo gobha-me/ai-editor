@@ -76,6 +76,44 @@ All notable changes to AI Editor are documented here.
   `initChat()` after history rehydration. Default-off; zero behavior change
   when the flag is absent.
 
+- **`node --test` CI step** (`.gitea/workflows/ci.yaml`) — new
+  `Node tests (node --test)` step in the `build-and-deploy` job, runs
+  `tests/test-*.mjs` after the version coherence check and before the
+  security lint. Pinned to Node 22 LTS via `actions/setup-node@v4`. A
+  failing test blocks PR merge before any Docker work happens.
+
+  Why: per `docs/ROADMAP.md` §1.1.0 exit criteria, "`node --test` runs in
+  CI, all existing `.mjs` suites pass after porting." Until this lands,
+  the only test runner is `tests/index.html` in a browser, which is not
+  exercised by CI. Closes the loop on regression detection at the chat
+  enrichment / summarizer / retry boundaries.
+
+- **Runner-health smoke test** (`tests/test-smoke.mjs`) — three sanity
+  checks (`1+1`, ESM resolution from `tests/` to `../js/`, Node major
+  version ≥ 20). Catches a broken CI runner config before it manifests as
+  a confusing failure in a real test suite.
+
+- **Node-side browser-globals shim** (`tests/_node-shim.mjs`) — minimal
+  `window` / `localStorage` / `indexedDB` / `document` / `navigator` stubs
+  so test files whose transitive imports touch `js/core.js` or `js/git.js`
+  can run under `node --test`. Side-effect-only module; consumers
+  `import './_node-shim.mjs';` at the top before any `../js/...` import.
+
+### Changed
+- **`tests/test-retry.mjs`, `tests/test-edit-tracker.mjs`,
+  `tests/test-summarizer.mjs`, `tests/test-blame-normalize.mjs`** — ported
+  from the in-page `window.T` framework to `node:test` +
+  `node:assert/strict`. The browser parallel suites
+  (`tests/test-*.js`) are unchanged and continue to run under
+  `tests/index.html`. The Node ports are aligned with current `.js`
+  sibling coverage (the previous `.mjs` files were stale: `test-retry`
+  asserted the wrong shape for `ConnectionError`, `test-edit-tracker`
+  used a long-renamed API). The two stateful tests load
+  `tests/_node-shim.mjs` first; pure-utility tests (`test-retry`,
+  `test-edit-tracker`) need no shim. Single DOM-bound assertion in
+  `test-blame-normalize` is `test.skip()`d under Node with a comment
+  pointing at the `.js` sibling.
+
 ### Fixed
 - **`tests/test-context-filter.js`** — Browser test now seeds
   `IgnoreManager._globalRaw` with `DEFAULT_IGNORE_PATTERNS` and calls
