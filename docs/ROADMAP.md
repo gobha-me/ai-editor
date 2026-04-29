@@ -172,6 +172,34 @@ Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough si
 
 ---
 
+### 1.1.4 — Supply-chain / glassworm protection [+~1 week]
+
+**What ships:**
+
+- **Invisible-Unicode lint** in `.gitea/workflows/ci.yaml` security stage. Extends the existing DOMPurify-bypass lint to also fail PRs that introduce characters in:
+  - **Tags block** `U+E0000–U+E007F` (the glassworm carrier — Unicode tag chars that render invisible but execute as code points).
+  - **Zero-width** `U+200B–U+200F`, `U+2060–U+206F`, `U+FEFF` (ZWSP/ZWJ/ZWNJ/BOM).
+  - **Bidi overrides** `U+202A–U+202E`, `U+2066–U+2069` (RLO/LRO/LRI/RLI/PDI — "Trojan Source" pattern).
+  - Scope: `js/`, `plugins/`, `tests/`, and any user-editable JS in the bundled plugin editor.
+- **Editor-side scan** in CodeMirror. New decoration that visibly flags the offending characters with a tooltip ("Invisible Unicode — possible supply-chain payload") and a quick-fix to delete. Off by default for languages where these chars are legitimate (e.g. comment-bidi in localized text), on by default for `.js`/`.json`/plugin manifests.
+- **Plugin manager review affordance.** When a user pastes/imports a plugin, the install dialog shows a "source contains N invisible characters" warning band before the user clicks Install. Same scanner powers the editor decoration.
+- **Settings export/import hardening.** Existing import already validates JSON shape; add the invisible-Unicode scan to the validator and surface findings in the import preview.
+- **`docs/SECURITY.md`** new doc describing the threat model (glassworm, Trojan Source, polyglot exfil), the protections shipped, and what remains the user's responsibility.
+
+**Why now:** AI Editor's value prop is *no backend, no build step, no node_modules* — but the plugin system is the analogous attack surface. Glassworm has been observed shipping through npm packages and IDE extensions in 2025–2026; our plugin ecosystem (small as it is today) inherits the same threat model the moment someone shares a plugin file. CI lint + editor decoration + install-time scan is cheap and turns the threat into a visible artifact instead of a hidden payload.
+
+**Exit criteria:**
+- A test fixture file containing a Tags-block character fails CI security-lint.
+- The editor renders a visible decoration for the same fixture in `tests/index.html`.
+- The plugin install dialog blocks/warns on a poisoned manifest.
+- `docs/SECURITY.md` is linked from README and PLUGIN.md.
+
+**Size:** ~2-3 PRs over ~1 week. The CI lint is a one-line `grep -P` extension; the editor decoration is the long pole.
+
+**UI impact:** Editor gutter/inline decoration for invisible chars; plugin install dialog warning band; new Settings → Security tab (or fold into an existing tab).
+
+---
+
 ### 1.2.0 — Compression Phase 1 [target: ~3 weeks after 1.1]
 
 **What ships:**
@@ -375,6 +403,7 @@ These slot into patch releases of whatever track is current. Some are enabled by
 | 19 | **Profile picker** in chat header (replaces role selector per Decision §2) | One canonical surface | 2.0.0 |
 | 20 | **Issue/PR tab visual hierarchy** — long tabs feel busy | Issue tabs render dense walls of metadata; lo-pri | Cross-cutting; lo-pri |
 | 21 | **Plugin marketplace UI** | Defer to post-2.0 once the architecture stabilizes | 2.x |
+| 22 | **Invisible-Unicode decoration in editor** + plugin install warning band | Surface the glassworm/Trojan-Source attack class as a visible artifact | 1.1.4 |
 
 **One thing I'd push back on if you ever propose it:** *don't* add a wizard/onboarding for profiles. The current onboarding (`js/onboarding.js`) is appropriately scoped (Git + LLM); profiles should default invisibly to `coder.v1` and surface only when the user notices the picker. Profile selection is not a setup decision; it's a workflow decision.
 
