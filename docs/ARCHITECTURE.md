@@ -147,6 +147,15 @@ Dynamic tool registration. Tools declare allowed roles at registration
 time. `ToolRegistry.getToolsForRole()` applies role-based filtering.
 `ToolRegistry.execute()` runs handlers with structured error recovery.
 
+Errors thrown by tool handlers (and by the rest of the editor) follow the
+contract in `js/utils/errors.js`: `EditorError` extends `Error` with a
+machine-readable `.code` (from the `ErrorCode` enum — `NETWORK_TIMEOUT`,
+`AUTH_INVALID_TOKEN`, `GIT_NOT_FOUND`, `LLM_STREAM_ERROR`, etc.) and a
+human-readable `.recoveryHint` rendered in the UI by
+`js/error-logger.js`. Consumers compare `err.code` against the enum
+rather than parsing `.message`; `EditorError.fromResponse()` and
+`EditorError.wrap()` are the canonical constructors.
+
 ## Editor Layer
 
 ### `editor/`

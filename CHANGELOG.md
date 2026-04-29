@@ -4,6 +4,81 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs
+
+- **SlotManager — contract locked** (`docs/DESIGN-git-providers-and-ui-extensions.md`
+  §4). Closes the last design-only deliverable from `docs/ROADMAP.md`
+  §1.1.0: *"during 1.1 we lock the contract."* Adds four subsections
+  to the existing SlotManager design:
+  - **Slot catalog** — closed registry of five named slots
+    (`sidebar-panels`, `settings-connections`, `editor-toolbar`,
+    `chat-input-row`, `status-bar`) with host element and purpose for
+    each. Plugins cannot invent private slot names; new slots require
+    a DESIGN-doc PR.
+  - **Error semantics, security, and ordering** — `render()` errors
+    are caught, logged, and skipped (no sibling-render abort);
+    `HTMLElement` returns mount via `appendChild`, `string` returns
+    via `insertAdjacentHTML('beforeend', ...)` and are **not**
+    sanitized by SlotManager (plugin authors own sanitization, same
+    rule as the CI `return raw;` lint); priority sorts ascending with
+    default `50` and stable tie-break by registration order; CSS
+    isolation is via plugin-id namespacing — no shadow DOM in 1.4.x.
+  - **Schema additions** — `version: '1.1'` field on each panel /
+    setting / menuItem entry; future renderers can reject unknown
+    versions for forward-compat.
+  - **Implementation status callout** at the top of §4 — clarifies
+    that the renderer (`js/slot-manager.js`) is deferred to 1.4.x
+    while the contract is now locked.
+
+  Why: 1.4.0 (Tools Phase 1) is two tracks away. Without the
+  catalog/error/security clarifications now, the 1.4.x SlotManager
+  patch would have to redesign these in flight — and the four
+  ambiguities (what slots exist, what happens on render error, who
+  sanitizes HTML, how priorities tie-break) are exactly the kind of
+  decisions that quietly bind plugin-author expectations once the
+  first plugin uses them.
+
+  `docs/PLAN.md` updated to reflect the locked contract under both
+  the 1.1.x landed table and the SlotManager Future Work bullet; the
+  doc/code drift entry is updated rather than deleted so the resolution
+  history is traceable.
+
+### Changed
+
+- **`docs/ARCHITECTURE.md` § `tools/registry.js`** — paragraph expanded to
+  name the canonical error contract directly: `EditorError` extends
+  `Error` with a machine-readable `.code` (from the `ErrorCode` enum)
+  and a human-readable `.recoveryHint`; consumers compare `err.code`
+  rather than parse `.message`; `js/error-logger.js` renders the hint;
+  `EditorError.fromResponse()` and `.wrap()` are the canonical
+  constructors. Closes a doc/code drift item flagged in
+  `docs/PLAN.md` § Known doc/code drift.
+
+- **`js/tools/doc-tools.js` `DOC_MANIFEST`** — entries can now declare
+  an `inline` content string instead of a `path` to fetch. The
+  `read_docs` handler short-circuits the fetch path for inline entries
+  and returns the inline content directly. The manifest-listing branch
+  surfaces inline entries with `inline: true` in place of `path` so the
+  LLM can tell them apart.
+
+### Removed
+
+- **`docs/LLM_ERROR_RECOVERY.md`** retired. The doc was ~160 lines of
+  agent-troubleshooting guidance built around a 2024 Gitea-only fix
+  (commit `f79091fb`); the canonical error contract has lived in
+  `js/utils/errors.js` for several releases now (`EditorError`,
+  `ErrorCode`, `recoveryHint`), and the doc had no live readers
+  outside `read_docs({doc_id:'error-recovery'})`. The `read_docs`
+  entry is preserved (so existing LLM tool calls don't 404) but now
+  returns an inline pointer string referencing `js/utils/errors.js`
+  and the new `ARCHITECTURE.md` paragraph. Closes the
+  `docs/ROADMAP.md` §1.1.0 deliverable: *"Retire/rewrite
+  `docs/LLM_ERROR_RECOVERY.md`. Either fold its useful content into a
+  new section in PLUGIN.md / TOOLS.md, or replace with a thin pointer
+  to `js/utils/errors.js`."* — shrink-to-pointer chosen because the
+  surviving content was three sentences, which fold into ARCHITECTURE
+  more honestly than into PLUGIN/TOOLS.
+
 ## [1.0.6] - 2026-04-29
 
 ### Added

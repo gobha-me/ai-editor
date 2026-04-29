@@ -28,13 +28,12 @@ Tracked authoritatively in [`docs/ROADMAP.md`](ROADMAP.md) §1.1.0. What has lan
 | Turn metadata enrichment | 1.0.5 | `file_ops`, `tool_result_for`, `tool_name`, `tool_args` on tool-result turns ([#170](../../../pulls/170)) |
 | Migration coverage probe | 1.0.5 | `js/chat/metadata-probe.js` + `?debug=metadata` dev flag ([#172](../../../pulls/172)) |
 | Pre-merge version coherence CI lint | 1.0.5 | `.gitea/workflows/ci.yaml` rejects PRs where `js/version.js` and `CHANGELOG.md` disagree ([#173](../../../pulls/173)) |
-| Profile scaffolding + unified `TaskLedger` | 1.0.6 | `js/profiles/` directory, data only — no consumer wires up yet (this PR) |
+| Profile scaffolding + unified `TaskLedger` | 1.0.6 | `js/profiles/` directory, data only — no consumer wires up yet ([#174](../../../pulls/174)) |
+| `node --test` CI step + `.mjs` port | 1.0.6 | `.gitea/workflows/ci.yaml` Node tests step; four browser-bound `.mjs` suites ported to `node:test` ([#175](../../../pulls/175)) |
+| `docs/LLM_ERROR_RECOVERY.md` retired | 1.0.x | File deleted; `read_docs({doc_id:'error-recovery'})` returns an inline pointer to `js/utils/errors.js`; canonical content folded into `ARCHITECTURE.md` § `tools/registry.js` |
+| Plugin SlotManager — contract locked | 1.0.x | [`DESIGN-git-providers-and-ui-extensions.md`](DESIGN-git-providers-and-ui-extensions.md) §4 now specifies the slot catalog, error semantics, security boundary, priority rule, and `version` field; renderer deferred to 1.4.x |
 
-What's still open per ROADMAP §1.1.0:
-
-- **CI test step** (`node --test` job in `.gitea/workflows/ci.yaml`; port the remaining `.mjs` files off `window.T`).
-- **`docs/LLM_ERROR_RECOVERY.md` retirement** — fold into PLUGIN.md/TOOLS.md or replace with a thin pointer to `js/utils/errors.js`.
-- **Plugin SlotManager** — design only in 1.1.x; implementation deferred to a 1.4.x patch per ROADMAP §1.1.0.
+All ROADMAP §1.1.0 items shipped. 1.2.0 (Compression Phase 1) opens next.
 
 ---
 
@@ -45,7 +44,7 @@ Items that could improve the editor post-1.0. Not committed — captured for ref
 ### Plugin System
 
 - **Dynamic provider registration in settings UI** — Plugins that call `Providers.register()` or `GitProviderRegistry.register()` don't appear in settings dropdowns. The dropdown should read from the live registry.
-- **SlotManager implementation** — Named DOM slots (`data-slot="sidebar-top"`, `data-slot="editor-toolbar"`, etc.) that plugins can inject HTML into. Designed in [DESIGN-git-providers-and-ui-extensions.md](DESIGN-git-providers-and-ui-extensions.md) §4 and referenced in `git-providers/registry.js#getAllContributions`, but the renderer is not yet built. Today plugins inject UI only via `registerButton` and `registerModal`.
+- **SlotManager implementation** — Named DOM slots that plugins can inject HTML into. Contract locked in 1.0.x (slot catalog, error semantics, security boundary, priority rule, `version` field) — see [DESIGN-git-providers-and-ui-extensions.md](DESIGN-git-providers-and-ui-extensions.md) §4. `git-providers/registry.js#getAllContributions` already collects manifests; the 1.4.x patch ships `js/slot-manager.js` against the locked contract. Today plugins inject UI only via `registerButton` and `registerModal`.
 - **Plugin settings panel tab** — Allow plugins to register a dedicated tab in the Settings modal for richer configuration UI beyond auto-generated `configSchema` fields.
 - **CodeMirror extension bridge** — Expose the CodeMirror `EditorView` to plugins for keybindings, decorations, and custom syntax highlighting.
 - **Plugin marketplace / registry** — A curated list of external plugin URLs browsable from within Settings.
@@ -80,5 +79,5 @@ Items that could improve the editor post-1.0. Not committed — captured for ref
 
 Tracked here so future updates close the loop:
 
-- `docs/LLM_ERROR_RECOVERY.md` references a specific Gitea-only fix (commit `f79091fb`) and pre-multi-provider phrasing. Reframe around the current multi-provider error path or retire it now that `js/utils/errors.js` carries structured `EditorError`/`ErrorCode`.
-- `docs/DESIGN-git-providers-and-ui-extensions.md` is mostly implemented (multi-connection works, providers are split, registry exists, contributions are collected). Only **SlotManager** remains unimplemented — the design doc could be split into "shipped" and "remaining" sections or the unimplemented portion folded into this roadmap.
+- ~~`docs/LLM_ERROR_RECOVERY.md` references a specific Gitea-only fix (commit `f79091fb`) and pre-multi-provider phrasing.~~ **Resolved** in 1.0.x — file retired; `read_docs({doc_id:'error-recovery'})` returns an inline pointer to `js/utils/errors.js`; `ARCHITECTURE.md` § `tools/registry.js` now names `EditorError` / `ErrorCode` / `recoveryHint` directly.
+- `docs/DESIGN-git-providers-and-ui-extensions.md` is mostly implemented (multi-connection works, providers are split, registry exists, contributions are collected). Only **SlotManager** remains unimplemented — contract locked in 1.0.x at the doc's §4; renderer ships in 1.4.x.

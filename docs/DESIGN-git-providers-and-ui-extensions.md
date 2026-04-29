@@ -192,6 +192,15 @@ const GitProviderRegistry = {
 
 ## 4. UI Extension System (Declarative Slots)
 
+> **Implementation status:** Contract locked in 1.1.0 (this section);
+> renderer (`js/slot-manager.js`) deferred to a 1.4.x patch per
+> [`docs/ROADMAP.md`](ROADMAP.md) §1.1.0. Today plugins inject UI only
+> via `Plugins.registerButton()` and `Plugins.registerModal()`. The
+> `contributes` manifest is already collected by
+> `js/git-providers/registry.js#getAllContributions()` but no consumer
+> renders it; that's what the 1.4.x SlotManager closes against the
+> contract below.
+
 The core layout defines named slots. Plugins/providers declare what they
 mount into those slots via their `contributes` manifest.
 
@@ -274,6 +283,70 @@ const SlotManager = {
 };
 ```
 
+### Slot catalog (closed registry for 1.4.x)
+
+The editor declares a fixed set of slots. Adding a slot requires a PR
+that updates this table; plugins cannot invent private slot names that
+the editor doesn't render.
+
+| Slot ID | Host element | Purpose |
+|---|---|---|
+| `sidebar-panels` | sidebar.html | Provider panels (issues, workflows, releases, etc.) |
+| `settings-connections` | settings-tabs.html | Per-connection settings cards (URL, token, scopes) |
+| `editor-toolbar` | editor pane (top of CodeMirror container) | View-mode toggles, format buttons, plugin actions |
+| `chat-input-row` | chat panel (above the input) | Above-input affordances — e.g. the 1.4.0 active-tools chip row |
+| `status-bar` | bottom of app shell | Status pills — e.g. 1.2.0 compression ratio, 1.4.0 tool count |
+
+Slots are rendered on demand: a contribution's `render()` is invoked
+once per `renderSlot()` call. There are no mount/unmount lifecycle hooks
+in 1.4.x — cleanup is the plugin's responsibility, typically via event
+delegation rather than per-render listener bindings.
+
+### Error semantics, security, and ordering
+
+Four contract clarifications a 1.4.x implementation must honor:
+
+1. **Render error containment.** If `contribution.render()` throws,
+   SlotManager catches the error, logs it to `console.error` with
+   `{ pluginId, slotId, error }`, and skips that contribution. Other
+   contributions in the same slot still render. Plugins must not rely
+   on exceptions to abort sibling contributions.
+
+2. **HTML injection / XSS boundary.** Contributions that return an
+   `HTMLElement` are mounted via `appendChild` (safe; the DOM API does
+   not parse markup). Contributions that return a `string` are mounted
+   via `insertAdjacentHTML('beforeend', ...)` and are **not** sanitized
+   by SlotManager. Plugin authors are responsible for sanitizing any
+   dynamic content they include in a string return value. Recommended
+   patterns: build the tree with `document.createElement` +
+   `textContent`, or pre-sanitize untrusted content with DOMPurify
+   before returning the string. The project-wide rule against
+   `return raw;` near a DOMPurify call (enforced by the CI security
+   lint in `.gitea/workflows/ci.yaml`) applies inside plugin render
+   functions just as it does in core code.
+
+3. **Priority and tie-breaking.** Sort key is `(priority ?? 50)`
+   ascending — lower number renders first. Default priority is **50**
+   when omitted; bias up by setting a smaller number, down by setting
+   a larger one. Ties break by registration order (insertion-stable —
+   `Array.prototype.sort` is stable in all currently-supported
+   browsers).
+
+4. **CSS isolation.** No shadow DOM in 1.4.x. Plugins must namespace
+   their CSS class names with their `pluginId` (e.g.
+   `.gitea-issues__panel`, `.foo-plugin__row`). Style collisions are
+   the plugin author's problem, not SlotManager's. `Plugins.injectCSS()`
+   is the canonical injection point and already exists today.
+
+### Schema additions
+
+Add a `version: '1.1'` field to each panel/setting/menuItem entry in
+`contributes`. The 1.4.x renderer rejects entries whose `version` it
+does not recognize, providing a forward-compat lever: future schema
+revisions ship as `'1.2'` etc. without breaking older renderers in
+the wild. Entries without a `version` field are treated as `'1.1'` for
+backwards compatibility with the providers that ship today.
+
 ### Provider manifest with UI extensions
 
 ```javascript
@@ -288,14 +361,17 @@ export default {
   contributes: {
     panels: [
       {
+        version: '1.1',                                  // schema version (see "Schema additions")
         id: 'gitea-issues',
         slot: 'sidebar-panels',
         title: 'Issues',
         icon: '📋',
+        priority: 50,                                    // default; lower → renders first (see "Priority and tie-breaking")
         render: (connection, state) => renderIssuesPanel(state.issues),
-        refreshEvent: 'issues:refresh'
+        refreshEvent: 'issues:refresh'                   // optional; re-renders panel when this fires on EventBus
       },
       {
+        version: '1.1',
         id: 'gitea-workflows',
         slot: 'sidebar-panels',
         title: 'Workflows',

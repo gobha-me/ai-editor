@@ -14,7 +14,7 @@ const DOC_MANIFEST = [
     { id: 'roles',        path: 'docs/ROLES_AND_TOOLS.md',  title: 'Roles & Tool Access' },
     { id: 'architecture', path: 'docs/ARCHITECTURE.md',     title: 'Editor Architecture' },
     { id: 'scan-tools',   path: 'docs/scan-tools-guide.md', title: 'Scan Tools Usage Guide' },
-    { id: 'error-recovery', path: 'docs/LLM_ERROR_RECOVERY.md', title: 'LLM Error Recovery Patterns' },
+    { id: 'error-recovery', inline: 'Error handling in AI Editor is implemented in `js/utils/errors.js`. Use the `EditorError` class with an `ErrorCode` constant and a `recoveryHint` string; consumers compare `err.code` rather than parsing messages, and `err.recoveryHint` is rendered to the user via `js/error-logger.js`. See `docs/ARCHITECTURE.md` § `tools/registry.js` for the tool-execution error path.', title: 'Error Handling — pointer to js/utils/errors.js' },
     { id: 'plan',         path: 'docs/PLAN.md',             title: 'Future Work / Roadmap' }
 ];
 
@@ -31,7 +31,7 @@ export function registerDocTools(registry) {
                 available_docs: DOC_MANIFEST.map(d => ({
                     id: d.id,
                     title: d.title,
-                    path: d.path
+                    ...(d.path ? { path: d.path } : { inline: true })
                 })),
                 usage: 'Call read_docs with doc_id to read a specific document. Example: read_docs({ doc_id: "plugin-sdk" })'
             };
@@ -42,6 +42,16 @@ export function registerDocTools(registry) {
             return {
                 error: `Unknown doc_id: "${doc_id}". Available: ${DOC_MANIFEST.map(d => d.id).join(', ')}`,
                 available_docs: DOC_MANIFEST.map(d => ({ id: d.id, title: d.title }))
+            };
+        }
+
+        // Inline pointer entries return their content directly (no fetch).
+        // Used for retired docs whose canonical content lives in source code.
+        if (doc.inline) {
+            return {
+                doc_id: doc.id,
+                title: doc.title,
+                content: doc.inline
             };
         }
 
