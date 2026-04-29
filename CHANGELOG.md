@@ -4,6 +4,88 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-04-29
+
+First behavior-changing release after the **1.1.0 — Foundations** track
+closes. Foundations content shipped incrementally under `1.0.5` and
+`1.0.6`; this release marks the track exit by landing the first
+follow-up patch from `docs/ROADMAP.md` §1.1.1, plus the documentation
+deliverables that were sitting in `[Unreleased]` after the docs branch
+merged.
+
+### Changed
+
+- **LLM timeout is now idle-based, not wall-clock** (`js/llm/api.js`,
+  `js/chat/handlers.js`). Old behavior: `Promise.race` in
+  `handlers.js` aborted any chat after a fixed wall-clock window from
+  fetch start (default 180s). Reasoning models (DeepSeek-R1, o1-style,
+  GPT-5 think-mode) routinely spend 30–90s reasoning before emitting
+  their first token and got falsely aborted. New behavior: the timer
+  lives inside `LLM._handleStream()` and resets on every
+  `reader.read()` chunk arrival — keep-alives, tool-call deltas, and
+  think-tag chunks all count as activity, not just visible tokens. If
+  no chunk arrives within the configured idle window, the request
+  aborts via the existing `AbortController` and surfaces as
+  `Idle timeout (Ns) — no tokens received`. The `Promise.race` wrapper
+  in `handlers.js` is removed; non-stream consumers get a wall-clock
+  fallback inside `chat()` using the same window. Closes
+  `docs/ROADMAP.md` §1.1.1.
+- **`docs/ARCHITECTURE.md` § `tools/registry.js`** — paragraph expanded to
+  name the canonical error contract directly: `EditorError` extends
+  `Error` with a machine-readable `.code` (from the `ErrorCode` enum)
+  and a human-readable `.recoveryHint`; consumers compare `err.code`
+  rather than parse `.message`; `js/error-logger.js` renders the hint;
+  `EditorError.fromResponse()` and `.wrap()` are the canonical
+  constructors. Closes a doc/code drift item flagged in
+  `docs/PLAN.md` § Known doc/code drift.
+- **`js/tools/doc-tools.js` `DOC_MANIFEST`** — entries can now declare
+  an `inline` content string instead of a `path` to fetch. The
+  `read_docs` handler short-circuits the fetch path for inline entries
+  and returns the inline content directly. The manifest-listing branch
+  surfaces inline entries with `inline: true` in place of `path` so the
+  LLM can tell them apart.
+
+### Added
+
+- **Settings rename + one-shot migration: `llmTimeout` → `llmIdleTimeout`**
+  (`js/core.js` `loadSettings()`). The migration runs at most once per
+  stored settings blob: if the old key is present and the new key is
+  absent, the value is copied over and the old key is deleted before
+  the merge spread. Same numeric value, new semantics — see Risk note
+  below. Default for new installs is `90000` (90s); old installs keep
+  whatever they had set (typically 180000ms).
+- **Settings → LLM tab — "Idle Timeout (since last token)"** label
+  (`html/settings-tabs.html`). The slider id, display span, and label
+  all renamed from `settingLlmTimeout`/`llmTimeoutValue` to
+  `settingLlmIdleTimeout`/`llmIdleTimeoutValue`. Adds an info-icon
+  tooltip and a `<small>` help line explaining the reset-on-token
+  semantics so users don't have to read the CHANGELOG to understand
+  the rename.
+- **`tests/test-llm-idle-timeout.mjs`** — six `node:test` cases
+  exercising `_handleStream()` with a fake reader: window respected
+  when chunks arrive in time, abort fires when chunks stop, timer
+  resets per chunk so cumulative duration > window doesn't trigger,
+  default falls back to 90s when setting is unset, user-cancel
+  distinguishable from idle-cancel.
+- **`tests/test-settings-migration.mjs`** — seven cases covering the
+  rename: copies old → new, no-op when only new present, no-op when
+  both present, no-op when neither, idempotency across re-runs, and
+  Storage round-trip integrity. Lands as a home for future one-shot
+  migrations so they don't each invent their own test pattern.
+
+### Risk note
+
+The old `llmTimeout` was wall-clock from fetch start; the new
+`llmIdleTimeout` resets on chunks. A user who set
+`llmTimeout: 60000` for a slow connection migrates to
+`llmIdleTimeout: 60000` — different meaning, same number. In practice
+the new semantics are *more lenient* for streaming sessions
+(reasoning models that paused for 30s before their first token used
+to fail; now they don't), so existing values continue to work. If a
+user did want the strict wall-clock-of-N behavior, they need to
+re-tune; this is acceptable per the roadmap and called out in the
+Settings → LLM help line.
+
 ### Docs
 
 - **SlotManager — contract locked** (`docs/DESIGN-git-providers-and-ui-extensions.md`
@@ -42,24 +124,6 @@ All notable changes to AI Editor are documented here.
   the 1.1.x landed table and the SlotManager Future Work bullet; the
   doc/code drift entry is updated rather than deleted so the resolution
   history is traceable.
-
-### Changed
-
-- **`docs/ARCHITECTURE.md` § `tools/registry.js`** — paragraph expanded to
-  name the canonical error contract directly: `EditorError` extends
-  `Error` with a machine-readable `.code` (from the `ErrorCode` enum)
-  and a human-readable `.recoveryHint`; consumers compare `err.code`
-  rather than parse `.message`; `js/error-logger.js` renders the hint;
-  `EditorError.fromResponse()` and `.wrap()` are the canonical
-  constructors. Closes a doc/code drift item flagged in
-  `docs/PLAN.md` § Known doc/code drift.
-
-- **`js/tools/doc-tools.js` `DOC_MANIFEST`** — entries can now declare
-  an `inline` content string instead of a `path` to fetch. The
-  `read_docs` handler short-circuits the fetch path for inline entries
-  and returns the inline content directly. The manifest-listing branch
-  surfaces inline entries with `inline: true` in place of `path` so the
-  LLM can tell them apart.
 
 ### Removed
 

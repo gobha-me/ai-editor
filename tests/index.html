@@ -141,6 +141,14 @@
                 await import('./test-profiles.js');
             } catch (e) { errors.push(['Profiles', e]); }
 
+            try {
+                await import('./test-settings-migration.js');
+            } catch (e) { errors.push(['Settings Migration', e]); }
+
+            try {
+                await import('./test-llm-idle-timeout.js');
+            } catch (e) { errors.push(['LLM Idle Timeout', e]); }
+
             // --- UI & Context (0.9.12) ---
             try {
                 await import('./test-context-filter.js');

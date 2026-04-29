@@ -365,6 +365,24 @@ export const LLM = {
         this.abortController = new AbortController();
         EventBus.emit('llm:generating', true);
 
+        // Non-stream wall-clock fallback. Streaming uses an idle-resetting
+        // timer inside _handleStream(); for non-stream we have no chunk
+        // boundary to reset on, so the same window doubles as a wall-clock
+        // cap on the full request. In production this branch is not exercised
+        // (chat handlers always pass stream:true), but keep abort semantics
+        // correct so non-streaming consumers don't hang indefinitely.
+        const idleMs = State.settings.llmIdleTimeout || 90000;
+        let nonStreamTimer = null;
+        let nonStreamTimedOut = false;
+        if (!stream) {
+            nonStreamTimer = setTimeout(() => {
+                nonStreamTimedOut = true;
+                try {
+                    if (this.abortController) this.abortController.abort();
+                } catch (_) { /* swallow */ }
+            }, idleMs);
+        }
+
         try {
             // === Plugin hook: beforeSend ===
             const hookData = await Plugins.runHook('beforeSend', {
@@ -420,7 +438,15 @@ export const LLM = {
             if (stream) {
                 result = await this._handleStream(response, onToken, !!tools);
             } else {
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (err) {
+                    if (nonStreamTimedOut) {
+                        throw new Error(`Idle timeout (${Math.round(idleMs/1000)}s) — no response received`);
+                    }
+                    throw err;
+                }
                 LLMDebug.logChunk(JSON.stringify(data).slice(0, 2000), {
                     type: 'non-stream-response',
                     hasToolCalls: !!data.choices?.[0]?.message?.tool_calls,
@@ -451,8 +477,14 @@ export const LLM = {
 
         } catch (err) {
             LLMDebug.logError(err);
+            // Translate the non-stream wall-clock abort into a friendly message
+            // so consumers see the same shape they got from streaming idle-timeouts.
+            if (nonStreamTimedOut && err?.name === 'AbortError') {
+                throw new Error(`Idle timeout (${Math.round(idleMs/1000)}s) — no response received`);
+            }
             throw err;
         } finally {
+            if (nonStreamTimer !== null) clearTimeout(nonStreamTimer);
             State.isGenerating = false;
             this.abortController = null;
             EventBus.emit('llm:generating', false);
@@ -525,140 +557,178 @@ export const LLM = {
         let hasToolCallsInResponse = false;
         let streamError = null;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                if (!line.startsWith('data: ')) continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') {
-                    LLMDebug.logChunk('[DONE]', null);
-                    continue;
-                }
-
-                let parsed;
+        // Idle-timeout: reset per chunk arrival at the reader.read() boundary,
+        // not at onToken — keep-alives, tool-call deltas, and think-tag chunks
+        // all count as network activity even when no visible token reaches the UI.
+        const idleMs = State.settings.llmIdleTimeout || 90000;
+        let idleTimer = null;
+        let idleTimedOut = false;
+        const armIdle = () => {
+            if (idleTimer !== null) clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                idleTimedOut = true;
                 try {
-                    parsed = JSON.parse(data);
-                } catch (e) {
-                    continue;
-                }
-
-                // Detect error responses embedded in SSE stream
-                const isErrorResponse = 
-                    parsed.error_type ||
-                    parsed.error ||
-                    (parsed.object === 'error' && parsed.message) ||
-                    (parsed.code && parsed.code >= 400 && !parsed.choices);
-                
-                if (isErrorResponse) {
-                    const errMsg = 
-                        parsed.error_message ||
-                        parsed.error?.message ||
-                        (typeof parsed.error === 'string' ? parsed.error : null) ||
-                        parsed.message ||
-                        JSON.stringify(parsed);
-                    console.error('[LLM] SSE error response:', errMsg);
-                    LLMDebug.logChunk(data.slice(0, 500), {
-                        hasContent: false, contentSnip: null,
-                        hasToolCalls: false, toolCallDelta: null,
-                        finishReason: null, hasUsage: false
-                    });
-                    streamError = new Error(`LLM stream error: ${errMsg}`);
-                    break;
-                }
-
-                // === DEBUG: Log raw chunk with parsed summary ===
-                const delta = parsed.choices?.[0]?.delta;
-                const chunkFinish = parsed.choices?.[0]?.finish_reason;
-                LLMDebug.logChunk(data.slice(0, 500), {
-                    hasContent: !!delta?.content,
-                    contentSnip: delta?.content ? delta.content.slice(0, 80) : null,
-                    hasToolCalls: !!delta?.tool_calls,
-                    toolCallDelta: delta?.tool_calls || null,
-                    finishReason: chunkFinish || null,
-                    hasUsage: !!parsed.usage
-                });
-
-                if (parsed.usage) {
-                    usage = parsed.usage;
-                }
-
-                if (chunkFinish) {
-                    finishReason = chunkFinish;
-                }
-
-                if (!delta) continue;
-
-                if (delta.content) {
-                    let chunk = delta.content;
-
-                    // Think-block stripping (only when no tool calls)
-                    if (!hasToolCallsInResponse && !hasTools) {
-                        if (inThinkBlock) {
-                            thinkBuffer += chunk;
-                            const endIdx = thinkBuffer.indexOf(thinkEndTag);
-                            if (endIdx >= 0) {
-                                chunk = thinkBuffer.slice(endIdx + thinkEndTag.length);
-                                inThinkBlock = false;
-                                LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
-                                thinkBuffer = '';
-                            } else {
-                                if (thinkBuffer.length > 12) {
-                                    thinkBuffer = thinkBuffer.slice(-11);
-                                }
-                                continue;
-                            }
-                        }
-
-                        // Detect <think> or <thinking> open tags
-                        const thinkMatch = chunk.match(/<think(?:ing)?>/i);
-                        if (thinkMatch) {
-                            const startIdx = thinkMatch.index;
-                            const openTag = thinkMatch[0];
-                            thinkEndTag = openTag.replace('<', '</');  // </think> or </thinking>
-                            const before = chunk.slice(0, startIdx);
-                            const afterStart = chunk.slice(startIdx + openTag.length);
-                            const endIdx = afterStart.indexOf(thinkEndTag);
-                            if (endIdx >= 0) {
-                                chunk = before + afterStart.slice(endIdx + thinkEndTag.length);
-                                LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
-                            } else {
-                                chunk = before;
-                                thinkBuffer = afterStart;
-                                inThinkBlock = true;
-                                LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
-                            }
-                        }
-                    }
-
-                    if (chunk) {
-                        content += chunk;
-                        if (onToken) onToken(chunk, content);
-                        EventBus.emit('llm:token', { token: chunk, content });
-                    }
-                }
-
-                if (delta.tool_calls) {
-                    hasToolCallsInResponse = true;
-                    LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
-                    for (const tc of delta.tool_calls) {
-                        if (tc.index !== undefined) {
-                            if (!toolCalls[tc.index]) {
-                                toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-                            }
-                            if (tc.id) toolCalls[tc.index].id = tc.id;
-                            if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
-                            if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
-                        }
-                    }
-                }
+                    if (this.abortController) this.abortController.abort();
+                } catch (_) { /* swallow — controller may already be nulled */ }
+            }, idleMs);
+        };
+        const clearIdle = () => {
+            if (idleTimer !== null) {
+                clearTimeout(idleTimer);
+                idleTimer = null;
             }
-            if (streamError) break;
+        };
+
+        try {
+            armIdle();
+
+            while (true) {
+                let readResult;
+                try {
+                    readResult = await reader.read();
+                } catch (err) {
+                    if (idleTimedOut) {
+                        throw new Error(`Idle timeout (${Math.round(idleMs/1000)}s) — no tokens received`);
+                    }
+                    throw err;
+                }
+                armIdle();
+                const { done, value } = readResult;
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') {
+                        LLMDebug.logChunk('[DONE]', null);
+                        continue;
+                    }
+
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch (e) {
+                        continue;
+                    }
+
+                    // Detect error responses embedded in SSE stream
+                    const isErrorResponse =
+                        parsed.error_type ||
+                        parsed.error ||
+                        (parsed.object === 'error' && parsed.message) ||
+                        (parsed.code && parsed.code >= 400 && !parsed.choices);
+
+                    if (isErrorResponse) {
+                        const errMsg =
+                            parsed.error_message ||
+                            parsed.error?.message ||
+                            (typeof parsed.error === 'string' ? parsed.error : null) ||
+                            parsed.message ||
+                            JSON.stringify(parsed);
+                        console.error('[LLM] SSE error response:', errMsg);
+                        LLMDebug.logChunk(data.slice(0, 500), {
+                            hasContent: false, contentSnip: null,
+                            hasToolCalls: false, toolCallDelta: null,
+                            finishReason: null, hasUsage: false
+                        });
+                        streamError = new Error(`LLM stream error: ${errMsg}`);
+                        break;
+                    }
+
+                    // === DEBUG: Log raw chunk with parsed summary ===
+                    const delta = parsed.choices?.[0]?.delta;
+                    const chunkFinish = parsed.choices?.[0]?.finish_reason;
+                    LLMDebug.logChunk(data.slice(0, 500), {
+                        hasContent: !!delta?.content,
+                        contentSnip: delta?.content ? delta.content.slice(0, 80) : null,
+                        hasToolCalls: !!delta?.tool_calls,
+                        toolCallDelta: delta?.tool_calls || null,
+                        finishReason: chunkFinish || null,
+                        hasUsage: !!parsed.usage
+                    });
+
+                    if (parsed.usage) {
+                        usage = parsed.usage;
+                    }
+
+                    if (chunkFinish) {
+                        finishReason = chunkFinish;
+                    }
+
+                    if (!delta) continue;
+
+                    if (delta.content) {
+                        let chunk = delta.content;
+
+                        // Think-block stripping (only when no tool calls)
+                        if (!hasToolCallsInResponse && !hasTools) {
+                            if (inThinkBlock) {
+                                thinkBuffer += chunk;
+                                const endIdx = thinkBuffer.indexOf(thinkEndTag);
+                                if (endIdx >= 0) {
+                                    chunk = thinkBuffer.slice(endIdx + thinkEndTag.length);
+                                    inThinkBlock = false;
+                                    LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
+                                    thinkBuffer = '';
+                                } else {
+                                    if (thinkBuffer.length > 12) {
+                                        thinkBuffer = thinkBuffer.slice(-11);
+                                    }
+                                    continue;
+                                }
+                            }
+
+                            // Detect <think> or <thinking> open tags
+                            const thinkMatch = chunk.match(/<think(?:ing)?>/i);
+                            if (thinkMatch) {
+                                const startIdx = thinkMatch.index;
+                                const openTag = thinkMatch[0];
+                                thinkEndTag = openTag.replace('<', '</');  // </think> or </thinking>
+                                const before = chunk.slice(0, startIdx);
+                                const afterStart = chunk.slice(startIdx + openTag.length);
+                                const endIdx = afterStart.indexOf(thinkEndTag);
+                                if (endIdx >= 0) {
+                                    chunk = before + afterStart.slice(endIdx + thinkEndTag.length);
+                                    LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
+                                } else {
+                                    chunk = before;
+                                    thinkBuffer = afterStart;
+                                    inThinkBlock = true;
+                                    LLMDebug.logThink('think-start', `Entered think block, kept before: "${before.slice(0, 60)}"`);
+                                }
+                            }
+                        }
+
+                        if (chunk) {
+                            content += chunk;
+                            if (onToken) onToken(chunk, content);
+                            EventBus.emit('llm:token', { token: chunk, content });
+                        }
+                    }
+
+                    if (delta.tool_calls) {
+                        hasToolCallsInResponse = true;
+                        LLMDebug.logThink('tool-call-delta', JSON.stringify(delta.tool_calls));
+                        for (const tc of delta.tool_calls) {
+                            if (tc.index !== undefined) {
+                                if (!toolCalls[tc.index]) {
+                                    toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                                }
+                                if (tc.id) toolCalls[tc.index].id = tc.id;
+                                if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+                            }
+                        }
+                    }
+                }
+                if (streamError) break;
+            }
+        } finally {
+            clearIdle();
         }
 
         if (streamError) {

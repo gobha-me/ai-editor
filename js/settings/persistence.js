@@ -39,7 +39,7 @@ export function collectAndSave() {
     State.settings.connections = GitProviderRegistry.listConnections();
 
     // Timeouts (convert seconds to milliseconds)
-    State.settings.llmTimeout = parseInt(document.getElementById('settingLlmTimeout').value) * 1000 || 180000;
+    State.settings.llmIdleTimeout = parseInt(document.getElementById('settingLlmIdleTimeout').value) * 1000 || 90000;
     State.settings.toolTimeout = parseInt(document.getElementById('settingToolTimeout').value) * 1000 || 30000;
     State.settings.summaryTimeout = parseInt(document.getElementById('settingSummaryTimeout').value) * 1000 || 60000;
 
@@ -204,7 +204,7 @@ export function exportSettings() {
         apiProvider: State.settings.apiProvider,
         
         // Timeouts
-        llmTimeout: State.settings.llmTimeout,
+        llmIdleTimeout: State.settings.llmIdleTimeout,
         toolTimeout: State.settings.toolTimeout,
         summaryTimeout: State.settings.summaryTimeout,
         

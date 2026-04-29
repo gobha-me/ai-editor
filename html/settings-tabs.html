@@ -100,9 +100,15 @@
     <hr>
 
     <div class="form-group">
-        <label for="settingLlmTimeout">LLM Timeout:</label>
-        <input type="range" id="settingLlmTimeout" min="30" max="600" step="10">
-        <span id="llmTimeoutValue">180s</span>
+        <label for="settingLlmIdleTimeout">
+            Idle Timeout (since last token):
+            <span title="Timer resets each time the API streams a chunk. If no token arrives within this window, the request is aborted. Reasoning models that pause to think are no longer falsely aborted at the wall-clock boundary." style="cursor: help; color: var(--text-muted);">ⓘ</span>
+        </label>
+        <input type="range" id="settingLlmIdleTimeout" min="30" max="600" step="10">
+        <span id="llmIdleTimeoutValue">90s</span>
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Default 90s. Resets on every streamed chunk; prevents false aborts for reasoning models that pause before emitting their first token.
+        </small>
     </div>
 
     <div class="form-group">

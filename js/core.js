@@ -73,7 +73,7 @@
  * @property {string}               apiProvider
  * @property {VeniceParameters}     veniceParameters
  * @property {OpenRouterParameters} openRouterParameters
- * @property {number}               llmTimeout
+ * @property {number}               llmIdleTimeout
  * @property {number}               toolTimeout
  * @property {number}               summaryTimeout
  * @property {string}               role
@@ -265,7 +265,7 @@ const State = {
         },
         
         // Timeout Configuration (in milliseconds)
-        llmTimeout: 180000,        // 3 minutes - Main LLM response timeout (for reasoning models like Kimi K2.5)
+        llmIdleTimeout: 90000,     // 90 seconds - Resets on every streamed chunk; aborts when no token arrives within this window
         toolTimeout: 30000,        // 30 seconds - Individual tool execution timeout
         summaryTimeout: 60000,     // 1 minute - Chat summary generation timeout
         
@@ -1549,6 +1549,14 @@ BUILTIN_ROLES.forEach(role => Roles.register(role));
 function loadSettings() {
     const saved = Storage.get('settings');
     if (saved) {
+        // One-shot migration (1.1.1): wall-clock llmTimeout → idle llmIdleTimeout.
+        // Same numeric value, different semantics (resets on each streamed chunk
+        // instead of firing once from fetch start). Drops the old key so the
+        // migration runs at most once per stored settings blob.
+        if (saved.llmTimeout !== undefined && saved.llmIdleTimeout === undefined) {
+            saved.llmIdleTimeout = saved.llmTimeout;
+            delete saved.llmTimeout;
+        }
         // Deep-merge known nested objects so new defaults aren't lost on upgrade.
         // Top-level keys are spread first, then nested objects are merged individually.
         const nestedKeys = ['veniceParameters', 'openRouterParameters', 'advancedParams'];

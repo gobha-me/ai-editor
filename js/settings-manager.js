@@ -96,20 +96,20 @@ function populateSettingsForm() {
     showModelCapabilities();
 
     // Timeout sliders
-    const llmTimeoutSlider = document.getElementById('settingLlmTimeout');
+    const llmIdleTimeoutSlider = document.getElementById('settingLlmIdleTimeout');
     const toolTimeoutSlider = document.getElementById('settingToolTimeout');
     const summaryTimeoutSlider = document.getElementById('settingSummaryTimeout');
-    
-    llmTimeoutSlider.value = (State.settings.llmTimeout || 180000) / 1000;
+
+    llmIdleTimeoutSlider.value = (State.settings.llmIdleTimeout || 90000) / 1000;
     toolTimeoutSlider.value = (State.settings.toolTimeout || 30000) / 1000;
     summaryTimeoutSlider.value = (State.settings.summaryTimeout || 60000) / 1000;
-    
-    document.getElementById('llmTimeoutValue').textContent = llmTimeoutSlider.value + 's';
+
+    document.getElementById('llmIdleTimeoutValue').textContent = llmIdleTimeoutSlider.value + 's';
     document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';
     document.getElementById('summaryTimeoutValue').textContent = summaryTimeoutSlider.value + 's';
 
-    llmTimeoutSlider.oninput = () => {
-        document.getElementById('llmTimeoutValue').textContent = llmTimeoutSlider.value + 's';
+    llmIdleTimeoutSlider.oninput = () => {
+        document.getElementById('llmIdleTimeoutValue').textContent = llmIdleTimeoutSlider.value + 's';
     };
     toolTimeoutSlider.oninput = () => {
         document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';

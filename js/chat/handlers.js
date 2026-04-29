@@ -344,8 +344,9 @@ export async function handleGeneralRequest(input) {
             let result;
 
             try {
-                // Use configurable timeout from settings (default 180s = 3min)
-                const timeout = State.settings.llmTimeout || 180000;
+                // Idle-timeout lives inside LLM._handleStream — the timer resets on
+                // every reader.read() chunk arrival, so reasoning models that pause
+                // before emitting their first token no longer get falsely aborted.
                 const chatOptions = {
                     stream: true,
                     tools: roleTools,
@@ -359,12 +360,7 @@ export async function handleGeneralRequest(input) {
                     updateStreamingMessage('*(processing tool results…)*');
                 }
 
-                result = await Promise.race([
-                    LLM.chat(messages, chatOptions),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error(`Response timeout (${timeout/1000}s)`)), timeout)
-                    )
-                ]);
+                result = await LLM.chat(messages, chatOptions);
 
                 content = content || result.content || '';
 
