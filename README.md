@@ -29,7 +29,7 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 
 **Multi-provider LLM** — Venice, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings. Ollama gets dedicated capability detection via `/api/show`.
 
-**Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL. See [docs/PLUGIN.md](docs/PLUGIN.md).
+**Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL. See [docs/PLUGIN.md](docs/PLUGIN.md) and [docs/SECURITY.md](docs/SECURITY.md) for the threat model.
 
 **Mobile responsive** — full mobile layout with bottom tab bar, swipe gestures, soft keyboard detection, and PWA support.
 
@@ -97,7 +97,7 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 - Install external plugins from URL via `window.AIEditor`
 - Ships with: Venice AI, Venice Billing, OpenRouter Billing, Cross-Repo Issues, Release Sync
 
-See [docs/PLUGIN.md](docs/PLUGIN.md) for the authoring guide.
+See [docs/PLUGIN.md](docs/PLUGIN.md) for the authoring guide and [docs/SECURITY.md](docs/SECURITY.md) for the supply-chain threat model.
 
 ## Configuration
 

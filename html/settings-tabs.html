@@ -256,6 +256,16 @@
 
     <div class="form-group">
         <label>
+            <input type="checkbox" id="settingEditorScanInvisibleUnicode">
+            Scan for invisible Unicode (glassworm / Trojan Source)
+        </label>
+        <small style="display: block; margin: 0.25rem 0 0 1.5rem; color: var(--text-muted);">
+            Surfaces zero-width, bidi-override, and tags-block characters as visible widgets in code files. Off for Markdown / HTML / XML by default. See <code>docs/SECURITY.md</code>.
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label>
             <input type="checkbox" id="settingShowIssues">
             Show Issues panel
         </label>

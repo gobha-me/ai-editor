@@ -131,7 +131,27 @@ jobs:
             exit 1
           fi
           echo "✅ Security lint passed"
-        
+
+      # ── Invisible Unicode Lint ──────────────────
+      # Glassworm (U+E0000–U+E007F tags block), zero-width chars, and bidi
+      # overrides (Trojan Source). Ranges must match
+      # js/security/invisible-unicode.js INVISIBLE_RANGES and the
+      # "Codepoint reference" section of docs/SECURITY.md.
+      - name: Security lint — invisible Unicode
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Checking for invisible Unicode (glassworm / Trojan Source)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if grep -rPn '[\x{E0000}-\x{E007F}\x{200B}-\x{200F}\x{2060}-\x{206F}\x{FEFF}\x{202A}-\x{202E}\x{2066}-\x{2069}]' \
+               js/ plugins/ tests/ \
+               --include='*.js' --include='*.mjs' --include='*.json'; then
+            echo ""
+            echo "❌ FAIL: Invisible Unicode characters found"
+            echo "   See docs/SECURITY.md for the threat model and codepoint reference."
+            exit 1
+          fi
+          echo "✅ No invisible Unicode characters found"
+
       - name: Add /tools to PATH
         run: echo "/tools" >> $GITHUB_PATH
         

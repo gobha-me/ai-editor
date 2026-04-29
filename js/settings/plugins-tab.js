@@ -261,48 +261,128 @@ function _wireInstallButton(container) {
     const status = container.querySelector('#pluginInstallStatus');
     if (!btn || !input) return;
 
-    const doInstall = async () => {
+    const setStatusText = (text, color) => {
+        if (!status) return;
+        status.textContent = text;
+        status.style.color = color;
+    };
+
+    const doInstall = async (options = {}) => {
         const url = input.value.trim();
         if (!url) {
-            if (status) {
-                status.textContent = 'Enter a plugin URL';
-                status.style.color = 'var(--warning)';
-            }
+            setStatusText('Enter a plugin URL', 'var(--warning)');
             return;
         }
 
         btn.disabled = true;
         btn.textContent = 'Installing…';
-        if (status) {
-            status.textContent = 'Fetching plugin…';
-            status.style.color = 'var(--text-secondary)';
-        }
+        setStatusText('Fetching plugin…', 'var(--text-secondary)');
 
-        const result = await installPlugin(url);
+        const result = await installPlugin(url, options);
 
         btn.disabled = false;
         btn.textContent = 'Install';
 
         if (result.success) {
-            if (status) {
-                status.textContent = `Installed: ${result.name}`;
-                status.style.color = 'var(--success)';
-            }
+            if (status) status.innerHTML = '';
+            setStatusText(`Installed: ${result.name}`, 'var(--success)');
             input.value = '';
             window.showToast?.(`Plugin installed: ${result.name}`, 'success');
             populatePluginsTab();
-        } else {
-            if (status) {
-                status.textContent = `Error: ${result.error}`;
-                status.style.color = 'var(--error)';
-            }
+            return;
         }
+
+        if (result.requiresConfirmation && Array.isArray(result.invisibleUnicodeFindings)) {
+            _renderInvisibleUnicodeWarning(status, result.invisibleUnicodeFindings, () => {
+                doInstall({ confirmedInvisibleUnicode: true });
+            });
+            return;
+        }
+
+        setStatusText(`Error: ${result.error}`, 'var(--error)');
     };
 
-    btn.addEventListener('click', doInstall);
+    btn.addEventListener('click', () => doInstall());
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') doInstall();
     });
+}
+
+/**
+ * Render an inline warning band when the plugin source contains invisible
+ * Unicode characters. Replaces the status text with a richer affordance
+ * including "Install anyway" / "Cancel".
+ *
+ * @param {HTMLElement} status — the #pluginInstallStatus element
+ * @param {Array<{codepoint: number, name: string, line: number, col: number}>} findings
+ * @param {() => void} onProceed — callback when the user clicks "Install anyway"
+ */
+function _renderInvisibleUnicodeWarning(status, findings, onProceed) {
+    if (!status) return;
+    status.innerHTML = '';
+    status.style.color = '';
+
+    const band = document.createElement('div');
+    band.className = 'plugin-install-warning-band';
+    band.style.cssText = [
+        'border: 1px solid var(--error)',
+        'background: color-mix(in srgb, var(--error) 12%, transparent)',
+        'border-radius: 4px',
+        'padding: 0.6rem 0.75rem',
+        'margin-top: 0.5rem',
+        'display: flex',
+        'flex-direction: column',
+        'gap: 0.5rem',
+        'font-size: 0.92em'
+    ].join(';');
+
+    const heading = document.createElement('div');
+    heading.style.cssText = 'color: var(--error); font-weight: 600;';
+    heading.textContent = `⚠ Source contains ${findings.length} invisible Unicode character${findings.length === 1 ? '' : 's'}`;
+    band.appendChild(heading);
+
+    const detail = document.createElement('div');
+    detail.style.cssText = 'color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9em; line-height: 1.5;';
+    const preview = findings.slice(0, 3)
+        .map(f => `• L${f.line}:${f.col} ${f.name} (U+${f.codepoint.toString(16).toUpperCase().padStart(4, '0')})`)
+        .join('\n');
+    detail.textContent = findings.length > 3
+        ? `${preview}\n… and ${findings.length - 3} more`
+        : preview;
+    detail.style.whiteSpace = 'pre-line';
+    band.appendChild(detail);
+
+    const help = document.createElement('div');
+    help.style.cssText = 'color: var(--text-muted); font-size: 0.88em;';
+    help.innerHTML = 'These chars can hide malicious code (glassworm, Trojan Source). See <code>docs/SECURITY.md</code>. Cancel unless you trust the source.';
+    band.appendChild(help);
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display: flex; gap: 0.5rem; justify-content: flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'btn-secondary';
+    cancelBtn.addEventListener('click', () => {
+        status.innerHTML = '';
+        status.textContent = 'Install cancelled';
+        status.style.color = 'var(--text-muted)';
+    });
+
+    const proceedBtn = document.createElement('button');
+    proceedBtn.textContent = 'Install anyway';
+    proceedBtn.className = 'btn-danger';
+    proceedBtn.style.cssText = 'background: var(--error); color: var(--text-primary); border: none; padding: 0.35rem 0.75rem; border-radius: 3px; cursor: pointer;';
+    proceedBtn.addEventListener('click', () => {
+        status.innerHTML = '';
+        onProceed();
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(proceedBtn);
+    band.appendChild(actions);
+
+    status.appendChild(band);
 }
 
 /**

@@ -88,6 +88,7 @@
  * @property {boolean}              showPullRequests
  * @property {boolean}              showLineNumbers
  * @property {'default'|'vim'}      editorKeybindingMode
+ * @property {boolean}              editorScanInvisibleUnicode
  * @property {string}               theme
  * @property {SummarizerMode}       summarizerMode
  * @property {SummarizerConfig}     summarizer
@@ -287,6 +288,7 @@ const State = {
         showPullRequests: true,    // Show pull requests panel in sidebar
         showLineNumbers: true,     // Show line numbers in editor
         editorKeybindingMode: 'default', // 'default' | 'vim' — keybinding profile for the editor
+        editorScanInvisibleUnicode: true, // Surface zero-width / bidi-override / glassworm chars in the editor
         theme: 'dark',
 
         // Summarizer Configuration

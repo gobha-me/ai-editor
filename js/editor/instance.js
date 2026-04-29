@@ -9,6 +9,11 @@
 import { State, EventBus } from '../core.js';
 import { CM, loadCodeMirror, getLanguageExtension } from './setup.js';
 import { getBlameCompartment } from './blame-gutter.js';
+import {
+    getInvisibleUnicodeCompartment,
+    buildInvisibleUnicodeExtension,
+    setInvisibleUnicodeMode
+} from './invisible-unicode-decoration.js';
 
 // ============================================
 // EDITOR INSTANCE
@@ -134,7 +139,14 @@ export async function createEditor(container, content, filename) {
     // Blame gutter compartment (starts empty = no gutter column)
     const blameComp = getBlameCompartment();
     if (blameComp) extensions.push(blameComp.of([]));
-    
+
+    // Invisible-Unicode decoration compartment (Settings → Appearance toggle)
+    const invisibleComp = getInvisibleUnicodeCompartment();
+    if (invisibleComp) {
+        const scanEnabled = State.settings.editorScanInvisibleUnicode !== false;
+        extensions.push(invisibleComp.of(buildInvisibleUnicodeExtension(filename, scanEnabled)));
+    }
+
     // Language extensions
     extensions.push(...languageExtensions);
 
@@ -828,6 +840,26 @@ export function setKeybindingMode(mode) {
         return true;
     } catch (e) {
         console.error('[Editor] Failed to set keybinding mode:', e);
+        return false;
+    }
+}
+
+// ============================================
+// INVISIBLE-UNICODE SCAN TOGGLE (CM6 Compartment)
+// ============================================
+
+export function setInvisibleUnicodeEnabled(enabled) {
+    if (!editorInstance) {
+        console.debug('[Editor] Cannot toggle invisible-Unicode scan — editor not ready');
+        return false;
+    }
+    try {
+        const filename = State.currentFile?.path || '';
+        setInvisibleUnicodeMode(editorInstance, filename, enabled);
+        console.log(`[Editor] Invisible-Unicode scan ${enabled ? 'on' : 'off'}`);
+        return true;
+    } catch (e) {
+        console.error('[Editor] Failed to toggle invisible-Unicode scan:', e);
         return false;
     }
 }

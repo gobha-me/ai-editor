@@ -2,6 +2,8 @@
 
 AI Editor's plugin system lets you extend the editor with custom behavior, UI, and integrations. Plugins can intercept LLM requests/responses, add toolbar buttons, register modal dialogs, and react to editor events.
 
+> **Plugins run with full access to `window` and `AIEditor` — they are not sandboxed.** Read [SECURITY.md](SECURITY.md) before installing a plugin from a URL you don't control. The editor scans plugin source for invisible Unicode (glassworm / Trojan Source) at install time, but does not audit plugin behavior.
+
 ## Quick Start
 
 ### Bundled Plugin (ships with the editor)

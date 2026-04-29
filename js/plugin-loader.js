@@ -48,11 +48,17 @@ function _saveList(list) {
 /**
  * Install a plugin from a URL.
  * Fetches the JS, loads it via blob import, verifies registration.
- * 
+ *
+ * Pre-install scan: rejects with `requiresConfirmation: true` if the source
+ * contains invisible Unicode (glassworm / Trojan Source / zero-width).
+ * Caller can re-invoke with `{ confirmedInvisibleUnicode: true }` to bypass.
+ *
  * @param {string} url - URL to a .js plugin file
- * @returns {Promise<{success: boolean, pluginId?: string, name?: string, error?: string}>}
+ * @param {{confirmedInvisibleUnicode?: boolean}} [options]
+ * @returns {Promise<{success: boolean, pluginId?: string, name?: string, error?: string,
+ *                   requiresConfirmation?: boolean, invisibleUnicodeFindings?: Array}>}
  */
-export async function installPlugin(url) {
+export async function installPlugin(url, options = {}) {
     url = url.trim();
     if (!url) {
         return { success: false, error: 'URL is required' };
@@ -78,6 +84,20 @@ export async function installPlugin(url) {
         // Basic validation — should reference AIEditor or Plugins.register
         if (!source.includes('Plugins') && !source.includes('AIEditor')) {
             throw new Error('File does not appear to be an AI Editor plugin');
+        }
+
+        // Invisible-Unicode scan — gate before exec on a tampered source.
+        if (!options.confirmedInvisibleUnicode) {
+            const { scan } = await import('./security/invisible-unicode.js');
+            const findings = scan(source);
+            if (findings.length > 0) {
+                return {
+                    success: false,
+                    requiresConfirmation: true,
+                    invisibleUnicodeFindings: findings,
+                    error: `Source contains ${findings.length} invisible Unicode character(s) — review before installing`
+                };
+            }
         }
 
         // Load via blob URL to avoid CORS issues with import()

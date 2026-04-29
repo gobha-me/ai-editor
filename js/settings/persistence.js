@@ -53,7 +53,10 @@ export function collectAndSave() {
 
     const keybindingModeEl = document.querySelector('input[name="editorKeybindingMode"]:checked');
     State.settings.editorKeybindingMode = keybindingModeEl ? keybindingModeEl.value : 'default';
-    
+
+    const scanInvisibleEl = document.getElementById('settingEditorScanInvisibleUnicode');
+    State.settings.editorScanInvisibleUnicode = scanInvisibleEl ? scanInvisibleEl.checked : true;
+
     const showIssuesEl = document.getElementById('settingShowIssues');
     State.settings.showIssues = showIssuesEl ? showIssuesEl.checked : false;
     
@@ -237,6 +240,7 @@ export function exportSettings() {
         editorFontSize: State.settings.editorFontSize,
         showLineNumbers: State.settings.showLineNumbers,
         editorKeybindingMode: State.settings.editorKeybindingMode,
+        editorScanInvisibleUnicode: State.settings.editorScanInvisibleUnicode,
         showIssues: State.settings.showIssues,
         showPullRequests: State.settings.showPullRequests,
         
@@ -297,6 +301,30 @@ export async function importSettings() {
 
             try {
                 const text = await file.text();
+
+                // Invisible-Unicode scan — surface tampering before applying settings.
+                // Catches glassworm / Trojan Source / zero-width injections in connection
+                // URLs, API keys, plugin metadata. Permissive (warn-and-confirm) to
+                // match the validator's existing style; blocking would leave Storage
+                // half-written if a throw lands mid-flow.
+                const { scan } = await import('../security/invisible-unicode.js');
+                const findings = scan(text);
+                if (findings.length > 0) {
+                    const { showConfirm } = await import('../ui/dialogs.js');
+                    const preview = findings.slice(0, 3)
+                        .map(f => `• L${f.line}:${f.col} ${f.name}`)
+                        .join('\n');
+                    const proceed = await showConfirm(
+                        `Settings file contains ${findings.length} invisible Unicode character(s):\n\n${preview}${findings.length > 3 ? `\n… and ${findings.length - 3} more` : ''}\n\nThese may indicate tampering (glassworm, Trojan Source). See docs/SECURITY.md.\n\nContinue with import?`,
+                        { title: 'Invisible Unicode detected', okLabel: 'Import anyway', variant: 'danger' }
+                    );
+                    if (!proceed) {
+                        window.showToast?.('Import cancelled', 'info');
+                        reject(new Error('Import cancelled by user'));
+                        return;
+                    }
+                }
+
                 const imported = JSON.parse(text);
 
                 // Validate it looks like a settings file (has at least one recognizable key)

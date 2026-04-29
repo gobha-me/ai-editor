@@ -4,6 +4,103 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-04-29
+
+Opens the **1.1.4 — Supply-chain / glassworm protection** patch from
+`docs/ROADMAP.md` §1.1.4. Adds visible review surfaces at three trust
+boundaries — PRs entering the repo, source loaded into the editor, and
+plugin/settings imports crossing into a running session — for the
+invisible-Unicode threat class (glassworm tags-block, Trojan Source bidi
+overrides, zero-width steganography). The CI lint is the cheap fence; the
+editor decoration is the long pole.
+
+### Added
+
+- **Scanner module** at `js/security/invisible-unicode.js`. Single source
+  of truth for the codepoint ranges (`U+200B–U+200F`, `U+2060–U+206F`,
+  `U+FEFF`, `U+202A–U+202E`, `U+2066–U+2069`, `U+E0000–U+E007F`). Exports
+  `scan()`, `findingsToCharRanges()`, `stripInvisible()`, `shouldScan()`,
+  and `INVISIBLE_RANGES`. Pure ES module with no DOM dependencies — runs
+  in Node tests and in the browser. New `js/security/` directory; further
+  security modules will land here as they ship.
+
+- **CI lint step** at `.gitea/workflows/ci.yaml`. New
+  "Security lint — invisible Unicode" job runs `grep -rPn` across
+  `js/`, `plugins/`, `tests/` (`*.js`, `*.mjs`, `*.json`) and fails the
+  build on any flagged codepoint. Sits as a peer to the existing
+  DOMPurify-bypass audit so failure output stays readable.
+
+- **CodeMirror 6 inline decoration**
+  (`js/editor/invisible-unicode-decoration.js`,
+  `js/editor/setup.js`, `js/editor/instance.js`). Renders flagged
+  codepoints as visible `U+xxxx` widgets with a tooltip naming the char
+  and a click-to-delete affordance. New keymap `Mod-Shift-U` strips every
+  flagged char in the selection. Compartment-based runtime toggle so
+  Settings changes take effect without recreating the editor. Adds
+  `Decoration`, `ViewPlugin`, `WidgetType` to the `CM` namespace on both
+  vendor-bundle and CDN-fallback paths; the existing `cmView` re-export
+  in `vendor/codemirror-entry.mjs` already provides them.
+
+- **`editorScanInvisibleUnicode` setting** (`js/core.js`,
+  `js/settings/persistence.js`, `js/settings-manager.js`,
+  `html/settings-tabs.html`, `js/app.js`, `js/editor.js`). Default `true`.
+  Off by default for prose formats (`*.md`, `*.markdown`, `*.html`,
+  `*.htm`, `*.xml`, `*.xhtml`) where bidi/zero-width chars are sometimes
+  legitimate; the language gate lives in `shouldScan(filename)`. Surfaced
+  in **Settings → Appearance** as "Scan for invisible Unicode (glassworm
+  / Trojan Source)" with a help line pointing at `docs/SECURITY.md`. The
+  `setInvisibleUnicodeEnabled()` export from `js/editor.js` is wired
+  through the existing `settings:saved` listener.
+
+- **Plugin install scan** in `js/plugin-loader.js` `installPlugin()`. When
+  the fetched source contains invisible Unicode, the call returns
+  `{ success: false, requiresConfirmation: true, invisibleUnicodeFindings }`
+  rather than executing the source. Caller can re-invoke with
+  `{ confirmedInvisibleUnicode: true }` to proceed. The
+  `_wireInstallButton` handler in `js/settings/plugins-tab.js` renders an
+  inline warning band into `#pluginInstallStatus` listing the first three
+  findings with line/column, and offers Cancel (default) or
+  "Install anyway." Trust-on-first-install: subsequent reloads do not
+  rescan the same source.
+
+- **Settings import scan** in `js/settings/persistence.js`
+  `importSettings()`. The fetched JSON text is scanned before
+  `JSON.parse`. On findings, the existing `showConfirm` from
+  `js/ui/dialogs.js` surfaces a danger-styled confirmation dialog with
+  the count and first three findings; default action is Cancel. Permissive
+  (warn-and-confirm) rather than throwing — matches the existing
+  validator's style and avoids leaving Storage half-written if a throw
+  lands mid-flow.
+
+- **`docs/SECURITY.md`** — new security policy document. Covers the
+  threat model (glassworm, Trojan Source, polyglot exfiltration, plugin
+  supply chain), what ships in 1.1.4, what does not ship (residual user
+  responsibility — plugins are not sandboxed, trust-on-first-install,
+  no signature verification), the canonical codepoint reference table
+  (kept in sync with the JS scanner and the CI lint), and how to report
+  a vulnerability. Linked from `README.md` (Plugin system feature block
+  and PLUGIN.md cross-reference) and from the top of `docs/PLUGIN.md`.
+
+- **Tests** at `tests/test-invisible-unicode.mjs` — 17 new
+  `node --test` cases covering each codepoint family, range boundaries,
+  ASCII/CJK/emoji negative cases, UTF-16 surrogate-pair offset math for
+  the supplementary-plane Tags block (`'\u{E0000}'.length === 2`),
+  multi-finding scans, line/column reporting, and the `shouldScan`
+  language gate. Runs in CI under the existing `node --test` step.
+
+### Changed
+
+- **`installPlugin(url)` API in `js/plugin-loader.js`** now accepts an
+  optional `options` argument and may return `requiresConfirmation: true`
+  alongside the existing `success`/`error` shape. Existing callers that
+  treat any non-`success` return as failure continue to work; callers
+  wanting the warning-band UX should branch on `requiresConfirmation` and
+  re-invoke with `{ confirmedInvisibleUnicode: true }`. Only caller in
+  the editor codebase is `js/settings/plugins-tab.js` which has been
+  updated.
+
+- **`docs/ROADMAP.md`** header bumped to **1.1.4**.
+
 ## [1.1.3] - 2026-04-29
 
 Opens the **1.1.3 — Vim keybindings** track from `docs/ROADMAP.md` §1.1.3.

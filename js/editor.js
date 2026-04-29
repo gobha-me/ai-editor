@@ -31,6 +31,7 @@ export {
     applyEdit,
     setLineNumbersVisible,
     setKeybindingMode,
+    setInvisibleUnicodeEnabled,
     // Section-based editing (for LLM tools)
     getLineInfo,
     getLineRange,

@@ -70,6 +70,11 @@ export const CM = {
     StateField: null,
     StateEffect: null,
 
+    // Decoration APIs (for invisible-Unicode decoration, etc.)
+    Decoration: null,
+    ViewPlugin: null,
+    WidgetType: null,
+
     // Theme
     oneDark: null,
 
@@ -140,6 +145,11 @@ async function loadFromVendorBundle() {
     CM.GutterMarker = cmView.GutterMarker;
     CM.StateField = cmState.StateField;
     CM.StateEffect = cmState.StateEffect;
+
+    // Decoration APIs (for invisible-Unicode decoration, future inline marks)
+    CM.Decoration = cmView.Decoration;
+    CM.ViewPlugin = cmView.ViewPlugin;
+    CM.WidgetType = cmView.WidgetType;
 
     // Language modules
     CM.languages.javascript = bundle.langJavascript;
@@ -346,6 +356,11 @@ export async function loadCodeMirror() {
             CM.StateField = cmState?.StateField;
             CM.StateEffect = cmState?.StateEffect;
 
+            // Decoration APIs (for invisible-Unicode decoration, future inline marks)
+            CM.Decoration = cmView?.Decoration;
+            CM.ViewPlugin = cmView?.ViewPlugin;
+            CM.WidgetType = cmView?.WidgetType;
+
             console.log('CodeMirror modules loaded:', {
                 EditorView: !!CM.EditorView,
                 EditorState: !!CM.EditorState,
@@ -356,7 +371,10 @@ export async function loadCodeMirror() {
                 bracketMatching: !!CM.bracketMatching,
                 autocompletion: !!CM.autocompletion,
                 searchKeymap: !!CM.searchKeymap,
-                oneDark: !!CM.oneDark
+                oneDark: !!CM.oneDark,
+                Decoration: !!CM.Decoration,
+                ViewPlugin: !!CM.ViewPlugin,
+                WidgetType: !!CM.WidgetType
             });
 
             await loadLanguages(CDN);

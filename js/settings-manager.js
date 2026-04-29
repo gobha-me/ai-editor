@@ -160,7 +160,11 @@ function populateSettingsForm() {
     const kbMode = State.settings.editorKeybindingMode === 'vim' ? 'vim' : 'default';
     const kbRadio = document.querySelector(`input[name="editorKeybindingMode"][value="${kbMode}"]`);
     if (kbRadio) kbRadio.checked = true;
-    
+
+    // Invisible-Unicode scan checkbox — defaults to true on legacy installs.
+    const scanInvisibleEl = document.getElementById('settingEditorScanInvisibleUnicode');
+    if (scanInvisibleEl) scanInvisibleEl.checked = State.settings.editorScanInvisibleUnicode !== false;
+
     const showIssuesEl = document.getElementById('settingShowIssues');
     if (showIssuesEl) showIssuesEl.checked = State.settings.showIssues !== false;
     
