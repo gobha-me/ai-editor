@@ -269,12 +269,22 @@ export const LLM = {
      * @returns {Promise<Array<{id: string, name: string, type: 'embedding', owned_by: string|null}>>}
      */
     async listEmbeddingModels() {
-        const baseUrl = State.settings.llmEndpoint.replace(/\/$/, '');
-        
+        // Per 1.1.2 the embedder has its own endpoint/key — fetch the
+        // embedder catalog from the embedder, not the chat LLM. Provider
+        // headers still come from `apiProvider` (chat-LLM provider) — no
+        // chat provider sets headers that break /models on a sibling host.
+        const endpoint = State.settings.embeddingEndpoint || '';
+        const apiKey = State.settings.embeddingApiKey || '';
+        if (!endpoint) {
+            console.warn('[LLM] listEmbeddingModels: no embedder endpoint configured');
+            return [];
+        }
+        const baseUrl = endpoint.replace(/\/$/, '');
+
         try {
             const response = await fetch(`${baseUrl}/models?type=embedding`, {
                 headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     ...ProviderRegistry.getHeaders(State.settings)
                 }
             });
@@ -282,7 +292,7 @@ export const LLM = {
             if (response.ok) {
                 const data = await response.json();
                 const rawModels = data.data || data.models || data || [];
-                
+
                 if (Array.isArray(rawModels) && rawModels.length > 0) {
                     console.log(`[LLM] Found ${rawModels.length} embedding models via ?type=embedding`);
                     return rawModels.map(m => ({
@@ -301,7 +311,7 @@ export const LLM = {
         try {
             const response = await fetch(`${baseUrl}/models`, {
                 headers: {
-                    'Authorization': `Bearer ${State.settings.llmApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     ...ProviderRegistry.getHeaders(State.settings)
                 }
             });

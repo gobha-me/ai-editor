@@ -252,74 +252,8 @@
 
 <!-- Context Tab -->
 <div class="settings-tab-content" id="tabContext">
-    <div class="form-group">
-        <label>
-            <input type="checkbox" id="settingUseEmbeddings">
-            Enable embeddings-based context
-        </label>
-        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
-            Automatically finds relevant files using semantic search
-        </small>
-    </div>
-
-    <div id="embeddingsSettings" style="margin-top: 1rem;">
-        <div class="form-group">
-            <label for="settingEmbeddingModel">Embedding Model:</label>
-            <input type="text" id="settingEmbeddingModel" list="embeddingModelsList" placeholder="Xenova/all-MiniLM-L6-v2">
-            <datalist id="embeddingModelsList">
-                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Local, ~23MB)</option>
-                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Local, ~33MB)</option>
-                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Local, ~130MB)</option>
-            </datalist>
-            <button type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
-                🔄 Fetch API Models
-            </button>
-            <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
-                Local models (Xenova/*) run in browser. Others use API endpoint.
-            </small>
-        </div>
-
-        <div class="form-group">
-            <label for="settingMaxRelevantFiles">Max relevant files per query:</label>
-            <input type="range" id="settingMaxRelevantFiles" min="1" max="20" step="1">
-            <span id="maxRelevantFilesValue">5</span>
-            <small style="display: block; color: var(--text-muted);">How many files are returned to the LLM per semantic search</small>
-        </div>
-
-        <div class="form-group">
-            <label for="settingMaxIndexFiles">Max files to index:</label>
-            <input type="range" id="settingMaxIndexFiles" min="25" max="500" step="25">
-            <span id="maxIndexFilesValue">200</span>
-            <small style="display: block; color: var(--text-muted);">
-                Limits how many files are embedded per project. Binary, vendor, and generated files are always skipped.
-            </small>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="settingAutoReindex">
-                Auto-reindex on project/branch change
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label for="settingEmbeddingCacheExpiry">Cache expiry (days):</label>
-            <input type="number" id="settingEmbeddingCacheExpiry" min="1" max="365" value="7">
-        </div>
-
-        <div class="form-group">
-            <button type="button" class="btn btn-secondary" id="btnClearEmbeddingsCache">
-                🗑️ Clear Embeddings Cache
-            </button>
-        </div>
-
-        <div id="embeddingsStatusText" style="padding: 0.75rem; background: var(--bg-secondary); border-radius: 4px; font-size: var(--font-md); margin-top: 1rem;">
-            Loading status...
-        </div>
-    </div>
-
     <!-- Summarizer Settings -->
-    <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+    <div>
         <h3 style="font-size: var(--font-lg); margin-bottom: 0.75rem;">📋 Chat Summarizer</h3>
         <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
             Controls how aggressively older messages are compressed into summaries.
@@ -389,6 +323,130 @@
                 <span id="sumMaxCharsValue" style="min-width: 3em; text-align: right;">2000</span>
                 <small style="display: block; color: var(--text-muted);">Longer summaries preserve more detail but use more tokens</small>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Embeddings Tab -->
+<div class="settings-tab-content" id="tabEmbeddings">
+    <h3 style="font-size: var(--font-lg); margin-bottom: 0.5rem;">🧬 Embedder Provider</h3>
+    <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
+        The embedder powers semantic file search (<code>find_relevant_files</code>). Choose how it runs — locally in your browser (Transformers.js) or via an OpenAI-compatible API endpoint. The embedder's credentials are independent from the chat LLM, so you can point them at different hosts.
+    </small>
+
+    <div class="form-group">
+        <label style="font-weight: 600;">Provider:</label>
+        <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="embeddingProvider" id="embeddingProviderLocal" value="local">
+                💻 In browser (Transformers.js)
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="embeddingProvider" id="embeddingProviderOpenai" value="openai">
+                OpenAI / Generic
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="embeddingProvider" id="embeddingProviderVenice" value="venice">
+                Venice
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="embeddingProvider" id="embeddingProviderOpenrouter" value="openrouter">
+                OpenRouter
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                <input type="radio" name="embeddingProvider" id="embeddingProviderOllama" value="ollama">
+                Ollama
+            </label>
+        </div>
+        <small style="display: block; color: var(--text-muted); margin-top: 0.35rem;">
+            Local mode runs the model in your browser — no API calls, no key required, but loads ~25–130MB on first use. Remote providers expect <code>POST /embeddings</code> in OpenAI shape.
+        </small>
+    </div>
+
+    <div id="embeddingRemoteSettings" style="margin-top: 0.75rem;">
+        <div class="form-group">
+            <label for="settingEmbeddingEndpoint">Embedder endpoint:</label>
+            <input type="text" id="settingEmbeddingEndpoint" placeholder="https://api.venice.ai/api/v1">
+            <small style="display: block; color: var(--text-muted);">Base URL — <code>/embeddings</code> is appended automatically.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingEmbeddingApiKey">Embedder API key:</label>
+            <input type="password" id="settingEmbeddingApiKey" placeholder="sk-…">
+            <button type="button" class="btn btn-secondary" id="btnEmbeddingUseChatLlmCreds" style="margin-top: 0.5rem;">
+                ⇣ Use chat LLM credentials
+            </button>
+            <small style="display: block; color: var(--text-muted); margin-top: 0.5rem;">
+                Click to copy the LLM tab's endpoint and key into these fields when both share a host.
+            </small>
+        </div>
+    </div>
+
+    <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border);">
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" id="settingUseEmbeddings">
+            Enable embeddings-based context
+        </label>
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Automatically finds relevant files using semantic search.
+        </small>
+    </div>
+
+    <div id="embeddingsSettings" style="margin-top: 1rem;">
+        <div class="form-group">
+            <label for="settingEmbeddingModel">Embedding model:</label>
+            <input type="text" id="settingEmbeddingModel" list="embeddingModelsList" placeholder="Xenova/all-MiniLM-L6-v2">
+            <datalist id="embeddingModelsList">
+                <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Local, ~23MB)</option>
+                <option value="Xenova/bge-small-en-v1.5">bge-small-en-v1.5 (Local, ~33MB)</option>
+                <option value="Xenova/bge-base-en-v1.5">bge-base-en-v1.5 (Local, ~130MB)</option>
+            </datalist>
+            <button type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
+                🔄 Fetch API Models
+            </button>
+            <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
+                Local models (<code>Xenova/*</code>) run in browser. Others use the embedder endpoint above.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingMaxRelevantFiles">Max relevant files per query:</label>
+            <input type="range" id="settingMaxRelevantFiles" min="1" max="20" step="1">
+            <span id="maxRelevantFilesValue">5</span>
+            <small style="display: block; color: var(--text-muted);">How many files are returned to the LLM per semantic search.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="settingMaxIndexFiles">Max files to index:</label>
+            <input type="range" id="settingMaxIndexFiles" min="25" max="500" step="25">
+            <span id="maxIndexFilesValue">200</span>
+            <small style="display: block; color: var(--text-muted);">
+                Limits how many files are embedded per project. Binary, vendor, and generated files are always skipped.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="settingAutoReindex">
+                Auto-reindex on project/branch change
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="settingEmbeddingCacheExpiry">Cache expiry (days):</label>
+            <input type="number" id="settingEmbeddingCacheExpiry" min="1" max="365" value="7">
+        </div>
+
+        <div class="form-group">
+            <button type="button" class="btn btn-secondary" id="btnClearEmbeddingsCache">
+                🗑️ Clear Embeddings Cache
+            </button>
+        </div>
+
+        <div id="embeddingsStatusText" style="padding: 0.75rem; background: var(--bg-secondary); border-radius: 4px; font-size: var(--font-md); margin-top: 1rem;">
+            Loading status...
         </div>
     </div>
 </div>

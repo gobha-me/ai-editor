@@ -32,6 +32,18 @@ function applyMigration(saved) {
         saved.llmIdleTimeout = saved.llmTimeout;
         delete saved.llmTimeout;
     }
+    if (saved.embeddingProvider === undefined) {
+        const isLocalModel = (saved.embeddingModel || '').startsWith('Xenova/');
+        if (isLocalModel) {
+            saved.embeddingProvider = 'local';
+            saved.embeddingEndpoint = '';
+            saved.embeddingApiKey = '';
+        } else if (saved.embeddingModel) {
+            saved.embeddingProvider = saved.apiProvider || 'openai';
+            saved.embeddingEndpoint = saved.llmEndpoint || '';
+            saved.embeddingApiKey = saved.llmApiKey || '';
+        }
+    }
     return saved;
 }
 
@@ -88,4 +100,122 @@ test('integration: Storage round-trip carries the renamed key', () => {
     Storage.set('settings-test-roundtrip', { llmIdleTimeout: 120000 });
     const back = Storage.get('settings-test-roundtrip');
     assert.equal(back.llmIdleTimeout, 120000);
+});
+
+// ---------------------------------------------------------------------------
+// 1.1.2 — Embedder provider decoupling
+//
+// Pre-1.1.2 the embedder shared `llmEndpoint` + `llmApiKey` with the chat LLM
+// and inferred local-vs-remote from `embeddingModel.startsWith('Xenova/')`.
+// 1.1.2 promotes the embedder to its own provider with explicit settings:
+// `embeddingProvider`, `embeddingEndpoint`, `embeddingApiKey`. The migration
+// must produce a bit-for-bit equivalent runtime configuration on every
+// existing install — proven by the cases below.
+// ---------------------------------------------------------------------------
+
+test('migration: 1.1.2 splits credentials when remote embedding model present', () => {
+    const before = {
+        embeddingModel: 'text-embedding-bge-m3',
+        useEmbeddings: true,
+        llmEndpoint: 'https://api.venice.ai/api/v1',
+        llmApiKey: 'sk-test',
+        apiProvider: 'venice',
+    };
+    const after = applyMigration({ ...before });
+    assert.equal(after.embeddingProvider, 'venice');
+    assert.equal(after.embeddingEndpoint, 'https://api.venice.ai/api/v1');
+    assert.equal(after.embeddingApiKey, 'sk-test');
+    // Chat LLM credentials preserved — migration clones, never moves.
+    assert.equal(after.llmEndpoint, 'https://api.venice.ai/api/v1');
+    assert.equal(after.llmApiKey, 'sk-test');
+    assert.equal(after.apiProvider, 'venice');
+});
+
+test('migration: 1.1.2 detects local mode from Xenova/* prefix', () => {
+    // Bit-for-bit equivalence proof: the most common case is a local-mode
+    // user with the default model. The chat LLM credentials must NOT leak
+    // into the embedder fields.
+    const before = {
+        embeddingModel: 'Xenova/all-MiniLM-L6-v2',
+        useEmbeddings: true,
+        llmEndpoint: 'should-not-leak',
+        llmApiKey: 'should-not-leak',
+        apiProvider: 'openai',
+    };
+    const after = applyMigration({ ...before });
+    assert.equal(after.embeddingProvider, 'local');
+    assert.equal(after.embeddingEndpoint, '');
+    assert.equal(after.embeddingApiKey, '');
+});
+
+test('migration: 1.1.2 idempotent when embeddingProvider already present', () => {
+    const before = {
+        embeddingProvider: 'openai',
+        embeddingEndpoint: 'https://api.openai.com/v1',
+        embeddingApiKey: 'sk-existing',
+        embeddingModel: 'text-embedding-3-small',
+        llmEndpoint: 'https://api.anthropic.com',
+        llmApiKey: 'sk-different',
+    };
+    const after = applyMigration({ ...before });
+    assert.equal(after.embeddingProvider, 'openai');
+    assert.equal(after.embeddingEndpoint, 'https://api.openai.com/v1');
+    assert.equal(after.embeddingApiKey, 'sk-existing');
+    // llm* unchanged
+    assert.equal(after.llmEndpoint, 'https://api.anthropic.com');
+});
+
+test('migration: 1.1.2 fresh install (no embeddingModel) leaves provider unset for default', () => {
+    // No model and no provider → migration does not set anything; the
+    // fresh-install default 'local' wins via the merge spread in
+    // loadSettings (validated separately by the integration test below).
+    const before = {};
+    const after = applyMigration({ ...before });
+    assert.equal(after.embeddingProvider, undefined);
+    assert.equal(after.embeddingEndpoint, undefined);
+    assert.equal(after.embeddingApiKey, undefined);
+});
+
+test('migration: 1.1.2 falls back to "openai" when remote model present but no apiProvider', () => {
+    const before = {
+        embeddingModel: 'text-embedding-3-large',
+        llmEndpoint: 'https://api.openai.com/v1',
+        llmApiKey: 'sk-x',
+    };
+    const after = applyMigration({ ...before });
+    assert.equal(after.embeddingProvider, 'openai');
+    assert.equal(after.embeddingEndpoint, 'https://api.openai.com/v1');
+    assert.equal(after.embeddingApiKey, 'sk-x');
+});
+
+test('migration: 1.1.2 + 1.1.1 chain on the same blob', () => {
+    // Real-world case: a user upgrades from 1.1.0 (or earlier) directly to
+    // 1.1.2, skipping 1.1.1. Both migrations must fire on a single load.
+    const before = {
+        llmTimeout: 240000,
+        embeddingModel: 'text-embedding-bge-m3',
+        llmEndpoint: 'https://embed.local/v1',
+        llmApiKey: 'sk-shared',
+        apiProvider: 'ollama',
+    };
+    const after = applyMigration({ ...before });
+    // 1.1.1 fired
+    assert.equal(after.llmIdleTimeout, 240000);
+    assert.equal(after.llmTimeout, undefined);
+    // 1.1.2 fired
+    assert.equal(after.embeddingProvider, 'ollama');
+    assert.equal(after.embeddingEndpoint, 'https://embed.local/v1');
+    assert.equal(after.embeddingApiKey, 'sk-shared');
+});
+
+test('integration: State.settings.embeddingProvider default is "local"', () => {
+    assert.equal(State.settings.embeddingProvider, 'local');
+    assert.equal(State.settings.embeddingEndpoint, '');
+    assert.equal(State.settings.embeddingApiKey, '');
+});
+
+test('integration: State.settings.maxIndexFiles default is 200', () => {
+    // Promoted from an implicit `|| 200` fallback at the call sites to a
+    // real default in 1.1.2; validates it landed in core.js without drift.
+    assert.equal(State.settings.maxIndexFiles, 200);
 });

@@ -210,7 +210,41 @@ function populateSettingsForm() {
             embeddingsSettings.style.opacity = embeddingsToggle.checked ? '1' : '0.5';
             embeddingsSettings.style.pointerEvents = embeddingsToggle.checked ? 'auto' : 'none';
         };
+        embeddingsToggle.checked = !!State.settings.useEmbeddings;
         embeddingsToggle.onchange(); // Initialize state
+    }
+
+    // Embedder provider radios — populate from State and toggle endpoint/key visibility.
+    const embeddingProvider = State.settings.embeddingProvider || 'local';
+    const providerRadio = document.querySelector(`input[name="embeddingProvider"][value="${embeddingProvider}"]`);
+    if (providerRadio) providerRadio.checked = true;
+    const remoteSettings = document.getElementById('embeddingRemoteSettings');
+    const updateRemoteVisibility = () => {
+        const selected = document.querySelector('input[name="embeddingProvider"]:checked')?.value || 'local';
+        if (remoteSettings) remoteSettings.style.display = (selected === 'local') ? 'none' : '';
+    };
+    document.querySelectorAll('input[name="embeddingProvider"]').forEach(r => {
+        r.onchange = updateRemoteVisibility;
+    });
+    updateRemoteVisibility();
+
+    // Embedder endpoint/key inputs
+    const embeddingEndpointEl = document.getElementById('settingEmbeddingEndpoint');
+    if (embeddingEndpointEl) embeddingEndpointEl.value = State.settings.embeddingEndpoint || '';
+    const embeddingApiKeyEl = document.getElementById('settingEmbeddingApiKey');
+    if (embeddingApiKeyEl) embeddingApiKeyEl.value = State.settings.embeddingApiKey || '';
+
+    // "Use chat LLM credentials" — copy from the LLM tab's inputs (not from
+    // State directly, so unsaved changes in the LLM tab still propagate).
+    const useChatCredsBtn = document.getElementById('btnEmbeddingUseChatLlmCreds');
+    if (useChatCredsBtn) {
+        useChatCredsBtn.onclick = () => {
+            const llmEndpoint = document.getElementById('settingLlmEndpoint')?.value.trim() || '';
+            const llmApiKey = document.getElementById('settingLlmApiKey')?.value.trim() || '';
+            if (embeddingEndpointEl) embeddingEndpointEl.value = llmEndpoint;
+            if (embeddingApiKeyEl) embeddingApiKeyEl.value = llmApiKey;
+            window.showToast('Copied chat LLM credentials into embedder fields', 'success');
+        };
     }
 
     // Clear cache button
@@ -272,8 +306,8 @@ function populateSettingsForm() {
             // Scroll clicked tab into view
             tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
             
-            // Update embeddings status when switching to Context tab
-            if (tab.dataset.tab === 'tabContext') updateEmbeddingsStatus();
+            // Update embeddings status when switching to Embeddings tab
+            if (tab.dataset.tab === 'tabEmbeddings') updateEmbeddingsStatus();
             // Populate Models tab when switching to it
             if (tab.dataset.tab === 'tabModels') populateModelsTab();
             // Refresh Plugins tab when switching to it

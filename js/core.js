@@ -60,10 +60,14 @@
  * @property {string}               giteaUrl
  * @property {GitConnection[]}      connections
  * @property {boolean}              useEmbeddings
+ * @property {string}               embeddingProvider
+ * @property {string}               embeddingEndpoint
+ * @property {string}               embeddingApiKey
  * @property {string}               embeddingModel
  * @property {boolean}              autoReindex
  * @property {number}               embeddingCacheExpiry
  * @property {number}               maxRelevantFiles
+ * @property {number}               maxIndexFiles
  * @property {string}               llmEndpoint
  * @property {string}               llmApiKey
  * @property {string}               llmModel
@@ -228,10 +232,14 @@ const State = {
         
         // Embeddings / Context Management
         useEmbeddings: false,      // Enable client-side embeddings
-        embeddingModel: 'Xenova/all-MiniLM-L6-v2', // Transformers.js model
+        embeddingProvider: 'local',// 'local' (Transformers.js in-browser) | 'openai' | 'venice' | 'openrouter' | 'ollama'
+        embeddingEndpoint: '',     // OpenAI-compat embeddings URL — unused when embeddingProvider === 'local'
+        embeddingApiKey: '',       // Bearer token — unused when embeddingProvider === 'local'
+        embeddingModel: 'Xenova/all-MiniLM-L6-v2', // Local Transformers.js model or remote provider model id
         autoReindex: true,         // Auto-update embeddings on file changes
         embeddingCacheExpiry: 7,   // Days before re-indexing
         maxRelevantFiles: 5,       // Max files to return for context queries
+        maxIndexFiles: 200,        // Hard cap on files indexed in a project (1.1.2.x will measure & re-tune)
         
         // LLM Configuration
         llmEndpoint: '',
@@ -1556,6 +1564,26 @@ function loadSettings() {
         if (saved.llmTimeout !== undefined && saved.llmIdleTimeout === undefined) {
             saved.llmIdleTimeout = saved.llmTimeout;
             delete saved.llmTimeout;
+        }
+        // One-shot migration (1.1.2): split shared LLM/embedder credentials.
+        // Pre-1.1.2 the embedder shared llmEndpoint + llmApiKey with the chat
+        // LLM and inferred local-vs-remote from embeddingModel.startsWith('Xenova/').
+        // Now the embedder has its own provider/endpoint/apiKey; mode is explicit.
+        // Local-mode users get an empty endpoint/key (sentinel only); remote-mode
+        // users get llm* cloned across so behavior is bit-for-bit equivalent.
+        if (saved.embeddingProvider === undefined) {
+            const isLocalModel = (saved.embeddingModel || '').startsWith('Xenova/');
+            if (isLocalModel) {
+                saved.embeddingProvider = 'local';
+                saved.embeddingEndpoint = '';
+                saved.embeddingApiKey = '';
+            } else if (saved.embeddingModel) {
+                saved.embeddingProvider = saved.apiProvider || 'openai';
+                saved.embeddingEndpoint = saved.llmEndpoint || '';
+                saved.embeddingApiKey = saved.llmApiKey || '';
+            }
+            // Otherwise: no model and no provider → fresh-install default 'local'
+            // wins via the merge spread below.
         }
         // Deep-merge known nested objects so new defaults aren't lost on upgrade.
         // Top-level keys are spread first, then nested objects are merged individually.

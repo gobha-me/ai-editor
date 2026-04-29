@@ -4,6 +4,116 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-04-29
+
+Opens the **1.1.2 — Embedder hardening** track from `docs/ROADMAP.md`
+§1.1.2 with the foundational provider-decoupling change. Pre-1.1.2 the
+embedder shared `llmEndpoint` + `llmApiKey` with the chat LLM and inferred
+local-vs-remote from `embeddingModel.startsWith('Xenova/')`. Self-hosted
+deployments that want the embedder on a different host than the chat LLM
+couldn't be expressed. This release introduces independent embedder
+credentials with an explicit provider sentinel, ships a new Settings tab
+to surface them, and migrates existing installs in place. The remaining
+1.1.2.x patches (filetype filters, ceiling measurement, in-browser
+embedder validation, "skipped: N" surface) build on this shape.
+
+### Changed
+
+- **Embedder gets its own provider, endpoint, and API key**
+  (`js/embeddings-client.js`, `js/core.js`, `js/llm/api.js`,
+  `js/settings/models-tab.js`). Old behavior: `EmbeddingsClient._initRemote`
+  and `_embedRemote` read `State.settings.llmEndpoint` and `llmApiKey`,
+  with mode auto-detected from the model name prefix. New behavior: mode
+  is driven by `State.settings.embeddingProvider` (a `'local' | 'openai'
+  | 'venice' | 'openrouter' | 'ollama'` sentinel), and remote mode reads
+  `embeddingEndpoint` + `embeddingApiKey` instead. The chat LLM's
+  `llmEndpoint`/`llmApiKey` are untouched — the migration *clones* the
+  shared credentials into the new keys for any existing remote-embedder
+  user, so behavior is bit-for-bit equivalent on upgrade. `_detectMode`
+  is removed; the explicit provider sentinel replaces the heuristic.
+- **Embeddings UI moves from Context tab to its own Settings → Embeddings
+  tab** (`html/modals.html`, `html/settings-tabs.html`,
+  `js/settings-manager.js`). The Context tab now hosts only the chat
+  summarizer. The new tab consolidates: provider radio, endpoint, API
+  key, "Use chat LLM credentials" copy button, enable toggle, model
+  picker + datalist + Fetch API Models button, max-relevant-files
+  slider, max-index-files slider, auto-reindex, cache expiry, clear
+  cache, and the live status panel. The settings tab strip handles the
+  11th tab via the existing scroll arrows; the sidebar UX rework noted
+  in `docs/ROADMAP.md` UI #13 stays deferred to 1.3.x/1.4.x.
+- **`EmbeddingsClient` `settings:saved` handler reinits on
+  provider/endpoint/key/model change** (`js/embeddings-client.js`). Pre-1.1.2
+  it only watched mode change; switching providers in the new UI now
+  takes effect without a page reload, as does swapping models within
+  the same mode.
+- **`LLM.listEmbeddingModels()` and
+  `fetchEmbeddingModelsForSettings()` fetch the embedder catalog from the
+  embedder endpoint** (`js/llm/api.js`, `js/settings/models-tab.js`). The
+  "Fetch API Models" button on the Embeddings tab now hits the embedder
+  host, falling back to the chat-LLM inputs only if the embedder fields
+  are empty (covers the in-modal first-run flow).
+
+### Added
+
+- **Three new settings keys** (`js/core.js`): `embeddingProvider`
+  (default `'local'`), `embeddingEndpoint`, `embeddingApiKey`. The
+  `Settings` typedef and the `State.settings` defaults block both gain
+  these fields. `maxIndexFiles` is also promoted from an implicit
+  `|| 200` fallback at call sites to a real default in the same block —
+  not a behavior change, just removes the silent magic number.
+- **One-shot migration: split shared LLM/embedder credentials**
+  (`js/core.js` `loadSettings()`). The migration runs at most once per
+  stored settings blob: if `embeddingProvider` is undefined and the
+  saved `embeddingModel` starts with `Xenova/`, set
+  `embeddingProvider: 'local'` (no endpoint/key); if a non-Xenova model
+  is set, clone `apiProvider` → `embeddingProvider`, `llmEndpoint` →
+  `embeddingEndpoint`, `llmApiKey` → `embeddingApiKey`. Fresh installs
+  fall through to the default `'local'` via the merge spread. The chat
+  LLM's `apiProvider`/`llmEndpoint`/`llmApiKey` are preserved.
+- **Settings → Embeddings tab** (`html/modals.html` line 18,
+  `html/settings-tabs.html` new `tabEmbeddings` panel). Provider radio
+  with five options; endpoint + API key inputs that hide when `local`
+  is selected; "⇣ Use chat LLM credentials" button that copies from the
+  LLM tab's inputs (not from `State` directly, so unsaved LLM-tab edits
+  propagate). The "indexing controls" section below the divider keeps
+  the existing controls, just relocated.
+- **`tests/test-settings-migration.mjs`** — eight new `node:test` cases
+  exercising the 1.1.2 split: remote credentials cloned into embedder
+  fields when `embeddingModel` is non-Xenova, local mode detected from
+  `Xenova/*` prefix without leaking chat-LLM credentials, idempotency,
+  fresh-install fallthrough, `apiProvider` defaulting to `'openai'`,
+  and a chained 1.1.1 + 1.1.2 case covering users who upgrade from
+  1.1.0 directly to 1.1.2. Two integration tests confirm
+  `State.settings.embeddingProvider === 'local'` and
+  `maxIndexFiles === 200` defaults landed without drift.
+
+### Risk note
+
+Existing remote-embedder users are the migration's primary risk
+surface. Because old `_initRemote` and `_embedRemote` only read
+`llmEndpoint` + `llmApiKey`, the migration's clone of those values into
+`embeddingEndpoint` + `embeddingApiKey` produces a runtime configuration
+that is bit-for-bit equivalent to the pre-1.1.2 behavior. The migration
+unit test (`migration: 1.1.2 splits credentials when remote embedding
+model present`) is the contract; the manual verification path is to
+load an existing 1.1.1 install, inspect `State.settings.embedding*` in
+DevTools, and confirm a `find_relevant_files` call in chat hits the
+expected endpoint with the expected `Authorization` header.
+
+Local-mode users (the default and most common case) experience no
+behavioral change at all — the migration sets the explicit `'local'`
+sentinel and clears the unused endpoint/key, which is bit-for-bit
+equivalent to the prior `embeddingModel.startsWith('Xenova/')`
+heuristic.
+
+### Removed
+
+- **Dead `embeddingMode` reference** in
+  `js/settings/persistence.js` `exportSettings()` (line 214 prior). The
+  field was exported but never set, read, or migrated — it's a leftover
+  from a prior iteration. Replaced with the three real new keys
+  (`embeddingProvider`, `embeddingEndpoint`, `embeddingApiKey`).
+
 ## [1.1.1] - 2026-04-29
 
 First behavior-changing release after the **1.1.0 — Foundations** track

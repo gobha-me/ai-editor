@@ -57,22 +57,31 @@ export function collectAndSave() {
     const showPRsEl = document.getElementById('settingShowPullRequests');
     State.settings.showPullRequests = showPRsEl ? showPRsEl.checked : false;
 
-    // Context - with null checks
+    // Embeddings tab — provider, endpoint, key + indexing controls
+    const embeddingProviderEl = document.querySelector('input[name="embeddingProvider"]:checked');
+    State.settings.embeddingProvider = embeddingProviderEl ? embeddingProviderEl.value : 'local';
+
+    const embeddingEndpointEl = document.getElementById('settingEmbeddingEndpoint');
+    State.settings.embeddingEndpoint = embeddingEndpointEl ? embeddingEndpointEl.value.trim() : '';
+
+    const embeddingApiKeyEl = document.getElementById('settingEmbeddingApiKey');
+    State.settings.embeddingApiKey = embeddingApiKeyEl ? embeddingApiKeyEl.value.trim() : '';
+
     const useEmbeddingsEl = document.getElementById('settingUseEmbeddings');
     State.settings.useEmbeddings = useEmbeddingsEl ? useEmbeddingsEl.checked : false;
-    
+
     const embeddingModelEl = document.getElementById('settingEmbeddingModel');
     State.settings.embeddingModel = embeddingModelEl ? embeddingModelEl.value.trim() : 'Xenova/all-MiniLM-L6-v2';
-    
+
     const maxRelevantFilesEl = document.getElementById('settingMaxRelevantFiles');
     State.settings.maxRelevantFiles = maxRelevantFilesEl ? parseInt(maxRelevantFilesEl.value) || 5 : 5;
 
     const maxIndexFilesEl = document.getElementById('settingMaxIndexFiles');
     State.settings.maxIndexFiles = maxIndexFilesEl ? parseInt(maxIndexFilesEl.value) || 200 : 200;
-    
+
     const autoReindexEl = document.getElementById('settingAutoReindex');
     State.settings.autoReindex = autoReindexEl ? autoReindexEl.checked : false;
-    
+
     const embeddingCacheExpiryEl = document.getElementById('settingEmbeddingCacheExpiry');
     State.settings.embeddingCacheExpiry = embeddingCacheExpiryEl ? parseInt(embeddingCacheExpiryEl.value) || 7 : 7;
 
@@ -210,8 +219,10 @@ export function exportSettings() {
         
         // Embeddings
         useEmbeddings: State.settings.useEmbeddings,
+        embeddingProvider: State.settings.embeddingProvider,
+        embeddingEndpoint: State.settings.embeddingEndpoint,
+        embeddingApiKey: State.settings.embeddingApiKey,
         embeddingModel: State.settings.embeddingModel,
-        embeddingMode: State.settings.embeddingMode,
         embeddingCacheExpiry: State.settings.embeddingCacheExpiry,
         autoReindex: State.settings.autoReindex,
         maxRelevantFiles: State.settings.maxRelevantFiles,
@@ -285,7 +296,7 @@ export async function importSettings() {
                 const imported = JSON.parse(text);
 
                 // Validate it looks like a settings file (has at least one recognizable key)
-                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams', 'pluginState', 'userPlugins'];
+                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams', 'pluginState', 'userPlugins', 'embeddingProvider', 'embeddingEndpoint', 'embeddingApiKey'];
                 const hasValidKey = knownKeys.some(k => k in imported);
                 if (!hasValidKey) {
                     throw new Error('Invalid settings file: no recognized settings keys found');

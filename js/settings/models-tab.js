@@ -87,27 +87,38 @@ export async function fetchModelsForSettings() {
  * Fetch embedding models from API and populate the embedding model input/datalist.
  */
 export async function fetchEmbeddingModelsForSettings() {
-    const endpoint = document.getElementById('settingLlmEndpoint').value.trim();
-    const apiKey = document.getElementById('settingLlmApiKey').value.trim();
-    
+    // Per 1.1.2 the embedder has its own endpoint/key inputs in
+    // Settings → Embeddings. Fall back to the chat LLM inputs only if the
+    // user hasn't filled the embedder inputs yet (covers the in-modal
+    // first-run flow where they typed the chat creds and want the embedder
+    // to mirror).
+    const embeddingEndpointEl = document.getElementById('settingEmbeddingEndpoint');
+    const embeddingApiKeyEl = document.getElementById('settingEmbeddingApiKey');
+    const embedEndpoint = (embeddingEndpointEl?.value || '').trim();
+    const embedApiKey = (embeddingApiKeyEl?.value || '').trim();
+    const fallbackEndpoint = document.getElementById('settingLlmEndpoint').value.trim();
+    const fallbackApiKey = document.getElementById('settingLlmApiKey').value.trim();
+    const endpoint = embedEndpoint || fallbackEndpoint;
+    const apiKey = embedApiKey || fallbackApiKey;
+
     if (!endpoint || !apiKey) {
-        window.showToast('Please enter API endpoint and key first', 'warning');
+        window.showToast('Please enter embedder endpoint and key first', 'warning');
         return;
     }
-    
+
     try {
         // Temporarily set the values for the API call
-        const origEndpoint = State.settings.llmEndpoint;
-        const origApiKey = State.settings.llmApiKey;
-        
-        State.settings.llmEndpoint = endpoint;
-        State.settings.llmApiKey = apiKey;
-        
+        const origEndpoint = State.settings.embeddingEndpoint;
+        const origApiKey = State.settings.embeddingApiKey;
+
+        State.settings.embeddingEndpoint = endpoint;
+        State.settings.embeddingApiKey = apiKey;
+
         const embeddingModels = await LLM.listEmbeddingModels();
-        
+
         // Restore original values (user hasn't saved yet)
-        State.settings.llmEndpoint = origEndpoint;
-        State.settings.llmApiKey = origApiKey;
+        State.settings.embeddingEndpoint = origEndpoint;
+        State.settings.embeddingApiKey = origApiKey;
         
         if (embeddingModels.length === 0) {
             window.showToast('No embedding models found. You can still enter a model ID manually or use local Xenova/* models.', 'warning');

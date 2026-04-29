@@ -33,15 +33,9 @@ const EmbeddingsClient = {
     },
 
     /**
-     * Detect if model is local (Transformers.js) or remote (API)
-     */
-    _detectMode(modelName) {
-        return modelName.startsWith('Xenova/') ? 'local' : 'remote';
-    },
-
-    /**
      * Initialize the embeddings system
-     * Routes to local (Transformers.js) or remote (API) based on model
+     * Routes to local (Transformers.js) or remote (API) based on
+     * the explicit `embeddingProvider` setting.
      */
     async init() {
         if (this._initialized) return true;
@@ -64,7 +58,7 @@ const EmbeddingsClient = {
 
         this._loading = true;
         const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
-        this._mode = this._detectMode(modelName);
+        this._mode = State.settings.embeddingProvider === 'local' ? 'local' : 'remote';
 
         console.log(`[Embeddings] Initializing in ${this._mode} mode with model: ${modelName}`);
 
@@ -122,8 +116,8 @@ const EmbeddingsClient = {
      * Just validates that API credentials are configured
      */
     async _initRemote(modelName) {
-        if (!State.settings.llmEndpoint || !State.settings.llmApiKey) {
-            throw new Error('API endpoint and key required for remote embeddings');
+        if (!State.settings.embeddingEndpoint || !State.settings.embeddingApiKey) {
+            throw new Error('Embedder endpoint and key required for remote embeddings');
         }
         console.log(`[Embeddings] Remote mode ready with model: ${modelName}`);
     },
@@ -300,14 +294,14 @@ const EmbeddingsClient = {
      * Generate embedding using remote API (Venice.ai, Ollama, OpenAI-compatible)
      */
     async _embedRemote(text) {
-        const url = `${State.settings.llmEndpoint.replace(/\/$/, '')}/embeddings`;
+        const url = `${State.settings.embeddingEndpoint.replace(/\/$/, '')}/embeddings`;
         const modelName = State.settings.embeddingModel;
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${State.settings.llmApiKey}`
+                'Authorization': `Bearer ${State.settings.embeddingApiKey}`
             },
             body: JSON.stringify({
                 model: modelName,
@@ -402,20 +396,34 @@ const EmbeddingsClient = {
     }
 };
 
-// Auto-initialize when settings change
+// Track the configuration that produced the current pipeline so we can
+// detect when any change (provider, endpoint, key, model) requires a
+// fresh init. Pre-1.1.2 this only watched the mode-derived-from-model;
+// the new shape lets the user switch endpoints/keys without a reload.
+let _lastConfigSig = null;
+function _embedderConfigSig() {
+    return [
+        State.settings.embeddingProvider || '',
+        State.settings.embeddingEndpoint || '',
+        State.settings.embeddingApiKey || '',
+        State.settings.embeddingModel || '',
+    ].join('|');
+}
+
 EventBus.on('settings:saved', async () => {
     if (State.settings.useEmbeddings && !EmbeddingsClient._initialized) {
         console.log('[Embeddings] Enabled in settings, initializing...');
+        _lastConfigSig = _embedderConfigSig();
         await EmbeddingsClient.init();
     } else if (State.settings.useEmbeddings && EmbeddingsClient._initialized) {
-        // Model changed - reinitialize
-        const newMode = EmbeddingsClient._detectMode(State.settings.embeddingModel);
-        if (newMode !== EmbeddingsClient._mode) {
-            console.log(`[Embeddings] Mode changed from ${EmbeddingsClient._mode} to ${newMode}, reinitializing...`);
+        const newSig = _embedderConfigSig();
+        if (newSig !== _lastConfigSig) {
+            console.log('[Embeddings] Provider/endpoint/key/model changed, reinitializing...');
             EmbeddingsClient._initialized = false;
             EmbeddingsClient._maxInputChars = null; // Reset discovered limit for new model
             embeddingModel = null;
             pipeline = null;
+            _lastConfigSig = newSig;
             await EmbeddingsClient.init();
         }
     }
