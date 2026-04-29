@@ -299,27 +299,29 @@ search_in_files({
 
 ## Language Support
 
-### JavaScript/TypeScript
+`scan_file` parses by extension. Currently supported:
+
+### JavaScript/TypeScript (`.js`, `.ts`, `.jsx`, `.tsx`)
 - Functions: `function name()`, `async function name()`
 - Arrow functions: `const name = () =>`
 - Classes: `class Name`
 - Constants: `const NAME = value`
 - Exports: `export function`, `export const`, `export class`
 
-### Python
+### Python (`.py`)
 - Functions: `def name():`
 - Classes: `class Name:`
 
-**Coming soon:** Go, Rust, Java, C/C++
+Other languages return an empty `outline` from `scan_file`. `read_function` falls back to a simple name match — works on any language where the function name uniquely appears at the start of a line. `find_references` and `read_lines` are language-agnostic.
 
 ---
 
 ## Integration
 
-All tools are automatically registered and available to the LLM. No configuration needed.
+All scan tools are auto-registered at app startup. No configuration needed.
 
 **Tool registry location:** `js/tools/scan-tools.js`
-**Registration:** `js/chat.js` (imported with other tool modules)
+**Registration:** Imported by `js/app.js` alongside the other tool modules; registers via `ToolRegistry.register()`.
 
 ---
 

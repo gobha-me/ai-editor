@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Auto-derived from `0.9.16` source with manual annotations.
+> Last sync: `1.0.4` source with manual annotations.
 
 ## Design Constraints
 
@@ -34,16 +34,16 @@
 │ onboarding   │               │                          │
 │ mobile       │               │                          │
 ├──────────────┴───────────────┴──────────────────────────┤
-│                    Tool Layer                           │
-│  tools/registry  tools/file-tools  tools/edit-tools    │
-│  tools/project-tools  tools/search-tools               │
-│  tools/issue-tools  tools/pr-tools  tools/commit-tools │
-│  tools/scan-tools  tools/scratchpad-tools              │
-│  tools/xref-tools (cross-project reference)            │
-│  tools/multifile-tools (edit_file, write_file)         │
-│  tools/search-replace-tools (text-based editing)       │
-│  tools/eval-tools (sandboxed JS execution)             │
-│  tools/context-tools  tools/edit-tracker               │
+│                    Tool Layer (52 tools)                │
+│  tools/registry        tools/file-tools                 │
+│  tools/edit-tools      tools/multifile-tools            │
+│  tools/cursor-tools    tools/scan-tools                 │
+│  tools/search-tools    tools/project-tools              │
+│  tools/xref-tools      tools/issue-tools                │
+│  tools/pr-tools        tools/commit-tools               │
+│  tools/scratchpad-tools tools/context-tools             │
+│  tools/plugin-tools    tools/doc-tools                  │
+│  tools/eval-tools      tools/edit-tracker               │
 ├─────────────────────────────────────────────────────────┤
 │                    LLM Layer                            │
 │  llm.js (barrel)  llm/api  llm/debug  llm/utils       │
@@ -112,6 +112,13 @@ the methods they support. Unimplemented methods throw `"not supported"`.
 Concrete implementations. Each normalizes provider-specific API responses
 into the shapes defined in `base.js` typedefs (`BlameData`, `FileCommit`,
 `PullRequestData`, `PRFileChange`, `CommitStatus`).
+
+### `git-providers/local.js`
+
+In-memory zip-only provider used when the user uploads a zip without a
+Git connection. Backs `getFileTree` / `getFile` / `batchCommitFiles` with
+a `Map`. Hidden from Settings → Connections (`hidden: true`). Refreshing
+the page wipes its state — by design.
 
 ## LLM Layer
 
@@ -210,23 +217,58 @@ settings-manager.js → State.settings.* = value
                     Listeners (model-manager, llm-tab, etc.) react
 ```
 
-## File Size Budget
+## File Size Map
 
-Post-0.9.13 decomposition, no single file exceeds ~600 lines. The barrel
-re-export pattern (`llm.js`, `editor.js`, `ui-helpers.js`) keeps import
-paths clean while modules stay focused.
+The barrel re-export pattern (`llm.js`, `editor.js`, `ui-helpers.js`)
+keeps import paths clean while modules stay focused. Largest modules
+in the current tree (1.0.4):
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `core.js` | ~1135 | Shared kernel (5 subsystems + types) |
-| `llm/api.js` | ~680 | LLM client + high-level functions |
-| `chat/summarizer.js` | ~640 | Chat compression engine |
-| `chat/conversations.js` | ~340 | Multi-conversation persistence (save/load/switch/delete) |
-| `prompts.js` | ~580 | System prompt assembly |
-| `git-providers/base.js` | ~450 | Provider interface (43 methods) |
+| `core.js` | ~1655 | Shared kernel (EventBus, State, Storage, Plugins, Roles, Providers facade, types) |
+| `git-providers/gitlab.js` | ~1140 | GitLab provider (full base.js interface) |
+| `context-manager.js` | ~1085 | Embeddings index, retrieval, similarity scoring |
+| `app.js` | ~1083 | Bootstrap, event wiring, `window.*` exposures |
+| `git-providers/gitea.js` | ~1044 | Gitea provider |
+| `git-providers/github.js` | ~1031 | GitHub provider |
+| `issue-detail.js` | ~1003 | Issue tab renderer + actions |
+| `project-manager.js` | ~856 | Project switching, repo fetching, sidebar lists |
+| `chat/handlers.js` | ~832 | Tool-call dispatch, retry, cache management |
+| `llm/api.js` | ~817 | LLM client + streaming SSE parser |
+| `chat/messages.js` | ~802 | Message rendering, markdown sanitization |
+| `editor/instance.js` | ~771 | CodeMirror EditorView wrapper + edit ops |
+| `git.js` | ~743 | Git facade resolving connectionId → provider+connection |
+| `git-providers/base.js` | ~684 | Provider interface (43 methods) |
+| `chat/summarizer.js` | ~646 | Chat compression engine |
+| `zip-upload.js` | ~646 | Zip parse, batch commit, local-mode loader |
+| `scan-tools.js` | ~599 | scan_file / read_function / find_references / read_lines |
+| `chat/index.js` | ~583 | Chat init + conversation drawer + tool registration |
+
+Provider files trend large because each implements the same ~43-method
+base interface. `core.js` is large because it's the only module
+allowed to import from `providers/`, so all globally-used registries
+(EventBus, State, Storage, Plugins, Roles) live there to avoid cycles.
 
 ## Type Coverage
 
-`jsconfig.json` enables project-wide `@ts-check`. Five core modules carry
-full JSDoc annotations (41 `@typedef`, 106 `@param`, 65 `@returns`).
-VS Code shows inline type hints and red squiggles without a build step.
+`jsconfig.json` enables project-wide `@ts-check` (`checkJs: true`,
+`strict: false`, `module: ES2022`). Core modules carry JSDoc annotations
+with `@typedef` blocks for shared shapes. VS Code shows inline type
+hints and red squiggles without a build step.
+
+## Testing & CI
+
+Tests are browser-based — open `tests/index.html` to run the suite.
+A handful of pure-logic suites have parallel `.mjs` versions that run
+under `node --test` (e.g. `test-summarizer.mjs`, `test-retry.mjs`,
+`test-edit-tracker.mjs`).
+
+CI (`.gitea/workflows/ci.yaml`) does **not** execute tests. It runs:
+
+1. Security lint — greps for `return raw;` (DOMPurify bypass)
+2. Docker build
+3. Push to internal registry (+ Docker Hub on tag)
+4. `kubectl apply` and rollout health-check
+
+The `BASE_PATH` env var lets the same image serve at `/`, `/test`, or
+`/dev` so PRs and main can be deployed side-by-side.

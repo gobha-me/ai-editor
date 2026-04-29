@@ -2,6 +2,48 @@
 
 All notable changes to AI Editor are documented here.
 
+## [1.0.5] - 2026-04-29
+
+### Added
+- **`docs/ROADMAP.md`** — Versioned plan through 2.0 covering the four
+  intelligence subsystems (retrieval, memory, compression, tools) and
+  profile contract. Tracks: foundations → compression → memory → tools →
+  retrieval → profiles. Biweekly minor cadence; ~5-month arc to 2.0.
+- **DESIGN docs landed** — `DESIGN-intelligence.md`, `DESIGN-retrieval.md`,
+  `DESIGN-memory.md`, `DESIGN-compression.md`, `DESIGN-profiles.md`,
+  `DESIGN-tools.md` relocated from project root into `docs/`. These
+  describe the architecture target ROADMAP.md sequences toward.
+
+### Changed
+- **`js/version.js`** — Bumped 1.0.4 → 1.0.5. The 1.0.5 release shipped
+  to production via PRs #165, #166, #167 but the version constant wasn't
+  bumped in lockstep; this corrects the drift.
+- **`docs/TOOLS.md`** — Full rewrite covering all 52 tools across 16
+  modules with accurate per-tool role assignments. Previous version
+  documented ~25 tools and missed cursor/multifile/xref/eval/scratchpad/
+  doc/commit/PR-merge/CI/embeddings tools entirely.
+- **`docs/ARCHITECTURE.md`** — Updated File Size Map with current line
+  counts (replaces stale "no file >600 lines" claim). Added Local
+  provider section, Testing & CI section. Removed deleted
+  `search-replace-tools` reference.
+- **`docs/ROLES_AND_TOOLS.md`** — Full rewrite. Tool counts per role
+  now accurate (52/36/28/27/22 instead of "19+"). Tool/role matrix
+  derived from actual `roles:` fields in source.
+- **`docs/scan-tools-guide.md`** — Fixed `js/chat.js` reference (now
+  `js/chat/`); replaced "Coming soon: Go/Rust/Java/C++" with description
+  of current empty-outline behavior for non-JS/Python files.
+- **`docs/PLAN.md`** — Added 1.0.4 + recent shipped items; flagged
+  SlotManager as designed-but-not-built; added Scan Tool Coverage and
+  Testing sections; added Known doc/code drift section.
+
+### Fixed (already shipped on `main` ahead of this version bump)
+- **PR #165:** PR detail merge button state now resets on every PR load
+  (issue #10).
+- **PR #166:** Editable model definitions — capabilities and context
+  window can now be overridden per model (issue #8).
+- **PR #167:** Tool widgets persist across redraws via `_display`
+  metadata (issue #6).
+
 ## [1.0.4] - 2026-02-23
 
 ### Security

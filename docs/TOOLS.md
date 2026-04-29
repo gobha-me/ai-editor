@@ -1,352 +1,430 @@
-# AI Editor - Tool Reference
+# AI Editor — LLM Tool Reference
 
-Quick reference for all available tools.
+Reference for all 52 LLM tools. Roles control which tools are available; see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for role definitions and access matrix.
 
-## 📂 File Tools
+> **Counts at a glance** — 52 tools across 16 modules (`js/tools/*.js`). Tool definitions live with their handler in the same module and self-register at app startup via `js/app.js`.
+
+---
+
+## Quick reference by module
+
+| Module | Tools | Theme |
+|---|---|---|
+| `file-tools` | 4 | Read files; manage open tabs |
+| `scan-tools` | 4 | Token-efficient file outline / function / line / xref reads |
+| `search-tools` | 1 | Full-text grep across project |
+| `edit-tools` | 3 | Line-range edits on the active editor buffer |
+| `cursor-tools` | 4 | Cursor-relative navigate / select / replace / insert |
+| `multifile-tools` | 2 | Edit/write any file by path (auto-opens) |
+| `project-tools` | 5 | Project list / switch / tree; create/delete files |
+| `xref-tools` | 3 | Read-only `peek_*` access to OTHER projects |
+| `issue-tools` | 5 | List, read, create, update, comment on issues |
+| `pr-tools` | 7 | PR/MR lifecycle + CI status & logs |
+| `commit-tools` | 2 | Commit dirty editor tabs from chat |
+| `context-tools` | 3 | Embeddings-based file relevance + index control |
+| `scratchpad-tools` | 3 | Persistent notes that survive chat summarization |
+| `plugin-tools` | 4 | Plugin editor read/write/run + listing |
+| `doc-tools` | 1 | Read built-in docs (`read_docs`) |
+| `eval-tools` | 1 | Sandboxed JS execution (`run_code`) |
+
+---
+
+## File reading (`file-tools`)
 
 ### `read_current_file`
-Read the content of the currently open file in the editor. Returns line-numbered content. Large files (200+ lines) are truncated by default.
-```javascript
-read_current_file({ full: true })  // full is optional, default: false
+Read the currently open file. Large files (200+ lines) are head/tail-truncated unless `full: true`.
+```js
+read_current_file({ full: true })  // optional
 ```
 
 ### `read_file`
-Read any file's content without opening it in the editor. Large files (200+ lines) are truncated by default.
-```javascript
-read_file({ path: "js/chat.js", full: true })  // full is optional, default: false
+Read any file by path without opening it. Same truncation rules.
+```js
+read_file({ path: "js/chat/index.js", full: true })
 ```
 
 ### `open_file`
-Open a specific file in the editor. **Required before using edit tools** (`replace_lines`, `insert_lines`, `delete_lines`).
-```javascript
-open_file({ path: "js/chat.js" })
+Open a file in the editor. Required before `replace_lines` / `insert_lines` / `delete_lines` operate on it.
+```js
+open_file({ path: "js/chat/index.js" })
 ```
 
 ### `list_open_tabs`
-See all open files in the editor.
-```javascript
+List all tabs currently open in the editor (file + plugin-editor + issue tabs).
+```js
 list_open_tabs()
 ```
 
-## 🔍 Navigation Tools (NEW - Efficient!)
+---
 
-### `scan_file` ⭐ RECOMMENDED FIRST
-Get file outline without reading full content. **97% token savings!**
-```javascript
-scan_file({
-  path: "js/chat.js",
-  include_signatures: true
-})
-// Returns: functions, classes, line numbers, params
+## Token-efficient navigation (`scan-tools`)
+
+For large files prefer this group over `read_file` — see [scan-tools-guide.md](scan-tools-guide.md).
+
+### `scan_file` — file outline
+Returns functions, classes, exports with line numbers. JS/TS and Python supported (other extensions return an empty outline).
+```js
+scan_file({ path: "js/chat/handlers.js", include_signatures: true })
 ```
 
-### `read_function` ⭐ READ SPECIFIC PARTS
-Read just one function by name. **89% token savings!**
-```javascript
-read_function({
-  path: "js/chat.js",
-  name: "handleGeneralRequest"
-})
-// Returns: function code, line range
+### `read_function`
+Extract a single function by name.
+```js
+read_function({ path: "js/chat/handlers.js", name: "handleGeneralRequest" })
 ```
 
-### `read_lines` ⭐ READ LINE RANGE
-Read specific lines with context.
-```javascript
-read_lines({
-  path: "js/chat.js",
-  start_line: 740,
-  end_line: 750,
-  context_lines: 5  // optional
-})
+### `find_references`
+Find a symbol's definitions and usages across the project.
+```js
+find_references({ symbol: "executeToolCall", scope: "js/" })
 ```
 
-### `find_references` ⭐ FIND USAGE
-Find where a symbol is defined and used.
-```javascript
-find_references({
-  symbol: "executeToolCall",
-  scope: "js/"  // optional
-})
-// Returns: line numbers + snippets
+### `read_lines`
+Read a line range with optional context.
+```js
+read_lines({ path: "js/chat/handlers.js", start_line: 200, end_line: 220, context_lines: 3 })
 ```
-
-**Recommended workflow:**
-1. `scan_file` to see structure
-2. `read_function` or `read_lines` for specific parts
-3. `find_references` to understand usage
 
 ---
 
-## 🔎 Search Tools
+## Search (`search-tools`)
 
-### `search_in_files` (Enhanced)
-Search across project files. Now returns compact snippets!
-```javascript
-search_in_files({
-  query: "executeToolCall",
-  path: "js/",  // optional
-  max_results: 20,
-  compact: true  // default: 80-char snippets
-})
-// Returns: { line, snippet } for each match
+### `search_in_files`
+Compact text search across project files. Honors ignore patterns.
+```js
+search_in_files({ query: "executeToolCall", path: "js/", max_results: 20, compact: true })
 ```
-**Tip:** Use `read_lines` to see full context around matches.
 
 ---
 
-## ✏️ Edit Tools
+## Line-based editing (`edit-tools`)
 
-> **Important:** Edit tools (`replace_lines`, `insert_lines`, `delete_lines`) operate on the **currently open file** in the editor. You must call `open_file` first. They do NOT accept a `path` parameter.
+> Operate on the **currently open file**. Call `open_file` first. No `path` parameter.
 
 ### `replace_lines`
-Replace a line range with new content. Line numbers are 1-indexed.
-```javascript
-replace_lines({
-  start_line: 10,
-  end_line: 15,
-  new_content: "new code here"
-})
+```js
+replace_lines({ start_line: 10, end_line: 15, new_content: "..." })
 ```
 
 ### `insert_lines`
-Insert new lines after a specified line. Use `after_line: 0` to insert at the beginning.
-```javascript
-insert_lines({
-  after_line: 42,
-  content: "new code"
-})
+```js
+insert_lines({ after_line: 42, content: "..." })  // after_line: 0 = top of file
 ```
 
 ### `delete_lines`
-Delete a line range. Line numbers are 1-indexed, inclusive.
-```javascript
-delete_lines({
-  start_line: 10,
-  end_line: 15
-})
+```js
+delete_lines({ start_line: 10, end_line: 15 })
+```
+
+---
+
+## Cursor-relative editing (`cursor-tools`)
+
+For step-by-step edits where the LLM verifies position before mutating. All operations are buffer-only — undo with Ctrl+Z.
+
+### `goto_line`
+Move the cursor; returns line content + word_before/after for verification.
+```js
+goto_line({ line: 120, col: 15 })  // col optional, defaults to 1
+```
+
+### `select_range`
+```js
+select_range({ from_line: 10, from_col: 1, to_line: 12, to_col: 80 })
+```
+
+### `replace_selection`
+Requires an active selection (use `select_range` first).
+```js
+replace_selection({ new_content: "..." })
+```
+
+### `insert_at_cursor`
+```js
+insert_at_cursor({ content: "// new code\n" })
+```
+
+---
+
+## Multi-file editing (`multifile-tools`)
+
+Auto-opens or switches to the target file — no manual `open_file` needed.
+
+### `edit_file`
+Replace, insert, or delete by path. Stale-line-number guard via EditTracker.
+```js
+edit_file({ path: "js/app.js", operation: "replace", start_line: 100, end_line: 105, new_content: "..." })
+edit_file({ path: "js/app.js", operation: "insert", after_line: 50, new_content: "..." })
+edit_file({ path: "js/app.js", operation: "delete", start_line: 200, end_line: 210 })
+```
+
+### `write_file`
+Create a new file or overwrite an existing one. New files commit immediately; existing files are buffer-edits awaiting save.
+```js
+write_file({ path: "js/new-module.js", content: "..." })
+```
+
+---
+
+## Project & file management (`project-tools`)
+
+### `list_projects`
+List all repos across all enabled connections.
+
+### `set_active_project`
+Switch the editor's active project context.
+```js
+set_active_project({ connectionId: "default-gitea", owner: "user", repo: "name", branch: "main" })
+```
+
+### `get_project_tree`
+Filtered file tree. Honors ignore patterns.
+```js
+get_project_tree({ path: "js/" })
 ```
 
 ### `create_file`
-Create a new file in the repository. Commits directly to the current branch. Intermediate directories are created automatically.
-```javascript
-create_file({
-  path: "js/new-file.js",
-  content: "// new file content",
-  message: "Add new-file.js"  // optional, defaults to "Create <path>"
-})
+Create a new file in the repo with a direct commit.
+```js
+create_file({ path: "js/new.js", content: "...", message: "Add new.js" })
 ```
 
 ### `delete_file`
-Delete a file from the repository. Commits the deletion directly to the current branch.
-```javascript
-delete_file({
-  path: "js/old-file.js",
-  message: "Remove old-file.js"  // optional, defaults to "Delete <path>"
-})
+Delete a file with a direct commit.
+```js
+delete_file({ path: "js/old.js", message: "Remove old.js" })
 ```
 
 ---
 
-## 📋 Project Tools
+## Cross-project reference (`xref-tools`)
 
-### `get_project_tree`
-Get file tree structure. Optionally filter by directory path. Respects ignore patterns (Settings → Ignore).
-```javascript
-get_project_tree({ path: "src/" })  // path is optional
+Read-only access to *other* projects without switching the active project. Reject calls targeting the current project — use the regular tools instead.
+
+### `peek_project_tree`
+```js
+peek_project_tree({ connectionId, owner, repo, branch, path })
+```
+
+### `peek_project_file`
+```js
+peek_project_file({ connectionId, owner, repo, path, branch, full: false })
+```
+
+### `peek_read_lines`
+```js
+peek_read_lines({ connectionId, owner, repo, path, branch, start_line, end_line })
 ```
 
 ---
 
-## 🎫 Issue Tools
+## Issues (`issue-tools`)
 
 ### `list_issues`
-List issues for the current project. Returns open issues by default.
-```javascript
-list_issues({
-  state: "open",     // "open" | "closed" | "all" (default: "open")
-  labels: "bug,ui"   // optional comma-separated label filter
-})
+```js
+list_issues({ state: "open", labels: "bug,ui", page: 1 })
 ```
 
 ### `read_issue`
-Read a specific issue by number, including body, labels, and comments.
-```javascript
+```js
 read_issue({ number: 32 })
 ```
 
 ### `create_issue`
-Create a new issue in the current project.
-```javascript
-create_issue({
-  title: "Bug: something broke",
-  body: "Description...",           // optional, markdown supported
-  labels: ["bug", "priority-high"]  // optional array of label names
-})
+```js
+create_issue({ title: "...", body: "...", labels: ["bug"] })
 ```
 
 ### `update_issue`
-Update issue metadata only (title, state, labels). Does **not** modify the issue body — use `add_issue_comment` to post new content.
-```javascript
-update_issue({
-  number: 32,
-  title: "Updated title",  // optional
-  state: "closed",         // optional: "open" | "closed"
-  labels: ["bug", "p1"]    // optional: replaces label list
-})
+Metadata only — title, state, labels. **Does not modify the body.** Use `add_issue_comment` to post new content.
+```js
+update_issue({ number: 32, title: "...", state: "closed", labels: ["bug", "p1"] })
 ```
 
 ### `add_issue_comment`
-Post a comment on an issue. Use this to add updates, responses, analysis, or any new information.
-```javascript
-add_issue_comment({
-  number: 32,
-  body: "Work completed!"  // markdown supported
-})
+```js
+add_issue_comment({ number: 32, body: "..." })
 ```
 
 ---
 
-## 🔀 Pull Request Tools
+## Pull requests & CI (`pr-tools`)
 
 ### `create_pull_request`
-Create a pull/merge request. Head defaults to the current branch, base defaults to the repository default branch.
-```javascript
-create_pull_request({
-  title: "Add user authentication",
-  body: "## Changes\n- Added login flow\n- Added session management",  // optional
-  head: "feature/auth",  // optional, defaults to current branch
-  base: "main"           // optional, defaults to repo default branch
-})
+```js
+create_pull_request({ title, body, head, base })  // head/base optional
 ```
 
 ### `list_pull_requests`
-List pull/merge requests for the current project.
-```javascript
-list_pull_requests({
-  state: "open"  // "open" | "closed" | "all" (default: "open")
-})
+```js
+list_pull_requests({ state: "open" })
+```
+
+### `read_pull_request`
+```js
+read_pull_request({ number: 12 })
+```
+
+### `add_pr_review`
+General PR comment (not line-level).
+```js
+add_pr_review({ number: 12, body: "..." })
+```
+
+### `merge_pull_request`
+Verifies the PR is mergeable before attempting. Emits `context:prMerged` so the embedding index reindexes the base branch.
+```js
+merge_pull_request({ number: 12, merge_type: "squash", delete_branch: true })
+```
+
+### `get_ci_status`
+```js
+get_ci_status({ ref: "feature/x" })  // defaults to current branch
+```
+
+### `get_ci_logs`
+Output is trimmed proportional to the active model's context window.
+```js
+get_ci_logs({ run_id: 123, job_id: 456 })
 ```
 
 ---
 
-## 🎯 Best Practices
+## Commit from chat (`commit-tools`)
 
-### ✅ DO:
-1. **Use `scan_file` before `read_file`** — Save 97% tokens
-2. **Use `read_function` for specific functions** — Save 89% tokens
-3. **Use `search_in_files` with `compact: true`** — Save 85% tokens
-4. **Use `read_lines` to examine search results** — Only read what you need
-5. **Use `find_references` to understand code flow** — Line numbers only
-6. **Call `open_file` before using edit tools** — Edit tools operate on the open file
+### `commit_files`
+Commit dirty editor tabs. Generates an AI commit message if `message` is omitted.
+```js
+commit_files({ paths: ["js/a.js"], message: "..." })  // both optional
+```
 
-### ❌ DON'T:
-1. Don't read full files when you only need structure
-2. Don't read full files when you only need one function
-3. Don't search without compact mode
-4. Don't read entire files to see one section
-5. Don't manually search when `find_references` can help
-6. Don't pass `path` to `replace_lines`/`insert_lines`/`delete_lines` — they work on the open file
-
-### 📊 Token Usage Comparison
-
-| Task | Old Method | New Method | Savings |
-|------|-----------|------------|---------|
-| "Show me function X" | `read_file` (18K) | `scan_file` + `read_function` (2.5K) | **86%** |
-| "Find uses of Y" | Multiple `read_file` (50K+) | `find_references` + `read_lines` (5K) | **90%** |
-| "Search for Z" | `search_in_files` verbose (10K) | `search_in_files` compact (2K) | **80%** |
+### `list_dirty_files`
+Preview what `commit_files` would touch.
 
 ---
 
-## 🚀 Example Workflows
+## Embeddings / context (`context-tools`)
 
-### Understand Unknown Codebase
-```
-1. get_project_tree({ path: "src/" })
-2. scan_file({ path: "js/main.js" })
-3. read_function({ path: "js/main.js", name: "init" })
-4. find_references({ symbol: "handleEvent" })
-5. read_lines({ path: "js/events.js", start_line: 120, end_line: 130 })
+Requires `Settings → Context → Use Embeddings` to be enabled.
+
+### `find_relevant_files`
+```js
+find_relevant_files({ query: "authentication logic", max_files: 5 })
 ```
 
-### Fix a Bug
-```
-1. search_in_files({ query: "error message", compact: true })
-2. read_lines({ path: "js/module.js", start_line: 245, end_line: 255, context_lines: 10 })
-3. scan_file({ path: "js/module.js" })
-4. read_function({ path: "js/module.js", name: "buggyFunction" })
-5. open_file({ path: "js/module.js" })
-6. replace_lines({ start_line: 250, end_line: 253, new_content: "fixed code" })
-```
+### `get_embeddings_status`
+Reports indexed file count, model, indexing state.
 
-### Implement Feature
-```
-1. find_references({ symbol: "similar_feature" })
-2. read_function({ path: "js/existing.js", name: "similar_feature" })
-3. scan_file({ path: "js/target.js" })
-4. open_file({ path: "js/target.js" })
-5. insert_lines({ after_line: 42, content: "new feature code" })
-```
-
-### Create a PR After Work
-```
-1. create_pull_request({
-     title: "Fix: resolve login timeout issue",
-     body: "## Summary\nFixed the session timeout bug..."
-   })
+### `index_project`
+```js
+index_project({ force: false })
 ```
 
 ---
 
-## 🔐 Role-Based Access
+## Scratchpad (`scratchpad-tools`)
 
-Not all tools are available to all roles. The tool registry enforces role-based access:
+Persistent key-value notes that survive chat summarization. Limits scale with the active model's context window.
 
-| Tool | Roles |
-|------|-------|
-| `read_file`, `read_lines`, `scan_file`, etc. | All roles |
-| `get_project_tree`, `search_in_files` | All roles |
-| `list_issues`, `read_issue` | All roles |
-| `list_pull_requests` | All roles |
-| `replace_lines`, `insert_lines`, `delete_lines` | Coder |
-| `create_file`, `delete_file` | Coder |
-| `create_issue`, `update_issue` | PM |
-| `add_issue_comment` | PM, Reviewer |
-| `create_pull_request` | Coder, PM |
-| `read_plugin_source`, `write_plugin_source` | Plugin Developer |
-| `run_plugin`, `list_user_plugins` | Plugin Developer |
+### `scratchpad_write`
+```js
+scratchpad_write({ key: "working_files", content: "..." })
+```
 
-## 🧩 Plugin Editor Tools
+### `scratchpad_read`
+```js
+scratchpad_read({ key: "working_files" })  // omit key to read all
+```
 
-Available only in the **Plugin Developer** role (auto-activated when a plugin editor tab is open).
+### `scratchpad_clear`
+```js
+scratchpad_clear({ key: "working_files" })  // omit key to clear all
+```
+
+---
+
+## Plugin editor (`plugin-tools`)
+
+Available only in the **Plugin Developer** role (auto-activates when a plugin editor tab is open).
 
 ### `read_plugin_source`
-Read the source code of the plugin currently open in the plugin editor tab. Returns numbered lines. **This is the only way to read plugin tab content** — `read_file` and `read_current_file` do not work for plugin tabs.
-```javascript
-read_plugin_source()
-```
+The only way to read plugin tab content (`read_file` does not work for plugin tabs).
 
 ### `write_plugin_source`
-Replace the full source code in the active plugin editor tab. Must provide the complete source.
-```javascript
-write_plugin_source({ source: "const { Plugins } = window.AIEditor;\n..." })
+```js
+write_plugin_source({ source: "const { Plugins } = window.AIEditor; ..." })
 ```
 
 ### `run_plugin`
-Save the current plugin source to storage and hot-reload it (register + initialize). Equivalent to pressing "▶ Run" in the toolbar.
-```javascript
-run_plugin()
-```
+Save + hot-reload the active plugin.
 
 ### `list_user_plugins`
-List all user-created plugins with their enabled/registered status.
-```javascript
-list_user_plugins()
+List user-created plugins with status.
+
+---
+
+## Documentation (`doc-tools`)
+
+### `read_docs`
+Self-serve access to the docs in this directory. Available to **Plugin Developer** and **Full Access** roles.
+```js
+read_docs()                          // list available docs
+read_docs({ doc_id: "plugin-sdk" })  // read one
 ```
 
 ---
 
-For detailed documentation, see:
-- **Navigation Tools:** `docs/scan-tools-guide.md`
-- **Tool Registry:** `js/tools/registry.js`
-- **Individual Tool Modules:** `js/tools/*.js`
+## JavaScript execution (`eval-tools`)
+
+### `run_code`
+Sandboxed `Function()` constructor with most globals blocked, 3-second timeout, last-expression auto-return. For verifying calculations, parsing data, or testing regex.
+```js
+run_code({ code: "42 * 17" })  // → result: 714
+```
+
+---
+
+## Best practices
+
+| ✅ Do | ❌ Don't |
+|---|---|
+| `scan_file` before `read_file` for large files | Read full files just to get structure |
+| `find_references` to map call graphs | Manually grep when a tool exists |
+| `search_in_files` with `compact: true` (default) | Read entire files to inspect a single match |
+| `edit_file` for cross-file workflows | Call `open_file` then `replace_lines` repeatedly when `edit_file` does it in one call |
+| Use `add_issue_comment` to post content on an issue | Use `update_issue({ body })` — `body` is intentionally not supported |
+| Use `peek_*` for OTHER projects, regular tools for the current one | Use `peek_*` to read the active project (it will reject) |
+| Re-read after every edit on a long file | Trust line numbers across multiple sequential edits — they drift |
+
+---
+
+## Role access summary
+
+Compact view — see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for full matrix.
+
+| Tool | Allowed roles |
+|---|---|
+| File reads, scan/find tools, project tree, search, peek_*, scratchpad, list issues/PRs, CI status/logs, list_projects, set_active_project | `all` |
+| `replace_lines`, `insert_lines`, `delete_lines`, `replace_selection`, `insert_at_cursor`, `edit_file`, `write_file`, `create_file`, `delete_file`, `commit_files`, `list_dirty_files`, `run_code` | `coder` |
+| `goto_line`, `select_range` | `all` |
+| `create_issue`, `update_issue` | `pm` |
+| `add_issue_comment` | `pm`, `reviewer` |
+| `create_pull_request` | `coder`, `pm` |
+| `add_pr_review`, `merge_pull_request` | `coder`, `pm`, `reviewer` |
+| `find_relevant_files` | `full`, `coder`, `reviewer` |
+| `index_project` | `full`, `coder` |
+| `read_plugin_source`, `write_plugin_source`, `run_plugin`, `list_user_plugins` | `plugin-dev` |
+| `read_docs` | `plugin-dev`, `full` |
+
+The `full` role bypasses all role checks (`ToolRegistry.checkRoleAccess` short-circuits).
+
+---
+
+## Adding a new tool
+
+1. Create or extend a module in `js/tools/`.
+2. Call `registry.register(name, handler, definition)` with a `roles` field — `'all'` or `string[]` of role IDs.
+3. Import the module in `js/app.js` so it registers at startup.
+4. (If the role is new) Register the role first via `Roles.register()` in `js/core.js` or a plugin.
+
+The registry validates role IDs at registration time and throws on typos. See [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md#adding-new-tools) for the contract.
