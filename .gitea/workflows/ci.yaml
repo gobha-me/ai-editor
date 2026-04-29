@@ -50,6 +50,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Version Coherence Check ──────────────────
+      - name: Version coherence check
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Version coherence: js/version.js ↔ CHANGELOG.md"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          VERSION_JS=$(sed -n "s/^export const VERSION = '\([^']*\)'.*/\1/p" js/version.js | head -1)
+          VERSION_CHANGELOG=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)
+
+          if [[ -z "$VERSION_JS" ]]; then
+            echo "❌ FAIL: Could not parse VERSION from js/version.js"
+            exit 1
+          fi
+          if [[ -z "$VERSION_CHANGELOG" ]]; then
+            echo "❌ FAIL: Could not find any versioned heading in CHANGELOG.md"
+            exit 1
+          fi
+
+          echo "  js/version.js → $VERSION_JS"
+          echo "  CHANGELOG.md  → $VERSION_CHANGELOG"
+
+          if [[ "$VERSION_JS" != "$VERSION_CHANGELOG" ]]; then
+            echo ""
+            echo "❌ FAIL: Version drift detected"
+            echo "  js/version.js says $VERSION_JS"
+            echo "  Latest CHANGELOG heading is $VERSION_CHANGELOG"
+            echo ""
+            echo "Fix one of:"
+            echo "  • If shipping a new version: bump js/version.js AND promote"
+            echo "    ## [Unreleased] in CHANGELOG.md to ## [X.Y.Z] - YYYY-MM-DD"
+            echo "  • If post-release patch work: the two should already match"
+            exit 1
+          fi
+
+          echo "✅ Version coherence: $VERSION_JS"
+
       # ── Security Lint ────────────────────────────
       - name: Security lint — innerHTML audit
         run: |

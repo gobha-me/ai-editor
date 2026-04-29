@@ -5,6 +5,18 @@ All notable changes to AI Editor are documented here.
 ## [Unreleased]
 
 ### Added
+- **Pre-merge version coherence CI lint** (`.gitea/workflows/ci.yaml`) — new
+  step in the `build-and-deploy` job, runs before the existing security lint.
+  Parses the `VERSION` constant from `js/version.js` and the most recent
+  `## [X.Y.Z]` heading from `CHANGELOG.md`; fails the build if they disagree.
+  Skips the `## [Unreleased]` block (matched only on numeric headings).
+
+  Why: AI Editor has shipped two release-sync drifts in a row
+  (`0.9.42 → 1.0.4 → 1.0.5`) where `js/version.js` lagged the production
+  tag and required a retroactive sync PR. Per `docs/ROADMAP.md` §1.1.0
+  this lint is the machine replacement for the human "remember to bump
+  version.js" rule. Pure CI tooling — no runtime impact.
+
 - **Migration coverage probe** (`js/chat/metadata-probe.js`) — read-only
   consistency check that surfaces in dev mode via `?debug=metadata`. At
   session load, counts how many tool-result turns carry the enrichment
