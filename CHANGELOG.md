@@ -428,6 +428,67 @@ detection. Removability: delete the flag file + the four-line guard in
   `[IDB] Database open blocked — close other tabs` — no data is lost
   because the upgrade is purely additive.
 
+#### Memory Phase 1 — LLM tools (Memory PR #4)
+
+Memory PR #4 of 8 in the 1.3.0 track. Wires three OpenAI-function-calling
+tools — `memory_remember`, `memory_recall`, `memory_revise` — over the
+PR #2 store and PR #3 file layer. **No user-visible behavior change in
+this PR.** The model can call these tools when something prompts it to,
+but no system-prompt injection auto-fires memories into context yet —
+that arrives with PR #5 (Settings → Memory tab) and PR #8 (release / the
+inline `@memory` chip + DESIGN-memory.md update). PR #4 is foundation
+for the rest of the track; it ships now to unblock parallel work on the
+Settings tab and the consent card.
+
+The tools honor the two kickoff decisions (memory file
+`project_design_engagement.md`, 2026-04-30): `scope` is `user|workspace`
+only — `persona` was dropped — and the `source` enum
+(`user_explicit | agent_proposed | inferred`) is the surface the tools
+expose, not the dropped `confidence: float` field.
+
+- **`js/tools/memory-tools.js`** — registers the three tools. Wraps the
+  store's `create / update / supersede / getByKey / list / searchSemantic`
+  surface. `memory_remember` looks up `(scope, owner, key)` first and
+  auto-supersedes when a head exists; semi-deterministic for the model
+  ("remember X" with the same key twice produces the audit chain a human
+  would expect). Embeds via `embedRecord()` before write so semantic
+  recall hits immediately; embedding-down (provider offline, embeddings
+  disabled) writes still succeed with `embedding: null` and the response
+  carries `embedded: false`. `memory_recall` accepts `scope: 'all'` (a
+  synthetic value not in `MEMORY_SCOPES`) and merges per-scope queries —
+  rationale: the model rarely knows where a fact was filed; forcing it
+  to pick scope-by-scope means missed hits and giving up. `memory_revise`
+  patches in place via `update()`; identity fields are unreachable from
+  the schema; `reason` is required. Owner-id resolution: workspace via
+  `getActiveWorkspaceId()` (returns an actionable error when no project
+  is loaded — the `?memoryRepoMode=on` flag is still the gate until PR
+  #5 ships the Settings toggle); user via a lazy UUID stored at
+  `Storage('memoryUserId')` — global per origin (the bare key isn't in
+  `Storage._TAB_SCOPED`), so user memories don't fragment across tabs.
+  Actor format `'agent:<llmModel>'` so the audit log distinguishes
+  agent calls from PR #6's user-clicked Settings/consent mutations.
+  Role gates: `recall` is `'all'` (read-only is harmless); `remember`
+  and `revise` are `['full', 'coder', 'pm']` — `reviewer` is read-only
+  by charter, `plugin-dev` is plugin-scoped.
+
+- **`tests/test-memory-tools.mjs`** — node:test suite covering the three
+  tools end-to-end through the registry, the in-memory IDB fake, and a
+  stub embeddings client. Cases: happy-path create, idempotent
+  re-remember (action=superseded with chain), default scope/source,
+  workspace-no-active-project graceful error, invalid category/source/
+  persona-scope rejected with helpful messages, embedding-down write
+  proceeds with `embedded:false`, user-scope owner via Storage,
+  semantic vs list recall paths, `scope: 'all'` merge, workspace-empty
+  recall with note, embeddings-down query falls back to list with
+  `note`, category filter, limit clamp, revise patches in place +
+  re-embeds, source-only revise leaves value untouched, unknown id /
+  superseded id / missing reason / no-field-changes errors, and role-
+  gate denial for `reviewer` on remember (with recall still allowed).
+  24 cases total.
+
+- **`js/chat/index.js`** — wires `registerMemoryTools(ToolRegistry)` into
+  the boot sequence after `registerPluginTools`.
+
 ### Notes
 
 - **No version bump.** Per `feedback_version_bump.md`, intermediate

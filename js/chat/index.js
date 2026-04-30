@@ -19,6 +19,7 @@ import { registerMultiFileTools } from '../tools/multifile-tools.js';
 import { registerEvalTools } from '../tools/eval-tools.js';
 import { registerCursorTools } from '../tools/cursor-tools.js';
 import { registerPluginTools } from '../tools/plugin-tools.js';
+import { registerMemoryTools } from '../tools/memory-tools.js';
 
 // Import submodules
 import { 
@@ -67,6 +68,7 @@ registerMultiFileTools(ToolRegistry);
 registerEvalTools(ToolRegistry);
 registerCursorTools(ToolRegistry);
 registerPluginTools(ToolRegistry);
+registerMemoryTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION
