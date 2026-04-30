@@ -326,6 +326,7 @@ export async function handleGeneralRequest(input) {
     const MAX_TOOL_ROUNDS = 8;
     let finalContent = '';          // Accumulated across rounds (used for error fallback)
     let lastRoundContent = '';      // Only the current round's text (used for DOM + history)
+    let lastRoundReasoning = null;  // Reasoning captured by _handleStream for the last round
     const toolActions = []; // Track all tool executions for fallback summary
     
     // === DUPLICATE TOOL CALL DETECTION ===
@@ -450,8 +451,13 @@ export async function handleGeneralRequest(input) {
 
             // === LAYER 1: Structured tool_calls from API (primary path) ===
             let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
+            // Streaming layer (1.3.1) splits <think>/<thinking> off into result.reasoning,
+            // so content/result.content are already reasoning-free. The stripThinkBlocks
+            // call below is a defensive no-op for non-streaming providers that emit think
+            // blocks intact in the final response.
             let cleanContent = stripThinkBlocks(content || result.content || '');
             let toolCallSource = toolCalls.length > 0 ? 'structured' : null;
+            lastRoundReasoning = result.reasoning || null;
 
             // === LAYER 2: Text-format fallback ===
             if (toolCalls.length === 0 && cleanContent) {
@@ -695,7 +701,10 @@ export async function handleGeneralRequest(input) {
                     role: 'assistant',
                     timestamp: Date.now()
                 };
-                
+                if (lastRoundReasoning && lastRoundReasoning.content && lastRoundReasoning.content.length > 0) {
+                    assistantMsg.reasoning = lastRoundReasoning;
+                }
+
                 if (toolCallSource === 'structured') {
                     // Always include content field — null when no text content.
                     // OpenAI spec allows null, and some providers (Venice) reject
@@ -785,10 +794,13 @@ export async function handleGeneralRequest(input) {
         }
     }
 
-    // Use last round's content for the final DOM element
+    // Use last round's content for the final DOM element.
+    // lastRoundReasoning carries the reasoning captured by _handleStream
+    // for the round whose content we're rendering; older rounds' reasoning
+    // is already attached to the assistant turns pushed during the loop.
     finalizeStreamingMessage(
-        lastRoundContent.trim() ? lastRoundContent : finalContent, 
-        { hasCode: false }
+        lastRoundContent.trim() ? lastRoundContent : finalContent,
+        { hasCode: false, reasoning: lastRoundReasoning }
     );
 }
 

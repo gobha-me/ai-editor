@@ -4,6 +4,172 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-04-30
+
+Closes the **Reasoning as turn metadata** item from `docs/ROADMAP.md`
+§1.3.x (originally numbered 1.3.5 in the renumbering note; landing in
+1.3.1 because §1.3.1 self-healing tools shipped inside 1.3.0). Splits
+`<think>` / `<thinking>` content off the assistant response into a
+first-class `reasoning` field on the turn rather than stripping it,
+closing the **duplicated-preamble streaming bug by construction**:
+once every byte either goes to `content` or to `reasoning` (never
+both), the closing-tag-straddles-SSE-chunk leak path doesn't exist.
+
+The 1.1.0 turn-metadata schema is read-path-only and intentionally
+additive — `reasoning` plugs into the same contract. Pre-1.3.1 turns
+persist with `reasoning: undefined` and the renderer's guard
+(`reasoning && reasoning.content && reasoning.content.length > 0`)
+treats absent ≡ no-bubble, so the change is **fully backwards
+compatible**: old conversations replay unchanged.
+
+**ReasoningBlock shape (locked at PR kickoff):**
+```js
+{ provider, format: 'tag'|'native'|'channel',
+  content, started_at, ended_at } | null
+```
+String-only was rejected; structured shape preserves the cost-
+attribution and per-format rendering decisions a year from now when
+native reasoning APIs (OpenAI o1, Anthropic extended thinking) plug in
+under `format: 'native'` or `'channel'` without schema churn. Phase 1
+emits only `format: 'tag'`; provider resolves from
+`State.settings.apiProvider`.
+
+**Cost attribution unchanged.** Reasoning tokens are provider-reported
+via `usage.completion_tokens_details.reasoning_tokens`; the recorder
+extracts that field and persists it as a separate column on the cost
+dashboard. They are **not** double-counted by re-extracting reasoning
+length from our captured text — the captured text is for display and
+export, not for billing math. `js/intelligence/cost/cost-recorder.js`
+gains a comment marking this as a checked invariant.
+
+### Added
+
+- **`splitThinkBlocks(text) → { content, reasoning }`** in
+  [js/llm/utils.js](js/llm/utils.js) — pure helper that returns both
+  halves rather than discarding reasoning. `stripThinkBlocks` becomes
+  a thin wrapper around it (`splitThinkBlocks(text).content`) so plugin
+  and renderer callers that don't yet consume reasoning continue to
+  work unchanged. Re-exported from `js/llm.js` alongside `stripThinkBlocks`.
+
+- **Reasoning capture in `LLM._handleStream()`**
+  ([js/llm/api.js](js/llm/api.js)) — accumulates reasoning into a
+  separate `reasoningContent` string alongside `content`, with explicit
+  handling for the three cases the original stripping path recognized:
+  complete block in one chunk, opening tag detected, closing tag
+  straddling chunks. The thinkBuffer-flush branch (line 704 in 1.3.0
+  that *discarded* the buffer) now flushes everything-but-the-tail-11
+  chars to `reasoningContent` so micro-chunked closing tags reassemble
+  correctly. Stream-ending-mid-think also flushes whatever's in flight
+  rather than losing it. Returns `{ content, reasoning, toolCalls,
+  finishReason, usage }`; reasoning is `null` when no `<think>` block
+  was seen.
+
+- **`enrichAssistantTurn(skeleton, { reasoning })`** in
+  [js/chat/turn-enrich.js](js/chat/turn-enrich.js) — mirrors the
+  read-path-only contract from 1.1.0 for the assistant side. Drops
+  empty reasoning before merging so persisted turns never carry a
+  no-op ReasoningBlock; absent ≡ no-bubble per the renderer guard.
+
+- **Reasoning bubble** in
+  [js/chat/messages.js](js/chat/messages.js) — collapsed-by-default
+  `<details>` rendered above the assistant content for turns with
+  reasoning attached. Click expands. Provider name + elapsed seconds
+  surface in the summary meta line. Theming reuses the existing
+  `tool-call-details` typography and chrome — no new design tokens.
+  CSS lives in [css/chat.css](css/chat.css) under `.message-reasoning`.
+
+- **Per-turn reasoning preservation in chat export**
+  ([js/chat/export.js](js/chat/export.js)) — the markdown export now
+  walks the `.message-reasoning .reasoning-body` element and emits a
+  `<details><summary>💭 Reasoning</summary>...</details>` block above
+  the response so 1.3.4's session-replay viewer can step through what
+  the model thought at each turn.
+
+- **`tests/test-reasoning-streaming.mjs`** — 9 node:test cases pinning
+  the streaming-layer split contract, including the load-bearing
+  closing-tag-straddles-SSE-chunk regression and the
+  shredded-closing-tag-across-many-micro-chunks variant. Documents
+  the preexisting opening-tag-split-across-chunks limitation
+  (inherited from the 1.3.0 stripping path; out of scope for 1.3.1).
+
+- **`tests/test-reasoning-export.mjs`** — 10 node:test cases pinning
+  the ReasoningBlock JSON round-trip, the renderer guard semantics
+  (absent vs. empty-string both suppress the bubble), and the
+  end-to-end pipeline `splitThinkBlocks` → `enrichAssistantTurn` →
+  serialize.
+
+- **`splitThinkBlocks` cases in
+  [tests/test-llm-pure.js](tests/test-llm-pure.js)** — 14 new browser
+  assertions covering basic single/multi/case-insensitive blocks,
+  unclosed trailing blocks, null/undefined/empty input, whitespace and
+  trimming behavior, the `<thinking>` long-tag variant, and explicit
+  backwards-compat assertions on the `stripThinkBlocks` wrapper.
+
+- **`enrichAssistantTurn` cases in
+  [tests/test-turn-enrich.mjs](tests/test-turn-enrich.mjs)** — 5
+  node:test cases asserting the empty-content drop, null-reasoning
+  no-merge, and field preservation contracts.
+
+### Changed
+
+- **`stripThinkBlocks` is now a thin wrapper** over `splitThinkBlocks`.
+  Identical observable behavior on every input the pre-1.3.1 tests
+  exercised; the wrapper exists so plugin and renderer code that
+  doesn't yet consume reasoning keeps working without changes.
+
+- **Streaming response shape** gains a `reasoning` field. Consumers
+  that destructure `{ content, toolCalls, finishReason, usage }`
+  continue to work; the new field is additive.
+
+- **`addMessage(role, content, meta)` JSDoc** documents that `meta`
+  may carry `reasoning: ReasoningBlock | null`. The function itself
+  was already meta-spreading; the contract is now explicit.
+
+- **`finalizeStreamingMessage(content, meta)`** prepends a reasoning
+  bubble before the streamed `.message-content` element when
+  `meta.reasoning` carries non-empty content. Persisted turn includes
+  the reasoning field via the existing `...meta` spread.
+
+- **`renderMessage(message, ...)`** for assistant turns now interpolates
+  a reasoning `<details>` block ahead of the content div when the
+  guard passes. Idempotent — re-rendering the same turn produces the
+  same DOM.
+
+- **Tool-loop intermediate assistant messages** in
+  [js/chat/handlers.js](js/chat/handlers.js) — `lastRoundReasoning`
+  tracks the reasoning captured for each round; the intermediate
+  assistant push and the final `finalizeStreamingMessage` call both
+  receive it. Multi-round tool-using sessions persist reasoning per
+  round rather than only on the final response.
+
+### Fixed
+
+- **Duplicated-preamble streaming bug.** When a closing `</think>` /
+  `</thinking>` tag straddled an SSE chunk boundary, the original
+  `thinkBuffer` flush path discarded all-but-11 chars after exceeding
+  12 — but the regex retry on the *next* chunk could re-detect the
+  open tag inside the discarded fragment, leaving torn fragments in
+  rendered content. With reasoning explicitly admitted as a turn
+  property, every byte has exactly one home; the leak path is
+  structurally impossible. The new
+  `tests/test-reasoning-streaming.mjs` regression fixture would have
+  caught the original bug.
+
+### Notes
+
+- **Compression rules unchanged.** Reasoning is part of its turn
+  (intentional: reasoning without its turn is meaningless; a turn
+  without reasoning loses provenance). Documented for the rule
+  preamble; no compactor code change.
+
+- **Removability check (per Decision §7).** With `reasoning` ripped
+  out and the renderer falling back to `splitThinkBlocks(text).content`,
+  reasoning bubbles disappear, replay export (1.3.4 when it lands)
+  loses one column, and the cost dashboard shows zero reasoning-token
+  cost. **Crucially: the duplicated-preamble bug returns** — that's
+  the load-bearing user-visible degradation that proves the field
+  earned its place.
+
 ## [1.3.0] - 2026-04-30
 
 Closes the **Memory Phase 1** track from `docs/ROADMAP.md` §1.3.0 —

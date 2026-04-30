@@ -66,6 +66,12 @@ function _onCostUpdated(payload) {
     const inputTokens     = usage.prompt_tokens     || 0;
     const outputTokens    = usage.completion_tokens || 0;
     const cachedTokens    = usage.prompt_tokens_details?.cached_tokens || 0;
+    // Reasoning tokens (1.3.1): provider-reported under
+    // completion_tokens_details.reasoning_tokens. They are NOT re-added to
+    // inputTokens here — the provider has already counted the reasoning
+    // portion of the *next* request's prompt under prompt_tokens when
+    // history is replayed. Double-counting would require extracting reasoning
+    // from our captured text and adding it again; we do not.
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
 
     const modelId = payload.modelId || State.settings.llmModel || '';

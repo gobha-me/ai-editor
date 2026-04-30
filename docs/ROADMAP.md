@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-04-29 · Current released version: **1.2.1** · Authoring branch: `feat/roadmap-1.x`
+> Last updated: 2026-04-30 · Current released version: **1.3.1** · Authoring branch: `feat/roadmap-1.x`
 
 ## TL;DR
 
@@ -353,13 +353,13 @@ The Memory UX (these three flows) is the scope of the **Touch 1 design engagemen
 
 ### 1.3.x — Memory follow-ups [+3-4 weeks]
 
-> **Renumbering note (2026-04-30 kickoff).** The original §1.3.1 ("workspace scope") shipped inside 1.3.0; the slot is reused for self-healing tools (previously 1.3.3). §1.3.2 retains the `persona` slot but is now deferred indefinitely. Subsequent items shift up by one.
+> **Renumbering note (2026-04-30 kickoff, revised post-1.3.1 ship).** The original §1.3.1 ("workspace scope") shipped inside 1.3.0; the original 1.3.1 self-healing-tools work also already shipped inside 1.3.0 (`memory_revise` with required `reason` parameter, audit-entry-per-revision in [js/intelligence/memory/store.js](js/intelligence/memory/store.js)). §1.3.2 retains the `persona` slot but is deferred indefinitely. **The "Reasoning as turn metadata" item — originally numbered 1.3.6, then 1.3.5 in the prior renumbering — shipped as 1.3.1 (2026-04-30)**, taking the slot the reframed self-healing-tools item vacated. Subsequent items keep their numbers; new memory follow-ups slot above 1.3.3 as they're scoped.
 
-- **1.3.1:** Self-healing tools — agents can rewrite memory files within guardrails (`memory_revise` accepts a `reason`; revisions become audit entries). Builds directly on the file layer shipped in 1.3.0.
+- **1.3.1 [SHIPPED — 2026-04-30]:** Reasoning as turn metadata. Splits `<think>`/`<thinking>` content off the streamed response into a first-class `reasoning` field on the assistant turn rather than stripping it. Closes the duplicated-preamble streaming bug by construction (every byte either goes to `content` or `reasoning`, never both). ReasoningBlock shape: `{ provider, format: 'tag'|'native'|'channel', content, started_at, ended_at } | null`. Phase 1 emits only `format: 'tag'`; native/channel reserved for OpenAI o1, Anthropic extended thinking. See [CHANGELOG.md §1.3.1](../CHANGELOG.md) for full detail. The previous 1.3.1 (self-healing tools) was reframed as already-shipped inside 1.3.0.
 - **1.3.2 — `persona` scope [DEFERRED INDEFINITELY].** Dropped from 1.3.0 at kickoff 2026-04-30. Revisit only if `user`-scope memory usage in production reveals cluster patterns that suggest persona-level curation would meaningfully reduce noise. Single-user code-focused editor + 2.0 ships `chat_multi.v1` and `rp.v1` profiles as stubs already, so persona is not load-bearing for the planned profile contract.
 - **1.3.3: Cross-device session sync via Git.** Conversations stored as `.aieditor/sessions/<id>.json`. Opt-in toggle — same setting as memory's repo mode (browser-cache by default, repo-committed when explicitly enabled). When enabled and the current branch isn't protected, sessions auto-stage with the next commit. Open the same project on a second device, conversations appear in the conversation drawer. Unique-to-us — no backend required; Git is the transport.
 - **1.3.4: Session replay / shareable transcripts.** Export the active conversation as a `.aieditor.session` archive (JSON: messages + tool calls + tool results + before/after diffs). Drop the file into another instance to view in read-only replay mode (step through turns, see what the model saw at each step). Use cases: bug reports, blog posts, teaching, post-mortems. Builds on the existing conversation persistence.
-- **1.3.5: Reasoning as turn metadata [+1 week].**
+- **1.3.5: Reasoning as turn metadata [SHIPPED AS 1.3.1 — 2026-04-30].** *Slot retained below for the design rationale, which still describes the shipped implementation. The work landed in 1.3.1 because §1.3.1's prior occupant (self-healing tools) already shipped inside 1.3.0; rather than leave a numbered gap, the highest-value backlog item slid into the slot. See [CHANGELOG.md §1.3.1](../CHANGELOG.md) for the as-shipped detail; section below remains the canonical design record.*
 
   **What ships:** the assistant-turn schema gains a `reasoning` field; the streaming layer **splits** `<thinking>` / `<think>` (and provider-specific reasoning blocks) off the response into that field rather than stripping them. The default chat renderer treats `reasoning` as a separate, collapsed-by-default bubble above the response; absent or null collapses to nothing. Provenance is preserved end-to-end: through history, through the export format consumed by 1.3.4's replay viewer, through the cost dashboard's per-conversation breakdown.
 

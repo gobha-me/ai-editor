@@ -6,22 +6,51 @@
  */
 
 // ============================================
-// THINK-BLOCK STRIPPING
+// THINK-BLOCK SPLITTING
 // ============================================
 
 /**
- * Strip <think> / <thinking> blocks from text content.
+ * Split <think> / <thinking> blocks out of text content.
+ * Returns { content, reasoning } where reasoning concatenates every
+ * captured block (joined by "\n\n" when multiple), or null if none.
+ *
  * Handles multiple blocks, nested whitespace, partial/unclosed tags,
  * and both tag variants used by different model families.
- * Used for non-streaming responses where think blocks arrive intact.
+ * Used for non-streaming responses where think blocks arrive intact;
+ * the streaming path in js/llm/api.js does its own incremental capture.
+ *
+ * @param {string|null|undefined} text
+ * @returns {{ content: string|null|undefined, reasoning: string|null }}
+ */
+export function splitThinkBlocks(text) {
+    if (text === null || text === undefined || text === '') {
+        return { content: text, reasoning: null };
+    }
+    const parts = [];
+    let result = text.replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, (_, inner) => {
+        parts.push(inner);
+        return '';
+    });
+    // Unclosed trailing block (model hit token limit mid-thought)
+    result = result.replace(/<think(?:ing)?>([\s\S]*)$/gi, (_, inner) => {
+        parts.push(inner);
+        return '';
+    });
+    const reasoning = parts.length > 0 ? parts.join('\n\n').trim() : null;
+    return {
+        content: result.trim(),
+        reasoning: reasoning && reasoning.length > 0 ? reasoning : null,
+    };
+}
+
+/**
+ * Legacy wrapper — strips think blocks and returns content only.
+ * Plugins and renderers that don't yet consume reasoning continue to call this.
+ * New code should prefer splitThinkBlocks() so reasoning is preserved.
  */
 export function stripThinkBlocks(text) {
     if (!text) return text;
-    // Closed blocks: <think>...</think> and <thinking>...</thinking>
-    let result = text.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
-    // Unclosed trailing blocks (model hit token limit mid-thought)
-    result = result.replace(/<think(?:ing)?>[\s\S]*$/gi, '');
-    return result.trim();
+    return splitThinkBlocks(text).content;
 }
 
 // ============================================

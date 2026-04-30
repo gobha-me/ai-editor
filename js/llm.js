@@ -13,7 +13,7 @@
  */
 
 // Pure utilities
-export { stripThinkBlocks, sanitizeMessages } from './llm/utils.js';
+export { stripThinkBlocks, splitThinkBlocks, sanitizeMessages } from './llm/utils.js';
 
 // Debug logger
 export { LLMDebug } from './llm/debug.js';

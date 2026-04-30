@@ -81,6 +81,7 @@ export function exportChat() {
         const roleEl = msg.querySelector('.message-role');
         const timeEl = msg.querySelector('.message-time');
         const contentEl = msg.querySelector('.message-content');
+        const reasoningEl = msg.querySelector('.message-reasoning .reasoning-body');
 
         const role = roleEl?.textContent?.trim() || 'Unknown';
         const time = timeEl?.textContent?.trim() || '';
@@ -96,6 +97,24 @@ export function exportChat() {
             lines.push(`### ❌ Error (${time})`);
         } else {
             lines.push(`### ${role} (${time})`);
+        }
+
+        // Reasoning bubble (1.3.1): emit captured reasoning as a collapsed
+        // <details> block so 1.3.4 replay viewer can step through what the
+        // model thought. Absent ≡ no block. Indented per-line so it nests
+        // cleanly under the heading in markdown renderers.
+        if (reasoningEl) {
+            const reasoningText = reasoningEl.textContent?.trim() || '';
+            if (reasoningText) {
+                lines.push(`<details><summary>💭 Reasoning</summary>`);
+                lines.push('');
+                for (const line of reasoningText.split('\n')) {
+                    lines.push(line);
+                }
+                lines.push('');
+                lines.push(`</details>`);
+                lines.push('');
+            }
         }
 
         lines.push(content);

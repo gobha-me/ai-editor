@@ -153,3 +153,31 @@ export function enrichToolResultTurn(turnSkeleton, toolName, args, parsedResult)
         file_ops: extractFileOps(toolName, args, parsedResult),
     };
 }
+
+/**
+ * @typedef {Object} ReasoningBlock
+ * @property {string|null} provider — the LLM provider that produced this reasoning
+ * @property {'tag'|'native'|'channel'} format — 'tag' for &lt;think&gt;/&lt;thinking&gt;
+ *   captured from streamed text; 'native' / 'channel' reserved for native
+ *   reasoning APIs (OpenAI o1, Anthropic extended thinking) when added later.
+ * @property {string} content — captured reasoning text, trimmed
+ * @property {number|null} started_at — wall-clock ms at first reasoning chunk
+ * @property {number|null} ended_at — wall-clock ms at last reasoning chunk
+ */
+
+/**
+ * Compose enriched fields onto an assistant-turn skeleton. Idempotent.
+ * Mirrors the read-path-only contract from 1.1.0: pre-1.3.1 turns persist
+ * with `reasoning: undefined` and renderers/exporters treat absent ≡ no-bubble.
+ *
+ * @param {object} turnSkeleton - existing assistant turn fields
+ * @param {{ reasoning?: ReasoningBlock|null }} extras
+ * @returns {object} new turn object with reasoning merged when present
+ */
+export function enrichAssistantTurn(turnSkeleton, extras = {}) {
+    const out = { ...turnSkeleton };
+    if (extras.reasoning && extras.reasoning.content && extras.reasoning.content.length > 0) {
+        out.reasoning = extras.reasoning;
+    }
+    return out;
+}

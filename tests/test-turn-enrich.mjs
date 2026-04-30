@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractFileOps, enrichToolResultTurn } from '../js/chat/turn-enrich.js';
+import { extractFileOps, enrichToolResultTurn, enrichAssistantTurn } from '../js/chat/turn-enrich.js';
 
 // ============================================
 // extractFileOps — edits
@@ -287,4 +287,50 @@ test('enrichToolResultTurn — null tool_call_id → tool_result_for is null', (
         'read_file', { path: 'a.js' }, { path: 'a.js' }
     );
     assert.equal(enriched.tool_result_for, null);
+});
+
+// ============================================
+// enrichAssistantTurn (1.3.1)
+// ============================================
+
+test('enrichAssistantTurn — reasoning attached when content present', () => {
+    const reasoning = {
+        provider: 'venice', format: 'tag',
+        content: 'thinking step', started_at: 100, ended_at: 200,
+    };
+    const enriched = enrichAssistantTurn(
+        { role: 'assistant', content: 'answer', timestamp: 1 },
+        { reasoning }
+    );
+    assert.equal(enriched.reasoning, reasoning);
+    assert.equal(enriched.content, 'answer');
+    assert.equal(enriched.role, 'assistant');
+});
+
+test('enrichAssistantTurn — empty reasoning content drops the field', () => {
+    const enriched = enrichAssistantTurn(
+        { role: 'assistant', content: 'x' },
+        { reasoning: { provider: 'v', format: 'tag', content: '', started_at: null, ended_at: null } }
+    );
+    assert.equal(enriched.reasoning, undefined);
+});
+
+test('enrichAssistantTurn — null reasoning leaves field absent (not null)', () => {
+    const enriched = enrichAssistantTurn({ role: 'assistant', content: 'x' }, { reasoning: null });
+    assert.equal('reasoning' in enriched, false, 'absent ≡ no-bubble per renderer guard');
+});
+
+test('enrichAssistantTurn — no extras at all leaves skeleton intact', () => {
+    const enriched = enrichAssistantTurn({ role: 'assistant', content: 'x' });
+    assert.equal('reasoning' in enriched, false);
+    assert.equal(enriched.content, 'x');
+});
+
+test('enrichAssistantTurn — preserves other fields on skeleton', () => {
+    const enriched = enrichAssistantTurn(
+        { role: 'assistant', content: 'x', tool_calls: [{ id: 't1' }], timestamp: 99 },
+        { reasoning: { provider: 'v', format: 'tag', content: 'r', started_at: 0, ended_at: 1 } }
+    );
+    assert.deepEqual(enriched.tool_calls, [{ id: 't1' }]);
+    assert.equal(enriched.timestamp, 99);
 });

@@ -4,7 +4,7 @@
  */
 
 import { State, EventBus, Storage } from '../core.js';
-import { stripThinkBlocks } from '../llm.js';
+import { stripThinkBlocks, splitThinkBlocks } from '../llm.js';
 import { getChatContainer } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
 import { escapeHtml } from '../utils/html.js';
@@ -12,11 +12,46 @@ import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consen
 import { consentList } from '../intelligence/memory/index.js';
 
 /**
- * Add a message to chat history and render it
+ * Add a message to chat history and render it.
+ *
+ * `meta` may carry additional turn properties spread onto the persisted
+ * record. Notable optional fields:
+ *   - reasoning: ReasoningBlock|null (1.3.1) — captured <think>/<thinking>
+ *     content, rendered as a collapsed bubble above the response. Absent
+ *     ≡ no-bubble; pre-1.3.1 turns persist with reasoning undefined.
+ *   - hasCode, elapsedTime, tool_calls, etc.
  */
+/**
+ * Build the collapsed reasoning <details> block for an assistant turn.
+ * Matches the existing tool-call-details theming (no new CSS tokens).
+ *
+ * @param {{provider:string|null, format:string, content:string, started_at:number|null, ended_at:number|null}} reasoning
+ * @returns {string} HTML
+ */
+function buildReasoningHtml(reasoning) {
+    const elapsed =
+        (reasoning.started_at && reasoning.ended_at)
+            ? Math.max(0, Math.round((reasoning.ended_at - reasoning.started_at) / 100) / 10)
+            : null;
+    const meta = [
+        reasoning.provider || null,
+        elapsed != null ? `${elapsed}s` : null,
+    ].filter(Boolean).join(' · ');
+    return `
+        <details class="message-reasoning">
+            <summary class="reasoning-summary">
+                <span class="reasoning-icon">💭</span>
+                <span class="reasoning-label">Reasoning</span>
+                ${meta ? `<span class="reasoning-meta">${escapeHtml(meta)}</span>` : ''}
+            </summary>
+            <div class="reasoning-body">${formatMessageContent(reasoning.content)}</div>
+        </details>
+    `;
+}
+
 export function addMessage(role, content, meta = {}) {
     console.log(`[addMessage] role=${role}, content length=${content?.length}`);
-    
+
     const message = {
         role,
         content,
@@ -178,11 +213,23 @@ export function finalizeStreamingMessage(content, meta = {}) {
     if (messageEl) {
         messageEl.classList.remove('streaming');
         messageEl.removeAttribute('id');
-        
+
         const contentEl = messageEl.querySelector('.message-content');
-        // Strip think blocks for display only
+        // Strip think blocks for display only (no-op when streaming layer
+        // already split them into meta.reasoning).
         const displayContent = stripThinkBlocks(content);
         contentEl.innerHTML = formatMessageContent(displayContent);
+
+        // Reasoning bubble (1.3.1): prepend a collapsed <details> when
+        // reasoning was captured; absent ≡ no-bubble.
+        if (meta.reasoning && meta.reasoning.content && meta.reasoning.content.length > 0) {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = buildReasoningHtml(meta.reasoning);
+            const detailsEl = wrapper.firstElementChild;
+            if (detailsEl) {
+                contentEl.parentNode.insertBefore(detailsEl, contentEl);
+            }
+        }
         
         // Update time to show elapsed duration
         const timeEl = messageEl.querySelector('.message-time');
@@ -218,10 +265,13 @@ export function finalizeStreamingMessage(content, meta = {}) {
     // Inject edit/retry buttons on the last user message now that response is complete
     _injectUserEditButtons();
 
-    // Add to history with FULL content (including think blocks for LLM context)
+    // Add to history. Content is the visible response text (reasoning
+    // already split off into meta.reasoning by the streaming layer in
+    // 1.3.1; pre-1.3.1 turns may still carry inline think blocks, which
+    // the renderer's `splitThinkBlocks` fallback handles at display time).
     State.chatHistory.push({
         role: 'assistant',
-        content,  // Full content with think blocks preserved
+        content,
         timestamp: Date.now(),
         ...meta
     });
@@ -306,9 +356,21 @@ export function renderMessage(message, isLastUserMessage = false) {
 
     // Build image HTML for multimodal messages
     const imageHtml = messageImages.length > 0
-        ? `<div class="message-images">${messageImages.map(url => 
+        ? `<div class="message-images">${messageImages.map(url =>
             `<img src="${url}" alt="Attached image" class="message-image" onclick="window.Chat.previewImage(this.src)">`
           ).join('')}</div>`
+        : '';
+
+    // Reasoning bubble (1.3.1): collapsed <details> above content for assistant
+    // turns whose <think>/<thinking> content was captured by the streaming
+    // layer. Guard rejects empty strings so an empty bubble shell never renders.
+    const reasoningHtml = (
+        message.role === 'assistant' &&
+        message.reasoning &&
+        message.reasoning.content &&
+        message.reasoning.content.length > 0
+    )
+        ? buildReasoningHtml(message.reasoning)
         : '';
 
     messageEl.innerHTML = `
@@ -317,6 +379,7 @@ export function renderMessage(message, isLastUserMessage = false) {
             <span class="message-time">${timeDisplay}</span>
         </div>
         ${imageHtml}
+        ${reasoningHtml}
         <div class="message-content">${formatMessageContent(displayContent)}</div>
     `;
 

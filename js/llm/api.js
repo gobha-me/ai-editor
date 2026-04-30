@@ -580,6 +580,14 @@ export const LLM = {
         let hasToolCallsInResponse = false;
         let streamError = null;
 
+        // Reasoning capture (1.3.1): accumulate <think>/<thinking> content
+        // into a separate field rather than discarding it. The split-across-
+        // chunks case (closing tag straddling SSE boundaries) is the
+        // duplicated-preamble bug; explicit accumulation closes it.
+        let reasoningContent = '';
+        let reasoningStartedAt = null;
+        let reasoningEndedAt = null;
+
         // Idle-timeout: reset per chunk arrival at the reader.read() boundary,
         // not at onToken — keep-alives, tool-call deltas, and think-tag chunks
         // all count as network activity even when no visible token reaches the UI.
@@ -687,18 +695,29 @@ export const LLM = {
                     if (delta.content) {
                         let chunk = delta.content;
 
-                        // Think-block stripping (only when no tool calls)
+                        // Think-block split (only when no tool calls).
+                        // Reasoning is captured into reasoningContent rather than
+                        // discarded — closes the duplicated-preamble streaming bug
+                        // by construction (admissibility, not accumulation).
                         if (!hasToolCallsInResponse && !hasTools) {
                             if (inThinkBlock) {
                                 thinkBuffer += chunk;
                                 const endIdx = thinkBuffer.indexOf(thinkEndTag);
                                 if (endIdx >= 0) {
+                                    // Capture reasoning up to the closing tag
+                                    reasoningContent += thinkBuffer.slice(0, endIdx);
                                     chunk = thinkBuffer.slice(endIdx + thinkEndTag.length);
                                     inThinkBlock = false;
+                                    reasoningEndedAt = Date.now();
                                     LLMDebug.logThink('think-end', `Exited think block, remaining: "${chunk.slice(0, 60)}"`);
                                     thinkBuffer = '';
                                 } else {
+                                    // Closing tag not yet seen — flush all but the
+                                    // last 11 chars (max len of "</thinking>") to
+                                    // reasoning; keep the tail as a possible
+                                    // straddling tag prefix.
                                     if (thinkBuffer.length > 12) {
+                                        reasoningContent += thinkBuffer.slice(0, -11);
                                         thinkBuffer = thinkBuffer.slice(-11);
                                     }
                                     continue;
@@ -714,10 +733,16 @@ export const LLM = {
                                 const before = chunk.slice(0, startIdx);
                                 const afterStart = chunk.slice(startIdx + openTag.length);
                                 const endIdx = afterStart.indexOf(thinkEndTag);
+                                if (reasoningStartedAt === null) reasoningStartedAt = Date.now();
                                 if (endIdx >= 0) {
+                                    // Complete block in one chunk
+                                    if (reasoningContent.length > 0) reasoningContent += '\n\n';
+                                    reasoningContent += afterStart.slice(0, endIdx);
+                                    reasoningEndedAt = Date.now();
                                     chunk = before + afterStart.slice(endIdx + thinkEndTag.length);
                                     LLMDebug.logThink('think-complete', `Complete think block in one chunk, kept: "${chunk.slice(0, 60)}"`);
                                 } else {
+                                    if (reasoningContent.length > 0) reasoningContent += '\n\n';
                                     chunk = before;
                                     thinkBuffer = afterStart;
                                     inThinkBlock = true;
@@ -758,8 +783,28 @@ export const LLM = {
             throw streamError;
         }
 
+        // If the stream ended mid-think (model cut off without closing tag),
+        // flush whatever's in thinkBuffer as reasoning so it isn't lost.
+        if (inThinkBlock && thinkBuffer.length > 0) {
+            reasoningContent += thinkBuffer;
+            reasoningEndedAt = Date.now();
+        }
+
+        let reasoning = null;
+        const trimmed = reasoningContent.trim();
+        if (trimmed.length > 0) {
+            reasoning = {
+                provider: State.settings.apiProvider || null,
+                format: 'tag',
+                content: trimmed,
+                started_at: reasoningStartedAt,
+                ended_at: reasoningEndedAt || reasoningStartedAt,
+            };
+        }
+
         return {
             content,
+            reasoning,
             toolCalls: toolCalls.length > 0 ? toolCalls.filter(Boolean) : null,
             finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
             usage

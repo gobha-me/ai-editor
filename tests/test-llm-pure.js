@@ -1,8 +1,9 @@
 /**
- * Tests for LLM pure functions — stripThinkBlocks, sanitizeMessages, getLanguageFromPath.
+ * Tests for LLM pure functions — stripThinkBlocks, splitThinkBlocks,
+ * sanitizeMessages, getLanguageFromPath.
  * These are critical for message integrity and API compatibility.
  */
-import { stripThinkBlocks, sanitizeMessages, getLanguageFromPath } from '../js/llm.js';
+import { stripThinkBlocks, splitThinkBlocks, sanitizeMessages, getLanguageFromPath } from '../js/llm.js';
 
 const { T } = window;
 
@@ -37,6 +38,78 @@ T.eq(
     'result',
     'Result is trimmed'
 );
+
+// ============================================
+// splitThinkBlocks (1.3.1)
+// ============================================
+
+T.suite('splitThinkBlocks — Basic');
+
+T.eq(
+    splitThinkBlocks('hello world').content,
+    'hello world',
+    'Plain text content unchanged'
+);
+T.eq(
+    splitThinkBlocks('hello world').reasoning,
+    null,
+    'Plain text yields null reasoning'
+);
+
+const single = splitThinkBlocks('<think>reasoning here</think>answer');
+T.eq(single.content, 'answer', 'Single block: content is post-tag text');
+T.eq(single.reasoning, 'reasoning here', 'Single block: reasoning captured');
+
+const multi = splitThinkBlocks('<think>a</think>mid<think>b</think>end');
+T.eq(multi.content, 'midend', 'Multiple blocks: content concatenated');
+T.eq(multi.reasoning, 'a\n\nb', 'Multiple blocks: reasoning joined by blank line');
+
+const caseIns = splitThinkBlocks('<THINK>case</THINK>result');
+T.eq(caseIns.content, 'result', 'Case-insensitive: content correct');
+T.eq(caseIns.reasoning, 'case', 'Case-insensitive: reasoning captured');
+
+T.suite('splitThinkBlocks — Edge Cases');
+
+const unclosed = splitThinkBlocks('<think>unclosed content');
+T.eq(unclosed.content, '', 'Unclosed: content empty');
+T.eq(unclosed.reasoning, 'unclosed content', 'Unclosed: reasoning captured');
+
+const prefixUnclosed = splitThinkBlocks('prefix<think>middle');
+T.eq(prefixUnclosed.content, 'prefix', 'Unclosed: prefix preserved');
+T.eq(prefixUnclosed.reasoning, 'middle', 'Unclosed: trailing reasoning captured');
+
+T.eq(splitThinkBlocks(null).content, null, 'null input: content null');
+T.eq(splitThinkBlocks(null).reasoning, null, 'null input: reasoning null');
+T.eq(splitThinkBlocks(undefined).content, undefined, 'undefined input: content undefined');
+T.eq(splitThinkBlocks('').content, '', 'Empty string: content empty');
+T.eq(splitThinkBlocks('').reasoning, null, 'Empty string: reasoning null');
+
+T.suite('splitThinkBlocks — Whitespace and trimming');
+
+const padded = splitThinkBlocks('  <think>pad</think>  result  ');
+T.eq(padded.content, 'result', 'Content trimmed');
+T.eq(padded.reasoning, 'pad', 'Reasoning trimmed');
+
+const newlines = splitThinkBlocks('<think>\n  reasoning\n  more\n</think>\nanswer');
+T.eq(newlines.content, 'answer', 'Newlines: content correct');
+T.eq(
+    newlines.reasoning,
+    'reasoning\n  more',
+    'Newlines: reasoning interior preserved (outer blanks trimmed)'
+);
+
+T.suite('splitThinkBlocks — thinking variant');
+
+const thinking = splitThinkBlocks('<thinking>longer tag</thinking>response');
+T.eq(thinking.content, 'response', '<thinking> variant: content correct');
+T.eq(thinking.reasoning, 'longer tag', '<thinking> variant: reasoning captured');
+
+T.suite('stripThinkBlocks — backwards compat with split');
+
+// stripThinkBlocks must continue to behave identically to old impl
+T.eq(stripThinkBlocks('<think>x</think>y'), 'y', 'Wrapper still strips');
+T.eq(stripThinkBlocks(null), null, 'Wrapper preserves null');
+T.eq(stripThinkBlocks(''), '', 'Wrapper preserves empty string');
 
 // ============================================
 // sanitizeMessages
