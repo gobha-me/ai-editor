@@ -702,6 +702,97 @@ asks for it.
   write). The "default source" test was rewritten to assert the new
   `pending_consent` return shape.
 
+#### Memory Phase 1 — Commit-modal "Memory updates" section (Memory PR #7)
+
+Memory PR #7 of 8 in the 1.3.0 track. Closes the third Touch 1 flow
+(`docs/design/touch-1-memory-ux/project/flow3-commit.jsx`): pending
+`.aieditor/memory/*.md` writes from `file-layer.js` are now visible
+inside the commit modal alongside the user's dirty editor tabs.
+
+Two surface variants per ROADMAP Decision §4 ("Memory files auto-stage
+on commit when repo mode is opt-in AND the current branch isn't
+protected"):
+
+- **Flow 3A — unprotected branch.** A `commit-section--mem` panel auto-
+  stages every pending memory path; each row carries a Show/Hide diff
+  toggle revealing the pending content as `+ ` prefixed lines. On
+  commit, the pseudo-tabs (`{path, content, sha: undefined}`) ride
+  through `batchSaveFiles()` so the provider takes the create branch
+  for new files and the update branch for existing ones. Successfully-
+  committed paths drop from `_pendingFiles` via the auto-clear hook —
+  partial-success commits leave failed paths pending so the user can
+  retry without losing them.
+- **Flow 3B — protected branch.** The same paths surface as a
+  `commit-section--warn` panel with disabled checkboxes and three
+  escape-hatch buttons: **Branch off & commit memory** (placeholder —
+  emits `memory:branchOffRequested` and points at the 1.3.x patch that
+  wires the real branch-creation flow), **Keep pending** (closes the
+  modal without staging; pending state preserved), **Discard** (drops
+  every visible path from the projection, leaving IDB source records
+  intact). The commit button label adopts a `(code only)` suffix when
+  Flow 3B is active so the user understands that a green Commit only
+  sends the code files.
+
+The renderer is vanilla DOM (string in, string out) per Decision §9 —
+the next Preact slot is reserved for the active-tools chip row at
+1.4.0; the section's small surface and minimal local state didn't earn
+the framework. `escapeAttr()` covers both attribute and content
+escaping so the renderer is testable under `node --test` without a
+DOM.
+
+- **`js/ui/commit-memory-section.js`** *(new)* — pure renderer
+  (`renderMemoryUpdatesSection({isProtected, pendingPaths, branch})`)
+  + click delegation (`wireMemoryUpdatesSection(rootEl, callbacks)`).
+  Idempotent wiring replaces any previous handler so re-renders
+  between modal opens don't accumulate listeners. Show/Hide diff
+  toggles a sibling `<pre>` per row, lazily filled via
+  `getPendingContent(path)` on first expand. `formatPendingDiff()`
+  prefixes each line with `+ ` for the preview.
+- **`js/ui/commit.js`** — three integration points:
+  `openCommitModal()` calls a new `_renderMemorySection()` helper that
+  reads `listPendingPaths()` + `_currentBranchIsProtected()` (looks up
+  `State.branches.find(b => b.name === State.currentBranch)?.protected`)
+  and writes the rendered section into `#commitMemorySection`.
+  `commitAndPush()` builds memory pseudo-tabs only on unprotected
+  branches and concatenates them with the user's selected dirty tabs
+  before `batchSaveFiles()`. Auto-clear runs after the call: filter
+  committed paths against the original pending set and call
+  `discardPendingMemoryWrites()` on the intersection. The commit
+  button label gains a `(code only)` suffix when Flow 3B is active.
+- **`js/intelligence/memory/file-layer.js`** — new export
+  `discardPendingMemoryWrites(paths?)` drops paths from
+  `_pendingFiles` without touching IDB source records. Emits one
+  synthetic `MEMORY_EVENTS.UPDATED` (`{before: null, after: null}`)
+  when paths are actually dropped so the Settings → Memory tab's
+  pending-paths indicator refreshes if it's open. The file layer's
+  own `_onMutation` listener guards on `record.scope === 'workspace'`
+  and treats null as a no-op, so the synthetic envelope doesn't
+  trigger a regenerate cycle. No-op when the layer is disabled.
+- **`js/intelligence/memory/index.js`** — re-exports
+  `discardPendingMemoryWrites` alongside `listPendingPaths` /
+  `getPendingContent` / `isEnabled`.
+- **`html/modals.html`** — adds `<div id="commitMemorySection">`
+  between the file-list `.form-group` and the commit-message
+  `.form-group`. Empty when no pending paths or layer disabled.
+- **`css/memory.css`** — appends a 165-line `.commit-section*` block
+  with the two variants (`--mem` accent left border, `--warn` warning
+  left border), the `.commit-file--mem` row, the `.commit-mem-diff`
+  preview `<pre>`, the `.branch-row__protected` indicator pill, and
+  the `.src-link` toggle style. Reuses already-shipped `.mem-btn` /
+  `.mem-btn--ghost` from PR #5/#6.
+- **`tests/test-commit-memory-section.mjs`** — 11 node:test cases over
+  the renderer: empty input → empty string; Flow 3A render shape;
+  Flow 3B render shape with three buttons; pluralization; XSS escape
+  on path and branch; `formatPendingDiff()` line-prefixing.
+- **`tests/test-file-layer-discard.mjs`** — 6 node:test cases: no-op
+  when disabled; named-path drop; clear-all; IDB source records
+  unchanged; exactly-one synthetic event per drop batch; unknown path
+  is a silent no-op.
+- **`tests/test-commit-modal-memory.js`** — 22-assertion browser smoke
+  pinning Flow 3A / 3B render shapes, Show/Hide diff toggle, Discard
+  click clearing pending paths while keeping IDB records. Wired into
+  `tests/index.html` after the Memory Tab suite.
+
 ### Notes
 
 - **No version bump.** Per `feedback_version_bump.md`, intermediate
@@ -732,6 +823,22 @@ asks for it.
   Behavior reverts to "agent-proposed memories write immediately and
   silently" — the user-visible gap closed by PR #6 is exactly that
   silent write becoming an explicit Accept/Edit/Dismiss card.
+- **Removability (Memory PR #7).** Delete `js/ui/commit-memory-section.js`,
+  the new test files, and revert the integration block in
+  `js/ui/commit.js` (the `_renderMemorySection` helper, the import
+  block, the memory-pseudo-tabs branch in `commitAndPush`, the
+  auto-clear hook), the `discardPendingMemoryWrites` export in
+  `js/intelligence/memory/file-layer.js` and its re-export in
+  `js/intelligence/memory/index.js`, the `<div id="commitMemorySection">`
+  in `html/modals.html`, and the `.commit-section*` block appended to
+  `css/memory.css`. Behavior reverts to "pending memory writes from
+  the file layer are invisible at commit time" — the user has no path
+  to commit `.aieditor/memory/*.md` files (the file layer holds them
+  in `_pendingFiles` indefinitely) and no signal on protected branches
+  that the writes can't be staged. The user-visible gap closed by
+  PR #7 is exactly that invisible accumulation becoming a legible
+  panel that auto-stages on feature branches and warns on protected
+  ones.
 
 ## [1.2.1] - 2026-04-29
 

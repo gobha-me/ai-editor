@@ -77,6 +77,7 @@ export {
     loadFromGit,
     getPendingContent,
     listPendingPaths,
+    discardPendingMemoryWrites,
     getDiagnostics,
     clearDiagnostics,
     isEnabled,

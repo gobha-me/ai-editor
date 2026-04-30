@@ -547,6 +547,44 @@ export function getActiveWorkspaceId() {
     return _activeWorkspaceId;
 }
 
+/**
+ * Drop entries from the pending-content map without touching the IDB
+ * source records. Two callers:
+ *   - The commit modal's auto-clear hook after `batchSaveFiles()`
+ *     succeeds — the file just landed, so it's no longer pending.
+ *     Partial-success commits pass only the paths that actually
+ *     committed, so failed paths stay pending.
+ *   - The "Discard" button in the protected-branch escape hatch
+ *     (Touch 1 Flow 3B) — user has decided not to commit memory on
+ *     this branch. The records remain in IDB; only the file
+ *     projection is cleared.
+ *
+ * Emits one `MEMORY_EVENTS.UPDATED` with `{before: null, after: null}`
+ * if any path was actually dropped, so the Memory tab's pending-paths
+ * list refreshes if it's open. The `_onMutation` listener guards on
+ * `record.scope === 'workspace'` and treats null as a no-op, so the
+ * synthetic envelope doesn't trigger a regenerate cycle.
+ *
+ * No-op when the layer is disabled or no paths match.
+ *
+ * @param {string[]} [paths] If omitted, drops every pending path.
+ * @returns {string[]} The paths that were actually dropped.
+ */
+export function discardPendingMemoryWrites(paths) {
+    if (!_enabled) return [];
+
+    const targets = Array.isArray(paths) ? paths : Array.from(_pendingFiles.keys());
+    const dropped = [];
+    for (const p of targets) {
+        if (_pendingFiles.delete(p)) dropped.push(p);
+    }
+
+    if (dropped.length > 0) {
+        EventBus.emit(MEMORY_EVENTS.UPDATED, { before: null, after: null });
+    }
+    return dropped;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Boot integration                                                           */
 /* -------------------------------------------------------------------------- */

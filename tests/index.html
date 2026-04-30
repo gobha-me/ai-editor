@@ -166,6 +166,10 @@
                 await import('./test-memory-tab.js');
             } catch (e) { errors.push(['Memory Tab', e]); }
 
+            try {
+                await import('./test-commit-modal-memory.js');
+            } catch (e) { errors.push(['Commit Modal Memory', e]); }
+
             // --- Deployment ---
             try {
                 await import('./test-dependencies.js');
