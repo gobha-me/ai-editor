@@ -92,6 +92,7 @@ import {
     getDiagnostics as memoryGetDiagnostics,
     isEnabled as memoryFileLayerIsEnabled,
     getActiveWorkspaceId as memoryFileLayerWorkspaceId,
+    consentClearAll as memoryConsentClearAll,
 } from './intelligence/memory/index.js';
 import { 
     openZipUpload, closeZipUpload, 
@@ -1017,6 +1018,14 @@ async function init() {
     initCostTrackerListener();
     initCostRecorder();
     installMemoryFileLayer();
+    // Memory PR #6 — drop pending consent candidates when chat clears.
+    // The conversational context that produced agent-proposed proposals is
+    // gone; pending cards from a prior chat shouldn't restore on the new one.
+    EventBus.on('chat:cleared', () => {
+        try { memoryConsentClearAll(); } catch (e) {
+            console.warn('[app] consent queue clear failed:', e);
+        }
+    });
     if (typeof window !== 'undefined' && window.AIEditor) {
         window.AIEditor.memoryFileLayer = {
             getPendingContent: memoryGetPendingContent,

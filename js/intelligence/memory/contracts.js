@@ -139,6 +139,30 @@
  */
 
 /**
+ * In-memory candidate for an `agent_proposed` `memory_remember` call held
+ * pending user consent (PR #6). Never persisted — the queue lives only as
+ * long as the page session. On Accept the consent queue converts a
+ * candidate to a real `MemoryRecord` via `create()`/`supersede()`; on
+ * Dismiss it is dropped silently with no audit entry (dismissed proposals
+ * never became state).
+ *
+ * `actor` and `reason` are forwarded to whichever store call resolves the
+ * candidate so the audit log of the *accepted* record reflects the agent
+ * that proposed it.
+ *
+ * @typedef {Object} MemoryCandidate
+ * @property {string}            candidate_id   Local UUID; not the eventual record id.
+ * @property {MemoryScope}       scope
+ * @property {string}            owner_id_or_workspace_id
+ * @property {string}            key                          Already canonicalized (lowercase, trimmed).
+ * @property {string|Object}     value
+ * @property {MemoryCategory}    category
+ * @property {string}            actor                        Proposing agent ("agent:<model>").
+ * @property {string}            reason                       Audit annotation forwarded on accept.
+ * @property {number}            created_at                   Epoch ms.
+ */
+
+/**
  * Event payloads emitted on `EventBus`. Strings are stable across versions
  * so consumers (Settings UI, chat consent card) can subscribe by name.
  *
@@ -153,17 +177,37 @@
  * @property {string}        recordId
  * @property {MemoryRecord}  before
  *
- * @typedef {MemoryCreatedEvent|MemoryUpdatedEvent|MemoryDeletedEvent} MemoryEvent
+ * @typedef {Object} MemoryConsentRequestedEvent
+ * @property {MemoryCandidate}  candidate
+ *
+ * @typedef {Object} MemoryConsentResolvedEvent
+ * @property {string}                  candidate_id
+ * @property {"accepted"|"dismissed"}  outcome
+ * @property {string}                  [record_id]    Set on `accepted` outcome.
+ *
+ * @typedef {MemoryCreatedEvent
+ *   |MemoryUpdatedEvent
+ *   |MemoryDeletedEvent
+ *   |MemoryConsentRequestedEvent
+ *   |MemoryConsentResolvedEvent} MemoryEvent
  */
 
 /**
  * EventBus channel names. Listeners subscribe via `EventBus.on(name, fn)`
  * (see `js/core.js`). Strings are part of the public API.
+ *
+ * Consent channels (PR #6) are separate from the durable mutation channels
+ * — `CONSENT_REQUESTED` fires for every `agent_proposed` `memory_remember`
+ * call; `CONSENT_RESOLVED` fires on Accept (with `record_id`) or Dismiss.
+ * Dismissed proposals never produce a `CREATED` event because they never
+ * become records.
  */
 export const MEMORY_EVENTS = Object.freeze({
     CREATED: 'memory:created',
     UPDATED: 'memory:updated',
     DELETED: 'memory:deleted',
+    CONSENT_REQUESTED: 'memory:consent_requested',
+    CONSENT_RESOLVED: 'memory:consent_resolved',
 });
 
 /**

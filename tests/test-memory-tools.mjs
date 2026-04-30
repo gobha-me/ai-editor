@@ -94,10 +94,10 @@ test('memory_remember happy path → action=created, record persisted, audit sho
 test('memory_remember idempotent on same (scope, owner, key) → action=superseded, two records in store', async () => {
     const reg = freshRegistry();
     const a = await reg.execute('memory_remember', {
-        key: 'lang', value: 'rust', category: 'preferences',
+        key: 'lang', value: 'rust', category: 'preferences', source: 'user_explicit',
     });
     const b = await reg.execute('memory_remember', {
-        key: 'lang', value: 'go', category: 'preferences', reason: 'changed mind',
+        key: 'lang', value: 'go', category: 'preferences', source: 'user_explicit', reason: 'changed mind',
     });
     assert.equal(a.action, 'created');
     assert.equal(b.action, 'superseded');
@@ -111,14 +111,20 @@ test('memory_remember idempotent on same (scope, owner, key) → action=supersed
     assert.equal(newRec.superseded_by, null);
 });
 
-test('memory_remember defaults: scope→workspace, source→agent_proposed when omitted', async () => {
+test('memory_remember defaults: scope→workspace, source→agent_proposed → returns pending_consent (PR #6)', async () => {
     const reg = freshRegistry();
     const out = await reg.execute('memory_remember', {
         key: 'k', value: 'v', category: 'workflow',
     });
-    const rec = await getById(out.id);
-    assert.equal(rec.scope, 'workspace');
-    assert.equal(rec.source, 'agent_proposed');
+    // PR #6 contract: agent_proposed (the default source) defers durability
+    // to user consent. The tool returns a candidate id and writes nothing.
+    assert.equal(out.status, 'pending_consent');
+    assert.equal(typeof out.candidate_id, 'string');
+    assert.ok(out.candidate_id.length > 0);
+    assert.equal(out.scope, 'workspace');
+    assert.equal(out.source, 'agent_proposed');
+    // No record exists; consent flow has to resolve the candidate first.
+    assert.equal(out.id, undefined);
 });
 
 test('memory_remember with scope=workspace and no active workspace → actionable error', async () => {
@@ -163,7 +169,7 @@ test('memory_remember when embed() returns null still persists the record with e
     stub.embed = async () => null;
     const reg = freshRegistry();
     const out = await reg.execute('memory_remember', {
-        key: 'k', value: 'v', category: 'workflow',
+        key: 'k', value: 'v', category: 'workflow', source: 'user_explicit',
     });
     assert.equal(out.success, true);
     assert.equal(out.embedded, false);
@@ -175,7 +181,7 @@ test('memory_remember when embed() returns null still persists the record with e
 test('memory_remember with user scope uses Storage(memoryUserId) as owner', async () => {
     const reg = freshRegistry();
     const out = await reg.execute('memory_remember', {
-        key: 'k', value: 'v', category: 'preferences', scope: 'user',
+        key: 'k', value: 'v', category: 'preferences', scope: 'user', source: 'user_explicit',
     });
     const rec = await getById(out.id);
     assert.equal(rec.scope, 'user');
@@ -196,9 +202,9 @@ test('memory_recall with query → searchSemantic path, ranked by similarity', a
         if (text.startsWith('go')) return [0, 1, 0];
         return [0, 0, 1];
     };
-    await reg.execute('memory_remember', { key: 'rust', value: 'rust lang', category: 'preferences' });
-    await reg.execute('memory_remember', { key: 'go', value: 'go lang', category: 'preferences' });
-    await reg.execute('memory_remember', { key: 'zig', value: 'zig lang', category: 'preferences' });
+    await reg.execute('memory_remember', { key: 'rust', value: 'rust lang', category: 'preferences', source: 'user_explicit' });
+    await reg.execute('memory_remember', { key: 'go', value: 'go lang', category: 'preferences', source: 'user_explicit' });
+    await reg.execute('memory_remember', { key: 'zig', value: 'zig lang', category: 'preferences', source: 'user_explicit' });
 
     // Query embedding aligns with rust.
     stub.embed = async (text) => {
@@ -213,9 +219,9 @@ test('memory_recall with query → searchSemantic path, ranked by similarity', a
 
 test('memory_recall without query → list path, sorted by updated_at desc', async () => {
     const reg = freshRegistry();
-    await reg.execute('memory_remember', { key: 'first', value: '1', category: 'workflow' });
+    await reg.execute('memory_remember', { key: 'first', value: '1', category: 'workflow', source: 'user_explicit' });
     await new Promise((r) => setTimeout(r, 5));
-    await reg.execute('memory_remember', { key: 'second', value: '2', category: 'workflow' });
+    await reg.execute('memory_remember', { key: 'second', value: '2', category: 'workflow', source: 'user_explicit' });
 
     const out = await reg.execute('memory_recall', { scope: 'workspace' });
     assert.equal(out.success, true);
@@ -226,8 +232,8 @@ test('memory_recall without query → list path, sorted by updated_at desc', asy
 
 test("memory_recall scope='all' merges results from both user and workspace", async () => {
     const reg = freshRegistry();
-    await reg.execute('memory_remember', { key: 'k_user', value: 'u', category: 'preferences', scope: 'user' });
-    await reg.execute('memory_remember', { key: 'k_ws', value: 'w', category: 'preferences', scope: 'workspace' });
+    await reg.execute('memory_remember', { key: 'k_user', value: 'u', category: 'preferences', scope: 'user', source: 'user_explicit' });
+    await reg.execute('memory_remember', { key: 'k_ws', value: 'w', category: 'preferences', scope: 'workspace', source: 'user_explicit' });
 
     const out = await reg.execute('memory_recall', { scope: 'all' });
     assert.equal(out.success, true);
@@ -247,7 +253,7 @@ test('memory_recall scope=workspace with no active workspace → success but emp
 
 test('memory_recall query falls back to list when query embedding returns null', async () => {
     const reg = freshRegistry();
-    await reg.execute('memory_remember', { key: 'k1', value: 'v1', category: 'workflow' });
+    await reg.execute('memory_remember', { key: 'k1', value: 'v1', category: 'workflow', source: 'user_explicit' });
 
     stub.embed = async () => null;
     const out = await reg.execute('memory_recall', { query: 'anything', scope: 'workspace' });
@@ -258,8 +264,8 @@ test('memory_recall query falls back to list when query embedding returns null',
 
 test('memory_recall category filter restricts results', async () => {
     const reg = freshRegistry();
-    await reg.execute('memory_remember', { key: 'a', value: '1', category: 'preferences' });
-    await reg.execute('memory_remember', { key: 'b', value: '2', category: 'workflow' });
+    await reg.execute('memory_remember', { key: 'a', value: '1', category: 'preferences', source: 'user_explicit' });
+    await reg.execute('memory_remember', { key: 'b', value: '2', category: 'workflow', source: 'user_explicit' });
 
     const out = await reg.execute('memory_recall', { scope: 'workspace', category: 'workflow' });
     assert.equal(out.count, 1);
@@ -269,7 +275,7 @@ test('memory_recall category filter restricts results', async () => {
 test('memory_recall limit clamps result count', async () => {
     const reg = freshRegistry();
     for (let i = 0; i < 5; i++) {
-        await reg.execute('memory_remember', { key: `k${i}`, value: String(i), category: 'workflow' });
+        await reg.execute('memory_remember', { key: `k${i}`, value: String(i), category: 'workflow', source: 'user_explicit' });
     }
     const out = await reg.execute('memory_recall', { scope: 'workspace', limit: 2 });
     assert.equal(out.count, 2);
@@ -282,7 +288,7 @@ test('memory_recall limit clamps result count', async () => {
 test('memory_revise patches value in place and re-embeds', async () => {
     const reg = freshRegistry();
     const created = await reg.execute('memory_remember', {
-        key: 'k', value: 'old', category: 'workflow',
+        key: 'k', value: 'old', category: 'workflow', source: 'user_explicit',
     });
 
     stubCalls.length = 0;
@@ -300,8 +306,11 @@ test('memory_revise patches value in place and re-embeds', async () => {
 
 test('memory_revise can change source without touching value', async () => {
     const reg = freshRegistry();
+    // Seed with `inferred` (bypasses the consent queue per PR #6) so we
+    // have a real record id; revise to `user_explicit`, the realistic
+    // upgrade path when an inferred fact gets confirmed.
     const created = await reg.execute('memory_remember', {
-        key: 'k', value: 'kept', category: 'workflow', source: 'agent_proposed',
+        key: 'k', value: 'kept', category: 'workflow', source: 'inferred',
     });
     const out = await reg.execute('memory_revise', {
         id: created.id, source: 'user_explicit', reason: 'user confirmed',
@@ -323,7 +332,7 @@ test('memory_revise on unknown id returns "not found" error', async () => {
 
 test('memory_revise on superseded record returns guidance to use memory_recall', async () => {
     const reg = freshRegistry();
-    const a = await reg.execute('memory_remember', { key: 'k', value: '1', category: 'workflow' });
+    const a = await reg.execute('memory_remember', { key: 'k', value: '1', category: 'workflow', source: 'user_explicit' });
     await softDelete(a.id, { actor: 'tester' });
     const out = await reg.execute('memory_revise', {
         id: a.id, value: '2', reason: 'after delete',
@@ -334,7 +343,7 @@ test('memory_revise on superseded record returns guidance to use memory_recall',
 
 test('memory_revise without reason is rejected', async () => {
     const reg = freshRegistry();
-    const created = await reg.execute('memory_remember', { key: 'k', value: 'v', category: 'workflow' });
+    const created = await reg.execute('memory_remember', { key: 'k', value: 'v', category: 'workflow', source: 'user_explicit' });
     const out = await reg.execute('memory_revise', { id: created.id, value: 'v2' });
     assert.ok(out.error);
     assert.match(out.error, /reason is required/);
@@ -342,7 +351,7 @@ test('memory_revise without reason is rejected', async () => {
 
 test('memory_revise with no field changes is rejected (id+reason alone is a no-op)', async () => {
     const reg = freshRegistry();
-    const created = await reg.execute('memory_remember', { key: 'k', value: 'v', category: 'workflow' });
+    const created = await reg.execute('memory_remember', { key: 'k', value: 'v', category: 'workflow', source: 'user_explicit' });
     const out = await reg.execute('memory_revise', { id: created.id, reason: 'just because' });
     assert.ok(out.error);
     assert.match(out.error, /at least one of value\/category\/source/);
@@ -367,7 +376,7 @@ test('role=reviewer can call memory_recall (read-only is allowed for all)', asyn
     // First seed a record with a non-reviewer role so it exists.
     State.settings.role = 'full';
     await reg.execute('memory_remember', {
-        key: 'seed', value: 's', category: 'workflow',
+        key: 'seed', value: 's', category: 'workflow', source: 'user_explicit',
     });
     // Now switch to reviewer and recall.
     State.settings.role = 'reviewer';

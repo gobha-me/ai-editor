@@ -86,10 +86,26 @@ export {
     installFileLayer,
 } from './file-layer.js';
 
+/* Consent queue — in-memory pending-consent buffer for agent-proposed
+ * memory_remember calls (PR #6). Resolution writes to the store via the
+ * existing `create()`/`supersede()` paths. */
+export {
+    enqueue as consentEnqueue,
+    get as consentGet,
+    list as consentList,
+    accept as consentAccept,
+    dismiss as consentDismiss,
+    clearAll as consentClearAll,
+} from './consent-queue.js';
+
 /* Test seams — production code should never import these */
 export { _setIDBImpl, _resetIDBImpl, createMemoryFakeIDB } from './idb-schema.js';
 export { _resetMutexForTests } from './store.js';
 export { _setGitClientForTests, _resetForTests as _resetFileLayerForTests } from './file-layer.js';
+export {
+    _setEmbeddingsClientForTests as _setConsentEmbeddingsForTests,
+    _resetForTests as _resetConsentQueueForTests,
+} from './consent-queue.js';
 
 /**
  * Re-export typedefs so consumers can `import('./intelligence/memory')`
@@ -104,4 +120,5 @@ export { _setGitClientForTests, _resetForTests as _resetFileLayerForTests } from
  * @typedef {import('./contracts.js').MemoryListOptions}  MemoryListOptions
  * @typedef {import('./contracts.js').MemoryQuery}        MemoryQuery
  * @typedef {import('./contracts.js').MemoryEvent}        MemoryEvent
+ * @typedef {import('./contracts.js').MemoryCandidate}    MemoryCandidate
  */

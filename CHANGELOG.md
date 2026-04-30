@@ -577,6 +577,131 @@ Out of scope here (sequenced for later Memory PRs): chat consent card
   subscriptions). Resets the IDB impl in the `finally` so other suites
   see real IDB. Registered under "Memory Tab" in `tests/index.html`.
 
+#### Memory Phase 1 — Chat consent card (Memory PR #6)
+
+Memory PR #6 of 8 in the 1.3.0 track. Closes the consent gap: before
+this PR, `memory_remember` with the default `source: 'agent_proposed'`
+wrote to the IDB store immediately and silently. Per Touch 1 Flow 1
+(`docs/design/touch-1-memory-ux/project/flow1-consent.jsx`), the user
+must Accept / Edit / Dismiss an inline card before an agent-proposed
+memory becomes durable. **Second Preact + htm consumer** in the
+codebase (Memory tab was first; active-tools chip row at 1.4.0 is next
+per Decision §9).
+
+The consent flow is implemented as a pending in-memory queue, not a
+write-immediately-then-revise/softDelete model. Three reasons argued
+against the cheaper alternative: (1) **tool-result honesty** — the
+model needs to know whether its write durably landed; returning
+`created` when the user might dismiss is a lie the next `memory_recall`
+exposes; (2) **file-layer thrash** — `js/intelligence/memory/file-layer.js`
+regenerates `.aieditor/memory/<cat>.md` on every CREATED/UPDATED/DELETED;
+write-then-delete per dismissed proposal is git noise with repo-mode on;
+(3) **audit cleanliness** — dismissed proposals never became state and
+shouldn't appear in `audit.listForRecord()`.
+
+`source: 'user_explicit'` and `source: 'inferred'` bypass the queue and
+write immediately — the consent gate applies only to `agent_proposed`.
+
+The "quiet" single-line variant is enabled via `?memoryConsentVariant=quiet`
+URL flag (mirrors `?compression=off` and `?memoryRepoMode=on` precedent).
+A Settings toggle is deferred to a 1.3.x patch if real-user feedback
+asks for it.
+
+- **`js/intelligence/memory/consent-queue.js`** — in-memory pending
+  queue. Surface: `enqueue(input)`, `get(id)`, `list()`, `accept(id, opts)`,
+  `dismiss(id, opts)`, `clearAll()`. Lifetime: page session only — no
+  IDB persistence (a reload drops pending proposals; a `chat:cleared`
+  event drops them too). `accept()` does the `getByKey` → `create` /
+  `supersede` branch deferred from the tool, so the head record at
+  accept time wins (between propose and accept the head may have
+  changed). Embedding work also moves here so dismissed candidates
+  skip the embedder entirely. Test seam:
+  `_setEmbeddingsClientForTests`, `_resetForTests`.
+- **`js/intelligence/memory/contracts.js`** — extends `MEMORY_EVENTS`
+  with `CONSENT_REQUESTED: 'memory:consent_requested'` (payload
+  `{candidate}`) and `CONSENT_RESOLVED: 'memory:consent_resolved'`
+  (payload `{candidate_id, outcome: 'accepted'|'dismissed', record_id?}`).
+  Adds `MemoryCandidate` typedef + the two payload typedefs. **Does
+  not** extend `AuditAction` — dismissals are intentionally unaudited.
+- **`js/tools/memory-tools.js`** — `memory_remember` branches on
+  `source` after validation. `agent_proposed` enqueues a candidate via
+  `consentEnqueue()` and returns `{status: 'pending_consent',
+  candidate_id, key, value, scope, category, source, hint}` — the model
+  is told explicitly that the write is not durable and not to call
+  `memory_recall` expecting to find it. `user_explicit` and `inferred`
+  paths are unchanged. Tool description updated so the consent gate is
+  visible at the function-calling boundary.
+- **`js/chat/consent-card.js`** — Preact mount wrapper. Mirrors
+  `js/settings/memory-tab.js` (the PR #5 precedent) but accepts a
+  caller-supplied root because each consent card mounts into a fresh
+  chat-message slot. Tracks active mounts via WeakMap + a strong-ref
+  Set so `unmountAll()` can drain everything in one pass. Idempotency
+  guard prevents double-mount on the same root. Vanilla error fallback
+  if Preact load fails. Test seams: `_isMounted`, `_resetForTests`.
+- **`js/chat/consent-card/MemoryConsentCard.js`** — Preact component.
+  Four-state machine (`open | editing | saved | dismissed`) over three
+  visual sub-components: `InlineCard` (default), `QuietLine` (URL
+  flag), `SavedCard` (post-Accept with Undo). `Enter` accepts in either
+  open or editing mode; `Escape` cancels edit. `Undo` calls
+  `softDelete()` with `reason: 'user undid consent'`. The "Will be
+  staged with your next commit on `<branch>`" line shows only when the
+  file layer is enabled and the candidate is workspace-scope.
+- **`js/chat/messages.js`** — exports `addConsentCardMessage(candidateId)`
+  which appends a `<div class="chat-message mem-consent-slot">` and
+  fires `mountConsentCard()`. Modifies `clearChat()` and
+  `renderMessages()` to call `unmountAllConsentCards()` *before*
+  `chatContainer.innerHTML = ''` so Preact effect-cleanup runs while
+  the DOM still exists (otherwise listeners subscribed inside the
+  component would leak across re-renders). After re-render,
+  `renderMessages()` walks `consentList()` and re-mounts cards for any
+  candidate still pending — survives a tab switch / `editMessage`
+  re-render without re-prompting the agent.
+- **`js/chat/handlers.js`** — after `addToolCallMessage`, branches on
+  `toolName === 'memory_remember' && toolResult?.status ===
+  'pending_consent'` to call `addConsentCardMessage(candidate_id)`.
+  The tool-call panel still renders so the agent's call is visible;
+  the card sits below it.
+- **`js/app.js`** — subscribes to `chat:cleared` and calls
+  `consentClearAll()` so a "new chat" drops any pending proposals (the
+  conversational context that produced them is gone).
+- **`css/memory.css`** — appends `.mem-consent*` block (~230 lines)
+  using the existing `--accent`, `--text-muted`, `--text-secondary`,
+  `--font-mono` tokens. Class names match `flow1-consent.jsx`. Saved
+  state uses an accent-tinted background + Undo link; dismissed
+  collapses with `display: none` so the chat reflow is consistent
+  regardless of resolution outcome. Quiet variant uses a dashed border
+  and a single-line layout.
+- **`tests/test-memory-consent-queue.mjs`** — 13 cases over the queue
+  surface: enqueue UUID shape + CONSENT_REQUESTED emission, key
+  canonicalization, list snapshot, clearAll silent, accept (no
+  existing key) emits CREATED then CONSENT_RESOLVED in order, accept
+  with edited value writes the edit, accept on existing key takes the
+  supersede branch, accept on unknown id throws, source override
+  honored, embedding success populates record, embedder error swallowed
+  (record persisted with `embedding: null`), dismiss emits RESOLVED
+  with no store write + no audit, dismiss is idempotent, accept is
+  one-shot (drop-before-write contract).
+- **`tests/test-memory-consent-tool-flow.mjs`** — 7 cases at the LLM-
+  tool boundary: agent_proposed returns `pending_consent` and writes
+  nothing, user_explicit bypasses queue (immediate write), inferred
+  bypasses queue, agent_proposed → consentAccept produces a record
+  with `source: user_explicit` and the audit log captures it as
+  create, Edit + Accept stores the edited value, Dismiss leaves no
+  record + no audit, supersede branch fires when an existing record
+  at the same `(scope, owner, key)` is present.
+- **`tests/test-memory-consent-card-mount.mjs`** — 7 cases over the
+  Preact mount wrapper using the `_setLoaderForTests` stub: render
+  fires with the supplied root, idempotent per root, unmount runs
+  cleanup + clears tracking, `unmountAll` drains every active mount,
+  null-root and empty-candidateId no-op cleanly, dynamic-import failure
+  falls back to the vanilla error banner.
+- **`tests/test-memory-tools.mjs`** — existing tests updated for the
+  new contract: every test that seeded records via `memory_remember`
+  with implicit default source now passes `source: 'user_explicit'` so
+  it bypasses the queue (the test's intent was always immediate
+  write). The "default source" test was rewritten to assert the new
+  `pending_consent` return shape.
+
 ### Notes
 
 - **No version bump.** Per `feedback_version_bump.md`, intermediate
@@ -596,6 +721,17 @@ Out of scope here (sequenced for later Memory PRs): chat consent card
   inspecting/editing/deleting memories. The `memory_remember` tool
   becomes a write-only black box without the tab to read it back —
   that's the user-visible gap PR #5 closes.
+- **Removability (Memory PR #6).** Delete `js/intelligence/memory/consent-queue.js`,
+  `js/chat/consent-card.js`, the `js/chat/consent-card/` directory,
+  the new test files, and revert the four-line branch in
+  `js/chat/handlers.js`, the `addConsentCardMessage` export +
+  unmountAll wiring in `js/chat/messages.js`, the `chat:cleared`
+  subscription in `js/app.js`, the `agent_proposed` branch in
+  `js/tools/memory-tools.js`, and the `MEMORY_EVENTS.CONSENT_*`
+  channel additions in `js/intelligence/memory/contracts.js`.
+  Behavior reverts to "agent-proposed memories write immediately and
+  silently" — the user-visible gap closed by PR #6 is exactly that
+  silent write becoming an explicit Accept/Edit/Dismiss card.
 
 ## [1.2.1] - 2026-04-29
 

@@ -587,3 +587,257 @@
 .mem-detail__actions .mem-toolbar__btn--primary {
     flex: 1;
 }
+
+/* ============================================
+   CONSENT CARD (Memory PR #6 — Touch 1 Flow 1)
+   Inline card the chat renders when memory_remember
+   returns `pending_consent`. Two visual variants:
+   default inline + quiet single-line. Shares the
+   `mem-*` token vocabulary with the Settings tab.
+   ============================================ */
+
+.chat-message.mem-consent-slot {
+    /* Slot inserted by messages.js — own no padding/margin so the card
+       inside it sits flush with the surrounding chat-message rhythm. */
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+
+.mem-consent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.7rem 0.85rem;
+    margin: 0.35rem 0;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 6px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+
+.mem-consent.is-saved {
+    border-color: var(--accent, #4eb1f3);
+    background: rgba(78, 177, 243, 0.05);
+}
+
+.mem-consent.is-dismissed {
+    /* Empty state — slot left in place but the card collapses so the
+       chat reflow is consistent regardless of the resolution outcome. */
+    display: none;
+}
+
+.mem-consent--gone,
+.mem-consent--error {
+    padding: 0.4rem 0.6rem;
+    font-size: var(--font-sm, 12px);
+    color: var(--text-muted);
+}
+
+.mem-consent--error {
+    color: var(--error, #f14c4c);
+    border-color: rgba(241, 76, 76, 0.3);
+}
+
+.mem-consent__head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    color: var(--text-secondary);
+    font-size: var(--font-sm, 12px);
+}
+
+.mem-consent__title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mem-consent__scope {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: var(--font-xs, 11px);
+}
+
+.mem-consent__scope code {
+    font-family: var(--font-mono);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.mem-consent__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.mem-consent__kv {
+    font-family: var(--font-mono);
+    font-size: var(--font-md, 13px);
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.mem-consent__key {
+    font-weight: 600;
+    color: var(--accent, #4eb1f3);
+}
+
+.mem-consent__colon {
+    color: var(--text-muted);
+}
+
+.mem-consent__value {
+    color: var(--text-primary);
+}
+
+.mem-consent__input {
+    display: inline-block;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding: 4px 6px;
+    font-family: var(--font-mono);
+    font-size: inherit;
+    color: var(--text-primary);
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.25));
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    outline: none;
+}
+
+.mem-consent__input:focus {
+    border-color: var(--accent, #4eb1f3);
+}
+
+.mem-consent__why {
+    color: var(--text-muted);
+    font-size: var(--font-xs, 11px);
+    line-height: 1.5;
+}
+
+.mem-consent__why code {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.25);
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.mem-consent__error {
+    margin-top: 0.25rem;
+    padding: 0.35rem 0.5rem;
+    color: var(--error, #f14c4c);
+    background: rgba(241, 76, 76, 0.08);
+    border-left: 2px solid var(--error, #f14c4c);
+    font-size: var(--font-xs, 11px);
+}
+
+.mem-consent__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.mem-consent__spacer {
+    flex: 1;
+}
+
+.mem-consent__undo {
+    color: var(--accent, #4eb1f3);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.mem-consent__undo:hover {
+    color: var(--accent-hover, #6cc1f7);
+}
+
+/* ----- Quiet single-line variant ----- */
+
+.mem-consent--quiet {
+    padding: 0.35rem 0.5rem;
+    border-style: dashed;
+    background: transparent;
+}
+
+.mem-consent__line {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-sm, 12px);
+}
+
+.mem-consent__icon {
+    color: var(--accent, #4eb1f3);
+}
+
+.mem-consent__label {
+    color: var(--text-secondary);
+}
+
+.mem-consent__preview {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-xs, 11px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ----- Buttons ----- */
+
+.mem-btn {
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: var(--font-xs, 11px);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.mem-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--text-muted);
+}
+
+.mem-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mem-btn--ghost {
+    border-color: transparent;
+    color: var(--text-muted);
+}
+
+.mem-btn--ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+}
+
+.mem-btn--primary {
+    background: var(--accent, #4eb1f3);
+    border-color: var(--accent, #4eb1f3);
+    color: var(--bg-primary, #1e1e1e);
+    font-weight: 600;
+}
+
+.mem-btn--primary:hover:not(:disabled) {
+    background: var(--accent-hover, #6cc1f7);
+    border-color: var(--accent-hover, #6cc1f7);
+}
+
+.mem-btn__kbd {
+    margin-left: 0.4rem;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    font-size: 0.85em;
+    opacity: 0.7;
+}

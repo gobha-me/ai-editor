@@ -6,13 +6,14 @@
 import { State, EventBus, Storage } from '../core.js';
 import { LLM, LLMTools, generateEdit, generateCommitMessage, buildSystemPrompt, stripThinkBlocks, getContextScale } from '../llm.js';
 import { applyEdit, computeSimpleDiff } from '../editor.js';
-import { 
-    addMessage, 
-    addStreamingMessage, 
-    updateStreamingMessage, 
+import {
+    addMessage,
+    addStreamingMessage,
+    updateStreamingMessage,
     finalizeStreamingMessage,
     cleanupStreamingMessage,
     addToolCallMessage,
+    addConsentCardMessage,
     formatMessageContent
 } from './messages.js';
 import { 
@@ -543,6 +544,20 @@ export async function handleGeneralRequest(input) {
 
                     // Show collapsible tool call detail
                     addToolCallMessage(toolName, args, toolResult);
+
+                    // Memory PR #6 — when memory_remember enqueues an
+                    // agent-proposed candidate (per consent-queue.js), the
+                    // tool returns `pending_consent`. Drop an inline
+                    // consent card below the tool-call panel so the user
+                    // can Accept/Edit/Dismiss before the record durably
+                    // lands. user_explicit + inferred sources don't go
+                    // through this path; they write immediately.
+                    if (toolName === 'memory_remember'
+                        && toolResult
+                        && toolResult.status === 'pending_consent'
+                        && typeof toolResult.candidate_id === 'string') {
+                        addConsentCardMessage(toolResult.candidate_id);
+                    }
 
                     toolActions.push({
                         tool: toolName,

@@ -36,6 +36,7 @@ import {
     embedRecord,
     getActiveWorkspaceId,
     getOrCreateUserOwnerId,
+    consentEnqueue,
 } from '../intelligence/memory/index.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
 
@@ -186,6 +187,36 @@ export function registerMemoryTools(registry) {
 
         const value = typeof a.value === 'string' ? a.value : a.value;
         const actor = _actor();
+
+        // PR #6 — agent-proposed proposals never hit the store. Enqueue a
+        // candidate, return `pending_consent` to the model, let the chat
+        // consent card (`js/chat/consent-card/MemoryConsentCard.js`)
+        // resolve via `consentAccept` / `consentDismiss`. Embedding work
+        // happens at accept time so dismissed proposals never call the
+        // embedding API. user_explicit + inferred bypass the queue —
+        // see module-level docs in `consent-queue.js` for the rationale.
+        if (source === 'agent_proposed') {
+            const { candidate_id } = consentEnqueue({
+                scope,
+                owner_id_or_workspace_id: owner,
+                key: a.key,
+                value,
+                category: a.category,
+                actor,
+                reason,
+            });
+            return {
+                status: 'pending_consent',
+                candidate_id,
+                key: a.key,
+                value,
+                scope,
+                category: a.category,
+                source,
+                hint: 'Awaiting user Accept/Edit/Dismiss. The record is not yet durable; do not call memory_recall expecting to find it until the user responds.',
+            };
+        }
+
         const embedding = await _safeEmbed({ key: a.key, value });
         const embeddingModelId = State?.settings?.embeddingModel || '';
 
@@ -248,7 +279,7 @@ export function registerMemoryTools(registry) {
         type: 'function',
         function: {
             name: 'memory_remember',
-            description: 'Store a curated atomic fact in long-term memory. Use for stable user preferences, project decisions, or domain facts the user wants you to remember across sessions. NOT for short-term notes within this conversation — use scratchpad_write for that. If a memory with the same key already exists, this supersedes it (old record kept for audit).',
+            description: 'Store a curated atomic fact in long-term memory. Use for stable user preferences, project decisions, or domain facts the user wants you to remember across sessions. NOT for short-term notes within this conversation — use scratchpad_write for that. If a memory with the same key already exists, this supersedes it (old record kept for audit). With the default source `agent_proposed`, the call returns `{status: "pending_consent", candidate_id}` and the user is shown an inline Accept/Edit/Dismiss card; the record is NOT durable until they respond. Use `source: "user_explicit"` only when the user just told you to remember something — that path writes immediately.',
             parameters: {
                 type: 'object',
                 properties: {

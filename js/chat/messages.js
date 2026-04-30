@@ -8,6 +8,8 @@ import { stripThinkBlocks } from '../llm.js';
 import { getChatContainer } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
 import { escapeHtml } from '../utils/html.js';
+import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consent-card.js';
+import { consentList } from '../intelligence/memory/index.js';
 
 /**
  * Add a message to chat history and render it
@@ -401,6 +403,37 @@ export function addToolCallMessage(toolName, args, result) {
 }
 
 /**
+ * Append an inline memory-consent slot for an `agent_proposed`
+ * `memory_remember` proposal (Memory PR #6, Touch 1 Flow 1). Sits below
+ * the tool-call panel for the originating call. The Preact component
+ * mounts asynchronously; the slot DOM element is reachable immediately
+ * via `data-candidate-id` for tests + reflows.
+ *
+ * @param {string} candidateId
+ */
+export function addConsentCardMessage(candidateId) {
+    if (typeof candidateId !== 'string' || candidateId.length === 0) return;
+    const chatContainer = getChatContainer();
+    if (!chatContainer) return;
+
+    // Don't double-mount the same candidate (e.g. renderMessages re-walk
+    // race with a freshly-emitted CONSENT_REQUESTED event).
+    const existing = chatContainer.querySelector(
+        `.mem-consent-slot[data-candidate-id="${CSS && CSS.escape ? CSS.escape(candidateId) : candidateId}"]`
+    );
+    if (existing) return;
+
+    const slot = document.createElement('div');
+    slot.className = 'chat-message mem-consent-slot';
+    slot.dataset.candidateId = candidateId;
+    chatContainer.appendChild(slot);
+
+    // Fire-and-forget; mount errors are logged inside `mountConsentCard`.
+    mountConsentCard(slot, candidateId);
+    scrollToBottom();
+}
+
+/**
  * Summarize tool arguments for compact display
  */
 function summarizeToolArgs(toolName, args) {
@@ -501,9 +534,12 @@ function summarizeToolResult(toolName, result) {
 export function renderMessages(historyOverride = null) {
     const chatContainer = getChatContainer();
     if (!chatContainer) return;
-    
+
+    // Drain Preact consent-card mounts before nuking the DOM. Without this,
+    // listeners subscribed in the component would leak across re-renders.
+    unmountAllConsentCards();
     chatContainer.innerHTML = '';
-    
+
     const history = historyOverride || State.chatHistory;
     
     if (history.length === 0) {
@@ -542,7 +578,20 @@ export function renderMessages(historyOverride = null) {
     if (summaryInfo?.summary) {
         renderSummaryNotification(summaryInfo, ChatSummarizer.hasStash());
     }
-    
+
+    // Re-mount any pending consent candidates at the chat tail. Surviving
+    // proposals from the same session — e.g. user navigated tabs and the
+    // chat re-rendered, or `editMessage` triggered a re-render mid-flow —
+    // get their cards restored without re-prompting the agent.
+    try {
+        const pending = consentList();
+        for (const c of pending) {
+            addConsentCardMessage(c.candidate_id);
+        }
+    } catch (e) {
+        console.warn('[messages] consent re-mount failed:', e);
+    }
+
     scrollToBottom();
 }
 
@@ -553,6 +602,10 @@ export function clearChat() {
     State.chatHistory = [];
     Storage.set('chatHistory', []);
     ChatSummarizer.clear();
+    // Drain consent-card mounts before renderMessages rebuilds the DOM.
+    // The `chat:cleared` event below also drains the consent *queue*
+    // (subscribed in app.js), so re-mount won't restore stale candidates.
+    unmountAllConsentCards();
     renderMessages();
     EventBus.emit('chat:cleared');
 }
