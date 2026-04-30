@@ -16,6 +16,22 @@ surfaces (vanilla everywhere else, forever) is locked in
 `docs/ROADMAP.md` §Decisions §9. Memory tab is the first target;
 `active-tools chip row` (1.4.0) and `profile picker` (2.0) follow.
 
+In parallel, lands a **synthetic compression-savings benchmark** that
+verifies the Decision §8 gate locally without waiting for organic
+dashboard data on `editor.gobha.ai` to accumulate. Five deterministic
+fixtures (pure subsumption, pure invalidation, hybrid, 30-turn debug,
+50-turn agentic) run through the same Compactor pipeline and assert
+token-reduction percentages on every commit. **Aggregate result:
+79.2% reduction across 105 turns / 193,950 → 40,350 tokens; 30-turn
+debug session 78.7%; 50-turn agentic session 90.3% — all far above
+the ROADMAP §1.2.0 floor of 40%.** Numbers are bounded ±2–3pp on both
+sides so a regression that under-evicts (rule miss) and one that
+over-evicts (false-positive cascade) both flag the test. The 50-turn
+fixture mirrors the manual checklist Tier 2 will run on
+`editor.gobha.ai/dev` once the upcoming `?compression=off` flag PR
+lands; that deployed-instance dual-session compares its dashboard
+numbers against this synthetic floor.
+
 ### Added
 
 - **`vendor/preact-htm-entry.mjs`** — esbuild entry point re-exporting
@@ -56,6 +72,18 @@ surfaces (vanilla everywhere else, forever) is locked in
   bundle to the SCIF-readiness manifest with `dockerBundled: true,
   required: false` (the first consumer lands later in 1.3.0; until
   then the helper is dormant).
+
+- **`tests/test-compression-synthetic-savings.mjs`** — Tier 1
+  measurement-before-scale benchmark per ROADMAP Decision §8. Six
+  node:test cases over five fixtures (S1 pure subsumption — 59.4%, S2
+  pure invalidation — 46.9%, S3 hybrid 10-turn — 70.0%, S4 30-turn
+  debug — 78.7%, S5 50-turn agentic — 90.3%) plus an aggregate
+  assertion (79.2% across 105 turns). Bounds are tight (±2–3pp around
+  the deterministic value) so logic regressions in either direction
+  surface immediately. Provides the floor the Tier 2 deployed-instance
+  dual-session run will compare against — Rule 3 (next compression
+  patch, slot now-untracked per the planned ROADMAP §1.2.x reframe)
+  ships only if dashboard data confirms the synthetic numbers.
 
 ### Changed
 
