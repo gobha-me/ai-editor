@@ -115,35 +115,151 @@ patch ships.
   when flag is absent; SSR / no-window safety; malformed search
   string doesn't throw.
 
-- **`tests/test-plugin-lifecycle.mjs`** — 7 node:test cases over
-  `Plugins.setEnabled` covering: first-time enable runs `init()` and
-  registers buttons; re-enable doesn't double-init; disable doesn't
-  re-trigger init; toggle off→on with an existing instance skips
-  re-init (no double-registered tools/buttons); init() throws are
-  logged but don't unset the enabled flag; `plugin:enabledChanged`
-  fires before init() begins so listeners aren't blocked on async
-  work; unknown plugin id is a quiet no-op.
+#### Memory Phase 1 — subsystem core (Memory PR #2)
+
+Memory PR #2 of 8 in the 1.3.0 track. Stands up the storage backbone
+in `js/intelligence/memory/`: contracts, IDB-backed structured store
+with audit log, validators, embedding canonicalization helper. No
+LLM tools, no `.aieditor/memory/*.md` file layer, no UI yet — those
+arrive in PRs #3–#7. **No user-visible behavior change in this PR.**
+
+The two kickoff decisions (memory `project_design_engagement.md`,
+2026-04-30) are concrete in code now: `MemoryScope` is `user|workspace`
+only — `persona` was dropped from 1.3.0 entirely; `MemorySource` is the
+3-value enum `user_explicit | agent_proposed | inferred` that replaced
+the original `confidence: float` field. `DESIGN-memory.md` still
+reflects the pre-kickoff data model; that doc updates with PR #8.
+
+- **`js/intelligence/memory/contracts.js`** — JSDoc typedefs and runtime
+  constants for the subsystem. Exports `MemoryScope`, `MemoryCategory`,
+  `MemorySource`, `MemoryRecord` (14 fields), `AuditEntry`, `AuditAction`,
+  `MemoryListOptions`, `MemoryQuery`, `MemoryEvent`. Runtime constants:
+  `MEMORY_EVENTS` (channel names — `memory:created|updated|deleted`),
+  `MEMORY_LIMITS` (key/actor/reason caps), the four enum lists, and
+  `DELETED_SENTINEL = '__deleted__'` (the value `superseded_by` takes for
+  soft-deleted records — keeps the deletion chain in the same field
+  rather than adding a parallel `deleted_at` column).
+
+- **`js/intelligence/memory/validation.js`** — pure validators. Each
+  returns `{ ok: true }` or `{ ok: false, errors: string[] }` so the
+  store layer decides whether to throw. `assertValid()` is the
+  throwing wrapper used inside `store.create/update`. Enforces
+  scope/category/source enum membership, key canonicalization
+  (lowercase + trim, ≤256 chars), `embedding` as `number[]` not
+  `Float32Array` (for IDB structured-clone safety), `created_at <=
+  updated_at`, and rejects `superseded_by === id` (no self-supersession).
+
+- **`js/intelligence/memory/utils.js`** — `KeyMutex` class providing
+  per-key serialization (`withLock(key, fn)`), plus `chainKey()`,
+  `now()` (clock seam), `newRecordId()` (wraps
+  `crypto.randomUUID()` with a v4 fallback for environments without it).
+  The mutex is the load-bearing race-safety mechanism that makes
+  read-modify-write on the same `(scope, owner, key)` atomic. Issue #188
+  is the bug class this prevents for memory writes.
+
+- **`js/intelligence/memory/idb-schema.js`** — IDB plumbing layer.
+  Exports the `STORES` constant, the four record indexes
+  (`by_scope_owner_key`, `by_scope_category`, `by_superseded_by`,
+  `by_expires_at`), the two audit indexes (`by_record_id`, `by_ts`),
+  and twelve operation primitives (`putRecord`, `getRecord`,
+  `deleteRecord`, `getAllRecords`, `getRecordsByOwner`,
+  `getRecordsByKey`, `getRecordsByCategory`, `getExpiredRecords`,
+  `addAudit`, `getAllAudit`, `getAuditByRecord`, `clearAll`) routed
+  through a swappable implementation. Production wires to real IDB via
+  `IDB.open()` (now v2); `_setIDBImpl(impl)` is the test seam. Mirrors
+  the `embeddings-client.js:_setLoaderForTests` pattern. Ships a
+  `Map`-backed `createMemoryFakeIDB()` for `node:test`.
+
+- **`js/intelligence/memory/embeddings.js`** — the canonical
+  embed-input format. `canonicalEmbedText(rec)` builds
+  `"${key}: ${value}"` (value JSON-stringified when not a string)
+  and is the single owner of that format. PR #3's file-layer reconciler
+  and PR #4's `memory_remember` tool both call this so semantic search
+  across the file/runtime divide stays consistent. `embedRecord(client,
+  rec)` is the convenience wrapper that delegates to a caller-provided
+  embedding client (typically `js/embeddings-client.js:EmbeddingsClient`).
+  No caching, no batching, no retries — `EmbeddingsClient` already does
+  those.
+
+- **`js/intelligence/memory/audit.js`** — append-only log over IDB
+  store `memory_audit`. `append({actor, action, record_id, before,
+  after, reason})` returns the assigned `seq` (autoIncrement guarantees
+  monotonic ordering). `list({recordId?, sinceTs?, limit?})` and
+  `listForRecord(recordId)` are the read paths. Rejects malformed
+  entries synchronously before any IDB write.
+
+- **`js/intelligence/memory/store.js`** — the public CRUD surface.
+  `create()`, `update()`, `supersede()`, `softDelete()`,
+  `purgeExpired()` mutate; `getById()`, `getByKey()`, `list()`,
+  `searchSemantic()` query. Every mutation routes through `KeyMutex`
+  on `chainKey(scope, owner, key)`, writes to IDB, appends an audit
+  entry, and emits the corresponding `memory:*` event on `EventBus`.
+  `update()` rejects identity-bearing field changes (use
+  `supersede()`); `softDelete()` sets `superseded_by = DELETED_SENTINEL`;
+  `searchSemantic()` filters out records with `embedding === null` so
+  records pending indexing don't pollute the result set. Local
+  `cosineSimilarity` so the store runs under `node:test` without
+  importing the embeddings-client's module-eval setup.
+
+- **`js/intelligence/memory/index.js`** — barrel re-exporting the
+  public surface plus `import('./intelligence/memory')` typedef
+  pickup. Test-seam exports (`_setIDBImpl`, `_resetIDBImpl`,
+  `createMemoryFakeIDB`, `_resetMutexForTests`) are exposed so
+  `tests/test-memory-*.mjs` can swap the IDB layer and reset state
+  between cases.
+
+- **`tests/test-memory-contracts.mjs`** — barrel + constants smoke
+  suite. Asserts every public function is exported (so a barrel
+  regression fails at import time, not at first use), enum lists are
+  frozen, and `MEMORY_SCOPES` is `['user', 'workspace']` only (the
+  persona-dropped invariant).
+
+- **`tests/test-memory-validation.mjs`** — pure-function suite over
+  `validation.js`. Covers canonicalization, every enum, key length,
+  multi-error aggregation, self-supersession, `created_at` vs
+  `updated_at` ordering, embedding-type guard (rejects `Float32Array`),
+  `md_path` round-trip, actor max length, and `assertValid` throwing
+  with `errors[]` attached.
+
+- **`tests/test-memory-store.mjs`** — CRUD-surface suite using the
+  Map-backed fake IDB. Exercises create→getById round-trip, key
+  canonicalization, audit entry on create, `getByKey` chain walk,
+  identity-field guards on update, supersede creating a new head and
+  marking the old, `softDelete` with `DELETED_SENTINEL` and list
+  filtering, `purgeExpired` with audit action `expire`, scope
+  isolation across `user`/`workspace`, list filtering by category /
+  expiry / pagination, and `searchSemantic` ranking by cosine with
+  null-embedding exclusion and topK truncation.
+
+- **`tests/test-memory-audit.mjs`** — audit-log suite. Asserts
+  monotonic seq, optional `ts` injection, malformed-entry rejection,
+  `MEMORY_LIMITS.ACTOR_MAX_LENGTH` / `REASON_MAX_LENGTH` enforcement,
+  `list` ordering and `sinceTs` filter, `listForRecord` filter, and
+  100-way concurrent `append` preserving count and assigning a
+  contiguous seq range. Also confirms `before/after` snapshots
+  round-trip unchanged through the IDB store.
+
+- **`tests/test-memory-races.mjs`** — race-safety suite. The
+  load-bearing case: 50 concurrent `update()` calls against the same
+  record produce exactly 50 audit entries with `entries[i].before ===
+  entries[i-1].after` for every i — proving the `KeyMutex` serializes
+  read-modify-write atomically. Also verifies different keys mutate
+  concurrently (no false serialization), `update`/`softDelete` races
+  resolve to exactly-one-winner per trial, and the mutex chain map
+  drains after operations resolve.
 
 ### Fixed
 
 - **Plugin lifecycle: `setEnabled(true)` now runs `init()` on first
-  enable.** Previously `setEnabled` only flipped the boolean and
-  emitted `plugin:enabledChanged` — it never called `init()`.
+  enable.** (#190) Previously `setEnabled` only flipped the boolean
+  and emitted `plugin:enabledChanged` — it never called `init()`.
   Plugins shipped with `defaultEnabled: false` (release-sync,
   cross-repo-issues, custom user plugins that opted out of auto-init)
   registered at boot, got skipped by the boot-time `Plugins.init()`
   loop in `js/app.js`, and stayed UI-less even after a user toggled
-  them on in Settings. Symptom: plugin appeared "enabled" in the
-  Plugins tab but its toolbar button never showed and its LLM tools
-  never registered, because `registerButton`/`registerModal`/
-  `registerTool` calls all live inside `init()`. **Fix:** `setEnabled`
-  is now async and calls `manifest.init(config)` exactly once on the
-  first disabled→enabled transition (skips if `instance` is already
-  set, since we have no unregister path yet — re-enabling after a
-  disable does not re-init). `plugin:initialized` fires after init
-  completes. Existing `setEnabled` callers don't await; that's fine
-  — the boolean flip + event emit are still synchronous. Only the
-  `init()` work moves into the returned promise.
+  them on in Settings. `setEnabled` is now async and calls
+  `manifest.init(config)` exactly once on the first disabled→enabled
+  transition. See `tests/test-plugin-lifecycle.mjs` for coverage.
 
 ### Changed
 
@@ -163,6 +279,18 @@ patch ships.
   the active-tools chip row and profile picker) use Preact + htm
   loaded as a single ~5KB ESM bundle, no JSX, no build-time transform.
   Existing surfaces stay vanilla forever.
+
+- **`js/storage/idb.js`** — bumps `DB_VERSION` from 1 to 2 to add the
+  Memory subsystem's two object stores additively. The existing `kv`
+  store is unchanged and its data is preserved. New: `memory_records`
+  (keyPath `id`) with four indexes — compound `by_scope_owner_key`,
+  `by_scope_category`, sparse `by_superseded_by`, sparse
+  `by_expires_at` — and `memory_audit` (autoIncrement keyPath `seq`)
+  with `by_record_id` and `by_ts` indexes. The schema upgrade runs
+  once per browser tab on first load after deploy. Failure mode if a
+  tab's upgrade is blocked is the existing `IDB.open()` warning at
+  `[IDB] Database open blocked — close other tabs` — no data is lost
+  because the upgrade is purely additive.
 
 ### Notes
 

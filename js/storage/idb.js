@@ -1,14 +1,21 @@
 /**
  * AI Editor — IndexedDB Wrapper
- * 
+ *
  * Low-level async key-value store backed by IndexedDB.
  * Used by Storage in core.js as the primary persistence backend.
- * 
- * Single object store ('kv') with string keys and JSON-serializable values.
- * Keys are stored WITHOUT the 'ai-editor-' prefix — the prefix is a
- * localStorage artifact and doesn't belong in IDB's own namespace.
- * 
- * @since 0.9.11
+ *
+ * Object stores:
+ *   - `kv` (v1)              — generic JSON-serializable kv store used by Storage.
+ *   - `memory_records` (v2)  — Memory subsystem records (1.3.0). Owned by `js/intelligence/memory/`.
+ *   - `memory_audit` (v2)    — Memory subsystem audit log. Append-only, autoIncrement seq.
+ *
+ * Keys in `kv` are stored WITHOUT the 'ai-editor-' prefix — the prefix is a
+ * localStorage artifact and doesn't belong in IDB's own namespace. The two
+ * memory stores use their own keyPaths (`id` for records, autoIncrement
+ * `seq` for audit), so prefix conventions don't apply.
+ *
+ * @since 0.9.11 (v1: kv store)
+ * @since 1.3.0  (v2: memory_records + memory_audit)
  */
 
 const IDB = {
@@ -16,8 +23,14 @@ const IDB = {
     _db: null,
 
     DB_NAME: 'ai-editor',
-    DB_VERSION: 1,
+    DB_VERSION: 2,
     STORE_NAME: 'kv',
+
+    // Memory subsystem stores (v2). Names are also re-exported by
+    // `js/intelligence/memory/idb-schema.js` so the memory module never
+    // hardcodes them at multiple sites.
+    MEMORY_RECORDS_STORE: 'memory_records',
+    MEMORY_AUDIT_STORE: 'memory_audit',
 
     /**
      * Open (or create) the database. Idempotent — returns cached handle.
@@ -31,13 +44,55 @@ const IDB = {
 
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
+
+                // v1: kv store. Created on fresh install or upgrade from v0.
                 if (!db.objectStoreNames.contains(this.STORE_NAME)) {
                     db.createObjectStore(this.STORE_NAME);
+                }
+
+                // v2: Memory subsystem stores. Additive — kv data preserved.
+                if (!db.objectStoreNames.contains(this.MEMORY_RECORDS_STORE)) {
+                    const records = db.createObjectStore(this.MEMORY_RECORDS_STORE, { keyPath: 'id' });
+                    // Compound lookup: scope+owner+key resolves a record (or supersession chain) directly.
+                    records.createIndex('by_scope_owner_key', ['scope', 'owner_id_or_workspace_id', 'key'], { unique: false });
+                    records.createIndex('by_scope_category', ['scope', 'category'], { unique: false });
+                    records.createIndex('by_superseded_by', 'superseded_by', { unique: false });
+                    records.createIndex('by_expires_at', 'expires_at', { unique: false });
+                }
+
+                if (!db.objectStoreNames.contains(this.MEMORY_AUDIT_STORE)) {
+                    const audit = db.createObjectStore(this.MEMORY_AUDIT_STORE, { keyPath: 'seq', autoIncrement: true });
+                    audit.createIndex('by_record_id', 'record_id', { unique: false });
+                    audit.createIndex('by_ts', 'ts', { unique: false });
                 }
             };
 
             req.onsuccess = (e) => {
                 this._db = e.target.result;
+
+                // Cross-tab upgrade coordination. When ANOTHER tab opens
+                // this database at a higher version, the browser fires
+                // `versionchange` on this connection. If we don't close
+                // here, the other tab's upgrade hangs in `onblocked`
+                // indefinitely — the failure mode that surfaced during
+                // the v1→v2 deploy: old tabs held v1 connections and
+                // new tabs couldn't upgrade. Without this handler, users
+                // in browsers without a visible dev console see "the UI
+                // is broken" with no way to diagnose.
+                this._db.onversionchange = () => {
+                    console.warn('[IDB] Another tab requested a database upgrade — closing this connection. Reload to use the new version.');
+                    try { this._db.close(); } catch {}
+                    this._db = null;
+                    // Surface a user-visible toast on the OLD tab so the
+                    // user knows to reload. window.showToast is wired
+                    // during boot (js/app.js); fall back to a deferred
+                    // alert if it isn't available yet.
+                    try {
+                        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                            window.showToast('A newer version of the editor is open in another tab. Reload this tab to use it.', 'warning');
+                        }
+                    } catch {}
+                };
 
                 // Handle unexpected close (browser cleanup, quota revoked)
                 this._db.onclose = () => {
@@ -53,7 +108,30 @@ const IDB = {
             };
 
             req.onblocked = () => {
-                console.warn('[IDB] Database open blocked — close other tabs');
+                // The other tab(s) hold an older version connection and
+                // ignored `versionchange` (typically: pre-fix code from
+                // a previous deploy). We can't proceed until they close.
+                // Surface a *visible* warning — locked-down browsers
+                // (managed Edge, Chromebook kiosk) hide the console, so
+                // a console.warn alone leaves users with a silently
+                // broken UI. Try toast first; fall back to alert.
+                console.warn('[IDB] Database upgrade BLOCKED — another tab has an older version of the editor open. Close other tabs and reload.');
+                try {
+                    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                        window.showToast('Database upgrade blocked — close other editor tabs and reload.', 'warning');
+                        return;
+                    }
+                } catch {}
+                // Toast not available (boot hasn't completed). Defer the
+                // alert past the current microtask so it doesn't fire
+                // before the page renders.
+                try {
+                    setTimeout(() => {
+                        try {
+                            alert('AI Editor: database upgrade is blocked because another tab has an older version open. Close other tabs of this editor and reload.');
+                        } catch {}
+                    }, 0);
+                } catch {}
             };
         });
     },
