@@ -145,7 +145,7 @@ Roles control which tools the AI can access. Five built-in roles range from Full
 
 ## Deployment
 
-Static site served by nginx. No build step — the Dockerfile bundles vendor dependencies (CodeMirror, marked, DOMPurify, JSZip, htmx) at build time.
+Static site served by nginx. No build step — the Dockerfile bundles vendor dependencies (CodeMirror, Preact + htm, marked, DOMPurify, JSZip, htmx) at build time. From 1.3.0, select new state-heavy surfaces (Memory tab first; later the active-tools chip row and the profile picker) are built with [Preact](https://preactjs.com/) + [htm](https://github.com/developit/htm) — loaded as a single ~5KB ESM bundle, no JSX, no build-time transform. Existing tabs, sidebar, file tree, editor frame, and chat stay vanilla.
 
 ### Docker
 

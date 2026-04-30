@@ -25,7 +25,9 @@
     "@codemirror/theme-one-dark": "^6",
     "@codemirror/view": "^6",
     "@replit/codemirror-vim": "^6",
-    "codemirror": "^6"
+    "codemirror": "^6",
+    "htm": "^3",
+    "preact": "^10"
   },
   "devDependencies": {
     "esbuild": "^0.24"

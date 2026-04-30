@@ -4,6 +4,82 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+Opens the **Memory Phase 1** track from `docs/ROADMAP.md` §1.3.0. This
+patch is foundational only — it wires the Preact + htm vendor bundle
+that subsequent Memory PRs will use to render the Settings → Memory
+tab, the inline `@memory` chip, the agent-proposed-memory consent card
+in chat, and the commit-modal "Memory updates" section. No
+user-visible behavior change in this PR.
+
+The decision to allow Preact + htm narrowly for new state-heavy
+surfaces (vanilla everywhere else, forever) is locked in
+`docs/ROADMAP.md` §Decisions §9. Memory tab is the first target;
+`active-tools chip row` (1.4.0) and `profile picker` (2.0) follow.
+
+### Added
+
+- **`vendor/preact-htm-entry.mjs`** — esbuild entry point re-exporting
+  Preact's public surface (`h`, `render`, `Fragment`, etc.), all
+  hooks (`useState`, `useEffect`, `useRef`, …), and htm's preact-bound
+  `html` template tag. Compiles to `vendor/preact-htm-bundle.js`
+  during the Docker build, mirroring the existing
+  `codemirror-bundle.js` pattern. ~5 KB minified ESM.
+
+- **`Dockerfile` Stage 1** — bundles `preact-htm-entry.mjs` alongside
+  `codemirror-entry.mjs` via `npx esbuild --bundle --format=esm
+  --minify --target=es2020`. Adds a `test -s preact-htm-bundle.js`
+  guard to the verification step so empty bundles fail the build
+  loudly. Stage 2 copies the bundle into `/usr/share/nginx/html/vendor/`
+  and removes the build-only entry file.
+
+- **`vendor/package.json`** — declares `preact ^10` and `htm ^3` as
+  dev dependencies for the Stage 1 esbuild step. No runtime npm install
+  in the served image; vendor `node_modules` is purged in Stage 2.
+
+- **`js/utils/preact-mount.js`** — public mount helper. Exports
+  `getPreact()` (lazy-loads the vendor bundle, falls back to esm.sh
+  for dev mode, caches the result) and
+  `mountPreact(rootEl, componentFn, props)` returning an idempotent
+  cleanup function that calls Preact's `render(null, root)` on
+  teardown. The CDN fallback mirrors the CodeMirror loader pattern in
+  `js/editor/setup.js`. Includes `_setLoaderForTests` /
+  `_resetLoaderForTests` seams for the node:test suite.
+
+- **`tests/test-preact-mount.mjs`** — node:test smoke suite with 10
+  cases covering loader caching, concurrent-load coalescing, render
+  call shape, idempotent cleanup, argument validation
+  (rootEl required, componentFn must be a function), and cache reset
+  between stub swaps. Stubs Preact entirely — real DOM integration
+  belongs to the browser suite at `tests/index.html`.
+
+- **`tests/test-dependencies.js` manifest** — adds the Preact + htm
+  bundle to the SCIF-readiness manifest with `dockerBundled: true,
+  required: false` (the first consumer lands later in 1.3.0; until
+  then the helper is dormant).
+
+### Changed
+
+- **README.md `Deployment` section** — vendor-bundle list now
+  includes Preact + htm. Adds a one-paragraph note pointing at
+  Decision §9: select new state-heavy surfaces (Memory tab first; later
+  the active-tools chip row and profile picker) use Preact + htm
+  loaded as a single ~5KB ESM bundle, no JSX, no build-time transform.
+  Existing surfaces stay vanilla forever.
+
+### Notes
+
+- **No version bump.** Per `feedback_version_bump.md`, intermediate
+  PRs in a track ship under `[Unreleased]`. The bump from 1.2.1 →
+  1.3.0 lands in the final 1.3.0 PR (per the approved plan, PR #8 of
+  the Memory track) alongside the @memory chip, the
+  `docs/DESIGN-memory.md` updates (drop persona scope, drop
+  confidence float, codify the `.aieditor/memory/*.md` file format),
+  and the ROADMAP §1.2.x reframe (compression follow-ups slot into
+  whatever minor is current when verified).
+- **Removability.** Delete `js/utils/preact-mount.js`, the bundle,
+  and the entry mjs; nothing else regresses — there are no consumers
+  yet. Subsequent Memory PRs will be the first callers.
+
 ## [1.2.1] - 2026-04-29
 
 Opens the **Cost dashboard** patch from `docs/ROADMAP.md` §1.2.1 — the

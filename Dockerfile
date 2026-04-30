@@ -18,14 +18,21 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Bundle CodeMirror into a single ESM file
-COPY vendor/package.json vendor/codemirror-entry.mjs ./
+# Bundle CodeMirror + Preact/htm into single ESM files
+COPY vendor/package.json vendor/codemirror-entry.mjs vendor/preact-htm-entry.mjs ./
 RUN npm install --ignore-scripts \
     && npx esbuild codemirror-entry.mjs \
         --bundle \
         --format=esm \
         --minify \
         --outfile=codemirror-bundle.js \
+        --target=es2020 \
+        --tree-shaking=true \
+    && npx esbuild preact-htm-entry.mjs \
+        --bundle \
+        --format=esm \
+        --minify \
+        --outfile=preact-htm-bundle.js \
         --target=es2020 \
         --tree-shaking=true
 
@@ -41,6 +48,7 @@ RUN wget -q -O marked.min.js \
 
 # Verify downloads aren't empty
 RUN test -s codemirror-bundle.js \
+    && test -s preact-htm-bundle.js \
     && test -s marked.min.js \
     && test -s purify.min.js \
     && test -s jszip.min.js \
@@ -74,6 +82,7 @@ ENV BASE_PATH=/
 
 # Security headers and gzip configuration
 COPY --from=vendor-build /build/codemirror-bundle.js /tmp/vendor/
+COPY --from=vendor-build /build/preact-htm-bundle.js /tmp/vendor/
 COPY --from=vendor-build /build/marked.min.js        /tmp/vendor/
 COPY --from=vendor-build /build/purify.min.js         /tmp/vendor/
 COPY --from=vendor-build /build/jszip.min.js          /tmp/vendor/
@@ -84,6 +93,7 @@ COPY . /usr/share/nginx/html/
 
 # Copy vendor bundles into the served directory
 COPY --from=vendor-build /build/codemirror-bundle.js /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/preact-htm-bundle.js /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/marked.min.js        /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/purify.min.js         /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/jszip.min.js          /usr/share/nginx/html/vendor/
@@ -94,6 +104,7 @@ RUN rm -rf /usr/share/nginx/html/vendor/node_modules \
            /usr/share/nginx/html/vendor/package-lock.json \
            /usr/share/nginx/html/vendor/package.json \
            /usr/share/nginx/html/vendor/codemirror-entry.mjs \
+           /usr/share/nginx/html/vendor/preact-htm-entry.mjs \
            /usr/share/nginx/html/Dockerfile \
            /usr/share/nginx/html/deployment.yaml \
            /usr/share/nginx/html/nginx.conf \

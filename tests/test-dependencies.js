@@ -44,6 +44,13 @@ const DEPENDENCIES = [
         dockerBundled: true,
     },
     {
+        name: 'Preact + htm (UI for new state-heavy surfaces, 1.3.0+)',
+        localPath: './vendor/preact-htm-bundle.js',
+        cdnUrl: 'https://esm.sh/preact@10',
+        required: false,       // First consumer (Memory tab) lands later in 1.3.0; until then the helper just no-ops
+        dockerBundled: true,   // Docker build bundles via esbuild (see Dockerfile Stage 1)
+    },
+    {
         name: 'CodeMirror 6 (editor)',
         localPath: './vendor/codemirror-bundle.js',
         cdnUrl: 'https://esm.sh/@codemirror/view@6',
