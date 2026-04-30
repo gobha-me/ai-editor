@@ -523,3 +523,78 @@ Memory does this implicitly already (`MemoryConfig.capacity_warnings` is policy;
 **Profile-schema implication for 2.0.** The current `Profile` typedef mixes policy values (e.g., `compression.mode`, `tools.budget`) with what should be resolved parameters (e.g., concrete per-rule eviction caps). This is fine through 1.x — the resolution math lives outside the persisted struct anyway. A future revision (likely 2.0 alongside the profile picker) should separate them explicitly: persisted `Profile` carries only policy; a `ResolvedProfile` is computed on every session load against the active model's window. This makes the "what's stored vs. what's running" distinction visible at the type level instead of requiring readers to know which fields are which.
 
 **Don't over-correct.** Some fields are inherently absolute and don't need resolution: `max_summary_length` in characters, role enum, plugin allow-list. Resolution applies to anything sized against context-window or store-capacity; it does not apply to anything sized against bytes-on-the-wire or count-of-things.
+
+---
+
+## Appendix: Two-View Configuration — Preset and Advanced
+
+> Added during 1.2.5 scoping (`docs/ROADMAP.md` §1.2.5 "Compression settings refresh"). Promoted from the compression panel to a profile-doc appendix because the commitment shapes every settings panel from 1.2.5 forward — memory in 1.3.x, tools in 1.4.x, profiles in 2.0. Sister principle to "Policy vs. Resolution" above; together the two appendices describe how configuration is *stored* (policy) and how it is *exposed* (two views).
+
+**Configuration surfaces have two audiences and serve them with two views of the same underlying data, never two separate configurations.**
+
+- **Preset view** — named modes, intent-level. Aggressive / Balanced / Conservative. The user picks an *intent*; the system resolves it to parameters. This serves the 95% case where the user wants the system to do something sensible without thinking about it.
+- **Advanced view** — every individual knob, parameter-level, individually adjustable. The user can produce broken configurations because that's the price of admission for actually understanding the architecture. This serves the 5% case where the user is debugging, exploring, or has needs the presets don't cover.
+
+A **single, consistent toggle** moves between them. Both views are first-class — neither is a downgraded version of the other. Presets aren't "the easy version of the real settings"; advanced isn't "the experimental escape hatch." They are two projections of the same underlying configuration.
+
+### Why both, and why one toggle
+
+The alternative framings are all worse:
+
+| Framing | Failure mode |
+|---|---|
+| One surface, all knobs visible | Overwhelms the 95% who don't know what `preserve_recent` means and shouldn't have to. |
+| One surface, presets only | Tells the 5% to read source. Power users disengage; bug reports become "Balanced does something I don't want" with no way to express what. |
+| Presets in Settings, knobs in a dev console / debug panel | Splits the surface across two places. Power users context-switch. Discovery is bad. |
+| Per-feature "show advanced for this section" toggles | Fragments the convention. The user learns the toggle in compression, then has to re-learn it for memory. |
+
+The toggle keeps both surfaces in the same physical location and makes the relationship between them visible — the advanced view shows what the preset is *currently resolving to*, which is the most useful thing for a power user to see.
+
+### The contract
+
+Every configurable surface in the architecture commits to:
+
+1. **Two views, one toggle, same place.** The toggle has the same name, the same position, and the same mechanic in every settings panel. Compression in 1.2.5 establishes the convention; memory (1.3.x), tools (1.4.x), and profiles (2.0) inherit it.
+2. **Preset is sufficient for default operation.** A user who never opens advanced gets a working system. Advanced never holds load-bearing configuration that the preset can't express.
+3. **The two views are never inconsistent.** They are projections of the same persisted configuration. Editing in advanced shows up immediately in preset (as "Custom" if it no longer matches a named preset). Switching presets snaps every advanced knob to the new preset's defaults.
+4. **Both views show post-resolution numbers.** Following "Policy vs. Resolution" above: switching the model re-resolves intent into parameters; both the preset summary line and every advanced knob update to reflect the new resolution. Stored intent does not move.
+5. **Advanced annotates the *why*.** Each advanced knob carries its preset-derived default ("Default for Balanced: 4 turns") and the resolution input ("scales with context window"). Without annotations, advanced is just an overwhelming list; with them, it teaches the architecture.
+
+### What this rules out
+
+The two-view contract is a **top-down call about where configuration lives.** It rules out:
+
+- Separate "Developer mode" or "Debug settings" sections in any settings UI.
+- Hidden URL parameters that flip persistent settings (one-shot URL flags for transient overrides like `?compression=off` or `?memoryRepoMode=on` are fine — they don't write to settings storage; they're per-session debug shims).
+- "Experimental settings" sidebars or admin-only configuration paths.
+- Per-feature visibility hacks ("hide this knob unless `?advanced=1`"; "show this checkbox only on certain providers"). Every knob lives in either the preset view or the advanced view, deterministically, for every user.
+
+If something is configuration, it lives in the advanced view of the relevant panel. If it's not configuration, it lives in the LLM Debug modal (or another diagnostics surface). There is no third place. The single toggle does all the work that "developer settings" panels would otherwise do — and because there is one toggle, not three, the user learns the convention once.
+
+### Naming the toggle
+
+The toggle's label is itself part of the architectural commitment. Inconsistent labels across panels — "Show advanced options" in compression, "Power user mode" in memory, "Developer view" in tools — defeat the purpose. Pick one label at the first panel that ships the toggle (compression, 1.2.5) and use it everywhere thereafter. The choice itself is less important than the consistency; whichever the codebase prefers is fine, but commit once.
+
+### Cross-track adoption
+
+The pattern is being established in 1.2.5 because compression is the first subsystem with enough configurable surface area to need it. The track adoption schedule:
+
+| Subsystem | Track | What the preset view exposes | What the advanced view adds |
+|---|---|---|---|
+| Compression | 1.2.5 | Mode (Aggressive/Balanced/Conservative/Custom), max summary length | Per-rule toggles, `preserve_recent`, summary fallback threshold |
+| Memory | 1.3.x | Repo-mode toggle, agent-proposal frequency | Per-scope quotas, audit retention window, embedding cache size |
+| Tools | 1.4.x | Tool budget mode (default 5000 tokens), discovery vs. always-on toggle for static set | Per-category overrides, sticky-admission TTL, lazy-expansion threshold |
+| Profiles | 2.0 | Profile picker (named profile preset) | Forked profile definitions, raw `Profile` struct edits |
+
+Each track inherits the toggle name and position from compression (1.2.5). New tracks introduced after 2.0 do the same.
+
+### What this is *not*
+
+The two-view contract is not a UI style guide. It does not dictate the visual treatment of the toggle (radio? checkbox? expandable section? sidebar?). It does not dictate panel layout, control grouping, or copy. It commits only to:
+
+- Both views exist.
+- One toggle moves between them.
+- The toggle name is consistent across every settings panel.
+- The two views are projections of the same configuration, not separate configurations.
+
+Visual treatment is left to the design engagement (per ROADMAP §Decisions §10) and to whatever convention the existing codebase has settled on at the time of each panel's implementation.
