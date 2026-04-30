@@ -489,6 +489,94 @@ expose, not the dropped `confidence: float` field.
 - **`js/chat/index.js`** — wires `registerMemoryTools(ToolRegistry)` into
   the boot sequence after `registerPluginTools`.
 
+#### Memory Phase 1 — Settings → Memory tab (Memory PR #5)
+
+Memory PR #5 of 8 in the 1.3.0 track. Lands the **first Preact + htm
+consumer** in the codebase (Decision §9) — the Settings → Memory tab.
+Closes the "memory is real but invisible" gap: PRs #2-#4 made it
+possible for the agent and the file layer to read/write memories, but
+the user had no UI to inspect, edit, or delete them. Layout follows
+Touch 1 design Flow 2A (`docs/design/touch-1-memory-ux/project/
+flow2-settings.jsx`) — in-strip tab placement between Roles and
+Plugins, split-pane list+detail, repo-mode toggle, scope filter chips,
+inline audit log on the selected record. The mock's `persona` chip and
+`confidence` float are absent per the 2026-04-30 kickoff (Decisions
+§1, §2): scopes are `user`+`workspace` only, and the `source` enum
+(`user_explicit | agent_proposed | inferred`) drives the affordance.
+
+Live updates: the tab subscribes to `MEMORY_EVENTS.{CREATED,UPDATED,
+DELETED}` so memories created via the `memory_remember` tool while the
+modal is open appear without a manual refresh. Effect cleanup
+unsubscribes on unmount; the settings-manager unmounts on
+`closeSettings()` so the EventBus subscription window matches the
+modal's open lifetime — no leaked listeners across cycles.
+
+Out of scope here (sequenced for later Memory PRs): chat consent card
+(PR #6), commit-modal "Memory updates" section (PR #7), inline
+`@memory` chip + DESIGN-memory.md update + 1.3.0 release (PR #8).
+
+- **`js/settings/memory-tab.js`** — `mountMemoryTab()` /
+  `unmountMemoryTab()` lifecycle surface. Owns the Preact root, the
+  cleanup fn returned by `mountPreact`, and an idempotent guard so
+  repeated tab clicks don't double-mount. Loads `MemoryTab.js` via
+  dynamic import — the components file uses top-level `await
+  getPreact()`, so dynamic import keeps a Preact bundle/CDN failure
+  out of `settings-manager.js`'s synchronous import graph.
+- **`js/settings/memory-tab/MemoryTab.js`** — Preact components.
+  Single file with `MemoryTab` (root, owns records / selectedId /
+  filter / scope state), `MemoryToolbar` (count badge, file-mode
+  toggle, audit toggle, export), `MemoryRepoBanner` (file-mode pending
+  paths), `MemoryFilters` (search + scope chips), `MemoryList` +
+  `MemoryRow` (scope badge, key:value, source + relative-time meta),
+  and `MemoryDetail` (read-only key, value textarea, scope/source/
+  category tags, recent-audit list, Save/Delete). Save calls
+  `update(id, {value}, ...)`; Delete uses `softDelete()`. Audit toggle
+  expands the list from last 5 to last 50 inline, no extra modal.
+  Export is a JSON `Blob` download mirroring `exportSettings()`. "all"
+  scope chip queries both `user` and `workspace` and merges by
+  `updated_at`.
+- **`js/intelligence/memory/owner.js`** — single source of truth for
+  user-scope owner-id resolution. Exports `getOrCreateUserOwnerId()`
+  (lazy UUID persisted at `Storage('memoryUserId')`, shared across
+  tabs because the key is not in `Storage._TAB_SCOPED`). Both
+  `memory-tools.js` (PR #4 LLM tools) and `MemoryTab.js` (this PR)
+  consume this resolver, so the tab and the agent see the same user
+  bucket. Without it the tab would render empty after an agent's
+  `memory_remember` call — caught during real-world testing of this
+  PR before merge. Future Memory PRs (#6 consent card, #8 @memory
+  chip) reuse it too.
+- **`html/modals.html`** — new `<button data-tab="tabMemory">` between
+  Roles and Plugins (Touch 1 Variant A position).
+- **`html/settings-tabs.html`** — new `<div id="tabMemory"
+  class="settings-tab-content">` panel with a
+  `<div id="memoryTabRoot">` slot for the Preact mount.
+- **`js/settings-manager.js`** — imports `mountMemoryTab` /
+  `unmountMemoryTab`. Tab-switch handler calls `mountMemoryTab()`
+  alongside the existing `populateModelsTab()` / `populatePluginsTab()`
+  patterns. `closeSettings()` calls `unmountMemoryTab()` so each modal
+  open gets a fresh root.
+- **`css/memory.css`** — full visual surface for the tab. Class names
+  mirror the Touch 1 design canvas styles for vocabulary continuity
+  with the consent card / commit-modal section / @memory chip that
+  ship in PRs #6-#8. Includes scope-badge color treatments
+  (user=accent blue, workspace=success teal), source-tag treatments
+  (`user-explicit` neutral, `agent-proposed` warning yellow,
+  `inferred` muted italic), pill-switch toggle, repo-mode banner.
+- **`css/base.css`** — adds `--memory: var(--accent)` token. Tracks
+  accent today; reserved as a distinct knob so memory surfaces can
+  move to a memory-specific hue without touching every site.
+- **`index.html`** — links the new `css/memory.css` file alongside the
+  existing component CSS files.
+- **`tests/test-memory-tab.js`** — browser smoke test pinning the
+  integration contract. Swaps the memory IDB to the in-memory fake
+  via `_setIDBImpl(createMemoryFakeIDB())`, seeds 3 records, mounts
+  the tree into a fixture div, asserts row count, fires a `create()`
+  while mounted and asserts the row count rises (live-update path),
+  fires `softDelete()` and asserts it falls, then runs cleanup and
+  asserts the EventBus listener count returns to baseline (no leaked
+  subscriptions). Resets the IDB impl in the `finally` so other suites
+  see real IDB. Registered under "Memory Tab" in `tests/index.html`.
+
 ### Notes
 
 - **No version bump.** Per `feedback_version_bump.md`, intermediate
@@ -499,9 +587,15 @@ expose, not the dropped `confidence: float` field.
   confidence float, codify the `.aieditor/memory/*.md` file format),
   and the ROADMAP §1.2.x reframe (compression follow-ups slot into
   whatever minor is current when verified).
-- **Removability.** Delete `js/utils/preact-mount.js`, the bundle,
-  and the entry mjs; nothing else regresses — there are no consumers
-  yet. Subsequent Memory PRs will be the first callers.
+- **Removability (Memory PR #5).** Delete `js/settings/memory-tab.js`,
+  the `js/settings/memory-tab/` directory, `css/memory.css`, the
+  `tabMemory` button + panel, the settings-manager wiring, the
+  `--memory` token, and the test file; the memory subsystem still
+  works (the `memory_remember/recall/revise` tools and the file
+  layer are independent), but users lose the only direct surface for
+  inspecting/editing/deleting memories. The `memory_remember` tool
+  becomes a write-only black box without the tab to read it back —
+  that's the user-visible gap PR #5 closes.
 
 ## [1.2.1] - 2026-04-29
 

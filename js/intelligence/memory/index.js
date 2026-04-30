@@ -63,6 +63,10 @@ export {
     embedRecord,
 } from './embeddings.js';
 
+/* Owner-id resolution (shared by memory-tools, Settings → Memory tab,
+ * and future PRs #6/#8). */
+export { getOrCreateUserOwnerId } from './owner.js';
+
 /* File layer — `.aieditor/memory/*.md` projection (PR #3, this) */
 export {
     serialize,

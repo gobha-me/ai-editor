@@ -22,7 +22,7 @@
  * @module tools/memory-tools
  */
 
-import { State, Storage } from '../core.js';
+import { State } from '../core.js';
 import {
     create,
     update,
@@ -35,6 +35,7 @@ import {
     MEMORY_SOURCES,
     embedRecord,
     getActiveWorkspaceId,
+    getOrCreateUserOwnerId,
 } from '../intelligence/memory/index.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
 
@@ -71,25 +72,13 @@ export function _resetMemoryToolsForTests() {
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** Stable per-origin user id, lazily generated and persisted. */
-function _getOrCreateUserId() {
-    let id = Storage.get('memoryUserId');
-    if (!id || typeof id !== 'string') {
-        id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-            ? crypto.randomUUID()
-            : 'u-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-        Storage.set('memoryUserId', id);
-    }
-    return id;
-}
-
 /** Resolve `owner_id_or_workspace_id` for the requested scope. */
 function _resolveOwner(scope) {
     if (scope === 'workspace') {
         const id = _workspaceId();
         return typeof id === 'string' && id.length > 0 ? id : null;
     }
-    return _getOrCreateUserId();
+    return getOrCreateUserOwnerId();
 }
 
 function _actor() {

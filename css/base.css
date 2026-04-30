@@ -27,7 +27,12 @@
     
     --border: #3c3c3c;
     --border-light: #474747;
-    
+
+    /* Memory subsystem accent — tracks --accent today; reserved as a
+       distinct token so the Memory tab, @memory chip, and consent card
+       can move to a memory-specific hue without touching every site. */
+    --memory: var(--accent);
+
     --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     

@@ -162,6 +162,10 @@
                 await import('./test-secondary-pane.js');
             } catch (e) { errors.push(['Secondary Pane', e]); }
 
+            try {
+                await import('./test-memory-tab.js');
+            } catch (e) { errors.push(['Memory Tab', e]); }
+
             // --- Deployment ---
             try {
                 await import('./test-dependencies.js');

@@ -29,6 +29,7 @@ import {
     populateEmbeddingModelsByProvider
 } from './settings/models-tab.js';
 import { initCostTab, populateCostTab } from './settings/cost-tab.js';
+import { mountMemoryTab, unmountMemoryTab } from './settings/memory-tab.js';
 
 // ── Open / Close ──
 
@@ -52,6 +53,10 @@ export async function openSettings() {
 }
 
 export function closeSettings() {
+    // Tear down the Memory tab Preact root so its EventBus subscriptions
+    // don't accumulate across modal open/close cycles. Idempotent — no-op
+    // if the tab was never opened.
+    unmountMemoryTab();
     document.getElementById('settingsModal').classList.remove('active');
 }
 
@@ -333,6 +338,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabStorage') renderStorageMetrics();
             // Refresh Cost dashboard when switching to it
             if (tab.dataset.tab === 'tabCost') populateCostTab();
+            // Mount the Memory tab Preact tree on first activation; idempotent.
+            if (tab.dataset.tab === 'tabMemory') mountMemoryTab();
             
             // Re-check arrow visibility after scroll settles
             setTimeout(updateTabArrows, 100);
