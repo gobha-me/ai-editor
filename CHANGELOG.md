@@ -115,6 +115,36 @@ patch ships.
   when flag is absent; SSR / no-window safety; malformed search
   string doesn't throw.
 
+- **`tests/test-plugin-lifecycle.mjs`** — 7 node:test cases over
+  `Plugins.setEnabled` covering: first-time enable runs `init()` and
+  registers buttons; re-enable doesn't double-init; disable doesn't
+  re-trigger init; toggle off→on with an existing instance skips
+  re-init (no double-registered tools/buttons); init() throws are
+  logged but don't unset the enabled flag; `plugin:enabledChanged`
+  fires before init() begins so listeners aren't blocked on async
+  work; unknown plugin id is a quiet no-op.
+
+### Fixed
+
+- **Plugin lifecycle: `setEnabled(true)` now runs `init()` on first
+  enable.** Previously `setEnabled` only flipped the boolean and
+  emitted `plugin:enabledChanged` — it never called `init()`.
+  Plugins shipped with `defaultEnabled: false` (release-sync,
+  cross-repo-issues, custom user plugins that opted out of auto-init)
+  registered at boot, got skipped by the boot-time `Plugins.init()`
+  loop in `js/app.js`, and stayed UI-less even after a user toggled
+  them on in Settings. Symptom: plugin appeared "enabled" in the
+  Plugins tab but its toolbar button never showed and its LLM tools
+  never registered, because `registerButton`/`registerModal`/
+  `registerTool` calls all live inside `init()`. **Fix:** `setEnabled`
+  is now async and calls `manifest.init(config)` exactly once on the
+  first disabled→enabled transition (skips if `instance` is already
+  set, since we have no unregister path yet — re-enabling after a
+  disable does not re-init). `plugin:initialized` fires after init
+  completes. Existing `setEnabled` callers don't await; that's fine
+  — the boolean flip + event emit are still synchronous. Only the
+  `init()` work moves into the returned promise.
+
 ### Changed
 
 - **`js/chat/compactor-integration.js`** — when

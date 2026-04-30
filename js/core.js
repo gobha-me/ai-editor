@@ -1059,16 +1059,41 @@ const Plugins = {
     },
 
     /**
-     * Enable or disable a plugin.
-     * @param {string} pluginId
+     * Enable or disable a plugin. When transitioning disabled→enabled
+     * for the first time, runs the plugin's `init()` so its buttons,
+     * modals, hooks, and tools register. Without this, plugins shipped
+     * with `defaultEnabled: false` (release-sync, cross-repo-issues)
+     * would register at boot, get skipped by the boot-time `init()`
+     * loop in `js/app.js`, and remain UI-less even after a user toggled
+     * them on in Settings — symptom: plugin appears "enabled" but its
+     * toolbar button never shows.
+     *
+     * @param {string}  pluginId
      * @param {boolean} enabled
+     * @returns {Promise<void>} Resolves once the (possibly deferred)
+     *   init() completes. Existing callers don't await; that's fine —
+     *   the boolean flip is synchronous, only the init() runs after.
      */
-    setEnabled(pluginId, enabled) {
+    async setEnabled(pluginId, enabled) {
         const plugin = this._registered[pluginId];
         if (!plugin) return;
+        const wasEnabled = plugin.enabled;
         plugin.enabled = enabled;
         this._persistState();
         EventBus.emit('plugin:enabledChanged', { pluginId, enabled });
+
+        // First-time enable: run init() so the plugin can register its
+        // buttons/modals/hooks/tools. Skip when re-enabling a plugin that
+        // already has an instance (it set everything up once already and
+        // we don't have an unregister path yet).
+        if (enabled && !wasEnabled && !plugin.instance && plugin.manifest && plugin.manifest.init) {
+            try {
+                plugin.instance = await plugin.manifest.init(plugin.config);
+                EventBus.emit('plugin:initialized', pluginId);
+            } catch (e) {
+                console.error(`Plugin init failed on enable: ${pluginId}`, e);
+            }
+        }
     },
 
     registerButton(pluginId, { icon, label, onClick }) {
