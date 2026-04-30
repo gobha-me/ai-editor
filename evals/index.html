@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Editor — NIAH Context-Attention Eval</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            font: 14px/1.5 -apple-system, system-ui, sans-serif;
+            background: #1a1a1a; color: #ddd;
+            margin: 0; padding: 24px; max-width: 1100px;
+        }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .sub { color: #888; font-size: 12px; margin-bottom: 24px; }
+        section { background: #222; border: 1px solid #333; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+        h2 { font-size: 14px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; }
+        button {
+            background: #2d6cdf; color: #fff; border: 0; padding: 8px 14px;
+            border-radius: 4px; cursor: pointer; font: inherit;
+        }
+        button:hover { background: #3578e8; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        button.secondary { background: #444; }
+        button.secondary:hover { background: #555; }
+        button.danger { background: #b33; }
+        .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .pill {
+            background: #333; padding: 3px 8px; border-radius: 99px;
+            font-size: 12px; color: #aaa;
+        }
+        .pill.ok { background: #1a3a1a; color: #6c6; }
+        .pill.warn { background: #3a2a1a; color: #c95; }
+        .pill.error { background: #3a1a1a; color: #c66; }
+        table.eval-heatmap { border-collapse: collapse; margin: 8px 0 16px; }
+        table.eval-heatmap th, table.eval-heatmap td {
+            border: 1px solid #333; padding: 6px 10px; text-align: center;
+            font-variant-numeric: tabular-nums; min-width: 64px;
+        }
+        table.eval-heatmap th { background: #2a2a2a; color: #aaa; font-weight: 500; }
+        .eval-cell { color: #fff; font-weight: 500; }
+        .eval-cell.empty { background: #222; color: #555; }
+        .eval-cell.cell-error { border: 2px dashed #c66 !important; }
+        .eval-line-wrap { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+        .eval-line-chart { background: #1d1d1d; border: 1px solid #333; border-radius: 4px; }
+        .eval-line-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+        .eval-line-legend span span { display: inline-block; width: 12px; height: 4px; margin-right: 6px; vertical-align: middle; }
+        .gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .gauge { background: #2a2a2a; padding: 10px; border-radius: 4px; }
+        .gauge-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+        .gauge-value { font-size: 16px; font-variant-numeric: tabular-nums; }
+        .bar { height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+        .bar-fill { height: 100%; background: #2d6cdf; transition: width 0.3s; }
+        .log { background: #111; border: 1px solid #222; border-radius: 4px; padding: 8px; max-height: 280px; overflow: auto; font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.4; }
+        .log .ok { color: #6c6; }
+        .log .miss { color: #c95; }
+        .log .err { color: #c66; }
+        .log .meta { color: #777; }
+        select, input[type="number"] { background: #2a2a2a; color: #ddd; border: 1px solid #444; padding: 4px 6px; border-radius: 3px; font: inherit; }
+        details summary { cursor: pointer; color: #888; font-size: 12px; }
+        details[open] summary { margin-bottom: 8px; }
+        .preflight-table { border-collapse: collapse; margin: 8px 0; }
+        .preflight-table td, .preflight-table th { border: 1px solid #333; padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+        .preflight-table th { text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>NIAH Context-Attention Eval</h1>
+    <div class="sub">Empirical test of head-vs-tail attention across model context tiers. See <code>docs/EVAL-attention-scaling.md</code> after a run.</div>
+
+    <section id="bootstrap">
+        <h2>1. Provider</h2>
+        <div class="row">
+            <button id="btn-load">Load settings + model list</button>
+            <span id="boot-status" class="pill">not loaded</span>
+        </div>
+        <div id="boot-detail" class="sub" style="margin-top: 8px;"></div>
+    </section>
+
+    <section id="config">
+        <h2>2. Grid configuration</h2>
+        <div class="row" id="tier-small-row">
+            <label><input type="checkbox" id="tier-small" checked> short context</label>
+            <select id="tier-small-model" disabled><option>(load models first)</option></select>
+            <span class="sub">lengths [8K, 16K, 28K]</span>
+        </div>
+        <div class="row" id="tier-medium-row" style="margin-top: 6px;">
+            <label><input type="checkbox" id="tier-medium"> mid context</label>
+            <select id="tier-medium-model" disabled><option>(load models first)</option></select>
+            <span class="sub">lengths [32K, 64K, 110K]</span>
+        </div>
+        <div class="row" id="tier-large-row" style="margin-top: 6px;">
+            <label><input type="checkbox" id="tier-large"> long context</label>
+            <select id="tier-large-model" disabled><option>(load models first)</option></select>
+            <span class="sub">lengths [128K, 256K, 512K, 900K]</span>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+            <label>Replicates: <input type="number" id="replicates" min="1" max="5" value="3" style="width: 50px;"></label>
+            <span class="sub">·</span>
+            <label>Max $ cap: <input type="number" id="maxUsd" min="0.1" step="0.1" value="8" style="width: 70px;"></label>
+            <span class="sub">·</span>
+            <span class="sub">depths [5, 25, 50, 75, 95]%</span>
+            <span class="sub">·</span>
+            <label title="Tiers run concurrently by default — different models = different rate-limit buckets, so they don't fight. Untick to force one tier at a time.">
+                <input type="checkbox" id="parallel-tiers" checked> parallel tiers
+            </label>
+        </div>
+        <div class="sub" style="margin-top: 8px;">
+            Model lists populate from the live provider catalog after step 1, filtered to tool-capable models and bucketed by context window. Each dropdown defaults to the cheapest input-token price in its tier; pick a different one if you want to compare architectures.
+        </div>
+    </section>
+
+    <section id="preflight">
+        <h2>3. Pre-flight estimate</h2>
+        <div class="row">
+            <button id="btn-preflight" disabled>Estimate</button>
+            <span id="preflight-status" class="pill">—</span>
+        </div>
+        <div id="preflight-output"></div>
+    </section>
+
+    <section id="run">
+        <h2>4. Run</h2>
+        <div class="row">
+            <button id="btn-run" disabled>Run grid</button>
+            <button id="btn-abort" class="danger" disabled>Abort</button>
+            <span id="run-status" class="pill">idle</span>
+        </div>
+        <div class="gauges" style="margin-top: 12px;">
+            <div class="gauge">
+                <div class="gauge-label">Progress</div>
+                <div class="gauge-value" id="g-progress">0 / 0</div>
+                <div class="bar"><div class="bar-fill" id="g-progress-bar" style="width: 0%"></div></div>
+                <div class="sub" style="margin-top: 4px;">spent: <span id="g-spent">$0</span> · ETA: <span id="g-eta">—</span></div>
+            </div>
+            <div class="gauge">
+                <div class="gauge-label">Rate limits — <span id="g-model">—</span> <span class="sub">(per-model)</span></div>
+                <div class="gauge-value">RPM: <span id="g-rpm">—</span> · TPM: <span id="g-tpm">—</span></div>
+                <div class="bar"><div class="bar-fill" id="g-tpm-bar" style="width: 0%; background: #d84;"></div></div>
+                <div class="sub" style="margin-top: 4px;">reset: <span id="g-reset">—</span></div>
+            </div>
+        </div>
+        <details style="margin-top: 12px;">
+            <summary>Live log</summary>
+            <div class="log" id="log"></div>
+        </details>
+    </section>
+
+    <section id="results">
+        <h2>5. Results</h2>
+        <div class="row">
+            <button id="btn-json" class="secondary" disabled>Download JSON</button>
+            <button id="btn-md" class="secondary" disabled>Download Markdown</button>
+        </div>
+        <div id="heatmap-container" style="margin-top: 16px;"></div>
+    </section>
+
+    <script type="module">
+        import { State, loadSettings, EventBus } from '../js/core.js';
+        import { LLM } from '../js/llm.js';
+        import { loadCorpus } from './haystack.js';
+        import { runGrid } from './run-niah.js';
+        import { estimateGridCost, formatUsd, formatDuration } from './cost-preflight.js';
+        import { renderHeatmap, exportJson, exportMarkdown } from './render-heatmap.js';
+
+        // Tier definitions: context-window range + lengths to probe.
+        // Models are picked at runtime from the live provider catalog so
+        // a deprecation/rename/addition doesn't require a code change.
+        const TIERS = {
+            small:  { ctxMin: 32_000,  ctxMax: 200_000,    lengths: [8000, 16000, 28000] },
+            medium: { ctxMin: 200_000, ctxMax: 500_000,    lengths: [32000, 64000, 110000] },
+            large:  { ctxMin: 500_000, ctxMax: Infinity,   lengths: [128000, 256000, 512000, 900000] }
+        };
+        const DEPTHS = [0.05, 0.25, 0.50, 0.75, 0.95];
+
+        const $ = (id) => document.getElementById(id);
+        const log = (msg, cls = '') => {
+            const el = $('log');
+            const div = document.createElement('div');
+            div.className = cls;
+            div.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+            el.appendChild(div);
+            el.scrollTop = el.scrollHeight;
+        };
+
+        let corpus = null;
+        let cells = [];
+        let lastCost = 0;
+        let runAbort = null;
+
+        function buildConfig() {
+            const tiers = [];
+            const replicates = +$('replicates').value || 3;
+            for (const k of ['small', 'medium', 'large']) {
+                if (!$(`tier-${k}`).checked) continue;
+                const modelId = $(`tier-${k}-model`).value;
+                if (!modelId) continue;
+                tiers.push({ modelId, lengths: TIERS[k].lengths, depths: DEPTHS, replicates });
+            }
+            return {
+                tiers,
+                maxUsd: +$('maxUsd').value || 8,
+                sequentialTiers: !$('parallel-tiers').checked
+            };
+        }
+
+        /** Filter + bucket models into tier dropdowns after listModels(). */
+        function populateTierDropdowns(models) {
+            for (const k of ['small', 'medium', 'large']) {
+                const { ctxMin, ctxMax, lengths } = TIERS[k];
+                const required = Math.ceil(Math.max(...lengths) * 1.1);
+                const candidates = models
+                    .filter(m => m.capabilities?.supportsFunctionCalling)
+                    .filter(m => {
+                        const ctx = m.meta?.contextTokens || 0;
+                        return ctx >= ctxMin && ctx <= ctxMax && ctx >= required;
+                    })
+                    .filter(m => m.pricing?.input != null)
+                    .sort((a, b) => (a.pricing.input || 0) - (b.pricing.input || 0));
+
+                const sel = $(`tier-${k}-model`);
+                sel.innerHTML = '';
+                if (candidates.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '(none available)';
+                    sel.appendChild(opt);
+                    sel.disabled = true;
+                    $(`tier-${k}`).disabled = true;
+                    $(`tier-${k}`).checked = false;
+                    continue;
+                }
+                for (const m of candidates) {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    const ctxK = (m.meta.contextTokens / 1000).toFixed(0);
+                    const inP = m.pricing.input.toFixed(2);
+                    opt.textContent = `${m.id}  —  ${ctxK}K ctx, $${inP}/M in`;
+                    sel.appendChild(opt);
+                }
+                sel.disabled = false;
+                $(`tier-${k}`).disabled = false;
+            }
+        }
+
+        $('btn-load').addEventListener('click', async () => {
+            $('btn-load').disabled = true;
+            $('boot-status').textContent = 'loading...';
+            try {
+                await loadSettings();
+                if (!State.settings?.llmEndpoint || !State.settings?.llmApiKey) {
+                    throw new Error('No LLM endpoint/key in settings. Configure Settings → LLM in the main app first.');
+                }
+                $('boot-detail').textContent = `Endpoint: ${State.settings.llmEndpoint}  ·  provider: ${State.settings.apiProvider || 'default'}`;
+                log('Loading corpus...');
+                corpus = await loadCorpus();
+                log(`Corpus: ${corpus.length} chars`, 'meta');
+
+                log('Fetching model list...');
+                const models = await LLM.listModels();
+                log(`Loaded ${models.length} models`, 'meta');
+
+                populateTierDropdowns(models);
+                const tierCounts = ['small', 'medium', 'large'].map(k => ({
+                    k, n: $(`tier-${k}-model`).options.length
+                }));
+                const empty = tierCounts.filter(t => $(`tier-${t.k}-model`).disabled);
+                if (empty.length === 3) {
+                    $('boot-status').textContent = 'no models';
+                    $('boot-status').className = 'pill error';
+                    $('boot-detail').textContent += '  ·  No tool-capable models in any tier';
+                } else if (empty.length > 0) {
+                    $('boot-status').textContent = 'partial';
+                    $('boot-status').className = 'pill warn';
+                    $('boot-detail').textContent += `  ·  ${tierCounts.map(t => `${t.k}=${t.n}`).join(', ')}`;
+                } else {
+                    $('boot-status').textContent = 'ready';
+                    $('boot-status').className = 'pill ok';
+                    $('boot-detail').textContent += `  ·  ${tierCounts.map(t => `${t.k}=${t.n}`).join(', ')}`;
+                }
+                $('btn-preflight').disabled = false;
+            } catch (err) {
+                $('boot-status').textContent = 'error';
+                $('boot-status').className = 'pill error';
+                $('boot-detail').textContent = err.message;
+                log(`Bootstrap failed: ${err.message}`, 'err');
+                $('btn-load').disabled = false;
+            }
+        });
+
+        $('btn-preflight').addEventListener('click', () => {
+            const cfg = buildConfig();
+            if (cfg.tiers.length === 0) {
+                $('preflight-status').textContent = 'select at least one tier';
+                $('preflight-status').className = 'pill warn';
+                return;
+            }
+            const est = estimateGridCost(cfg, State.models);
+            const out = $('preflight-output');
+            out.innerHTML = '';
+            const t = document.createElement('table');
+            t.className = 'preflight-table';
+            t.innerHTML = `<tr><th>tier</th><th>calls</th><th>input tok</th><th>cost</th><th>min wall-clock</th></tr>` +
+                est.perTier.map(r =>
+                    `<tr><th>${r.modelId}${r.pricingMissing ? ' ⚠️' : ''}</th>` +
+                    `<td>${r.calls}</td>` +
+                    `<td>${(r.inputTok / 1000).toFixed(0)}K</td>` +
+                    `<td>${formatUsd(r.costUsd)}</td>` +
+                    `<td>${formatDuration(r.etaMs)}</td></tr>`
+                ).join('') +
+                `<tr><th>TOTAL</th><td>${est.callCount}</td><td>—</td>` +
+                `<td>${formatUsd(est.totalUsd)}</td><td>${formatDuration(est.etaMs)}</td></tr>`;
+            out.appendChild(t);
+
+            const overCap = est.totalUsd > cfg.maxUsd;
+            $('preflight-status').textContent = overCap
+                ? `over $${cfg.maxUsd} cap`
+                : `${formatUsd(est.totalUsd)} · ${formatDuration(est.etaMs)} min`;
+            $('preflight-status').className = `pill ${overCap ? 'warn' : 'ok'}`;
+            $('btn-run').disabled = overCap;
+        });
+
+        $('btn-run').addEventListener('click', async () => {
+            const cfg = buildConfig();
+            cells = [];
+            lastCost = 0;
+            $('btn-run').disabled = true;
+            $('btn-abort').disabled = false;
+            $('btn-json').disabled = true;
+            $('btn-md').disabled = true;
+            $('run-status').textContent = 'running';
+            $('run-status').className = 'pill warn';
+            $('heatmap-container').innerHTML = '';
+            runAbort = new AbortController();
+
+            const total = cfg.tiers.reduce(
+                (s, t) => s + t.lengths.length * t.depths.length * t.replicates, 0
+            );
+            $('g-progress').textContent = `0 / ${total}`;
+
+            try {
+                const result = await runGrid(cfg, corpus, {
+                    onCell: (c) => {
+                        cells.push(c);
+                        const tag = c.error ? 'err' : (c.hit ? 'ok' : 'miss');
+                        const flag = c.error ? `[ERR ${c.error.slice(0, 60)}]`
+                            : c.hit ? '[hit]' : '[miss]';
+                        log(`${c.model} · L=${c.lengthTokens} · d=${(c.depthPct * 100).toFixed(0)}% · r${c.replicate} ${flag} · ${c.latencyMs}ms · ${formatUsd(c.costUsd)}`, tag);
+                        renderHeatmap($('heatmap-container'), cells);
+                    },
+                    onProgress: (done, total, cost, etaMs) => {
+                        $('g-progress').textContent = `${done} / ${total}`;
+                        $('g-progress-bar').style.width = `${(done / total) * 100}%`;
+                        $('g-spent').textContent = formatUsd(cost);
+                        $('g-eta').textContent = formatDuration(etaMs);
+                        lastCost = cost;
+                    },
+                    onPaceTick: (s) => {
+                        if (s.modelId) $('g-model').textContent = s.modelId;
+                        if (s.rpmLimit !== null) {
+                            $('g-rpm').textContent = `${s.remainingReq ?? '?'} / ${s.rpmLimit}`;
+                        } else {
+                            $('g-rpm').textContent = '—';
+                        }
+                        if (s.tpmLimit !== null) {
+                            $('g-tpm').textContent = `${formatTok(s.remainingTok)} / ${formatTok(s.tpmLimit)}`;
+                            const pct = s.tpmLimit ? (1 - (s.remainingTok ?? 0) / s.tpmLimit) * 100 : 0;
+                            $('g-tpm-bar').style.width = `${pct.toFixed(0)}%`;
+                        } else {
+                            $('g-tpm').textContent = 'uncapped';
+                            $('g-tpm-bar').style.width = '0%';
+                        }
+                        if (s.resetTokAt) {
+                            const r = Math.max(0, s.resetTokAt - Date.now());
+                            $('g-reset').textContent = `${(r / 1000).toFixed(0)}s`;
+                        } else if (s.resetReqAt) {
+                            const r = Math.max(0, s.resetReqAt - Date.now());
+                            $('g-reset').textContent = `${(r / 1000).toFixed(0)}s (rpm)`;
+                        }
+                    },
+                    abortSignal: runAbort.signal
+                });
+
+                $('run-status').textContent = result.aborted ? `aborted: ${result.reason}` : 'done';
+                $('run-status').className = `pill ${result.aborted ? 'warn' : 'ok'}`;
+                log(`Grid finished. cells=${result.cells.length} · spent=${formatUsd(result.totalCost)}`, 'meta');
+                $('btn-json').disabled = false;
+                $('btn-md').disabled = false;
+            } catch (err) {
+                $('run-status').textContent = 'error';
+                $('run-status').className = 'pill error';
+                log(`Grid error: ${err.message}`, 'err');
+            } finally {
+                $('btn-run').disabled = false;
+                $('btn-abort').disabled = true;
+                runAbort = null;
+            }
+        });
+
+        $('btn-abort').addEventListener('click', () => {
+            if (runAbort) {
+                runAbort.abort();
+                log('User aborted', 'meta');
+            }
+        });
+
+        $('btn-json').addEventListener('click', () => {
+            const blob = exportJson(cells, {
+                config: buildConfig(),
+                generatedAt: Date.now(),
+                totalCost: lastCost
+            });
+            triggerDownload(blob, `niah-results-${Date.now()}.json`);
+        });
+
+        $('btn-md').addEventListener('click', () => {
+            const md = exportMarkdown(cells, {
+                config: buildConfig(),
+                generatedAt: Date.now(),
+                totalCost: lastCost
+            });
+            const blob = new Blob([md], { type: 'text/markdown' });
+            triggerDownload(blob, `niah-report-${Date.now()}.md`);
+        });
+
+        function formatTok(n) {
+            if (n === null || n === undefined) return '?';
+            if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+            if (n >= 1000) return `${Math.round(n / 1000)}K`;
+            return String(n);
+        }
+
+        function triggerDownload(blob, name) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        // Self-test: tick every 500ms to refresh the reset countdown
+        setInterval(() => {
+            const txt = $('g-reset').textContent;
+            if (txt.endsWith('s')) {
+                const n = parseFloat(txt);
+                if (n > 0) $('g-reset').textContent = `${Math.max(0, n - 0.5).toFixed(0)}s`;
+            }
+        }, 500);
+    </script>
+</body>
+</html>

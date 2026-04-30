@@ -248,6 +248,24 @@ reflects the pre-kickoff data model; that doc updates with PR #8.
   resolve to exactly-one-winner per trial, and the mutex chain map
   drains after operations resolve.
 
+- **`evals/` — NIAH context-attention eval harness.** Empirically
+  tests the architectural assumption (DESIGN-retrieval.md §475,
+  DESIGN-memory.md §74) that *transformer attention is strongest at
+  the head and tail of the window* against the actual models AI Editor
+  calls. Plants a passcode in a long *Pride and Prejudice* haystack
+  at varying depths (5%, 25%, 50%, 75%, 95%), asks the model to
+  recite it, scores hit/miss across small/medium/large context tiers
+  on Venice. Bypasses `LLM.chat()` so it can capture provider
+  rate-limit response headers (`x-ratelimit-{limit,remaining,reset}-{requests,tokens}`)
+  for slow-roll pacing — the same algorithm is queued for production
+  in ROADMAP §1.2.5. Reuses settings, model registry, and pricing
+  from the running app via `localStorage`; keeps no key material in
+  committed code. Never imported by `js/app.js` or CI. Runs against a
+  $10 budget cap; full grid (~150 calls across 3 model tiers) costs
+  ~$5.70 and ~10–15 min wall-clock TPM-bound. Pre-flight unit suite
+  at `evals/test-haystack.mjs` (10 cases) gates harness sanity before
+  any API call.
+
 ### Fixed
 
 - **Plugin lifecycle: `setEnabled(true)` now runs `init()` on first
