@@ -26,11 +26,20 @@ token-reduction percentages on every commit. **Aggregate result:
 debug session 78.7%; 50-turn agentic session 90.3% — all far above
 the ROADMAP §1.2.0 floor of 40%.** Numbers are bounded ±2–3pp on both
 sides so a regression that under-evicts (rule miss) and one that
-over-evicts (false-positive cascade) both flag the test. The 50-turn
-fixture mirrors the manual checklist Tier 2 will run on
-`editor.gobha.ai/dev` once the upcoming `?compression=off` flag PR
-lands; that deployed-instance dual-session compares its dashboard
-numbers against this synthetic floor.
+over-evicts (false-positive cascade) both flag the test.
+
+**Tier 2 of the same gate:** the new `?compression=off` URL flag turns
+the deployed instance into the *control* side of a dual-session A/B.
+With the flag set, `chat/compactor-integration.js` short-circuits past
+the Compactor entirely — chat history flows straight into
+`ChatSummarizer.getContextMessages()` exactly as it did pre-1.2.0. Open
+two tabs on `editor.gobha.ai/dev` (one with the flag, one without),
+run the same 50-turn synthetic shape from Tier 1's S5 fixture, then
+compare the per-conversation totals on Settings → Cost. The synthetic
+benchmark's 90.3% is the floor the deployed dashboard should approach;
+materially below means deployed Compactor wiring or input shape
+diverges from the synthetic — worth chasing before the next compression
+patch ships.
 
 ### Added
 
@@ -85,7 +94,38 @@ numbers against this synthetic floor.
   patch, slot now-untracked per the planned ROADMAP §1.2.x reframe)
   ships only if dashboard data confirms the synthetic numbers.
 
+- **`js/utils/compression-flag.js`** — Tier 2 dual-session flag.
+  Reads `?compression=off` (also `=false`, `=0`, `=disabled`,
+  case-insensitive) from `window.location.search` once on first call,
+  caches the result for the rest of the session, and logs a single
+  `[AI Editor] Compression DISABLED…` line to the DevTools console so
+  the operator running the dual-session A/B can confirm which tab is
+  in which mode. URL-only by design — no localStorage, no Settings
+  toggle (per the plan: easy to share via link, easy to A/B by opening
+  two tabs, no persisted state to forget about). Includes
+  `_resetCacheForTests` for the node:test seam.
+
+- **`tests/test-compression-flag.mjs`** — 15 node:test cases covering:
+  flag absent / unrelated query params / non-disable values
+  (`compression=on`, `=true`, `=1`); all four disable tokens
+  (`off`, `false`, `0`, `disabled`); case-insensitive match;
+  whitespace tolerance; flag set alongside other params; one-shot
+  cache (URL change after first call doesn't re-flip the flag);
+  console.log fires exactly once on first detection and stays silent
+  when flag is absent; SSR / no-window safety; malformed search
+  string doesn't throw.
+
 ### Changed
+
+- **`js/chat/compactor-integration.js`** — when
+  `isCompressionDisabled()` is true, `getCompressedContextMessages()`
+  short-circuits past `Compactor.compress` entirely, attaches
+  diagnostics with `warnings: ['disabled_via:url_flag(?compression=off)']`
+  to the active LLM exchange (so the LLM Debug modal makes the mode
+  obvious), and hands `State.chatHistory` straight to
+  `ChatSummarizer.getContextMessages` — the pre-1.2.0 baseline path.
+  Default behavior (no flag) unchanged.
+
 
 - **README.md `Deployment` section** — vendor-bundle list now
   includes Preact + htm. Adds a one-paragraph note pointing at

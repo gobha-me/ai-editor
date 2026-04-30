@@ -42,6 +42,7 @@ import {
 } from '../intelligence/compression/index.js';
 import { ChatSummarizer } from './summarizer.js';
 import { LLMDebug } from '../llm.js';
+import { isCompressionDisabled } from '../utils/compression-flag.js';
 
 /**
  * @typedef {import('../intelligence/compression/contracts.js').Diagnostics} Diagnostics
@@ -67,6 +68,33 @@ export function getLastCompressionDiagnostics() {
 export async function getCompressedContextMessages() {
     let compressedMessages;
     let diagnostics = null;
+
+    // Tier 2 dual-session control: when `?compression=off` is in the URL,
+    // skip the Compactor entirely and route chat history straight into
+    // ChatSummarizer — exactly the pre-1.2.0 path. Diagnostics record the
+    // bypass so the LLM debug modal makes the mode obvious.
+    if (isCompressionDisabled()) {
+        diagnostics = {
+            rules_run: [],
+            rules_skipped: [],
+            decisions_by_rule: {},
+            evicted_ids: [],
+            replaced_ids: [],
+            summarized_spans: [],
+            tokens_in: 0,
+            tokens_out: 0,
+            compression_ratio: 1,
+            warnings: ['disabled_via:url_flag(?compression=off)'],
+            rule_errors: [],
+            latency_per_rule_ms: {},
+            summarizer_latency_ms: 0,
+        };
+        _lastDiagnostics = diagnostics;
+        if (LLMDebug && typeof LLMDebug.attachCompressionDiagnostics === 'function') {
+            LLMDebug.attachCompressionDiagnostics(diagnostics);
+        }
+        return ChatSummarizer.getContextMessages(State.chatHistory);
+    }
 
     try {
         const role = State?.settings?.role || null;
