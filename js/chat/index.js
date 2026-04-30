@@ -40,6 +40,7 @@ import {
 } from './messages.js';
 import { setupInputHandlers, stopGeneration, removeImage } from './input.js';
 import { exportChat } from './export.js';
+import { exportConversationToFile, openReplayModal } from './replay.js';
 import { probeMetadataCoverage, summarizeCoverage } from './metadata-probe.js';
 import { showToast } from '../ui-helpers.js';
 import { 
@@ -522,6 +523,7 @@ function renderConversationList() {
                     <div class="conv-item-meta">${date} · ${msgCount} msg${msgCount !== 1 ? 's' : ''}${costChip}</div>
                 </div>
                 <button type="button" class="${syncClass}" data-conv-sync="${c.id}" title="${_escapeAttr(syncTitle)}" aria-label="${_escapeAttr(syncTitle)}" aria-pressed="${isSynced}">${syncIcon}</button>
+                <button type="button" class="conv-item-download" data-conv-download="${c.id}" title="Download .aieditor.session" aria-label="Download conversation as .aieditor.session">⤓</button>
                 <button type="button" class="btn-icon-danger conv-item-delete" data-conv-delete="${c.id}" title="Delete">✕</button>
             </div>
         `;
@@ -543,6 +545,20 @@ function renderConversationList() {
             e.stopPropagation();
             const id = el.dataset.convSync;
             _toggleConversationSync(id);
+        });
+    });
+
+    list.querySelectorAll('[data-conv-download]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = el.dataset.convDownload;
+            // If the conversation being downloaded is the active one,
+            // flush any in-memory chat to storage first so the export
+            // doesn't lose the most recent turns.
+            if (id === ConversationManager.getActiveId() && State.chatHistory.length > 0) {
+                ConversationManager.save();
+            }
+            exportConversationToFile(id);
         });
     });
 
@@ -699,6 +715,8 @@ window.Chat = {
     sendMessage,
     executeToolCall,
     exportChat,
+    exportConversationToFile,
+    openReplayModal,
     continueResponse,
     retryLastMessage,
     copyMessage,

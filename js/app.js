@@ -102,6 +102,7 @@ import {
     isEnabled as sessionsIsEnabled,
     getActiveWorkspaceId as sessionsActiveWorkspaceId,
 } from './chat/sessions-sync.js';
+import { installReplay } from './chat/replay.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -1027,6 +1028,7 @@ async function init() {
     initCostRecorder();
     installMemoryFileLayer();
     installSessionsSync();
+    installReplay();
     // Memory PR #6 — drop pending consent candidates when chat clears.
     // The conversational context that produced agent-proposed proposals is
     // gone; pending cards from a prior chat shouldn't restore on the new one.

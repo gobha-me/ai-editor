@@ -840,3 +840,38 @@
         </div>
     </div>
 </div>
+
+<!-- Replay Modal (1.3.3) — read-only stepper for .aieditor.session archives -->
+<div class="modal-overlay" id="replayModal" role="dialog" aria-modal="true" aria-labelledby="replayTitle">
+    <div class="modal replay-modal" id="replayModalInner">
+        <div class="modal-header">
+            <h2 id="replayTitle">▶ Session Replay</h2>
+            <button type="button" class="modal-close" onclick="window.closeReplayModal()" aria-label="Close replay">×</button>
+        </div>
+        <div class="modal-body replay-body" id="replayBody">
+            <!-- Empty state: drop zone for an .aieditor.session file. Replaced
+                 by the stepper layout once a payload has been parsed. -->
+            <div class="replay-drop-zone" id="replayDropZone" role="region" aria-label="Drop a session archive">
+                <div class="replay-drop-icon">📥</div>
+                <div class="replay-drop-text">Drop a <code>.aieditor.session</code> file here</div>
+                <div class="replay-drop-hint">or click to browse</div>
+                <input type="file" id="replayFileInput" accept=".aieditor.session,.json,application/json" hidden>
+                <div class="replay-drop-error" id="replayDropError" role="alert"></div>
+            </div>
+            <!-- Stepper layout: turn list (left) + active turn pane (right).
+                 Hidden until a payload loads; replay.js toggles the
+                 `replay-mode-active` class on the body to flip visibility. -->
+            <aside class="replay-turn-list" id="replayTurnList" aria-label="Conversation turns"></aside>
+            <section class="replay-pane" id="replayPane" aria-live="polite"></section>
+        </div>
+        <div class="modal-footer replay-footer" id="replayFooter">
+            <div class="replay-meta" id="replayMeta"></div>
+            <div class="replay-nav">
+                <button type="button" class="btn btn-secondary" id="btnReplayPrev" onclick="window.replayPrev()" disabled>‹ Prev</button>
+                <span class="replay-pos" id="replayPos">—</span>
+                <button type="button" class="btn btn-secondary" id="btnReplayNext" onclick="window.replayNext()" disabled>Next ›</button>
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="window.closeReplayModal()">Close</button>
+        </div>
+    </div>
+</div>

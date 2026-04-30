@@ -248,6 +248,30 @@
     color: var(--accent, #4a9eff);
 }
 
+/* 1.3.3 — per-row download button. Visible-on-hover (parallels delete) */
+.conv-item-download {
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: transparent;
+    border: 1px solid var(--border, #ccc);
+    border-radius: 4px;
+    color: var(--text-muted, #888);
+    font-size: var(--chat-sm);
+    padding: 2px 6px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.conv-item:hover .conv-item-download {
+    opacity: 1;
+}
+
+.conv-item-download:hover {
+    background: var(--bg-hover, rgba(0,0,0,0.05));
+    color: var(--text-primary);
+}
+
 .conv-empty {
     text-align: center;
     padding: 1.5rem 0.75rem;
@@ -1275,4 +1299,205 @@
     max-height: 90vh;
     border-radius: 8px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================
+   1.3.3 — SESSION REPLAY MODAL
+   ============================================ */
+
+/* Wider than the default modal — replay is a read-through experience */
+.replay-modal {
+    max-width: calc(var(--ui-font-size) * 70);
+    width: 90%;
+    height: 80vh;
+    max-height: 80vh;
+}
+
+.replay-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    gap: 0.75rem;
+    padding: 0;
+}
+
+/* Empty state — drop zone fills the body until a payload is loaded */
+.replay-drop-zone {
+    flex: 1;
+    margin: 1rem;
+    border: 2px dashed var(--border, #ccc);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: border-color 0.15s, background-color 0.15s;
+    padding: 2rem;
+    text-align: center;
+}
+
+.replay-drop-zone:hover,
+.replay-drop-zone.replay-drop-active {
+    border-color: var(--accent, #4a9eff);
+    background: var(--bg-hover, rgba(74, 158, 255, 0.05));
+}
+
+.replay-drop-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.replay-drop-text {
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.replay-drop-text code {
+    background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono, monospace);
+}
+
+.replay-drop-hint {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+.replay-drop-error {
+    display: none;
+    color: var(--danger, #dc3545);
+    background: var(--danger-bg, rgba(220, 53, 69, 0.1));
+    border: 1px solid var(--danger, #dc3545);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+    font-size: var(--font-sm);
+    max-width: 100%;
+    word-break: break-word;
+}
+
+/* Stepper layout — turn list (left) + active turn pane (right) */
+.replay-turn-list,
+.replay-pane {
+    display: none;
+}
+
+.replay-body.replay-mode-active .replay-drop-zone {
+    display: none;
+}
+
+.replay-body.replay-mode-active .replay-turn-list {
+    display: flex;
+    flex-direction: column;
+    width: 28%;
+    min-width: 200px;
+    max-width: 320px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 0.5rem;
+    gap: 0.15rem;
+}
+
+.replay-body.replay-mode-active .replay-pane {
+    display: block;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.replay-turn-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    line-height: 1.3;
+    transition: background-color 0.1s, border-color 0.1s;
+}
+
+.replay-turn-item:hover {
+    background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.replay-turn-item.replay-turn-active {
+    background: var(--accent-bg, rgba(74, 158, 255, 0.12));
+    border-color: var(--accent, #4a9eff);
+}
+
+.replay-turn-num {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    min-width: 1.5em;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85em;
+}
+
+.replay-turn-icon {
+    flex-shrink: 0;
+}
+
+.replay-turn-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Active-turn pane — reuses existing chat-message styles for content,
+   reasoning bubbles, and tool-call details so visual fidelity matches
+   the live chat panel. The replay-message class is a marker hook only. */
+.replay-pane .replay-message {
+    margin-bottom: 1rem;
+}
+
+.replay-pane .replay-message:last-child {
+    margin-bottom: 0;
+}
+
+/* Replay footer — meta + nav controls */
+.replay-footer {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.replay-meta {
+    flex: 1;
+    min-width: 180px;
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.replay-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.replay-pos {
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    font-variant-numeric: tabular-nums;
+    min-width: 4em;
+    text-align: center;
+}
+
+.replay-empty {
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+    padding: 0.75rem;
 }

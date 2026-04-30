@@ -4,6 +4,132 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-04-30
+
+Closes the **Session replay / shareable transcripts** item from
+`docs/ROADMAP.md` §1.3.x (originally slotted §1.3.4; renumbered to
+§1.3.3 because versions are monotonic releases — session sync took
+the prior §1.3.3 slot when it shipped as 1.3.2). Conversations can
+now be exported as a single `.aieditor.session` JSON file, dropped
+into another instance, and walked turn-by-turn in a read-only
+stepper. The use cases are bug reports, blog posts, teaching, and
+post-mortems — anywhere "here's exactly what the model saw at each
+step" is the artifact.
+
+**Reuses the 1.3.2 contract end-to-end.** `serialize`/`parse` from
+`js/chat/sessions-sync.js` already produce and consume the
+schema_version:1 shape; replay is the second consumer of the same
+bytes, validating that the schema isn't sync-only. No schema fields
+added; no new schema_version bump. Archives produced by 1.3.2's
+repo sync (the `.aieditor/sessions/<id>.json` files) can be dropped
+into the replay modal verbatim — they're the same format.
+
+**Read-only by construction.** Replay state lives in the module's
+closure, not in `ConversationManager`. There is no path through the
+replay UI that mutates `State.chatHistory`, `Storage`, the IDB, or
+the Git provider. Loading an archive cannot collide with, shadow,
+or overwrite a local conversation with the same id.
+
+**"Before/after diffs" framing.** The roadmap line mentions diffs;
+edit-tool results carry a 3-line `context` window of the surrounding
+file content (what the model saw). Replay surfaces that as-is via
+the existing tool-call `_display` payload. A future patch can
+expand edit-tool results to capture full file before/after if the
+use cases demand it; that's a separate admissibility argument and
+isn't load-bearing for the 1.3.3 stories.
+
+### Added
+
+- **`js/chat/replay.js`** *(new, ~600 lines)* — read-only stepper
+  module. Public API: `buildArchiveForConversation(id)` (returns
+  `{filename, content}` or null), `exportConversationToFile(id)`
+  (Blob-backed download), `openReplayModal()`, `closeReplayModal()`,
+  `loadFromFile(file)` / `loadFromString(content, label?)`, `next()`,
+  `prev()`, `goto(idx)`, `clearLoaded()`, `installReplay()`. Test
+  seams: `_stateSnapshotForTests`, `_resetForTests`. Imports the
+  same `serialize`/`parse` pair sessions-sync uses, so the two
+  surfaces share a single schema contract by construction.
+
+- **`#replayModal`** in [html/modals.html](html/modals.html) — modal
+  with two body states. Empty: a centered drop zone (drag a
+  `.aieditor.session` file or click to browse). Loaded: a turn list
+  on the left + active-turn pane on the right, with prev/next
+  buttons + position counter + keyboard nav (←/→/Esc). Follows the
+  existing `.modal-overlay`/`.modal` pattern; CSS toggles between
+  empty and stepper layouts via the `replay-mode-active` class on
+  `#replayBody`.
+
+- **▶ replay button** in the chat header
+  ([html/chat-panel.html](html/chat-panel.html)) — opens the modal
+  in empty drop-zone state. Sits between "Copy chat" and "New chat"
+  in the header row.
+
+- **⤓ download button per conversation row** in the conversation
+  drawer ([js/chat/index.js](js/chat/index.js)) — exports the row's
+  conversation as a `.aieditor.session` file. Visible-on-hover,
+  matching the delete and sync buttons. If the row being exported
+  is the active conversation with in-memory turns, the active
+  conversation flushes to storage first so the exported bytes
+  include every turn the user just saw.
+
+- **Replay CSS** in [css/chat.css](css/chat.css) — `.replay-modal`,
+  `.replay-drop-zone`, `.replay-turn-list`, `.replay-pane`,
+  `.replay-turn-item`, `.replay-meta`, `.replay-pos`. The active-
+  turn pane reuses the existing `.chat-message`,
+  `.message-reasoning`, and `.tool-call-details` classes so visual
+  fidelity matches the live chat panel — reasoning bubbles,
+  tool-call expand/collapse, and markdown formatting all render
+  the same way.
+
+- **`tests/test-session-replay.mjs`** *(new, 14 tests)* — exercises
+  the pure data-flow paths under `node --test`: round-trip
+  (`buildArchive` → `parse` → `loadFromString`), filename slugging,
+  rejection of malformed JSON / missing id / future
+  `schema_version`, legacy archives without `schema_version`
+  (treated as v1), and stepper navigation (`next`/`prev` clamp at
+  the ends, `goto` clamps out-of-range, no-op when nothing is
+  loaded). DOM rendering is browser-only; the module guards every
+  `getElementById` call with a null check so the data-flow paths
+  run cleanly without a DOM.
+
+### Changed
+
+- **`js/chat/index.js`** — drawer rows render with three trailing
+  buttons (sync, download, delete) instead of two. Wired the
+  download button's `data-conv-download` handler to flush the
+  active conversation before export and call
+  `exportConversationToFile()`. Exposed `exportConversationToFile`
+  and `openReplayModal` on `window.Chat` for plugin authors.
+
+- **`js/app.js`** — boot flow imports `installReplay` from
+  `js/chat/replay.js` and calls it alongside the existing memory /
+  sessions install hooks. The function wires
+  `window.openReplayModal`, `window.closeReplayModal`,
+  `window.replayNext`, `window.replayPrev`, `window.replayGoto`,
+  `window.replayExportConversation` for the inline `onclick`
+  handlers in `#replayModal`.
+
+### Notes
+
+- **No new schema_version.** The 1.3.2 shape is the contract;
+  replay is the second consumer. Future additive fields plug in
+  the same way (read-path-only, absent ≡ "not present"). A future
+  `schema_version` bump only happens on a structural change, and
+  the parser explicitly rejects unknown future versions rather
+  than rendering a partial view.
+
+- **No backend, no upload.** Export is a Blob-backed
+  `URL.createObjectURL` download; import is a local file read. The
+  archive never leaves the user's machine through this surface.
+  (Repo-committed archives via 1.3.2's per-conversation sync are a
+  separate, opt-in path.)
+
+- **Out of scope (deferred).** Forking from a turn into a live
+  conversation; full-file before/after snapshots; comparing two
+  replays side-by-side; an auto-advance/playback timer; a public
+  hosted replay viewer. Each is a separate admissibility argument
+  and none is load-bearing for the 1.3.3 use cases.
+
 ## [1.3.2] - 2026-04-30
 
 Closes the **Cross-device session sync via Git** item from
