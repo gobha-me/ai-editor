@@ -158,8 +158,24 @@ test('CODER_V1 compression registers Rules 1, 2, and 5 (1.2.0)', () => {
 
 test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () => {
     assert.equal(CODER_V1.tools.budget_tokens, 5000);
-    assert.deepEqual(CODER_V1.tools.catalog, []); // 1.4.0 populates from registry.
-    assert.deepEqual(CODER_V1.tools.static, []);  // 1.4.0 populates with the static set.
+    // catalog stays empty — source of truth is js/tools/registry.js via the Catalog adapter (1.3.4).
+    assert.deepEqual(CODER_V1.tools.catalog, []);
+    // static was populated in 1.3.4 (PR 1 of 1.4.0 Tools Phase 1) with the
+    // ROADMAP §1.4.0 set: meta-tools + read_file/read_lines/scan_file +
+    // edit_file + commit_files + list_dirty_files. Names that do not yet
+    // exist in the registry (the meta-tools, until 1.4.0 PR 3) are
+    // silently skipped by the admission consumer.
+    assert.deepEqual(CODER_V1.tools.static, [
+        'list_tool_categories',
+        'list_tools_by_category',
+        'find_tool',
+        'read_file',
+        'read_lines',
+        'scan_file',
+        'edit_file',
+        'commit_files',
+        'list_dirty_files',
+    ]);
     assert.equal(CODER_V1.tools.expansion_mode, 'short');
 });
 

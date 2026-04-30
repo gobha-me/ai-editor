@@ -51,12 +51,16 @@
  *   history (which is always true for coder). Rules 1–4 register here
  *   in 1.2.x as their implementations land.
  *
- * - **tools**: Catalog left empty here on purpose — the existing
- *   `js/tools/registry.js` is the source of truth. 1.4.0 will populate
- *   this from the registry filtered by role, and `static` will hold the
- *   small always-loaded subset called out in
- *   ROADMAP.md:301: meta-tools + read_file + read_lines + scan_file +
- *   edit_file + commit_files + list_dirty_files.
+ * - **tools**: `catalog` stays as `[]` — the source of truth is
+ *   `js/tools/registry.js`, surfaced via the
+ *   `js/intelligence/tools/Catalog` adapter (1.3.4 foundation). The
+ *   `static` array carries the names called out in ROADMAP §1.4.0:
+ *   meta-tools (`list_tool_categories`, `list_tools_by_category`,
+ *   `find_tool`) plus `read_file` + `read_lines` + `scan_file` +
+ *   `edit_file` + `commit_files` + `list_dirty_files`. The set is
+ *   *declared* in 1.3.4 and *consumed* when admission lands in 1.4.0
+ *   PR 2; entries the catalog cannot resolve (the meta-tools, until
+ *   PR 3) are silently skipped by the consumer.
  *
  * - **task_ledger**: Enabled with the coder-tuned cap and a low novelty
  *   threshold per DESIGN-profiles.md (coder re-admits liberally so a
@@ -130,8 +134,20 @@ export const CODER_V1 = {
     },
 
     tools: {
-        catalog: [],            // Populated from js/tools/registry.js when 1.4.0 wires admission.
-        static: [],             // 1.4.0: meta-tools + read_file/read_lines/scan_file/edit_file/commit_files/list_dirty_files.
+        catalog: [],            // Source of truth is js/tools/registry.js via the Catalog adapter (js/intelligence/tools/).
+        static: [
+            // Meta-tools — PR 3 of 1.4.0 adds the implementations; resolution returns null until then.
+            'list_tool_categories',
+            'list_tools_by_category',
+            'find_tool',
+            // Always-loaded coder essentials — ROADMAP §1.4.0.
+            'read_file',
+            'read_lines',
+            'scan_file',
+            'edit_file',
+            'commit_files',
+            'list_dirty_files',
+        ],
         discovery_strategies: ['categorical'], // ROADMAP §1.4.0: categorical only; semantic in 1.4.1.
         budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.

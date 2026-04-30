@@ -1,0 +1,397 @@
+// @ts-check
+/**
+ * Tool Catalog — read-only adapter over `js/tools/registry.js`.
+ *
+ * The Catalog is the registry of all `ToolDef`s available to a profile.
+ * In the target architecture (DESIGN-tools.md §"The Tool Catalog") the
+ * catalog is shared infrastructure backed by the same vector store as
+ * retrieval. For Phase 1 / 1.3.4 it is a thin synchronous adapter over
+ * the existing registry: every `ToolRegistry.register(...)` call becomes
+ * one `ToolDef` here, derived on demand.
+ *
+ * Why an adapter and not a rewrite: the existing registry is the source
+ * of truth for tool *handlers* (the executable plumbing). The admission
+ * subsystem only cares about *definitions*. Wrapping rather than replacing
+ * keeps PR 1 non-load-bearing — delete `js/intelligence/tools/` and the
+ * editor still works exactly as today.
+ *
+ * Subsequent PRs (the Composer in PR 2, meta-tools in PR 3, sticky
+ * admission in PR 4) consume this catalog. Nothing else does in 1.3.4.
+ *
+ * @module intelligence/tools/catalog
+ */
+
+import { ToolRegistry } from '../../tools/registry.js';
+import { computeToolID } from './tool-id.js';
+
+/**
+ * @typedef {import('./contracts.js').ToolDef} ToolDef
+ * @typedef {import('./contracts.js').ToolID} ToolID
+ * @typedef {import('./contracts.js').ToolMetadata} ToolMetadata
+ * @typedef {import('./contracts.js').AuthSpec} AuthSpec
+ * @typedef {import('./contracts.js').SideEffectClass} SideEffectClass
+ */
+
+const PROFILE_NAMESPACE = 'coder';
+const TOOL_VERSION = '1';
+
+/**
+ * Category mapping for the ~52 currently-registered tools. Categories use
+ * dot-notation so the categorical-discovery strategy can navigate a tree
+ * without a separate tree representation (DESIGN-tools.md §"Core
+ * Contracts" line 155).
+ *
+ * Tools not listed here fall back to `"misc"` — better to surface a
+ * gap than to misclassify silently.
+ *
+ * The categories mirror DESIGN-tools.md's §"Worked Example" and the
+ * roadmap's static-set carve-out (`code.file.read`, `code.git.commit`).
+ *
+ * @type {Object.<string, string>}
+ */
+const CATEGORY_BY_NAME = {
+    // code.file
+    'read_file': 'code.file.read',
+    'read_lines': 'code.file.read',
+    'read_current_file': 'code.file.read',
+    'read_function': 'code.file.read',
+    'open_file': 'code.file.navigate',
+    'list_open_tabs': 'code.file.navigate',
+    'create_file': 'code.file.write',
+    'delete_file': 'code.file.write',
+    'write_file': 'code.file.write',
+    'edit_file': 'code.file.edit',
+    'replace_lines': 'code.file.edit',
+    'insert_lines': 'code.file.edit',
+    'delete_lines': 'code.file.edit',
+    'replace_selection': 'code.file.edit',
+    'insert_at_cursor': 'code.file.edit',
+
+    // code.scan
+    'scan_file': 'code.scan',
+    'find_references': 'code.scan',
+    'search_in_files': 'code.scan',
+
+    // code.cursor
+    'goto_line': 'code.cursor',
+    'select_range': 'code.cursor',
+
+    // code.project
+    'list_projects': 'code.project',
+    'set_active_project': 'code.project',
+    'get_project_tree': 'code.project',
+    'peek_project_tree': 'code.project.xref',
+    'peek_project_file': 'code.project.xref',
+    'peek_read_lines': 'code.project.xref',
+
+    // code.git
+    'commit_files': 'code.git.commit',
+    'list_dirty_files': 'code.git.status',
+
+    // code.git.pr
+    'create_pull_request': 'code.git.pr',
+    'list_pull_requests': 'code.git.pr',
+    'read_pull_request': 'code.git.pr',
+    'add_pr_review': 'code.git.pr',
+    'merge_pull_request': 'code.git.pr',
+    'get_ci_status': 'code.git.ci',
+    'get_ci_logs': 'code.git.ci',
+
+    // code.issue
+    'list_issues': 'code.issue',
+    'read_issue': 'code.issue',
+    'create_issue': 'code.issue',
+    'update_issue': 'code.issue',
+    'add_issue_comment': 'code.issue',
+
+    // code.context (retrieval bridge)
+    'find_relevant_files': 'code.context',
+    'get_embeddings_status': 'code.context',
+    'index_project': 'code.context',
+
+    // memory
+    'memory_remember': 'memory',
+    'memory_recall': 'memory',
+    'memory_revise': 'memory',
+
+    // scratchpad (session-scoped memory)
+    'scratchpad_write': 'scratchpad',
+    'scratchpad_read': 'scratchpad',
+    'scratchpad_clear': 'scratchpad',
+
+    // plugin
+    'read_plugin_source': 'plugin',
+    'write_plugin_source': 'plugin',
+    'run_plugin': 'plugin',
+    'list_user_plugins': 'plugin',
+
+    // docs
+    'read_docs': 'docs',
+
+    // eval
+    'run_code': 'eval',
+};
+
+/**
+ * Side-effect classification by tool name. Read tools observe; write
+ * tools mutate local state; external tools touch a remote system.
+ * Irreversible is reserved for tools we want to flag at consent time
+ * (delete_file is technically recoverable via Git, so it is `"write"`).
+ *
+ * Tools not listed default to `"read"` — the conservative default is
+ * the most-restrictive one for *consent*, but the least-restrictive for
+ * *gating*; here the lookup result feeds the model's awareness of what
+ * a tool will do, so defaulting to `"read"` would be misleading. We
+ * default to `"external"` instead so unknown tools surface as
+ * "needs caution" until classified.
+ *
+ * @type {Object.<string, SideEffectClass>}
+ */
+const SIDE_EFFECTS_BY_NAME = {
+    'read_file': 'read',
+    'read_lines': 'read',
+    'read_current_file': 'read',
+    'read_function': 'read',
+    'open_file': 'read',
+    'list_open_tabs': 'read',
+    'scan_file': 'read',
+    'find_references': 'read',
+    'search_in_files': 'read',
+    'list_dirty_files': 'read',
+    'list_projects': 'read',
+    'get_project_tree': 'read',
+    'peek_project_tree': 'read',
+    'peek_project_file': 'read',
+    'peek_read_lines': 'read',
+    'list_issues': 'read',
+    'read_issue': 'read',
+    'list_pull_requests': 'read',
+    'read_pull_request': 'read',
+    'get_ci_status': 'read',
+    'get_ci_logs': 'read',
+    'find_relevant_files': 'read',
+    'get_embeddings_status': 'read',
+    'memory_recall': 'read',
+    'scratchpad_read': 'read',
+    'read_plugin_source': 'read',
+    'list_user_plugins': 'read',
+    'read_docs': 'read',
+
+    'edit_file': 'write',
+    'replace_lines': 'write',
+    'insert_lines': 'write',
+    'delete_lines': 'write',
+    'replace_selection': 'write',
+    'insert_at_cursor': 'write',
+    'goto_line': 'write',
+    'select_range': 'write',
+    'memory_remember': 'write',
+    'memory_revise': 'write',
+    'scratchpad_write': 'write',
+    'scratchpad_clear': 'write',
+    'write_plugin_source': 'write',
+    'index_project': 'write',
+    'set_active_project': 'write',
+
+    'create_file': 'external',
+    'delete_file': 'external',
+    'write_file': 'external',
+    'commit_files': 'external',
+    'create_pull_request': 'external',
+    'add_pr_review': 'external',
+    'merge_pull_request': 'external',
+    'create_issue': 'external',
+    'update_issue': 'external',
+    'add_issue_comment': 'external',
+    'run_plugin': 'external',
+    'run_code': 'external',
+};
+
+/**
+ * Approximate token count for a serializable object. Mirrors the
+ * `CHARS_PER_TOKEN = 4` heuristic used by
+ * `js/intelligence/compression/tokens.js`. Exact counts arrive when a
+ * `tiktoken`-equivalent module lands.
+ *
+ * @param {unknown} obj
+ * @returns {number}
+ */
+function approxTokens(obj) {
+    if (obj == null) return 0;
+    const s = typeof obj === 'string' ? obj : JSON.stringify(obj);
+    return Math.max(1, Math.ceil(s.length / 4));
+}
+
+/**
+ * Derive a category for a tool whose name is not in `CATEGORY_BY_NAME`.
+ * Falls back to `"misc"` so a missing entry is visible to operators
+ * rather than silently misfiled under an existing category.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function deriveCategory(name) {
+    if (name in CATEGORY_BY_NAME) return CATEGORY_BY_NAME[name];
+    return 'misc';
+}
+
+/**
+ * Derive a `SideEffectClass` for a tool whose name is not in
+ * `SIDE_EFFECTS_BY_NAME`. Defaults to `"external"` — the most
+ * informative-when-wrong choice, since "needs caution" beats
+ * "looks safe" for unclassified tools.
+ *
+ * @param {string} name
+ * @returns {SideEffectClass}
+ */
+function deriveSideEffects(name) {
+    if (name in SIDE_EFFECTS_BY_NAME) return SIDE_EFFECTS_BY_NAME[name];
+    return 'external';
+}
+
+/**
+ * Build a `ToolDef` from one entry in `ToolRegistry.definitions`.
+ * Pure derivation — no IO, no mutation of the source registry.
+ *
+ * @param {Object} def  Entry from `ToolRegistry.getDefinitions()`.
+ * @returns {ToolDef|null}
+ */
+function defToToolDef(def) {
+    const fn = def && def.function;
+    if (!fn || typeof fn.name !== 'string' || fn.name.length === 0) return null;
+
+    const name = fn.name;
+    const description = typeof fn.description === 'string' ? fn.description : '';
+    const schema = fn.parameters || { type: 'object', properties: {} };
+
+    const requiredGroups = Array.isArray(def._registeredRoles) ? def._registeredRoles.slice() : [];
+    /** @type {AuthSpec} */
+    const authorization = {
+        required_groups: requiredGroups,
+        required_consent: false,
+        rate_limit: null,
+    };
+
+    const short_cost = approxTokens(`${name}: ${description}`);
+    const cost_estimate = short_cost + approxTokens(schema);
+
+    /** @type {ToolMetadata} */
+    const metadata = {
+        version: TOOL_VERSION,
+        authorization,
+        side_effects: deriveSideEffects(name),
+        cost_estimate,
+        short_cost,
+        examples: null,
+        deprecated: false,
+        superseded_by: null,
+    };
+
+    return {
+        id: computeToolID(PROFILE_NAMESPACE, name, TOOL_VERSION),
+        name,
+        category: deriveCategory(name),
+        description,
+        schema,
+        full_doc: '',
+        embedding: null,
+        metadata,
+    };
+}
+
+/**
+ * Produce the current snapshot of all `ToolDef`s. Built on each call
+ * because the registry is mutable (plugins can register tools at any
+ * time). The set is small enough (~52 tools) that re-deriving is cheap
+ * and avoids cache-invalidation footguns.
+ *
+ * @returns {ToolDef[]}
+ */
+function buildAll() {
+    const defs = ToolRegistry.getDefinitions();
+    /** @type {ToolDef[]} */
+    const out = [];
+    for (const def of defs) {
+        const td = defToToolDef(def);
+        if (td) out.push(td);
+    }
+    return out;
+}
+
+/**
+ * Look up a tool by deterministic ToolID. Returns null when the ID
+ * doesn't resolve in the current registry — callers should treat this
+ * as "tool was migrated or removed" and fall back to audit metadata,
+ * not crash.
+ *
+ * @param {ToolID} id
+ * @returns {ToolDef|null}
+ */
+function getById(id) {
+    const all = buildAll();
+    for (const td of all) {
+        if (td.id === id) return td;
+    }
+    return null;
+}
+
+/**
+ * Look up a tool by canonical name. Null when the name isn't registered
+ * — used by `coder.v1.tools.static` resolution: a name in the static
+ * array that doesn't yet exist in the registry (e.g. the meta-tools in
+ * 1.3.4, before PR 3 adds them) simply returns null and the consumer
+ * skips it.
+ *
+ * @param {string} name
+ * @returns {ToolDef|null}
+ */
+function getByName(name) {
+    const all = buildAll();
+    for (const td of all) {
+        if (td.name === name) return td;
+    }
+    return null;
+}
+
+/**
+ * List tools whose category begins with `prefix` (dot-segment aware).
+ * `"code.git"` matches `"code.git.commit"` and `"code.git.pr"` but not
+ * `"code.gitsomething"`.
+ *
+ * @param {string} prefix
+ * @returns {ToolDef[]}
+ */
+function listByCategoryPrefix(prefix) {
+    if (typeof prefix !== 'string') return [];
+    const all = buildAll();
+    if (prefix === '') return all;
+    return all.filter(td => td.category === prefix || td.category.startsWith(prefix + '.'));
+}
+
+/**
+ * List every `ToolDef` in the catalog (one per registered tool).
+ *
+ * @returns {ToolDef[]}
+ */
+function listAll() {
+    return buildAll();
+}
+
+export const Catalog = {
+    getById,
+    getByName,
+    listByCategoryPrefix,
+    listAll,
+};
+
+// Test seams — unit tests assert on derivation in isolation from the
+// registry singleton. Not part of the public surface; underscore prefix
+// signals "do not import from product code."
+export const _testing = {
+    defToToolDef,
+    deriveCategory,
+    deriveSideEffects,
+    approxTokens,
+    PROFILE_NAMESPACE,
+    TOOL_VERSION,
+};

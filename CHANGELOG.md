@@ -4,6 +4,120 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-04-30
+
+Lands the **tools-track foundation** — PR 1 of the 1.4.0 Tools Phase 1
+arc. No model-visible behavior change. The existing `ToolRegistry`
+keeps shipping every registered tool to every LLM call exactly as it
+did in 1.3.3; this release establishes the data contracts and read-
+only catalog adapter that subsequent 1.4.0 PRs (Composer, meta-tools,
+sticky admission, diagnostics, active-tools chip row) plug into.
+
+The track lands as 1.3.4 instead of 1.4.0 because Phase 1's exit
+criteria (70%+ token reduction on a typical coder session, working
+discovery roundtrip, diagnostics in the LLM debug modal) are not yet
+satisfied — 1.4.0 is reserved for when the admission layer is live.
+Same pattern that scaffolded `js/profiles/` data in 1.1.0 before
+subsystems wired up.
+
+**Why now:** the 1.3.x Memory follow-ups completed in one day (1.3.1
+reasoning, 1.3.2 session sync, 1.3.3 session replay), `[Unreleased]`
+is empty, and `coder.v1` already scaffolded `tools.static: []` /
+`tools.catalog: []` waiting for 1.4.0 — see `docs/ROADMAP.md` §1.3.x
+renumbering note ("new memory follow-ups slot above 1.3.3 as they're
+scoped"; none are).
+
+### Added
+
+- **`js/intelligence/tools/`** *(new module tree)* — public surface
+  exposed via the barrel `index.js`:
+
+  - **`computeToolID(profile_namespace, canonical_name, version)`**
+    — synchronous deterministic hash producing a 16-character
+    lowercase hex string (`docs/DESIGN-tools.md` §"Tool Identity and
+    Stability" contract). FNV-1a 32-bit applied twice (forward +
+    reversed input with NUL separators, concatenated to 64 bits).
+    Synchronous because admission decisions happen on the LLM-call
+    hot path; SubtleCrypto is async-only and would force the
+    Composer to await per call. Throws on empty/non-string inputs.
+    Determinism, name/version/namespace discrimination, and
+    boundary-shift collision resistance are asserted in the new
+    test suite.
+
+  - **`Catalog`** — read-only adapter over `js/tools/registry.js`.
+    Public API: `Catalog.getById(id)`, `Catalog.getByName(name)`,
+    `Catalog.listByCategoryPrefix(prefix)`, `Catalog.listAll()`. Each
+    call re-derives the catalog from `ToolRegistry.getDefinitions()`;
+    the set is small (~52 tools) and the registry is mutable
+    (plugins can register at any time), so re-derivation is cheaper
+    than cache-invalidation discipline. No mutation API — the
+    catalog reflects the registry, never the other way around.
+
+  - **`ToolDef` / `ToolMetadata` / `AuthSpec` / `ToolRequest` /
+    `ToolAdmissionResult` / `AdmittedTool` / `SuppressionRecord` /
+    `ToolDiagnostics` / `ToolSummary` / `CategoryInfo` /
+    `DiscoveryCall` typedefs** in `contracts.js` — match the
+    field-by-field shape from `docs/DESIGN-tools.md:122-191` so PR 2's
+    Composer plugs in without contract churn.
+
+  - **Category mapping table** in `catalog.js` for the ~52
+    currently-registered tools (`code.file.read`, `code.git.commit`,
+    `memory.*`, `code.context.*`, etc.). Tools without an entry fall
+    back to `"misc"` so a missing classification is visible to
+    operators rather than silently misfiled.
+
+  - **Side-effect mapping table** in `catalog.js` classifying each
+    tool as `"read"` / `"write"` / `"external"` / `"irreversible"`.
+    Unmapped tools default to `"external"` — the cautious-when-wrong
+    default, since "needs caution" beats "looks safe" for
+    unclassified capabilities. The classification feeds the model's
+    awareness of what each tool will do (consent UI surfaces it in
+    a later PR).
+
+- **`coder.v1.tools.static`** populated with the ROADMAP §1.4.0
+  always-loaded set: `['list_tool_categories', 'list_tools_by_category',
+  'find_tool', 'read_file', 'read_lines', 'scan_file', 'edit_file',
+  'commit_files', 'list_dirty_files']`. The meta-tools (first three)
+  do not yet exist in the registry — `Catalog.getByName('list_tool_categories')`
+  returns null until 1.4.0 PR 3 adds them, and the admission consumer
+  in PR 2 is contractually required to skip-not-throw on null.
+  Asserted in the new test suite.
+
+- **`tests/test-tools-foundation.mjs`** *(new, 20 tests)* — covers
+  deterministic ToolID hashing (5 tests), Catalog adapter behavior
+  (10 tests, including derivation, lookup, and category-prefix
+  semantics), and profile integration (3 tests asserting
+  `coder.v1.tools.static` resolves correctly for tools that exist
+  and returns null for tools that don't). Picked up automatically by
+  the `node --test tests/test-*.mjs` step in
+  `.gitea/workflows/ci.yaml`.
+
+### Changed
+
+- **`tests/test-profiles.mjs:159`** — the 1.1.0-era assertion
+  `assert.deepEqual(CODER_V1.tools.static, [])` (which encoded
+  "static set is populated in 1.4.0") is updated to assert the
+  actual populated set. The intent of the original assertion ("PR
+  1.4.0 fills this in") is preserved by the new deepEqual; the
+  empty-array check was an interim placeholder, not a load-bearing
+  constraint.
+
+### Notes
+
+- **No browser-test registration.** The new test file is `.mjs` and
+  picks up automatically via `node --test tests/test-*.mjs` in CI.
+  Pure-data contract tests (compression, memory, profiles) have
+  followed this pattern since 1.2.0; the browser runner at
+  `tests/index.html` continues to host the DOM/Storage-touching
+  `.js` suites only.
+
+- **Removability check.** Delete `js/intelligence/tools/`, revert
+  `coder-v1.js` `tools.static` back to `[]`, and the editor still
+  works exactly as it did at 1.3.3 — every tool still loads on
+  every call, every existing test still passes. PR 1 is intentionally
+  non-load-bearing: the seam exists but no consumer reads from it
+  yet.
+
 ## [1.3.3] - 2026-04-30
 
 Closes the **Session replay / shareable transcripts** item from
