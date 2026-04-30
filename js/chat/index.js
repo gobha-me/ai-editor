@@ -506,13 +506,22 @@ function renderConversationList() {
         const title = c.title || 'New Chat';
         const activeClass = isActive ? ' conv-item-active' : '';
         const costChip = _formatCostChip(c.id);
+        const isSynced = Boolean(c.synced);
+        const syncTitle = isSynced
+            ? 'Synced via repo · click to stop syncing'
+            : 'Sync this conversation via the repo (.aieditor/sessions/)';
+        const syncClass = isSynced
+            ? 'conv-item-sync conv-item-sync-on'
+            : 'conv-item-sync';
+        const syncIcon = isSynced ? '📡' : '⇅';
 
         return `
             <div class="conv-item${activeClass}" data-conv-id="${c.id}">
                 <div class="conv-item-content" data-conv-load="${c.id}" title="${_escapeAttr(title)}">
-                    <div class="conv-item-title">${_escapeHtml(title)}</div>
+                    <div class="conv-item-title">${_escapeHtml(title)}${isSynced ? ' <span class="conv-item-sync-badge" title="Synced via repo">📡</span>' : ''}</div>
                     <div class="conv-item-meta">${date} · ${msgCount} msg${msgCount !== 1 ? 's' : ''}${costChip}</div>
                 </div>
+                <button type="button" class="${syncClass}" data-conv-sync="${c.id}" title="${_escapeAttr(syncTitle)}" aria-label="${_escapeAttr(syncTitle)}" aria-pressed="${isSynced}">${syncIcon}</button>
                 <button type="button" class="btn-icon-danger conv-item-delete" data-conv-delete="${c.id}" title="Delete">✕</button>
             </div>
         `;
@@ -529,6 +538,14 @@ function renderConversationList() {
         });
     });
 
+    list.querySelectorAll('[data-conv-sync]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = el.dataset.convSync;
+            _toggleConversationSync(id);
+        });
+    });
+
     list.querySelectorAll('[data-conv-delete]').forEach(el => {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -537,6 +554,53 @@ function renderConversationList() {
             renderMessages();
         });
     });
+}
+
+/**
+ * Toggle the per-conversation sync flag. First-time-on shows a confirm
+ * prompt — once dismissed-OK, future toggles on this same conversation
+ * skip the prompt, and toggling off prompts a separate "stop syncing"
+ * confirmation that explains the committed file persists.
+ *
+ * @param {string} id
+ */
+function _toggleConversationSync(id) {
+    if (!id) return;
+    const wasSynced = ConversationManager.isSynced(id);
+
+    if (!wasSynced) {
+        const ack = Storage.get('sessionSyncFirstAck', false);
+        if (!ack) {
+            const proceed = window.confirm(
+                'Sync this conversation via the repo?\n\n' +
+                'The full transcript (messages, tool calls, results) will be ' +
+                'written to .aieditor/sessions/<id>.json and committed to the ' +
+                'repo on the next commit. Anyone with repo access will be able ' +
+                'to read it.\n\n' +
+                'Default-private — only conversations you flip on are synced. ' +
+                'You can turn this off later, but the already-committed file ' +
+                'will remain in the repo until you remove it manually.'
+            );
+            if (!proceed) return;
+            Storage.set('sessionSyncFirstAck', true);
+        }
+        ConversationManager.setSynced(id, true);
+        if (typeof window.showToast === 'function') {
+            window.showToast('Conversation will sync on the next commit', 'success');
+        }
+    } else {
+        const proceed = window.confirm(
+            'Stop syncing this conversation?\n\n' +
+            'New messages will no longer be projected to .aieditor/sessions/. ' +
+            'The already-committed file remains in the repo until removed manually.'
+        );
+        if (!proceed) return;
+        ConversationManager.setSynced(id, false);
+        if (typeof window.showToast === 'function') {
+            window.showToast('Sync paused for this conversation', 'info');
+        }
+    }
+    renderConversationList();
 }
 
 /** Format timestamp as relative time */

@@ -94,6 +94,14 @@ import {
     getActiveWorkspaceId as memoryFileLayerWorkspaceId,
     consentClearAll as memoryConsentClearAll,
 } from './intelligence/memory/index.js';
+import {
+    installSessionsSync,
+    getPendingContent as sessionsGetPendingContent,
+    listPendingPaths as sessionsListPendingPaths,
+    getDiagnostics as sessionsGetDiagnostics,
+    isEnabled as sessionsIsEnabled,
+    getActiveWorkspaceId as sessionsActiveWorkspaceId,
+} from './chat/sessions-sync.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -1018,6 +1026,7 @@ async function init() {
     initCostTrackerListener();
     initCostRecorder();
     installMemoryFileLayer();
+    installSessionsSync();
     // Memory PR #6 — drop pending consent candidates when chat clears.
     // The conversational context that produced agent-proposed proposals is
     // gone; pending cards from a prior chat shouldn't restore on the new one.
@@ -1033,6 +1042,13 @@ async function init() {
             getDiagnostics: memoryGetDiagnostics,
             isEnabled: memoryFileLayerIsEnabled,
             getActiveWorkspaceId: memoryFileLayerWorkspaceId,
+        };
+        window.AIEditor.sessionsSync = {
+            getPendingContent: sessionsGetPendingContent,
+            listPendingPaths: sessionsListPendingPaths,
+            getDiagnostics: sessionsGetDiagnostics,
+            isEnabled: sessionsIsEnabled,
+            getActiveWorkspaceId: sessionsActiveWorkspaceId,
         };
     }
     initSessionListeners();

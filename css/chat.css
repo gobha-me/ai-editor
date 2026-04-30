@@ -211,6 +211,43 @@
     opacity: 1;
 }
 
+/* 1.3.2 — per-conversation sync toggle. Visible-on-hover (parallels the
+ * delete button) when off; always-visible when on, so synced
+ * conversations announce themselves at a glance. */
+.conv-item-sync {
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: transparent;
+    border: 1px solid var(--border, #ccc);
+    border-radius: 4px;
+    color: var(--text-muted, #888);
+    font-size: var(--chat-sm);
+    padding: 2px 6px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.conv-item:hover .conv-item-sync {
+    opacity: 1;
+}
+
+.conv-item-sync.conv-item-sync-on {
+    opacity: 1;
+    border-color: var(--accent, #4a9eff);
+    color: var(--accent, #4a9eff);
+}
+
+.conv-item-sync:hover {
+    background: var(--bg-hover, rgba(0,0,0,0.05));
+}
+
+.conv-item-sync-badge {
+    margin-left: 4px;
+    font-size: 0.85em;
+    color: var(--accent, #4a9eff);
+}
+
 .conv-empty {
     text-align: center;
     padding: 1.5rem 0.75rem;

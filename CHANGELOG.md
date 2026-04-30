@@ -4,6 +4,150 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-04-30
+
+Closes the **Cross-device session sync via Git** item from
+`docs/ROADMAP.md` §1.3.x (originally slotted §1.3.3; renumbered to
+§1.3.2 because versions are monotonic releases, not reserved slots —
+persona-scope at the prior §1.3.2 is deferred indefinitely with no
+version reservation). Conversations the user explicitly flags as
+synced are projected to `.aieditor/sessions/<id>.json`, pending-staged
+in the commit modal, and round-trip through Git so opening the same
+project on a second device surfaces the same conversations in the
+drawer.
+
+**Design refined at kickoff: per-conversation opt-in, not workspace-wide.**
+The roadmap originally framed sessions to mirror memory's repo mode
+(workspace-level toggle). After review, the gate tightened: memory
+holds curated facts (intentional, pre-vetted) so workspace-wide
+opt-in is fine; sessions hold raw transcripts (pasted secrets, stack
+traces, half-formed scratch thinking the user never planned to commit)
+so workspace-wide opt-in is too coarse. Each conversation now carries
+a `synced: boolean` flag; default-false. Toggling on a single
+conversation is the only path that creates an `.aieditor/sessions/`
+file; turning it off stops future syncs (the already-committed file
+persists until the user removes it manually). This preserves the
+cross-device sync story for the conversations the user wants on
+another machine, while keeping every other conversation default-private.
+
+**Schema (locked at PR kickoff):**
+```js
+{
+  schema_version: 1,
+  id, title, createdAt, updatedAt, messageCount,
+  messages, summaryInfo, pruneStash,
+  synced_by, last_synced_at,
+}
+```
+JSON, not Markdown — sessions aren't human-curated facts; JSON
+round-trips message arrays / tool calls / reasoning blocks
+unambiguously. Stable key order keeps the same conversation producing
+the same bytes across runs.
+
+**Conflict resolution:** latest `updatedAt` wins, mirroring memory's
+file-layer rule. The local `_generateId()` (base36 timestamp + 4-char
+random) isn't globally unique; if two devices flag the same
+auto-generated id, the later edit wins silently. Divergent message
+lists across machines (real merge conflicts) are out of scope for
+1.3.2 — surface diagnostics later if real usage shows the asymmetry
+hurts.
+
+**Privacy gates:**
+- **Default off** for every conversation. The synced state is part of
+  the per-conversation index entry, never set implicitly.
+- **First-toggle-on confirm dialog** explains that the full transcript
+  will land in the repo and anyone with repo access can read it.
+  After the user confirms once, future toggle-ons skip the prompt
+  (the first-ack flag persists in `Storage`).
+- **Untoggle confirm dialog** is separate, explaining that the already-
+  committed file persists until removed manually.
+- **Decision §4 protected-branch gate** applies: the commit modal's
+  "Session updates" section renders Flow 3B (disabled warning band +
+  three escape-hatch buttons) on protected branches, mirroring memory's
+  Flow 3A/3B split.
+
+### Added
+
+- **`js/chat/sessions-sync.js`** *(new, ~480 lines)* — pending-buffer
+  layer mirroring `js/intelligence/memory/file-layer.js`. Public API:
+  `sessionPath(id)`, `serialize(entry, payload, meta)`, `parse(content)`,
+  `enable(workspaceId)` / `disable()`, `loadFromGit({ owner, repo,
+  branch?, gitClient? })`, `getPendingContent(path)`,
+  `listPendingPaths()`, `discardPendingSessionWrites(paths)`,
+  `installSessionsSync()` boot helper. Subscribes to `conversation:saved`,
+  `conversation:renamed`, `conversation:syncToggled`,
+  `conversation:deleted` and regenerates the affected file *only when
+  the conversation is `synced: true`*. Mutation on an unflagged
+  conversation produces no pending content. Test seams:
+  `_setGitClientForTests`, `_resetForTests`.
+
+- **`ConversationManager.setSynced(id, synced)` / `isSynced(id)`**
+  in [js/chat/conversations.js](js/chat/conversations.js) — the index
+  entry's `synced` flag with a `conversation:syncToggled` event for
+  the sync layer to hook. `synced: false` is the default for every
+  newly-created conversation.
+
+- **`conversation:saved` event** emitted by `ConversationManager.save()`
+  after the index write. Lets the sync layer regenerate the projected
+  file on the same debounced cadence the chat already uses.
+
+- **Drawer sync badge + per-conversation toggle** in
+  [js/chat/index.js](js/chat/index.js). Each row gains a `📡` badge
+  next to the title when synced, plus an `⇅` toggle button (visible-
+  on-hover when off, always-visible when on). Click flips the flag
+  through the confirm-dialog flow. CSS in
+  [css/chat.css](css/chat.css) under `.conv-item-sync` and
+  `.conv-item-sync-badge`. Closes UI #6 from the roadmap's cross-cutting
+  table.
+
+- **Commit modal "Session updates" section** —
+  [js/ui/commit-sessions-section.js](js/ui/commit-sessions-section.js)
+  *(new)* renders Flow 3A (auto-staged on unprotected branches) and
+  Flow 3B (warning band + Branch off / Keep pending / Discard escape
+  hatches on protected branches). [js/ui/commit.js](js/ui/commit.js)
+  imports it alongside the existing memory section, renders both,
+  appends pending session paths to the `batchSaveFiles()` payload,
+  and clears successfully-committed paths via
+  `discardPendingSessionWrites()`. The button label switches to
+  "Commit N file(s) (code only)" when *either* memory or session
+  pending writes exist on a protected branch.
+
+- **`installSessionsSync()` boot wiring** in
+  [js/app.js](js/app.js) — registers `project:loaded` and
+  `project:cleared` handlers, calls `enable(workspaceId)` and
+  `loadFromGit({ owner, repo, branch })` on workspace mount, and
+  exposes `window.AIEditor.sessionsSync` for dev-console inspection.
+
+- **`tests/test-sessions-sync.mjs`** — 26 node:test cases covering
+  serialize/parse round-trip, malformed-input warnings, lifecycle
+  (enable/disable/idempotency), pending-buffer mutation behavior
+  (synced vs. non-synced, untoggle, delete, discard), `loadFromGit`
+  hydration with newer/older/equal `updatedAt` precedence, malformed-
+  file warning accumulation, and `ConversationManager.setSynced` /
+  `isSynced` integration.
+
+### Changed
+
+- **`ConversationManager.save()`** now emits `conversation:saved` after
+  the index write so the sessions-sync layer can hook the same
+  debounced cadence as the chat. Pre-1.3.2 listeners are unaffected
+  (event was previously unused).
+
+- **Conversation index schema** gains an optional `synced: boolean`
+  field per entry. Pre-1.3.2 entries persist with `synced: undefined`,
+  treated as `false` by every consumer. No migration required.
+
+### Notes
+
+- The committed `.aieditor/sessions/<id>.json` file is **not auto-removed**
+  when the user untoggles sync or deletes the local conversation.
+  Manual `git rm` is the cleanup path for 1.3.2; auto-deletion is a
+  follow-up patch if it bites.
+- `loadFromGit` requires the Git provider to expose `getDirContents`.
+  When unavailable, the loader is a no-op (no warning) — sessions
+  the user has already flagged sync normally on the next save; only
+  the cross-device hydration path needs the directory listing.
+
 ## [1.3.1] - 2026-04-30
 
 Closes the **Reasoning as turn metadata** item from `docs/ROADMAP.md`

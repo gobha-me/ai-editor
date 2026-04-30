@@ -21,6 +21,16 @@ import {
     renderMemoryUpdatesSection,
     wireMemoryUpdatesSection,
 } from './commit-memory-section.js';
+import {
+    isEnabled as sessionsSyncIsEnabled,
+    listPendingPaths as sessionsListPendingPaths,
+    getPendingContent as sessionsGetPendingContent,
+    discardPendingSessionWrites,
+} from '../chat/sessions-sync.js';
+import {
+    renderSessionUpdatesSection,
+    wireSessionUpdatesSection,
+} from './commit-sessions-section.js';
 
 // ============================================
 // COMMIT MODAL
@@ -54,11 +64,13 @@ export function openCommitModal() {
     }).join('');
 
     _renderMemorySection();
+    _renderSessionsSection();
 
     const isProtected = _currentBranchIsProtected();
     const memCount = (memoryFileLayerIsEnabled() ? memoryListPendingPaths().length : 0);
+    const sessCount = (sessionsSyncIsEnabled() ? sessionsListPendingPaths().length : 0);
     document.getElementById('btnDoCommit').textContent =
-        (isProtected && memCount > 0)
+        (isProtected && (memCount > 0 || sessCount > 0))
             ? `✅ Commit ${dirtyTabs.length} file(s) (code only)`
             : `✅ Commit ${dirtyTabs.length} file(s)`;
 
@@ -102,6 +114,29 @@ function _renderMemorySection() {
         branch: State.currentBranch || '',
     });
     wireMemoryUpdatesSection(root, { closeModal: closeCommitModal });
+}
+
+function _renderSessionsSection() {
+    const root = document.getElementById('commitSessionsSection');
+    if (!root) return;
+
+    if (!sessionsSyncIsEnabled()) {
+        root.innerHTML = '';
+        return;
+    }
+    const pendingPaths = sessionsListPendingPaths();
+    if (pendingPaths.length === 0) {
+        root.innerHTML = '';
+        return;
+    }
+
+    const isProtected = _currentBranchIsProtected();
+    root.innerHTML = renderSessionUpdatesSection({
+        isProtected,
+        pendingPaths,
+        branch: State.currentBranch || '',
+    });
+    wireSessionUpdatesSection(root, { closeModal: closeCommitModal });
 }
 
 export async function generateCommitMsg() {
@@ -162,7 +197,20 @@ export async function commitAndPush() {
         content: memoryGetPendingContent(path) || '',
         sha: undefined,
     }));
-    const allTabs = tabsToCommit.concat(memoryPseudoTabs);
+
+    // 1.3.2 — same Flow 3A/3B gate for sessions.
+    const sessionPaths = (
+        sessionsSyncIsEnabled() && !_currentBranchIsProtected()
+            ? sessionsListPendingPaths()
+            : []
+    );
+    const sessionPseudoTabs = sessionPaths.map((path) => ({
+        path,
+        content: sessionsGetPendingContent(path) || '',
+        sha: undefined,
+    }));
+
+    const allTabs = tabsToCommit.concat(memoryPseudoTabs).concat(sessionPseudoTabs);
 
     if (allTabs.length === 0) {
         showToast('No changes to commit', 'warning');
@@ -179,11 +227,17 @@ export async function commitAndPush() {
         // Auto-clear pending memory paths that landed successfully.
         // Partial-success commits leave failed paths pending so the
         // user can retry without losing them.
+        const committedSet = new Set(results.map((r) => r.path));
         if (memoryPaths.length > 0) {
-            const committedSet = new Set(results.map((r) => r.path));
             const memoryCommitted = memoryPaths.filter((p) => committedSet.has(p));
             if (memoryCommitted.length > 0) {
                 discardPendingMemoryWrites(memoryCommitted);
+            }
+        }
+        if (sessionPaths.length > 0) {
+            const sessionsCommitted = sessionPaths.filter((p) => committedSet.has(p));
+            if (sessionsCommitted.length > 0) {
+                discardPendingSessionWrites(sessionsCommitted);
             }
         }
 

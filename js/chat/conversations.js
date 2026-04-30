@@ -5,9 +5,16 @@
  * Each conversation stores its own messages, summary info, and prune stash.
  * 
  * Storage layout:
- *   'conversations'       → [{id, title, createdAt, updatedAt, messageCount}]
+ *   'conversations'       → [{id, title, createdAt, updatedAt, messageCount, synced?}]
  *   'conv-{id}'           → {messages, summaryInfo, pruneStash}
  *   'activeConversation'  → string id
+ *
+ * The `synced` flag (1.3.2) is per-conversation opt-in for the
+ * cross-device sync via `.aieditor/sessions/<id>.json` (see
+ * `js/chat/sessions-sync.js`). Default-false; only conversations the
+ * user explicitly flips on are projected to the repo. Sessions are
+ * raw transcripts vs memory's curated facts, so the gate is
+ * per-conversation rather than workspace-wide.
  */
 
 import { State, Storage, EventBus } from '../core.js';
@@ -185,7 +192,8 @@ const ConversationManager = {
                 title: _deriveTitle(messages),
                 createdAt: now,
                 updatedAt: now,
-                messageCount: messages.length
+                messageCount: messages.length,
+                synced: false
             });
         }
 
@@ -200,6 +208,11 @@ const ConversationManager = {
         }
 
         _setIndex(index);
+
+        // 1.3.2 — let the sync layer pick up the change. The listener
+        // ignores conversations without `synced: true`, so this is a
+        // no-op for unflagged conversations.
+        EventBus.emit('conversation:saved', { id });
     },
 
     /**
@@ -272,7 +285,8 @@ const ConversationManager = {
             title: 'New Chat',
             createdAt: now,
             updatedAt: now,
-            messageCount: 0
+            messageCount: 0,
+            synced: false
         });
         _setIndex(index);
 
@@ -334,6 +348,42 @@ const ConversationManager = {
         entry.title = title.slice(0, TITLE_MAX);
         _setIndex(index);
         EventBus.emit('conversation:renamed', { id, title: entry.title });
+    },
+
+    /**
+     * 1.3.2 — Set the per-conversation sync flag. Toggling on opts the
+     * conversation in to `.aieditor/sessions/<id>.json` projection;
+     * toggling off stops future syncs (the already-committed remote
+     * file persists until the user removes it manually). Returns the
+     * resolved boolean (false if the id isn't in the index).
+     *
+     * @param {string} id
+     * @param {boolean} synced
+     * @returns {boolean}
+     */
+    setSynced(id, synced) {
+        const index = _getIndex();
+        const entry = index.find(c => c.id === id);
+        if (!entry) return false;
+        const next = Boolean(synced);
+        if (entry.synced === next) return next;
+        entry.synced = next;
+        entry.updatedAt = Date.now();
+        _setIndex(index);
+        EventBus.emit('conversation:syncToggled', { id, synced: next });
+        return next;
+    },
+
+    /**
+     * 1.3.2 — Get the per-conversation sync flag. Returns false for
+     * unknown ids and for conversations without the flag (default off).
+     *
+     * @param {string} id
+     * @returns {boolean}
+     */
+    isSynced(id) {
+        const entry = _getIndex().find(c => c.id === id);
+        return Boolean(entry && entry.synced);
     }
 };
 
