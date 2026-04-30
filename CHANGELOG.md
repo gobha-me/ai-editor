@@ -248,6 +248,100 @@ reflects the pre-kickoff data model; that doc updates with PR #8.
   resolve to exactly-one-winner per trial, and the mutex chain map
   drains after operations resolve.
 
+#### Memory Phase 1 — `.aieditor/memory/*.md` file layer (Memory PR #3)
+
+Memory PR #3 of 8 in the 1.3.0 track. Stands up the transparent file
+projection of the workspace-scope structured store: per-category
+Markdown files at `.aieditor/memory/{preferences,decisions,project_context,
+domain_knowledge,workflow}.md` plus an `index.md` pointer. **No
+user-visible behavior change in this PR.** The actual `Git.updateFile()`
+write at commit time lands in PR #7 (commit-modal "Memory updates"
+section, Touch 1 Flow 3A); for now the file content is held in an
+in-memory pending buffer that consumers (PR #7's modal, PR #5's Memory
+tab diagnostics) read via `getPendingContent(path)` /
+`listPendingPaths()`. The reason for the split: the editor has no
+working-tree concept, so calling `Git.updateFile()` per mutation would
+force a commit per mutation — wrong shape for the auto-staging UX
+Decision §3 + Flow 3A describe.
+
+The file format is decided by the kickoff (memory file
+`project_design_engagement.md`, Decision §4): one YAML-frontmatter
+block per record, frontmatter keys alphabetically sorted, strings
+JSON-encoded for unambiguous escape, body JSON-encoded so any
+string/object/array round-trips. Records sorted by `key` for
+byte-determinism. Conflict resolution at parse time: duplicate keys
+keep the latest `updated_at`, drop the others, surface as
+`diagnostics.warnings` (no three-way merge — Memory tab in PR #5
+renders the warnings).
+
+The `?memoryRepoMode=on` URL flag is the temporary opt-in until PR #5
+ships the Settings → Memory toggle. Mirrors the `?compression=off`
+precedent from PR #187: URL-only, read-once + cached, logged on first
+detection. Removability: delete the flag file + the four-line guard in
+`installFileLayer()`; behavior reverts to "file layer inert until PR
+#5's Settings toggle activates it."
+
+- **`js/intelligence/memory/file-layer.js`** — the projection module.
+  Exports pure `serialize(records)` / `serializeIndex(counts)` /
+  `parse(content, opts)` for round-trippable conversion between
+  `MemoryRecord[]` and the YAML-frontmatter file format. Lifecycle
+  (`enable(workspaceId)`, `disable()`, `loadFromGit({owner, repo,
+  branch, gitClient?})`) wires the layer to a specific workspace,
+  performs initial flush from existing IDB records on enable, and
+  reads any committed `.aieditor/memory/*.md` from Git on workspace
+  mount to seed the structured store. Mutation subscriber filters
+  events to workspace-scope records belonging to the active workspace
+  (user-scope records and other-workspace records are no-ops).
+  Pending content read API: `getPendingContent(path)`,
+  `listPendingPaths()`, `getDiagnostics()`, `clearDiagnostics()`,
+  `isEnabled()`, `getActiveWorkspaceId()`. Helper: `categoryPath(cat)`,
+  `indexPath()`. Boot integration: `installFileLayer()` (called from
+  `js/app.js`) subscribes to `project:loaded` / `project:cleared` only
+  when the URL flag is set. Test seams:
+  `_setGitClientForTests(client)`, `_resetForTests()`. Eventual
+  consistency: pending content is one IDB roundtrip behind the most
+  recent mutation — sub-millisecond in production; tests synchronize
+  naturally because `createMemoryFakeIDB()` resolves on next
+  microtask.
+
+- **`js/utils/memory-repo-mode-flag.js`** — URL flag reader. Reads
+  `?memoryRepoMode=on` (also `=true`/`=1`/`=enabled`,
+  case-insensitive) from `window.location.search` once on first call,
+  caches the result, logs `[AI Editor] Memory repo-mode ENABLED…` on
+  first detection so the operator running manual end-to-end testing
+  sees in DevTools which mode the tab is in. Includes
+  `_resetCacheForTests` for the node:test seam. Mirrors
+  `js/utils/compression-flag.js` byte-for-byte structurally.
+
+- **`tests/test-memory-file-layer.mjs`** — 36 node:test cases over
+  the file layer. Pure paths (`categoryPath` for every
+  `MEMORY_CATEGORIES` entry; null for unknown including the dropped
+  `persona`; `indexPath`). Round-trip (single record; multiple
+  records preserving key sort; structured object values; strings
+  with quotes, newlines, unicode, and embedded quotes in
+  `created_by`). Determinism (input-order independence; empty input
+  → empty string). Conflict resolution (duplicate keys → newer
+  `updated_at` wins, both ids surface in warning; well-formed blocks
+  survive when one block is malformed; records failing
+  `validateRecord` skipped with warning; empty/whitespace input
+  parses cleanly). Store `md_path` defaulting (workspace-scope
+  records get `.aieditor/memory/<category>.md`; user-scope stays
+  null; explicit override respected; supersession populates the new
+  head). Lifecycle (enable activates; disable clears; rejects empty
+  workspaceId; idempotent re-enable; refuses to switch workspaces
+  without disable). Initial flush (existing workspace records flush
+  on enable; user-scope records skipped; empty workspace produces no
+  pending content; re-enable produces byte-identical content).
+  Mutation subscription (workspace-scope create regenerates the
+  affected category file; user-scope and other-workspace events
+  ignored; softDelete regenerates with the record removed; disable
+  unsubscribes — subsequent mutations don't regenerate).
+  `loadFromGit` (reads via injected fake client; accumulates parse
+  warnings; treats getFile errors as "file absent" with no warning;
+  refuses when not enabled). Diagnostics (`clearDiagnostics` empties
+  the buffer). Index regeneration (omits zero-count categories;
+  updates when a mutation reaches a new category).
+
 - **`evals/` — NIAH context-attention eval harness.** Empirically
   tests the architectural assumption (DESIGN-retrieval.md §475,
   DESIGN-memory.md §74) that *transformer attention is strongest at
@@ -297,6 +391,30 @@ reflects the pre-kickoff data model; that doc updates with PR #8.
   the active-tools chip row and profile picker) use Preact + htm
   loaded as a single ~5KB ESM bundle, no JSX, no build-time transform.
   Existing surfaces stay vanilla forever.
+
+- **`js/intelligence/memory/store.js`** — `create()` and `supersede()`
+  now populate `md_path` automatically for workspace-scope records when
+  the caller doesn't supply one (`.aieditor/memory/<category>.md`).
+  User-scope records stay `null`. Lets the file layer (this PR's
+  `file-layer.js`) know which file each record projects into without
+  requiring every caller (PR #4's LLM tools, PR #5's UI) to compute
+  the path. Existing field validation (`md_path` is null or string)
+  unchanged.
+
+- **`js/app.js`** — calls `installMemoryFileLayer()` during the boot
+  init sequence (alongside `initCostRecorder` / `initSessionListeners`).
+  Exposes `window.AIEditor.memoryFileLayer = { getPendingContent,
+  listPendingPaths, getDiagnostics, isEnabled, getActiveWorkspaceId }`
+  so the manual end-to-end test against `editor.gobha.ai/dev?memoryRepoMode=on`
+  can inspect pending content from DevTools without code changes.
+  PR #5's Settings → Memory tab reads from the same surface; PR #7's
+  commit modal too.
+
+- **`js/intelligence/memory/index.js`** — re-exports the file-layer
+  surface (15 named exports plus 2 test seams). Consumers
+  (`js/app.js`, future PR #4–#7) `import { ... } from
+  'intelligence/memory/index.js'` rather than reaching into the
+  individual sub-modules.
 
 - **`js/storage/idb.js`** — bumps `DB_VERSION` from 1 to 2 to add the
   Memory subsystem's two object stores additively. The existing `kv`

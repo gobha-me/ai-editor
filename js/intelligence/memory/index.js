@@ -63,9 +63,29 @@ export {
     embedRecord,
 } from './embeddings.js';
 
+/* File layer — `.aieditor/memory/*.md` projection (PR #3, this) */
+export {
+    serialize,
+    serializeIndex,
+    parse,
+    enable,
+    disable,
+    loadFromGit,
+    getPendingContent,
+    listPendingPaths,
+    getDiagnostics,
+    clearDiagnostics,
+    isEnabled,
+    getActiveWorkspaceId,
+    categoryPath,
+    indexPath,
+    installFileLayer,
+} from './file-layer.js';
+
 /* Test seams — production code should never import these */
 export { _setIDBImpl, _resetIDBImpl, createMemoryFakeIDB } from './idb-schema.js';
 export { _resetMutexForTests } from './store.js';
+export { _setGitClientForTests, _resetForTests as _resetFileLayerForTests } from './file-layer.js';
 
 /**
  * Re-export typedefs so consumers can `import('./intelligence/memory')`

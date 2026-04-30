@@ -101,6 +101,14 @@ export async function create(input, opts) {
         updated_at: ts,
     };
 
+    // Populate md_path for workspace-scope records when the caller didn't
+    // supply one. The file layer (PR #3 `file-layer.js`) reads this to know
+    // which `.aieditor/memory/*.md` file each record projects into; user-
+    // scope records stay null because user memories don't project to files.
+    if (record.md_path === null && record.scope === 'workspace' && typeof record.category === 'string') {
+        record.md_path = `.aieditor/memory/${record.category}.md`;
+    }
+
     assertValid(record);
 
     const lock = chainKey(record.scope, record.owner_id_or_workspace_id, record.key);
@@ -264,6 +272,10 @@ export async function supersede(oldId, replacement, opts) {
             created_at: ts,
             updated_at: ts,
         };
+        // See create() above — same default for workspace-scope records.
+        if (newRecord.md_path === null && newRecord.scope === 'workspace' && typeof newRecord.category === 'string') {
+            newRecord.md_path = `.aieditor/memory/${newRecord.category}.md`;
+        }
         assertValid(newRecord);
 
         const updatedOld = { ...before, superseded_by: newRecord.id, updated_at: ts };

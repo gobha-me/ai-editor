@@ -85,6 +85,14 @@ import { initAccessibility, announce } from './accessibility.js';
 import { initOfflineIndicator } from './offline-indicator.js';
 import { initIndexIndicator } from './index-indicator.js';
 import { initCostRecorder } from './intelligence/cost/index.js';
+import {
+    installFileLayer as installMemoryFileLayer,
+    getPendingContent as memoryGetPendingContent,
+    listPendingPaths as memoryListPendingPaths,
+    getDiagnostics as memoryGetDiagnostics,
+    isEnabled as memoryFileLayerIsEnabled,
+    getActiveWorkspaceId as memoryFileLayerWorkspaceId,
+} from './intelligence/memory/index.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -1008,6 +1016,16 @@ async function init() {
     initProjectListeners();
     initCostTrackerListener();
     initCostRecorder();
+    installMemoryFileLayer();
+    if (typeof window !== 'undefined' && window.AIEditor) {
+        window.AIEditor.memoryFileLayer = {
+            getPendingContent: memoryGetPendingContent,
+            listPendingPaths: memoryListPendingPaths,
+            getDiagnostics: memoryGetDiagnostics,
+            isEnabled: memoryFileLayerIsEnabled,
+            getActiveWorkspaceId: memoryFileLayerWorkspaceId,
+        };
+    }
     initSessionListeners();
     initSidebarCollapse();
     initSidebarSectionResize();
