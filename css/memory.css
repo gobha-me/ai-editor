@@ -1004,3 +1004,146 @@
     padding: 1px 6px;
     font-size: 0.85em;
 }
+
+/* ============================================
+   @MEMORY CHIP — inline chat citation picker
+   (Memory PR #8, 1.3.0)
+   Mounted into #memoryChipRoot inside .chat-input-area; shows when the
+   user types `@memory` in the textarea. Visual vocabulary mirrors
+   .mem-consent so the three Memory surfaces feel consistent.
+   ============================================ */
+
+.memory-chip-root {
+    /* Slot reserved for the popover. The chip itself uses absolute
+       positioning so it overlays content above the input without
+       displacing it. The slot has no visual presence when empty. */
+    position: relative;
+    min-height: 0;
+}
+
+.mem-chip {
+    position: absolute;
+    bottom: 0.5rem;       /* float above the input */
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary, #252525);
+    border: 1px solid var(--border, #3a3a3a);
+    border-radius: 6px;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.35);
+    padding: 0.5rem 0.6rem;
+    font-size: var(--font-md);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 18rem;
+    overflow: hidden;
+}
+
+.mem-chip__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+}
+
+.mem-chip__title {
+    color: var(--memory, #b388ff);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.mem-chip__hint {
+    color: var(--text-muted);
+}
+
+.mem-chip__hint code {
+    background: var(--bg-tertiary);
+    padding: 0 0.3em;
+    border-radius: 2px;
+    color: var(--text-primary);
+}
+
+.mem-chip__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: 12rem;
+}
+
+.mem-chip__item {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.35rem 0.5rem;
+    border-radius: 3px;
+    cursor: default;
+}
+
+.mem-chip__item.is-active {
+    background: var(--accent-translucent, rgba(54, 153, 255, 0.18));
+    outline: 1px solid var(--accent, #3699ff);
+}
+
+.mem-chip__scope {
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 0 0.35em;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    line-height: 1.4;
+}
+
+.mem-chip__key {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-md);
+    white-space: nowrap;
+}
+
+.mem-chip__value {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.mem-chip__empty {
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+    padding: 0.4rem 0.5rem;
+}
+
+.mem-chip__empty code {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    padding: 0 0.3em;
+    border-radius: 2px;
+}
+
+.mem-chip__foot {
+    display: flex;
+    gap: 0.9rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+}
+
+.mem-chip__kbd {
+    display: inline-block;
+    padding: 0 0.35em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--text-secondary);
+}

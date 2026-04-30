@@ -14,6 +14,15 @@ import {
     removePendingImage,
     clearPendingImages
 } from './state.js';
+import {
+    showChip,
+    hideChip,
+    setChipQuery,
+    navigateChip,
+    selectChipActive,
+    isChipVisible,
+} from './memory-chip.js';
+import { findActiveTrigger, applyCitation } from './memory-chip/match.js';
 
 /** Max image size in bytes (5 MB) */
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -65,8 +74,36 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
         return;
     }
 
+    // @memory chip — dispatch keystrokes to the picker controller before
+    // the chat-send handler runs. When the picker is open, ↑/↓ navigate,
+    // Enter inserts the citation, and Escape closes; all four consume
+    // the event AND call stopImmediatePropagation so the send-on-Enter
+    // listener below doesn't fire after `selectChipActive()` closes the
+    // chip (`isChipVisible()` would already read false in that listener).
+    inputElement.addEventListener('keydown', (e) => {
+        if (!isChipVisible()) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            navigateChip('down');
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            navigateChip('up');
+        } else if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            selectChipActive();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            hideChip();
+        }
+    });
+
     // Enter to send
     inputElement.addEventListener('keydown', (e) => {
+        if (isChipVisible()) return;  // chip handler above owns this stroke
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             const inputValue = inputElement.value.trim();
@@ -75,6 +112,57 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
                 handleUserInputFn(inputValue);
             }
         }
+    });
+
+    // @memory trigger detection — fires on every textarea content change
+    // (typing, paste-text, programmatic value updates). Opens the chip
+    // when the cursor is inside an active `@memory[...filter]` substring
+    // and closes it when the cursor leaves.
+    const handleTriggerChange = () => {
+        const text = inputElement.value || '';
+        const cursor = (typeof inputElement.selectionStart === 'number')
+            ? inputElement.selectionStart
+            : text.length;
+        const trigger = findActiveTrigger(text, cursor);
+        if (trigger) {
+            if (!isChipVisible()) {
+                showChip({
+                    onSelect: (record) => {
+                        const t2 = findActiveTrigger(inputElement.value || '',
+                            (typeof inputElement.selectionStart === 'number')
+                                ? inputElement.selectionStart
+                                : (inputElement.value || '').length);
+                        const result = applyCitation(inputElement.value || '', t2 || trigger, record.key);
+                        inputElement.value = result.text;
+                        try { inputElement.setSelectionRange(result.cursor, result.cursor); } catch { /* swallow */ }
+                        inputElement.focus();
+                    },
+                });
+            }
+            setChipQuery(trigger.query);
+        } else if (isChipVisible()) {
+            hideChip();
+        }
+    };
+    inputElement.addEventListener('input', handleTriggerChange);
+    inputElement.addEventListener('keyup', (e) => {
+        // Selection-only changes (arrow keys without modifying text) come
+        // through keyup, not input. Only re-run when the cursor could
+        // have moved.
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+            e.key === 'Home' || e.key === 'End') {
+            handleTriggerChange();
+        }
+    });
+    inputElement.addEventListener('click', handleTriggerChange);
+    inputElement.addEventListener('blur', () => {
+        // Don't close on the focus-jump that happens during paste; close
+        // only if focus actually leaves the textarea AND the chip slot.
+        // The chip popover is visual-only (no focusable elements), so a
+        // genuine blur means the user clicked elsewhere.
+        setTimeout(() => {
+            if (document.activeElement !== inputElement) hideChip();
+        }, 100);
     });
 
     // Paste — intercept images from clipboard

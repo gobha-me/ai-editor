@@ -170,6 +170,14 @@
                 await import('./test-commit-modal-memory.js');
             } catch (e) { errors.push(['Commit Modal Memory', e]); }
 
+            try {
+                await import('./test-memory-chip-match.mjs');
+            } catch (e) { errors.push(['Memory Chip — match helpers', e]); }
+
+            try {
+                await import('./test-memory-chip-controller.mjs');
+            } catch (e) { errors.push(['Memory Chip — controller', e]); }
+
             // --- Deployment ---
             try {
                 await import('./test-dependencies.js');

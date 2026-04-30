@@ -4,17 +4,29 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-Opens the **Memory Phase 1** track from `docs/ROADMAP.md` §1.3.0. This
-patch is foundational only — it wires the Preact + htm vendor bundle
-that subsequent Memory PRs will use to render the Settings → Memory
-tab, the inline `@memory` chip, the agent-proposed-memory consent card
-in chat, and the commit-modal "Memory updates" section. No
-user-visible behavior change in this PR.
+## [1.3.0] - 2026-04-30
+
+Closes the **Memory Phase 1** track from `docs/ROADMAP.md` §1.3.0 —
+the externally-tellable Git-native-memory story (Decision §1) and the
+prerequisite for the 1.4.x Tools track. Eight PRs land across this
+release, sequenced per the 2026-04-30 kickoff:
+
+1. **#185 — Preact + htm vendor wiring + slot-mount integration layer.** Wires the ~5 KB ESM bundle and `js/utils/preact-mount.js` helper. No user-visible change in isolation; foundational for the Memory surfaces that follow.
+2. **#189 — Memory subsystem core (store, embeddings, audit, contracts).** `js/intelligence/memory/{contracts,validation,utils,idb-schema,embeddings,audit,store,index}.js`. KeyMutex serializes per-key mutations; IDB v2 adds `memory_records` + `memory_audit` stores additively.
+3. **#192 — `.aieditor/memory/*.md` file layer.** `js/intelligence/memory/file-layer.js` + `?memoryRepoMode=on` URL flag. Pending content held in-memory until PR #197 wires `Git.updateFile()` at commit time.
+4. **#193 — `memory_remember` / `memory_recall` / `memory_revise` LLM tools.** `js/tools/memory-tools.js`. Tool-result-honest: `agent_proposed` returns `{status: 'pending_consent', candidate_id}`; `user_explicit` and `inferred` bypass the consent queue.
+5. **#194 — Settings → Memory tab.** First Preact consumer. `js/settings/memory-tab*.js`, `css/memory.css`, in-strip placement (Touch 1 Variant A). Live updates via `MEMORY_EVENTS` subscriptions with effect-cleanup.
+6. **#195 — Chat consent card (Flow 1).** `js/chat/consent-card.js` + `js/chat/consent-card/MemoryConsentCard.js`; 4-state component (open / editing / saved / dismissed); `?memoryConsentVariant=quiet` URL flag for the single-line variant.
+7. **#197 — Commit-modal "Memory updates" section (Flow 3A/3B).** `js/ui/commit-memory-section.js`; auto-staging on non-protected branches, "Branch off & commit memory" escape hatch on protected ones.
+8. **#198 (this PR) — Inline `@memory` chip + DESIGN-memory.md update + ROADMAP §1.3.x reframe + 1.3.0 release.**
+
+**Five kickoff decisions are now reflected in `docs/DESIGN-memory.md`** (locking the contract going forward): persona scope dropped from 1.3.0 and deferred indefinitely; `confidence: float` field replaced by the `source` enum (`user_explicit | agent_proposed | inferred`); `.aieditor/memory/*.md` is deterministic key-sorted YAML-frontmatter blocks with last-write-wins conflict resolution surfaced in `diagnostics.warnings`; auto-staging on opt-in non-protected branches with a Touch 1 Flow 3A "Memory updates" parallel section and Flow 3B escape hatch; framework integration is div-slot mounting via `mountPreact()` (custom elements deferred). The companion `[memory:<key>]` markdown citation wire format is documented in DESIGN-memory.md §"Chat Citation Wire Format" — the format is what the `@memory` chip inserts and what `memory_recall` resolves at the model's option.
 
 The decision to allow Preact + htm narrowly for new state-heavy
 surfaces (vanilla everywhere else, forever) is locked in
-`docs/ROADMAP.md` §Decisions §9. Memory tab is the first target;
-`active-tools chip row` (1.4.0) and `profile picker` (2.0) follow.
+`docs/ROADMAP.md` §Decisions §9. Memory tab is the first target; the
+`@memory` chip (this PR) and consent card (#195) follow it; the
+`active-tools chip row` (1.4.0) and `profile picker` (2.0) come next.
 
 In parallel, lands a **synthetic compression-savings benchmark** that
 verifies the Decision §8 gate locally without waiting for organic
@@ -40,6 +52,22 @@ benchmark's 90.3% is the floor the deployed dashboard should approach;
 materially below means deployed Compactor wiring or input shape
 diverges from the synthetic — worth chasing before the next compression
 patch ships.
+
+**Closing the Memory track (PR #8).** The inline `@memory` chip lands
+as the third Preact + htm consumer in the codebase (after the Settings
+tab in PR #5 and the consent card in PR #6). Typing `@memory` opens a
+fuzzy picker of the user's memories; arrow keys navigate, Enter
+inserts a `[memory:<key>]` markdown citation token at the trigger
+site. The citation is visible to the LLM as literal text and resolved
+via `memory_recall` at the model's option — no invisible structured
+tags, no new render path. Alongside the chip, this release aligns
+`docs/DESIGN-memory.md` with the kickoff decisions that PRs #1–#7
+shipped (collapsed scope enum, `source` enum replacing `confidence:
+float`, file-format spec, Git-integration spec, mount-pattern spec,
+chat-citation wire format), and reframes `docs/ROADMAP.md` §1.3.x to
+reflect that workspace scope landed inside 1.3.0 (the original §1.3.1
+slot is reused for self-healing tools; persona scope §1.3.2 deferred
+indefinitely).
 
 ### Added
 
@@ -359,6 +387,38 @@ detection. Removability: delete the flag file + the four-line guard in
   ~$5.70 and ~10–15 min wall-clock TPM-bound. Pre-flight unit suite
   at `evals/test-haystack.mjs` (10 cases) gates harness sanity before
   any API call.
+
+- **Inline `@memory` chip + picker (Memory PR #8).** Typing `@memory`
+  in the chat input opens a Preact-rendered popover with the user's
+  memories (user + workspace scopes). Arrow keys navigate, Enter
+  inserts a `[memory:<key>]` markdown citation token at the trigger
+  site, Esc closes without inserting. Three-file split mirrors the
+  consent card (PR #6) and Memory tab (PR #5) precedents:
+  - `js/chat/memory-chip/match.js` — pure helpers
+    (`findActiveTrigger`, `filterMemories`, `formatCitation`,
+    `applyCitation`); DOM-free and store-free so node:test can
+    exercise every rule without loading Preact.
+  - `js/chat/memory-chip.js` — controller (module-local state,
+    pub-sub, `MEMORY_EVENTS` subscription for live refresh, lazy
+    load on first show). Public surface: `showChip / hideChip /
+    setChipQuery / navigateChip / selectChipActive / isChipVisible`.
+  - `js/chat/memory-chip/MemoryChip.js` — Preact component;
+    subscribes to the controller and re-renders on each state
+    change.
+  - `js/chat/input.js` integration — trigger detection on `input` /
+    `click` / arrow-key / `blur` events; navigation/selection/
+    dismissal on keydown when the chip is visible (consumes the
+    event so the existing Enter-to-send doesn't fire).
+  - `html/chat-panel.html` — `#memoryChipRoot` slot inside
+    `.chat-input-area` with absolute-positioned popover (no layout
+    reflow).
+  - `css/memory.css` — `.mem-chip` styles mirroring the `.mem-consent`
+    visual vocabulary so the three Memory surfaces feel consistent.
+  - `tests/test-memory-chip-match.mjs` (24 cases) +
+    `tests/test-memory-chip-controller.mjs` (12 cases) — full
+    coverage of trigger detection, filter scoring, citation insertion,
+    visibility seam, navigation wrap, selection callback, hide
+    idempotency.
 
 ### Fixed
 
@@ -795,14 +855,16 @@ DOM.
 
 ### Notes
 
-- **No version bump.** Per `feedback_version_bump.md`, intermediate
-  PRs in a track ship under `[Unreleased]`. The bump from 1.2.1 →
-  1.3.0 lands in the final 1.3.0 PR (per the approved plan, PR #8 of
-  the Memory track) alongside the @memory chip, the
-  `docs/DESIGN-memory.md` updates (drop persona scope, drop
-  confidence float, codify the `.aieditor/memory/*.md` file format),
-  and the ROADMAP §1.2.x reframe (compression follow-ups slot into
-  whatever minor is current when verified).
+- **Version bump 1.2.1 → 1.3.0.** Memory PR #8 closes the 1.3.0 track
+  and cuts the release. Per `feedback_version_bump.md`, intermediate
+  PRs in a track ship under `[Unreleased]`; the bump lands here
+  alongside the `@memory` chip, the `docs/DESIGN-memory.md` updates
+  (drop persona scope, drop confidence float, codify the
+  `.aieditor/memory/*.md` file format, document the chat citation
+  wire format and div-slot mount pattern), and the ROADMAP §1.3.x
+  reframe (workspace shipped in 1.3.0; original §1.3.1 slot reused
+  for self-healing tools; persona §1.3.2 deferred indefinitely;
+  remaining patches renumbered).
 - **Removability (Memory PR #5).** Delete `js/settings/memory-tab.js`,
   the `js/settings/memory-tab/` directory, `css/memory.css`, the
   `tabMemory` button + panel, the settings-manager wiring, the
@@ -839,6 +901,19 @@ DOM.
   PR #7 is exactly that invisible accumulation becoming a legible
   panel that auto-stages on feature branches and warns on protected
   ones.
+- **Removability (Memory PR #8).** Delete `js/chat/memory-chip.js`,
+  the `js/chat/memory-chip/` directory, and the new test files; revert
+  the chip-related imports and event-handler additions in
+  `js/chat/input.js`, the `<div id="memoryChipRoot">` slot in
+  `html/chat-panel.html`, and the `.mem-chip*` block appended to
+  `css/memory.css`. Behavior reverts to "users must paste memory keys
+  manually if they want to cite a memory in a message." That's
+  acceptable — the chip is a discovery affordance, not load-bearing
+  for the subsystem (the LLM tools, store, file layer, Settings tab,
+  consent card, and commit-modal section all keep working). The
+  user-visible gap closed by PR #8 is exactly that the existing
+  memories were invisible to the chat author at message-composition
+  time.
 
 ## [1.2.1] - 2026-04-29
 
