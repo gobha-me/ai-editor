@@ -28,6 +28,7 @@ import {
 } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
 import { ConversationManager } from './conversations.js';
+import { getConvCost } from '../intelligence/cost/index.js';
 import { 
     addMessage, 
     renderMessages,
@@ -131,6 +132,17 @@ function initChat(containerEl, inputEl) {
     EventBus.on('conversation:loaded', () => renderConversationList());
     EventBus.on('conversation:deleted', () => renderConversationList());
     EventBus.on('conversation:renamed', () => renderConversationList());
+
+    // Repaint the per-row cost chip after each turn lands.
+    EventBus.on('cost:updated', () => {
+        if (document.getElementById('conversationDrawer')?.classList.contains('open')) {
+            renderConversationList();
+        }
+    });
+
+    // Budget banner — soft warnings only (1.2.1).
+    EventBus.on('cost:budget-warning', (info) => _renderBudgetBanner(info));
+    EventBus.on('cost:budget-ok', () => _renderBudgetBanner(null));
 
     // Listen for LLM events
     EventBus.on('llm:generating', (isGenerating) => {
@@ -491,12 +503,13 @@ function renderConversationList() {
         const msgCount = c.messageCount || 0;
         const title = c.title || 'New Chat';
         const activeClass = isActive ? ' conv-item-active' : '';
+        const costChip = _formatCostChip(c.id);
 
         return `
             <div class="conv-item${activeClass}" data-conv-id="${c.id}">
                 <div class="conv-item-content" data-conv-load="${c.id}" title="${_escapeAttr(title)}">
                     <div class="conv-item-title">${_escapeHtml(title)}</div>
-                    <div class="conv-item-meta">${date} · ${msgCount} msg${msgCount !== 1 ? 's' : ''}</div>
+                    <div class="conv-item-meta">${date} · ${msgCount} msg${msgCount !== 1 ? 's' : ''}${costChip}</div>
                 </div>
                 <button type="button" class="btn-icon-danger conv-item-delete" data-conv-delete="${c.id}" title="Delete">✕</button>
             </div>
@@ -535,6 +548,69 @@ function _formatRelativeTime(ts) {
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
     return new Date(ts).toLocaleDateString();
+}
+
+/**
+ * Render the soft budget-warning banner above the chat input.
+ * Pass `null` to clear it.
+ *
+ * @param {{level: 'warn'|'over', reason: 'daily'|'monthly', percent: number, cap: number|null, spend: number}|null} info
+ */
+function _renderBudgetBanner(info) {
+    const inputArea = document.querySelector('.chat-input-area');
+    if (!inputArea) return;
+
+    let banner = document.getElementById('costBudgetBanner');
+    if (!info) {
+        if (banner) banner.remove();
+        return;
+    }
+
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'costBudgetBanner';
+        banner.style.cssText = 'padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; border-radius: 4px; font-size: var(--font-md); display: flex; align-items: center; gap: 0.5rem;';
+        // Insert at the top of chat-input-area so it sits above the cursor-context line.
+        inputArea.insertBefore(banner, inputArea.firstChild);
+    }
+
+    const isOver = info.level === 'over';
+    banner.style.background = isOver ? 'var(--danger-bg, rgba(220, 53, 69, 0.15))' : 'var(--warning-bg, rgba(255, 193, 7, 0.15))';
+    banner.style.border = `1px solid ${isOver ? 'var(--danger, #dc3545)' : 'var(--warning, #ffc107)'}`;
+    banner.style.color = 'var(--text-primary)';
+
+    const pct = Math.round((info.percent || 0) * 100);
+    const reasonLabel = info.reason === 'monthly' ? 'monthly' : 'daily';
+    const capStr = info.cap != null ? `$${info.cap.toFixed(2)}` : '—';
+    const spendStr = info.spend != null ? (info.spend < 0.01 ? '<$0.01' : `$${info.spend.toFixed(2)}`) : '$0.00';
+    const verb = isOver ? 'exceeded' : 'approaching';
+
+    banner.innerHTML = `
+        <span style="font-size: 1.1em;">${isOver ? '🚨' : '⚠️'}</span>
+        <span style="flex: 1;">
+            ${reasonLabel.charAt(0).toUpperCase() + reasonLabel.slice(1)} budget ${verb}: <strong>${spendStr} of ${capStr}</strong> (${pct}%). Requests are not blocked — adjust caps in Settings → Cost.
+        </span>
+        <button type="button" id="costBudgetBannerDismiss" class="btn-icon" title="Dismiss" style="background: transparent; border: 0; cursor: pointer; color: inherit; font-size: 1rem;">✕</button>
+    `;
+    const dismissBtn = banner.querySelector('#costBudgetBannerDismiss');
+    if (dismissBtn) dismissBtn.addEventListener('click', () => banner?.remove());
+}
+
+/**
+ * Cost chip for a conversation row. Returns empty string when no
+ * `cost-by-conv-{id}` record exists (older conversations pre-1.2.1
+ * fall back gracefully).
+ *
+ * @param {string} convId
+ * @returns {string}
+ */
+function _formatCostChip(convId) {
+    const cc = getConvCost(convId);
+    if (!cc || (cc.requests || 0) === 0) return '';
+    const tokens = (cc.inputTokens || 0) + (cc.outputTokens || 0);
+    const tokenStr = tokens < 1000 ? String(tokens) : (tokens < 1_000_000 ? `${(tokens / 1000).toFixed(1)}k` : `${(tokens / 1_000_000).toFixed(2)}M`);
+    const usd = cc.cost > 0 ? (cc.cost < 0.01 ? '<$0.01' : `$${cc.cost.toFixed(2)}`) : '$0.00';
+    return ` · ${usd} · ${tokenStr} tok`;
 }
 
 function _escapeHtml(s) {

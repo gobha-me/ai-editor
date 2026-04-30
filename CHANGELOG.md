@@ -4,6 +4,106 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-04-29
+
+Opens the **Cost dashboard** patch from `docs/ROADMAP.md` §1.2.1 — the
+measurement-before-scale gate per Decision §8. Without this dashboard
+in production for at least a week, the 1.2.x cadence (Rule 3 → Rule 4
+→ Rule 5 tuning) has no way to confirm that 1.2.0's Rules 1+2
+delivered the projected ≥40% reduction; if they didn't, the rest of
+the track gets re-scoped, not stacked on an unverified base.
+
+### Added
+
+- **`js/intelligence/cost/` module tree** — second occupant of the
+  `js/intelligence/` umbrella after compression in 1.2.0.
+  - `cost-store.js`: synchronous Storage layer over three keys —
+    `cost-by-conv-{id}` (per-conversation aggregate with byTool /
+    byModel breakdowns), `cost-daily` (rolling 30-day calendar with
+    byProvider breakdown, auto-pruned on every write), and
+    `cost-budget` (daily / monthly USD caps). Local-date stamps
+    (`localDateKey`) so the chart matches the user's wall clock.
+  - `budget.js`: pure threshold helpers — `checkThresholds(spend, cap)`
+    returns `{level: 'ok'|'warn'|'over', percent}` with WARN at 80%
+    and OVER at 100%; `pickWorse({daily, monthly})` returns the more
+    pressing of the two so the banner copy can name the offender.
+  - `cost-recorder.js`: subscribes to the existing `cost:updated`
+    event from `js/llm/api.js` and `llm:generating` for the
+    conversation-switch race fix — snapshots `activeConversationId`
+    on generation start, attributes the next `cost:updated` to that
+    snapshot rather than whichever conversation was active when the
+    response arrived. Per-tool attribution proportionally credits
+    `prompt_tokens` to each tool by tool-result byte length;
+    documented as **estimated** (1.4.0's admission ledger replaces
+    this with measured numbers).
+  - `index.js`: barrel exporting the public surface plus
+    `initCostRecorder()`.
+
+- **Settings → Cost tab** (`js/settings/cost-tab.js`,
+  `html/settings-tabs.html`). New tab between Storage and Advanced.
+  Vanilla JS — Memory in 1.3.0 is the first Preact target, not this.
+  - Live session card mirroring `State.sessionCost`.
+  - 30-day SVG bar chart (no chart library) with daily USD spend +
+    hover tooltip showing per-provider breakdown.
+  - Conversations list sorted by spend, click-to-load through the
+    existing `ConversationManager.load(id)`.
+  - Per-tool breakdown for the active conversation — calls + estimated
+    tokens, labelled "Estimated" with a tooltip explaining the
+    Phase-1 caveat.
+  - Budget alert inputs (daily / monthly USD caps) with
+    `Today: $X of $Y` and `This month: $X of $Y` hint lines.
+  - Provider note that links to `plugins/venice-billing.js` when
+    Venice is the active provider, since that overlay still owns the
+    live USD/DIEM API view.
+
+- **Conversation drawer cost chip.** Each row in
+  `js/chat/index.js` `renderConversationList` now appends `· $X.XX ·
+  Nk tok` to the meta line when a `cost-by-conv-{id}` record exists.
+  Older conversations pre-1.2.1 fall back gracefully (no chip).
+  Drawer rerenders on `cost:updated` while open so the chip stays
+  current.
+
+- **Soft budget-warning banner above the chat input** at 80% (warn)
+  and 100% (over) of the configured daily or monthly cap, whichever
+  is worse. Inserted into `.chat-input-area`, dismissable, never
+  blocks a request — Decision §8 commits to soft-only in 1.2.1; hard
+  halts can revisit if dashboard data shows demand.
+
+- **`tests/test-cost-store.mjs`, `test-cost-budget.mjs`,
+  `test-cost-recorder.mjs`** — node:test coverage for aggregation
+  arithmetic, daily-prune at 30 days, multi-conversation isolation,
+  budget round-trip, and per-tool attribution proportionality.
+
+### Changed
+
+- **`js/llm/api.js` `LLM._trackUsage` and `cost:updated` event
+  payload.** Now optionally accepts a `context = {messages, toolCalls}`
+  argument and forwards it into the event. Existing consumers
+  (`js/model-manager.js` `updateCostTracker`) ignore the new fields.
+  Backwards compatible.
+
+- **`js/chat/conversations.js` `ConversationManager.delete()`** also
+  calls `removeConvCost(id)` so the matching `cost-by-conv-{id}`
+  record clears. Storage doesn't leak across conversation deletes.
+
+### Notes
+
+- **Per-tool attribution is an estimate.** Phase 1 uses byte-length
+  proportions; the 1.4.0 Tools track lands the admission ledger that
+  replaces this with measured counts on the unified `TaskLedger` from
+  1.1.0. Documented in the dashboard UI.
+- **Hard halts are deliberately not in 1.2.1.** Soft warnings only,
+  per the locked decision. The roadmap notes hard halts as a future
+  patch if usage data shows demand.
+- **Removability.** Delete `js/intelligence/cost/` and unregister the
+  Settings → Cost tab; `State.sessionCost` keeps working unchanged.
+  Persisted records become orphan keys cleared by Storage on next
+  cleanup. No data loss; the editor degrades to the pre-1.2.1
+  session-only view.
+- **Gate for 1.2.2.** ROADMAP §1.2.1 commits Rule 3 (Consumption) to
+  ≥1 week of dashboard data showing concrete Rule 1+2 savings before
+  it ships. The next minor that opens is whichever the data justifies.
+
 ## [1.2.0] - 2026-04-29
 
 Opens the **Compression Phase 1** track from `docs/ROADMAP.md` §1.2.0

@@ -84,6 +84,7 @@ import { initPanelResize } from './resize-manager.js';
 import { initAccessibility, announce } from './accessibility.js';
 import { initOfflineIndicator } from './offline-indicator.js';
 import { initIndexIndicator } from './index-indicator.js';
+import { initCostRecorder } from './intelligence/cost/index.js';
 import { 
     openZipUpload, closeZipUpload, 
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
@@ -1006,6 +1007,7 @@ async function init() {
     initStatusBarListener();
     initProjectListeners();
     initCostTrackerListener();
+    initCostRecorder();
     initSessionListeners();
     initSidebarCollapse();
     initSidebarSectionResize();

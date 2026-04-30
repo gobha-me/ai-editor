@@ -482,7 +482,10 @@ export const LLM = {
                 result
             });
 
-            this._trackUsage(result.usage, hookedModel);
+            this._trackUsage(result.usage, hookedModel, {
+                messages: hookedMessages,
+                toolCalls: result.toolCalls || null,
+            });
             return result;
 
         } catch (err) {
@@ -505,8 +508,12 @@ export const LLM = {
      * Track token usage and estimated cost for the session.
      * @param {LLMUsage|null} usage
      * @param {string} modelId
+     * @param {{messages?: ChatMessage[], toolCalls?: ToolCallDelta[]|null}} [context]
+     *        Forwarded into the `cost:updated` event payload so the
+     *        cost-recorder (1.2.1) can attribute per-tool spend.
+     *        Existing consumers (model-manager.updateCostTracker) ignore.
      */
-    _trackUsage(usage, modelId) {
+    _trackUsage(usage, modelId, context) {
         if (!usage) return;
 
         const inputTokens = usage.prompt_tokens || 0;
@@ -543,7 +550,13 @@ export const LLM = {
             }
         }
 
-        EventBus.emit('cost:updated', { usage, sessionCost: State.sessionCost });
+        EventBus.emit('cost:updated', {
+            usage,
+            sessionCost: State.sessionCost,
+            modelId,
+            messages: context?.messages,
+            toolCalls: context?.toolCalls,
+        });
     },
 
     /**

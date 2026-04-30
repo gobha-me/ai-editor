@@ -12,6 +12,7 @@
 
 import { State, Storage, EventBus } from '../core.js';
 import { ChatSummarizer } from './summarizer.js';
+import { removeConvCost } from '../intelligence/cost/cost-store.js';
 
 /** Max conversations kept in the index */
 const MAX_CONVERSATIONS = 50;
@@ -293,6 +294,8 @@ const ConversationManager = {
 
         // Remove payload
         Storage.remove(`conv-${id}`);
+        // Clear the matching cost record (1.2.1) so storage doesn't leak.
+        removeConvCost(id);
         index.splice(idx, 1);
         _setIndex(index);
 

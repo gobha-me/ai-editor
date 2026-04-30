@@ -1,0 +1,232 @@
+// @ts-check
+/**
+ * Cost recorder — translates `cost:updated` LLM events into persisted
+ * per-conversation + daily aggregates with estimated per-tool spend.
+ *
+ * Race resolution: the active conversation can change mid-stream
+ * (user opens a different conversation while a turn is in flight).
+ * The recorder snapshots the conversation ID on `llm:generating: true`
+ * and attributes the next `cost:updated` to that snapshot — never to
+ * the conversation active at the moment usage arrives.
+ *
+ * Per-tool attribution is a Phase-1 estimate: tool-result byte counts
+ * are scaled proportionally against `prompt_tokens` to credit each
+ * tool with its share of input cost. The 1.4.0 admission ledger
+ * replaces this with measured numbers.
+ *
+ * @module intelligence/cost/cost-recorder
+ */
+
+import { State, EventBus } from '../../core.js';
+import { ConversationManager } from '../../chat/conversations.js';
+import {
+    recordTurn,
+    getBudget,
+    getTodaySpend,
+    getMonthSpend,
+    localDateKey,
+} from './cost-store.js';
+import { checkThresholds, pickWorse } from './budget.js';
+
+let _initialized = false;
+
+/**
+ * Snapshot of the conversation that was active when generation began.
+ * Cleared after the corresponding `cost:updated` lands.
+ * @type {string|null}
+ */
+let _inFlightConvId = null;
+
+/**
+ * Attach event listeners. Idempotent.
+ */
+export function init() {
+    if (_initialized) return;
+    _initialized = true;
+
+    EventBus.on('llm:generating', (active) => {
+        if (active === true) {
+            _inFlightConvId = ConversationManager.getActiveId() || null;
+        }
+    });
+
+    EventBus.on('cost:updated', _onCostUpdated);
+}
+
+/**
+ * @param {{usage: any, sessionCost: any, messages?: any[], toolCalls?: any[]|null, modelId?: string}} payload
+ */
+function _onCostUpdated(payload) {
+    if (!payload || !payload.usage) return;
+
+    const convId = _inFlightConvId || ConversationManager.getActiveId() || null;
+    _inFlightConvId = null;
+
+    const usage = payload.usage;
+    const inputTokens     = usage.prompt_tokens     || 0;
+    const outputTokens    = usage.completion_tokens || 0;
+    const cachedTokens    = usage.prompt_tokens_details?.cached_tokens || 0;
+    const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+
+    const modelId = payload.modelId || State.settings.llmModel || '';
+    const provider = State.settings.apiProvider || null;
+
+    const { cost, cacheSavings } = _computeCost({
+        modelId, inputTokens, outputTokens, cachedTokens,
+    });
+
+    const byTool = _attributeTools(payload.messages || [], inputTokens);
+
+    recordTurn({
+        conversationId: convId,
+        modelId,
+        provider,
+        inputTokens,
+        outputTokens,
+        cachedTokens,
+        reasoningTokens,
+        cost,
+        cacheSavings,
+        byTool,
+        timestamp: Date.now(),
+    });
+
+    _emitBudgetWarningIfNeeded();
+}
+
+/**
+ * @param {{modelId: string, inputTokens: number, outputTokens: number, cachedTokens: number}} args
+ * @returns {{cost: number, cacheSavings: number}}
+ */
+function _computeCost({ modelId, inputTokens, outputTokens, cachedTokens }) {
+    const model = (State.models || []).find((m) => m.id === modelId);
+    if (!model || !model.pricing) return { cost: 0, cacheSavings: 0 };
+
+    const inputPrice  = model.pricing.input  || 0;
+    const outputPrice = model.pricing.output || 0;
+    const cachePrice  = model.pricing.cacheInput ?? null;
+
+    const uncachedInput = Math.max(inputTokens - cachedTokens, 0);
+    const inputCost  = (uncachedInput / 1_000_000) * inputPrice;
+    const cacheCost  = cachePrice !== null ? (cachedTokens / 1_000_000) * cachePrice : 0;
+    const outputCost = (outputTokens / 1_000_000) * outputPrice;
+    const cost = inputCost + cacheCost + outputCost;
+
+    let cacheSavings = 0;
+    if (cachedTokens > 0) {
+        const saved = inputPrice - (cachePrice || 0);
+        cacheSavings = (cachedTokens / 1_000_000) * saved;
+    }
+
+    return { cost, cacheSavings };
+}
+
+/**
+ * Attribute prompt tokens to tools proportionally by tool-result byte
+ * length. Result-less tools (model called the tool but no result yet
+ * in the input) get `calls: 1, estTokens: 0`.
+ *
+ * @param {any[]} messages
+ * @param {number} promptTokens
+ * @returns {Object<string, {calls: number, estTokens: number}>}
+ */
+export function _attributeTools(messages, promptTokens) {
+    /** @type {Object<string, {calls: number, estTokens: number, bytes: number}>} */
+    const tally = {};
+
+    if (!Array.isArray(messages) || messages.length === 0) return {};
+
+    /** @type {Map<string, string>} tool_call_id -> tool name */
+    const callIdToName = new Map();
+    for (const m of messages) {
+        if (m && m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+            for (const tc of m.tool_calls) {
+                const id = tc?.id;
+                const name = tc?.function?.name || tc?.name || 'unknown';
+                if (id) callIdToName.set(id, name);
+            }
+        }
+    }
+
+    let totalToolBytes = 0;
+    for (const m of messages) {
+        if (m && m.role === 'tool') {
+            const name = (m.tool_call_id && callIdToName.get(m.tool_call_id)) || m.name || 'unknown';
+            const bytes = _byteLen(m.content);
+            const slot = tally[name] || { calls: 0, estTokens: 0, bytes: 0 };
+            slot.calls += 1;
+            slot.bytes += bytes;
+            totalToolBytes += bytes;
+            tally[name] = slot;
+        }
+    }
+
+    if (totalToolBytes > 0 && promptTokens > 0) {
+        // Estimate: tool results are some fraction of total input. Rather
+        // than assume 100% of `promptTokens` came from tool bytes (which
+        // would overcount when system prompts and history dominate), we
+        // use an upper bound — `promptTokens * (toolBytes / max(totalInputBytes, toolBytes))`.
+        // For Phase 1 we approximate `totalInputBytes` by summing every
+        // message's content length so the ratio stays sane.
+        let totalInputBytes = 0;
+        for (const m of messages) {
+            totalInputBytes += _byteLen(m && m.content);
+        }
+        const denom = Math.max(totalInputBytes, totalToolBytes, 1);
+        for (const name of Object.keys(tally)) {
+            const slot = tally[name];
+            slot.estTokens = Math.round(promptTokens * (slot.bytes / denom));
+        }
+    }
+
+    /** @type {Object<string, {calls: number, estTokens: number}>} */
+    const out = {};
+    for (const [name, slot] of Object.entries(tally)) {
+        out[name] = { calls: slot.calls, estTokens: slot.estTokens };
+    }
+    return out;
+}
+
+/**
+ * Char-count proxy for byte length. `_attributeTools` only uses the
+ * ratio between values so the absolute scale doesn't matter — what
+ * matters is consistent normalization across messages.
+ * @param {any} content
+ * @returns {number}
+ */
+function _byteLen(content) {
+    if (content == null) return 0;
+    if (typeof content === 'string') return content.length;
+    try {
+        return JSON.stringify(content).length;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Compare today's + this-month's spend against the configured budget
+ * and emit `cost:budget-warning` when the worse of the two crosses
+ * the warn or over threshold. Idempotent at the ok level — listeners
+ * dismiss banners on `cost:budget-ok`.
+ */
+function _emitBudgetWarningIfNeeded() {
+    const budget = getBudget();
+    if (budget.daily == null && budget.monthly == null) {
+        EventBus.emit('cost:budget-ok', { reason: 'no-cap' });
+        return;
+    }
+
+    const dailyCheck = checkThresholds(getTodaySpend(), budget.daily);
+    const monthlyCheck = checkThresholds(getMonthSpend(), budget.monthly);
+    const worst = pickWorse({ daily: dailyCheck, monthly: monthlyCheck });
+
+    if (worst.level === 'ok') {
+        EventBus.emit('cost:budget-ok', { dailyCheck, monthlyCheck });
+    } else {
+        EventBus.emit('cost:budget-warning', { ...worst, dailyCheck, monthlyCheck, today: localDateKey() });
+    }
+}
+
+// Expose for tests.
+export const __test = { _attributeTools };

@@ -28,6 +28,7 @@ import {
     fetchEmbeddingModelsForSettings, populateModelsTab, initModelsTabEvents,
     populateEmbeddingModelsByProvider
 } from './settings/models-tab.js';
+import { initCostTab, populateCostTab } from './settings/cost-tab.js';
 
 // ── Open / Close ──
 
@@ -277,6 +278,7 @@ function populateSettingsForm() {
     populatePluginsTab();
     populateAdvancedParams();
     initModelsTabEvents();
+    initCostTab();
 
     // --- Ignore Tab ---
     const ignoreTextarea = document.getElementById('settingIgnorePatterns');
@@ -329,6 +331,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabIgnore') { _updateIgnoreStats(); _updateProjectIgnoreDisplay(); }
             // Render Storage metrics when switching to it
             if (tab.dataset.tab === 'tabStorage') renderStorageMetrics();
+            // Refresh Cost dashboard when switching to it
+            if (tab.dataset.tab === 'tabCost') populateCostTab();
             
             // Re-check arrow visibility after scroll settles
             setTimeout(updateTabArrows, 100);
