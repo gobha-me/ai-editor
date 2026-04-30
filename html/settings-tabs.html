@@ -209,6 +209,19 @@
 <!-- Appearance Tab -->
 <div class="settings-tab-content" id="tabAppearance">
     <div class="form-group">
+        <label for="settingTheme" style="font-weight: 600;">Theme:</label>
+        <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
+            Refined IDE matches the classic dark palette. Editorial Calm uses serif headings, warm neutrals, and generous spacing — the contrarian alternate.
+        </small>
+        <select id="settingTheme">
+            <option value="refined">Refined IDE</option>
+            <option value="editorial">Editorial Calm</option>
+        </select>
+    </div>
+
+    <hr>
+
+    <div class="form-group">
         <label for="settingFontSize">UI Font Size (header, sidebar, modals):</label>
         <input type="range" id="settingFontSize" min="8" max="28" step="1">
         <span id="fontSizeValue">13px</span>

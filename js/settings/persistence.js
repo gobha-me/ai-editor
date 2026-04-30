@@ -44,6 +44,9 @@ export function collectAndSave() {
     State.settings.summaryTimeout = parseInt(document.getElementById('settingSummaryTimeout').value) * 1000 || 60000;
 
     // Appearance - with null checks
+    const themeEl = document.getElementById('settingTheme');
+    State.settings.theme = themeEl ? themeEl.value : (State.settings.theme || 'refined');
+
     State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
     State.settings.chatFontSize = parseInt(document.getElementById('settingChatFontSize').value) || 13;
     State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;

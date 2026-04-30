@@ -1,40 +1,51 @@
 /**
  * AI Editor - Base Styles
  * Variables, resets, typography, layout grid, scrollbars, responsive
+ *
+ * Theme tokens (`--tk-*`) live in `css/themes/`. The `:root` block
+ * below is the **alias bridge** — every legacy variable name used
+ * across the rest of the app (`--bg-primary`, `--accent`, etc.)
+ * resolves to a `--tk-*` token. Component CSS keeps reading the
+ * legacy names; the theme files define the values. Adding a new
+ * primary color requires a new `--tk-*` token, not a new alias.
+ *
+ * Alias bridge added: 1.3.5 (2026-04-30) — Touch 2 facelift PR 1.
  */
 
 /* ============================================
-   CSS VARIABLES
+   CSS VARIABLES — alias bridge to --tk-* tokens
    ============================================ */
 
 :root {
-    --bg-primary: #1e1e1e;
-    --bg-secondary: #252526;
-    --bg-tertiary: #2d2d30;
-    --bg-hover: #3c3c3c;
-    --bg-active: #094771;
-    
-    --text-primary: #cccccc;
-    --text-secondary: #9e9e9e;   /* AA 4.5:1+ on bg-tertiary #2d2d30 */
-    --text-muted: #8e8e8e;       /* AA 4.5:1+ on bg-secondary #252526 */
-    
-    --accent: #0e7dca;
-    --accent-hover: #1a8fe0;
-    --success: #4ec9b0;
-    --warning: #dcdcaa;
-    --error: #f14c4c;
-    --danger: #c93a3a;
-    
-    --border: #3c3c3c;
-    --border-light: #474747;
+    --bg-primary:        var(--tk-bg-app);
+    --bg-secondary:      var(--tk-bg-surface);
+    --bg-tertiary:       var(--tk-bg-raised);
+    --bg-hover:          var(--tk-bg-hover);
+    --bg-active:         var(--tk-bg-active);
+    --bg-darker:         var(--tk-bg-darker);
 
-    /* Memory subsystem accent — tracks --accent today; reserved as a
-       distinct token so the Memory tab, @memory chip, and consent card
-       can move to a memory-specific hue without touching every site. */
-    --memory: var(--accent);
+    --text-primary:      var(--tk-text-primary);
+    --text-secondary:    var(--tk-text-secondary);
+    --text-muted:        var(--tk-text-muted);
 
-    --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --accent:            var(--tk-color-accent);
+    --accent-hover:      var(--tk-color-accent-hover);
+    --success:           var(--tk-color-success);
+    --warning:           var(--tk-color-warning);
+    --error:             var(--tk-color-error);
+    --danger:            var(--tk-color-danger);
+
+    --border:            var(--tk-border);
+    --border-light:      var(--tk-border-light);
+
+    /* Memory subsystem accent — bridged through --tk-color-memory so
+       themes can shift Memory to a distinct hue without touching every
+       call site. Refined IDE keeps it equal to --accent; Editorial
+       Calm uses a rust-violet. */
+    --memory:            var(--tk-color-memory);
+
+    --font-mono:         var(--tk-font-mono);
+    --font-sans:         var(--tk-font-sans);
     
     /* ---- Three independent font size axes (controlled by settings sliders) ---- */
     --ui-font-size: 13px;       /* Informational: header, sidebar labels, modals, status */

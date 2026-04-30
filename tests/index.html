@@ -116,6 +116,10 @@
                 await import('./test-blame-normalize.js');
             } catch (e) { errors.push(['Blame', e]); }
 
+            try {
+                await import('./test-theme-tokens.js');
+            } catch (e) { errors.push(['Theme Tokens', e]); }
+
             // --- LLM & Chat (0.9.12) ---
             try {
                 await import('./test-llm-pure.js');

@@ -689,7 +689,7 @@ tr.model-edit-active td {
 }
 
 .badge-state-merged {
-    background: #8957e5;
+    background: var(--tk-color-merged);
     color: white;
 }
 

@@ -152,6 +152,34 @@ jobs:
           fi
           echo "✅ No invisible Unicode characters found"
 
+      # ── Theme Token Contract Lint (1.3.5+) ──────
+      # Enforces the Touch 2 facelift's frozen `--tk-*` vocabulary:
+      # primary hex literals must live only in `css/themes/`. Component
+      # CSS reads through the alias bridge in `css/base.css`. Defensive
+      # `var(--name, #fallback)` patterns are exempt — those never fire
+      # once the alias bridge resolves, but they survive a missing-link
+      # scenario harmlessly. See `css/themes/tokens.css` for the
+      # contract; `docs/ROADMAP.md` §1.3.5 for the rationale.
+      - name: Theme token lint — no standalone hex outside css/themes/
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Theme token lint: standalone hex must live in css/themes/"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          # Standalone hex = a #RGB / #RRGGBB / #RRGGBBAA literal NOT
+          # inside `var(...)`. Lines containing `var(--` are exempt.
+          if grep -rEn '#[0-9a-fA-F]{3,8}\b' css/ \
+               --include='*.css' \
+               --exclude-dir=themes \
+             | grep -v 'var(--'; then
+            echo ""
+            echo "❌ FAIL: Standalone hex literal(s) found outside css/themes/"
+            echo "   Move the value into the --tk-* token contract"
+            echo "   (css/themes/tokens.css) and reference it as"
+            echo "   var(--tk-color-...) from component CSS."
+            exit 1
+          fi
+          echo "✅ No standalone hex literals outside css/themes/"
+
       - name: Add /tools to PATH
         run: echo "/tools" >> $GITHUB_PATH
         

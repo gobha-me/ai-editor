@@ -4,6 +4,131 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-04-30
+
+Lands the **theme tokens contract foundation** — PR 1 of the Touch 2
+facelift arc. No visual change for existing users on the default theme.
+This release locks the `--tk-*` public CSS-custom-property vocabulary
+that every subsequent facelift PR (top bar Restructure, Settings sidebar,
+Connections / Debug / Help panels, Lucide icon swap, woff2 self-hosting)
+reads from, and ships **two themes** — Refined IDE (default; mirrors the
+1.3.4 palette one-for-one) and Editorial Calm (bundled alternate; serif
+headings, warm neutrals, generous spacing) — to prove the contract
+carries variation.
+
+The Touch 2 design deliverable from claude.ai/design landed earlier
+today (commit `69f6597`, stored at `docs/design/touch-2-facelift/`)
+ahead of the schedule projected by ROADMAP Decision §10. The pushback
+memo's strongest PROBE — *"a frozen token vocabulary; once published,
+removing a token is a breaking change"* — is what 1.3.5 ships. Top bar
+and Settings sidebar Restructure components are LOCKED for ship in
+Touch 2; they land as 1.3.6 / 1.3.7 against this contract.
+
+**Why now:** every later facelift component must read its colors,
+fonts, radii, and shadows from `--tk-*` to be theme-able. Shipping a
+component before the contract is frozen would either force a redo (if
+the contract changes) or quietly couple the component to specific
+theme values (defeating themes-as-plugin). Foundation-first is the
+only sequencing that doesn't require rework. Same pattern that landed
+profile-data scaffolding in 1.1.0 and tools-track scaffolding in 1.3.4
+ahead of subsystem wiring.
+
+### Added
+
+- **`css/themes/tokens.css`** *(new — frozen public contract)* — the
+  `--tk-*` vocabulary every plugin theme author implements:
+  `--tk-bg-{darker, app, surface, raised, hover, active, overlay}`,
+  `--tk-text-{primary, secondary, muted, on-accent, on-light}`,
+  `--tk-color-{accent, accent-hover, success, warning, warning-strong,
+  error, danger, info, diff-add, diff-remove, pr, merged, orange, gold,
+  memory}`, `--tk-border{,-light}`, `--tk-radius-{sm, md, lg, xl, pill}`,
+  `--tk-space-{1..6, 8}`, `--tk-font-{sans, serif, mono}`,
+  `--tk-shadow-{sm, md, lg}`. Header comment documents the contract and
+  the breaking-change-on-removal rule.
+
+- **`css/themes/refined.css`** *(new — default theme)* — the Refined
+  IDE palette. Values mirror the dark palette baked into 1.3.4's
+  `:root` so existing users see no visual regression after the alias
+  bridge lands. Activated by `<html data-theme="refined">` (or no
+  `data-theme` attribute, since `:root` matches).
+
+- **`css/themes/editorial.css`** *(new — bundled alternate)* — the
+  Editorial Calm palette. Burnt-amber accent, ivory text on warm-dark
+  bg, serif headings via Source Serif 4 (system fallback until 1.3.x
+  woff2 self-hosting ships), softer/longer shadows, generous spacing.
+  Activated by `<html data-theme="editorial">`. Touch 2 designation:
+  *"the contrarian bet… let it earn its way to default."*
+
+- **Settings → Appearance gains a Theme dropdown** — Refined IDE /
+  Editorial Calm. Live-applies on change (no reload needed). Persists
+  to `State.settings.theme`; default `'refined'`. The pre-1.3.5 schema
+  carried `theme: 'dark'` (functionally a placeholder); a one-shot
+  migration in `loadSettings()` rewrites any non-recognized value to
+  `'refined'` so legacy installs land on the no-regression theme.
+
+### Changed
+
+- **`css/base.css :root` is now an alias bridge** — every legacy
+  variable used across the rest of the app (`--bg-primary`,
+  `--text-primary`, `--accent`, `--success`, `--warning`, `--error`,
+  `--danger`, `--border`, `--memory`, `--font-mono`, `--font-sans`,
+  etc.) resolves to a `--tk-*` token. Component CSS keeps reading the
+  legacy names with zero edits; the theme files define the values.
+  Adding a new primary color requires a new `--tk-*` token, not a new
+  alias. Drift between component-CSS fallback hex (`var(--accent, #fallback)`
+  patterns) and the canonical alias is now harmless — the alias bridge
+  always resolves first.
+
+- **Standalone hex literals swept from component CSS** — every
+  hardcoded color value outside `var(...)` fallback positions in
+  `css/{components, modals, sidebar, editor, memory, chat}.css` is now
+  a `--tk-*` reference (or, where the value was a brand-flavored
+  translucent overlay, `color-mix(in srgb, var(--tk-color-*) N%,
+  transparent)`). Theme-neutral overlays like `rgba(0,0,0,…)` and
+  `rgba(255,255,255,…)` stay as-is — those carry no theme intent.
+
+- **`index.html` load order** — `css/themes/tokens.css` loads first
+  (defines the contract with placeholder values), then the active
+  theme stylesheet (`css/themes/{refined|editorial}.css` via
+  `<link id="theme-link">`), then `css/base.css` (alias bridge), then
+  the component CSS files. A theme switch only swaps the `theme-link`
+  href; no other CSS changes.
+
+- **`docs/ROADMAP.md` §1.3.x renumbering note** — Touch 2 arrived
+  pre-1.4.0 (Decision §10 had projected post-1.4.x). Renumbering
+  projects 1.3.5 → 1.3.x as the facelift series before 1.4.0 opens:
+  1.3.5 tokens (this release) → 1.3.6 top bar Restructure → 1.3.7
+  Settings sidebar Restructure → 1.3.8 Connections → 1.3.9 Debug →
+  1.3.10 Help → 1.3.11 Lucide icons → 1.3.12 woff2 fonts → 1.3.13
+  rem scaling 80–175% (replaces the 3-axis font-size sliders) →
+  1.4.0 Tools admission layer.
+
+### Tests / CI
+
+- **`.gitea/workflows/ci.yaml`** — new lint stage: any standalone hex
+  literal under `css/` (excluding `css/themes/`) fails the build.
+  Patterns inside `var(...)` are exempt (defensive fallbacks are
+  acceptable; the alias bridge guarantees they never fire). The lint
+  is the contract's enforcement mechanism — without it, drift returns
+  in three releases.
+
+- **`tests/test-theme-tokens.html`** *(new)* — verifies the contract
+  at runtime: every `--tk-*` token resolves to a non-empty value under
+  both themes; alias-bridge integrity (`--bg-primary` resolves to the
+  same value as `--tk-bg-app`); switching `data-theme` updates resolved
+  values without page reload.
+
+### Removability check
+
+With `css/themes/` reverted and the alias bridge in `base.css` removed,
+the editor still loads and renders today's palette — every component
+CSS rule resolves through its `var(--name, #fallback)` defensive
+fallback. The token system's value is what it *enables*: themes-as-plugin,
+component CSS that reads only token names, and the locked `--tk-*`
+contract that 1.3.6 onward depends on. Nothing user-visible degrades
+on revert *today* — which is the point: 1.3.5 ships infrastructure,
+not behavior.
+
 ## [1.3.4] - 2026-04-30
 
 Lands the **tools-track foundation** — PR 1 of the 1.4.0 Tools Phase 1

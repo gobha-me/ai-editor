@@ -1,0 +1,94 @@
+/**
+ * AI Editor — Refined IDE theme (default)
+ *
+ * Same family as VSCode / Cursor, executed properly. Lowest-risk,
+ * lowest-narrative theme — exists so existing 1.3.4 users see no
+ * visual regression after the token contract lands.
+ *
+ * Touch 2 designation: "ship Refined IDE as the new default."
+ *
+ * Values mirror the palette baked into 1.3.4's `css/base.css :root`.
+ * Drift between this file and tokens.css's placeholder values is
+ * harmless — placeholders are the safety net; this file is the
+ * authoritative source for the "default" experience.
+ *
+ * Activated by:
+ *   <html data-theme="refined">  (or no `data-theme` attribute,
+ *                                  since this matches `:root`)
+ *
+ * Added: 1.3.5 (2026-04-30).
+ */
+
+:root,
+:root[data-theme="refined"] {
+    /* Backgrounds */
+    --tk-bg-darker:        #1a1a1a;
+    --tk-bg-app:           #1e1e1e;
+    --tk-bg-surface:       #252526;
+    --tk-bg-raised:        #2d2d30;
+    --tk-bg-hover:         #3c3c3c;
+    --tk-bg-active:        #094771;
+    --tk-bg-overlay:       rgba(0, 0, 0, 0.5);
+
+    /* Text */
+    --tk-text-primary:     #cccccc;
+    --tk-text-secondary:   #9e9e9e;
+    --tk-text-muted:       #8e8e8e;
+    --tk-text-on-accent:   #1e1e1e;
+    --tk-text-on-light:    #ffffff;
+
+    /* Brand accent */
+    --tk-color-accent:         #0e7dca;
+    --tk-color-accent-hover:   #1a8fe0;
+
+    /* Semantic */
+    --tk-color-success:    #4ec9b0;
+    --tk-color-warning:    #dcdcaa;
+    --tk-color-warning-strong: #e87d0d;
+    --tk-color-error:      #f14c4c;
+    --tk-color-danger:     #c93a3a;
+    --tk-color-info:       #5bbdf5;
+
+    /* Diff */
+    --tk-color-diff-add:      #22863a;
+    --tk-color-diff-remove:   #cb2536;
+
+    /* Issue / PR / branch */
+    --tk-color-pr:         #6f42c1;
+    --tk-color-merged:     #8957e5;
+    --tk-color-orange:     #d97a3a;
+    --tk-color-gold:       #ffd700;
+
+    /* Memory accent — same as brand accent under Refined */
+    --tk-color-memory:     #0e7dca;
+
+    /* Borders */
+    --tk-border:           #3c3c3c;
+    --tk-border-light:     #474747;
+
+    /* Radii — Refined uses slightly tighter corners */
+    --tk-radius-sm:        3px;
+    --tk-radius-md:        4px;
+    --tk-radius-lg:        6px;
+    --tk-radius-xl:        8px;
+    --tk-radius-pill:      999px;
+
+    /* Spacing */
+    --tk-space-1:          4px;
+    --tk-space-2:          8px;
+    --tk-space-3:          12px;
+    --tk-space-4:          16px;
+    --tk-space-5:          20px;
+    --tk-space-6:          24px;
+    --tk-space-8:          32px;
+
+    /* Fonts — system stack until 1.3.x woff2 self-hosting lands */
+    --tk-font-sans:        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --tk-font-serif:       Georgia, 'Times New Roman', Times, serif;
+    --tk-font-mono:        'Fira Code', 'Consolas', 'Monaco', monospace;
+
+    /* Shadows — Refined uses sharp, defined shadows */
+    --tk-shadow-sm:        0 1px 4px rgba(0, 0, 0, 0.25);
+    --tk-shadow-md:        0 4px 12px rgba(0, 0, 0, 0.30);
+    --tk-shadow-lg:        0 8px 32px rgba(0, 0, 0, 0.40);
+}

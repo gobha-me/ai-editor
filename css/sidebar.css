@@ -421,8 +421,8 @@
 }
 
 .issue-item-focused {
-    border-left: 3px solid #6f42c1;
-    background: color-mix(in srgb, var(--bg-hover) 60%, #6f42c1 10%);
+    border-left: 3px solid var(--tk-color-pr);
+    background: color-mix(in srgb, var(--bg-hover) 60%, var(--tk-color-pr) 10%);
 }
 
 .issue-item-focused .issue-number {

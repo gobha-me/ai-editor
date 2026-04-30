@@ -360,6 +360,14 @@ window.clearProjectDrafts = clearProjectDrafts;
 // ============================================
 
 function applyVisualSettings() {
+    // Theme — swap the active theme stylesheet to match persisted setting.
+    // Must run before any font/panel calculations so theme-driven font
+    // stacks resolve correctly. Imported lazily to avoid a circular dep
+    // on settings-manager.js during early app boot.
+    import('./settings-manager.js').then(({ applyTheme }) => {
+        applyTheme(State.settings.theme || 'refined');
+    });
+
     // Font sizes
     document.documentElement.style.setProperty('--ui-font-size', (State.settings.fontSize || 13) + 'px');
     document.documentElement.style.setProperty('--chat-font-size', (State.settings.chatFontSize || 13) + 'px');

@@ -31,6 +31,25 @@ import {
 import { initCostTab, populateCostTab } from './settings/cost-tab.js';
 import { mountMemoryTab, unmountMemoryTab } from './settings/memory-tab.js';
 
+// ── Theme switching ──
+// Live-swaps the active theme stylesheet by updating the <link> href
+// and the <html data-theme> attribute. The link is identified by id
+// `theme-link` (set in index.html). Token contract: only the theme
+// file changes; component CSS continues reading --tk-* through the
+// alias bridge in base.css.
+const VALID_THEMES = new Set(['refined', 'editorial']);
+
+export function applyTheme(themeName) {
+    const name = VALID_THEMES.has(themeName) ? themeName : 'refined';
+    const link = document.getElementById('theme-link');
+    if (link && link.dataset.themeName !== name) {
+        link.href = `./css/themes/${name}.css`;
+        link.dataset.themeName = name;
+    }
+    document.documentElement.setAttribute('data-theme', name);
+    State.settings.theme = name;
+}
+
 // ── Open / Close ──
 
 export async function openSettings() {
@@ -126,6 +145,17 @@ function populateSettingsForm() {
     };
 
     // --- Appearance Tab ---
+
+    // Theme dropdown — Refined IDE (default) / Editorial Calm.
+    // Live-applies on change so users see the swap without reload.
+    const themeSelect = document.getElementById('settingTheme');
+    if (themeSelect) {
+        themeSelect.value = State.settings.theme || 'refined';
+        themeSelect.onchange = () => {
+            applyTheme(themeSelect.value);
+        };
+    }
+
     const fontSlider = document.getElementById('settingFontSize');
     const chatFontSlider = document.getElementById('settingChatFontSize');
     const editorFontSlider = document.getElementById('settingEditorFontSize');

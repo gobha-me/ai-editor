@@ -1,0 +1,149 @@
+/**
+ * AI Editor — Theme Tokens (`--tk-*`)
+ *
+ * PUBLIC CONTRACT. Frozen vocabulary. Once published, removing or
+ * renaming a token is a breaking change for plugin authors who ship
+ * `plugins/themes/*.css`.
+ *
+ * Rules:
+ *   1. Every color, font, radius, spacing, and shadow the app reads
+ *      MUST come from a `--tk-*` token defined here.
+ *   2. App CSS (everything outside `css/themes/`) MUST NOT define
+ *      hex literals as primary values. Translucent overlays
+ *      (`rgba(0,0,0,...)`, `rgba(255,255,255,...)`) are theme-neutral
+ *      and exempt; document the choice in a comment when used.
+ *   3. Token VALUES live in theme files (`refined.css`,
+ *      `editorial.css`, future `plugins/themes/*.css`). This file
+ *      defines only the contract — names + comment describing what
+ *      each one is for. Values are placeholders mirroring Refined IDE
+ *      so the contract remains valid even when no theme is loaded.
+ *
+ * Plugin theme authors: implement every token below in your `:root`
+ * (or under a `[data-theme="your-name"]` selector). Missing tokens
+ * fall back to the placeholders here, so partial themes degrade
+ * gracefully but won't ship a coherent look.
+ *
+ * Added: 1.3.5 (2026-04-30) — first Touch 2 facelift patch.
+ */
+
+:root {
+    /* ========================================================
+       Backgrounds
+       Layered from deepest to most-raised. App bg sits behind
+       all surfaces; raised is for floating elements (dropdowns,
+       popovers); overlay is the modal scrim.
+       ======================================================== */
+    --tk-bg-darker:        #1a1a1a;  /* deeper than app bg (fenced-in regions) */
+    --tk-bg-app:           #1e1e1e;  /* primary editor canvas */
+    --tk-bg-surface:       #252526;  /* secondary surfaces, cards, sidebars */
+    --tk-bg-raised:        #2d2d30;  /* dropdowns, popovers */
+    --tk-bg-hover:         #3c3c3c;  /* hover state */
+    --tk-bg-active:        #094771;  /* active/selected state */
+    --tk-bg-overlay:       rgba(0, 0, 0, 0.5);  /* modal scrim */
+
+    /* ========================================================
+       Text
+       Primary for body copy; secondary/muted for hierarchy;
+       on-accent for text drawn on top of an accent fill.
+       ======================================================== */
+    --tk-text-primary:     #cccccc;
+    --tk-text-secondary:   #9e9e9e;  /* AA 4.5:1 on bg-raised */
+    --tk-text-muted:       #8e8e8e;  /* AA 4.5:1 on bg-surface */
+    --tk-text-on-accent:   #1e1e1e;  /* drawn on accent-filled bg */
+    --tk-text-on-light:    #ffffff;  /* drawn on dark high-contrast bg */
+
+    /* ========================================================
+       Brand accent
+       The dominant color of the UI. Hover is the lighter sibling.
+       ======================================================== */
+    --tk-color-accent:         #0e7dca;
+    --tk-color-accent-hover:   #1a8fe0;
+
+    /* ========================================================
+       Semantic colors
+       success / warning / error / danger / info — used by status
+       indicators, banners, and toast messages.
+       ======================================================== */
+    --tk-color-success:    #4ec9b0;
+    --tk-color-warning:    #dcdcaa;
+    --tk-color-warning-strong: #e87d0d;  /* attention-grabbing variant */
+    --tk-color-error:      #f14c4c;
+    --tk-color-danger:     #c93a3a;
+    --tk-color-info:       #5bbdf5;
+
+    /* ========================================================
+       Diff colors
+       Distinct from success/error to allow themes to diverge —
+       diff add isn't always green and remove isn't always red,
+       e.g. Editorial Calm uses warmer hues.
+       ======================================================== */
+    --tk-color-diff-add:      #22863a;
+    --tk-color-diff-remove:   #cb2536;
+
+    /* ========================================================
+       Issue / PR / branch
+       Provider-aware accents. Today match GitHub's palette;
+       individual themes may override.
+       ======================================================== */
+    --tk-color-pr:         #6f42c1;  /* open PR badge, branch indicator */
+    --tk-color-merged:     #8957e5;  /* merged-PR variant */
+    --tk-color-orange:     #d97a3a;  /* "modified" badge, secondary alerts */
+    --tk-color-gold:       #ffd700;  /* star/favorite */
+
+    /* ========================================================
+       Memory subsystem accent
+       Tracks --tk-color-accent today; reserved as a distinct
+       token so the Memory tab, @memory chip, and consent card
+       can move to a memory-specific hue without touching every
+       call site.
+       ======================================================== */
+    --tk-color-memory:     var(--tk-color-accent);
+
+    /* ========================================================
+       Borders
+       ======================================================== */
+    --tk-border:           #3c3c3c;
+    --tk-border-light:     #474747;
+
+    /* ========================================================
+       Radii
+       ======================================================== */
+    --tk-radius-sm:        3px;
+    --tk-radius-md:        4px;
+    --tk-radius-lg:        6px;
+    --tk-radius-xl:        8px;
+    --tk-radius-pill:      999px;
+
+    /* ========================================================
+       Spacing
+       Coarse vocabulary; component CSS may compute fractions
+       from these (`calc(var(--tk-space-2) / 2)` is fine).
+       ======================================================== */
+    --tk-space-1:          4px;
+    --tk-space-2:          8px;
+    --tk-space-3:          12px;
+    --tk-space-4:          16px;
+    --tk-space-5:          20px;
+    --tk-space-6:          24px;
+    --tk-space-8:          32px;
+
+    /* ========================================================
+       Fonts
+       The sans/mono stacks ship as system-stack fallbacks; a
+       follow-up patch (per ROADMAP §1.3.x) self-hosts woff2
+       for Inter / IBM Plex Sans / Source Serif 4 / JetBrains
+       Mono and tightens the stack accordingly.
+       ======================================================== */
+    --tk-font-sans:        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --tk-font-serif:       Georgia, 'Times New Roman', Times, serif;
+    --tk-font-mono:        'Fira Code', 'Consolas', 'Monaco', monospace;
+
+    /* ========================================================
+       Shadows
+       Theme-controlled because Editorial Calm uses softer
+       shadows and Refined IDE uses sharper ones.
+       ======================================================== */
+    --tk-shadow-sm:        0 1px 4px rgba(0, 0, 0, 0.25);
+    --tk-shadow-md:        0 4px 12px rgba(0, 0, 0, 0.30);
+    --tk-shadow-lg:        0 8px 32px rgba(0, 0, 0, 0.40);
+}

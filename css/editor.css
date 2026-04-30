@@ -205,15 +205,15 @@
 }
 
 .issue-tab-actions .issue-tab-accept:hover {
-    background: rgba(34, 134, 58, 0.12);
-    border-color: #22863a;
-    color: #4ec9b0;
+    background: color-mix(in srgb, var(--tk-color-diff-add) 12%, transparent);
+    border-color: var(--tk-color-diff-add);
+    color: var(--tk-color-success);
 }
 
 .issue-tab-actions .issue-tab-deny:hover {
-    background: rgba(203, 37, 54, 0.12);
-    border-color: #cb2536;
-    color: #f14c4c;
+    background: color-mix(in srgb, var(--tk-color-diff-remove) 12%, transparent);
+    border-color: var(--tk-color-diff-remove);
+    color: var(--tk-color-error);
 }
 
 .issue-tab-actions .issue-tab-comment:hover {
@@ -336,8 +336,9 @@
 }
 
 .plugin-editor-actions .btn-danger:hover {
-    background: #d64545;
-    border-color: #d64545;
+    background: var(--tk-color-danger);
+    border-color: var(--tk-color-danger);
+    filter: brightness(1.15);
 }
 
 .plugin-editor-cm {

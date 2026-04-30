@@ -89,7 +89,7 @@
  * @property {boolean}              showLineNumbers
  * @property {'default'|'vim'}      editorKeybindingMode
  * @property {boolean}              editorScanInvisibleUnicode
- * @property {string}               theme
+ * @property {'refined'|'editorial'} theme
  * @property {SummarizerMode}       summarizerMode
  * @property {SummarizerConfig}     summarizer
  */
@@ -289,7 +289,9 @@ const State = {
         showLineNumbers: true,     // Show line numbers in editor
         editorKeybindingMode: 'default', // 'default' | 'vim' — keybinding profile for the editor
         editorScanInvisibleUnicode: true, // Surface zero-width / bidi-override / glassworm chars in the editor
-        theme: 'dark',
+        theme: 'refined',          // 'refined' | 'editorial' — Touch 2 facelift theme (1.3.5+).
+                                   // Older installs may carry 'dark' / 'light' from the
+                                   // pre-facelift schema; loadSettings() migrates those.
 
         // Summarizer Configuration
         summarizerMode: 'balanced',    // 'aggressive' | 'balanced' | 'conservative' | 'custom'
@@ -1600,6 +1602,16 @@ function loadSettings() {
         // Now the embedder has its own provider/endpoint/apiKey; mode is explicit.
         // Local-mode users get an empty endpoint/key (sentinel only); remote-mode
         // users get llm* cloned across so behavior is bit-for-bit equivalent.
+        // One-shot migration (1.3.5): theme schema becomes Touch 2 names.
+        // Pre-1.3.5 settings carried `theme: 'dark'` (or 'light', unused);
+        // post-1.3.5 valid values are 'refined' (the new default that
+        // mirrors today's dark palette) and 'editorial'. 'dark' → 'refined'
+        // is bit-equivalent for existing users; anything unrecognized falls
+        // back to the default rather than carrying an invalid value forward.
+        if (saved.theme && saved.theme !== 'refined' && saved.theme !== 'editorial') {
+            saved.theme = 'refined';
+        }
+
         if (saved.embeddingProvider === undefined) {
             const isLocalModel = (saved.embeddingModel || '').startsWith('Xenova/');
             if (isLocalModel) {

@@ -6,6 +6,13 @@
     <title>AI Editor</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+    <!-- Theme tokens — public --tk-* contract (frozen) + active theme.
+         Load order matters: tokens.css defines the contract with
+         placeholder values; the theme file overrides them. base.css
+         then aliases legacy --bg-*/--text-*/--accent vars to --tk-*.
+         A theme switch swaps the active <link>; no other CSS changes. -->
+    <link rel="stylesheet" href="./css/themes/tokens.css">
+    <link rel="stylesheet" href="./css/themes/refined.css" id="theme-link" data-theme-name="refined">
     <!-- Stylesheets (split by component) -->
     <link rel="stylesheet" href="./css/base.css">
     <link rel="stylesheet" href="./css/sidebar.css">

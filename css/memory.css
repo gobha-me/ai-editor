@@ -95,7 +95,7 @@
 .mem-toolbar__btn--primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--tk-text-on-light);
 }
 
 .mem-toolbar__btn--primary:hover:not(:disabled) {
@@ -166,7 +166,7 @@
 
 .mem-toggle--on .mem-toggle__switch::after {
     transform: translateX(10px);
-    background: #fff;
+    background: var(--tk-text-on-light);
 }
 
 .mem-toggle code {
@@ -860,7 +860,7 @@
 }
 
 .commit-section--warn {
-    border-left-color: #d97a3a;
+    border-left-color: var(--tk-color-orange);
     background: rgba(217, 122, 58, 0.08);
 }
 
@@ -883,7 +883,7 @@
 }
 
 .commit-section__title--warn {
-    color: #d97a3a;
+    color: var(--tk-color-orange);
 }
 
 .commit-section__count {
@@ -997,7 +997,7 @@
 }
 
 .branch-row__protected {
-    color: #d97a3a;
+    color: var(--tk-color-orange);
     background: rgba(217, 122, 58, 0.12);
     border: 1px solid rgba(217, 122, 58, 0.3);
     border-radius: 3px;

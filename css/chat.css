@@ -1144,15 +1144,15 @@
 }
 
 .issue-focus-actions .btn-accept:hover {
-    background: #22863a20;
-    border-color: #22863a;
-    color: #22863a;
+    background: color-mix(in srgb, var(--tk-color-diff-add) 13%, transparent);
+    border-color: var(--tk-color-diff-add);
+    color: var(--tk-color-diff-add);
 }
 
 .issue-focus-actions .btn-deny:hover {
-    background: #cb253620;
-    border-color: #cb2536;
-    color: #cb2536;
+    background: color-mix(in srgb, var(--tk-color-diff-remove) 13%, transparent);
+    border-color: var(--tk-color-diff-remove);
+    color: var(--tk-color-diff-remove);
 }
 
 .issue-focus-actions .btn-comment:hover {
@@ -1162,9 +1162,9 @@
 }
 
 .issue-focus-actions .btn-work:hover {
-    background: #6f42c120;
-    border-color: #6f42c1;
-    color: #6f42c1;
+    background: color-mix(in srgb, var(--tk-color-pr) 13%, transparent);
+    border-color: var(--tk-color-pr);
+    color: var(--tk-color-pr);
 }
 
 /* ============================================
@@ -1205,7 +1205,7 @@
     border-radius: 50%;
     border: none;
     background: rgba(0, 0, 0, 0.65);
-    color: #fff;
+    color: var(--tk-text-on-light);
     font-size: 10px;
     line-height: 1;
     cursor: pointer;

@@ -45,7 +45,8 @@
 }
 
 .btn-danger:hover {
-    background: #d64545;
+    background: var(--tk-color-danger);
+    filter: brightness(1.15);
 }
 
 .btn-success {
@@ -54,7 +55,7 @@
 }
 
 .btn-commit {
-    background: #e87d0d;
+    background: var(--tk-color-warning-strong);
     color: white;
     border: none;
     font-weight: 600;
@@ -62,12 +63,13 @@
 }
 
 .btn-commit:hover {
-    background: #f5920e;
+    background: var(--tk-color-warning-strong);
+    filter: brightness(1.12);
 }
 
 @keyframes commitPulse {
     0%, 100% { box-shadow: none; }
-    50% { box-shadow: 0 0 8px rgba(232, 125, 13, 0.5); }
+    50% { box-shadow: 0 0 8px color-mix(in srgb, var(--tk-color-warning-strong) 50%, transparent); }
 }
 
 /* Commit file list */
@@ -204,7 +206,7 @@
 }
 
 .header-cost-tracker .cost-balance {
-    color: #5bbdf5;              /* AA contrast on bg-secondary */
+    color: var(--tk-color-info);   /* AA contrast on bg-surface */
     font-weight: 600;
     padding-left: 6px;
     border-left: 1px solid var(--border-light);
@@ -632,8 +634,8 @@
 }
 
 .match-highlight {
-    background: rgba(255, 215, 0, 0.3);
-    color: #ffd700;
+    background: color-mix(in srgb, var(--tk-color-gold) 30%, transparent);
+    color: var(--tk-color-gold);
     padding: 0 2px;
     border-radius: 2px;
 }
