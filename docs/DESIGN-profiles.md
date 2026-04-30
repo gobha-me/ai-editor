@@ -496,3 +496,30 @@ RetrievalRequest {
 - **Five canonical profiles, opinionated.** Standard chat, multi-user chat, RP, coder, KB. New surfaces should fit into one or extend an existing one before becoming a sixth.
 
 These are the load-bearing decisions. Push back on any of them before building.
+
+---
+
+## Appendix: Policy vs. Resolution
+
+> Added during 1.2.5 scoping (`docs/ROADMAP.md` §1.2.5 "Compression settings refresh"). Promoted from the compression panel to a profile-doc appendix because the distinction is broader than compression — it shapes how every token-count knob across the architecture should be persisted and displayed.
+
+**Configuration is intent (policy); parameters are resolution.**
+
+The user picks `Balanced`. That's *policy* — a stable, named choice that doesn't change when the user switches models. At session start, with the active model known, the system *resolves* policy into absolute parameters: token counts, turn counts, fractions of budget. The settings panel persists policy; the panel displays resolution. Switching models re-resolves. The intent does not move.
+
+This is what makes "auto-tune to your model's context window" possible. Without the distinction, every model switch becomes a settings re-tune by hand; with it, the user sets intent once and the system handles the math.
+
+The pattern should be the default for any token-count parameter anywhere in the architecture:
+
+| Subsystem | Policy (persisted) | Resolution (computed at session start) |
+|---|---|---|
+| Compression (1.2.5+) | `mode: balanced`, `rules.{subsumption, ...}: bool`, `preserve_recent: 4` (intent, in turns) | Per-rule budgets in tokens, summary trigger in tokens, max-summary-length carry-through |
+| Memory (1.3.0+) | `MemoryConfig.capacity_warnings: 0.8` (policy: warn at 80%) | The actual byte threshold against the IDB store size |
+| Tools (1.4.0+) | `tools.budget: 5000` (per design, policy expressed in tokens because the tool catalog is provider-agnostic) | Resolved tool admission set per-call |
+| Retrieval (1.5.0+) | Strategy weights (semantic 0.5, structural 0.3, thematic 0.2 — policy) | Per-strategy chunk quotas in tokens |
+
+Memory does this implicitly already (`MemoryConfig.capacity_warnings` is policy; byte counts at warning time are resolved against IDB). Compression's 1.2.5 panel is the first place the distinction is *named* in user-facing UI. Tools (1.4.0 budget = 5000 tokens) and Retrieval (1.5.0 strategy quotas) should follow the same shape when they ship.
+
+**Profile-schema implication for 2.0.** The current `Profile` typedef mixes policy values (e.g., `compression.mode`, `tools.budget`) with what should be resolved parameters (e.g., concrete per-rule eviction caps). This is fine through 1.x — the resolution math lives outside the persisted struct anyway. A future revision (likely 2.0 alongside the profile picker) should separate them explicitly: persisted `Profile` carries only policy; a `ResolvedProfile` is computed on every session load against the active model's window. This makes the "what's stored vs. what's running" distinction visible at the type level instead of requiring readers to know which fields are which.
+
+**Don't over-correct.** Some fields are inherently absolute and don't need resolution: `max_summary_length` in characters, role enum, plugin allow-list. Resolution applies to anything sized against context-window or store-capacity; it does not apply to anything sized against bytes-on-the-wire or count-of-things.
