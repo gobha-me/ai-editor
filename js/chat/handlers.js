@@ -32,6 +32,10 @@ import { ChatSummarizer } from './summarizer.js';
 import { enrichToolResultTurn } from './turn-enrich.js';
 import { getCompressedContextMessages } from './compactor-integration.js';
 import { withRetry } from '../retry.js';
+import { ConversationManager } from './conversations.js';
+import { recordInvocation as recordToolInvocation } from './task-state.js';
+import { Catalog } from '../intelligence/tools/index.js';
+import { CODER_V1 } from '../profiles/coder-v1.js';
 
 /**
  * Main entry point for user input
@@ -556,6 +560,28 @@ export async function handleGeneralRequest(input) {
 
                     // Show collapsible tool call detail
                     addToolCallMessage(toolName, args, toolResult);
+
+                    // 1.3.17 / Tools PR 4 — record the invocation against
+                    // the conversation's TaskLedger so a non-static tool
+                    // the model just used becomes sticky-admissible on the
+                    // next turn. Gated to the `coder` role because that is
+                    // the only role with a populated `tools.static` set
+                    // today; other roles run the legacy `Roles.filterTools`
+                    // path which never consults the ledger. Failed tool
+                    // calls are skipped inside `recordToolInvocation`.
+                    if (State.settings.role === 'coder') {
+                        const td = Catalog.getByName(toolName);
+                        recordToolInvocation({
+                            conversationId: ConversationManager.getActiveId(),
+                            toolName,
+                            args,
+                            toolResult,
+                            turnId: toolCall.id || null,
+                            surface: CODER_V1.name,
+                            staticNames: CODER_V1.tools.static,
+                            toolCost: td ? td.metadata.cost_estimate : 0,
+                        });
+                    }
 
                     // Memory PR #6 — when memory_remember enqueues an
                     // agent-proposed candidate (per consent-queue.js), the

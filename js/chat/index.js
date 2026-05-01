@@ -42,6 +42,7 @@ import {
 import { setupInputHandlers, stopGeneration, removeImage } from './input.js';
 import { exportChat } from './export.js';
 import { exportConversationToFile, openReplayModal } from './replay.js';
+import { dropLedger as dropTaskLedger } from './task-state.js';
 import { probeMetadataCoverage, summarizeCoverage } from './metadata-probe.js';
 import { showToast } from '../ui-helpers.js';
 import { 
@@ -140,6 +141,14 @@ function initChat(containerEl, inputEl) {
     EventBus.on('conversation:loaded', () => renderConversationList());
     EventBus.on('conversation:deleted', () => renderConversationList());
     EventBus.on('conversation:renamed', () => renderConversationList());
+
+    // 1.3.17 / Tools PR 4 — reclaim ledger memory for deleted conversations.
+    // Ledgers persist across conversation switches by design (re-opening
+    // a conversation should preserve its sticky tool set), so we only
+    // drop on `conversation:deleted`, not `conversation:loaded`.
+    EventBus.on('conversation:deleted', (e) => {
+        if (e && typeof e.id === 'string') dropTaskLedger(e.id);
+    });
 
     // Repaint the per-row cost chip after each turn lands.
     EventBus.on('cost:updated', () => {

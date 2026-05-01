@@ -10,21 +10,31 @@
  * `ToolAdmissionResult` — `admitted[]`, `suppressed[]`, counters — that the
  * caller renders into the OpenAI tool-array shape via `renderForLLM`.
  *
- * **Phase 1 / PR 2 scope (this file):**
- *   - Static-set admission only. `source: "static"` on every admitted entry.
+ * **Phase 1 scope (this file):**
+ *   - Static-set admission. `source: "static"` on entries from
+ *     `request.profile_static`.
+ *   - **Sticky admission** (added 1.3.17 / PR 4) via
+ *     `request.task_ledger.tool_admissions`. Tools the model invoked on a
+ *     prior turn re-admit additively on top of the static set. Skipped if
+ *     the same `tool_id` already admitted from static (the ledger never
+ *     duplicates static membership). `source: "sticky"` on entries.
  *   - Authorization filter via `metadata.authorization.required_groups`,
  *     mirroring the legacy `Roles.filterTools()` semantics ("all" group is
- *     always allowed; the "full" role bypasses).
- *   - Budget packing in declared order. Over-budget entries land in
- *     `suppressed[]` with `reason: 'over_budget'`.
+ *     always allowed; the "full" role bypasses). Applies uniformly to
+ *     static AND sticky entries — an authorization change mid-task drops
+ *     a previously-sticky tool with `reason: 'unauthorized'`.
+ *   - Budget packing. Static admits first (declared order); sticky admits
+ *     after, in ledger order. Sticky overflow lands in `suppressed[]` with
+ *     `reason: 'over_budget'` — protecting the static set's budget claim.
  *   - Skip-not-throw on names that do not resolve via `Catalog.getByName()`.
  *     Surfaced in `diagnostics.unresolved_static` so callers can tell
  *     "missing on purpose" (PR-3 meta-tools) from "registry forgot".
  *
  * **Out of scope (subsequent PRs):**
- *   - Sticky admission via `TaskLedger.tool_admissions` / `tool_invocations`.
- *   - Discovery (categorical / semantic).
+ *   - Discovery (categorical / semantic) — sub-prompt that returns "admit
+ *     these" hints to the Composer mid-call.
  *   - Lazy schema expansion (`form: "short"` on discovery).
+ *   - LRU eviction of sticky entries when memory pressure exceeds budget.
  *   - Deprecation handling (`metadata.deprecated`).
  *
  * Pure function — no `State` reads, no DOM, no logging side effects. The
@@ -107,9 +117,16 @@ function toOpenAIShape(td) {
  *      Null → push to `unresolved_static`, skip.
  *   2. Authorization filter via `isAuthorized`. Failures land in
  *      `suppressed` with `reason: 'unauthorized'`.
- *   3. Budget packing. Walk in declared order; admit when
+ *   3. Budget packing for static. Walk in declared order; admit when
  *      `tokens_used + cost_estimate ≤ budget_tokens`. Otherwise suppress
  *      with `reason: 'over_budget'`.
+ *   4. Sticky pass — for each entry in `task_ledger.tool_admissions`,
+ *      resolve via `Catalog.getById` (preferred) or `Catalog.getByName`
+ *      (fallback for ledgers built before stable `ToolID` propagation).
+ *      Skip if the same `tool_id` already admitted from static.
+ *      Authorization + budget gates apply identically to static; ledger-
+ *      ordered packing means an early-discovered tool wins over a later
+ *      one when budget tightens.
  *
  * @param {ToolRequest} request
  * @returns {ToolAdmissionResult}
@@ -157,17 +174,88 @@ export function composeAdmission(request) {
 
         admitted.push({
             tool_id: td.id,
-            form: 'full',           // PR 2 always full; lazy expansion arrives later.
+            form: 'full',           // Always full on the static path; lazy expansion arrives later.
             rendered: JSON.stringify(toOpenAIShape(td)),
             source: 'static',
         });
         tokensUsed += cost;
     }
 
+    const staticCount = admitted.length;
+    let stickyAdmitted = 0;
+
+    // 1.3.17 / PR 4 — sticky admission via the unified TaskLedger. The
+    // ledger's `tool_admissions[]` carries entries the chat-side hook
+    // wrote when the model invoked a non-static tool on a prior turn.
+    // Order in the ledger reflects discovery order, so packing in that
+    // order means the earliest-discovered tool gets priority when the
+    // budget tightens — matching the operator's intuition that "you've
+    // been using this all task" beats "you tried this once recently."
+    const ledger = request?.task_ledger;
+    /** @type {Set<string>} */
+    const admittedIds = new Set(admitted.map(a => a.tool_id));
+    if (ledger && Array.isArray(ledger.tool_admissions)) {
+        for (const rec of ledger.tool_admissions) {
+            if (!rec || typeof rec.tool_id !== 'string') continue;
+
+            // Resolve. Prefer ToolID (stable across registry edits), fall
+            // back to name for ledgers built before ToolIDs landed in
+            // every record (records today persist `tool_id === toolName`,
+            // matching `task-state.js#recordInvocation`).
+            const td = Catalog.getById(rec.tool_id) || Catalog.getByName(rec.tool_id);
+            if (!td) {
+                // Ledger references a tool the registry no longer knows
+                // about (plugin unloaded mid-session, etc.). Drop silently
+                // — sticky admission is best-effort, not a hard contract.
+                continue;
+            }
+
+            // Static wins — never duplicate the same tool across sources.
+            // Compare on the resolved Catalog ID (`td.id`) because the
+            // ledger entry's `tool_id` is name-keyed today (per
+            // `task-state.js#recordInvocation`) while `admitted[]` carries
+            // the hash-based `td.id`.
+            if (admittedIds.has(td.id)) continue;
+
+            if (!isAuthorized(td.metadata.authorization.required_groups, userGroups)) {
+                suppressed.push({
+                    tool_id: td.id,
+                    reason: 'unauthorized',
+                    detail: `requires one of: ${td.metadata.authorization.required_groups.join(', ') || '(none)'}`,
+                });
+                continue;
+            }
+
+            const cost = td.metadata.cost_estimate;
+            if (tokensUsed + cost > budget) {
+                suppressed.push({
+                    tool_id: td.id,
+                    reason: 'over_budget',
+                    detail: `cost=${cost}, used=${tokensUsed}, budget=${budget}`,
+                });
+                continue;
+            }
+
+            admitted.push({
+                tool_id: td.id,
+                // Honor the ledger's recorded form. 1.3.17 always writes
+                // `'full'` (lazy expansion lands as a later patch); the
+                // copy-not-coerce keeps this branch correct when that
+                // patch lands without a follow-up touch here.
+                form: rec.form === 'short' ? 'short' : 'full',
+                rendered: JSON.stringify(toOpenAIShape(td)),
+                source: 'sticky',
+            });
+            admittedIds.add(td.id);
+            tokensUsed += cost;
+            stickyAdmitted++;
+        }
+    }
+
     /** @type {ToolDiagnostics} */
     const diagnostics = {
-        static_admitted: admitted.length,
-        sticky_admitted: 0,
+        static_admitted: staticCount,
+        sticky_admitted: stickyAdmitted,
         discovery_admitted: 0,
         suppressed: suppressed.length,
         unresolved_static: unresolved,

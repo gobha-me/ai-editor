@@ -4,6 +4,141 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.17] - 2026-05-01
+
+Sticky tool admission via the unified `TaskLedger`. Closes the discovery
+roundtrip the 1.3.16 meta-tools opened: a tool the model invoked once
+(via `find_tool` → name) re-admits on subsequent turns with
+`source: 'sticky'`, instead of silently dropping out of the OpenAI
+tool-array because it isn't in `coder.v1.tools.static`.
+
+PR 4 of 4 in the §1.4.0 Tools Phase 1 arc (1.3.4 foundation → 1.3.14
+Composer → 1.3.15 system-prompt admission → 1.3.16 meta-tools →
+**1.3.17 sticky admission** → 1.4.0 measurement). Lands as 1.3.17 (not
+1.4.0) because the §1.4.0 exit criterion (70% token reduction measured
+on real coder sessions via the 1.2.1 cost dashboard) is gated on a
+follow-up patch that wires tool-definition cost into the cost-recorder.
+
+The `TaskLedger` struct landed empty in 1.1.0 with explicit slots for
+`tool_admissions[]` and `tool_invocations[]`; this PR fills them in for
+the first time. `coder.v1.task_ledger` (the `enabled: true, capacity: 500`
+config) finally has a consumer.
+
+### Added
+
+- **[`js/chat/task-state.js`](js/chat/task-state.js)** *(new)* —
+  per-conversation `TaskLedger` registry. Owns a
+  `Map<conversationId, TaskLedger>` keyed off
+  `Storage.get('activeConversation')`. Public surface:
+  - `getOrCreateLedger(conversationId, surface)` — idempotent. Returns
+    `null` for null/empty ids so the Composer's null-`task_ledger` branch
+    stays on the 1.3.14 behavior when no conversation is active.
+  - `getLedger(conversationId)` — lookup-only; no implicit creation.
+  - `dropLedger(conversationId)` — reclaim memory; called from
+    [`js/chat/index.js`](js/chat/index.js) on `conversation:deleted`.
+  - `recordInvocation({ ... })` — hook called from
+    [`js/chat/handlers.js`](js/chat/handlers.js) after each successful
+    `executeToolCall()`. Always pushes a `ToolInvocationRecord`. Auto-pushes
+    a `ToolAdmissionRecord` (`source: 'discovery'`, `form: 'full'`) for
+    tools outside the profile's static set; updates `last_used_at` on a
+    re-invoked tool instead of duplicating the admission record. Failed
+    calls (`toolResult.error` truthy) and static-set tools are no-ops.
+
+- **[`tests/test-task-state.mjs`](tests/test-task-state.mjs)** *(new)* —
+  fourteen tests covering: idempotent get-or-create, per-conversation
+  isolation, lookup-only `getLedger`, drop semantics, invocation logging
+  + auto-admission contract, static-set bypass, re-invocation
+  bookkeeping, failed-call skip, and `args_summary` truncation.
+
+- **[`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs)** —
+  nine new sticky-admission tests (turn-by-turn fixture using a staged
+  ledger). Cover: sticky entry admits with `source: 'sticky'`; static
+  beats sticky on name overlap; unauthorized sticky entry → suppressed;
+  budget-exhausted sticky entry → suppressed; unknown ledger entry
+  silently dropped (not surfaced in `unresolved_static`); declared-order
+  packing when budget partially fits; `tokens_used` accounting; `null`
+  ledger preserves 1.3.14 behavior; `form: 'short'` is honored.
+
+### Changed
+
+- **[`js/intelligence/tools/composer.js`](js/intelligence/tools/composer.js)** —
+  `composeAdmission()` extended with a sticky pass after the static loop.
+  Walks `request.task_ledger.tool_admissions[]` (when the request carries
+  a non-null ledger), resolves each via `Catalog.getById` then falls back
+  to `Catalog.getByName` for ledgers built before stable IDs propagate,
+  applies the same authorization + budget gates as the static path, and
+  pushes `source: 'sticky'`. Dedup against the static set compares on the
+  resolved `td.id` so a name-keyed ledger record and a hash-keyed static
+  admit can't double-admit the same tool. `diagnostics.sticky_admitted`
+  carries the real count instead of the hardcoded `0`.
+
+- **[`js/llm/api.js`](js/llm/api.js)** — `LLMTools._runComposer()` now
+  reads the active conversation id directly from
+  `Storage.get('activeConversation')` and threads
+  `getOrCreateLedger(...)` through `composeAdmission(...)` as
+  `task_ledger`. The legacy `task_ledger: null` line is gone. Storage
+  read avoids a circular import via `ConversationManager`. Console log
+  surfaces the static / sticky split.
+
+- **[`js/chat/handlers.js`](js/chat/handlers.js)** — post-`executeToolCall()`
+  hook calls `recordToolInvocation(...)` when `State.settings.role ===
+  'coder'`. Other roles run the legacy `Roles.filterTools()` path which
+  ignores the ledger; recording for them would just consume memory.
+
+- **[`js/chat/index.js`](js/chat/index.js)** — subscribes to
+  `conversation:deleted` and calls `dropTaskLedger(e.id)`. Loaded /
+  switched conversations keep their ledger so re-opening a conversation
+  preserves its sticky tool set; deletion is the only event that reclaims.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.3.16 → 1.3.17. Paired
+  with this CHANGELOG promotion per the version-coherence lint.
+
+### Notes
+
+- **Removability check.** With `js/chat/task-state.js` reverted and
+  `_runComposer()` re-passing `task_ledger: null`, the editor reverts
+  to 1.3.16 behavior: discovery still works, but invoking a non-static
+  tool drops on the next turn. No data corruption (ledger lives only
+  in memory). The `?toolsCompose=off` kill switch from 1.3.14
+  bypasses everything upstream.
+
+- **Lifecycle.** Ledgers are in-memory only — no IDB, no persistence
+  across reload. Matches `task-ledger.js`'s lifecycle commitment:
+  *"Ledgers do not survive session end by default."* The chat side
+  retains them across conversation switches (re-opening a conversation
+  picks up its sticky set) but releases on `conversation:deleted`.
+
+- **Failed tool calls don't go sticky.** A tool that errored isn't
+  evidence the model meant to use it; sticky-admitting broken tools
+  would clutter the budget. `recordInvocation` checks
+  `toolResult.error` and no-ops on truthy.
+
+- **Static beats sticky.** When the same tool appears in
+  `coder.v1.tools.static` AND the ledger, only the static admit lands —
+  `source: 'static'` wins, sticky pass skips. Prevents double-budgeting
+  of the same definition under two attribution sources.
+
+- **No `tool_id` migration needed.** Ledger records persist `tool_id`
+  as the canonical name (matching the 1.3.4 footnote that names ARE the
+  ToolID until profiles namespace them). The Composer's `getById ||
+  getByName` fallback resolves either form, so when stable hashed IDs
+  start propagating into ledger records (post-2.0 profile resolution),
+  the existing in-memory ledgers continue to work.
+
+- **Coder-only today.** Other roles (`full`, `pm`, `reviewer`,
+  `plugin-dev`) run the legacy `Roles.filterTools` path with no static
+  set declared, so the Composer is inactive and the ledger goes
+  unused. The hook gates on role to avoid writing dead records. Once
+  profile resolution (post-2.0) gives every role its own static set,
+  the gate comes off.
+
+- **`?toolsCompose=off` interaction.** When the kill switch is on, the
+  Composer doesn't run at all — the legacy `Roles.filterTools()` path
+  takes over, ignoring the ledger. Tool invocations still get recorded
+  (the hook doesn't check the kill switch) so the ledger is ready when
+  the switch flips back; this matches the 1.3.14 design (kill switch
+  toggles admission strategy, not data flow).
+
 ## [1.3.16] - 2026-05-01
 
 Closes the `unresolved_static` gap surfaced by the 1.3.14 Composer. Three

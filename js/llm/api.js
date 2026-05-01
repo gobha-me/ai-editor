@@ -66,6 +66,7 @@ import { LLMDebug } from './debug.js';
 import { Catalog, composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
 import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
+import { getOrCreateLedger } from '../chat/task-state.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -864,12 +865,20 @@ export const LLMTools = {
             return { result: null, composerActive: false, role };
         }
 
+        // 1.3.17 / Tools PR 4 — thread the per-conversation TaskLedger so
+        // the Composer can re-admit non-static tools the model invoked on
+        // a prior turn (`source: 'sticky'`). `getOrCreateLedger(null, ...)`
+        // returns null, so a missing/empty conversation id stays
+        // backwards-compatible with the 1.3.14 behavior.
+        const conversationId = Storage.get('activeConversation', null);
+        const ledger = getOrCreateLedger(conversationId, CODER_V1.name);
+
         const result = composeAdmission({
             task: 'chat',
             query: null,
             budget_tokens: CODER_V1.tools.budget_tokens,
             profile_static: CODER_V1.tools.static,
-            task_ledger: null,
+            task_ledger: ledger,
             user_groups: [role],
             discovery_call: null,
             expansion_mode: CODER_V1.tools.expansion_mode,
@@ -926,8 +935,11 @@ export const LLMTools = {
 
         console.log(
             '[LLMTools] Composer admitted', result.admitted.length,
-            '/', CODER_V1.tools.static.length,
-            '(', result.tokens_used, 'tokens; unresolved:', result.diagnostics.unresolved_static.join(',') || 'none', ')'
+            '(', result.diagnostics.static_admitted, 'static +',
+            result.diagnostics.sticky_admitted, 'sticky)',
+            '/', CODER_V1.tools.static.length, 'static declared;',
+            result.tokens_used, 'tokens; unresolved:',
+            result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
         return renderForLLM(result);

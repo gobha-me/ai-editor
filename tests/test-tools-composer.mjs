@@ -24,6 +24,7 @@ import { _testing as composerTesting } from '../js/intelligence/tools/composer.j
 import { _testing as catalogTesting } from '../js/intelligence/tools/catalog.js';
 import { ToolRegistry } from '../js/tools/registry.js';
 import { CODER_V1 } from '../js/profiles/coder-v1.js';
+import { createTaskLedger } from '../js/profiles/task-ledger.js';
 import { LLMDebug } from '../js/llm/debug.js';
 import { isToolsComposeDisabled, _resetCacheForTests as resetFlagCache } from '../js/utils/tools-compose-flag.js';
 
@@ -340,6 +341,221 @@ test('LLMDebug.attachToolDiagnostics ignores null/undefined input', () => {
     LLMDebug.attachToolDiagnostics(null);
     LLMDebug.attachToolDiagnostics(undefined);
     assert.equal(LLMDebug._pendingTools, null);
+});
+
+// ============================================
+// Sticky admission via task_ledger.tool_admissions (1.3.17 / Tools PR 4)
+// ============================================
+//
+// Each test stages a TaskLedger with one or more admission records that
+// reference a tool name *not* in the static set (`find_references`,
+// `search_in_files`), so the static loop ignores them and the sticky pass
+// is the only path that can admit them.
+
+function registerStickyFixture() {
+    // Same as registerStaticFixture but adds two non-static read tools the
+    // sticky tests will reference.
+    registerStaticFixture();
+    const reg = (name, description, parameters = { type: 'object', properties: {} }, roles = 'all') =>
+        ToolRegistry.register(name, async () => ({}), {
+            function: { name, description, parameters }, roles,
+        });
+    reg('find_references',  'Find references to a symbol across the project.',
+        { type: 'object', properties: { symbol: { type: 'string' } } });
+    reg('search_in_files',  'Full-text search across project files.',
+        { type: 'object', properties: { query: { type: 'string' } } });
+}
+
+function makeLedgerWith(...toolNames) {
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    for (const name of toolNames) {
+        ledger.tool_admissions.push({
+            tool_id: name,
+            admitted_at: 1700000000000,
+            form: 'full',
+            source: 'discovery',
+            cost: 0,
+            last_used_at: 1700000000000,
+        });
+    }
+    return ledger;
+}
+
+test('sticky admission: a non-static ledger entry admits with source:"sticky"', () => {
+    registerStickyFixture();
+    const ledger = makeLedgerWith('find_references');
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 2, 'one static + one sticky');
+    const stickies = result.admitted.filter(a => a.source === 'sticky');
+    assert.equal(stickies.length, 1);
+    assert.equal(Catalog.getById(stickies[0].tool_id).name, 'find_references');
+    assert.equal(result.diagnostics.sticky_admitted, 1);
+    assert.equal(result.diagnostics.static_admitted, 1);
+});
+
+test('sticky admission: same tool in static AND ledger admits exactly once (static wins)', () => {
+    registerStickyFixture();
+    const ledger = makeLedgerWith('read_file');  // already in profile_static below
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file', 'edit_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 2, 'no duplicate of read_file');
+    for (const a of result.admitted) {
+        assert.equal(a.source, 'static', 'static wins when names overlap');
+    }
+    assert.equal(result.diagnostics.sticky_admitted, 0);
+});
+
+test('sticky admission: unauthorized sticky tool lands in suppressed', () => {
+    registerStickyFixture();
+    // edit_file requires ['coder']; user is 'pm' (no overlap, no full bypass).
+    const ledger = makeLedgerWith('edit_file');
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: ['pm'], discovery_call: null, expansion_mode: 'full',
+    });
+    // Only the static read_file admits; edit_file is sticky-suppressed.
+    assert.equal(result.admitted.length, 1);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].reason, 'unauthorized');
+    assert.equal(Catalog.getById(result.suppressed[0].tool_id).name, 'edit_file');
+    assert.equal(result.diagnostics.sticky_admitted, 0);
+});
+
+test('sticky admission: over-budget sticky tool lands in suppressed (static is protected)', () => {
+    registerStickyFixture();
+    // Probe each tool's individual cost so we can size the budget tightly.
+    const probeStatic = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'], task_ledger: null,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const staticCost = probeStatic.tokens_used;
+
+    const ledger = makeLedgerWith('find_references');
+    const result = composeAdmission({
+        task: 'unit', query: null,
+        budget_tokens: staticCost,    // exactly the static cost — no room for sticky
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 1, 'only the static tool admits');
+    assert.equal(result.admitted[0].source, 'static');
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].reason, 'over_budget');
+    assert.equal(result.diagnostics.sticky_admitted, 0);
+});
+
+test('sticky admission: ledger entry referencing a removed tool is silently dropped', () => {
+    registerStickyFixture();
+    // Stage a ledger that points at a tool the registry doesn't know about.
+    const ledger = makeLedgerWith('this_tool_does_not_exist');
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 1, 'static still admits');
+    assert.equal(result.suppressed.length, 0, 'unknown sticky entry is dropped, not suppressed');
+    assert.equal(result.diagnostics.sticky_admitted, 0);
+    assert.deepEqual(result.diagnostics.unresolved_static, [], 'unresolved_static covers profile_static, not sticky');
+});
+
+test('sticky admission: respects ledger order when budget partially fits', () => {
+    registerStickyFixture();
+    // Probe each candidate sticky tool's cost.
+    const probe = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['find_references', 'search_in_files'],
+        task_ledger: null,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const findCost = Catalog.getByName('find_references').metadata.cost_estimate;
+
+    // Budget = static + first sticky exactly. Second sticky must overflow.
+    const staticProbe = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'], task_ledger: null,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const ledger = makeLedgerWith('find_references', 'search_in_files');
+    const result = composeAdmission({
+        task: 'unit', query: null,
+        budget_tokens: staticProbe.tokens_used + findCost,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const admittedNames = result.admitted.map(a => Catalog.getById(a.tool_id).name);
+    assert.deepEqual(admittedNames, ['read_file', 'find_references']);
+    assert.equal(result.diagnostics.sticky_admitted, 1);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(Catalog.getById(result.suppressed[0].tool_id).name, 'search_in_files');
+});
+
+test('sticky admission: tokens_used equals static + sticky admitted costs', () => {
+    registerStickyFixture();
+    const ledger = makeLedgerWith('find_references', 'search_in_files');
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    let expected = 0;
+    for (const a of result.admitted) {
+        expected += Catalog.getById(a.tool_id).metadata.cost_estimate;
+    }
+    assert.equal(result.tokens_used, expected);
+});
+
+test('sticky admission: null task_ledger preserves 1.3.14 behavior (no sticky pass)', () => {
+    registerStickyFixture();
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file', 'edit_file'],
+        task_ledger: null,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 2);
+    for (const a of result.admitted) {
+        assert.equal(a.source, 'static');
+    }
+    assert.equal(result.diagnostics.sticky_admitted, 0);
+});
+
+test('sticky admission: ledger.form = "short" is honored on the admitted entry', () => {
+    registerStickyFixture();
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    ledger.tool_admissions.push({
+        tool_id: 'find_references',
+        admitted_at: 1700000000000,
+        form: 'short',
+        source: 'discovery',
+        cost: 0,
+        last_used_at: 1700000000000,
+    });
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const sticky = result.admitted.find(a => a.source === 'sticky');
+    assert.ok(sticky, 'sticky entry admits');
+    assert.equal(sticky.form, 'short', 'form is copied from the ledger record');
 });
 
 // ============================================
