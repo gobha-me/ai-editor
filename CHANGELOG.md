@@ -4,6 +4,107 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-05-01
+
+Lands **rem-based UI scaling** — PR 9 of the Touch 2 facelift arc and
+the **final** facelift patch before 1.4.0 (Tools admission) opens.
+Replaces the three independent font-size sliders in Settings →
+Appearance (UI / chat / editor) with a single **UI Scale** slider
+(80%–175%, default 100%) that drives both `--ui-font-size` and
+`--chat-font-size` from a 13px base. Editor font size keeps its own
+slider — code is the one place users genuinely want to size
+independently of the surrounding chrome. The intent: *simpler, more
+predictable, plays better with browser zoom and accessibility
+settings.*
+
+**Why 1.3.13 and not 1.3.5:** the slider rebuild interacts with the
+new Settings sidebar (1.3.7); landing it before the sidebar
+Restructure would have meant re-laying-out the slider twice. With
+1.3.7 LOCKED and the sidebar shape settled, the rebuild lands once.
+
+**Migration is automatic.** Pre-1.3.13 settings carrying
+`fontSize` and/or `chatFontSize` keys derive `uiScale = max(legacy)
+/ 13 * 100`, snapped to the slider's 5% step and clamped to the
+80–175% range. Legacy keys are removed from State and Storage on
+the same load — the migration runs once per blob and never
+re-fires. Settings exports from any 1.3.x version import cleanly
+into 1.3.13+ via the same derivation at import time.
+
+### Added
+
+- **UI Scale slider** in Settings → Appearance — a single
+  percent-based knob with `aria-label`, `aria-valuemin/max/now`
+  wired so screen readers announce "UI Scale, N percent" instead of
+  a px value. Helper text explains the scope: *"Scales chrome
+  (header, sidebar, chat, modals). Editor font size is separate so
+  code can be sized independently."*
+
+- **`State.settings.uiScale`** *(new key, default `100`)* — percent
+  in the range `[80, 175]`, replacing `fontSize` and
+  `chatFontSize`. Apply path: `uiPx = round(13 * uiScale / 100)`,
+  written to both `--ui-font-size` and `--chat-font-size` on the
+  document element. The derived `--font-*` and `--chat-*` calc
+  chains in [`css/base.css`](css/base.css) are preserved — they
+  scale with the assigned base, no chat.css refactor needed.
+
+- **One-shot migration in [`js/core.js`](js/core.js)** —
+  `loadSettings()` detects pre-1.3.13 settings (presence of
+  `fontSize` or `chatFontSize` with absent `uiScale`), derives the
+  scale percent, and deletes the legacy keys. Sits alongside the
+  earlier 1.1.1 / 1.1.2 / 1.3.5 migrations, follows the same
+  delete-after-migrate idiom so a downgrade-then-upgrade can't
+  re-fire.
+
+- **Import-time migration in
+  [`js/settings/persistence.js`](js/settings/persistence.js)** —
+  legacy export imported into a 1.3.13 instance migrates
+  before `Object.assign` reaches State. Necessary because the
+  post-reload `loadSettings` migration only fires when `uiScale` is
+  absent in the saved blob, and defaults would have populated it
+  from the in-memory State first. Logs a one-line `console.info`
+  for traceability.
+
+### Changed
+
+- **`html/settings-tabs.html`** — three slider blocks
+  (`settingFontSize`, `settingChatFontSize`, `settingEditorFontSize`)
+  collapse to two (`settingUiScale`, `settingEditorFontSize`).
+
+- **`js/settings-manager.js`** — three `oninput` handlers
+  collapse to two; the UI Scale handler debounces a single dual-set
+  (`--ui-font-size` + `--chat-font-size`) at 200ms via its own timer
+  to avoid the race where calling `debouncedFontPreview` twice in
+  one event would have only applied the second call.
+
+- **`js/app.js`** boot path — applies `uiScale` to both UI and
+  chat font CSS variables in one pass; `--editor-font-size`
+  continues to read from `editorFontSize` directly.
+
+- **Settings export shape** — `uiScale` replaces `fontSize` and
+  `chatFontSize`; `editorFontSize` unchanged. The `knownKeys`
+  validator accepts both new and legacy schemas so a v1.3.12 export
+  imports without a "no recognized settings keys" rejection.
+
+### Roadmap
+
+- **§1.3.13 marked as `[SHIPPED — 2026-05-01]`** in
+  [`docs/ROADMAP.md`](docs/ROADMAP.md). The 1.3.x facelift arc
+  closes; **§1.4.0 Tools admission** opens next as the next minor
+  track.
+
+- **Roadmap trim, companion to this ship** —
+  [`docs/ROADMAP.md`](docs/ROADMAP.md) shed ~150 lines: shipped
+  1.3.1–1.3.12 entries collapsed to one-line CHANGELOG references
+  (their bodies were redundant with the very link they each ended
+  with), the retained "1.3.5 [SHIPPED AS 1.3.1]" rationale block
+  (~35 lines) deleted, three renumbering notes consolidated to one,
+  the stale `Current released version` header updated to 1.3.13.
+  Future track scope (1.4.x, 1.5.x, 2.0, post-2.0 candidates) and
+  load-bearing decisions are preserved verbatim. The aim: *less to
+  skim, same coverage* — moving "what shipped" detail to its proper
+  home (this CHANGELOG) and leaving the roadmap as the
+  plan-of-record surface.
+
 ## [1.3.12] - 2026-05-01
 
 Lands **self-hosted woff2 fonts** — PR 8 of the Touch 2 facelift arc

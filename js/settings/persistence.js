@@ -47,8 +47,7 @@ export function collectAndSave() {
     const themeEl = document.getElementById('settingTheme');
     State.settings.theme = themeEl ? themeEl.value : (State.settings.theme || 'refined');
 
-    State.settings.fontSize = parseInt(document.getElementById('settingFontSize').value) || 13;
-    State.settings.chatFontSize = parseInt(document.getElementById('settingChatFontSize').value) || 13;
+    State.settings.uiScale = parseInt(document.getElementById('settingUiScale').value) || 100;
     State.settings.editorFontSize = parseInt(document.getElementById('settingEditorFontSize').value) || 14;
     
     const showLineNumbersEl = document.getElementById('settingShowLineNumbers');
@@ -239,7 +238,7 @@ export function exportSettings() {
         
         // Appearance
         theme: State.settings.theme,
-        fontSize: State.settings.fontSize,
+        uiScale: State.settings.uiScale,
         editorFontSize: State.settings.editorFontSize,
         showLineNumbers: State.settings.showLineNumbers,
         editorKeybindingMode: State.settings.editorKeybindingMode,
@@ -331,7 +330,7 @@ export async function importSettings() {
                 const imported = JSON.parse(text);
 
                 // Validate it looks like a settings file (has at least one recognizable key)
-                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'fontSize', 'advancedParams', 'pluginState', 'userPlugins', 'embeddingProvider', 'embeddingEndpoint', 'embeddingApiKey'];
+                const knownKeys = ['connections', 'giteaUrl', 'llmEndpoint', 'llmApiKey', 'apiProvider', 'llmModel', 'role', 'uiScale', 'fontSize', 'advancedParams', 'pluginState', 'userPlugins', 'embeddingProvider', 'embeddingEndpoint', 'embeddingApiKey'];
                 const hasValidKey = knownKeys.some(k => k in imported);
                 if (!hasValidKey) {
                     throw new Error('Invalid settings file: no recognized settings keys found');
@@ -345,6 +344,20 @@ export async function importSettings() {
                     userPlugins: importedUserPlugins,
                     ...settingsToApply
                 } = imported;
+                // 1.3.13 migration: legacy fontSize/chatFontSize from a pre-1.3.13
+                // export → uiScale percent. Done at import time because the
+                // post-reload loadSettings migration only fires when uiScale is
+                // absent in the saved blob; here defaults would have populated it.
+                if (settingsToApply.uiScale === undefined &&
+                    (settingsToApply.fontSize !== undefined || settingsToApply.chatFontSize !== undefined)) {
+                    const maxLegacy = Math.max(settingsToApply.fontSize || 13, settingsToApply.chatFontSize || 13);
+                    const raw = (maxLegacy / 13) * 100;
+                    const snapped = Math.round(raw / 5) * 5;
+                    settingsToApply.uiScale = Math.max(80, Math.min(175, snapped));
+                    console.info('[Settings] Migrated legacy fontSize/chatFontSize → uiScale', settingsToApply.uiScale);
+                }
+                delete settingsToApply.fontSize;
+                delete settingsToApply.chatFontSize;
                 Object.assign(State.settings, settingsToApply);
 
                 // Save core settings

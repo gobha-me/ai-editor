@@ -164,14 +164,12 @@ function populateSettingsForm() {
         };
     }
 
-    const fontSlider = document.getElementById('settingFontSize');
-    const chatFontSlider = document.getElementById('settingChatFontSize');
+    const uiScaleSlider = document.getElementById('settingUiScale');
     const editorFontSlider = document.getElementById('settingEditorFontSize');
-    fontSlider.value = State.settings.fontSize || 13;
-    chatFontSlider.value = State.settings.chatFontSize || 13;
+    uiScaleSlider.value = State.settings.uiScale || 100;
     editorFontSlider.value = State.settings.editorFontSize || 14;
-    document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
-    document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
+    document.getElementById('uiScaleValue').textContent = uiScaleSlider.value + '%';
+    uiScaleSlider.setAttribute('aria-valuenow', uiScaleSlider.value);
     document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';
 
     // Debounced live preview — label updates instantly, CSS var applies after 200ms settle
@@ -183,13 +181,17 @@ function populateSettingsForm() {
         }, 200);
     };
 
-    fontSlider.oninput = () => {
-        document.getElementById('fontSizeValue').textContent = fontSlider.value + 'px';
-        debouncedFontPreview('--ui-font-size', fontSlider.value);
-    };
-    chatFontSlider.oninput = () => {
-        document.getElementById('chatFontSizeValue').textContent = chatFontSlider.value + 'px';
-        debouncedFontPreview('--chat-font-size', chatFontSlider.value);
+    let _scaleDebounce = null;
+    uiScaleSlider.oninput = () => {
+        const scale = parseInt(uiScaleSlider.value);
+        document.getElementById('uiScaleValue').textContent = scale + '%';
+        uiScaleSlider.setAttribute('aria-valuenow', scale);
+        clearTimeout(_scaleDebounce);
+        _scaleDebounce = setTimeout(() => {
+            const px = Math.round(13 * (scale / 100)) + 'px';
+            document.documentElement.style.setProperty('--ui-font-size', px);
+            document.documentElement.style.setProperty('--chat-font-size', px);
+        }, 200);
     };
     editorFontSlider.oninput = () => {
         document.getElementById('editorFontSizeValue').textContent = editorFontSlider.value + 'px';

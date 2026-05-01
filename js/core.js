@@ -81,8 +81,7 @@
  * @property {number}               toolTimeout
  * @property {number}               summaryTimeout
  * @property {string}               role
- * @property {number}               fontSize
- * @property {number}               chatFontSize
+ * @property {number}               uiScale
  * @property {number}               editorFontSize
  * @property {boolean}              showIssues
  * @property {boolean}              showPullRequests
@@ -281,9 +280,8 @@ const State = {
         
         // UI Configuration
         role: 'full',              // Active role: full | coder | pm | reviewer
-        fontSize: 13,              // UI font size in px
-        chatFontSize: 13,          // Chat panel font size in px
-        editorFontSize: 14,        // Editor font size in px
+        uiScale: 100,              // UI scale percent (80-175); drives --ui-font-size and --chat-font-size from a 13px base
+        editorFontSize: 14,        // Editor font size in px (independent of uiScale by design — code is the one place users want different sizing)
         showIssues: true,          // Show issues panel in sidebar
         showPullRequests: true,    // Show pull requests panel in sidebar
         showLineNumbers: true,     // Show line numbers in editor
@@ -1619,6 +1617,19 @@ function loadSettings() {
         // back to the default rather than carrying an invalid value forward.
         if (saved.theme && saved.theme !== 'refined' && saved.theme !== 'editorial') {
             saved.theme = 'refined';
+        }
+        // One-shot migration (1.3.13): three-axis font sizes → single uiScale.
+        // Pre-1.3.13 settings carried independent fontSize / chatFontSize / editorFontSize
+        // sliders; the UI scale slider replaces the first two with a percent-based knob
+        // (default 100 == 13px). Editor font size keeps its own knob. Migration picks
+        // max(legacy) so users who scaled either surface up don't lose ground.
+        if (saved.uiScale === undefined && (saved.fontSize !== undefined || saved.chatFontSize !== undefined)) {
+            const maxLegacy = Math.max(saved.fontSize || 13, saved.chatFontSize || 13);
+            const raw = (maxLegacy / 13) * 100;
+            const snapped = Math.round(raw / 5) * 5;
+            saved.uiScale = Math.max(80, Math.min(175, snapped));
+            delete saved.fontSize;
+            delete saved.chatFontSize;
         }
 
         if (saved.embeddingProvider === undefined) {

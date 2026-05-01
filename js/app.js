@@ -260,9 +260,10 @@ function applyVisualSettings() {
         applyTheme(State.settings.theme || 'refined');
     });
 
-    // Font sizes
-    document.documentElement.style.setProperty('--ui-font-size', (State.settings.fontSize || 13) + 'px');
-    document.documentElement.style.setProperty('--chat-font-size', (State.settings.chatFontSize || 13) + 'px');
+    // Font sizes — uiScale (1.3.13) drives both UI and chat font sizes from a 13px base
+    const uiPx = Math.round(13 * (State.settings.uiScale || 100) / 100);
+    document.documentElement.style.setProperty('--ui-font-size', uiPx + 'px');
+    document.documentElement.style.setProperty('--chat-font-size', uiPx + 'px');
     document.documentElement.style.setProperty('--editor-font-size', (State.settings.editorFontSize || 14) + 'px');
 
     // Panel visibility - with null checks

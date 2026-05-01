@@ -230,15 +230,14 @@
     <hr>
 
     <div class="form-group">
-        <label for="settingFontSize">UI Font Size (header, sidebar, modals):</label>
-        <input type="range" id="settingFontSize" min="8" max="28" step="1">
-        <span id="fontSizeValue">13px</span>
-    </div>
-
-    <div class="form-group">
-        <label for="settingChatFontSize">Chat Font Size (messages, tools):</label>
-        <input type="range" id="settingChatFontSize" min="8" max="28" step="1">
-        <span id="chatFontSizeValue">13px</span>
+        <label for="settingUiScale">UI Scale:</label>
+        <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
+            Scales chrome (header, sidebar, chat, modals). Editor font size is separate so code can be sized independently.
+        </small>
+        <input type="range" id="settingUiScale" min="80" max="175" step="5"
+               aria-label="UI Scale, 80 to 175 percent"
+               aria-valuemin="80" aria-valuemax="175" aria-valuenow="100">
+        <span id="uiScaleValue">100%</span>
     </div>
 
     <div class="form-group">
