@@ -183,6 +183,18 @@
             } catch (e) { errors.push(['Debug Slide-out', e]); }
 
             try {
+                await import('./test-help-hotkey-registry.js');
+            } catch (e) { errors.push(['Help — Hotkey Registry', e]); }
+
+            try {
+                await import('./test-help-search.js');
+            } catch (e) { errors.push(['Help — Search', e]); }
+
+            try {
+                await import('./test-help-slideout.js');
+            } catch (e) { errors.push(['Help — Slide-out', e]); }
+
+            try {
                 await import('./test-commit-modal-memory.js');
             } catch (e) { errors.push(['Commit Modal Memory', e]); }
 

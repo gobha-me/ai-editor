@@ -19,3 +19,7 @@ README.md
 LICENSE
 *.md
 !docs/*.md
+# CHANGELOG.md ships at the root for the Help slide-out's Changelog page
+# (1.3.10) — without this re-include, the *.md exclusion above strips it
+# and the in-app Changelog tab 404s in production.
+!CHANGELOG.md

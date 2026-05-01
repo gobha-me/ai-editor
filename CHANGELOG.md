@@ -4,6 +4,232 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-05-01
+
+Lands the **Help slide-out** — PR 6 of the Touch 2 facelift arc and the
+third **net-new surface** in the arc. Replaces the 6-tab `#helpModal`
+with a right-edge drawer per
+`docs/design/touch-2-facelift/project/help.jsx`. Inherits the 1.3.9
+`.slide-out-overlay` + `.slide-out` shell from `css/slide-out.css`
+(plus a new `.slide-out--wide` modifier in `css/help.css` so the
+left-rail nav + content pane fit). The slide-out shell now has two
+consumers — the contract is real shared infrastructure rather than a
+single-call-site artifact.
+
+**Pages (10, grouped):**
+
+- *(no group)* — Getting started · Hotkeys · Command palette
+- **Building** — Plugin SDK · Tools API · Themes
+- **Concepts** — Roles · Memory · Architecture
+- **Reference** — Changelog
+
+The four *(no group)* and Themes pages render from inline static HTML
+in `js/help/pages/`; Plugin SDK / Tools / Roles / Memory / Architecture
+load `docs/PLUGIN.md` / `docs/TOOLS.md` / `docs/ROLES_AND_TOOLS.md` /
+`docs/DESIGN-memory.md` / `docs/ARCHITECTURE.md`; Changelog loads the
+root `CHANGELOG.md`. All markdown pages flow through marked + DOMPurify
+via the new `js/help/markdown-loader.js` (extracted from the retired
+`_loadHelpDoc` in `js/app.js`).
+
+**Data-driven hotkeys page.** New `js/help/hotkey-registry.js` is the
+**display contract** — one entry per shortcut with shape
+`{ id, group, combo, desc, when? }`. The Hotkeys page reads from it and
+renders ⌘ glyphs on macOS, `Ctrl`/`Shift`/`Alt` words on Windows/Linux
+(detected from `navigator.platform` / `navigator.userAgentData`). A
+platform toggle button on the page persists an override in
+localStorage so a Linux user reading mac-flavoured docs can pin macOS
+rendering. Combo tokens match the `help.jsx` Kbd vocabulary
+(`mod`/`shift`/`alt`/`enter`/`esc`/arrows/single chars).
+
+The keydown handler in `js/app.js` is **not** refactored to consume the
+registry in 1.3.10 — that's a follow-up named `1.3.11+ — consolidate
+handler to consume registry`. A one-line comment at the top of
+`setupKeyboardShortcuts` flags the registry as the source-of-truth
+for display so future drift is visible.
+
+**Search-all.** New `js/help/search-index.js` builds a per-doc /
+per-section index lazily on first open of the slide-out (~30KB total
+corpus, build in <50ms). Substring matching with weighted ranking —
+title=10, heading=5, body=1; results capped at top 30; snippets ±70
+chars around the first match with the match wrapped in `<mark>`. Input
+throttled at 150ms; minimum 2-char query. Esc inside the input clears
+without closing the drawer; clicking a result navigates to that page.
+
+**Triggers.** Existing F1 hotkey now opens the slide-out instead of
+the modal. New **Cmd+/ (Ctrl+/ on win/linux)** opens it from anywhere
+*except* inside a CodeMirror editor, where the chord stays bound to
+toggle-line-comment (the document-level handler bails when
+`e.target.closest('.cm-editor')` matches).
+
+**Removed:** the Roadmap tab (was lazy-loading `docs/PLAN.md`) per the
+Touch 2 design memo. Footer preserves the existing GitHub +
+Buy-me-a-coffee links and adds the running version pill.
+
+### Added
+
+- **`html/help-slideout.html`** *(new)* — slide-out skeleton loaded via
+  `template-loader.js` alongside the other partials. Carries the head
+  row (title + close), body row (left-rail nav + content), and footer
+  row (links + version meta). Nav and content panes are JS-populated;
+  the search input lives in the head of the nav rail.
+
+- **`css/help.css`** *(new)* — shell-modifier (`.slide-out--wide`,
+  `min(820px, 96vw)`) plus all `.help__*` blocks (head, body, nav,
+  group titles, search wrap, content article, h1/h2, lede, plat-toggle,
+  hotkey rows, kbd-combo, code/pre, results, footer, mobile breakpoint).
+  Loaded after `css/slide-out.css` in `index.html`. **Every value
+  reads through the 1.3.5 `--tk-*` contract; zero hex literals; zero
+  per-theme variants.** Refined IDE and Editorial Calm render
+  byte-identical markup.
+
+- **`.help__doc`** styling (markdown-rendered docs) — h1/h2/h3, p, ul,
+  pre/code, table — all `--tk-*`-backed; replaces the legacy
+  `.help-doc-content` block (which used legacy `--text-*` / `--bg-*`
+  aliases pre-1.3.5).
+
+- **`js/help/index.js`** *(new)* — entry. `initHelpSlideOut()`,
+  `openHelpSlideOut(pageId?)`, `closeHelpSlideOut()`. Wires the
+  topbar `#btnHelp` click, close button, Esc, backdrop click, nav
+  clicks, and the search input. Mounts the nav by iterating the
+  `NAV_ITEMS` array (matches help.jsx). Sets `window.openHelpModal` /
+  `window.closeHelpModal` as back-compat aliases so any legacy inline
+  references keep working.
+
+- **`js/help/hotkey-registry.js`** *(new)* — `HOTKEYS` array (50+
+  entries across Global / Panel focus / Files / Editor / Editor tabs /
+  File tree / Diff viewer / Chat / Quick open / Plugin editor / Vim
+  mode), `hotkeysByGroup()`, `findHotkey(id)`. Display contract; the
+  consolidation follow-up makes the keydown handler consume from it.
+
+- **`js/help/kbd.js`** *(new)* — `renderKbd(combo, plat)` returns an
+  HTML string for a `.kbd-combo` (vanilla JS port of the help.jsx
+  React Kbd). Mac map: ⌘ ⇧ ⌥ ⌃ ↵ ↑↓←→ ⌫ ⌦; Windows map: Ctrl Shift
+  Alt Enter Backspace Delete with `+` separators. Falls back to
+  uppercased single chars / `F1`-style for function keys.
+
+- **`js/help/platform.js`** *(new)* — `detectPlatform()` reads
+  `navigator.userAgentData` first then legacy `navigator.platform`;
+  `getPlatform()` honors a localStorage override
+  (`aieditor.help.platform`); `setPlatform(plat)` / `togglePlatform()`
+  persist the user choice across reloads.
+
+- **`js/help/markdown-loader.js`** *(new)* — extracted from the
+  retired `js/app.js` `_loadHelpDoc`. `renderDocInto(panel, path)`
+  fetches, runs marked+DOMPurify, and renders into the panel; caches
+  rendered HTML per path. `loadDocText(path)` returns plain markdown
+  for the search index. Preserves the SPA-fallback guard
+  ("rebuild the Docker image to include docs/") for missing-doc
+  errors.
+
+- **`js/help/search-index.js`** *(new)* — `buildSearchIndex()` (lazy,
+  on first open) + `search(query)`. Indexes static pages by parsing
+  their rendered HTML into `<h2>`-bounded sections; indexes markdown
+  pages by splitting on `##` headings. Hotkeys page indexed directly
+  from `HOTKEYS` (skips the page renderer to avoid a render cycle).
+  Cap 30 results; snippets HTML-escape surrounding text and the
+  matched substring.
+
+- **`js/help/pages/getting-started.js`** *(new)* — orientation page,
+  5 sections (Connect a repo / Set up AI / Use the chat / Commit
+  changes / Where to look next).
+
+- **`js/help/pages/hotkeys.js`** *(new)* — data-driven page. Calls
+  `hotkeysByGroup()`, renders rows via `renderKbd()`, mounts the
+  platform-toggle button. Re-renders the page when the toggle is
+  clicked; the override persists in localStorage.
+
+- **`js/help/pages/command-palette.js`** *(new)* — documents the
+  1.3.6 ⌘K command surface, what it is today (Quick Open alias) and
+  what accretes onto it next (commands prefix, settings/help
+  prefix).
+
+- **`js/help/pages/themes.js`** *(new)* — full `--tk-*` token
+  vocabulary reference; explains the frozen-as-of-1.3.5 contract +
+  how to ship a theme as a plugin (manifest + single CSS file, no JS
+  entry).
+
+- **`js/help/pages/markdown-pages.js`** *(new)* — single-export
+  router that maps a page id to a doc path and calls
+  `renderDocInto`.
+
+- **`tests/test-help-hotkey-registry.js`** *(new)* — 30+ assertions:
+  shape contract, unique ids, group partitioning preserves order,
+  `findHotkey` lookup, `renderKbd` mac-glyph vs win-word output,
+  empty/single-token combo handling, presence of help.open /
+  help.openMod / palette.open.
+
+- **`tests/test-help-search.js`** *(new)* — empty / 1-char query
+  guards, title=10 > heading=5 > body=1 ranking, snippet ellipsis
+  + `<mark>` highlighting, results capped at 30, `_resetIndex` /
+  `_setIndex` test seams.
+
+- **`tests/test-help-slideout.js`** *(new)* — full slide-out
+  lifecycle: open via call + click, nav renders 10 items in 4 groups
+  in design order, default page is Getting started, hotkeys page
+  renders 30+ rows from the registry, Themes page mentions
+  `--tk-*`, Esc inside search input clears it without closing,
+  close via call + close button + backdrop click.
+
+### Changed
+
+- **F1 handler** in `js/app.js` `setupKeyboardShortcuts` — calls
+  `openHelpSlideOut()` instead of the retired `openHelpModal()`.
+
+- **New Cmd+/ binding** in `js/app.js` — opens the help slide-out
+  unless the editor has focus (CodeMirror's toggle-line-comment
+  binding wins inside `.cm-editor`).
+
+- **`js/template-loader.js`** — adds `'help-slideout'` to the
+  `loadTemplates([...])` list; concatenates the partial into the
+  app shell after `debug-slideout`.
+
+- **`index.html`** — adds `<link rel="stylesheet" href="./css/help.css">`
+  after the `slide-out.css` link so `.slide-out--wide` overrides the
+  shell default width.
+
+- **`js/app.js` `setupKeyboardShortcuts`** — leading comment names
+  the registry as the display contract and calls out the
+  consolidation follow-up.
+
+### Removed
+
+- **`#helpModal` block in `html/modals.html`** — the entire 138-line
+  modal (6 tabs, static hotkeys table, 5 markdown-doc panels, footer)
+  retired in favor of the slide-out.
+
+- **Help modal CSS in `css/modals.css`** — `.help-shortcuts`,
+  `.help-group`, `.help-row`, `.help-keys`, `.help-tab-content`,
+  `.help-doc-content`, and the 11 `.help-doc-content *` rules
+  (rendered markdown styling). Replaced wholesale by `css/help.css`
+  blocks reading through the `--tk-*` contract.
+
+- **Help modal helpers in `js/app.js`** — `openHelpModal`,
+  `closeHelpModal`, `initHelpTabs`, `_updateHelpTabArrows`,
+  `_loadHelpDoc`, `_helpDocCache`, `window.scrollHelpTabs`,
+  `window._helpDocCache`, `window._loadHelpDoc` — all retired. The
+  `openHelpModal` / `closeHelpModal` window aliases remain but now
+  point at the slide-out functions for back-compat with any legacy
+  inline `onclick=` references.
+
+- **Roadmap (`#helpTab-plan`) tab** — design memo dropped this; the
+  Changelog page covers ship-dated work.
+
+### Deferred
+
+- **Hotkey registry consolidation** — keydown handler in `js/app.js`
+  still owns the live hotkey wiring. Follow-up `1.3.11+` makes the
+  handler consume from `js/help/hotkey-registry.js` so registry edits
+  drive runtime behaviour. For 1.3.10 the registry is the **display
+  contract** only.
+
+- **Lucide icon swap** — nav uses emoji equivalents (✨ # 🔍 📦 ⚙️
+  🎨 @ 🧠 🖥 ⎇) per design's mock fixtures. The 1.3.11 patch swaps
+  to Lucide everywhere.
+
+- **"Docs synced Xh ago" footer text** — cosmetic only, dropped from
+  1.3.10. Footer shows `v1.3.10` + the GitHub / Buy-me-a-coffee
+  links.
+
 ## [1.3.9] - 2026-05-01
 
 Lands the **Debug slide-out** — PR 5 of the Touch 2 facelift arc and

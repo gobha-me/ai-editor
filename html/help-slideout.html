@@ -1,0 +1,54 @@
+<!-- Help slide-out — 1.3.10 Touch 2 net-new surface
+     Right-edge drawer per docs/design/touch-2-facelift/project/help.jsx.
+     Replaces the 6-tab #helpModal and inherits the 1.3.9 .slide-out shell.
+     The .slide-out--wide modifier (defined in css/help.css) widens the
+     drawer so the left-rail nav + content pane both fit. -->
+<div class="slide-out-overlay" id="helpSlideOut" role="dialog"
+     aria-modal="true" aria-labelledby="helpSlideOutTitle" aria-hidden="true">
+    <aside class="slide-out slide-out--wide" role="document">
+        <div class="help">
+            <div class="help__head">
+                <div class="help__title" id="helpSlideOutTitle">
+                    <span aria-hidden="true">📖</span>
+                    <span>Help &amp; docs</span>
+                </div>
+                <div class="help__head-spacer" aria-hidden="true"></div>
+                <button type="button" class="help__head-btn help__head-btn--icon"
+                        id="helpCloseBtn" title="Close (Esc)" aria-label="Close">✕</button>
+            </div>
+
+            <div class="help__body">
+                <aside class="help__nav" id="helpNav">
+                    <div class="help__search-wrap">
+                        <span aria-hidden="true">🔍</span>
+                        <input type="search" class="help__search-input" id="helpSearchInput"
+                               placeholder="Search all docs…" aria-label="Search docs">
+                        <kbd class="help-kbd help-kbd--hint" id="helpSearchHint">⌘/</kbd>
+                    </div>
+                    <div id="helpNavList"></div>
+                </aside>
+
+                <div class="help__content" id="helpContent" tabindex="0"
+                     role="region" aria-label="Help content"></div>
+            </div>
+
+            <div class="help__foot">
+                <a class="help__foot-link" href="https://github.com/gobha-me/ai-editor"
+                   target="_blank" rel="noopener noreferrer"
+                   title="View source on GitHub">
+                    <span aria-hidden="true">⭐</span>
+                    <span>GitHub</span>
+                </a>
+                <span class="help__foot-sep" aria-hidden="true">·</span>
+                <a class="help__foot-link" href="https://buymeacoffee.com/jeffasmith"
+                   target="_blank" rel="noopener noreferrer"
+                   title="Support AI Editor development">
+                    <span aria-hidden="true">☕</span>
+                    <span>Buy me a coffee</span>
+                </a>
+                <div class="help__foot-spacer" aria-hidden="true"></div>
+                <span class="help__foot-meta" id="helpFootMeta"></span>
+            </div>
+        </div>
+    </aside>
+</div>
