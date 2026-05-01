@@ -652,6 +652,15 @@ function setupKeyboardShortcuts() {
             QuickOpen.open();
         }
 
+        // Ctrl+K - Top-bar command surface
+        // 1.3.6 Phase 1: aliases the Ctrl+P file finder. The palette accretes
+        // commands and settings/help search in 1.3.7+; until then ⌘K and
+        // Ctrl+P share a single overlay so muscle memory works either way.
+        if (e.ctrlKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            QuickOpen.open();
+        }
+
         // Ctrl+Shift+F - Project search
         if (e.ctrlKey && e.shiftKey && e.key === 'F') {
             e.preventDefault();
@@ -756,62 +765,69 @@ function closePluginModal() {
 }
 
 /**
- * Initialize the plugin toolbar dropdown.
- * Shows/hides based on whether any plugins have registered buttons.
+ * Initialize the top-bar Debug dropdown (1.3.6).
+ *
+ * Consolidates the prior `#btnErrorLog` + `#btnLLMDebug` icons into a
+ * single 🐛 menu button. Bridge until §1.3.9 ships the full Debug
+ * slide-out; the items here move into that surface as tabs.
  */
-let _pluginToolbarInitialized = false;
+function initDebugMenu() {
+    const btn = document.getElementById('btnDebugMenu');
+    const dropdown = document.getElementById('tbDebugDropdown');
+    if (!btn || !dropdown) return;
 
-function initPluginToolbar() {
-    const toolbar = document.getElementById('pluginToolbar');
-    const btn = document.getElementById('btnPluginMenu');
-    const dropdown = document.getElementById('pluginDropdown');
-    if (!toolbar || !btn || !dropdown) return;
+    const setOpen = (open) => {
+        if (open) dropdown.removeAttribute('hidden');
+        else dropdown.setAttribute('hidden', '');
+        btn.setAttribute('aria-expanded', String(open));
+    };
 
-    function render() {
-        const buttons = Plugins.getButtons();
-        if (buttons.length === 0) {
-            toolbar.style.display = 'none';
-            return;
-        }
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setOpen(dropdown.hasAttribute('hidden'));
+    });
+    document.addEventListener('click', () => setOpen(false));
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
 
-        toolbar.style.display = '';
-        dropdown.innerHTML = buttons.map((b, i) => `
-            <button class="plugin-dropdown-item" data-plugin-btn-idx="${i}">
-                <span class="plugin-btn-icon">${b.icon || '⚡'}</span>
-                <span>${b.label || 'Action'}</span>
-            </button>
-        `).join('');
+    document.getElementById('tbDebugErrorLog')?.addEventListener('click', () => {
+        setOpen(false);
+        openErrorLog();
+    });
+    document.getElementById('tbDebugLLM')?.addEventListener('click', () => {
+        setOpen(false);
+        openLLMDebug();
+    });
+}
 
-        dropdown.querySelectorAll('[data-plugin-btn-idx]').forEach(el => {
-            el.addEventListener('click', () => {
-                const idx = parseInt(el.dataset.pluginBtnIdx);
-                if (buttons[idx]?.onClick) buttons[idx].onClick();
-                dropdown.style.display = 'none';
-            });
-        });
-    }
+/**
+ * Initialize the top-bar branch indicator (1.3.6).
+ *
+ * Renders the current branch name in `#tbBranchName`. Ahead/behind counts
+ * (`#tbBranchCounts`) ship in §1.3.6.1 once provider compare endpoints land.
+ */
+function initBranchIndicator() {
+    const wrap = document.getElementById('tbBranchIndicator');
+    const nameEl = document.getElementById('tbBranchName');
+    if (!wrap || !nameEl) return;
 
-    // Only bind event listeners once — this function may be called multiple times
-    if (!_pluginToolbarInitialized) {
-        _pluginToolbarInitialized = true;
-
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isVisible = dropdown.style.display !== 'none';
-            dropdown.style.display = isVisible ? 'none' : '';
-        });
-
-        // Close on outside click
-        document.addEventListener('click', () => {
-            dropdown.style.display = 'none';
-        });
-
-        // Re-render when plugins change
-        EventBus.on('plugin:buttonRegistered', render);
-        EventBus.on('plugin:enabledChanged', render);
-    }
+    const render = () => {
+        const branch = State.currentBranch || (State.currentProject ? '—' : '—');
+        nameEl.textContent = branch;
+        wrap.disabled = !State.currentProject;
+        wrap.title = State.currentProject
+            ? `Branch: ${branch}`
+            : 'No project loaded';
+    };
 
     render();
+    EventBus.on('project:loaded', render);
+    EventBus.on('branches:refresh', render);
+    // Branch picker is in the sidebar; mirror its change into the top bar.
+    document.getElementById('branchSelect')?.addEventListener('change', () => {
+        // onBranchChange runs first (async), but State.currentBranch is set
+        // synchronously inside it before the await; render is safe immediately.
+        setTimeout(render, 0);
+    });
 }
 
 function setupEventListeners() {
@@ -825,13 +841,12 @@ function setupEventListeners() {
         }
     };
 
-    // Header buttons
+    // Top-bar (1.3.6 Restructure)
     safeAdd('btnCommit', 'click', openCommitModal);
-    safeAdd('btnRevert', 'click', revertCurrentFile);
+    safeAdd('btnRevert', 'click', revertCurrentFile);  // now in editor toolbar
     safeAdd('btnSettings', 'click', openSettings);
-    safeAdd('btnErrorLog', 'click', openErrorLog);
-    safeAdd('btnLLMDebug', 'click', openLLMDebug);
     safeAdd('btnHelp', 'click', openHelpModal);
+    safeAdd('tbCmdK', 'click', () => QuickOpen.open());
 
     // Panel collapse buttons (inside panel headers)
     safeAdd('btnCollapseSidebar', 'click', toggleSidebar);
@@ -902,7 +917,9 @@ function setupEventListeners() {
     safeAdd('branchSelect', 'change', onBranchChange);
     safeAdd('modelSelect', 'change', onModelChange);
     safeAdd('roleSelect', 'change', onRoleChange);
-    safeAdd('btnResetCost', 'click', resetSessionCost);
+    // Cost reset moves to the §1.3.9 Debug slide-out — until then expose on
+    // window for power users / docs.
+    window.resetSessionCost = resetSessionCost;
 
     // Editor toolbar
     safeAdd('btnToggleLineNumbers', 'click', toggleLineNumbers);
@@ -1117,8 +1134,13 @@ async function init() {
         }
     });
 
-    // Initialize built-in plugins
-    initPluginToolbar();
+    // Top-bar Debug menu + branch indicator (1.3.6)
+    initDebugMenu();
+    initBranchIndicator();
+
+    // Initialize built-in plugins. Plugin-registered toolbar actions render
+    // inside Settings → Plugins → Toolbar actions (1.3.6 — was a top-bar
+    // dropdown pre-Restructure).
     for (const plugin of Plugins.list()) {
         await Plugins.init(plugin.id);
     }
@@ -1127,15 +1149,12 @@ async function init() {
     const extResult = await loadInstalledPlugins();
     if (extResult.loaded > 0 || extResult.failed > 0) {
         console.log(`[plugins] External: ${extResult.loaded} loaded, ${extResult.failed} failed`);
-        // Re-render toolbar in case new plugins added buttons
-        initPluginToolbar();
     }
 
     // Load user-created plugins (from Storage, built with plugin editor)
     const userResult = await loadUserPlugins();
     if (userResult.loaded > 0 || userResult.failed > 0) {
         console.log(`[plugins] User-created: ${userResult.loaded} loaded, ${userResult.failed} failed`);
-        initPluginToolbar();
     }
 
     console.log(`✓ ${VERSION_DISPLAY} initialized`);

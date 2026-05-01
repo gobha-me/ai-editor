@@ -2,10 +2,21 @@
 // SETTINGS — PLUGINS TAB
 // ============================================
 
-import { Plugins } from '../core.js';
+import { Plugins, EventBus } from '../core.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { installPlugin, uninstallPlugin, getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
+
+// Re-render the Plugins tab when plugin button registration changes,
+// but only if the tab is currently visible (avoid spurious DOM work).
+// 1.3.6 — actions surfaced as a "Toolbar actions" subsection here, not
+// the deleted top-bar dropdown.
+function _refreshIfVisible() {
+    const container = document.getElementById('pluginsList');
+    if (container && container.offsetParent !== null) populatePluginsTab();
+}
+EventBus.on('plugin:buttonRegistered', _refreshIfVisible);
+EventBus.on('plugin:enabledChanged', _refreshIfVisible);
 
 /**
  * Populate the Plugins tab with install UI + all registered plugins.
@@ -44,6 +55,31 @@ export function populatePluginsTab() {
             </div>
         </div>
     `;
+
+    // ------------------------------------------
+    // Toolbar actions section (1.3.6)
+    // Plugin-registered buttons formerly lived in the top-bar `⚡` dropdown;
+    // they now surface here. List is empty when no plugin has registered an
+    // action — the section header collapses with it.
+    // ------------------------------------------
+    const toolbarButtons = Plugins.getButtons();
+    let toolbarHtml = '';
+    if (toolbarButtons.length > 0) {
+        toolbarHtml = `<div class="plugin-section-header">Toolbar actions</div>`;
+        toolbarHtml += toolbarButtons.map((b, i) => `
+            <div class="connection-card" data-plugin-toolbar-row="${i}">
+                <div class="connection-card-icon">${escapeHtml(b.icon || '⚡')}</div>
+                <div class="connection-card-info">
+                    <div class="connection-card-label">${escapeHtml(b.label || 'Action')}</div>
+                    <div class="connection-card-meta">Registered by ${escapeHtml(b.pluginId)}</div>
+                </div>
+                <div class="connection-card-actions">
+                    <button type="button" data-plugin-toolbar-run="${i}" title="Run action">▶</button>
+                </div>
+            </div>
+        `).join('');
+        toolbarHtml += '<div style="margin-bottom: 1rem;"></div>';
+    }
 
     // ------------------------------------------
     // Installed external plugins section
@@ -187,13 +223,21 @@ export function populatePluginsTab() {
         return;
     }
 
-    container.innerHTML = installHtml + externalHtml + userHtml + builtinHtml;
+    container.innerHTML = installHtml + toolbarHtml + externalHtml + userHtml + builtinHtml;
 
     // ------------------------------------------
     // Wire event handlers
     // ------------------------------------------
     _wireInstallButton(container);
     _wireCreateButton(container);
+
+    // Toolbar action run buttons
+    container.querySelectorAll('[data-plugin-toolbar-run]').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.pluginToolbarRun, 10);
+            if (toolbarButtons[idx]?.onClick) toolbarButtons[idx].onClick();
+        });
+    });
 
     // Uninstall buttons
     container.querySelectorAll('[data-uninstall-url]').forEach(el => {

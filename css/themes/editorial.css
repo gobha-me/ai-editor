@@ -103,4 +103,10 @@
     --tk-shadow-sm:        0 2px 8px rgba(0, 0, 0, 0.18);
     --tk-shadow-md:        0 6px 20px rgba(0, 0, 0, 0.22);
     --tk-shadow-lg:        0 12px 40px rgba(0, 0, 0, 0.28);
+
+    /* Top bar — 1.3.6
+       Editorial keeps the same 56px height in this patch;
+       a future tuning pass may grow it for the calmer feel. */
+    --tk-header-height:    56px;
+    --tk-cmd-placeholder:  var(--tk-text-muted);
 }

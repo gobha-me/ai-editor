@@ -4,6 +4,170 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-04-30
+
+Lands the **top bar Restructure** — PR 2 of the Touch 2 facelift arc, and
+the LOCKED-for-ship layout per the design pushback memo
+(`docs/design/touch-2-facelift/project/pushback.jsx`): *"the top bar holds
+identity (brand + repo + branch + connection state) and command surface
+(⌘K). Everything else moves."* The 6-icon junk drawer (revert / settings
+/ error log / LLM debug / plugins / help) is replaced by a focused
+identity-and-command surface; relocated controls land in the destinations
+the memo prescribed.
+
+Reads colors / fonts / radii / spacing from the `--tk-*` contract that
+1.3.5 froze. Both shipped themes (Refined IDE, Editorial Calm) render the
+same component — no per-theme variants, no hex literals.
+
+**Why now:** the token contract was the prerequisite. With it locked,
+every facelift component reads through it; shipping the top bar before
+the contract would have either forced rework on contract change or
+quietly coupled the component to specific theme values.
+
+### Added
+
+- **`css/topbar.css`** *(new)* — `.tb` / `.tb--restructure` markup with
+  `.tb__brand`, `.tb__divider`, `.tb__btn`, `.tb__btn--icon`, `.tb__branch`,
+  `.tb__cmd` (⌘K command surface), `.tb__usage` (token-usage pill),
+  `.tb__right`, `.tb__debug` + `.tb__debug-dropdown` + `.tb__debug-item`.
+  Every value reads from `--tk-*`. Loaded after `css/components.css` in
+  `index.html`.
+
+- **`--tk-header-height` + `--tk-cmd-placeholder` tokens** — added to
+  `tokens.css` (contract) and mirrored in `refined.css` + `editorial.css`.
+  Header height is `56px` under both themes in this patch; Editorial
+  may grow it in a future tuning pass without touching component CSS.
+
+- **`#tbCmdK` ⌘K command surface** *(Phase 1)* — input-style button in
+  the top bar that opens the existing `QuickOpen` overlay on click or
+  on `Ctrl+K`. Phase 1 scope is file search; the palette accretes
+  commands and settings/help search in 1.3.7+. **Ctrl+P retained as
+  alias** so muscle memory works from either keystroke until the
+  palette grows distinct surfaces.
+
+- **`#tbBranchIndicator` branch button** — renders the current branch
+  name (`State.currentBranch`) in `#tbBranchName`. Updates on
+  `project:loaded`, on `branches:refresh`, and when the sidebar
+  `#branchSelect` picker fires `change`. The `#tbBranchCounts` slot
+  exists but stays `hidden` in this patch; ahead/behind counts ship in
+  **1.3.6.1** once provider compare endpoints land (GitHub `/compare`,
+  Gitea `/compare`, GitLab `/repository/compare`, local-zip skips).
+
+- **Debug dropdown (`#btnDebugMenu` + `#tbDebugDropdown`)** — single 🐛
+  icon opens a dropdown with **Error log** + **LLM debug log** items.
+  Bridge until §1.3.9 ships the full Debug slide-out (the items move
+  in there as tabs at that point). Outside-click closes.
+
+- **Settings → Plugins → Toolbar actions section** — plugin-registered
+  toolbar buttons (`Plugins.getButtons()`) now render as cards inside
+  the existing Plugins tab, formerly hosted in the deleted top-bar
+  `⚡` dropdown. Re-renders on `plugin:buttonRegistered` /
+  `plugin:enabledChanged` if the tab is currently visible.
+
+### Changed
+
+- **`html/header.html`** — full rewrite to the LOCKED Restructure layout:
+  brand mark + divider + branch indicator + ⌘K surface + token-usage
+  pill + 3-icon row (Settings ⚙️ / Help ❓ / Debug 🐛). The `app-header`
+  and `header-actions` class names persist on the new markup so
+  `js/index-indicator.js` still finds the insertion point for the
+  index pill.
+
+- **`html/editor-panel.html`** — `#btnRevert` (was in the top bar)
+  added to `.editor-toolbar` as the first button. ID preserved →
+  existing `revertCurrentFile` listener and `updateRevertButton`
+  refresh path work unchanged. `Ctrl+Shift+Z` shortcut also unchanged.
+
+- **`js/model-manager.js` token-pill format** — was
+  `"12,402 tok (8,000↓ · 4,402↑) · 38 req"`, is now `"12.4k tok"`
+  (with the breakdown moved to the `title` tooltip). Request count
+  dropped — the cost dashboard owns drill-down. Uses k/M suffixes at
+  ≥10k / ≥1M to keep the pill width bounded.
+
+- **`js/error-logger.js` updateBadge** — flags `#btnDebugMenu` instead
+  of the deleted `#btnErrorLog`. Error count still surfaces as the
+  background-color signal, just on the new entry point.
+
+- **`css/base.css`** — `.app-header` / `.header-actions` rules removed
+  (moved to `topbar.css`). Legacy `--header-height` variable removed
+  (the top bar uses `--tk-header-height` directly). The 1.3.13 rem-scale
+  refactor will revisit whether the header should re-derive from the
+  UI scale slider.
+
+- **`css/components.css`** — `.header-cost-tracker*` block (lines 161–227
+  pre-patch) and `.plugin-toolbar` / `.plugin-dropdown*` block (lines
+  595–634 pre-patch) deleted. Both rendered DOM that no longer exists.
+  The `.cost-highlight` / `.cost-saved` / `.cost-balance` /
+  `.cost-diem*` modifier classes are preserved inside `.tb__usage` in
+  `topbar.css` — `js/model-manager.js` continues to write them as inner
+  spans.
+
+- **`css/mobile.css`** — top-bar mobile rules re-authored against the
+  new selectors. Brand name + version label hide ≤768px; ⌘K shrinks
+  to icon-only (placeholder + kbd hint hidden); branch name truncates
+  to 80px; help icon hides. `#btnCommit` icon-only treatment preserved.
+
+- **`docs/ROADMAP.md` §1.3.6** — flipped to `[SHIPPED — 2026-04-30]`
+  summary; ahead/behind counts called out as deferred to 1.3.6.1.
+
+### Removed
+
+- **`#btnRevert` from header** — relocated to editor toolbar.
+- **`#btnErrorLog` and `#btnLLMDebug`** — consolidated into the Debug
+  dropdown.
+- **`#btnPluginMenu` / `#pluginToolbar` / `#pluginDropdown`** — top-bar
+  plugin dropdown deleted; actions render in Settings → Plugins →
+  Toolbar actions.
+- **`#btnResetCost`** — ✕ session-cost reset button removed from the
+  pill. Reset is still callable as `window.resetSessionCost()` from
+  DevTools as a documented stopgap; proper UX returns in §1.3.9 Debug
+  slide-out's AI tab.
+- **`initPluginToolbar()` function in `js/app.js`** and its three init
+  callsites — replaced by `initDebugMenu()` + `initBranchIndicator()`
+  on the top bar, with plugin-button rendering moved into
+  `js/settings/plugins-tab.js`.
+
+### Tests / CI
+
+- Manual cross-theme browser test (Refined IDE + Editorial Calm via
+  Settings → Appearance) per the plan's verification checklist.
+- The 1.3.5 hex-lint stage at `.gitea/workflows/ci.yaml:163` continues
+  to gate against standalone hex outside `css/themes/` — `topbar.css`
+  is included in the swept set.
+
+### Deferred
+
+- **Ahead/behind branch counts** → **1.3.6.1.** Net-new git-provider
+  work (`compareBranches(connection, owner, repo, base, head)` across
+  GitHub / Gitea / GitLab / local-zip), caching keyed on `(repoId,
+  branch)` with TTL + commit/fetch invalidation, refresh triggers on
+  `branch:changed` / `commit:complete` / explicit `branches:refresh`.
+  Branch name renders today; the `#tbBranchCounts` element exists
+  hidden, ready for the follow-up patch to populate.
+
+- **Model picker → chat compose.** The pushback memo prescribes the
+  move ("model picker → chat compose"); the design artboard for the
+  destination layout is incomplete (`topbar.jsx` doesn't show it). The
+  picker stays in the chat header for 1.3.6 and follows once the
+  destination is sketched.
+
+### Removability check
+
+Reverting `html/header.html` + `css/topbar.css` and removing `#btnRevert`
+from the editor toolbar:
+
+**Degrades:** top bar returns to the 6-icon junk drawer; ⌘K disappears
+(Ctrl+P still works since untouched); branch name no longer in the top
+bar (the editor-bottom `#statusBranch` is unchanged); revert no longer
+in the editor toolbar (`Ctrl+Shift+Z` still works).
+
+**Sticks (the move-once changes are independent net-improvements):**
+plugin actions remain in Settings → Plugins; error log + LLM debug log
+remain reachable through Settings/etc. when the dropdown is re-wired.
+
+Identity-surface clarity is real but reversible. Patch passes the
+removability bar set by 1.3.1 / 1.3.5.
+
 ## [1.3.5] - 2026-04-30
 
 Lands the **theme tokens contract foundation** — PR 1 of the Touch 2

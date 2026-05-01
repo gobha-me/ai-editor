@@ -173,20 +173,23 @@ export function updateCostTracker() {
 
     const parts = [];
 
-    // Token counts
+    // Token counts — 1.3.6: pill format. Detailed breakdown lives in tooltip
+    // (the pill is identity-surface; the cost dashboard / Debug slide-out
+    // owns drill-down). Token count uses k-suffix for ≥10k for compactness.
     if (totalTokens > 0) {
-        let tokStr = `${totalTokens.toLocaleString()} tok`;
-        const details = [];
-        details.push(`${sc.totalInputTokens.toLocaleString()}↓`);
-        details.push(`${sc.totalOutputTokens.toLocaleString()}↑`);
+        const tokStr = _formatTokenCount(totalTokens);
+        const details = [
+            `${sc.totalInputTokens.toLocaleString()}↓`,
+            `${sc.totalOutputTokens.toLocaleString()}↑`
+        ];
         if (sc.cachedInputTokens > 0) {
             details.push(`${sc.cachedInputTokens.toLocaleString()} cached`);
         }
         if (sc.reasoningTokens > 0) {
             details.push(`${sc.reasoningTokens.toLocaleString()} reasoning`);
         }
-        tokStr += ` (${details.join(' · ')})`;
-        parts.push(tokStr);
+        // Title attribute carries the breakdown that used to live inline.
+        parts.push(`<span title="${details.join(' · ')}">${tokStr} tok</span>`);
     } else {
         parts.push('0 tok');
     }
@@ -209,8 +212,7 @@ export function updateCostTracker() {
         parts.push('pricing N/A');
     }
 
-    // Request count
-    parts.push(`${sc.requests} req`);
+    // Request count dropped from the 1.3.6 pill (cost dashboard owns it).
 
     // Provider balance
     const bal = State.providerBalance;
@@ -253,6 +255,16 @@ export function updateCostTracker() {
     }
 
     el.innerHTML = parts.join(' · ');
+}
+
+/**
+ * Format a token count for the top-bar pill — k-suffix at ≥10_000 to
+ * keep the pill width bounded. 1.3.6.
+ */
+function _formatTokenCount(n) {
+    if (n < 10_000) return n.toLocaleString();
+    if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    return `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`;
 }
 
 /**

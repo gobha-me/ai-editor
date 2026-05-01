@@ -70,8 +70,11 @@
     --chat-xl: calc(var(--chat-font-size) + 3px);
     --chat-2xl: calc(var(--chat-font-size) + 7px);
     
-    /* ---- Layout dimensions (scale with UI font) ---- */
-    --header-height: calc(var(--ui-font-size) * 3.1);  /* ~40px at 13, ~50px at 16 */
+    /* ---- Layout dimensions (scale with UI font) ----
+       Header height moved to `--tk-header-height` (theme tokens) in 1.3.6
+       — fixed at 56px under both Refined and Editorial. The 1.3.13 rem-scale
+       refactor will revisit whether the top bar should re-derive from the
+       UI scale slider. */
     --sidebar-width: 260px;
     --chat-width: 350px;
     --input-height: 120px;
@@ -112,34 +115,10 @@ body {
 }
 
 /* ---- Header ---- */
-
-.app-header {
-    height: var(--header-height);
-    min-height: 36px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 1rem;
-    flex-shrink: 0;
-    font-size: var(--font-base);
-}
-
-.app-header h1 {
-    font-size: var(--font-lg);
-    font-weight: 500;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.header-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
+/* `.app-header` and `.header-actions` rules moved to `css/topbar.css` in
+   1.3.6 (Touch 2 Restructure). The class names persist on the new markup
+   so `js/index-indicator.js` (which queries `.app-header` and
+   `.header-actions` to inject the index pill) still finds them. */
 
 /* ---- Main content grid ---- */
 

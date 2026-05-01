@@ -1,0 +1,318 @@
+/**
+ * AI Editor — Top bar (`.tb`)
+ *
+ * Touch 2 LOCKED layout — Restructure variant. The top bar holds two
+ * concerns and only two: identity (brand + branch) and command surface
+ * (⌘K). Every other action is hosted elsewhere — revert in the editor
+ * toolbar, plugins in Settings, errors+LLM-debug under the Debug
+ * dropdown, model picker in chat compose.
+ *
+ * Both shipped themes (Refined IDE, Editorial Calm) render the same
+ * markup; differences come entirely from `--tk-*` token values.
+ *
+ * Added: 1.3.6 (2026-04-30) — Touch 2 facelift PR 2.
+ */
+
+/* ============================================
+   CONTAINER
+   ============================================ */
+
+.tb {
+    height: var(--tk-header-height);
+    background: var(--tk-bg-surface);
+    border-bottom: 1px solid var(--tk-border);
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    padding: 0 var(--tk-space-3);
+    flex-shrink: 0;
+    font-size: var(--font-base);
+    color: var(--tk-text-primary);
+}
+
+/* ============================================
+   BRAND
+   ============================================ */
+
+.tb__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    font-weight: 500;
+    color: var(--tk-text-primary);
+    flex-shrink: 0;
+}
+
+.tb__brand-mark {
+    font-size: var(--font-xl);
+    line-height: 1;
+    color: var(--tk-color-accent);
+}
+
+.tb__brand-name {
+    font-size: var(--font-lg);
+}
+
+.tb__brand .version {
+    font-size: var(--font-sm);
+    color: var(--tk-text-muted);
+    font-weight: 400;
+}
+
+/* ============================================
+   DIVIDER
+   ============================================ */
+
+.tb__divider {
+    width: 1px;
+    height: 24px;
+    background: var(--tk-border);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   GENERIC TOP-BAR BUTTON
+   ============================================ */
+
+.tb__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    height: 32px;
+    padding: 0 var(--tk-space-2);
+    background: transparent;
+    color: var(--tk-text-primary);
+    border: 1px solid transparent;
+    border-radius: var(--tk-radius-md);
+    font-family: inherit;
+    font-size: var(--font-sm);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+}
+
+.tb__btn:hover:not(:disabled) {
+    background: var(--tk-bg-hover);
+}
+
+.tb__btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.tb__btn--icon {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    font-size: var(--font-lg);
+}
+
+/* ============================================
+   BRANCH INDICATOR
+   ============================================ */
+
+.tb__branch {
+    color: var(--tk-text-secondary);
+}
+
+.tb__branch:not(:disabled):hover {
+    color: var(--tk-text-primary);
+}
+
+.tb__branch-icon {
+    color: var(--tk-color-pr);
+    font-size: var(--font-base);
+}
+
+.tb__branch-name {
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-sm);
+    color: var(--tk-text-primary);
+}
+
+.tb__branch-counts {
+    color: var(--tk-text-muted);
+    font-size: var(--font-xs);
+    margin-left: var(--tk-space-1);
+}
+
+/* ============================================
+   ⌘K COMMAND SURFACE
+   ============================================ */
+
+.tb__cmd {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    flex: 0 1 420px;
+    min-width: 180px;
+    height: 32px;
+    padding: 0 var(--tk-space-2) 0 var(--tk-space-3);
+    margin-left: var(--tk-space-2);
+    background: var(--tk-bg-app);
+    color: var(--tk-cmd-placeholder);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    font-family: inherit;
+    font-size: var(--font-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.tb__cmd:hover {
+    background: var(--tk-bg-raised);
+    border-color: var(--tk-border-light);
+}
+
+.tb__cmd:focus-visible {
+    outline: 2px solid var(--tk-color-accent);
+    outline-offset: 1px;
+}
+
+.tb__cmd-icon {
+    color: var(--tk-text-muted);
+    font-size: var(--font-base);
+    flex-shrink: 0;
+}
+
+.tb__cmd-placeholder {
+    flex: 1;
+    color: var(--tk-cmd-placeholder);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tb__cmd-kbd {
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+    color: var(--tk-text-secondary);
+    background: var(--tk-bg-raised);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-sm);
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   RIGHT GROUP
+   ============================================ */
+
+.tb__right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   TOKEN-USAGE PILL
+   ============================================ */
+
+.tb__usage {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 var(--tk-space-2);
+    background: var(--tk-bg-raised);
+    border-radius: var(--tk-radius-pill);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+    color: var(--tk-text-secondary);
+    cursor: default;
+    user-select: none;
+}
+
+/* Cost emphasis modifiers (preserved from legacy header-cost-tracker;
+   the inner span gets these classes from js/model-manager.js). */
+
+.tb__usage .cost-highlight {
+    color: var(--tk-color-warning);
+    font-weight: 600;
+}
+
+.tb__usage .cost-saved {
+    color: var(--tk-color-success);
+}
+
+.tb__usage .cost-balance {
+    color: var(--tk-text-secondary);
+}
+
+.tb__usage .cost-diem {
+    color: var(--tk-text-secondary);
+}
+
+.tb__usage .cost-diem-warn {
+    color: var(--tk-color-warning);
+    font-weight: 600;
+}
+
+.tb__usage .cost-diem-crit {
+    color: var(--tk-color-error);
+    font-weight: 600;
+}
+
+/* ============================================
+   DEBUG DROPDOWN
+   ============================================ */
+
+.tb__debug {
+    position: relative;
+}
+
+.tb__debug-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 180px;
+    background: var(--tk-bg-raised);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    box-shadow: var(--tk-shadow-md);
+    padding: var(--tk-space-1);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    z-index: 1000;
+}
+
+.tb__debug-dropdown[hidden] {
+    display: none;
+}
+
+.tb__debug-item {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    width: 100%;
+    padding: var(--tk-space-2) var(--tk-space-3);
+    background: transparent;
+    color: var(--tk-text-primary);
+    border: none;
+    border-radius: var(--tk-radius-sm);
+    font-family: inherit;
+    font-size: var(--font-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.tb__debug-item:hover {
+    background: var(--tk-bg-hover);
+}
+
+/* ============================================
+   COMMIT BUTTON (preserved in top bar)
+   The .btn-commit class is themed by components.css — top-bar
+   adjustments are limited to size matching the surrounding row.
+   ============================================ */
+
+.tb .btn-commit {
+    height: 32px;
+    padding: 0 var(--tk-space-3);
+    font-size: var(--font-sm);
+    flex-shrink: 0;
+}

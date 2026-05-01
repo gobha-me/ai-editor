@@ -137,7 +137,10 @@ export const ErrorLogger = {
     },
 
     updateBadge() {
-        const btn = document.getElementById('btnErrorLog');
+        // 1.3.6: badge moved from the deleted #btnErrorLog onto the Debug
+        // dropdown trigger (#btnDebugMenu) — the dropdown is the new home
+        // for both Error log and LLM debug log.
+        const btn = document.getElementById('btnDebugMenu');
         if (btn) {
             const errorCount = this.logs.filter(l => l.type === 'ERROR' || l.type === 'UNHANDLED REJECTION').length;
             if (errorCount > 0) {

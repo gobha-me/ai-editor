@@ -153,78 +153,10 @@
 .toast.warning { border-left: 3px solid var(--warning); }
 .toast.info { border-left: 3px solid var(--accent); }
 
-/* ============================================
-
-   COST TRACKER (Header Bar)
-   ============================================ */
-
-.header-cost-tracker {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1;
-    justify-content: center;
-    min-width: 0;  /* Allow shrink */
-    font-family: var(--font-mono);
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    padding: 0 1rem;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
-.header-cost-tracker #costTrackerText {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.cost-reset-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: var(--font-xs);
-    padding: 1px 3px;
-    border-radius: 2px;
-    flex-shrink: 0;
-}
-
-.cost-reset-btn:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-}
-
-.header-cost-tracker .cost-highlight {
-    color: var(--warning);
-    font-weight: 600;
-}
-
-.header-cost-tracker .cost-saved {
-    color: var(--success);
-    font-weight: 500;
-}
-
-.header-cost-tracker .cost-balance {
-    color: var(--tk-color-info);   /* AA contrast on bg-surface */
-    font-weight: 600;
-    padding-left: 6px;
-    border-left: 1px solid var(--border-light);
-    margin-left: 2px;
-}
-
-.header-cost-tracker .cost-diem {
-    color: var(--text-secondary);
-}
-
-.header-cost-tracker .cost-diem-warn {
-    color: var(--warning);
-}
-
-.header-cost-tracker .cost-diem-crit {
-    color: var(--error);
-    font-weight: 600;
-}
+/* Cost tracker (`.header-cost-tracker`, `.cost-reset-btn`) and the
+   header plugin dropdown (`.plugin-toolbar`/`.plugin-dropdown*`) moved
+   to `css/topbar.css` in 1.3.6 — pill-form via `.tb__usage`, plugin
+   actions relocated to Settings → Plugins. */
 
 /* ---- Index Indicator ---- */
 
@@ -660,46 +592,9 @@
  * PLUGIN TOOLBAR
  * ============================================ */
 
-.plugin-toolbar {
-    position: relative;
-    display: inline-block;
-}
-
-.plugin-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    min-width: 180px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
-    padding: 0.25rem 0;
-    margin-top: 0.25rem;
-}
-
-.plugin-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    font-size: var(--font-md);
-    color: var(--text-primary);
-    border: none;
-    background: none;
-    width: 100%;
-    text-align: left;
-}
-
-.plugin-dropdown-item:hover {
-    background: var(--bg-hover);
-}
-
-.plugin-dropdown-item .plugin-btn-icon {
-    font-size: var(--font-base);
-}
+/* `.plugin-toolbar` / `.plugin-dropdown` / `.plugin-dropdown-item` removed in
+   1.3.6 — top-bar plugin dropdown was deleted (Touch 2 Restructure); plugin
+   buttons render inside Settings → Plugins → Toolbar actions. */
 
 /* Active state for plugin range/filter buttons */
 .vb-range-btn.active {
