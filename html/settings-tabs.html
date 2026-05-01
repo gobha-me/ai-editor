@@ -1,18 +1,17 @@
-<!-- Connections Tab -->
+<!-- Connections Tab — 1.3.8 Touch 2 net-new surface -->
 <div class="settings-tab-content active" id="tabConnections">
-    <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
-        Configure git provider connections. Multiple connections can be active simultaneously.
-    </p>
+    <div class="conn">
+        <div class="conn__head">
+            <h3 class="conn__title">Git connections</h3>
+            <p class="conn__sub">Connect any number of accounts per provider — multiple GitHub accounts, self-hosted Gitea/GitLab, or others. Repos from every connected account appear in the global repo picker.</p>
+        </div>
 
-    <div id="connectionsList">
-        <!-- Populated dynamically by settings-manager.js -->
+        <div id="connectionsGroups">
+            <!-- Populated by js/settings/connections-tab.js — one .conn__group per registered provider. -->
+        </div>
     </div>
 
-    <button type="button" class="btn btn-secondary" id="btnAddConnection" style="width: 100%; margin-top: 0.75rem;">
-        ＋ Add Connection
-    </button>
-
-    <!-- Connection Editor (hidden by default, shown on Add/Edit) -->
+    <!-- Connection Editor (hidden by default, shown on Add/Edit). Re-used by per-provider Add buttons; see preselectProvider in connections-tab.js. -->
     <div id="connectionEditor" class="connection-editor" style="display: none;">
         <h4 id="connectionEditorTitle" style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">New Connection</h4>
         <input type="hidden" id="connEditId">

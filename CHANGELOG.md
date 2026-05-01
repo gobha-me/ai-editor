@@ -4,6 +4,121 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-05-01
+
+Lands the **Connections panel** — PR 4 of the Touch 2 facelift arc, and
+the first **net-new surface** in the arc (1.3.5–1.3.7 were foundation
++ relocations). Replaces the flat "list of cards + monolithic editor"
+shape with a provider-grouped layout per
+`docs/design/touch-2-facelift/project/connections.jsx`:
+N-of-each-provider rows under a per-provider section header with an
+"Add ${provider} account" affordance. Status pill (ok / warn /
+disabled) resolves from data already on the connection
+(`enabled`, `_unreachable` from the circuit breaker, `token`
+presence) — no `lastSyncAt` plumbing in this patch, that lands with
+the aggregated repo picker in 1.3.8.1.
+
+The data model (`State.settings.connections[]`) was already
+array-shaped and `GitProviderRegistry.listAllRepos()` already
+aggregated across enabled connections; the UI is what wasn't keeping
+up. Reads every value through the 1.3.5 `--tk-*` contract — no hex
+literals, no per-theme variants. Both shipped themes (Refined IDE,
+Editorial Calm) render the same markup.
+
+**Why now:** the new Settings sidebar (1.3.7) is the shell the panel
+plugs into; landing Connections first among the net-new surfaces
+makes the per-row UX legible (sidebar groups it under **Workspace**)
+and demonstrates the data-driven pattern (`GitProviderRegistry.list()`
+shapes the groups) that 1.3.9 (Debug) and 1.3.10 (Help) inherit.
+
+### Added
+
+- **`css/connections.css`** *(new)* — `.conn` block per the design:
+  `.conn__head`, `.conn__group`, `.conn__group-head`, `.conn__provider`
+  (+ `.conn__provider-glyph` / `.conn__provider-label` /
+  `.conn__provider-count`), `.conn__add`, `.conn__empty`, `.conn__row`
+  (+ `.conn__row--disabled` modifier), `.conn__row-main` /
+  `.conn__row-name` / `.conn__warn-pip` / `.conn__row-meta` /
+  `.conn__sep` / `.conn__url`, `.conn__row-right`, `.conn__status`
+  (+ `.conn__status--ok` / `.conn__status--warn` /
+  `.conn__status--disabled`), `.conn__status-dot`, `.conn__row-action`
+  (+ `.conn__row-action--danger`). Provider glyph variants
+  (`.conn__provider-glyph--github`, etc.) reserved for future
+  per-provider tinting; today they all share the neutral pill
+  treatment by design contract (theme-neutral, no brand colors).
+  Mobile breakpoint (≤640px) wraps the right-column actions under the
+  row name. Loaded after `css/settings-sidebar.css` in `index.html` so
+  source order favors connections-specific overrides at equal
+  selector specificity.
+
+- **`tests/test-connections-panel.js`** *(new)* — browser-based
+  integration test pinning: one `.conn__group` per non-hidden
+  registered provider in registry order; per-group count badges; empty
+  groups render the empty-state line; Add buttons carry the provider
+  id in `data-conn-add`; provider glyph synthesis (`github`→GH,
+  `gitea`→GT, `gitlab`→GL); status pill resolution against
+  `enabled` / `_unreachable` / `token` signals; warn pip presence on
+  warn rows; `showConnectionEditor(null, providerId)` preselects the
+  provider and hides the URL input when the provider has a `fixedUrl`.
+  Registered in `tests/index.html` after the Settings sidebar test.
+
+- **`__test_renderConnectionsGroups`** + **`__test_showConnectionEditor`**
+  exports on `js/settings/connections-tab.js` — test seams that let
+  the smoke test drive the renderer against a controlled
+  GitProviderRegistry state without booting `initConnectionsTab` (which
+  expects the editor form to be in the live DOM).
+
+### Changed
+
+- **`html/settings-tabs.html` `#tabConnections`** — replaces the
+  flat list + single Add button with the new structure:
+  `.conn__head` (title + subtitle mirroring the design verbatim) and
+  `<div id="connectionsGroups">` populated dynamically. The shared
+  `#connectionEditor` form below remains unchanged — the per-group
+  Add buttons re-use it via the new `preselectProvider` argument.
+
+- **`js/settings/connections-tab.js`** — `renderConnectionsList()`
+  becomes `renderConnectionsGroups()`. Iterates
+  `GitProviderRegistry.list().filter(p => !p.hidden)` to build groups
+  in registry order; per group, lists matching connections from
+  `listConnections()` and renders an empty-state line when none
+  exist. Adds `glyphFor(providerId)` (synthesizes GH/GT/GL/BB/ZP, or
+  the first 2 chars of the provider id uppercased as a fallback) and
+  `statusFor(conn)` (resolves the pill kind from `enabled`,
+  `_unreachable`, and `token` presence — no new persisted fields).
+  Per-group "Add" buttons and per-row Edit / Refresh / Disconnect
+  actions use a single delegated click handler on
+  `#connectionsGroups`. Refresh sets `conn._forceRetry = true` and
+  clears `_unreachable` (re-render reflects it); the next outbound
+  `listRepos` call against this connection bypasses the circuit
+  breaker. Editor form colors swap from legacy `var(--success)` /
+  `var(--error)` aliases to canonical `var(--tk-color-success)` /
+  `var(--tk-color-error)` to match the connections-panel pattern.
+
+- **`index.html`** — adds `<link rel="stylesheet"
+  href="./css/connections.css">` after `css/settings-sidebar.css`
+  (source-order matches the 1.3.7 pattern).
+
+- **`tests/index.html`** — registers the new
+  `test-connections-panel.js` import after the Settings sidebar test.
+
+- **`docs/ROADMAP.md`** — marks 1.3.8 SHIPPED; bumps the
+  Last-updated header and Current-released-version pin to 1.3.8.
+
+### Deferred
+
+- **Aggregated repo picker** (the `variant === "with-picker"` block in
+  connections.jsx) — splits to **1.3.8.1**. The picker lives outside
+  the Settings modal (project loader / sidebar dropdown) and bundling
+  it would double the PR.
+- **`lastSyncAt` per-connection tracking** — pairs naturally with the
+  picker since the picker is what actually drives `listAllRepos`;
+  ships as 1.3.8.1's companion.
+- **Bitbucket support** — no provider client exists in
+  `js/git-providers/`. The new layout is data-driven over
+  `GitProviderRegistry.list()`, so adding Bitbucket later is
+  registering a provider, not redesigning the panel.
+
 ## [1.3.7] - 2026-05-01
 
 Lands the **Settings sidebar Restructure** — PR 3 of the Touch 2 facelift

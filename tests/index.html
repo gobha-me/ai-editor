@@ -175,6 +175,10 @@
             } catch (e) { errors.push(['Settings Sidebar', e]); }
 
             try {
+                await import('./test-connections-panel.js');
+            } catch (e) { errors.push(['Connections Panel', e]); }
+
+            try {
                 await import('./test-commit-modal-memory.js');
             } catch (e) { errors.push(['Commit Modal Memory', e]); }
 

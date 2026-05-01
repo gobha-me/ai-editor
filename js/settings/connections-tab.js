@@ -1,5 +1,11 @@
 // ============================================
-// SETTINGS — CONNECTIONS TAB
+// SETTINGS — CONNECTIONS TAB (1.3.8 Touch 2 layout)
+//
+// Provider-grouped, N-of-each-provider per
+// docs/design/touch-2-facelift/project/connections.jsx.
+// The shared editor form below remains the single add/edit
+// surface; per-provider "Add" buttons preselect the provider
+// when opening it.
 // ============================================
 
 import { GitProviderRegistry } from '../git-providers/index.js';
@@ -8,14 +14,29 @@ import { escapeHtml, escapeAttr } from '../utils/html.js';
 /** Currently editing connection ID (null = new) */
 let _editingConnectionId = null;
 
+/** 2-letter glyph per provider id; falls back to first 2 chars uppercased. */
+function glyphFor(providerId) {
+    const map = { github: 'GH', gitea: 'GT', gitlab: 'GL', bitbucket: 'BB', local: 'ZP' };
+    return map[providerId] || (providerId || '?').slice(0, 2).toUpperCase();
+}
+
 /**
- * Initialize the Connections tab: render list, wire up buttons.
+ * Decide a row's status from the data we already track.
+ * No `lastSyncAt` plumbing in 1.3.8 — that's 1.3.8.1's companion to the
+ * aggregated repo picker, which is what actually drives `listAllRepos`.
+ */
+function statusFor(conn) {
+    if (!conn.enabled) return { kind: 'disabled', label: 'disabled' };
+    if (conn._unreachable) return { kind: 'warn', label: 'unreachable — retry' };
+    if (!conn.token) return { kind: 'warn', label: 'no token' };
+    return { kind: 'ok', label: 'ready' };
+}
+
+/**
+ * Initialize the Connections tab: render groups, wire up editor controls.
  */
 export function initConnectionsTab() {
-    renderConnectionsList();
-
-    const addBtn = document.getElementById('btnAddConnection');
-    if (addBtn) addBtn.onclick = () => showConnectionEditor(null);
+    renderConnectionsGroups();
 
     const cancelBtn = document.getElementById('btnCancelConnection');
     if (cancelBtn) cancelBtn.onclick = hideConnectionEditor;
@@ -42,61 +63,110 @@ export function initConnectionsTab() {
             }
         };
     }
+
+    // Event delegation for the per-group "Add ${provider}" buttons,
+    // plus per-row refresh / edit / disconnect actions.
+    const groups = document.getElementById('connectionsGroups');
+    if (groups) {
+        groups.addEventListener('click', (ev) => {
+            const addBtn = ev.target.closest('[data-conn-add]');
+            if (addBtn) {
+                showConnectionEditor(null, addBtn.dataset.connAdd);
+                return;
+            }
+            const action = ev.target.closest('[data-conn-action]');
+            if (!action) return;
+            const id = action.dataset.connId;
+            const kind = action.dataset.connAction;
+            if (kind === 'edit') showConnectionEditor(id);
+            else if (kind === 'refresh') refreshConnection(id);
+            else if (kind === 'disconnect') removeConnection(id);
+        });
+    }
 }
 
 /**
- * Render the connections list from the GitProviderRegistry.
+ * Render per-provider groups from the GitProviderRegistry. Hidden providers
+ * (e.g. the in-memory zip fallback) and providers with no client are skipped
+ * — Bitbucket support arrives by registering a provider, not by editing this
+ * file.
  */
-function renderConnectionsList() {
-    const container = document.getElementById('connectionsList');
+function renderConnectionsGroups() {
+    const container = document.getElementById('connectionsGroups');
     if (!container) return;
 
-    const connections = GitProviderRegistry.listConnections().filter(c => {
-        const p = GitProviderRegistry.get(c.provider);
-        return !p?.hidden;
-    });
+    const providers = GitProviderRegistry.list().filter(p => !p.hidden);
+    const allConns = GitProviderRegistry.listConnections();
 
-    if (connections.length === 0) {
-        container.innerHTML = `
-            <div class="connections-empty">
-                <div class="connections-empty-icon">🔌</div>
-                <div>No connections configured yet.</div>
-                <div style="margin-top: 0.25rem; font-size: var(--font-sm);">Add a git provider to get started.</div>
-            </div>
-        `;
-        return;
-    }
+    container.innerHTML = providers.map(provider => {
+        const list = allConns.filter(c => c.provider === provider.id);
+        const glyph = glyphFor(provider.id);
+        const labelAttr = escapeAttr(provider.name);
 
-    container.innerHTML = connections.map(conn => {
-        const provider = GitProviderRegistry.get(conn.provider);
-        const icon = provider ? provider.icon : '📦';
-        const providerName = provider ? provider.name : conn.provider;
-        const disabledClass = conn.enabled ? '' : ' disabled';
-        const statusDot = conn.enabled
-            ? '<span style="color: var(--success);" title="Enabled">●</span>'
-            : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
+        const rowsHtml = list.length === 0
+            ? `<div class="conn__empty">No ${escapeHtml(provider.name)} accounts connected.</div>`
+            : list.map(conn => renderRow(conn, provider)).join('');
 
         return `
-            <div class="connection-card${disabledClass}" data-conn-id="${escapeAttr(conn.id)}">
-                <div class="connection-card-icon">${icon}</div>
-                <div class="connection-card-info">
-                    <div class="connection-card-label">${statusDot} ${escapeHtml(conn.label)}</div>
-                    <div class="connection-card-meta">${escapeHtml(providerName)} · ${escapeHtml(conn.url || '—')}</div>
+            <div class="conn__group" data-provider="${escapeAttr(provider.id)}">
+                <div class="conn__group-head">
+                    <div class="conn__provider">
+                        <span class="conn__provider-glyph conn__provider-glyph--${escapeAttr(provider.id)}">${escapeHtml(glyph)}</span>
+                        <span class="conn__provider-label">${escapeHtml(provider.name)}</span>
+                        <span class="conn__provider-count">${list.length}</span>
+                    </div>
+                    <button type="button" class="conn__add" data-conn-add="${escapeAttr(provider.id)}" title="Add ${labelAttr} account">
+                        ＋ Add ${escapeHtml(provider.name)} account
+                    </button>
                 </div>
-                <div class="connection-card-actions">
-                    <button onclick="window._editConnection('${escapeAttr(conn.id)}')" title="Edit">✏️</button>
-                    <button class="danger" onclick="window._removeConnection('${escapeAttr(conn.id)}')" title="Remove">🗑️</button>
-                </div>
+                ${rowsHtml}
             </div>
         `;
     }).join('');
 }
 
+function renderRow(conn, provider) {
+    const status = statusFor(conn);
+    const idAttr = escapeAttr(conn.id);
+    const disabledClass = conn.enabled ? '' : ' conn__row--disabled';
+    const warnPip = status.kind === 'warn'
+        ? '<span class="conn__warn-pip" title="Needs attention"></span>'
+        : '';
+    const url = conn.url || provider.fixedUrl || '—';
+
+    return `
+        <div class="conn__row${disabledClass}" data-conn-id="${idAttr}">
+            <div class="conn__row-main">
+                <div class="conn__row-name">
+                    ${escapeHtml(conn.label || conn.id)}
+                    ${warnPip}
+                </div>
+                <div class="conn__row-meta">
+                    <span class="conn__url">🔗 ${escapeHtml(url)}</span>
+                    <span class="conn__sep">·</span>
+                    <span>${conn.token ? 'token saved' : 'no token'}</span>
+                    <span class="conn__sep">·</span>
+                    <span>${conn.enabled ? 'enabled' : 'disabled'}</span>
+                </div>
+            </div>
+            <div class="conn__row-right">
+                <span class="conn__status conn__status--${status.kind}">
+                    <span class="conn__status-dot"></span> ${escapeHtml(status.label)}
+                </span>
+                <button type="button" class="conn__row-action" data-conn-action="edit" data-conn-id="${idAttr}" title="Edit">✏️</button>
+                <button type="button" class="conn__row-action" data-conn-action="refresh" data-conn-id="${idAttr}" title="Refresh / re-authorize">🔄</button>
+                <button type="button" class="conn__row-action conn__row-action--danger" data-conn-action="disconnect" data-conn-id="${idAttr}" title="Disconnect">🗑</button>
+            </div>
+        </div>
+    `;
+}
+
 /**
  * Show the connection editor form for adding or editing.
  * @param {string|null} connId - null = new connection
+ * @param {string|null} [preselectProvider] - when adding new, preselect this provider id
  */
-function showConnectionEditor(connId) {
+function showConnectionEditor(connId, preselectProvider = null) {
     _editingConnectionId = connId;
     const editor = document.getElementById('connectionEditor');
     const title = document.getElementById('connectionEditorTitle');
@@ -123,7 +193,12 @@ function showConnectionEditor(connId) {
         document.getElementById('connEditEnabled').checked = conn.enabled !== false;
     } else {
         // New connection
-        title.textContent = 'New Connection';
+        title.textContent = preselectProvider
+            ? `New ${GitProviderRegistry.get(preselectProvider)?.name || preselectProvider} Connection`
+            : 'New Connection';
+        if (preselectProvider && providers.some(p => p.id === preselectProvider)) {
+            providerSelect.value = preselectProvider;
+        }
         document.getElementById('connEditLabel').value = '';
         document.getElementById('connEditUrl').value = '';
         document.getElementById('connEditToken').value = '';
@@ -211,7 +286,7 @@ function saveConnectionFromEditor() {
     }
 
     hideConnectionEditor();
-    renderConnectionsList();
+    renderConnectionsGroups();
 }
 
 /**
@@ -253,10 +328,23 @@ async function testConnectionFromEditor() {
 }
 
 function showTestResult(el, type, message) {
-    const colors = { success: 'var(--success)', error: 'var(--error)', info: 'var(--text-muted)' };
+    const colors = { success: 'var(--tk-color-success)', error: 'var(--tk-color-error)', info: 'var(--tk-text-muted)' };
     el.style.display = 'block';
-    el.style.color = colors[type] || 'var(--text-primary)';
+    el.style.color = colors[type] || 'var(--tk-text-primary)';
     el.textContent = message;
+}
+
+/**
+ * Bypass the circuit-breaker cooldown for a single connection and re-render.
+ * The next outbound listRepos call against this connection will retry.
+ */
+function refreshConnection(connId) {
+    const conn = GitProviderRegistry.listConnections().find(c => c.id === connId);
+    if (!conn) return;
+    conn._forceRetry = true;
+    conn._unreachable = false;
+    renderConnectionsGroups();
+    window.showToast(`Retry queued for ${conn.label}`, 'info');
 }
 
 /**
@@ -271,10 +359,16 @@ export async function removeConnection(connId) {
 
     GitProviderRegistry.removeConnection(connId);
     hideConnectionEditor();
-    renderConnectionsList();
+    renderConnectionsGroups();
     window.showToast('Connection removed', 'success');
 }
 
-// Expose for onclick handlers in rendered HTML
+// Expose for any external callers (legacy compatibility — onclick attributes
+// in the old markup are gone, but other modules may invoke these).
 window._editConnection = (connId) => showConnectionEditor(connId);
 window._removeConnection = removeConnection;
+
+// Test seam: lets browser smoke tests render against a fixed registry state
+// without booting `initConnectionsTab` (which assumes the editor form exists).
+export const __test_renderConnectionsGroups = renderConnectionsGroups;
+export const __test_showConnectionEditor = showConnectionEditor;

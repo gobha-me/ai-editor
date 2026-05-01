@@ -1,0 +1,313 @@
+/**
+ * Settings → Connections panel — 1.3.8 Touch 2 net-new surface
+ *
+ * Per `docs/design/touch-2-facelift/project/connections.jsx`:
+ * provider-grouped layout with N-of-each-provider rows, an "Add"
+ * affordance per group, and a status pill per row. Both shipped
+ * themes (Refined IDE, Editorial Calm) render identical markup
+ * via the frozen `--tk-*` contract — no per-theme variants, no
+ * hex literals, no provider brand colors (theme-neutral by design).
+ *
+ * Loaded after `css/settings-sidebar.css` so source order favors
+ * connections-specific overrides at equal selector specificity.
+ *
+ * The legacy `.connection-card*` rules in `css/modals.css` survive
+ * because `js/settings/plugins-tab.js` still consumes them; removing
+ * them is plugins-tab work, out of scope for 1.3.8.
+ */
+
+/* ----- Panel head ----- */
+
+.conn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tk-space-4);
+}
+
+.conn__head {
+    margin-bottom: var(--tk-space-1);
+}
+
+.conn__title {
+    margin: 0;
+    color: var(--tk-text-primary);
+    font-size: var(--font-lg);
+    font-weight: 600;
+}
+
+.conn__sub {
+    margin: var(--tk-space-1) 0 0;
+    color: var(--tk-text-secondary);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    max-width: 64ch;
+}
+
+/* ----- Per-provider group ----- */
+
+.conn__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tk-space-2);
+}
+
+.conn__group-head {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+}
+
+.conn__provider {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    flex: 1;
+    min-width: 0;
+}
+
+.conn__provider-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--tk-bg-raised);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    color: var(--tk-text-secondary);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.conn__provider-glyph--sm {
+    width: 22px;
+    height: 22px;
+    font-size: var(--font-xs);
+}
+
+.conn__provider-label {
+    color: var(--tk-text-primary);
+    font-size: var(--font-md);
+    font-weight: 600;
+}
+
+.conn__provider-count {
+    padding: 1px 8px;
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-pill);
+    color: var(--tk-text-muted);
+    font-size: var(--font-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.conn__add {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    padding: 4px var(--tk-space-2);
+    background: transparent;
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    color: var(--tk-text-secondary);
+    font-size: var(--font-sm);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.conn__add:hover {
+    background: var(--tk-bg-hover);
+    border-color: var(--tk-border-light);
+    color: var(--tk-text-primary);
+}
+
+.conn__add:focus-visible {
+    outline: 2px solid var(--tk-color-accent);
+    outline-offset: -2px;
+}
+
+/* ----- Empty state per group ----- */
+
+.conn__empty {
+    padding: var(--tk-space-2) var(--tk-space-3);
+    background: var(--tk-bg-surface);
+    border: 1px dashed var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    color: var(--tk-text-muted);
+    font-size: var(--font-sm);
+    font-style: italic;
+}
+
+/* ----- Connection row ----- */
+
+.conn__row {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-3);
+    padding: var(--tk-space-2) var(--tk-space-3);
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    transition: border-color 0.12s;
+}
+
+.conn__row:hover {
+    border-color: var(--tk-border-light);
+}
+
+.conn__row.conn__row--disabled {
+    opacity: 0.6;
+}
+
+.conn__row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.conn__row-name {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    color: var(--tk-text-primary);
+    font-size: var(--font-md);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conn__warn-pip {
+    width: 7px;
+    height: 7px;
+    background: var(--tk-color-warning-strong);
+    border-radius: var(--tk-radius-pill);
+    flex-shrink: 0;
+}
+
+.conn__row-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    color: var(--tk-text-muted);
+    font-size: var(--font-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conn__sep {
+    color: var(--tk-border-light);
+}
+
+.conn__url {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conn__row-right {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    flex-shrink: 0;
+}
+
+/* ----- Status pill ----- */
+
+.conn__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px var(--tk-space-2);
+    background: var(--tk-bg-app);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-pill);
+    font-size: var(--font-xs);
+    color: var(--tk-text-secondary);
+    white-space: nowrap;
+}
+
+.conn__status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--tk-radius-pill);
+    background: var(--tk-text-muted);
+    flex-shrink: 0;
+}
+
+.conn__status--ok .conn__status-dot {
+    background: var(--tk-color-success);
+}
+
+.conn__status--warn .conn__status-dot {
+    background: var(--tk-color-warning-strong);
+}
+
+.conn__status--warn {
+    color: var(--tk-color-warning-strong);
+}
+
+.conn__status--disabled .conn__status-dot {
+    background: var(--tk-text-muted);
+}
+
+/* ----- Per-row actions (refresh, disconnect) ----- */
+
+.conn__row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--tk-radius-sm);
+    color: var(--tk-text-secondary);
+    font-size: var(--font-sm);
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.conn__row-action:hover {
+    background: var(--tk-bg-hover);
+    border-color: var(--tk-border);
+    color: var(--tk-text-primary);
+}
+
+.conn__row-action.conn__row-action--danger:hover {
+    /* Translucent danger fill — theme-neutral overlay technique
+       matching the .settings-sidebar__item.active accent fill. */
+    background: color-mix(in srgb, var(--tk-color-danger) 18%, transparent);
+    border-color: var(--tk-color-danger);
+    color: var(--tk-color-danger);
+}
+
+.conn__row-action:focus-visible {
+    outline: 2px solid var(--tk-color-accent);
+    outline-offset: -1px;
+}
+
+/* ----- Mobile collapse — right column wraps under name ----- */
+@media (max-width: 640px) {
+    .conn__row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .conn__row-right {
+        justify-content: flex-end;
+    }
+
+    .conn__group-head {
+        flex-wrap: wrap;
+    }
+}
