@@ -4,6 +4,129 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-05-01
+
+**Tools 1.4.x — inline AI suggestions (ghost text, hotkey-only).** A
+hotkey now requests a single completion at the cursor and renders it as
+a faded inline overlay. `Tab` accepts; `Esc` dismisses. **Off by
+default** — users opt in from Settings → General → Ghost text.
+
+The cost-control framing is intentional. Cursor/Copilot-style automatic
+completion makes one LLM call per pause (and per keystroke in some
+configs); hotkey-triggered makes one call per user intent. There is no
+idle polling, no debounced auto-trigger, no "pre-warm on cursor move."
+A second hotkey press while a request is in flight is silently dropped
+(single-flight throttle). Each call sends `tools: null, stream: false`
+through a parallel lean path so it doesn't share `LLM.chat`'s abort
+controller — chat and ghost text can be in flight at once without
+trampling each other.
+
+When the hotkey is `Tab` (default), there is an indent carve-out: at
+line-start indent positions, Tab still indents (existing CM6 behavior);
+mid-line / after non-whitespace, Tab triggers a completion. Same
+convention as Copilot/Cursor — preserves muscle memory.
+
+`State.settings.ghostText` is a subtree:
+`{ enabled, hotkey, maxTokens, contextLines, model }`. The `model`
+field is empty by default (inherit `llmModel`); set it to a small fast
+model id to pair a heavy chat model with a cheap completion model —
+material cost/latency win. The whole subtree is workspace-overridable
+via `.aieditor/settings.json` (1.4.4 safelist).
+
+Removability (Decision §7): `?ghostText=off` URL flag forces the
+compartment to install empty — no decoration, no keymap binding, Tab
+indents universally. Setting `enabled: false` does the same.
+
+### Added
+
+- **[`js/editor/ghost-text.js`](js/editor/ghost-text.js)** — feature
+  core. CM6 `StateField` carries
+  `{ status: 'idle'|'requesting'|'showing', suggestion, anchor,
+  requestId }`; `ViewPlugin` renders a single `Decoration.widget` when
+  SHOWING; `Compartment` is reconfigurable so the hotkey can change at
+  runtime. Module-local single-flight via an `inFlight` boolean +
+  `AbortController`. Exports
+  `triggerCompletion` / `acceptCompletion` / `dismissCompletion` /
+  `buildGhostTextExtension` / `refreshGhostTextExtension` /
+  `getGhostTextCompartment` / `getGhostTextSettings` /
+  `isAtIndentContext`. State-machine: any docChange or cursor move
+  while SHOWING dismisses; Esc aborts in REQUESTING; second Tab while
+  REQUESTING is a no-op.
+
+- **[`js/llm/completion.js`](js/llm/completion.js)** —
+  `requestGhostTextCompletion({ prefix, suffix, language, filename,
+  signal, model?, maxTokens?, temperature? })`. Calls
+  `/chat/completions` directly with `tools: null, stream: false` and a
+  one-paragraph system prompt; honors the caller's `AbortSignal` so
+  dismiss actually terminates the in-flight fetch. Defensive cleaning
+  strips a leading fence block and any `<think>…</think>` preamble
+  (some models still wrap inline-completion output even when told not
+  to). Pure helper `sliceContextAroundCursor(text, cursor, lines)`
+  returns prefix/suffix bounded by `contextLines` either side.
+
+- **[`tests/test-ghost-text.mjs`](tests/test-ghost-text.mjs)** —
+  node:test cases covering slicing, fence/think stripping, prompt
+  assembly, fetch happy/abort/error paths (with stubbed fetch),
+  indent-context detection, settings resolution, and throttle reset.
+
+- **[`tests/test-ghost-text.js`](tests/test-ghost-text.js)** — browser
+  smoke covering module exports, defaults, and the
+  feature-disabled-returns-empty-extension contract. Decoration render
+  + keymap dispatch are covered by manual verification per the 1.4.7
+  plan; a full editor mount is too heavy for the in-page harness.
+
+### Changed
+
+- **[`js/editor/instance.js`](js/editor/instance.js)** — installs the
+  ghost-text compartment between the keybinding compartment and
+  `basicSetup`, so its keymap registers before `indentWithTab` (CM6
+  evaluates extensions in order — earlier wins). When the feature is
+  disabled, `buildGhostTextExtension()` returns `[]`, making the
+  compartment zero-cost. New export: `refreshGhostText()` for live
+  reconfiguration when settings change.
+
+- **[`js/settings/persistence.js`](js/settings/persistence.js)** —
+  reads/writes `State.settings.ghostText` subtree in `collectAndSave()`;
+  triggers `refreshGhostText()` via dynamic import after save so the
+  hotkey/enabled state takes effect without a reload. `exportSettings()`
+  now round-trips the subtree.
+
+- **[`js/settings/llm-tab.js`](js/settings/llm-tab.js)** — new
+  `populateGhostTextModelSelect()` mirrors `populateCommitModelSelect()`;
+  the dropdown lists every available model with the "Use default model"
+  sentinel as the empty-string default.
+
+- **[`js/settings/models-tab.js`](js/settings/models-tab.js)** — calls
+  `populateGhostTextModelSelect()` alongside `populateCommitModelSelect()`
+  on `populateSettingsModelSelects()`.
+
+- **[`js/settings-manager.js`](js/settings-manager.js)** — hydrates the
+  ghost-text inputs (enabled / hotkey / maxTokens / contextLines) on
+  settings open. The model dropdown is populated by the llm-tab hook.
+
+- **[`html/settings-tabs.html`](html/settings-tabs.html)** — new
+  "Ghost text (inline AI suggestions)" subsection appended to the
+  General tab, after the timeout sliders.
+
+- **[`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js)**
+  — adds `'ghostText'` (whole subtree) to the safelist. Per-repo
+  overrides are valuable: a team can enable ghost text only on a repo
+  where the LLM context is well-trained. The `model` field is an id,
+  not an API key.
+
+### Notes for future work
+
+- **Vim coexistence.** `feat/1.1.3-vim-keybindings` hasn't shipped to
+  main; when it does, vim's `Tab` handler must coexist with (or
+  replace) ghost-text's binding when vim mode is active. The
+  ghost-text compartment is reconfigurable, so the wiring point is
+  there.
+
+- **Multi-completion cycling and partial-word acceptance** are
+  explicitly out of scope. The roadmap framing is "single completion
+  at the cursor"; cycling is a Copilot pattern that adds another LLM
+  call per cycle and breaks the cost-control story.
+
 ## [1.4.6] - 2026-05-01
 
 **Tools 1.4.x — scan-driven CI logs.** `get_ci_logs` no longer returns a

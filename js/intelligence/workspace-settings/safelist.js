@@ -60,6 +60,13 @@ export const SAFELIST = Object.freeze([
     'showIssues',
     'showPullRequests',
 
+    // Ghost text (1.4.7). Whole subtree —
+    // `ghostText.enabled` / `.hotkey` / `.maxTokens` / `.contextLines` /
+    // `.model` travel together. No credentials. The model field is an id,
+    // not an API key; per-repo override is useful when a team ships a
+    // workspace where one specific completion model fits the codebase.
+    'ghostText',
+
     // Behavior
     'role',
     'summarizerMode',

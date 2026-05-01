@@ -69,6 +69,29 @@ export function collectAndSave() {
     const scanInvisibleEl = document.getElementById('settingEditorScanInvisibleUnicode');
     State.settings.editorScanInvisibleUnicode = scanInvisibleEl ? scanInvisibleEl.checked : true;
 
+    // Ghost text (1.4.7) — subtree under State.settings.ghostText
+    const ghostTextEnabledEl = document.getElementById('settingGhostTextEnabled');
+    const ghostTextHotkeyEl = document.getElementById('settingGhostTextHotkey');
+    const ghostTextMaxTokensEl = document.getElementById('settingGhostTextMaxTokens');
+    const ghostTextContextLinesEl = document.getElementById('settingGhostTextContextLines');
+    const ghostTextModelEl = document.getElementById('settingGhostTextModel');
+    if (ghostTextEnabledEl || ghostTextHotkeyEl || ghostTextMaxTokensEl || ghostTextContextLinesEl || ghostTextModelEl) {
+        const prev = State.settings.ghostText || {};
+        State.settings.ghostText = {
+            enabled: ghostTextEnabledEl ? ghostTextEnabledEl.checked : !!prev.enabled,
+            hotkey: ghostTextHotkeyEl && ghostTextHotkeyEl.value.trim() ? ghostTextHotkeyEl.value.trim() : (prev.hotkey || 'Tab'),
+            maxTokens: ghostTextMaxTokensEl ? (parseInt(ghostTextMaxTokensEl.value, 10) || 150) : (prev.maxTokens || 150),
+            contextLines: ghostTextContextLinesEl ? (parseInt(ghostTextContextLinesEl.value, 10) || 40) : (prev.contextLines || 40),
+            model: ghostTextModelEl ? ghostTextModelEl.value.trim() : (prev.model || ''),
+        };
+        // Reconfigure the live editor so the new hotkey / enable state takes
+        // effect without a reload. Lazy-imported to avoid pulling editor
+        // internals into settings persistence at module-load time.
+        import('../editor/instance.js')
+            .then(m => m.refreshGhostText && m.refreshGhostText())
+            .catch(() => { /* editor not loaded yet — fine */ });
+    }
+
     const showIssuesEl = document.getElementById('settingShowIssues');
     State.settings.showIssues = showIssuesEl ? showIssuesEl.checked : false;
     
@@ -277,6 +300,7 @@ export function exportSettings() {
         showLineNumbers: pickGlobal('showLineNumbers'),
         editorKeybindingMode: pickGlobal('editorKeybindingMode'),
         editorScanInvisibleUnicode: pickGlobal('editorScanInvisibleUnicode'),
+        ghostText: pickGlobal('ghostText'),
         showIssues: pickGlobal('showIssues'),
         showPullRequests: pickGlobal('showPullRequests'),
 

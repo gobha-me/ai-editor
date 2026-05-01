@@ -4,7 +4,7 @@
 
 import { State, Storage } from '../core.js';
 import { LLM } from '../llm.js';
-import { showModelCapabilities, populateCommitModelSelect } from './llm-tab.js';
+import { showModelCapabilities, populateCommitModelSelect, populateGhostTextModelSelect } from './llm-tab.js';
 import { applyModelOverrides, DEFAULT_CAPABILITIES } from '../providers/registry.js';
 import { Icon } from '../ui/icons.js';
 
@@ -36,6 +36,9 @@ export function populateSettingsModelSelects(models) {
 
     // Commit model select
     populateCommitModelSelect();
+
+    // Ghost-text completion model select (1.4.7)
+    populateGhostTextModelSelect();
 }
 
 /**

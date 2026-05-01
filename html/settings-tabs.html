@@ -128,6 +128,56 @@
         <input type="range" id="settingSummaryTimeout" min="10" max="180" step="10">
         <span id="summaryTimeoutValue">60s</span>
     </div>
+
+    <hr>
+
+    <h4 style="margin: 0 0 0.5rem 0;">Ghost text (inline AI suggestions)</h4>
+    <small style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);">
+        Press a hotkey to request a single completion at the cursor — never automatic, never on idle.
+        Tab accepts, Esc dismisses. One in-flight request at a time. Off by default.
+    </small>
+
+    <div class="form-group" data-setting-key="ghostText">
+        <label>
+            <input type="checkbox" id="settingGhostTextEnabled">
+            Enable ghost-text suggestions
+        </label>
+    </div>
+
+    <div class="form-group" data-setting-key="ghostText">
+        <label for="settingGhostTextHotkey">Trigger hotkey:</label>
+        <input type="text" id="settingGhostTextHotkey" placeholder="Tab" style="max-width: 12rem;">
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            CodeMirror key spec — e.g. <code>Tab</code>, <code>Ctrl-Space</code>, <code>Mod-i</code>.
+            When set to <code>Tab</code>, indenting at line start still works (carve-out).
+        </small>
+    </div>
+
+    <div class="form-group" data-setting-key="ghostText">
+        <label for="settingGhostTextModel">Completion model (optional):</label>
+        <select id="settingGhostTextModel">
+            <option value="">Use default model</option>
+        </select>
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Pair a heavy chat model with a small fast completion model — cost/latency win on every Tab press.
+        </small>
+    </div>
+
+    <div class="form-group" data-setting-key="ghostText">
+        <label for="settingGhostTextMaxTokens">Max output tokens:</label>
+        <input type="number" id="settingGhostTextMaxTokens" min="16" max="1024" step="16" style="max-width: 8rem;">
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Default 150. Suggestions are short by design.
+        </small>
+    </div>
+
+    <div class="form-group" data-setting-key="ghostText">
+        <label for="settingGhostTextContextLines">Context window (lines either side of cursor):</label>
+        <input type="number" id="settingGhostTextContextLines" min="5" max="200" step="5" style="max-width: 8rem;">
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Default 40 lines before + 40 after. Higher = better context, more tokens per call.
+        </small>
+    </div>
 </div>
 
 <!-- Models Tab -->

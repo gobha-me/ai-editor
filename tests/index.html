@@ -164,6 +164,10 @@
                 await import('./test-keybindings.js');
             } catch (e) { errors.push(['Keybindings', e]); }
 
+            try {
+                await import('./test-ghost-text.js');
+            } catch (e) { errors.push(['Ghost Text', e]); }
+
             // --- UI & Context (0.9.12) ---
             try {
                 await import('./test-context-filter.js');

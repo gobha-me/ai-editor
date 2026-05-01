@@ -230,6 +230,19 @@ function populateSettingsForm() {
     const scanInvisibleEl = document.getElementById('settingEditorScanInvisibleUnicode');
     if (scanInvisibleEl) scanInvisibleEl.checked = State.settings.editorScanInvisibleUnicode !== false;
 
+    // Ghost text (1.4.7). Subtree may be absent on first load — fall back to defaults.
+    const _gt = State.settings.ghostText || {};
+    const gtEnabledEl = document.getElementById('settingGhostTextEnabled');
+    if (gtEnabledEl) gtEnabledEl.checked = _gt.enabled === true;
+    const gtHotkeyEl = document.getElementById('settingGhostTextHotkey');
+    if (gtHotkeyEl) gtHotkeyEl.value = _gt.hotkey || 'Tab';
+    const gtMaxTokensEl = document.getElementById('settingGhostTextMaxTokens');
+    if (gtMaxTokensEl) gtMaxTokensEl.value = _gt.maxTokens || 150;
+    const gtContextLinesEl = document.getElementById('settingGhostTextContextLines');
+    if (gtContextLinesEl) gtContextLinesEl.value = _gt.contextLines || 40;
+    // Model dropdown is populated by populateGhostTextModelSelect() in
+    // llm-tab.js; called from the settings-open hook below.
+
     const showIssuesEl = document.getElementById('settingShowIssues');
     if (showIssuesEl) showIssuesEl.checked = State.settings.showIssues !== false;
     

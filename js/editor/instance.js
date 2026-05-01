@@ -14,6 +14,11 @@ import {
     buildInvisibleUnicodeExtension,
     setInvisibleUnicodeMode
 } from './invisible-unicode-decoration.js';
+import {
+    getGhostTextCompartment,
+    buildGhostTextExtension,
+    refreshGhostTextExtension
+} from './ghost-text.js';
 
 // ============================================
 // EDITOR INSTANCE
@@ -80,6 +85,16 @@ export async function createEditor(container, content, filename) {
         const { State: AppState } = await import('../core.js');
         const mode = AppState.settings.editorKeybindingMode || 'default';
         extensions.push(keymapCompartment.of(buildKeymapExtension(mode)));
+    }
+
+    // Ghost-text compartment (1.4.7). Sits BEFORE basicSetup so its
+    // keymap registrations (Tab / Esc / configured hotkey) take priority
+    // over basicSetup's indentWithTab — earlier extensions win in CM6.
+    // When the feature is disabled (default), buildGhostTextExtension()
+    // returns [], so this is a zero-cost compartment until opt-in.
+    const ghostTextCompartment = getGhostTextCompartment();
+    if (ghostTextCompartment) {
+        extensions.push(ghostTextCompartment.of(buildGhostTextExtension()));
     }
 
     // Add basicSetup
@@ -840,6 +855,29 @@ export function setKeybindingMode(mode) {
         return true;
     } catch (e) {
         console.error('[Editor] Failed to set keybinding mode:', e);
+        return false;
+    }
+}
+
+// ============================================
+// GHOST-TEXT TOGGLE (CM6 Compartment, 1.4.7)
+// ============================================
+
+/**
+ * Reconfigure the live editor's ghost-text compartment. Called from
+ * settings persistence after `State.settings.ghostText` mutates.
+ * @returns {boolean} true if the dispatch ran
+ */
+export function refreshGhostText() {
+    if (!editorInstance) {
+        console.debug('[Editor] Cannot refresh ghost-text — editor not ready');
+        return false;
+    }
+    try {
+        refreshGhostTextExtension(editorInstance);
+        return true;
+    } catch (e) {
+        console.error('[Editor] Failed to refresh ghost-text:', e);
         return false;
     }
 }

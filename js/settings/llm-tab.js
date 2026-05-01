@@ -46,6 +46,26 @@ export function populateCommitModelSelect() {
     });
 }
 
+// ── Ghost-text model select (1.4.7) ──
+
+export function populateGhostTextModelSelect() {
+    const select = document.getElementById('settingGhostTextModel');
+    if (!select) return;
+
+    const current = (State.settings.ghostText && State.settings.ghostText.model) || '';
+    select.innerHTML = '<option value="">Use default model</option>';
+
+    (State.models || []).forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.selected = model.id === current;
+        const badges = [];
+        if (model.pricing) badges.push(`$${model.pricing.input ?? '?'}/$${model.pricing.output ?? '?'}`);
+        option.textContent = model.name + (badges.length ? ` (${badges.join(' ')})` : '');
+        select.appendChild(option);
+    });
+}
+
 // ── Model capabilities display ──
 
 export function showModelCapabilities() {
