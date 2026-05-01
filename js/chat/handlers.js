@@ -297,7 +297,13 @@ export async function handleGeneralRequest(input) {
     addStreamingMessage();
     resetToolLoopCancel();  // Reset cancel flag
 
-    const systemPrompt = buildSystemPrompt();
+    // 1.3.15: thread the admitted ToolDef[] through to the system prompt so
+    // its tool enumeration matches the API tools array. Coder + Composer
+    // active → dynamic enumeration of the admitted set; everywhere else →
+    // legacy enumeration. The Composer runs once per call here and again
+    // in getToolsForRole(); both are pure-function reads of the registry.
+    const { admittedDefs, composerActive } = LLMTools.getAdmittedTools();
+    const systemPrompt = buildSystemPrompt({ admittedDefs, composerActive });
     const roleTools = LLMTools.getToolsForRole();
     
     // Build initial message thread (compressed + summary-aware context).

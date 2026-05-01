@@ -63,7 +63,7 @@ import { applyModelOverrides } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
-import { composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
+import { Catalog, composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
 import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import {
@@ -841,6 +841,44 @@ export const LLMTools = {
     },
 
     /**
+     * Run the Composer for the active role, or report that it isn't
+     * applicable. Pure read of registry + profile + flag; no diagnostics
+     * emitted (callers that drive the LLM exchange decide whether to
+     * stamp `LLMDebug`).
+     *
+     * @returns {{ result: import('../intelligence/tools/contracts.js').ToolAdmissionResult|null, composerActive: boolean, role: string }}
+     * @private
+     */
+    _runComposer() {
+        const role = State.settings.role;
+
+        if (isToolsComposeDisabled()) {
+            return { result: null, composerActive: false, role };
+        }
+
+        const useComposer = role === 'coder'
+            && Array.isArray(CODER_V1.tools.static)
+            && CODER_V1.tools.static.length > 0;
+
+        if (!useComposer) {
+            return { result: null, composerActive: false, role };
+        }
+
+        const result = composeAdmission({
+            task: 'chat',
+            query: null,
+            budget_tokens: CODER_V1.tools.budget_tokens,
+            profile_static: CODER_V1.tools.static,
+            task_ledger: null,
+            user_groups: [role],
+            discovery_call: null,
+            expansion_mode: CODER_V1.tools.expansion_mode,
+        });
+
+        return { result, composerActive: true, role };
+    },
+
+    /**
      * Get tools for the active role.
      *
      * Two paths:
@@ -870,36 +908,14 @@ export const LLMTools = {
             return [];
         }
 
-        // Kill-switch: ?toolsCompose=off bypasses the Composer entirely.
-        if (isToolsComposeDisabled()) {
+        const { result, composerActive, role } = this._runComposer();
+
+        if (!composerActive) {
             const filtered = Roles.filterTools(defs);
-            console.log('[LLMTools] Composer DISABLED via flag — legacy path:', filtered.length, 'tools for role', State.settings.role);
+            const reason = isToolsComposeDisabled() ? 'kill-switch' : `no profile static set for role ${role}`;
+            console.log('[LLMTools] Legacy path (', reason, '):', filtered.length, 'tools');
             return filtered;
         }
-
-        // Profile resolution: 1.3.14 only wires `coder.v1`. Other roles
-        // fall through to the legacy path until their profiles register.
-        const role = State.settings.role;
-        const useComposer = role === 'coder'
-            && Array.isArray(CODER_V1.tools.static)
-            && CODER_V1.tools.static.length > 0;
-
-        if (!useComposer) {
-            const filtered = Roles.filterTools(defs);
-            console.log('[LLMTools] No profile static set for role', role, '— legacy path:', filtered.length, 'tools');
-            return filtered;
-        }
-
-        const result = composeAdmission({
-            task: 'chat',
-            query: null,
-            budget_tokens: CODER_V1.tools.budget_tokens,
-            profile_static: CODER_V1.tools.static,
-            task_ledger: null,
-            user_groups: [role],
-            discovery_call: null,
-            expansion_mode: CODER_V1.tools.expansion_mode,
-        });
 
         // Stash diagnostics + token-cost baseline for the upcoming exchange.
         LLMDebug.attachToolDiagnostics({
@@ -915,6 +931,46 @@ export const LLMTools = {
         );
 
         return renderForLLM(result);
+    },
+
+    /**
+     * Get the admitted `ToolDef[]` for the active role — the same admission
+     * result that `getToolsForRole()` renders to the OpenAI tool-array, but
+     * exposed as full `ToolDef`s so callers (notably `buildSystemPrompt()`)
+     * can describe the admitted tools by name + description.
+     *
+     * Roadmap §1.3.15: closes the gap between what the Composer admits
+     * (`renderForLLM` → API tools array) and what the system prompt claims
+     * the model has access to.
+     *
+     * Re-resolves through `Catalog.getById()` so a registry mutation
+     * between admit and lookup yields the registered shape (or drops the
+     * tool silently — same contract as `renderForLLM`).
+     *
+     * Returns `{ admittedDefs: [], composerActive: false }` for non-coder
+     * roles or when the kill-switch is engaged. Callers should fall back
+     * to a static enumeration in that case.
+     *
+     * @returns {{ admittedDefs: import('../intelligence/tools/contracts.js').ToolDef[], composerActive: boolean }}
+     */
+    getAdmittedTools() {
+        const defs = ToolRegistry.getDefinitions();
+        if (defs.length === 0) {
+            return { admittedDefs: [], composerActive: false };
+        }
+
+        const { result, composerActive } = this._runComposer();
+        if (!composerActive) {
+            return { admittedDefs: [], composerActive: false };
+        }
+
+        /** @type {import('../intelligence/tools/contracts.js').ToolDef[]} */
+        const admittedDefs = [];
+        for (const a of result.admitted) {
+            const td = Catalog.getById(a.tool_id);
+            if (td) admittedDefs.push(td);
+        }
+        return { admittedDefs, composerActive: true };
     }
 };
 

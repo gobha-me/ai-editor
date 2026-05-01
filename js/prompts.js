@@ -20,11 +20,12 @@ import { isConnectionDown } from './offline-indicator.js';
 // EDITOR-SPECIFIC PROMPTS
 // ============================================
 
-const EditorPrompts = {
-    systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
-
-You have access to tools that let you:
-- Read the current file open in the editor (read_current_file)
+// Legacy tool enumeration — pre-1.3.14 behavior. Kept as the fallback
+// when the Composer is bypassed (`?toolsCompose=off`) or when the active
+// role has no profile registered (everything except `coder` in 1.3.15).
+// Coder sessions render a dynamic enumeration of *admitted* tools instead
+// — see `renderToolEnumeration()` and `buildSystemPrompt()` below.
+const LEGACY_TOOL_ENUMERATION = `- Read the current file open in the editor (read_current_file)
 - Read specific line ranges efficiently (read_lines) — PREFERRED for large files
 - Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
 - Edit any file by path — auto-opens if needed (edit_file) — PREFERRED for multi-file line-based workflows
@@ -45,9 +46,14 @@ You have access to tools that let you:
 - Browse another project's files WITHOUT switching (peek_project_tree) — cross-project reference
 - Read a file from another project WITHOUT switching (peek_project_file) — cross-project reference
 - Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
-- Run JavaScript for calculations, data transforms, or logic validation (run_code) — sandboxed, no DOM access
+- Run JavaScript for calculations, data transforms, or logic validation (run_code) — sandboxed, no DOM access`;
 
-📝 SCRATCHPAD — YOUR PERSISTENT MEMORY:
+// Scratchpad instruction block — extracted from the systemPrompt body in
+// 1.3.15 so it can be conditionally injected only when `scratchpad_write`
+// is admitted (or for legacy / non-coder fallbacks where every tool is
+// loaded). Trailing newline is intentional — the placeholder consumes
+// nothing else around it.
+const SCRATCHPAD_INSTRUCTIONS = `📝 SCRATCHPAD — YOUR PERSISTENT MEMORY:
 You have a scratchpad for notes that persist across the entire conversation, even when older messages are summarized away. This is critical for long tasks.
 
 **ALWAYS write to the scratchpad when you:**
@@ -76,76 +82,63 @@ You have a scratchpad for notes that persist across the entire conversation, eve
 - The scratchpad contents appear in your context automatically — you don't need to read them manually
 - Cleared when the user starts a new chat
 
-🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
+`;
+
+/**
+ * Render an admitted tool list as enumeration bullets. Each bullet shows
+ * the tool's `description` (the same 1-2 sentence "for discovery" copy
+ * carried on `ToolDef.description`) followed by the canonical name in
+ * parens. Stable order — preserves the admission order from the Composer.
+ *
+ * Returns an empty-state line when no tools are admitted (e.g., the
+ * profile's static set was budget-pressured down to zero) so the prompt
+ * stays grammatical.
+ *
+ * @param {Array<{name: string, description: string}>} admittedDefs
+ * @returns {string}
+ */
+function renderToolEnumeration(admittedDefs) {
+    if (!admittedDefs || admittedDefs.length === 0) {
+        return '- (no tools currently admitted — none of the profile\'s static set could be admitted under the current budget)';
+    }
+    return admittedDefs.map(td => `- ${td.description.trim()} (${td.name})`).join('\n');
+}
+
+const EditorPrompts = {
+    systemPrompt: `You are an AI coding assistant integrated into a code editor. You help users write, edit, and understand code.
+
+You have access to these tools:
+{{toolEnumeration}}
+
+{{scratchpadInstructions}}🚨 EFFICIENCY RULES — AVOID UNNECESSARY TOOL CALLS:
 1. **DO NOT re-read files or data you already have.** If a previous tool result showed you file contents, search results, or project structure — USE THAT DATA. Do not call the same tool again with the same arguments.
-2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Use read_lines only if you need specific line ranges not yet seen.
+2. **Compressed results still contain key findings.** If you see "[File: path — N lines. Key symbols: ...]", those symbols ARE the file contents summary. Read a fresh line range only if you need lines not covered by the summary.
 3. **Minimum tools needed.** Skip steps you don't need:
-   - If you already know the project structure → skip get_project_tree
-   - If you DON'T know which files to look at → use find_relevant_files (semantic search) FIRST
-   - If you already know which file to edit → skip search_in_files
-   - If you know the exact string to grep → use search_in_files directly
-   - If the file is already open → skip open_file
+   - If you already know which file to look at → don't search again
+   - If a discovery tool is admitted to you and you don't know which files are relevant → use it FIRST (semantic discovery beats grep when you don't know exact identifiers)
    - If you have enough context to respond → just respond, no tools needed
-4. **For edits, the minimum path is:** read_file (see the code) → edit_file (provide line range and replacement)
+4. **For edits, the minimum path is:** read the relevant lines → make the edit with exact line numbers.
 5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.
 
-WORKFLOW — Use these tools as needed (not all are required every time):
-0. **If no project is loaded** and the user asks you to do something with code/files → call list_projects to see what's available, then set_active_project to load one. Most tools require an active project.
-1. scratchpad_write — note the task, plan, and key files BEFORE diving in
-2. get_project_tree — understand the project structure (skip if you already know it)
-3. **find_relevant_files — STRONGLY PREFERRED when you need to discover which files are relevant to a task or question.** This uses semantic/AI search and is much better than grep when you don't know exact function names or strings to search for. Use it for questions like "where is X handled?", "which files relate to Y?", or at the start of any new task to orient yourself.
-4. search_in_files — find exact text patterns or identifiers (use when you KNOW the specific string/symbol to grep for)
-5. read_lines — examine specific sections of candidate files (PREFERRED over full file reads)
-6. **edit_file — PREFERRED for all edits.** Auto-opens target file. Supports replace, insert, and delete by line range.
-   Alternatively use replace_lines/insert_lines/delete_lines for the currently open file.
-7. write_file — create new files or completely rewrite existing ones. New files are committed automatically; existing files are overwritten in the editor for review.
-8. commit_files — commit your changes when the user says to commit, or when a logical unit of work is complete. Uses list_dirty_files to preview what will be committed.
-9. set_active_project — switch to a different project if the user asks to work on something else. Commit first if there are dirty files.
-10. **CROSS-PROJECT REFERENCE** — ONLY when the user explicitly asks about a DIFFERENT project (e.g. "look at how project X does it" or "use the pattern from repo Y"):
-    - FIRST call list_projects to get the reference repo's connectionId/owner/repo — NEVER guess these values
-    - Use peek_project_tree to browse its files (stays in current project!)
-    - Use peek_project_file to read specific reference files
-    - Save key patterns/approaches to scratchpad
-    - Implement in the CURRENT project using the knowledge gained
-    - Do NOT use set_active_project for reference lookups — peek tools are read-only and don't disrupt the workspace
-    - ⚠️ NEVER use peek_project_tree or peek_project_file for the CURRENT project — use get_project_tree, read_file, read_lines instead
-11. scratchpad_write — update progress after completing each phase
+TYPICAL FLOW — Use the tools admitted to you as the task requires (not all steps every time):
+1. Note the task, plan, and key files in your scratchpad BEFORE diving in.
+2. Orient yourself in the project — use the discovery tools admitted to you to find relevant files when you don't already know them.
+3. Read the specific lines you intend to modify before editing.
+4. Make targeted edits using the editing tool admitted to you.
+5. Commit when the user says to commit, or when a logical unit of work is complete. Check for dirty files first.
+6. Update the scratchpad "progress" entry after completing each phase.
 
-🔀 EDITING FILES:
-PREFERRED APPROACH — edit_file (line-based, auto-opens target file):
-  1. read_file or read_lines to see the code and note line numbers
-  2. edit_file(path='a.js', operation='replace', start_line=X, end_line=Y, new_content='...')
-  3. For deletion: edit_file(path='a.js', operation='delete', start_line=X, end_line=Y)
-  4. For insertion: edit_file(path='a.js', operation='insert', after_line=X, new_content='...')
-Always read the target region BEFORE editing to get accurate line numbers.
+🔀 EDITING FILES — GENERAL PRINCIPLES:
+- Read the target region first to get accurate line numbers; never guess.
+- Each edit should be a *small, targeted change* — replace 10-30 lines at a time, not 50+.
+- For new files or complete rewrites, prefer the file-writing capability over many sequential line edits.
+- The exact tool names and parameter shapes are documented in each admitted tool's schema — consult those rather than guessing argument names.
 
-ALTERNATIVE — write_file (for new files or complete rewrites):
-  Use write_file(path, content) to create new files or do complete rewrites.
-  The older replace_lines/insert_lines/delete_lines still work but require open_file first.
-
-🚨 CRITICAL TOOL USAGE RULES:
-1. **ALWAYS read before editing**
-   - Use read_file or read_lines to see the current state and line numbers
-   - Never guess line numbers — verify them first
-
-2. **ALWAYS provide ALL required parameters for every tool call**
-   - edit_file: MUST include path. For replace: start_line, end_line, new_content. For insert: after_line, new_content. For delete: start_line, end_line.
-   - write_file: MUST include path AND content
-   - read_file/open_file: MUST include path
-   - NEVER leave parameters empty, undefined, or incomplete
-
-3. **edit_file auto-opens the target file — no manual open_file needed**
-   - The older replace_lines/insert_lines/delete_lines still work but require open_file first
-
-4. **If you hit token limits while generating large files:**
-   - Use write_file to create files with a minimal working skeleton first
-   - Then use edit_file to add sections incrementally
-   - NEVER try to generate 100+ lines in one write_file call
-
-5. **For large code implementations:**
-   - Break into phases: Phase 1 (core logic), Phase 2 (helpers), Phase 3 (UI)
-   - Implement each phase separately with its own tool calls
-   - Update the scratchpad "progress" entry after each phase
+🚨 CRITICAL EDITING RULES:
+1. **ALWAYS read before editing.** Use the file-reading capability admitted to you to see the current state and confirm line numbers.
+2. **ALWAYS provide ALL required parameters** for every tool call. Never leave parameters empty, undefined, or incomplete; consult the tool's schema for the required shape.
+3. **For large file generation, break into phases.** Generate a minimal working skeleton first, then add sections incrementally. Don't try to generate 100+ lines in a single tool call.
+4. **For large implementations,** break into phases (core logic, helpers, UI), implement each phase with its own tool calls, and update the scratchpad "progress" entry after each phase.
 
 IMPORTANT RULES:
 - Make SMALL, targeted edits. Replace 10-30 lines at a time, not 50+
@@ -155,7 +148,7 @@ IMPORTANT RULES:
 ⚠️ LINE NUMBER DRIFT:
 Every edit changes line numbers for all subsequent lines in the file.
 - After an edit, ALL line numbers below the edit shift
-- You MUST call read_lines on the target region BEFORE each subsequent edit
+- You MUST re-read the target region BEFORE each subsequent edit
 - NEVER make a second edit using line numbers from before a previous edit
 - Work TOP-DOWN (edit higher line numbers first) to minimize drift impact
 
@@ -196,9 +189,43 @@ Consider:
 4. Estimated complexity (simple/medium/complex)`
 };
 
-function buildSystemPrompt() {
+/**
+ * Build the system prompt the chat loop sends as the first message.
+ *
+ * 1.3.15: when the Composer is active for the active role (today: coder),
+ * the caller passes the admitted `ToolDef[]` and `composerActive: true`,
+ * and the prompt's tool enumeration is rendered dynamically from the
+ * admitted set. When called with no args (legacy callers, the
+ * `?toolsCompose=off` kill-switch path, and non-coder roles), the prompt
+ * falls back to the static legacy enumeration so the model continues to
+ * have a coherent self-description.
+ *
+ * @param {{ admittedDefs?: Array<{name: string, description: string}>, composerActive?: boolean }} [opts]
+ * @returns {string}
+ */
+function buildSystemPrompt(opts = {}) {
+    const admittedDefs = opts.admittedDefs;
+    const composerActive = !!opts.composerActive;
+    const admittedNames = composerActive && admittedDefs
+        ? new Set(admittedDefs.map(td => td.name))
+        : null;
+
     let prompt = EditorPrompts.systemPrompt;
-    
+
+    // Tool enumeration — dynamic when Composer is active, legacy otherwise.
+    const enumeration = composerActive
+        ? renderToolEnumeration(admittedDefs)
+        : LEGACY_TOOL_ENUMERATION;
+    prompt = prompt.replace('{{toolEnumeration}}', enumeration);
+
+    // Scratchpad instruction block — only render when scratchpad_write is
+    // admitted (or admittedNames is null, i.e., legacy fallback path). The
+    // pre-1.3.15 prompt always rendered the block even though scratchpad_*
+    // tools aren't in `coder.v1.tools.static` — telling the model to use a
+    // tool it couldn't invoke.
+    const renderScratchpadBlock = admittedNames === null || admittedNames.has('scratchpad_write');
+    prompt = prompt.replace('{{scratchpadInstructions}}', renderScratchpadBlock ? SCRATCHPAD_INSTRUCTIONS : '');
+
     if (State.currentProject) {
         prompt = prompt.replace('{{project}}', `${State.currentProject.owner}/${State.currentProject.repo}`);
         prompt = prompt.replace('{{connectionId}}', State.currentProject.connectionId || 'unknown');
@@ -238,7 +265,7 @@ function buildSystemPrompt() {
     // Inject active issue context (working on a branch for this issue)
     if (State.currentIssue) {
         const ci = State.currentIssue;
-        prompt += `\n\n--- ACTIVE ISSUE ---\nCurrently working on issue #${ci.number}: ${ci.title}\nBranch: ${ci.branch}\nUse the read_issue tool with number ${ci.number} to get full issue details, body, and comments.\nWhen work is complete, use create_pull_request to submit changes for review.`;
+        prompt += `\n\n--- ACTIVE ISSUE ---\nCurrently working on issue #${ci.number}: ${ci.title}\nBranch: ${ci.branch}\nRefer to the issue summary above; ask the user if you need fields not shown.\nWhen work is complete, submit changes for review using the pull-request tool admitted to you.`;
     }
 
     // Inject focused issue context (triaging/reviewing an issue in chat)
@@ -266,7 +293,7 @@ function buildSystemPrompt() {
         }
 
         focusCtx += `\n\nYou are helping triage this issue. The user may ask you to:`;
-        focusCtx += `\n- Find relevant code in the project using search_project, read_file, or scan tools`;
+        focusCtx += `\n- Find relevant code in the project using the discovery and file-reading tools admitted to you`;
         focusCtx += `\n- Assess the impact, complexity, or validity of the issue`;
         focusCtx += `\n- Suggest an implementation approach`;
         focusCtx += `\n- Help decide whether to accept or deny the issue`;
@@ -277,19 +304,27 @@ function buildSystemPrompt() {
     // Inject scratchpad (persistent LLM notes)
     prompt += buildScratchpadPrompt();
 
-    // Inject embeddings status so the LLM knows semantic search is available
+    // Inject embeddings status so the LLM knows semantic search is available.
+    // 1.3.15: name `find_relevant_files` only when it's actually admitted —
+    // otherwise the announcement points at a capability the model can reach
+    // through whichever discovery tool admission has surfaced (or via the
+    // 1.3.16 meta-tools when those land).
     const ctxStats = ContextManager.getStats();
     if (ctxStats.enabled && ctxStats.filesIndexed > 0) {
-        prompt += `\n\n🔍 SEMANTIC SEARCH ACTIVE: The project "${ctxStats.project}" has ${ctxStats.filesIndexed} files indexed for semantic search. Use find_relevant_files to discover which files relate to a topic — it understands natural language queries like "error handling" or "authentication flow" and returns the most relevant files ranked by similarity. This is MUCH more effective than grep when you don't know exact identifiers.`;
+        const findRelevantAdmitted = admittedNames === null || admittedNames.has('find_relevant_files');
+        const invocationHint = findRelevantAdmitted
+            ? 'Use find_relevant_files to discover which files relate to a topic — it understands natural language queries like "error handling" or "authentication flow" and returns the most relevant files ranked by similarity.'
+            : 'Use the discovery tool admitted to you to find relevant files by topic — semantic queries like "error handling" or "authentication flow" return ranked results.';
+        prompt += `\n\n🔍 SEMANTIC SEARCH ACTIVE: The project "${ctxStats.project}" has ${ctxStats.filesIndexed} files indexed for semantic search. ${invocationHint} This is MUCH more effective than grep when you don't know exact identifiers.`;
     }
 
     // Inject live cursor / selection context from the editor
-    prompt += buildCursorPrompt();
+    prompt += buildCursorPrompt(admittedNames);
 
     // Inject offline warning if the active project's git connection is down
     if (State.currentProject?.connectionId && isConnectionDown(State.currentProject.connectionId)) {
         prompt += `\n\n--- GIT PROVIDER OFFLINE ---`;
-        prompt += `\nThe git provider for the current project is unreachable. All git operations (read_file, write_file, commit_files, etc.) will fail.`;
+        prompt += `\nThe git provider for the current project is unreachable. All git-backed operations will fail until the connection recovers.`;
         prompt += `\nYou can still help with:`;
         prompt += `\n- Explaining code already visible in the editor`;
         prompt += `\n- Answering questions from the conversation context`;
@@ -306,7 +341,11 @@ function buildSystemPrompt() {
  * is highlighted, enabling prompts like "explain this code" or
  * "insert a comment at the cursor".
  */
-function buildCursorPrompt() {
+/**
+ * @param {Set<string>|null} [admittedNames] - When non-null, gate tool-name
+ *   mentions on actual admission. When null, render the legacy text.
+ */
+function buildCursorPrompt(admittedNames = null) {
     const ctx = getCursorContext();
     if (!ctx) return '';
 
@@ -314,19 +353,32 @@ function buildCursorPrompt() {
     block += `\nFile: ${ctx.filePath} (${ctx.totalLines} lines)`;
     block += `\nCursor: line ${ctx.line}, col ${ctx.col}`;
 
+    const has = (name) => admittedNames === null || admittedNames.has(name);
+
     if (ctx.selection) {
         const s = ctx.selection;
         block += `\nSelection: lines ${s.fromLine}–${s.toLine} (${s.lineCount} line${s.lineCount !== 1 ? 's' : ''})`;
         block += `\n\`\`\`\n${s.text}\n\`\`\``;
         if (s.truncated) {
-            block += `\n(Selection truncated for context window — use read_lines for the full range)`;
+            const hint = has('read_lines')
+                ? 'use read_lines for the full range'
+                : 'use the file-reading tool admitted to you with a line range';
+            block += `\n(Selection truncated for context window — ${hint})`;
         }
     }
 
     block += `\nWhen the user says "this code", "here", "the highlighted code", "at cursor", "the selection", or "selected" — they mean the above.`;
-    block += `\nUse insert_lines with line ${ctx.line} to insert at the cursor position.`;
+    if (has('insert_lines')) {
+        block += `\nUse insert_lines with line ${ctx.line} to insert at the cursor position.`;
+    } else if (has('edit_file')) {
+        block += `\nUse edit_file with operation='insert' and after_line=${ctx.line} to insert at the cursor position.`;
+    }
     if (ctx.selection) {
-        block += ` Use replace_lines or edit_file to edit the selected range.`;
+        if (has('replace_lines') && has('edit_file')) {
+            block += ` Use replace_lines or edit_file to edit the selected range.`;
+        } else if (has('edit_file')) {
+            block += ` Use edit_file with operation='replace' and the selection's line range to edit the selected range.`;
+        }
     }
 
     return block;

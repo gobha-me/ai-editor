@@ -4,6 +4,134 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-05-01
+
+Closes the **system-prompt admission gap** surfaced post-merge of 1.3.14.
+The 1.3.14 Composer trimmed the OpenAI `tools` array from 47 → 6 admitted
+tools for `coder.v1`, but [`js/prompts.js`](js/prompts.js)
+`EditorPrompts.systemPrompt` still hardcoded a 21-bullet enumeration plus
+WORKFLOW / EFFICIENCY / EDITING prose that named specific tools by string
+— so when asked "list the tools available to you" the model recited from
+the system prompt's hardcoded list, not from the API tools array, and
+self-described ~21 tools while only being able to invoke 6. The
+Composer's *invocation* reduction was real; its *self-description*
+reduction was zero.
+
+1.3.15 makes the self-description match. The chat handler in
+[`js/chat/handlers.js`](js/chat/handlers.js) now fetches the admitted
+`ToolDef[]` via the new `LLMTools.getAdmittedTools()` and threads it into
+`buildSystemPrompt({ admittedDefs, composerActive })`. The prompt's tool
+enumeration is rendered dynamically from the admitted set — one bullet
+per admitted tool, name + description from `ToolDef`. The WORKFLOW /
+EFFICIENCY / EDITING blocks were rewritten to capability language so they
+no longer name tools the Composer might have suppressed. The
+`?toolsCompose=off` kill-switch and non-coder roles fall back to the
+preserved `LEGACY_TOOL_ENUMERATION` constant — coherent self-description
+in either path.
+
+This is the **prereq for §1.3.16** meta-tools: discovery only makes sense
+once the prompt stops enumerating tools to begin with.
+
+**Side risk acknowledged.** Removing `find_relevant_files` /
+`peek_project_*` mentions from the dynamic-mode prompt while those tools
+are still in the global registry means the model can no longer discover
+them via prompt-reading in coder mode. That is exactly the problem 1.3.16
+meta-tools (`list_tool_categories`, `list_tools_by_category`, `find_tool`)
+solve. Reviewers should not expect end-to-end behavior change for
+non-static tools until 1.3.16 lands.
+
+### Added
+
+- **[`tests/test-system-prompt-admission.mjs`](tests/test-system-prompt-admission.mjs)**
+  *(new)* — seven tests covering the dynamic enumeration, the
+  `composerActive: false` legacy fallback, the no-args legacy fallback
+  (covers `generateEdit` / `analyzeIssue` callers), the cross-prompt
+  drift assertion (every legacy tool name absent from the admitted
+  fixture must also be absent from the rendered prompt), the dead-name
+  scrub (`read_issue` / `search_project` removed in every mode), and the
+  empty-admitted edge case.
+
+- **[`js/llm/api.js`](js/llm/api.js)** — new `LLMTools.getAdmittedTools()`
+  returning `{ admittedDefs: ToolDef[], composerActive: boolean }` for
+  callers that need to describe the admitted tools by name + description.
+  Re-resolves `result.admitted[].tool_id` through `Catalog.getById()`
+  (same contract as `renderForLLM`). Falls back to
+  `{ admittedDefs: [], composerActive: false }` on the kill-switch path
+  or for non-coder roles, signaling the caller to render the legacy
+  enumeration. Internal `_runComposer()` helper deduplicates the
+  Composer-invocation logic between `getToolsForRole()` and
+  `getAdmittedTools()`; only `getToolsForRole()` stamps `LLMDebug` so
+  diagnostics don't double-record.
+
+### Changed
+
+- **[`js/prompts.js`](js/prompts.js)** —
+  - `EditorPrompts.systemPrompt` body: replaced the hardcoded 21-tool
+    enumeration block with a `{{toolEnumeration}}` placeholder. The
+    legacy bullet list is preserved verbatim as the
+    `LEGACY_TOOL_ENUMERATION` module constant and used as the
+    kill-switch / non-coder fallback.
+  - `EditorPrompts.systemPrompt` body: replaced the SCRATCHPAD
+    instruction block with a `{{scratchpadInstructions}}` placeholder,
+    conditionally injected only when `scratchpad_write` is admitted (or
+    under the legacy fallback). Pre-1.3.15 the block always rendered —
+    instructing the model to use a tool that wasn't in
+    `coder.v1.tools.static` and therefore wasn't admitted.
+  - `EditorPrompts.systemPrompt` body: rewrote the EFFICIENCY RULES,
+    WORKFLOW, EDITING FILES, and CRITICAL EDITING RULES sections to
+    capability language — removed name-specific recipes for
+    `find_relevant_files`, `peek_project_tree`, `peek_project_file`,
+    `list_projects`, `set_active_project`, `get_project_tree`,
+    `open_file`, `replace_lines`, `insert_lines`, `delete_lines`,
+    `search_in_files`, `write_file`. Kept genuinely tool-agnostic
+    guidance (line-number drift warning, "read before edit",
+    "small targeted edits", phased-implementation strategy) verbatim.
+  - `buildSystemPrompt(opts)`: new optional
+    `{ admittedDefs, composerActive }` argument. Backwards-compatible —
+    no-args calls render the legacy enumeration, so the
+    `generateEdit` and `analyzeIssue` callers in `js/llm/api.js` need
+    no change.
+  - `buildCursorPrompt(admittedNames)`: the `EDITOR CURSOR` block now
+    gates `insert_lines` / `replace_lines` mentions on actual admission;
+    falls back to `edit_file` recipes when those names aren't admitted
+    (and `edit_file` is, as it is in `coder.v1`).
+  - `--- ACTIVE ISSUE ---` block: removed the never-registered
+    `read_issue` reference; rewrote to point at the issue summary
+    already in context.
+  - `--- FOCUSED ISSUE (TRIAGE MODE) ---` block: removed the
+    never-registered `search_project` reference.
+  - `--- GIT PROVIDER OFFLINE ---` block: rewrote the parenthetical
+    `(read_file, write_file, commit_files, etc.)` enumeration to
+    capability language ("All git-backed operations will fail").
+  - `🔍 SEMANTIC SEARCH ACTIVE` block: gates the `find_relevant_files`
+    name on admission; falls back to capability language when the tool
+    isn't admitted.
+
+- **[`js/chat/handlers.js`](js/chat/handlers.js)**: the chat loop now
+  fetches `{ admittedDefs, composerActive }` via the new
+  `LLMTools.getAdmittedTools()` and passes it into `buildSystemPrompt()`
+  before fetching the OpenAI tools array via `getToolsForRole()`. Both
+  consumers run the Composer; both calls are pure-function reads of the
+  registry.
+
+### Removed
+
+- Two never-registered tool names that drifted into the system prompt
+  years ago: `read_issue` (cited in the `--- ACTIVE ISSUE ---` block)
+  and `search_project` (cited in the `--- FOCUSED ISSUE ---` block).
+  Neither appeared in `js/tools/registry.js`; tool calls to them would
+  always have errored. Removed in every render path.
+
+### Notes for §1.3.16 (meta-tools)
+
+The discovery roundtrip — model calls `list_tools_by_category("file")`,
+gets summaries, calls one — now has a coherent prompt to land into. The
+admitted enumeration becomes whatever the static set + sticky admission
++ discovery results yield; the WORKFLOW prose already directs the model
+to "use the discovery tools admitted to you" rather than naming a
+specific function. Meta-tool implementations land 1.3.16; the prompt
+surface is ready.
+
 ## [1.3.14] - 2026-05-01
 
 Lands the **Tools Composer** — PR 2 of the 1.4.0 Tools Phase 1 arc, and
