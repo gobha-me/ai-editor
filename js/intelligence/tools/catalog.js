@@ -101,6 +101,7 @@ const CATEGORY_BY_NAME = {
     'merge_pull_request': 'code.git.pr',
     'get_ci_status': 'code.git.ci',
     'get_ci_logs': 'code.git.ci',
+    'wait_for_ci': 'code.git.ci',
 
     // code.issue
     'list_issues': 'code.issue',

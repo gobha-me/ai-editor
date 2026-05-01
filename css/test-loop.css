@@ -1,0 +1,139 @@
+/* ============================================================================
+ * Test-driven loop (1.4.5)
+ *
+ * Two surfaces:
+ *   1. The trigger button + inline form mounted in `.chat-input-area`.
+ *   2. The progress card rendered into the chat-messages stream.
+ *
+ * Uses only existing --tk-* tokens (Touch 2 lock); no new tokens introduced.
+ * ========================================================================= */
+
+/* ---------- Trigger button ---------- */
+
+.btn-test-loop {
+    /* Inherits .chat-input-actions button base; we just style the icon stroke. */
+    color: var(--tk-color-info);
+}
+.btn-test-loop:hover {
+    color: var(--tk-color-info, #5bbdf5);
+    filter: brightness(1.15);
+}
+
+/* ---------- Inline goal form ---------- */
+
+.test-loop-form {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    border-left: 3px solid var(--tk-color-info, #5bbdf5);
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.18));
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.test-loop-form__title {
+    font-weight: 600;
+    color: var(--tk-color-info);
+    margin-bottom: 0.25rem;
+}
+
+.test-loop-form__label {
+    font-size: var(--font-sm, 0.85rem);
+    color: var(--text-secondary);
+}
+
+.test-loop-form textarea,
+.test-loop-form input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg-primary, rgba(0, 0, 0, 0.25));
+    color: var(--text-primary);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: var(--font-sm, 0.85rem);
+}
+
+.test-loop-form textarea:focus,
+.test-loop-form input[type="text"]:focus {
+    outline: 2px solid var(--tk-color-info);
+    outline-offset: 1px;
+}
+
+.test-loop-form__bounds {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.test-loop-form__actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+}
+
+/* ---------- Progress card ---------- */
+
+.test-loop-card {
+    border-left: 3px solid var(--tk-color-info, #5bbdf5);
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.18));
+    border-radius: 4px;
+}
+
+.test-loop-card__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.test-loop-card__icon {
+    font-size: 1rem;
+}
+
+.test-loop-card__summary {
+    flex: 1;
+    font-weight: 500;
+}
+
+.test-loop-card__ci {
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--bg-primary, rgba(0, 0, 0, 0.25));
+    color: var(--text-secondary);
+}
+.test-loop-card__ci--success { color: var(--tk-color-success); border: 1px solid var(--tk-color-success); }
+.test-loop-card__ci--failure,
+.test-loop-card__ci--error    { color: var(--tk-color-error);   border: 1px solid var(--tk-color-error); }
+.test-loop-card__ci--pending  { color: var(--tk-color-warning); border: 1px solid var(--tk-color-warning); }
+.test-loop-card__ci--cancelled { color: var(--tk-color-orange); border: 1px solid var(--tk-color-orange); }
+
+.test-loop-card__body {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: var(--font-sm, 0.85rem);
+    color: var(--text-secondary);
+}
+
+.test-loop-card__row code {
+    font-family: var(--font-mono);
+    background: var(--bg-primary, rgba(0, 0, 0, 0.25));
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+.test-loop-card__abort,
+.test-loop-card__dismiss {
+    margin-left: 0.5rem;
+}

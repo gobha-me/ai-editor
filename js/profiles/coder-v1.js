@@ -147,6 +147,13 @@ export const CODER_V1 = {
             'edit_file',
             'commit_files',
             'list_dirty_files',
+            // CI tools added in 1.4.5 alongside the test-driven loop. The
+            // orchestrator polls CI itself, but exposing the tools to the
+            // model lets one-shot status checks happen mid-conversation
+            // without the loop UI.
+            'get_ci_status',
+            'wait_for_ci',
+            'get_ci_logs',
         ],
         discovery_strategies: ['categorical'], // ROADMAP §1.4.0: categorical only; semantic in 1.4.1.
         budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.

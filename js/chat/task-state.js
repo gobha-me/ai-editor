@@ -39,6 +39,7 @@ import { createTaskLedger } from '../profiles/task-ledger.js';
  * @typedef {import('../profiles/task-ledger.js').TaskLedger} TaskLedger
  * @typedef {import('../profiles/task-ledger.js').ToolAdmissionRecord} ToolAdmissionRecord
  * @typedef {import('../profiles/task-ledger.js').ToolInvocationRecord} ToolInvocationRecord
+ * @typedef {import('../profiles/task-ledger.js').LoopIterationRecord} LoopIterationRecord
  */
 
 /** @type {Map<string, TaskLedger>} */
@@ -323,4 +324,49 @@ export function recordDiscoveryAdmissions({
     }
 
     return { added, skipped };
+}
+
+/**
+ * Append a loop iteration record to the conversation's ledger. Used by the
+ * test-driven loop orchestrator (`js/intelligence/test-loop/`) to log each
+ * iteration boundary so the LLM Debug modal can render the loop's history.
+ *
+ * Iterations are append-only. Callers that need to update the in-flight
+ * record (for `ended_at` / `exit_reason` / `ci_state`) should call
+ * `updateLastLoopIteration` instead of pushing a new one.
+ *
+ * @param {Object} params
+ * @param {string|null}        params.conversationId
+ * @param {string}             params.surface
+ * @param {LoopIterationRecord} params.record
+ * @returns {{ recorded: boolean }}
+ */
+export function recordLoopIteration({ conversationId, surface, record }) {
+    if (!record || typeof record !== 'object') return { recorded: false };
+    const ledger = getOrCreateLedger(conversationId, surface);
+    if (!ledger) return { recorded: false };
+    ledger.loop_iterations.push(record);
+    return { recorded: true };
+}
+
+/**
+ * Patch the last loop iteration record on the ledger. No-op if no loop
+ * iterations exist for the conversation. Used by the orchestrator to mark
+ * the in-flight iteration as complete (`ended_at`, `exit_reason`, `ci_state`,
+ * `tokens_used`) without pushing a duplicate.
+ *
+ * @param {Object} params
+ * @param {string|null}        params.conversationId
+ * @param {string}             params.surface
+ * @param {Partial<LoopIterationRecord>} params.patch
+ * @returns {{ updated: boolean }}
+ */
+export function updateLastLoopIteration({ conversationId, surface, patch }) {
+    if (!patch || typeof patch !== 'object') return { updated: false };
+    const ledger = getOrCreateLedger(conversationId, surface);
+    if (!ledger) return { updated: false };
+    const last = ledger.loop_iterations[ledger.loop_iterations.length - 1];
+    if (!last) return { updated: false };
+    Object.assign(last, patch);
+    return { updated: true };
 }

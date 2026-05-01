@@ -105,6 +105,7 @@ import {
     isEnabled as workspaceSettingsIsEnabled,
     getActiveWorkspaceId as workspaceSettingsActiveWorkspaceId,
 } from './intelligence/workspace-settings/index.js';
+import { installTestLoopUi } from './intelligence/test-loop/ui.js';
 import {
     installSessionsSync,
     getPendingContent as sessionsGetPendingContent,
@@ -132,6 +133,7 @@ import './tools/scratchpad-tools.js'; // LLM persistent notes
 import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tools
 import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 import './tools/commit-tools.js';   // LLM-driven commit from chat
+import './tools/ci-tools.js';       // get_ci_status / wait_for_ci / get_ci_logs (1.4.5)
 
 // --- Plugins ---
 import '../plugins/venice-ai.js';
@@ -899,6 +901,7 @@ async function init() {
     installMemoryFileLayer();
     installSessionsSync();
     installWorkspaceSettingsFileLayer();
+    installTestLoopUi();
     installReplay();
     // Memory PR #6 — drop pending consent candidates when chat clears.
     // The conversational context that produced agent-proposed proposals is

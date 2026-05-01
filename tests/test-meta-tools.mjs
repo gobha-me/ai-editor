@@ -12,7 +12,7 @@
  *     output at K=8, and rejects empty input.
  *   - **Exit-criteria signal:** with the static set fully registered,
  *     `composeAdmission(coder.v1.tools.static)` returns
- *     `unresolved_static: []` and admits 9/9.
+ *     `unresolved_static: []` and admits the full static set.
  *
  * Runs under `node --test`.
  */
@@ -45,6 +45,10 @@ function registerStaticFixture() {
     reg('edit_file',        'Edit a file in place.',                { type: 'object', properties: { path: { type: 'string' } } }, ['coder']);
     reg('commit_files',     'Commit staged files to the branch.',   { type: 'object', properties: { message: { type: 'string' } } }, ['coder']);
     reg('list_dirty_files', 'List uncommitted files.',              { type: 'object', properties: {} });
+    // 1.4.5 CI tools (added to the static set alongside the test-driven loop)
+    reg('get_ci_status',    'Fetch CI status for a ref.',           { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
+    reg('wait_for_ci',      'Poll CI until terminal state.',        { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
+    reg('get_ci_logs',      'Fetch a CI job log tail.',             { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
 }
 
 // ============================================
@@ -249,7 +253,7 @@ test('coder.v1 admission: unresolved_static is empty after meta-tools register',
     assert.deepEqual(result.diagnostics.unresolved_static, [], 'no unresolved names after 1.3.16');
 });
 
-test('coder.v1 admission: admitted.length matches static set length (9/9)', () => {
+test('coder.v1 admission: admitted.length matches static set length', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session',

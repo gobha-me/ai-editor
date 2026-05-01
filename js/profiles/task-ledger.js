@@ -108,7 +108,26 @@
  */
 
 /**
- * The ledger itself. One owner per task; four record arrays inside it.
+ * One iteration of an agentic loop (e.g. test-driven loop, 1.4.5).
+ *
+ * The loop orchestrator (`js/intelligence/test-loop/`) appends one of these
+ * per iteration so the LLM Debug modal can render the loop's history and
+ * post-mortems can replay what happened. Same struct semantics as the other
+ * record arrays — append-only, capped, session-scoped.
+ *
+ * @typedef {Object} LoopIterationRecord
+ * @property {string}      loop_id        Stable id for the whole loop run; same across iterations.
+ * @property {number}      iteration      1-indexed iteration number within this loop.
+ * @property {number}      started_at     Epoch milliseconds.
+ * @property {number|null} ended_at       Null while in-flight; epoch ms on completion.
+ * @property {number}      tokens_used    Approximate token spend for this iteration.
+ * @property {string|null} commit_sha     SHA committed during the iteration (null if model didn't commit).
+ * @property {string|null} ci_state       "success" | "failure" | "error" | "cancelled" | "pending" | null.
+ * @property {string}      exit_reason    "in_flight" | "ci_pass" | "ci_fail" | "no_progress" | "max_iterations" | "max_tokens" | "wall_clock" | "user_abort" | "error".
+ */
+
+/**
+ * The ledger itself. One owner per task; record arrays inside it.
  *
  * Capacity is bounded (default 500 admission records). Older records
  * spill to a compact form (chunk_id + turn_id, dropping query embeddings)
@@ -117,14 +136,15 @@
  * coarse — re-tune the boundary detection rather than expanding the cap.
  *
  * @typedef {Object} TaskLedger
- * @property {TaskID}                  task_id
- * @property {string}                  surface              Profile name for diagnostics, e.g. "coder.v1".
- * @property {number}                  started_at           Epoch milliseconds.
- * @property {AdmissionRecord[]}       admissions           Chunk admissions (filled in 1.5.0).
- * @property {ExclusionRecord[]}       exclusions           Chunk exclusions (filled in 1.5.0).
- * @property {ToolAdmissionRecord[]}   tool_admissions      Tool admissions (filled in 1.4.0).
- * @property {ToolInvocationRecord[]}  tool_invocations     Tool invocations (filled in 1.4.0).
- * @property {number}                  capacity             Max admission records before spill/drop.
+ * @property {TaskID}                   task_id
+ * @property {string}                   surface              Profile name for diagnostics, e.g. "coder.v1".
+ * @property {number}                   started_at           Epoch milliseconds.
+ * @property {AdmissionRecord[]}        admissions           Chunk admissions (filled in 1.5.0).
+ * @property {ExclusionRecord[]}        exclusions           Chunk exclusions (filled in 1.5.0).
+ * @property {ToolAdmissionRecord[]}    tool_admissions      Tool admissions (filled in 1.4.0).
+ * @property {ToolInvocationRecord[]}   tool_invocations     Tool invocations (filled in 1.4.0).
+ * @property {LoopIterationRecord[]}    loop_iterations      Test-driven loop iterations (filled in 1.4.5).
+ * @property {number}                   capacity             Max admission records before spill/drop.
  */
 
 /**
@@ -159,6 +179,7 @@ export function createTaskLedger({ taskId, surface, capacity, startedAt }) {
         exclusions: [],
         tool_admissions: [],
         tool_invocations: [],
+        loop_iterations: [],
         capacity: typeof capacity === 'number' && capacity > 0 ? capacity : DEFAULT_LEDGER_CAPACITY,
     };
 }
@@ -182,6 +203,7 @@ export function isTaskLedger(v) {
         Array.isArray(o.exclusions) &&
         Array.isArray(o.tool_admissions) &&
         Array.isArray(o.tool_invocations) &&
+        Array.isArray(o.loop_iterations) &&
         typeof o.capacity === 'number'
     );
 }

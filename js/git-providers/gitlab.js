@@ -979,6 +979,7 @@ const gitlabProvider = {
                 status: p.status,
                 conclusion: p.status === 'success' ? 'success' : p.status === 'failed' ? 'failure' : null,
                 branch: p.ref,
+                headSha: p.sha || '',
                 event: p.source || 'push',
                 createdAt: p.created_at,
                 updatedAt: p.updated_at,

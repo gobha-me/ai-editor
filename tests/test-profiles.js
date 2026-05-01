@@ -107,7 +107,10 @@ T.deepEq(CODER_V1.tools.static, [
     'edit_file',
     'commit_files',
     'list_dirty_files',
-], 'tools.static populated by 1.3.4 / 1.4.0');
+    'get_ci_status',
+    'wait_for_ci',
+    'get_ci_logs',
+], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');

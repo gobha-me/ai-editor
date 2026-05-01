@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-01 · Current released version: **1.4.0** · Authoring branch: `claude/jolly-volhard-998f9f`
+> Last updated: 2026-05-01 · Current released version: **1.4.5** · Authoring branch: `claude/jolly-volhard-998f9f`
 
 ## How to read this doc
 
@@ -14,7 +14,7 @@
 
 | Phase | Track | Status |
 |---|---|---|
-| **Now** | Tools follow-ups (1.4.x): MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text | Sized; not started. §1.4.0 Phase 1 shipped (1.3.4 / 1.3.14 / 1.3.15 / 1.3.16 / 1.3.17 / 1.4.0); **79.5% token reduction observed** on coder session vs role-filter baseline. |
+| **Now** | Tools follow-ups (1.4.x): ghost text + tuning/eviction remain | Phase 1 shipped at 1.4.0 (79.5% token reduction live); 1.4.1 semantic `find_tool` ✓, 1.4.2 MCP bridge ✓, 1.4.4 workspace-scoped settings ✓, 1.4.5 test-driven loop ✓. 1.4.6 ghost text + tuning still sized but not started. |
 | **Next** | Retrieval Phase 1 (1.5.0) | Designed; not started. |
 | **Later** | Profiles → 2.0 | Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items | See *Deferred / unscheduled* — triage owed. |
@@ -49,12 +49,13 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 ---
 
-## What's in production today (1.4.0)
+## What's in production today (1.4.5)
 
 - **Editor / Git / providers** — CodeMirror 6, 19 languages, multi-tab, diff/blame/preview; 4 Git providers (Gitea/GitHub/GitLab/in-memory zip); 4 LLM providers (Venice, OpenRouter, Ollama, generic OpenAI).
 - **Memory subsystem (1.3.0–1.3.3)** — persistent `user` + `workspace` scopes, hybrid IDB + `.aieditor/memory/*.md` storage, 3 LLM tools (`memory_remember`/`memory_recall`/`memory_revise`), Settings → Memory tab, `@memory` chip, agent-proposal consent flow, cross-device session sync, session replay viewer.
 - **Touch 2 facelift (1.3.5–1.3.13)** — frozen `--tk-*` token vocabulary, top-bar restructure, Settings sidebar, Connections panel, Debug + Help slide-outs, Lucide icon family, self-hosted woff2 fonts, rem-based UI scaling.
-- **Tools subsystem (1.3.4 / 1.3.14–1.3.17 / 1.4.0, Phase 1 shipped)** — `ToolDef`/`ToolID`/`Catalog` foundation, Composer admission with `?toolsCompose=off` kill-switch, system-prompt admission alignment, meta-tools (`list_tool_categories`/`list_tools_by_category`/`find_tool`), sticky admission via `TaskLedger.tool_admissions[]`/`tool_invocations[]` in `js/chat/task-state.js`, cost-recorder wiring persisting per-turn admitted/baseline/unfiltered tool-definition tokens with the reduction percentage rendered in the LLM Debug modal. **79.5% token reduction observed live** on a coder session in the html-games repo against the role-filter baseline (target: ≥70%). 1.4.x follow-ups (MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text) sized but not started.
+- **Tools subsystem (1.3.4 / 1.3.14–1.3.17 / 1.4.0, Phase 1 shipped)** — `ToolDef`/`ToolID`/`Catalog` foundation, Composer admission with `?toolsCompose=off` kill-switch, system-prompt admission alignment, meta-tools (`list_tool_categories`/`list_tools_by_category`/`find_tool`), sticky admission via `TaskLedger.tool_admissions[]`/`tool_invocations[]` in `js/chat/task-state.js`, cost-recorder wiring persisting per-turn admitted/baseline/unfiltered tool-definition tokens with the reduction percentage rendered in the LLM Debug modal. **79.5% token reduction observed live** on a coder session in the html-games repo against the role-filter baseline (target: ≥70%).
+- **Tools 1.4.x follow-ups (1.4.1 / 1.4.2 / 1.4.4 / 1.4.5 shipped)** — semantic `find_tool` + lazy schema expansion (1.4.1); MCP bridge plugin (`Plugins.registerMCPServer`, 1.4.2); workspace-scoped settings (`.aieditor/settings.json` overrides, 1.4.4); **test-driven loop (1.4.5)** — bounded agentic CI iterator with three new LLM tools (`get_ci_status` / `wait_for_ci` / `get_ci_logs`), in-chat progress card, abort, Settings → Test Loop bounds. Ghost text + lazy-expansion tuning remain (1.4.6).
 - **Plugins / security / tab isolation** — manifest registration, lifecycle hooks, modal/button/CSS injection; 1.0.4 hardening pass; multi-tab Storage scoping (since 0.9.40).
 
 ## What drifted from the original sequence
@@ -104,12 +105,13 @@ Tools Phase 1 shipped at **1.4.0** with the 79.5%-token-reduction observation cl
 
 ### 1.4.x — Tools follow-ups [+5-7 weeks]
 
-- **1.4.1:** Semantic `find_tool` + lazy expansion (k-NN over tool embeddings, threshold-gated to avoid weak matches; admit short form on discovery, full schema on first call).
-- **1.4.2: MCP bridge plugin.** New `Plugins.registerMCPServer({ url, auth, transport })` — translates MCP JSON-RPC tool definitions into our `ToolDef` shape so they enter the catalog and play by the new admission rules. Per-server auth (API key or OAuth where supported). Massive ecosystem play with small implementation: we inherit the entire MCP server ecosystem instead of curating tools ourselves.
-- **1.4.3: Test-driven loop.** Agentic mode where the AI iterates on a failing test until CI passes. Loop: read failing test → propose fix → edit → commit → wait CI → read result → loop. Bounded by max iterations, max wall-clock, max tokens-per-iteration. Uses existing `commit_files` + `get_ci_status` + the new idle-timeout from 1.1.1 to handle the wait-for-CI step cleanly. UI: progress card showing iteration N/M with abort button. Builds on the existing tool inventory; no new core capabilities required.
-- **1.4.4: Workspace-scoped settings.** `.aieditor/settings.json` overrides global settings per repo (subset of overridable keys — never API keys). UI: Settings panel marks workspace-overridden values with a "reset to global" button. Auto-stages on commit when enabled and branch isn't protected (matches the memory commit pattern from 1.3.0). Pairs naturally with the rest of the `.aieditor/` directory convention.
-- **1.4.5: Inline AI suggestions (ghost text, hotkey-only).** Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling, no API cost without explicit user action. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control "hotkeyed not automatic" framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
-- **1.4.6:** Lazy expansion threshold tuning; eviction LRU on the static set when memory pressure exceeds budget. (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 fills in fields on the same struct.)
+- **1.4.1:** ✅ **Shipped.** Semantic `find_tool` + lazy expansion (k-NN over tool embeddings, threshold-gated; admit short form on discovery, full schema on first call).
+- **1.4.2:** ✅ **Shipped.** MCP bridge plugin — `Plugins.registerMCPServer({ url, auth, transport })` translates MCP JSON-RPC tool definitions into the `ToolDef` shape so they enter the catalog under the new admission rules.
+- **1.4.3:** *(slipped — slot consumed by the test-runner IMPORT FAILED hot-fix; planned scope re-sequenced below to 1.4.5).*
+- **1.4.4:** ✅ **Shipped.** Workspace-scoped settings — `.aieditor/settings.json` overrides a curated safelist of keys per-repo, with auto-stage on unprotected branches and a "reset to global" affordance.
+- **1.4.5:** ✅ **Shipped.** Test-driven loop — bounded agentic CI iterator. Three new LLM tools (`get_ci_status` / `wait_for_ci` / `get_ci_logs`) plus a chat-input "🔁 Loop" trigger that drives "edit → commit → wait CI → read failure log → loop" under user-tunable bounds (iterations, wall-clock, tokens/iter, CI poll). Reuses the 1.1.1 idle-timeout for the wait-for-CI step. Per-iteration records flow through the unified `TaskLedger.loop_iterations[]` (third consumer of the same struct). Roadmap originally sequenced this as 1.4.3.
+- **1.4.6:** *Inline AI suggestions (ghost text, hotkey-only).* Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
+- **1.4.7:** *Lazy expansion threshold tuning + LRU eviction on the static set when memory pressure exceeds budget.* (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 + 1.4.5 fill in fields on the same struct.)
 
 ---
 

@@ -175,6 +175,10 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'edit_file',
         'commit_files',
         'list_dirty_files',
+        // 1.4.5 — CI tools added alongside the test-driven loop.
+        'get_ci_status',
+        'wait_for_ci',
+        'get_ci_logs',
     ]);
     assert.equal(CODER_V1.tools.expansion_mode, 'short');
 });

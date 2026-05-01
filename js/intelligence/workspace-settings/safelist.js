@@ -76,6 +76,10 @@ export const SAFELIST = Object.freeze([
     'maxIndexFiles',
     'embeddingProvider',
     'embeddingModel',
+
+    // Test-driven loop bounds (1.4.5). Whole subtree — `testLoop.enabled`
+    // / `testLoop.maxIterations` etc. travel together. No credentials.
+    'testLoop',
 ]);
 
 /**

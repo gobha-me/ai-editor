@@ -4,6 +4,180 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-05-01
+
+**Tools 1.4.x — test-driven loop.** Bounded agentic CI iterator. The
+coder profile gains a 🔁 Loop button next to the chat send: enter a goal
++ optional failing-test path, and the orchestrator iterates "edit →
+commit → wait for CI → read failure log → loop" until CI passes or a
+bound trips.
+
+Three new LLM-facing CI tools land in
+[`js/tools/ci-tools.js`](js/tools/ci-tools.js) — also usable for one-shot
+status checks outside the loop:
+
+- `get_ci_status({ ref })` — current state for a SHA or branch.
+- `wait_for_ci({ ref, timeoutMs })` — polls with backoff (1s → 30s) up
+  to a hard 10 min cap; resolves on success/failure/error/cancelled or
+  reports `timed_out: true`.
+- `get_ci_logs({ ref, jobName?, tailLines? })` — resolves the matching
+  workflow run via `Git.listWorkflowRuns(...)`, defaults to the first
+  failed job if `jobName` is omitted, tails to a 1000-line cap so
+  multi-megabyte logs stay budget-safe.
+
+The orchestrator drives the loop above the chat: each iteration appends
+an iteration-context prompt ("Iteration N/M · Goal: X · Previous CI: Y"
+plus the failing log tail) to the existing chat send-path
+([`handleGeneralRequest`](js/chat/handlers.js)), then inspects the
+TaskLedger for `commit_files` invocations. When the model commits, the
+orchestrator resolves the new branch HEAD via `Git.listBranches` and
+polls CI itself. Bounds: max iterations (default 10), max wall-clock
+(default 30 min), max tokens per iteration (default 8000), CI poll
+timeout (default 5 min).
+
+The 1.4.0 unified `TaskLedger` gains a third record array
+(`loop_iterations[]` joining `tool_admissions[]` + `tool_invocations[]`
+in [`js/profiles/task-ledger.js`](js/profiles/task-ledger.js)). Same
+struct, third consumer — the LLM Debug modal will render loop history
+without further plumbing.
+
+The progress UI is a single in-chat card that updates live via
+`loop:state-changed` events: iteration N/M, current sub-state
+("editing & committing" / "awaiting CI"), commit SHA, CI badge, abort
+button. On exit the card collapses to a one-line summary.
+
+Settings → AI → Test Loop tab tunes the bounds; the `testLoop` subtree
+joins the workspace-settings safelist (1.4.4) so a repo can ship
+recommended bounds via `.aieditor/settings.json`. The trigger button
+remains hidden when the role is not `coder`.
+
+### Added
+
+- **[`js/tools/ci-tools.js`](js/tools/ci-tools.js)** — three CI tools
+  registered into `ToolRegistry` (and the
+  `js/intelligence/tools/catalog.js` `code.git.ci` category). Roles:
+  `coder` only — committing-then-waiting only makes sense from a writer
+  profile.
+
+- **[`js/intelligence/test-loop/orchestrator.js`](js/intelligence/test-loop/orchestrator.js)**
+  — `runTestLoop({ goal, testHint, bounds, runChatTurn })`. Bounds
+  enforced inline: `max_iterations` / `wall_clock` / `no_progress` /
+  `ci_pass` / `ci_fail` / `user_abort` / `error`. Each iteration writes
+  a `LoopIterationRecord` to the conversation's TaskLedger (in-flight,
+  then patched on completion).
+
+- **[`js/intelligence/test-loop/state.js`](js/intelligence/test-loop/state.js)**
+  — singleton run-state with `loop:state-changed` /
+  `loop:abort-requested` / `loop:started` / `loop:finished` events.
+  One in-flight loop at a time.
+
+- **[`js/intelligence/test-loop/ui.js`](js/intelligence/test-loop/ui.js)**
+  — trigger button visibility + inline form ("Goal" / "Failing test
+  path") + chat-stream progress card. Vanilla DOM. The card subscribes
+  to `loop:state-changed` and re-renders in place; on completion
+  collapses to a one-line summary with Dismiss.
+
+- **[`js/settings/test-loop-tab.js`](js/settings/test-loop-tab.js)** —
+  Settings → Test Loop tab. Toggle + four numeric knobs, validated &
+  clamped on change.
+
+- **[`css/test-loop.css`](css/test-loop.css)** — form + card styles.
+  Reuses `--tk-color-info` / `--tk-color-success` / `--tk-color-error`
+  / `--tk-color-warning` / `--tk-color-orange` only. No new tokens.
+
+- **[`tests/test-ci-tools.mjs`](tests/test-ci-tools.mjs)** — 22 cases.
+  Pure helpers, `get_ci_status` pass-through, `wait_for_ci` polling +
+  timeout + hard-max cap, `get_ci_logs` SHA→run→failed-job resolution
+  + tail-cap + jobName selection + structured errors for missing run
+  / no jobs / null log.
+
+- **[`tests/test-test-loop-orchestrator.mjs`](tests/test-test-loop-orchestrator.mjs)**
+  — 14 cases. Bounds enforcement (each exit reason), prompt-shape
+  assertions, ledger writes, `loop:state-changed` event sequence, abort
+  propagation, error-from-chat-callback handling.
+
+- **[`tests/test-test-loop-tab.mjs`](tests/test-test-loop-tab.mjs)** —
+  9 cases. Frozen defaults, persistence merge, EventBus emission,
+  workspace-settings safelist coverage.
+
+### Changed
+
+- **[`js/chat/task-state.js`](js/chat/task-state.js)** — adds
+  `recordLoopIteration` + `updateLastLoopIteration` helpers on top of
+  the existing per-conversation ledger registry. The orchestrator is
+  the only writer; the LLM Debug modal will become a reader in a
+  follow-up.
+
+- **[`js/profiles/task-ledger.js`](js/profiles/task-ledger.js)** — adds
+  `LoopIterationRecord` typedef + `loop_iterations: []` to
+  `createTaskLedger`'s empty-state and to `isTaskLedger`'s structural
+  check. Backward-compatible — existing readers ignore the new field.
+
+- **[`js/profiles/coder-v1.js`](js/profiles/coder-v1.js)** — extends
+  `tools.static[]` from 9 → 12 names; the three new CI tools are
+  always-loaded for the coder profile (still under the role gate, so
+  non-coder profiles never see them).
+
+- **[`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)**
+  — `wait_for_ci` joins `get_ci_status` + `get_ci_logs` under
+  `code.git.ci`.
+
+- **[`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js)**
+  — `testLoop` added to the safelist; the whole subtree round-trips
+  through `.aieditor/settings.json`.
+
+- **[`js/git-providers/gitea.js`](js/git-providers/gitea.js)**,
+  **[`js/git-providers/github.js`](js/git-providers/github.js)**,
+  **[`js/git-providers/gitlab.js`](js/git-providers/gitlab.js)** —
+  `listWorkflowRuns` mappings now include `headSha`, so `get_ci_logs`
+  can correlate a commit SHA → workflow run without ambiguity.
+
+- **[`js/app.js`](js/app.js)** — imports + boot-wires
+  `installTestLoopUi()`; adds `./tools/ci-tools.js` to the tool-module
+  imports.
+
+- **[`js/settings-manager.js`](js/settings-manager.js)** —
+  `initTestLoopTab()` joins the `openSettings()` init pass + the
+  per-tab lazy-init switch.
+
+- **[`html/chat-panel.html`](html/chat-panel.html)** — inserts the
+  `#btnTestLoop` action button (Lucide `repeat` icon, hidden by
+  default; UI module flips visibility on coder + enabled).
+
+- **[`html/modals.html`](html/modals.html)** — new `tabTestLoop`
+  sidebar entry under the AI group, after `tabMCPServers`.
+
+- **[`html/settings-tabs.html`](html/settings-tabs.html)** — empty
+  `#tabTestLoop` panel; populated by `initTestLoopTab`.
+
+- **[`index.html`](index.html)** — links `css/test-loop.css`.
+
+- **[`tests/test-meta-tools.mjs`](tests/test-meta-tools.mjs)** —
+  fixture registers stubs for the three CI tools so the
+  `unresolved_static: []` assertion stays exact.
+
+- **[`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs)**
+  — fixture deliberately leaves the CI tools unregistered; the
+  6-of-12 admission test now asserts six unresolved (3 meta + 3 CI)
+  instead of three.
+
+- **[`tests/test-profiles.mjs`](tests/test-profiles.mjs) /
+  [`tests/test-profiles.js`](tests/test-profiles.js)** — `tools.static`
+  assertion grows from 9 → 12 names.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.4.4 → 1.4.5.
+
+### Removability check (Decision §7)
+
+Deleting `js/intelligence/test-loop/`, `js/tools/ci-tools.js`, the
+`#btnTestLoop` markup, the `#tabTestLoop` panel, and the
+`testLoop` safelist entry restores 1.4.4 behavior. The coder profile
+loses the three CI tools — model can no longer query Gitea Actions
+status mid-conversation without an MCP server providing equivalents
+(acceptable; that's the pre-1.4.5 state). The TaskLedger keeps its
+`loop_iterations: []` field but it stays empty; readers ignore it.
+No data migration; ledgers are session-scoped.
+
 ## [1.4.4] - 2026-05-01
 
 **Tools 1.4.x — workspace-scoped settings.** New

@@ -876,6 +876,7 @@ const githubProvider = {
                 status: r.status,
                 conclusion: r.conclusion,
                 branch: r.head_branch,
+                headSha: r.head_sha || '',
                 event: r.event,
                 createdAt: r.created_at,
                 updatedAt: r.updated_at,

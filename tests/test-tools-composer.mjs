@@ -245,10 +245,11 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 9 names → 6 admitted, 3 unresolved
+// coder.v1 fixture — 12 names → 6 admitted, 6 unresolved
+// (3 meta-tools + 3 CI tools intentionally absent from this fixture)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 3 unresolved meta-tools', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 6 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -262,6 +263,7 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 3 unresolved
     assert.equal(result.admitted.length, 6);
     assert.deepEqual(result.diagnostics.unresolved_static, [
         'list_tool_categories', 'list_tools_by_category', 'find_tool',
+        'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });
 
