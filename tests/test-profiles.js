@@ -96,8 +96,18 @@ T.assert(!!c.summarizer, 'summarizer present');
 T.eq(c.summarizer.mode, 'balanced', 'summarizer mode matches default');
 
 T.eq(CODER_V1.tools.budget_tokens, 5000, 'tool budget 5000 per ROADMAP §Decisions 5');
-T.deepEq(CODER_V1.tools.catalog, [], 'tools.catalog populated by 1.4.0');
-T.deepEq(CODER_V1.tools.static, [], 'tools.static populated by 1.4.0');
+T.deepEq(CODER_V1.tools.catalog, [], 'tools.catalog scaffold (Phase 1 doesn\'t populate yet)');
+T.deepEq(CODER_V1.tools.static, [
+    'list_tool_categories',
+    'list_tools_by_category',
+    'find_tool',
+    'read_file',
+    'read_lines',
+    'scan_file',
+    'edit_file',
+    'commit_files',
+    'list_dirty_files',
+], 'tools.static populated by 1.3.4 / 1.4.0');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');
