@@ -1,385 +1,78 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-01 · Current released version: **1.3.17** · Authoring branch: `feat/roadmap-1.x`
+> Last updated: 2026-05-01 · Current released version: **1.3.17** · Authoring branch: `claude/jolly-volhard-998f9f`
 
-## TL;DR
+## How to read this doc
 
-The six new design docs in `docs/DESIGN-*.md` describe a complete intelligence layer rebuild — four peer subsystems (retrieval, memory, compression, tools) coordinated by per-surface profiles. The work rests on three load-bearing commitments:
+- **Now / Next / Later** — where we are at a glance.
+- **Active track** — the in-flight work, sized to PRs.
+- **Later (sequenced)** — the next two committed tracks (Retrieval, Profiles → 2.0).
+- **Deferred / unscheduled** — work that was planned, designed, or partially started but isn't currently scheduled. Some items are paused awaiting metrics; some may be obsolete. Triage owed.
+- Shipped releases live in [CHANGELOG.md](../CHANGELOG.md), not here.
 
-1. **Admissibility, not accumulation** — every byte the model sees has earned its place. The DESIGN docs are the contract; subsystems implement it.
-2. **Git-native memory** — memory and conversation state can opt into living in `.aieditor/*` files committed with the repo. The user's notes follow the code across machines and forks, with no backend. **This is a category change, not an incremental improvement** — every other AI-editor's memory either lives in a vendor cloud or dies when you switch machines. (Decision §1.)
-3. **Measurement before scale** — the cost dashboard ships in 1.2.x alongside the first eviction subsystem, not at the end of the arc. Each subsequent track lands against measured baselines, not projected savings.
+## Now / Next / Later
 
-This roadmap sequences the rebuild over the **1.x** line, ships a **2.0** when profiles become the load-bearing abstraction, and interleaves UI work and quick wins along the way. Estimated end-to-end runway: **~6 months** of evening sessions at the historical pace (CHANGELOG suggests 2026-02-12 → 2026-02-23 produced 30+ patch releases — this scope demands less velocity but more depth, so plan calls for biweekly minor releases instead of daily patches).
+| Phase | Track | Status |
+|---|---|---|
+| **Now** | Tools — admission layer, meta-tools, sticky admission | In flight. 1.3.4 / 1.3.14 / 1.3.15 / 1.3.16 / 1.3.17 shipped. Outstanding before §1.4.0 promotion: cost-recorder wiring for the 70% token-reduction exit criterion. |
+| **Next** | Tools follow-ups (1.4.x): MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text | Sized; not started. |
+| **Later** | Retrieval Phase 1 (1.5.0) → Profiles 2.0 | Designed; not started. |
+| **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items | See *Deferred / unscheduled* — triage owed. |
+
+---
+
+## TL;DR — architectural commitments
+
+The four DESIGN subsystems (`docs/DESIGN-*.md`) describe an intelligence layer rebuild — retrieval, memory, compression, tools — coordinated by per-surface profiles. Three load-bearing commitments:
+
+1. **Admissibility, not accumulation** — every byte the model sees has earned its place.
+2. **Git-native memory** — memory and conversation state can opt into living in `.aieditor/*` files committed with the repo. No backend; notes follow the code across machines and forks.
+3. **Measurement before scale** — the cost dashboard ships with the first eviction subsystem, not at the end of the arc. Each subsequent track lands against measured baselines.
+
+A 2.0 ships when profiles become the load-bearing configuration surface.
 
 ---
 
 ## Cadence and versioning
 
-**Versioning — SemVer with intent.**
+**SemVer with intent.**
 
 | Bump | Triggered by |
 |---|---|
 | Patch (`1.x.y → 1.x.y+1`) | Bug fixes, doc updates, security, small UI polish, single-rule additions inside an active track |
-| Minor (`1.x → 1.(x+1)`) | New subsystem track lands Phase 1 (compression, memory, tools, retrieval), or a self-contained feature spans multiple files |
-| Major (`1.x → 2.0`) | The profile contract becomes the load-bearing configuration surface. The current role-based tool filtering decomposes into a profile preset layer; settings schema migrates with a one-shot script |
+| Minor (`1.x → 1.(x+1)`) | New subsystem track lands Phase 1, or a self-contained feature spans multiple files |
+| Major (`1.x → 2.0`) | The profile contract becomes the load-bearing configuration surface |
 
-**Cadence — biweekly minor releases as a target.** Patches as needed, cherry-pickable to `main` once a track lands. Releases tag `vX.Y.Z` and propagate to `:latest` + `:vX.Y.Z` Docker images via the existing `.gitea/workflows/ci.yaml`.
+**Branching.** Main is protected. Every change goes through a PR from a topic branch. Gitea CI runs security lint + Docker build on every PR; tag push deploys to production. PR title convention: `feat(track):`, `fix(area):`, `chore(release):`, `docs(...)`. Squash + delete on merge.
 
-**Branching.** Main is protected. Every change goes through a PR from a topic branch (`feat/...`, `fix/...`, `docs/...`). The Gitea CI runs the security lint + Docker build on every PR; on tag push it deploys to production.
-
-**No "preview" or "beta" channels** in 1.x. The `:dev` Docker tag for PRs and the `:test` tag for `main` already provide preview environments for live testing.
+**No "preview" or "beta" channels** in 1.x. The `:dev` Docker tag for PRs and `:test` for `main` provide preview environments.
 
 ---
 
-## Where we are (v1.0.5)
+## What's in production today (1.3.17)
 
-What's already in production:
+- **Editor / Git / providers** — CodeMirror 6, 19 languages, multi-tab, diff/blame/preview; 4 Git providers (Gitea/GitHub/GitLab/in-memory zip); 4 LLM providers (Venice, OpenRouter, Ollama, generic OpenAI).
+- **Memory subsystem (1.3.0–1.3.3)** — persistent `user` + `workspace` scopes, hybrid IDB + `.aieditor/memory/*.md` storage, 3 LLM tools (`memory_remember`/`memory_recall`/`memory_revise`), Settings → Memory tab, `@memory` chip, agent-proposal consent flow, cross-device session sync, session replay viewer.
+- **Touch 2 facelift (1.3.5–1.3.13)** — frozen `--tk-*` token vocabulary, top-bar restructure, Settings sidebar, Connections panel, Debug + Help slide-outs, Lucide icon family, self-hosted woff2 fonts, rem-based UI scaling.
+- **Tools subsystem (1.3.4 / 1.3.14–1.3.17, ongoing)** — `ToolDef`/`ToolID`/`Catalog` foundation, Composer admission with `?toolsCompose=off` kill-switch, system-prompt admission alignment, meta-tools (`list_tool_categories`/`list_tools_by_category`/`find_tool`), sticky admission via `TaskLedger.tool_admissions[]`/`tool_invocations[]` in `js/chat/task-state.js`. Cost-recorder wiring is the remaining gate before §1.4.0 promotion.
+- **Plugins / security / tab isolation** — manifest registration, lifecycle hooks, modal/button/CSS injection; 1.0.4 hardening pass; multi-tab Storage scoping (since 0.9.40).
 
-- **Editor:** CodeMirror 6 in browser, 19 languages, multi-tab, diff/blame/preview panes, mobile-responsive
-- **Git:** 4 providers (Gitea, GitHub, GitLab, in-memory zip), full CRUD, PRs, issues, releases, CI status, branch protection
-- **AI:** 52 LLM tools across 16 modules, 5 roles (`full`/`coder`/`pm`/`reviewer`/`plugin-dev`), 4 LLM providers (Venice, OpenRouter, Ollama, generic OpenAI), streaming + tool calls, embedding-based file relevance via `context-manager.js`
-- **Plugins:** Manifest registration, lifecycle hooks, modal/button/CSS injection, built-in plugin editor, settings export/import
-- **Security:** 1.0.4 hardening pass (DOMPurify bypasses, escape audit), CI security lint
-- **Tab isolation:** Multi-tab Storage scoping (1 browser session per tab) — shipped 0.9.40
+## What drifted from the original sequence
 
-What's drifted from the design docs:
+The original 1.x → 2.0 plan was **Foundations → Compression → Memory → Tools → Retrieval → Profiles**. What actually shipped:
 
-- `chat/summarizer.js` is **only** Rule 5 (LLM summarization); no Rules 1–4 (eviction).
-- `context-manager.js` is single-strategy semantic; no chunker pipeline, no structural/thematic strategies, no Composer.
-- All 52 tools are loaded all the time (filtered by role only); no static/sticky/discovery split, no meta-tools.
-- "Memory" today is `scratchpad-tools` (in-session key-value, scratchpad cleared per task) — no persistent memory, no scopes, no audit.
-- Roles are user-facing presets that filter tools; they are not profiles in the design-doc sense.
+- **Memory jumped first** (1.3.0–1.3.3) — Touch 1 design landed and the Git-native story was the externally-tellable feature; took priority over compression.
+- **Touch 2 facelift inserted** (1.3.5–1.3.13) — whole-app refresh dropped into the 1.3.x slot once the deliverable arrived.
+- **Tools is shipping as 1.3.x patches** (1.3.4 + 1.3.14–1.3.16 + 1.3.17 in flight) — the §1.4.0 milestone label survives but the work is flowing as in-track patches; promotion to 1.4.0 happens when the 70%-token-reduction exit criterion is measurable end-to-end.
+- **Foundations (1.1.x) and Compression (1.2.x) skipped.** Several feature branches exist (`feat/1.1.0-*`, `feat/1.1.1-*`, `feat/1.1.2-*`, `feat/1.1.3-*`, `feat/1.2.0-*`, `feat/1.2.x-*`); current status of each item is unclear and needs triage. See *Deferred / unscheduled* below.
 
----
-
-## What we're building toward
-
-The four DESIGN subsystems, mapped to current modules and the gap each closes:
-
-| Subsystem | Today | Design target | Gap |
-|---|---|---|---|
-| **Retrieval** | `js/context-manager.js`, `js/embeddings-client.js`, `find_relevant_files` tool | `ChunkRef` contract, ingest pipeline, Composer with semantic + structural + thematic strategies, deterministic chunk identity | Whole rebuild; existing module survives as the legacy single-strategy implementation during migration |
-| **Memory** | `js/tools/scratchpad-tools.js` (session-scoped) | Persistent, scoped (`user`/`persona`/`workspace`/`org`), audit log, supersession, hybrid storage with optional `.aieditor/memory/*.md` file layer committed to the repo | New subsystem; scratchpad becomes a degenerate `session` scope inside it |
-| **Compression** | `js/chat/summarizer.js` (Rule 5 only) | 5 rules in priority order: Subsumption, Invalidation, Consumption, Resolution, Summarization | Add Rules 1–4 (eviction); fold existing summarizer into Rule 5 of the new pipeline |
-| **Tools** | All 52 tools always loaded; filtered by role | Hidden-by-default; static + sticky + discovery; meta-tools (`list_tool_categories`, `list_tools_by_category`, `find_tool`); lazy schema | Reverse the default; add 3 meta-tools; introduce `ToolID` stability |
-| **Profiles** | 5 roles (`full`/`coder`/`pm`/`reviewer`/`plugin-dev`) | 5 profiles (`chat.v1`/`chat_multi.v1`/`rp.v1`/`coder.v1`/`kb.v1`) with budget shape, strategy weights, rule sets, tool catalogs, task ledger | Roles become a UI-friendly surface over profiles; profiles do the actual work |
-
-The "Intelligence" umbrella (`docs/DESIGN-intelligence.md`) is the binding architectural commitment, not a runtime component. There is nothing to ship for the umbrella itself — it's the contract every subsystem PR is reviewed against.
+Practical consequence: roadmap entries that referenced "the unified `TaskLedger` from 1.1.0" or "the cost dashboard from 1.2.1" are talking about infrastructure that didn't ship as Foundations. The Tools track built its own ledger anyway — `TaskLedger.tool_admissions[]` / `tool_invocations[]` landed in `js/chat/task-state.js` as part of 1.3.17, scoped to tool admissions. Retrieval / Profiles entries that wanted to extend the same struct (chunk admissions, profile-resolved task ledger) now plug into the shipped one rather than waiting on a Foundations item. The cost dashboard remains deferred and still gates the compression track.
 
 ---
 
-## Tracks
+## Active track: Tools (1.3.x ongoing → 1.4.x)
 
-Five tracks of work. They are sequenced (not parallel), but inside a track minor versions can ship incrementally.
-
-```
-[Foundations]──▶[Compression]──▶[Memory]──▶[Tools]──▶[Retrieval]──▶[Profiles]
-   1.1.x          1.2.x          1.3.x      1.4.x      1.5.x         2.0.0
-```
-
-**Why this order:**
-
-1. **Foundations** unblocks everything. Turn metadata, profile scaffolding, CI test step — none of these change behavior, but compression rules can't fire without `file_ops` and `tool_result_for` on turns.
-2. **Compression first** because it's the highest cost-savings-per-line-of-code item. Long sessions today pay full input tokens for the entire history; Rules 1+2 (eviction) cut that without any new UX. Invisible win.
-3. **Memory next** because it's the highest *visible* value and unblocks no other subsystem. Users will feel it immediately: workspace-scoped memory committed to `.aieditor/memory/*.md` is a story unique to a Git-native editor.
-4. **Tools** cuts every-call cost and starts changing the model's interaction pattern (it has to learn discovery). User-visible via the active-tools chip row.
-5. **Retrieval** is the longest, riskiest rebuild. By the time we get here, we have compression handling history and memory handling curated facts — retrieval is now scoped specifically to corpus admission, which makes the rebuild much smaller than it would have been from a clean slate.
-6. **Profiles** consolidate everything. By 2.0, we know what each subsystem actually needs from a profile and can settle the contract without speculation.
-
----
-
-## Versioned plan
-
-Each milestone lists: **what ships**, **why now**, **exit criteria**, **rough size**.
-
-### 1.0.5 — Sync (this PR)
-
-**What ships:** Doc currency (TOOLS, ARCHITECTURE, ROLES_AND_TOOLS, scan-tools-guide, PLAN); ROADMAP.md (this file); DESIGN docs relocated into `docs/`; version bump 1.0.4 → 1.0.5; CHANGELOG entry retroactively documenting the 1.0.5 commits already on `main`.
-
-**Why now:** The released version (1.0.5) is ahead of the version string in code. Docs claim things that aren't true. New design docs need a home. Get the slate clean before adding to it.
-
-**Exit criteria:** PR merges; `js/version.js` matches the production tag; ROADMAP is the canonical source for everything that follows.
-
-**Size:** Single PR, this branch.
-
----
-
-### 1.1.0 — Foundations [target: ~2 weeks]
-
-**What ships:**
-
-- **Turn metadata enrichment.** Existing chat history entries carry `{role, content, timestamp}`. Add `file_ops` (extracted from `read_*`/`edit_*`/`write_*` tool results), `tool_result_for` (linking tool_result turns back to their tool_call turn), `tool_name`, `tool_args`. **Read-path only** — new turns going forward are enriched; pre-1.1.0 turns persist with the fields absent and compression treats them as `Keep`-by-default. **Forward-compat:** the schema is open — additional turn fields can be added in later patches without a migration because absence is treated as "field not yet populated," same as the pre-1.1.0 behavior. The `reasoning` field landing in 1.3.5 (assistant-side, captures `<think>`/`<thinking>` content split off the response) plugs in via this same read-path-only contract; pre-1.3.5 turns survive with `reasoning: undefined` and renderers/exporters treat absent ≡ no-bubble. **Touchpoints:** `chat/state.js`, `chat/handlers.js`, `tools/edit-tools.js`, `tools/multifile-tools.js`, `tools/scan-tools.js`, `tools/file-tools.js`.
-- **Migration coverage probe.** A read-only consistency check that runs at session load: counts how many history turns are missing each enrichment field and surfaces the result in dev mode (`?debug=metadata` query string flips it on). Tells 1.2.0 what its baseline is *before* rules consult the data, so when compression underperforms its 40% target you know whether the rule is wrong or coverage is incomplete. The probe never mutates history.
-- **Unified `TaskLedger` struct (data only).** Lands alongside profile scaffolding — same struct used by tools (1.4.0: `tool_admissions`, `tool_invocations`) and retrieval (1.5.0: chunk `admissions`, `exclusions`). One schema, no migration. Replaces the deferred "tool ledger merges with task ledger" item that previously lived in 1.4.6.
-- **Profile scaffolding (data only).** `js/profiles/` directory with the contract typedef and a `coder.v1` profile that mirrors *current* behavior exactly (no behavior change). Lets later tracks have a place to register configuration without retrofitting.
-- **CI test step.** Add a `node --test` job to `.gitea/workflows/ci.yaml` running the existing `*.mjs` parallel suites (`test-summarizer.mjs`, `test-retry.mjs`, `test-edit-tracker.mjs`, `test-blame-normalize.mjs`). Failing tests block PR merge alongside the existing security lint. *Note: those .mjs files currently bind to `window.T` and are browser-only — this step ports them to `node:test` first.*
-- **Pre-merge version coherence check.** Tiny CI lint that compares the version string in `js/version.js` to the latest `## [X.Y.Z]` heading in `CHANGELOG.md` and fails the build if they disagree. Two release-sync drifts in a row (0.9.42 → 1.0.4 → 1.0.5) is enough; one evening to fix forever.
-- **Retire/rewrite `docs/LLM_ERROR_RECOVERY.md`.** Either fold its useful content into a new section in PLUGIN.md / TOOLS.md, or replace with a thin pointer to `js/utils/errors.js`.
-- **Plugin SlotManager — design only.** PLAN.md already flags this; implementation deferred to a 1.4.x patch (it's small once we touch settings/UI), but during 1.1 we lock the contract.
-
-**Why now:** Compression Rules 1, 2, 3 require `file_ops` and `tool_result_for` on turns. Without this enrichment, the rules either no-op (graceful but pointless) or false-positive on missing metadata. The migration probe makes the coverage gap *visible* so 1.2.0's diagnostics can distinguish "no rule applied" from "rule skipped because metadata absent" — without that distinction, when compression underperforms you can't tell whether the rules are wrong or the data isn't there yet. The unified TaskLedger lands now so 1.4.0 and 1.5.0 fill in the same struct rather than shipping two ledger schemas and a migration. CI test step prevents regressions during the bigger tracks. Profile scaffolding is the architectural commitment to the design docs without behavior risk.
-
-**Risk note:** Turn-metadata enrichment is the highest-risk PR in 1.1.0 even though it's *labeled* foundational. The failure mode if backwards-compat slips is silent corruption that doesn't surface until 1.2.0 ships and rules consult partially-enriched turns. The probe is the safeguard. Treat the enrichment + probe as one shippable unit, not two.
-
-**Exit criteria:**
-- All new chat-history turns carry `file_ops` when applicable; `chat/messages.js` rendering still works on enriched and non-enriched turns mixed in the same history.
-- Migration probe surfaces a coverage report in dev mode; `?debug=metadata` makes it visible.
-- Unified `TaskLedger` typedef + empty-state struct present in `js/profiles/`; no consumer wires up yet.
-- `node --test` runs in CI, all existing `.mjs` suites pass after porting.
-- Version coherence check runs in CI and fails when `js/version.js` and `CHANGELOG.md` disagree.
-- `docs/PLAN.md` updates reflect what shipped.
-
-**Size:** ~3-5 PRs over 2 weeks. The Turn enrichment is the biggest piece.
-
-**UI impact:** None visible to end users. Dev mode only: coverage probe report at `?debug=metadata`.
-
----
-
-### 1.1.1 — Idle timeout (since-last-token) [+3 days]
-
-**What ships:** Replace wall-clock LLM timeout with an idle timeout that resets on every SSE chunk. Today `llmTimeout` aborts at fixed wall-clock from fetch start; reasoning models that think for 60s before emitting their first token get falsely aborted. New behavior: AbortController timer resets on each streamed chunk; if no token arrives within the configured window (default 90s), abort. Settings key renamed `llmTimeout` → `llmIdleTimeout` with one-shot migration.
-
-**Why now:** Foundational for everything that comes later — agentic loops, reasoning models, the test-driven loop in 1.4.3 all depend on this. It's a small fix today and unblocks otherwise-flaky long-stream behavior.
-
-**Touchpoints:** `js/llm/api.js` streaming loop, `js/core.js` settings migration, `js/settings/llm-tab.js` label change.
-
-**Size:** Single small PR.
-
-**UI impact:** Settings → LLM label changes from "Request timeout" to "Idle timeout (since last token)" with a help tooltip.
-
----
-
-### 1.1.2 — Embedder hardening [+1-2 weeks]
-
-**What ships:** Pre-retrieval-rebuild fixes for the indexing layer that's hitting real ceilings today.
-
-- **Provider decoupling.** Formalize embedder as a separate provider from the chat LLM. Today `embeddingModel` is a setting; promote to a full provider definition with URL, auth headers, and OpenAI-compat by default. Self-hosted clusters (the user's planned deployment) point here.
-- **Filetype priority and filters.** Gitignore-syntax exclusions plus per-extension weights (e.g., `*.test.js` 0.3, `*.md` 1.5, `dist/` skip). Stops the index from being dominated by tests, lockfiles, and generated content.
-- **500-file ceiling.** Measure current usage on real projects; either raise to 5000 with chunked indexing or remove entirely with paging. Decision-by-measurement, not flat-bump.
-- **In-browser embedder validation.** The code path exists but is untested. Fix what's broken, document hardware requirements (WebGPU vs WASM fallback), add a manual test in `tests/`. Will need real-hardware validation from Jeff post-merge.
-- **Settings → Embeddings tab.** New tab consolidating provider, model, filters, in-browser toggle, indexing controls.
-
-**Why now:** Project growth is hitting these walls today. Retrieval Phase 1 (1.5.0) eventually rebuilds this layer entirely, but that's months out — these are quality-of-life fixes for the meantime.
-
-**Exit criteria:** Self-hosted embedder works against an OpenAI-compat endpoint; filetype filters cut typical project index size by ≥30%; in-browser embedder produces non-zero results on at least one model.
-
-**Size:** ~3-4 PRs over 1-2 weeks.
-
-**UI impact:** New Settings → Embeddings tab. Index indicator shows "skipped: N (filtered)" alongside "indexed: M".
-
----
-
-### 1.1.3 — Vim keybindings [+3 days]
-
-**What ships:** Bundle `@replit/codemirror-vim` (the maintained CM6 vim extension; the original `@codemirror/vim` package was retired). Toggle in Settings → Appearance between Default / Vim. Single global mode (not per-tab). Persists across reloads. `:w` / `:wq` ex commands wired to the existing commit modal so save behaves the way users expect.
-
-**Why now:** Self-contained, low-risk, broadens audience meaningfully. Easier to land while the bigger tracks are still scoping.
-
-**Emacs deferred — out of scope for this patch.** The roadmap's earlier mention of `@codemirror/legacy-modes/mode/emacs` was a misread — that package is a CM5 syntax-highlighting shim, not keybindings. The maintained CM6 emacs options are third-party (`@replit/codemirror-emacs`) or hand-rolled; neither was demanded enough at scoping time to commit follow-up work. Pick up only if user demand emerges.
-
-**Exit criteria:** Vim mode passes a smoke test (insert/normal/visual transitions; toggle off restores default keymap). Help modal documents the toggle and the common bindings. Settings round-trip persists the mode across reloads.
-
-**Size:** Single PR.
-
-**UI impact:** Settings → Appearance gets a "Keybinding mode" radio (Default / Vim) below the line-number toggle. F1 help modal Hotkeys tab grows a "Vim mode" group.
-
----
-
-### 1.1.4 — Supply-chain / glassworm protection [+~1 week]
-
-**What ships:**
-
-- **Invisible-Unicode lint** in `.gitea/workflows/ci.yaml` security stage. Extends the existing DOMPurify-bypass lint to also fail PRs that introduce characters in:
-  - **Tags block** `U+E0000–U+E007F` (the glassworm carrier — Unicode tag chars that render invisible but execute as code points).
-  - **Zero-width** `U+200B–U+200F`, `U+2060–U+206F`, `U+FEFF` (ZWSP/ZWJ/ZWNJ/BOM).
-  - **Bidi overrides** `U+202A–U+202E`, `U+2066–U+2069` (RLO/LRO/LRI/RLI/PDI — "Trojan Source" pattern).
-  - Scope: `js/`, `plugins/`, `tests/`, and any user-editable JS in the bundled plugin editor.
-- **Editor-side scan** in CodeMirror. New decoration that visibly flags the offending characters with a tooltip ("Invisible Unicode — possible supply-chain payload") and a quick-fix to delete. Off by default for languages where these chars are legitimate (e.g. comment-bidi in localized text), on by default for `.js`/`.json`/plugin manifests.
-- **Plugin manager review affordance.** When a user pastes/imports a plugin, the install dialog shows a "source contains N invisible characters" warning band before the user clicks Install. Same scanner powers the editor decoration.
-- **Settings export/import hardening.** Existing import already validates JSON shape; add the invisible-Unicode scan to the validator and surface findings in the import preview.
-- **`docs/SECURITY.md`** new doc describing the threat model (glassworm, Trojan Source, polyglot exfil), the protections shipped, and what remains the user's responsibility.
-
-**Why now:** AI Editor's value prop is *no backend, no build step, no node_modules* — but the plugin system is the analogous attack surface. Glassworm has been observed shipping through npm packages and IDE extensions in 2025–2026; our plugin ecosystem (small as it is today) inherits the same threat model the moment someone shares a plugin file. CI lint + editor decoration + install-time scan is cheap and turns the threat into a visible artifact instead of a hidden payload.
-
-**Exit criteria:**
-- A test fixture file containing a Tags-block character fails CI security-lint.
-- The editor renders a visible decoration for the same fixture in `tests/index.html`.
-- The plugin install dialog blocks/warns on a poisoned manifest.
-- `docs/SECURITY.md` is linked from README and PLUGIN.md.
-
-**Size:** ~2-3 PRs over ~1 week. The CI lint is a one-line `grep -P` extension; the editor decoration is the long pole.
-
-**UI impact:** Editor gutter/inline decoration for invisible chars; plugin install dialog warning band; new Settings → Security tab (or fold into an existing tab).
-
----
-
-### 1.2.0 — Compression Phase 1 [target: ~3 weeks after 1.1]
-
-**What ships:**
-
-- **`js/intelligence/compression/`** — new module tree. `compactor.js` runs the rule pipeline; `rules/subsumption.js` and `rules/invalidation.js` implement Rules 1 and 2; `turn-store.js` holds the canonical session-scoped turn buffer.
-- **`preserve_recent` invariant.** Last N turns (default: 4 for chat, 2 for coder per design) never evicted.
-- **Diagnostics in LLM debug modal.** New section: "Compression decisions" listing evicted turn IDs with reasons (subsumed_by, invalidated_by). Helps debug false positives.
-- **Existing summarizer** stays in place under `chat/summarizer.js`, called as Rule 5 fallback by the new pipeline. No behavior change for users not yet hitting eviction patterns.
-- **Coder profile registers** Rules 1, 2 + existing Rule 5. Other roles (Reviewer, PM) keep current Rule-5-only behavior via the profile shim.
-
-**Why now:** Long coding sessions are the cost pathology described in `DESIGN-compression.md`. Phase 1 rules are deterministic, free at inference time, and require no LLM call. The savings are real and immediate.
-
-**Exit criteria:**
-- A 50-turn debugging session shows measurable token reduction (target: ≥40% on tool-heavy sessions per design projection; baseline measured before merging).
-- Diagnostics expose every eviction *and* distinguish "no rule applied" from "rule skipped because metadata absent" (uses the 1.1.0 coverage probe data).
-- No regressions in Rule 5 summarization (existing tests pass, plus new `.mjs` suite for Rules 1/2).
-- **Removability check:** With `js/intelligence/compression/` removed and the system reverted to Rule-5-only, what user-visible behavior degrades? If "nothing measurable on a 50-turn session," the subsystem has not yet earned its complexity and 1.2.1 (cost dashboard) is gated on closing that gap.
-
-**Size:** Single big PR (~1500 lines: compactor + rules + tests + diagnostics) plus 2-3 follow-up PRs for tuning.
-
-**UI impact:**
-- **Compression diagnostics panel** added to the LLM Debug modal (Ctrl+Shift+I). Shows the eviction trace per turn.
-- *Optional:* status-bar pill showing live compression ratio (e.g., "📉 60% kept"). Defer to 1.2.x patch if time-boxed.
-
----
-
-### 1.2.x — Compression follow-ups [+2-3 weeks]
-
-Each follow-up gates on the previous one delivering measured value, not on a calendar.
-
-- **1.2.1: Cost dashboard.** Cross-provider, per-conversation token-and-cost breakdown — promoted from 1.5.3 because *measurement infrastructure is the first investment, not the last*. Shipping the dashboard immediately after Rules 1+2 land lets us answer the load-bearing question: did Rule 1+2 actually deliver the ≥40% reduction the design projected? If yes, the rest of the roadmap accelerates. If no, we find out in month 2 instead of month 6 and the remaining tracks get re-scoped against measured data, not projected savings. Today the editor has Venice-specific billing in `plugins/venice-billing.js`; this generalizes it. **What ships:** Settings → Cost tab with per-conversation totals (linkable from the conversation drawer), per-tool token spend, per-session totals + 30-day historical, optional budget alerts. Existing Venice plugin stays as a provider-specific overlay. **Gate for 1.2.2:** dashboard produces at least 1 week of real-usage data before Rule 3 ships.
-- **1.2.2: Rule 3 (Consumption).** Gated on the dashboard from 1.2.1 showing concrete Rule 1+2 savings *and* the 1.1.0 `tool_result_for` plumbing exhibiting ≥95% coverage on production sessions for ≥1 week. Without the coverage signal, Rule 3 can't reason about consumed tool calls reliably.
-- **1.2.3: Rule 4 (Resolution).** Templated marker generation for "debugging spans that ended successfully." Build/test/commit success markers needed; the Git tools already emit success. Gated on Rule 3 diagnostics confirming the consumption pattern fires the way the design predicted — if the 1.2.2 numbers don't match, we re-scope rather than ship Rule 4 against an untrusted base.
-- **1.2.4: Rule 5 tuning.** Plug existing summarizer into the pipeline cleanly. Measure: compression latency, summarizer call rate (should drop now that Rules 1-4 evict first). The dashboard from 1.2.1 is the primary witness.
-- **1.2.5: Compression settings refresh [+1 week, after 1.2.4 lands].**
-
-  **What ships:** the Settings → Chat Summarizer panel is renamed to **Settings → Compression** and replaced. Five summarizer-era knobs (`messages_kept_no_tools`, `messages_kept_with_tools`, `summary_trigger_threshold`, `resummarize_interval`, `max_summary_length`) collapse into an architecture-shaped surface that names what the rule pipeline is actually doing:
-
-  | Control | Type | Notes |
-  |---|---|---|
-  | Mode | `Aggressive | Balanced | Conservative | Custom` | Preserved from current panel; intent-level. |
-  | Eviction rules | Checkbox list: Subsumption, Invalidation, Consumption, Resolution | Default all-on. Visible in **advanced view** only (see fifth bullet below). |
-  | preserve_recent (turns) | Per-mode default | Hard floor; never evicted regardless of rule decisions. |
-  | Summary fallback threshold | Per-mode default, e.g. `0.85` | Fraction of budget pressure at which Rule 5 fires after Rules 1–4 have run. |
-  | Max summary length (chars) | Preserved from current panel, unchanged | The one knob that survives the refresh untouched. |
-
-  **Preset / Advanced view toggle.** A single toggle (matching whatever convention the codebase already has, or establishing one if not — see open question below) switches between the **preset view** (mode selector + max summary length, the simple surface that serves the 95% case) and the **advanced view** (every individual knob — rule toggles, `preserve_recent`, summary fallback threshold, max summary length). The advanced view annotates each knob with its preset-derived default ("Default for Balanced: 4") and the resolution input ("scales with context window"). When a user fiddles with individual knobs and produces a configuration that doesn't match any named preset, the mode selector flips to **Custom** automatically; switching back to a named preset is a deliberate "reset to Balanced" action that snaps every knob to that preset's defaults. Both views show post-resolution numbers; switching the model causes both views to update because the displayed values are resolved policy, not stored parameters (see `docs/DESIGN-profiles.md` §"Policy vs. Resolution").
-
-  Migration: a one-shot, audit-logged, never-reversed transform of `settings.summarizer*` → `settings.compression*`. `Balanced` (old) → `Balanced` (new) with the new schema's per-mode defaults; `Custom` (old) → `Custom` (new) with rules all enabled, `preserve_recent` derived from `messages_kept_no_tools`, fallback threshold derived from `summary_trigger_threshold` as a fraction of the auto-tuned history reserve. The migrated values live alongside the old keys in stored settings until a session has run with the new schema (so a downgrade-then-upgrade doesn't double-migrate); old keys are removed by 1.3.0.
-
-  Auto-tune-to-context-window survives intact: anything stored as a token count is re-resolved at session start when the model is known. **Picking "Balanced" with a 200k model and switching to 32k re-resolves displayed numbers; intent does not change.** This is the policy-vs-resolution distinction; see the companion design observation appended to `docs/DESIGN-profiles.md`.
-
-  **Why now (1.2.5, not earlier and not later):** This needs Rules 1–5 live in production before it ships. By 1.2.4, all five rules are in the pipeline and the diagnostics from 1.2.0 + cost dashboard from 1.2.1 are the two surfaces that make the rule decisions legible. Now the user has reason to want fine-grained control over which rules fire — because the diagnostics make visible what each one is doing. Shipping the new panel before the diagnostics would expose controls without giving the user a way to see their effect; shipping it before Rules 3–5 land would expose toggles for behaviors that don't yet exist.
-
-  The **preset/advanced toggle pattern is being established in 1.2.5** because compression is the first subsystem with enough configurable surface area to need it. Subsequent panels — Memory in 1.3.x, Tools in 1.4.x, Profiles in 2.0 — should adopt the *same toggle in the same position with the same semantics* (see `docs/DESIGN-profiles.md` §"Two-View Configuration"). 1.2.5 is therefore not just "compression settings UX" — it's "the canonical pattern for every settings panel from here forward." Get this right and every later track inherits the convention; get it wrong and three more panels invent their own conventions.
-
-  **Why this matters beyond cosmetics:** configuration surfaces are how an architecture explains itself to users. A panel that talks about summarization when the underlying behavior is rule-based eviction teaches the wrong mental model. When a turn the user wanted preserved gets evicted, or a debugging span collapses unhelpfully, the user reaches for "summarizer" controls that have nothing to do with the actual decision; the panel becomes a source of frustration *and* of bug reports filed against the wrong subsystem. The 1.2.5 panel is what makes the rule pipeline legible to users — the configuration-surface analog of the "diagnostics on every call" commitment from 1.2.0.
-
-  **Scope-outs (explicitly not in 1.2.5):**
-  - **No separate "Developer mode" or "Debug settings" section.** The preset/advanced toggle does that work. If something is configuration, it goes in the advanced view of the relevant panel. If it's not configuration, it goes in the LLM Debug modal (or another diagnostics surface). There is no third place. This rules out a parallel "experimental settings" sidebar, a `?debug=` URL parameter that flips hidden settings, or an admin-only configuration path. The two-view-with-one-toggle pattern is the top-down call about where configuration lives — it's what prevents settings sprawl in subsequent tracks.
-  - **No per-feature visibility hacks.** "Hide this knob unless `?advanced=1`" or "show this checkbox only on certain providers" or "this slider is only visible if Rule 3 is enabled" all violate the contract. Every knob lives in either the preset view or the advanced view, deterministically, for every user. Conditional visibility within a view is fine (a slider greys out when the feature it controls is off); conditional existence of a knob across views is not.
-
-  **Touchpoints:**
-  - `html/settings-tabs.html` — `<div id="tabSummarizer">` (or whatever the existing id is) renamed to `tabCompression`; the controls inside replaced. The button label in `html/modals.html` (`<button data-tab="tabSummarizer">`) renamed to "Compression" and re-pointed.
-  - `js/settings/llm-tab.js:108-228` — currently owns the summarizer slider DOM + radio handling (`summarizerModeAggressive` etc.). The compression-settings DOM moves to a new file `js/settings/compression-tab.js`; this file shrinks to LLM-only concerns.
-  - `js/settings/compression-tab.js` *(new)* — owns the new panel: rule-toggle checkboxes, mode radios, `preserve_recent` and fallback-threshold sliders, max-summary-length slider, "see recent decisions →" link to the LLM Debug modal's compression-decisions section.
-  - `js/settings/persistence.js:95-98` — currently reads `summarizerMode` and the legacy `auto`/`manual` aliases. Adds a read path for `compressionMode` with a one-shot migration from the old key. Documented compatibility window: a settings export from any 1.2.x version imports cleanly into 1.2.5+; an export from 1.2.5+ into 1.2.4 or earlier is *not* supported (the new schema names rules that don't exist) and the import dialog surfaces this with a "this export was created in a newer version" banner rather than silently reverting.
-  - `js/chat/summarizer.js:108-180` — the `params` resolver currently reads `State.settings.summarizer.*` and `summarizerMode`. Reads from `State.settings.compression.*` after migration runs; the resolver is unchanged in shape — same intent-to-tokens math at session start — only the keys it consults change.
-  - `js/intelligence/compression/compactor.js` — currently registers Rules 1+2 unconditionally per the coder profile. Add per-rule `enabled` flag honor: when `compression.rules.subsumption === false`, the rule is skipped at compactor.run() entry rather than registered-then-no-op (saves the per-turn classify pass). No rule-implementation changes.
-  - `js/profiles/coder.v1.js` — the rule list moves from hardcoded `[Rule1, Rule2]` to `compression.rules`-driven; the profile reads from settings rather than hardcoding.
-  - `tests/test-summarizer.mjs` — old `summarizer*` key fixtures retained as migration test inputs; new `compression*` key fixtures added; the migration helper gets a dedicated `tests/test-compression-settings-migration.mjs` covering: Balanced→Balanced, Custom→Custom with derived `preserve_recent`, double-migration is a no-op, downgrade-then-upgrade doesn't re-migrate, missing keys default to mode-derived values.
-  - `docs/DESIGN-compression.md` §"User Configuration" — replaces or appends a section describing the new panel shape and the rule-toggle contract. The DESIGN doc is the contract per `What this roadmap commits to`; it updates first, then code.
-  - `docs/DESIGN-profiles.md` — companion appendix on policy-vs-resolution (see end of this entry).
-
-  **Open questions to resolve before implementation:**
-  1. **Power-user surface for individual rule toggles.** *Resolved by the preset/advanced toggle (above).* Rule toggles live in the advanced view; the preset view exposes only the mode selector + max summary length. Toggling a rule in advanced flips the mode to "Custom" automatically — the relationship is visible, no UX trap.
-  2. **`preserve_recent` per-rule overrides.** Some rules (Resolution) might be safer with a higher floor than others. Current proposal: per-mode default only; revisit if power users complain. Alternative: per-rule overrides under Advanced — but four rules × four modes × per-rule override is the surface area we want admissibility against.
-  3. **Settings export/import compatibility.** Export from 1.2.4 imported into 1.2.5+: migration runs. Export from 1.2.5+ imported into older: explicit "newer-version export, settings discarded" banner at import time. Document the asymmetric compatibility window in `docs/PLUGIN.md` § "Settings export/import" alongside the existing schema notes.
-  4. **Diagnostics linkage.** A "see recent decisions →" link in the panel that opens the LLM Debug modal's compression-decisions section. Light-touch — not a docked panel, just a deep link.
-  5. **Naming the toggle.** "Show advanced options" / "Power user mode" / "Show all knobs" / "Developer view." Whichever the codebase prefers, but commit once and use the **same label everywhere** (compression in 1.2.5, memory in 1.3.x, tools in 1.4.x, profiles in 2.0). The label *is* part of the architectural commitment — inconsistent labels across panels would defeat the purpose. Pick at PR kickoff; once chosen, every subsequent settings panel inherits it.
-
-  **Exit criteria:**
-  - Settings → Chat Summarizer no longer exists; Settings → Compression is the canonical surface for rule + summarizer configuration.
-  - One-shot migration test passes for every {Aggressive, Balanced, Conservative, Custom} × {default, hand-tuned} pair stored under the old schema.
-  - A user with an exported 1.2.4 settings JSON imports cleanly and lands in the equivalent 1.2.5 mode with diagnostics-visible behavior unchanged on a regression session.
-  - The Compactor honors per-rule `enabled` flags — disabling Subsumption produces a session where no Rule 1 evictions appear in the diagnostics, while Rules 2+5 continue firing.
-  - The "auto-tune to context window" line still works: switching the LLM model from a 200k to a 32k context updates the panel's displayed token counts without changing the saved intent.
-  - **Removability check:** with `js/settings/compression-tab.js` reverted to the old summarizer panel, what user-visible behavior degrades? The rule-toggle controls disappear; the panel name reverts; the auto-migration becomes a no-op (old keys still present). The Compactor falls back to its hardcoded coder-profile defaults — *which is fine, because that's where it started*. If "nothing measurable" then the panel didn't earn its complexity and the next 1.2.x patch is gated on closing the gap.
-
-  **Size:** Single PR, ~700-1000 lines (panel rewrite, migration, schema, settings/persistence + summarizer.js read path + Compactor flag honor + DESIGN-compression update + tests). The DESIGN doc updates first (per `What this roadmap commits to`); the code follows.
-
-  **UI impact:** Replaces UI #4 (Compression diagnostics pill) and UI #17 (Cost dashboard) — neither replaced; this is a **new** Settings tab. UI #24 in the cross-cutting table.
-
-  **Companion design observation (not a roadmap item).** Add an appendix section to `docs/DESIGN-profiles.md` titled **"Policy vs. Resolution"** capturing the distinction the panel formalizes:
-  > *Configuration is intent (policy); parameters are resolution. The user picks "Balanced" — that's policy, and it's stable across model changes. At session start, with the model known, policy resolves to absolute parameters (token counts, turn counts, fractions of budget). The panel persists policy; it displays resolution. Switching models re-resolves. This is what makes "auto-tune to context window" possible, and it should be the default pattern for any token-count parameter anywhere in the architecture. The current profile schema mixes policy values and resolved parameters; this is fine for now, but a future revision (likely 2.0) should separate them, exposing only policy in the persisted profile and re-resolving on every load against the active model's window.*
-  >
-  > *Memory does this implicitly today (`MemoryConfig.capacity_warnings` is policy; the actual byte counts at warning time are resolved against the IDB store size). Compression's 1.2.5 panel makes it explicit. Tools (1.4.0 budget = 5000) and Retrieval (1.5.0 strategy quotas) should follow the same shape when they ship.*
-
-- **1.2.6: Provider rate-limit respect (cross-cutting backlog).** Read `x-ratelimit-{limit,remaining,reset}-{requests,tokens}` headers from `js/providers/*` responses, pace requests with a token-aware sliding window, back off on 429 with `Retry-After`. Surface remaining RPM/TPM quota in the status-bar pill (UI #4) and the cost dashboard (UI #17). Reference algorithm and validation harness already live in `evals/pacing.js` from the NIAH eval; production code reuses the algorithm. **Why:** large-context calls (1.3.x memory recall, 1.5.x retrieval composer) routinely consume single-digit-percent of TPM per request; without provider-side pacing, bursts trip 429s during normal use. **Cross-cutting:** not gated on compression-rule cadence; ships when any track first hits provider rate-limit pressure. *(Was 1.2.5 in the previous revision; renumbered when the compression-settings-refresh entry slotted in.)*
-
----
-
-### 1.3.0 — Memory Phase 1 [target: ~3 weeks after 1.2]
-
-**What ships:**
-
-- **Persistent memory store.** New `js/intelligence/memory/` module. Phase 1 = `user` + `workspace` scopes (both shipped together at 1.3.0 kickoff 2026-04-30 — the `workspace` scope was originally scoped for 1.3.1 but bundled into 1.3.0 to ship the Git-native story in one minor release).
-- **Hybrid storage:**
-  - **Structured store** in IndexedDB via `Storage`, indexed by `key+scope`, with embeddings via the existing embeddings client.
-  - **Transparent file layer** at `.aieditor/memory/index.md` + per-category files (`preferences.md`, `decisions.md`, `project_context.md`, `domain_knowledge.md`, `workflow.md`). When a workspace is loaded, the editor reads from these committed files; when memories are created/updated, the files rewrite and become candidates for the next commit. **The killer integration:** memory lives in the repo. A user opens a project on a new machine, memories follow.
-- **3 creation paths:** `user_explicit` (Settings UI + `@memory` chip), `agent_proposed` (consent prompt in chat), `inferred` (low-confidence, TTL-bounded). The `confidence: float` field originally in this list was dropped at kickoff; `source` enum drives the UI affordance instead. See `docs/DESIGN-memory.md` for the complete data-model contract.
-- **Audit log** in IDB.
-- **3 new LLM tools:** `memory_remember`, `memory_recall`, `memory_revise`. `memory_remember` is tool-result-honest: `agent_proposed` returns `{status: 'pending_consent', candidate_id}`; `user_explicit` and `inferred` bypass the consent queue.
-- **Settings → Memory tab** with list/edit/audit views, agent-proposal toggle.
-
-**Why now:** **Git-native memory is the load-bearing feature here, not an incidental win.** Every other AI editor's memory either lives in a vendor cloud (Cursor, Claude.ai, ChatGPT memory), in a local-only store that dies when you switch machines (most plugin-style tools), or in a config file that isn't really memory (Cline, Aider rules). Repo-committed memory that round-trips through Git is a *category change* — the user's notes follow the code across machines, branches, and forks, with no backend. This is the reason memory ships before tools even though tools cuts more cost: memory unlocks an externally-tellable story that the rest of the roadmap then trades on. Pure capability addition with no breaking changes.
-
-**Story-completion landed in one release:** `user` scope ("we have memory") and `workspace` scope ("we have the Git-native demo") both shipped in 1.3.0 — the originally-planned ≤2 week gap between 1.3.0 and 1.3.1 collapsed to zero because the file layer (PR #3) and the Settings tab (PR #5) handled both scopes from the same code paths. The 1.3.x slot that was reserved for "workspace scope" is reused below for self-healing tools.
-
-**Exit criteria:**
-- `.aieditor/memory/` files round-trip through commit/checkout without corruption.
-- Settings → Memory shows all entries with audit trail.
-- A memory created in chat survives a page reload and reappears in the next session's context.
-- Agent proposals fire only with explicit consent (no silent writes).
-- **Removability check:** With `js/intelligence/memory/` removed and `scratchpad-tools` restored, what user-visible behavior degrades? Memory is the most user-visible subsystem — if removability is "nothing user-noticed" then the UI didn't expose memory enough and 1.3.x is gated on closing that gap.
-
-**Size:** ~6-8 PRs over 3 weeks. UI is the long pole.
-
-**UI impact (significant):**
-- **New Settings tab: Memory** — list view with scope filter, edit form, audit log expansion, "agent proposal frequency" setting. *First Preact + `htm` slow-roll target* (per Decision §9). Existing tabs stay vanilla; the new Memory tab is the proving ground for the framework boundary.
-- **Inline `@memory` chip in chat** — typing `@memory` shows a fuzzy-matched picker of existing memories for citation. Also Preact-rendered (the chip + picker share state with the Settings tab).
-- **Consent prompts** — when an agent proposes a memory, a small inline card in the chat with Accept/Dismiss/Edit buttons. Match the existing themed dialog system. Preact component.
-
-The Memory UX (these three flows) is the scope of the **Touch 1 design engagement** with claude.ai/design (kicked off pre-1.3.0; see Decision §10).
-
----
-
-### 1.3.x — Memory follow-ups + Touch 2 facelift
-
-> **Renumbering note.** Earlier reshuffles: §1.3.1's original occupants (workspace scope, self-healing tools) shipped inside 1.3.0; reasoning-as-turn-metadata took the empty slot. §1.3.2's original occupant (persona scope) was deferred indefinitely; cross-device session sync took the slot. Session replay slid to §1.3.3. Touch 2 facelift items now occupy 1.3.5–1.3.13. Versions are monotonic releases, not reserved slots — the previously-§1.3.2 persona-scope deferral never reserved a future number.
->
-> **1.3.15 insertion (post-1.3.14).** The original PR-3 plan put meta-tools at 1.3.15. After 1.3.14 deployed to `:dev`, dogfooding revealed the model still self-described as having ~21 tools (read from the system prompt's hardcoded enumeration) even though the Composer trimmed the API `tools` array to 6. Meta-tools (discovery) only make sense once the prompt stops enumerating tools to begin with — so 1.3.15 became "system-prompt admission alignment" and meta-tools moved to 1.3.16. The Composer's reduction is real for invocation; 1.3.15 makes it real for self-description too.
->
-> **Per-conversation sync opt-in (not workspace-wide).** Memory's repo mode is workspace-level (curated facts, intentional). Sessions hold raw transcripts (pasted secrets, stack traces) so workspace-level opt-in was too coarse. The shipped gate is a per-conversation `synced: boolean` flag on the index entry; default-false; the conversation drawer carries the toggle.
-
-- **1.3.1 [SHIPPED — 2026-04-30]:** Reasoning as turn metadata — splits `<think>`/`<thinking>` content off the streamed response into a first-class `reasoning` field, closing the duplicated-preamble streaming bug by construction. See [CHANGELOG.md §1.3.1](../CHANGELOG.md).
-- **1.3.2 [SHIPPED — 2026-04-30]:** Cross-device session sync via Git — per-conversation `synced: boolean` flag pending-stages `.aieditor/sessions/<id>.json` on commit. **Persona scope** (the prior §1.3.2 occupant) remains [DEFERRED INDEFINITELY]. See [CHANGELOG.md §1.3.2](../CHANGELOG.md).
-- **1.3.3 [SHIPPED — 2026-04-30]:** Session replay / shareable transcripts — read-only stepper over `.aieditor.session` JSON exports. See [CHANGELOG.md §1.3.3](../CHANGELOG.md).
-- **1.3.4 [SHIPPED — 2026-04-30]:** Tools-track foundation (PR 1 of §1.4.0) — `ToolDef`/`ToolID`/`Catalog` data contracts and read-only adapter; no admission decisions yet. See [CHANGELOG.md §1.3.4](../CHANGELOG.md).
-- **1.3.5 [SHIPPED — 2026-04-30]:** Theme tokens contract foundation (PR 1 of facelift arc) — frozen `--tk-*` public vocabulary, Refined IDE + Editorial Calm themes, CI lint on standalone hex. See [CHANGELOG.md §1.3.5](../CHANGELOG.md).
-- **1.3.6 [SHIPPED — 2026-04-30]:** Top bar Restructure (Touch 2 LOCKED, PR 2) — brand + branch + ⌘K + token pill + 3-icon row. See [CHANGELOG.md §1.3.6](../CHANGELOG.md).
-- **1.3.7 [SHIPPED — 2026-05-01]:** Settings sidebar Restructure (Touch 2 LOCKED, PR 3) — vertical Workspace/AI/App grouping replaces the 13-tab strip. See [CHANGELOG.md §1.3.7](../CHANGELOG.md).
-- **1.3.8 [SHIPPED — 2026-05-01]:** Connections panel (Touch 2 net-new, PR 4) — provider-grouped layout, per-row status pills. See [CHANGELOG.md §1.3.8](../CHANGELOG.md).
-- **1.3.9 [SHIPPED — 2026-05-01]:** Debug slide-out (Touch 2 net-new, PR 5) — five-tab right-edge drawer; first slide-out shell in the codebase. See [CHANGELOG.md §1.3.9](../CHANGELOG.md).
-- **1.3.10 [SHIPPED — 2026-05-01]:** Help slide-out (Touch 2 net-new, PR 6) — left-rail nav, data-driven hotkeys (⌘ vs Ctrl), search-all. See [CHANGELOG.md §1.3.10](../CHANGELOG.md).
-- **1.3.11 [SHIPPED — 2026-05-01]:** Lucide icon family swap (Touch 2 PROBE, PR 7) — replaces emoji in UI surfaces. See [CHANGELOG.md §1.3.11](../CHANGELOG.md).
-- **1.3.12 [SHIPPED — 2026-05-01]:** Self-hosted woff2 fonts (Touch 2 PROBE, PR 8) — Inter / IBM Plex Sans / Source Serif 4 / JetBrains Mono / IBM Plex Mono. See [CHANGELOG.md §1.3.12](../CHANGELOG.md).
-- **1.3.13 [SHIPPED — 2026-05-01]:** rem-based UI scaling (Touch 2, PR 9 — final facelift patch) — single 80–175% UI Scale slider replaces 3-axis font sliders; editor font size kept separate. Migration auto-derives scale from legacy `fontSize`/`chatFontSize`. See [CHANGELOG.md §1.3.13](../CHANGELOG.md).
-- **1.3.14 [SHIPPED — 2026-05-01]:** Tools Composer (PR 2 of 1.4.0 Tools Phase 1) — first runtime consumer of the 1.3.4 foundation. `composeAdmission()` resolves `coder.v1.tools.static` through the `Catalog`, gates on authorization, packs against `budget_tokens`, skip-not-throws on the 3 PR-3 meta-tools, surfaces `unresolved_static` in diagnostics. Wired into `LLMTools.getToolsForRole()` with a `?toolsCompose=off` kill-switch (the §1.4.0 removability check). Lands as 1.3.14 (not 1.4.0) until discovery + meta-tools satisfy the 70% token-reduction exit criterion. See [CHANGELOG.md §1.3.14](../CHANGELOG.md).
-- **1.3.15 [SHIPPED — 2026-05-01]:** System-prompt admission alignment (prereq for meta-tools 1.3.16) — `LLMTools.getAdmittedTools()` exposes the Composer's admitted `ToolDef[]`; `buildSystemPrompt({ admittedDefs, composerActive })` renders the tool enumeration dynamically from the admitted set; the WORKFLOW / EFFICIENCY / EDITING / SCRATCHPAD blocks were rewritten to capability language or scoped behind admission; the legacy 21-bullet block is preserved as `LEGACY_TOOL_ENUMERATION` for the `?toolsCompose=off` kill-switch and non-coder fallbacks; `read_issue` and `search_project` (never-registered references) removed in every mode. See [CHANGELOG.md §1.3.15](../CHANGELOG.md).
-- **1.3.16 [SHIPPED — 2026-05-01]:** Meta-tools (PR 3 of 1.4.0 Tools Phase 1) — `list_tool_categories`, `list_tools_by_category`, `find_tool` (categorical/text scoring only; semantic in 1.4.1). Closes the `unresolved_static` gap surfaced by the 1.3.14 Composer: `coder.v1.tools.static` admits 9/9 names instead of 6/9. Discovery roundtrip is now testable end-to-end (model calls `list_tools_by_category("code.git")`, gets summaries, picks one). Sticky admission ships in a later 1.4.x patch — for 1.3.16, a discovered tool only becomes invocable on the next turn if it was already in the static set. Lands as 1.3.16 (not 1.4.0) until the 70% token-reduction exit criterion is measurable end-to-end on real sessions via the 1.2.1 cost dashboard. See [CHANGELOG.md §1.3.16](../CHANGELOG.md).
-- **1.3.17 [SHIPPED — 2026-05-01]:** Sticky tool admission (PR 4 of 1.4.0 Tools Phase 1) — fills `TaskLedger.tool_admissions[]` / `tool_invocations[]` for the first time since the 1.1.0 scaffold. New per-conversation registry in [`js/chat/task-state.js`](../js/chat/task-state.js); `composeAdmission()` walks the ledger after the static loop and re-admits with `source: 'sticky'`; the post-`executeToolCall()` hook in [`js/chat/handlers.js`](../js/chat/handlers.js) records every successful call and auto-admits non-static tools. A tool the model invoked once via `find_tool` discovery now stays callable for the rest of the conversation instead of dropping out of the OpenAI tool-array on the next turn. Static-set membership beats sticky on name overlap; failed calls don't accumulate; ledgers reclaim on `conversation:deleted` only (so re-opening preserves the sticky set). Coder-only today — other roles run the legacy `Roles.filterTools` path with no static set. Lands as 1.3.17 (not 1.4.0) because the §1.4.0 measurement exit criterion still wants a follow-up patch wiring tool-definition cost into the 1.2.1 cost-recorder. See [CHANGELOG.md §1.3.17](../CHANGELOG.md).
-
-- **Chat panel facelift [DEFERRED — exploration not ship-ready].** Three variants in Touch 2 (Polish, Restructure, Reskin); user hasn't picked. Will get a 1.3.x slot once a direction is locked, or roll into 2.0 with the profile picker (which lands in chat header — adjacent territory).
-
----
+Tools work continues to ship as 1.3.x patches until the 70%-token-reduction exit criterion lands; promotion to 1.4.0 happens then. 1.4.x follow-ups are sized but not started.
 
 ### 1.4.0 — Tools Phase 1 [target: ~3 weeks after 1.3]
 
@@ -420,42 +113,35 @@ The Memory UX (these three flows) is the scope of the **Touch 1 design engagemen
 
 ---
 
-### 1.5.0 — Retrieval Phase 1 [target: ~6-8 weeks after 1.4]
+## Later (sequenced)
+
+### 1.5.0 — Retrieval Phase 1 [target: ~6-8 weeks after Tools track promotes]
 
 **What ships:**
-
-- **`js/intelligence/retrieval/`** — new module tree.
+- `js/intelligence/retrieval/` — new module tree.
 - **`ChunkRef` contract** with deterministic `ChunkID` (hash of `collection || source_uri || normalized_byte_range || chunker_version`).
-- **Ingest pipeline:** Loader → Chunker → (StructureExtractor) → Embedder → Store. Phase 1 chunkers: prose, code (regex heuristic for JS/TS/Python — same languages as `scan_file`), conversation (1 turn = 1 chunk), structured (per record).
+- **Ingest pipeline:** Loader → Chunker → (StructureExtractor) → Embedder → Store. Phase 1 chunkers: prose, code (regex heuristic for JS/TS/Python), conversation (1 turn = 1 chunk), structured (per record).
 - **Two strategies:** Semantic (hybrid k-NN + BM25 + RRF) and Structural (ancestor-walk over `parent_id` metadata).
-- **Composer** with budget accounting, per-strategy quotas, attention-aware ordering (`task` → tail, `system_context` → head, `retrieved`/`history` → body), dedup by ChunkID.
-- **Migration off `js/context-manager.js`.** The legacy module continues to back the existing `find_relevant_files` tool until 1.5.2; the new pipeline runs in parallel during 1.5.0–1.5.1 with feature-flag fallback.
-- **Chunk admission ledger.** This track fills in `admissions` and `exclusions` records on the **unified `TaskLedger`** from 1.1.0 — same struct, third consumer.
+- **Composer** with budget accounting, per-strategy quotas, attention-aware ordering, dedup by ChunkID.
+- **Migration off `js/context-manager.js`.** Legacy module continues to back `find_relevant_files` until 1.5.2; new pipeline runs in parallel during 1.5.0–1.5.1 with feature-flag fallback.
+- **Chunk admission ledger.** Adds `admissions` / `exclusions` records to the `TaskLedger` shipped in 1.3.17 (`js/chat/task-state.js`); same struct, second consumer.
 - **Diagnostics:** What strategies fired, chunks per strategy, tokens used vs budget, cache hits.
 
-**Why now:** This is the biggest rebuild. Doing it last means we already know exactly what compression and memory need from retrieval. The contract becomes concrete instead of speculative.
+**Why last:** Biggest rebuild. Doing it after compression + memory + tools means we know exactly what the other subsystems need from retrieval; the contract becomes concrete instead of speculative.
 
 **Exit criteria:**
 - Existing `find_relevant_files` results (legacy) and new Composer results agree for ≥80% of test queries.
 - New ingest pipeline indexes a project at startup with measurable progress and resumability.
-- Code review on a single attached file ("review src/foo.ts for code smells") matches or beats current behavior on a benchmark set.
-- **Removability check:** With `js/intelligence/retrieval/` removed and `context-manager.js` restored, what user-visible behavior degrades? Cost dashboard's retrieval-strategy breakdown disappears; per-call retrieved tokens jump back to baseline. If neither of those is measurably true on the benchmark, the rebuild didn't earn its complexity.
+- Code review on a single attached file matches or beats current behavior on a benchmark set.
+- **Removability check:** With `js/intelligence/retrieval/` removed and `context-manager.js` restored, what user-visible behavior degrades?
 
-**Size:** ~10-15 PRs over 6-8 weeks. The longest single track. Several `1.5.0-betaN` tag pushes likely.
+**Size:** ~10-15 PRs over 6-8 weeks. Several `1.5.0-betaN` tag pushes likely.
 
-**UI impact:**
-- **Retrieval diagnostics** in LLM debug modal (parallel to compression and tools sections).
-- **Index progress indicator** (already exists as `index-indicator.js`) updated to show the new pipeline's progress and per-strategy hit rates after a turn.
-- **Status bar:** "📊 8K retrieved / 22K budget" pill (optional polish).
-
----
-
-### 1.5.x — Retrieval follow-ups [+3-4 weeks]
-
+### 1.5.x — Retrieval follow-ups
 - **1.5.1:** Thematic strategy (k-means over filtered vectors). Powers "summarize this codebase" properly.
 - **1.5.2:** Legacy `context-manager.js` removed; `find_relevant_files` rewritten to call the new Composer.
-- **1.5.3: Cost dashboard — retrieval extension.** The dashboard itself shipped in 1.2.1 (cross-provider, per-conversation, per-tool). This patch adds the retrieval-strategy breakdown that 1.5.0's diagnostics now produce: per-strategy hit rates, per-strategy token spend, "this query was expensive because the structural strategy matched 200 chunks" affordances. No new Settings tab — extends the existing Cost tab.
-- **1.5.4:** Query cache, structural expansion cache (per `DESIGN-retrieval.md` §Caching).
+- **1.5.3:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) — *gated on cost dashboard shipping*.
+- **1.5.4:** Query cache, structural expansion cache.
 - **1.5.5 (optional, gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
 
 ---
@@ -463,158 +149,119 @@ The Memory UX (these three flows) is the scope of the **Touch 1 design engagemen
 ### 2.0.0 — Profiles ascend [target: ~3 weeks after 1.5]
 
 **What ships:**
-
 - **Profile contract goes live.** `Profile { name, version, base, budget, retrieval, memory, compression, tools, task_ledger }` is the configuration surface.
-- **5 canonical profiles registered:** `chat.v1` (base), `coder.v1`, `kb.v1`. (`chat_multi.v1` and `rp.v1` shipped as stubs — AI Editor's surface is single-user code-focused, but the profiles exist for plugin authors.)
-- **Roles → profile presets.** The existing 5 roles become UI-friendly toggles over the profile's tool catalog. The `role` setting persists for UX continuity, but all subsystems read from the resolved profile.
-- **Task ledger** with novelty-based re-admission (per `DESIGN-profiles.md` §The Task Ledger).
-- **Settings migration script.** One-shot migration runs on first 2.0 load; old `settings.role` translates to `settings.profile.preset`. Audit-logged.
-- **Profile picker UI.** New top-bar selector — sits next to or replaces the role selector depending on what feels right after dogfooding.
+- **5 canonical profiles registered:** `chat.v1` (base), `coder.v1`, `kb.v1`. (`chat_multi.v1` and `rp.v1` shipped as stubs for plugin authors.)
+- **Roles → profile presets.** The existing 5 roles become UI-friendly toggles over the profile's tool catalog. `role` setting persists for UX continuity; subsystems read from the resolved profile.
+- **Task ledger** with novelty-based re-admission.
+- **Settings migration script.** One-shot migration on first 2.0 load; `settings.role` translates to `settings.profile.preset`. Audit-logged.
+- **Profile picker UI.** New top-bar selector — sits next to or replaces the role selector after dogfooding.
 
-**Why now:** All four subsystems are shipping. Profiles consolidate them. By postponing 2.0 until everyone has clarity, we avoid baking speculative profile decisions into the 1.x line.
-
-**Be ready to discover the profile contract is lighter than designed.** `DESIGN-profiles.md` describes profiles as the abstraction across five surfaces (chat, multi-user, RP, coder, KB); ai-editor has one. If by 1.5.x the "profile" reduces to `coder.v1` plus a settings struct plus three knobs, that's a finding to celebrate, not a failure — 2.0 ships a profile contract sized to what the editor actually needs, not the design doc's full surface area. Plugin authors targeting other surfaces still get the contract; we just don't pre-build their use cases.
+**Be ready to discover the profile contract is lighter than designed.** `DESIGN-profiles.md` describes profiles as the abstraction across five surfaces; ai-editor has one. If by 1.5.x the "profile" reduces to `coder.v1` plus a settings struct plus three knobs, that's a finding to celebrate — 2.0 ships a contract sized to what the editor actually needs.
 
 **Exit criteria:**
 - Settings export from 1.5.x imports cleanly into 2.0 with the migration applied.
-- A user who never touches the profile picker sees no behavior difference (defaults to `coder.v1` or `chat.v1` based on current role).
+- A user who never touches the profile picker sees no behavior difference.
 - Profile-aware diagnostics: every subsystem's diagnostics surface includes the active profile name + version.
-- **Removability check:** With the profile layer collapsed back to roles, what user-visible behavior degrades? If "nothing — the picker is gone but the editor still works the same," profiles were over-architected and the contract should ship lighter.
+- **Removability check:** With the profile layer collapsed back to roles, what user-visible behavior degrades?
 
-**Size:** ~6-10 PRs over 3 weeks. The migration is the risk; everything else is plumbing.
-
-**UI impact (significant):**
-- **Profile picker** in the chat header. Could be a dropdown with previews showing budget shape, active rule set, tool count. Preact (per Decision §9 — third slow-roll target after Memory and active-tools chip row).
-- **Settings → Profiles tab** (replaces or augments Roles tab) — view/edit profile presets, see resolved configuration, fork from canonical.
-- **Status-bar profile pill** showing active profile + version. Click to switch.
+**Size:** ~6-10 PRs over 3 weeks. Migration is the risk; everything else is plumbing.
 
 ---
 
-### 3.0 — Uniform UI consolidation [stub; not scoped]
+### 3.0 / Post-2.0 candidates [unscoped]
 
-**Placeholder, not committed work.** By 2.0 we've shipped Preact + `htm` on a handful of new surfaces (Memory tab, `@memory` chip + consent, active-tools chip row, profile picker) while everything else stays vanilla. The 2.0 → 3.0 arc is the moment to evaluate whether a uniform UI story is worth the migration cost.
+- **Uniform UI consolidation** — by 2.0 we'll have shipped Preact + `htm` on a handful of new surfaces (Memory, `@memory` chip, active-tools chip row, profile picker). 3.0 evaluates whether to migrate select existing surfaces (Settings sidebar, secondary pane, conversation drawer), introduce a Plugin Component primitive, and rework mobile. Touch 2 of the design engagement is the natural input.
+- **Sub-agents** — bounded child conversations with their own context/tool catalog/budget. Tractable post-2.0 because profiles make "child profile" a real abstraction. Commit only if real tasks are measurably bottlenecked on context exhaustion that decomposition would solve.
+- **Browser-in-browser preview** — Service Worker intercepting iframe `fetch` to serve in-memory files; multi-file static web apps render correctly. StackBlitz-classic / CodeSandbox-v1 pattern. Commit if real users hit the multi-file wall often enough.
 
-**Candidate scope** (to be sized when 2.0 is closer):
-- Migrate select high-state existing surfaces to Preact (Settings sidebar, secondary pane, conversation drawer) where the vanilla rebuild patterns have grown brittle.
-- **Plugin Component primitive** — let plugins ship Preact components instead of HTML strings; makes the long-deferred plugin marketplace tractable.
-- **Mobile UI consolidation** (UI #16) — the existing fullscreen-overlay model for ≤768px is cramped; rework using shared Preact primitives.
-- **Theming + design-system pass** — by 3.0 the pile of inline styles in `html/*.html` will deserve a proper component library.
-
-**Why a stub now:** Decision §9 commits Preact-on-new-surfaces only through 2.0; this stub records the future arc so it isn't forgotten, but doesn't pre-scope work that should be designed against measured data after 2.0 ships. Touch 2 of the design engagement (Decision §10) is the natural input here.
+All three get scoped post-2.0 against measured signal, not speculation.
 
 ---
 
-### Post-2.0 candidates [unscoped]
+## Deferred / unscheduled (needs triage)
 
-**Placeholder, not committed work.** Two ideas surfaced during planning that don't fit the 1.x → 2.0 arc but are worth recording so they aren't forgotten. Both get scoped post-2.0 against measured signal, not speculation. They sit alongside the 3.0 UI consolidation stub — orthogonal to it, not gated by it.
+> **Why this section exists.** Foundations (1.1.x) and Compression (1.2.x) were sequenced before Memory + Tools jumped ahead. Some items are gated on metrics from the cost dashboard (which itself is deferred). Some may be obsolete now that Tools shipped its own equivalents (e.g. the `TaskLedger` landed in 1.3.17). Sorting paused-vs-abandoned is owed.
 
-#### Sub-agents
+### Foundations (was 1.1.x)
 
-**The idea.** A tool call that spawns a bounded child conversation with its own context, tool catalog, and budget allocation drawn from the parent's. The child runs a sub-task to completion and returns a structured result the parent decides what to admit into its own context. Lets the editor parallelize independent searches, protect the parent's context window from large intermediate results, and assign different profiles to different sub-tasks (parent on `coder.v1`, sub-agent on `kb.v1` for a docs lookup, etc.).
+| Item | Branch | Rationale |
+|---|---|---|
+| Turn metadata enrichment | `feat/1.1.0-turn-enrichment` | Needed by compression Rules 1–3 (`file_ops`, `tool_result_for`). Read-path-only; new turns enriched, old ones absent. |
+| Migration coverage probe | `feat/1.1.0-metadata-coverage-probe` | Read-only consistency check; `?debug=metadata` flips it on. Distinguishes "no rule applied" from "rule skipped because metadata absent." |
+| ~~Unified `TaskLedger` (data only)~~ | n/a | **Shipped in 1.3.17** as `js/chat/task-state.js` with `tool_admissions[]` / `tool_invocations[]`. Retrieval / Profiles will extend the same struct. Foundations row obsolete. |
+| Profile scaffolding (data only) | `feat/1.1.0-profile-scaffolding` | `js/profiles/coder.v1` mirroring current behavior, no behavior change. |
+| CI `node --test` step | `feat/1.1.0-ci-node-test` (worktree `ecstatic-aryabhata-1b4990` — likely abandoned; we're well past 1.1.0) | Port `*.mjs` suites to `node:test`. |
+| Pre-merge version coherence check | (none) | Lint comparing `js/version.js` to latest `## [X.Y.Z]` heading in `CHANGELOG.md`. Two release-sync drifts is enough; one evening to fix forever. |
+| Idle timeout (since-last-token) | `feat/1.1.1-llm-idle-timeout` | Replaces wall-clock LLM timeout. Foundational for reasoning models, agentic loops, test-driven loop. |
+| Embedder hardening | `feat/1.1.2-embedder-provider-decoupling` | Provider decoupling, filetype filters, 500-file ceiling, in-browser embedder validation, Settings → Embeddings tab. |
+| Vim keybindings | `feat/1.1.3-vim-keybindings` | `@replit/codemirror-vim`; toggle in Settings → Appearance. Self-contained. |
+| Glassworm / Trojan-Source protection | (none) | Invisible-Unicode lint in CI; editor decoration; plugin install warning band; `docs/SECURITY.md`. |
 
-**Why it fits the architecture.** Profiles (2.0) make this tractable — a sub-agent is a child profile with a budget allocation. Memory (1.3.x) gives sub-agents a way to surface findings without round-tripping through chat. The unified `TaskLedger` (1.1.0) already supports the "this admission came from sub-agent N" attribution an audit trail wants.
+### Compression (was 1.2.x)
 
-**What's hard.** The design surface, not the wiring. Open questions: when does the user see a sub-agent vs. the parent driving silently? How are mid-run results surfaced (collapsed cards, side panel, conversation drawer entry)? What's the depth cap and runaway-cost guard? How does cancel propagate? The cost dashboard (1.2.1) needs a sub-agent attribution column or it goes blind to a new spend category.
+> **The whole track is gated on the cost dashboard.** Without it, "did Rules 1+2 actually save the projected 40%?" is unanswerable. Each follow-up gates on the previous one's measured value showing up in the dashboard.
 
-**What would need to be true to commit it.** Profiles need to have settled (post-2.0) so "child profile" is a real abstraction rather than a speculative one. At least one task in the wild — code review across N files, a refactor that touches independent modules — needs to be measurably bottlenecked on context exhaustion that decomposition would solve. If by 2.x we haven't hit that wall on real work, sub-agents stay parked.
+| Item | Branch | Rationale |
+|---|---|---|
+| Rules 1+2 (Subsumption, Invalidation) | `feat/1.2.0-compression-phase-1`, `feat/1.2.x-compression-off-flag`, `feat/1.2.x-synthetic-savings` | New `js/intelligence/compression/` module tree. `preserve_recent` invariant. Diagnostics in LLM debug modal. Existing `chat/summarizer.js` stays as Rule 5 fallback. |
+| Cost dashboard | (none) | **Gating item.** Cross-provider, per-conversation, per-tool token + cost breakdown. Promoted from 1.5.3 because measurement infrastructure ships first, not last. Today the editor has Venice-specific billing in `plugins/venice-billing.js`; this generalizes it. |
+| Rule 3 (Consumption) | (none) | Gated on dashboard + ≥95% `tool_result_for` coverage on production sessions. |
+| Rule 4 (Resolution) | (none) | Templated marker generation for "debugging spans that ended successfully." Gated on Rule 3 numbers matching the design. |
+| Rule 5 tuning | (none) | Plug existing summarizer into the pipeline cleanly; measure compression latency and summarizer call rate. |
+| Settings → Compression panel refresh | (none) | Replaces Settings → Chat Summarizer. Establishes the **preset / advanced toggle pattern** (Decision §11) that subsequent panels inherit. Gated on Rules 1–5 live. The full design rationale (rule-toggle contract, policy-vs-resolution, scope-outs) belongs in `docs/DESIGN-compression.md`; the inline essay was moved out for readability. |
+| Provider rate-limit respect | (none) | Read `x-ratelimit-*` headers; pace requests; back off on 429. Cross-cutting; ships when any track hits rate-limit pressure. |
 
-**Removability check (preemptive).** With sub-agents removed, the parent does the same work serially with bigger context spend. If the only measurable difference is wall-clock time on tasks the user wasn't going to run anyway, the feature didn't earn its complexity.
+### Other deferred
 
-#### Browser-in-browser preview (multi-file web apps)
-
-**The idea.** The current preview pane (`js/secondary-pane.js`) renders single-file content via `srcdoc` — fine for one HTML file, a markdown doc, or an SVG. Multi-file static web apps (an `index.html` that imports `./app.js` which imports `./utils/foo.js` which fetches `./data.json`) don't render correctly today; the user has to deploy to see them work. The candidate: a sandboxed iframe whose `fetch` requests are intercepted by a Service Worker that serves files from the editor's in-memory file tree. Same pattern as StackBlitz-classic and CodeSandbox v1.
-
-**Why it fits.** Web-only (HTML/CSS/JS/ESM/JSON/assets) is the sweet spot — no Node runtime, no `npm install`, no build step needed. The "no build step" project constraint isn't violated; it's reinforced. The file tree is already in-memory; the Service Worker just needs read access. ES modules, relative imports, sibling `fetch()`, image/font assets all work without source rewriting.
-
-**What's hard.** Service Worker scope and registration is the fiddly part — the worker has to register against a path that doesn't conflict with the editor itself, and the iframe has to be served from a location inside that scope. Storage isolation (so the preview's `localStorage`/`IndexedDB` doesn't bleed into the editor's) needs careful origin handling. Debugging runs through the iframe's devtools, one click further than today. None of these are blockers; they're the reason a Phase 1 implementation is larger than its surface suggests.
-
-**What's out of scope even at the candidate stage.** Node runtime (no WebContainers — that's StackBlitz's proprietary tech, not portable). Real network requests to non-self origins beyond what browser CORS already permits. A "publish this preview" button — that's a deploy story, not a preview story.
-
-**What would need to be true to commit it.** Real users hitting the multi-file wall on real projects. The current preview handles roughly 80% of "show me what this looks like" — the question is whether the missing 20% (multi-page sites, ESM apps, asset-loading examples) shows up often enough to justify the build. Likely yes for users shipping static-site projects; less obvious for users primarily on backend code where preview isn't the loop.
-
-**Removability check (preemptive).** With the SW preview removed, the `srcdoc` preview returns. Multi-file users go back to deploying-to-see. If the deploy loop via Gitea CI is fast enough (it is today), the SW preview's value is "saves N seconds per iteration" — real, but needs measuring against the maintenance cost of a Service Worker registration the rest of the editor coexists with.
-
----
-
-## UI improvements (cross-cutting)
-
-These slot into patch releases of whatever track is current. Some are enabled by track work, others stand alone.
-
-| # | Improvement | Why | Track to ship in |
-|---|---|---|---|
-| 1 | **Idle-timeout label change** in Settings → LLM | Makes the new behavior discoverable | 1.1.1 |
-| 2 | **Settings → Embeddings tab** | Provider selector, filetype filters, in-browser toggle, indexing stats | 1.1.2 |
-| 3 | **Vim keybinding toggle** in Settings → Appearance | Self-contained power-user feature; Emacs deferred (no CM6 official package) | 1.1.3 |
-| 4 | **Compression diagnostics pill** in status bar (live ratio) + full trace in LLM debug modal | Surface admissibility decisions; per Decision §3 | 1.2.0 |
-| 5 | **Memory management UI** — Settings tab + inline `@memory` chip in chat | Memory is invisible without it | 1.3.0 |
-| 6 | **Cross-device session indicator** — small badge in conversation drawer when a conversation is repo-synced | Visibility for the opt-in repo mode | 1.3.2 |
-| 7 | **Session replay viewer** — drag-and-drop a `.aieditor.session` file, get read-only step-through | Bug reports, teaching | 1.3.3 |
-| 8 | **Active tools chip row** above chat input | Demystify what tools are loaded | 1.4.0 |
-| 9 | **MCP server management UI** in Settings → Plugins (or Settings → MCP) | Add/remove/auth MCP servers; see what tools each contributes | 1.4.2 |
-| 10 | **Test-driven loop progress card** in chat | Iteration N/M, current step, wall-clock budget, abort | 1.4.3 |
-| 11 | **Workspace-overrides indicator** in Settings (badge on overridden values) | Make the .aieditor/settings.json overrides discoverable | 1.4.4 |
-| 12 | **Inline AI suggestion (ghost text)** rendered as CM6 decoration | Hotkey-only — no automatic polling, no idle cost | 1.4.5 |
-| 13 | **Settings tab UX** — sidebar instead of horizontal tab strip | The strip already overflows; the Embeddings/Memory/Tools/Profile tabs make it worse | 1.3.x or 1.4.x |
-| 14 | **In-app help renderer** — currently Markdown in a modal | A persistent sidebar pane would make `read_docs`-driven content far more useful | 1.1.x |
-| 15 | **SlotManager (designed but not built)** | Still on PLAN.md; tackling alongside Settings tab UX rework gives plugins the long-promised injection points | 1.4.x |
-| 16 | **Mobile secondary pane** rework — diff/blame on mobile is cramped | The current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over | Cross-cutting; tackle alongside whichever track touches secondary-pane.js |
-| 17 | **Cost dashboard** — generic cross-provider, per-conversation, per-tool breakdown | Measurement infrastructure ships *with* the first eviction subsystem so 1.2.0's projected savings get verified immediately. Retrieval-strategy breakdown bolts on in 1.5.3. | 1.2.1 |
-| 18 | **Status bar at the bottom** — extends pill from #4 with tools + retrieval | "Compression: 60% kept · Tools: 8 loaded · Retrieval: 8K/22K" | 1.5.x |
-| 19 | **Profile picker** in chat header (replaces role selector per Decision §2) | One canonical surface | 2.0.0 |
-| 20 | **Issue/PR tab visual hierarchy** — long tabs feel busy | Issue tabs render dense walls of metadata; lo-pri | Cross-cutting; lo-pri |
-| 21 | **Plugin marketplace UI** | Defer to post-2.0 once the architecture stabilizes | 2.x |
-| 22 | **Invisible-Unicode decoration in editor** + plugin install warning band | Surface the glassworm/Trojan-Source attack class as a visible artifact | 1.1.4 |
-| 23 | **Reasoning bubble** above assistant responses — collapsed-by-default, click-to-expand inline card showing captured `<thinking>` content | Provenance is admitted, not stripped. Closes the duplicated-preamble streaming bug by construction; surfaces what the model thought when its answer is wrong; gives 1.3.4 replay viewer something to step through; lets the cost dashboard attribute reasoning tokens. | 1.3.5 |
-| 24 | **Settings → Compression** panel, **replacing** Settings → Chat Summarizer | Architecture-shaped surface (rule toggles, preserve_recent floor, fallback threshold) once Rules 1–5 are live. The configuration surface tracks the joint structure of the architecture beneath it. | 1.2.5 |
-
-**One thing I'd push back on if you ever propose it:** *don't* add a wizard/onboarding for profiles. The current onboarding (`js/onboarding.js`) is appropriately scoped (Git + LLM); profiles should default invisibly to `coder.v1` and surface only when the user notices the picker. Profile selection is not a setup decision; it's a workflow decision.
-
----
-
-## What's out of scope for the 1.x → 2.0 arc
-
-Explicit deferrals so we don't accidentally take them on:
-
-- **Multi-modal context.** Image/audio chunks. Vision models work for images today (paste-to-chat); structured handling is a 3.x topic.
-- **Cross-process / distributed state.** Stays single-process per `DESIGN-retrieval.md` §Consistency Model. No sync server, no multi-tab live coordination beyond the existing tab-isolation model.
-- **Real-time collaborative editing.** Two users editing the same file simultaneously. Not a context problem; not in scope.
-- **Plugin marketplace.** Old PLAN.md item. Defer to a 2.x track after the profile contract is stable.
-- **Markdown-as-source AST chunking.** The Phase 1 code chunker is regex-based per the design; a tree-sitter-grade chunker is gated on measured need.
-- **Custom embedding model fine-tuning.** Use the user's chosen provider; no fine-tuning loop.
-- **Cross-project task ledger.** Task ledgers stay session-scoped per `DESIGN-profiles.md`. If users want continuity, they put it in memory with consent.
+- **Chat panel facelift** — three Touch 2 variants (Polish, Restructure, Reskin); direction not locked. Will get a slot once a direction is picked or roll into 2.0 with the profile picker.
+- **Persona memory scope** — deferred indefinitely. Workspace + user scopes cover the demand seen so far.
+- **Plugin SlotManager** — designed but not built; on PLAN.md.
+- **In-app help renderer** — sidebar pane instead of modal; would make `read_docs`-driven content far more useful.
+- **Mobile secondary pane rework** — current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over.
+- **Issue/PR tab visual hierarchy** — long tabs feel busy; lo-pri.
+- **Plugin marketplace** — defer to 2.x once the architecture stabilizes.
 
 ---
 
 ## Decisions
 
-Resolved from discussion. These are now load-bearing — implementations of the relevant tracks honor them.
+Resolved from discussion. Load-bearing — implementations honor them.
 
-1. **Memory storage is two-tier.** Browser cache is the default (stateless, per-tab). Repo-committed (`.aieditor/memory/*.md`) is opt-in per workspace. The opt-in toggle lives in Settings → Memory. *Implications:* Memory subsystem (1.3.0) ships both backends from day one; the structured store is the universal layer, the file layer is the opt-in projection.
-2. **Roles get replaced by the profile picker at 2.0.** No dual-surface; one selector. The settings migration script (2.0.0) translates each user's stored `role` to a profile preset.
-3. **Compression diagnostics surface as a public status-bar pill.** Live ratio (e.g., "📉 60% kept") visible to all users, not just debug-mode. Full eviction trace stays in the LLM debug modal for power users.
-4. **Memory files auto-stage on commit when repo mode is opt-in AND the current branch isn't protected.** The opt-in is the consent gate; auto-staging is the smooth UX. On protected branches, the memory diff surfaces in the commit modal as an unstageable warning ("create a feature branch to persist memory changes").
-5. **Tool budget defaults to 5000 tokens (per design)**, exposed as a tunable in Settings → Tools. Measure-and-tune happens from real usage, not pre-launch.
-6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches. PR titles convention: `feat(track):`, `fix(area):`, `chore(release):`, `docs(...)`.
-7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone (1.2.0 / 1.3.0 / 1.4.0 / 1.5.0 / 2.0.0) carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the subsystem hasn't earned its place and the *next* minor is gated on closing that gap, not on adding more capability.
-8. **Measurement before scale.** The cost dashboard ships in 1.2.1 (one minor after the first eviction subsystem) — not in 1.5.3 as the design originally sequenced it. Each 1.2.x follow-up gates on the previous one's measured value showing up in the dashboard. If Rule 3 doesn't produce measurable savings on top of Rules 1+2, Rule 4 is re-scoped before it ships.
-9. **Preact + `htm` allowed for new state-heavy surfaces from 1.3.0 onward; vanilla everywhere else through 2.0.** The "no framework" constraint loosens *narrowly*. Existing tabs / sidebar / file tree / editor frame / chat stay vanilla forever; no migration. New surfaces with non-trivial state — Memory tab (1.3.0, first target), inline `@memory` chip + consent prompts (1.3.0), active-tools chip row (1.4.0), profile picker (2.0) — may be implemented in Preact + `htm/preact` loaded via the vendor bundle (no JSX, no build step, ~5KB gzipped). `State` + `EventBus` remain canonical: components subscribe via a thin store hook, `useState` only for ephemeral UI state. Bigger uniform-UI consolidation (potentially migrating select existing surfaces, plugin Component primitive, mobile rework) is a 2.0 → 3.0 arc. *Implications:* the README's "no framework" pitch updates when the first Preact component ships; vendor bundle gains `preact` + `htm` exports alongside CodeMirror.
-10. **claude.ai/design engages on a two-touch model.** **Touch 1 (Memory UX, received 2026-04-29)** scoped the three Memory flows for 1.3.0 (consent prompts, Memory tab, commit-modal warning); deliverable at `docs/design/touch-1-memory-ux/` — read `chats/chat1.md` before scoping memory work. **Touch 2 (whole-app facelift, received 2026-04-30)** locked top-bar Restructure + Settings sidebar Restructure; opened three net-new surfaces (Connections, Debug, Help); chat panel kept in exploration. Deliverable at `docs/design/touch-2-facelift/` — read `pushback.jsx` + `chats/chat1.md` before scoping facelift work. The pushback's strongest PROBE — *"a frozen `--tk-*` token vocabulary; once published, removing a token is a breaking change"* — is what 1.3.5 shipped. The 1.3.x track now extends through the facelift series (1.3.5 → 1.3.13) before 1.4.0 opens.
-11. **Two-view configuration for every settings panel.** Every configurable surface in the architecture exposes both a **preset view** (intent-level: named modes for the 95% case) and an **advanced view** (parameter-level: every individual knob, for the 5%). A single, consistent toggle moves between them — same name, same position, same mechanic in every settings panel. Both views are projections of the same persisted configuration, never separate configurations. Editing in advanced flips the preset selector to "Custom" automatically; switching back to a named preset snaps every advanced knob to that preset's defaults. Both views show post-resolution numbers (the sister principle "Policy vs. Resolution" lives as a `docs/DESIGN-profiles.md` appendix; the two principles together describe how configuration is *stored* and how it is *exposed*). *Implications:* the toggle pattern is established in compression (1.2.5); memory (1.3.x), tools (1.4.x), and profiles (2.0) inherit the same toggle name and position. **No separate "Developer mode" or "Debug settings" sections** — the advanced view does that work; configuration goes there, diagnostics go in the LLM Debug modal, and there is no third place. Full contract in `docs/DESIGN-profiles.md` §"Two-View Configuration: Preset and Advanced."
+1. **Memory storage is two-tier.** Browser cache default (per-tab); repo-committed `.aieditor/memory/*.md` opt-in per workspace. Toggle in Settings → Memory.
+2. **Roles get replaced by the profile picker at 2.0.** No dual-surface; one selector. Migration script translates stored `role` to a profile preset.
+3. **Compression diagnostics surface as a public status-bar pill** (e.g., "📉 60% kept"), not just debug-mode. Full eviction trace stays in the LLM debug modal for power users.
+4. **Memory files auto-stage on commit when repo mode is opt-in AND the current branch isn't protected.** On protected branches, the memory diff surfaces in the commit modal as an unstageable warning.
+5. **Tool budget defaults to 5000 tokens** (per design), exposed as a tunable in Settings → Tools.
+6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches.
+7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the next minor is gated on closing that gap.
+8. **Measurement before scale.** Cost dashboard ships with the first eviction subsystem, not at the end. *(Currently deferred — see Compression bucket.)*
+9. **Preact + `htm` allowed for new state-heavy surfaces from 1.3.0; vanilla everywhere else through 2.0.** Existing tabs / sidebar / file tree / editor frame / chat stay vanilla forever; no migration. Bigger uniform-UI consolidation is a 2.0 → 3.0 arc.
+10. **claude.ai/design engages on a two-touch model.** Touch 1 (Memory UX, 2026-04-29) → 1.3.0 Memory flows; deliverable at `docs/design/touch-1-memory-ux/`. Touch 2 (whole-app facelift, 2026-04-30) → top-bar Restructure + Settings sidebar + Connections / Debug / Help panels; deliverable at `docs/design/touch-2-facelift/`.
+11. **Two-view configuration for every settings panel.** Preset view (intent) + advanced view (parameters), reachable via the same toggle name and position in every panel. Editing in advanced flips the preset selector to "Custom"; switching back to a named preset snaps every knob to that preset's defaults. **No separate "Developer mode" sections.** Full contract in `docs/DESIGN-profiles.md` §"Two-View Configuration." Pattern was scheduled to debut in compression 1.2.5 — that panel is currently deferred, so the first panel to actually ship the toggle will be whichever subsequent panel lands first.
+
+---
+
+## What's out of scope for the 1.x → 2.0 arc
+
+- **Multi-modal context.** Image/audio chunks. Vision models work for images today (paste-to-chat); structured handling is a 3.x topic.
+- **Cross-process / distributed state.** Stays single-process. No sync server, no multi-tab live coordination beyond the existing tab-isolation model.
+- **Real-time collaborative editing.** Two users editing the same file simultaneously. Not a context problem; not in scope.
+- **Plugin marketplace.** Defer to 2.x after the profile contract stabilizes.
+- **Markdown-as-source AST chunking.** Phase 1 code chunker is regex-based; tree-sitter-grade is gated on measured need.
+- **Custom embedding model fine-tuning.** Use the user's chosen provider.
+- **Cross-project task ledger.** Task ledgers stay session-scoped. Continuity goes through memory with consent.
 
 ---
 
 ## What this roadmap commits to
 
-- **Six-month arc** through 2.0, sequenced as foundations → compression → memory → tools → retrieval → profiles.
-- **Biweekly minor releases** as the rhythm; patches as needed inside a track.
+- **Now / Next / Later** at the top — the doc's first job is to answer *what's being worked on, what's queued, what's not*.
 - **Admissibility, not accumulation** as the architectural principle every PR is reviewed against.
-- **Git-native memory and session state** as the externally-tellable story. Memory + sessions opt into living in `.aieditor/*` files committed with the repo; this is the unique feature the rest of the roadmap trades on.
-- **Measurement before scale.** The cost dashboard ships in 1.2.1 alongside the first eviction subsystem, not at the end of the arc. Each follow-up gates on the previous one delivering measured value, not on a calendar date.
-- **Removability discipline.** Every Phase-1 milestone exit criteria asks: with this subsystem removed, what user-visible behavior degrades? If "nothing measurable," the subsystem has not yet earned its complexity and the next minor is gated on closing that gap. Protects against shipping six well-designed subsystems and discovering in month seven that two of them were architecturally satisfying but didn't change anything users cared about.
-- **No major version bumps** until profiles become the load-bearing configuration surface — *and* the contract is sized to what ai-editor actually uses, not the full design surface (see 2.0.0 "Be ready to discover").
-- **UI investment proportional to capability investment** — every track that ships new behavior ships the UI that surfaces it.
-- **Two-view configuration, one toggle, same place everywhere.** Every settings panel from 1.2.5 forward exposes a preset view (intent) and an advanced view (parameters) reachable via the same toggle name and position. No separate developer-mode sections, no per-feature visibility hacks, no third place. Full contract in `docs/DESIGN-profiles.md` §"Two-View Configuration: Preset and Advanced."
-- **Honest deferrals.** Multi-modal, collaboration, marketplace are not on this roadmap. Adding them would make the arc unrealistic.
-- **The DESIGN docs are the contract.** When implementation diverges from a DESIGN doc, the doc updates first, then the code; not the other way around.
+- **Git-native memory and session state** as the externally-tellable story.
+- **Measurement before scale.** Cost dashboard is gating infrastructure; tracks that nominally depend on it stay deferred until it ships.
+- **Removability discipline.** Every Phase-1 milestone exit criteria asks: with this subsystem removed, what user-visible behavior degrades?
+- **No major version bumps** until profiles become the load-bearing configuration surface — *and* the contract is sized to what ai-editor actually uses.
+- **The DESIGN docs are the contract.** When implementation diverges from a DESIGN doc, the doc updates first, then the code.
+- **Honest deferrals.** Multi-modal, collaboration, marketplace are not on this roadmap.
 
 Push back on any of this. The roadmap is a hypothesis. The first track that drifts more than two weeks past its target gets the next milestone re-scoped, not the deadline pushed.
