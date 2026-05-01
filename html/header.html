@@ -37,20 +37,9 @@
         <button type="button" class="tb__btn tb__btn--icon" id="btnHelp"
                 title="Help (F1)" aria-label="Help">❓</button>
 
-        <div class="tb__debug" id="tbDebugMenu">
-            <button type="button" class="tb__btn tb__btn--icon" id="btnDebugMenu"
-                    title="Debug" aria-label="Debug menu"
-                    aria-haspopup="true" aria-expanded="false">🐛</button>
-            <div class="tb__debug-dropdown" id="tbDebugDropdown" role="menu" hidden>
-                <button type="button" class="tb__debug-item" id="tbDebugErrorLog"
-                        role="menuitem">
-                    <span aria-hidden="true">🐛</span> Error log
-                </button>
-                <button type="button" class="tb__debug-item" id="tbDebugLLM"
-                        role="menuitem">
-                    <span aria-hidden="true">🔬</span> LLM debug log
-                </button>
-            </div>
-        </div>
+        <!-- 1.3.9: dropdown retired. Single button opens the Debug
+             slide-out (Logs / Connections / Indexer / AI / Plugins). -->
+        <button type="button" class="tb__btn tb__btn--icon" id="btnDebugMenu"
+                title="Debug" aria-label="Open debug panel">🐛</button>
     </nav>
 </header>

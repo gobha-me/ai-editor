@@ -4,6 +4,234 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-05-01
+
+Lands the **Debug slide-out** — PR 5 of the Touch 2 facelift arc and
+the second **net-new surface** in the arc. Replaces the 1.3.6
+dropdown bridge (`#tbDebugDropdown` with "Error log" + "LLM debug
+log" menu items) and retires the standalone `#errorLogModal` /
+`#llmDebugModal` in favor of a single right-edge drawer per
+`docs/design/touch-2-facelift/project/debug.jsx`. Five tabs:
+
+- **Logs** — live stream from `ErrorLogger.logs[]` with a level
+  chip filter (all / debug / info / warn / error). Subscribes to
+  the new `error:logged` EventBus event so new entries appear
+  without polling.
+- **Connections** — provider-grouped git connection rows resolved
+  through the same `statusFor` helper the Settings → Connections
+  panel uses (now exported from `js/settings/connections-tab.js`),
+  plus a single AI-provider summary row.
+- **Indexer** — queue / paused / indexed counts read directly off
+  `ContextManager`, last-event snapshot card, "Re-index from
+  scratch" action.
+- **AI** — `LLMDebug.exchanges[]` rendered as a click-to-expand
+  table. The expanded detail uses the existing per-exchange HTML
+  refactored out of `renderLLMDebug` as the new exported
+  `renderExchangeDetail(exchange)` — one source of truth for the
+  per-exchange surface.
+- **Plugins** — `Plugins.list()` plus an in-memory error buffer
+  populated from a new `plugin:initError` event emitted by
+  `Plugins.init` (in `core.js`) and `installPlugin`/
+  `loadInstalledPlugins` (in `plugin-loader.js`).
+
+The head row carries a Pause stream toggle (suppresses the live
+re-render path; underlying capture continues so the bug-report
+flow still works after unpause), a **Copy bundle** button that
+puts a self-contained JSON payload (errors / exchanges /
+connections / indexer / plugins / pluginErrors + version + ts)
+on the clipboard, and an Esc-closeable Close affordance.
+
+This is the **first slide-out shell in the codebase**. The new
+`.slide-out` / `.slide-out-overlay` CSS in `css/slide-out.css` is
+the contract that 1.3.10 (Help) and any later right-edge drawer
+inherits — read every value through the 1.3.5 `--tk-*` token
+contract; no hex literals, no per-theme variants. Refined IDE and
+Editorial Calm render identical markup.
+
+**Why now:** 1.3.6 explicitly named §1.3.9 as the slot that
+retires the dropdown bridge, and 1.3.10 (Help) reuses the
+slide-out shell — landing it now means Help's PR plugs in instead
+of inventing a parallel pattern. Also removes the "open devtools
+or file a ticket" failure mode for non-technical users by
+exposing live logs, connection health, indexer queue, AI request
+log, and plugin lifecycle errors as one keyboard-reachable
+surface plus a one-click diagnostic bundle.
+
+### Added
+
+- **`css/slide-out.css`** *(new)* — shared right-edge drawer
+  shell (`.slide-out-overlay` + `.slide-out`) plus the Debug
+  panel's component blocks (`.debug__head`, `.debug__tabs`,
+  `.debug__panel`, `.debug__log` / `.debug__log-row`,
+  `.debug__conn`, `.debug__stat-row` / `.debug__stat`,
+  `.debug__progress`, `.debug__batch`, `.debug__table` /
+  `.debug__table-row`, `.debug__plugin`, `.debug__pill`). Loaded
+  after `css/connections.css` in `index.html` so the slide-out
+  can reuse `.conn__status` from the Connections panel for
+  status pills (one source of truth). Mobile breakpoint (≤640px)
+  collapses the drawer to full width and drops the lower-priority
+  table columns.
+
+- **`html/debug-slideout.html`** *(new)* — slide-out skeleton
+  loaded via `template-loader.js` alongside the other partials.
+  Carries the head row (title + active-session pip + Pause /
+  Copy bundle / Close buttons), the 5-tab nav with optional
+  count badges per tab, and the 5 panel containers populated by
+  the JS module on tab switch.
+
+- **`js/debug-slideout.js`** *(new)* — single module:
+  `initDebugSlideOut()` wires the topbar button + Esc handler +
+  EventBus subscriptions; `openDebugSlideOut(tab?)` /
+  `closeDebugSlideOut()` are the public entry points;
+  `buildDiagnosticBundle()` / `copyDiagnosticBundle()` produce
+  and copy the paste-into-bug-report JSON payload.
+  `recordPluginError({pluginId, name, msg})` and
+  `getPluginErrors()` expose the in-memory plugin lifecycle
+  buffer (max 50 entries, FIFO). Test seams
+  `__test_renderActive`, `__test_selectTab`, `__test_setLogLevel`,
+  `__test_resetState` follow the connections-tab pattern.
+
+- **`tests/test-debug-slideout.js`** *(new)* — browser smoke test
+  pinning: 5 tabs render in design order; Logs filter chip
+  narrows the row set; Connections tab resolves pill kinds
+  through `statusFor`; AI tab renders one row per exchange and
+  surfaces the error pill on a failed exchange;
+  `buildDiagnosticBundle()` returns the 7 expected top-level
+  keys; Esc closes the overlay. Registered in `tests/index.html`
+  after the Connections-panel suite.
+
+- **`renderExchangeDetail(exchange)`** export on
+  `js/llm-debug-modal.js` — factored out of `renderLLMDebug` so
+  the AI tab and the legacy modal renderer share the
+  per-exchange HTML; no duplication. The compression
+  diagnostics block, request messages, result, think events,
+  and raw SSE chunks all live in this one place.
+
+- **`statusFor(conn)`** export on
+  `js/settings/connections-tab.js` — was a private helper since
+  1.3.8; exported in 1.3.9 so the slide-out's Connections tab
+  resolves status from the same source.
+
+- **`error:logged` EventBus event** — emitted from
+  `ErrorLogger.logError` and `ErrorLogger.logConsole`. The
+  slide-out's Logs tab subscribes; nothing else does today.
+
+- **`plugin:initError` EventBus event** — emitted from
+  `Plugins.init` (in `core.js`) when a plugin's `init()` throws,
+  and from `installPlugin` / `loadInstalledPlugins` (in
+  `plugin-loader.js`) when installation throws. Carries
+  `{pluginId, name, msg}`.
+
+- **`window.openDebugSlideOut`**, **`window.closeDebugSlideOut`**,
+  **`window.copyDiagnosticBundle`** — exposed on the global so
+  plugins / DevTools / test harnesses can drive the slide-out.
+
+### Changed
+
+- **`html/header.html`** — the `<div class="tb__debug">` wrapper
+  + `#tbDebugDropdown` + `#tbDebugErrorLog` / `#tbDebugLLM`
+  menu items are deleted. The single `#btnDebugMenu` button
+  remains (now a plain `.tb__btn--icon`) and opens the
+  slide-out.
+
+- **`js/app.js`** — `initDebugMenu()` deleted; replaced by an
+  import of `initDebugSlideOut` from the new module and called
+  in the same place during boot. Window shims
+  `window.openErrorLog`/`window.closeErrorLog`/`window.openLLMDebug`/
+  `window.closeLLMDebug` continue to resolve, now redirecting
+  into the slide-out's Logs / AI tabs.
+
+- **`js/error-logger.js`** — `openErrorLog()` / `closeErrorLog()`
+  become async wrappers around `openDebugSlideOut('logs')` /
+  `closeDebugSlideOut()`. `clearErrorLog()` clears the buffer
+  and lets the slide-out's event subscription re-render.
+  Imports `EventBus` from `core.js` to emit `error:logged`.
+
+- **`js/llm-debug-modal.js`** — `renderLLMDebug`'s per-exchange
+  loop body is now a single call to the new
+  `renderExchangeDetail(ex)`. `openLLMDebug()` /
+  `closeLLMDebug()` redirect to the slide-out's AI tab.
+  `initLLMDebugAutoRefresh()` becomes a no-op (the slide-out's
+  own subscription handles re-render).
+
+- **`js/template-loader.js`** — `buildAppLayout` now also loads
+  the `debug-slideout` partial and appends it after `modals` in
+  the rendered layout.
+
+- **`index.html`** — adds `<link rel="stylesheet"
+  href="./css/slide-out.css">` after `connections.css`.
+
+- **`css/topbar.css`** — `.tb__debug`, `.tb__debug-dropdown`, and
+  `.tb__debug-item` rules deleted (no longer referenced by any
+  markup). Replaced with a comment pointer to the new
+  slide-out CSS.
+
+- **`js/plugin-loader.js`** — both error paths in
+  `installPlugin` and `loadInstalledPlugins` now emit
+  `plugin:initError` so the slide-out's Plugins tab reflects
+  install/load failures alongside `Plugins.init` failures.
+
+- **`js/core.js`** — `Plugins.init` emits `plugin:initError` in
+  its existing catch block. No behavior change for non-throwing
+  plugins; failing plugins still return false and skip
+  registration.
+
+- **`js/settings/connections-tab.js`** — `statusFor` is now an
+  exported function (was a module-private helper).
+
+### Removed
+
+- **`#errorLogModal`** + **`#llmDebugModal`** in
+  `html/modals.html` — both modal `<div class="modal-overlay">`
+  blocks deleted. The `#errorLogContent` / `#llmDebugContent`
+  containers and the Clear/Copy/Export footer buttons go with
+  them; the slide-out has its own actions where needed and the
+  exported helper functions (`copyErrorLog`, `exportErrorLog`,
+  `copyLLMDebug`, `exportLLMDebug`) keep working off the data
+  layer for any caller that still needs them.
+
+- **`initDebugMenu()`** in `js/app.js` — the dropdown handler
+  the function wired is gone; the slide-out's
+  `initDebugSlideOut()` takes its place.
+
+### Notes
+
+- **Removability check.** With `js/debug-slideout.js` and
+  `css/slide-out.css` removed and the dropdown markup restored,
+  the user loses: live log streaming with level filter,
+  one-click diagnostic bundle, indexer queue visibility, plugin
+  error visibility, and unified Debug entry point. The 1.3.6
+  dropdown bridge returns. **Real user-visible degradation** —
+  the slide-out earns its complexity by consolidating five
+  disjoint surfaces (error log modal, LLM debug modal, dropdown
+  menu, indexer pill, no-plugin-error-surface) into one
+  keyboard-reachable entry point that powers bug reports.
+
+- **AI-provider circuit breaker** is **not** in this patch. The
+  Connections tab surfaces the active model + exchange count;
+  real `_unreachable` resolution for AI providers (parallel to
+  the git circuit breaker) is its own data-layer change and
+  ships when a follow-up gates on it. Until then, the AI block
+  reads "configured" or "no model selected" from settings.
+
+- **`lastSyncAt`** plumbing on git connections stays deferred to
+  1.3.8.1 (which pairs it naturally with the aggregated repo
+  picker that actually drives `listAllRepos`). The slide-out's
+  Connections tab shows the same status pill the Settings panel
+  does — that's enough today.
+
+- **Plugin runtime error capture** beyond `init` is out of scope.
+  The patch captures install, load-from-storage, and init
+  throws; deeper hooks-time taps would require wrapping every
+  hook invocation, which is its own design conversation.
+
+- **Pause stream** suppresses live re-renders and freezes auto-
+  scrolls, but `ErrorLogger.logs` and `LLMDebug.exchanges`
+  continue to grow underneath — un-pausing shows the
+  accumulated entries. This is intentional: a "pause" that
+  dropped data on the floor would defeat the bug-report flow
+  the slide-out exists to enable.
+
 ## [1.3.8] - 2026-05-01
 
 Lands the **Connections panel** — PR 4 of the Touch 2 facelift arc, and

@@ -127,11 +127,12 @@ export async function buildAppLayout() {
     // Load all templates in parallel
     const templates = await loadTemplates([
         'header',
-        'sidebar', 
+        'sidebar',
         'editor-panel',
         'chat-panel',
         'search-panel',
-        'modals'
+        'modals',
+        'debug-slideout'
     ]);
     
     // Build the main layout structure
@@ -148,6 +149,7 @@ export async function buildAppLayout() {
             <div class="panel-edge-tab panel-edge-tab-right" id="chatExpandTab" title="Show chat" aria-label="Expand chat" role="button" tabindex="0" style="display:none;">💬</div>
         </main>
         ${templates.get('modals')}
+        ${templates.get('debug-slideout')}
     `;
     
     appContainer.innerHTML = html;

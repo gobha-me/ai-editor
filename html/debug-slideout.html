@@ -1,0 +1,69 @@
+<!-- Debug slide-out — 1.3.9 Touch 2 net-new surface
+     Right-edge drawer per docs/design/touch-2-facelift/project/debug.jsx.
+     Replaces the 1.3.6 dropdown bridge (#tbDebugDropdown) and the
+     legacy #errorLogModal / #llmDebugModal. -->
+<div class="slide-out-overlay" id="debugSlideOut" role="dialog"
+     aria-modal="true" aria-labelledby="debugSlideOutTitle" aria-hidden="true">
+    <aside class="slide-out" role="document">
+        <div class="debug">
+            <div class="debug__head">
+                <div class="debug__title" id="debugSlideOutTitle">
+                    <span aria-hidden="true">🐛</span>
+                    <span>Debug</span>
+                </div>
+                <div class="debug__head-meta" id="debugSessionMeta" aria-live="polite">
+                    <span class="debug__head-pip debug__head-pip--ok" aria-hidden="true"></span>
+                    <span id="debugSessionLabel">active · 0m</span>
+                </div>
+                <div class="debug__head-spacer" aria-hidden="true"></div>
+                <button type="button" class="debug__head-btn debug__head-btn--icon"
+                        id="debugPauseBtn" title="Pause stream"
+                        aria-label="Pause stream" aria-pressed="false">⏸</button>
+                <button type="button" class="debug__head-btn debug__head-btn--primary"
+                        id="debugCopyBundleBtn" title="Copy diagnostic bundle">📋 Copy bundle</button>
+                <button type="button" class="debug__head-btn debug__head-btn--icon"
+                        id="debugCloseBtn" title="Close (Esc)" aria-label="Close">✕</button>
+            </div>
+
+            <div class="debug__tabs" role="tablist">
+                <button type="button" class="debug__tab debug__tab--active" role="tab"
+                        data-debug-tab="logs" aria-selected="true">
+                    <span aria-hidden="true">📜</span>
+                    <span>Logs</span>
+                    <span class="debug__tab-count" id="debugTabCountLogs" hidden>0</span>
+                </button>
+                <button type="button" class="debug__tab" role="tab"
+                        data-debug-tab="conn" aria-selected="false">
+                    <span aria-hidden="true">🔌</span>
+                    <span>Connections</span>
+                    <span class="debug__tab-count" id="debugTabCountConn" hidden>0</span>
+                </button>
+                <button type="button" class="debug__tab" role="tab"
+                        data-debug-tab="indexer" aria-selected="false">
+                    <span aria-hidden="true">🗃</span>
+                    <span>Indexer</span>
+                </button>
+                <button type="button" class="debug__tab" role="tab"
+                        data-debug-tab="ai" aria-selected="false">
+                    <span aria-hidden="true">✨</span>
+                    <span>AI</span>
+                    <span class="debug__tab-count" id="debugTabCountAI" hidden>0</span>
+                </button>
+                <button type="button" class="debug__tab" role="tab"
+                        data-debug-tab="plugins" aria-selected="false">
+                    <span aria-hidden="true">🧩</span>
+                    <span>Plugins</span>
+                    <span class="debug__tab-count" id="debugTabCountPlugins" hidden>0</span>
+                </button>
+            </div>
+
+            <div class="debug__body">
+                <div class="debug__panel" data-debug-panel="logs"></div>
+                <div class="debug__panel" data-debug-panel="conn" hidden></div>
+                <div class="debug__panel" data-debug-panel="indexer" hidden></div>
+                <div class="debug__panel" data-debug-panel="ai" hidden></div>
+                <div class="debug__panel" data-debug-panel="plugins" hidden></div>
+            </div>
+        </div>
+    </aside>
+</div>

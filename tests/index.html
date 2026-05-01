@@ -179,6 +179,10 @@
             } catch (e) { errors.push(['Connections Panel', e]); }
 
             try {
+                await import('./test-debug-slideout.js');
+            } catch (e) { errors.push(['Debug Slide-out', e]); }
+
+            try {
                 await import('./test-commit-modal-memory.js');
             } catch (e) { errors.push(['Commit Modal Memory', e]); }
 

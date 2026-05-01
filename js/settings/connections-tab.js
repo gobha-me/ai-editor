@@ -25,7 +25,9 @@ function glyphFor(providerId) {
  * No `lastSyncAt` plumbing in 1.3.8 — that's 1.3.8.1's companion to the
  * aggregated repo picker, which is what actually drives `listAllRepos`.
  */
-function statusFor(conn) {
+// 1.3.9: exported so the Debug slide-out's Connections tab resolves
+// status from the same single source of truth.
+export function statusFor(conn) {
     if (!conn.enabled) return { kind: 'disabled', label: 'disabled' };
     if (conn._unreachable) return { kind: 'warn', label: 'unreachable — retry' };
     if (!conn.token) return { kind: 'warn', label: 'no token' };

@@ -991,6 +991,15 @@ const Plugins = {
                 plugin.instance = await plugin.manifest.init(plugin.config);
             } catch (e) {
                 console.error(`Plugin init failed: ${pluginId}`, e);
+                // 1.3.9: surface init errors to the Debug slide-out's
+                // Plugins tab. The data carrier is in-memory (no
+                // persisted side-effects), and capture remains a
+                // no-op for any consumer that doesn't subscribe.
+                EventBus.emit('plugin:initError', {
+                    pluginId,
+                    name: plugin.manifest.name || pluginId,
+                    msg: e.message || String(e),
+                });
                 return false;
             }
         }

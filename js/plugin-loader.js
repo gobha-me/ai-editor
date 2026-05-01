@@ -142,6 +142,7 @@ export async function installPlugin(url, options = {}) {
 
     } catch (err) {
         console.error(`[plugin-loader] Failed to install from ${url}:`, err);
+        EventBus.emit('plugin:initError', { pluginId: url, name: url, msg: err.message });
         return { success: false, error: err.message };
     }
 }
@@ -225,6 +226,11 @@ export async function loadInstalledPlugins() {
             entry.error = err.message;
             failed++;
             console.warn(`[plugin-loader] Failed to load ${entry.url}: ${err.message}`);
+            EventBus.emit('plugin:initError', {
+                pluginId: entry.pluginId || entry.url,
+                name: entry.name || entry.url,
+                msg: err.message,
+            });
         }
     }
 

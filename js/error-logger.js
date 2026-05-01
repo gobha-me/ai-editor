@@ -4,6 +4,7 @@
 
 import { escapeHtml } from './utils/html.js';
 import { EditorError } from './utils/errors.js';
+import { EventBus } from './core.js';
 
 export const ErrorLogger = {
     logs: [],
@@ -76,6 +77,7 @@ export const ErrorLogger = {
         }
 
         this.updateBadge();
+        EventBus.emit('error:logged', entry);
     },
 
     serializeValue(arg) {
@@ -134,6 +136,7 @@ export const ErrorLogger = {
         }
 
         this.updateBadge();
+        EventBus.emit('error:logged', entry);
     },
 
     updateBadge() {
@@ -228,34 +231,25 @@ export const ErrorLogger = {
     }
 };
 
-// Window functions for modal controls
-export function openErrorLog() {
-    const errorLogModal = document.getElementById('errorLogModal');
-    if (!errorLogModal) {
-        console.error('[ErrorLogger] Error log modal element not found - cannot open error log');
-        window.showToast?.('Error log modal not found — page may not have loaded correctly', 'error');
-        return;
-    }
-    
-    ErrorLogger.render();
-    errorLogModal.classList.add('active');
+// 1.3.9: standalone Error log modal retired in favor of the Debug
+// slide-out's "Logs" tab. Exports stay for plugins / window.* shims.
+// The data layer (`ErrorLogger.logs`) is unchanged; the slide-out
+// subscribes to `error:logged` and re-renders.
+export async function openErrorLog() {
+    const { openDebugSlideOut } = await import('./debug-slideout.js');
+    openDebugSlideOut('logs');
 }
 
-export function closeErrorLog() {
-    const errorLogModal = document.getElementById('errorLogModal');
-    if (!errorLogModal) {
-        console.error('[ErrorLogger] Error log modal element not found - cannot close error log');
-        return;
-    }
-    
-    errorLogModal.classList.remove('active');
+export async function closeErrorLog() {
+    const { closeDebugSlideOut } = await import('./debug-slideout.js');
+    closeDebugSlideOut();
 }
 
 export async function clearErrorLog() {
     const { showConfirm } = await import('./ui/dialogs.js');
     if (await showConfirm('Clear all error logs?', { title: 'Clear Logs', okLabel: 'Clear', variant: 'danger' })) {
         ErrorLogger.clear();
-        ErrorLogger.render();
+        // Slide-out subscribes to error events and re-renders itself.
     }
 }
 

@@ -255,54 +255,10 @@
     font-weight: 600;
 }
 
-/* ============================================
-   DEBUG DROPDOWN
-   ============================================ */
-
-.tb__debug {
-    position: relative;
-}
-
-.tb__debug-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    min-width: 180px;
-    background: var(--tk-bg-raised);
-    border: 1px solid var(--tk-border);
-    border-radius: var(--tk-radius-md);
-    box-shadow: var(--tk-shadow-md);
-    padding: var(--tk-space-1);
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    z-index: 1000;
-}
-
-.tb__debug-dropdown[hidden] {
-    display: none;
-}
-
-.tb__debug-item {
-    display: flex;
-    align-items: center;
-    gap: var(--tk-space-2);
-    width: 100%;
-    padding: var(--tk-space-2) var(--tk-space-3);
-    background: transparent;
-    color: var(--tk-text-primary);
-    border: none;
-    border-radius: var(--tk-radius-sm);
-    font-family: inherit;
-    font-size: var(--font-sm);
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.1s;
-}
-
-.tb__debug-item:hover {
-    background: var(--tk-bg-hover);
-}
+/* 1.3.9: `.tb__debug` / `.tb__debug-dropdown` / `.tb__debug-item`
+   retired with the dropdown bridge. The single `#btnDebugMenu` button
+   uses `.tb__btn--icon` styling and opens the Debug slide-out
+   (css/slide-out.css). */
 
 /* ============================================
    COMMIT BUTTON (preserved in top bar)

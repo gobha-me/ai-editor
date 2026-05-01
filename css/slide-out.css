@@ -1,0 +1,675 @@
+/**
+ * Slide-out shell + Debug panel — 1.3.9 Touch 2 net-new surface
+ *
+ * The first right-edge drawer in the codebase. Replaces the 1.3.6
+ * Debug dropdown bridge that consolidated Error log + LLM debug log
+ * into a single icon menu; this file ships the surface those items
+ * become tabs inside. Help (1.3.10) reuses `.slide-out` verbatim.
+ *
+ * Per `docs/design/touch-2-facelift/project/debug.jsx`:
+ * head row + 5 tabs (Logs / Connections / Indexer / AI / Plugins) +
+ * tab-local panels. Both shipped themes (Refined IDE, Editorial Calm)
+ * render identical markup via the frozen `--tk-*` contract — no
+ * per-theme variants, no hex literals.
+ *
+ * Loaded after `css/connections.css` in `index.html` so the slide-out
+ * can reuse `.conn__status` from the Connections panel for status
+ * pills (the Connections tab inside the slide-out renders the same
+ * pill the Settings panel does — one source of truth).
+ */
+
+/* ============================================
+   Slide-out shell (right-edge drawer)
+   ============================================ */
+
+.slide-out-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--tk-bg-overlay);
+    display: none;
+    z-index: 1000;
+}
+
+.slide-out-overlay.active {
+    display: block;
+}
+
+.slide-out {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(560px, 92vw);
+    background: var(--tk-bg-surface);
+    border-left: 1px solid var(--tk-border);
+    box-shadow: var(--tk-shadow-lg);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.18s ease-out;
+    z-index: 1001;
+}
+
+.slide-out-overlay.active .slide-out {
+    transform: translateX(0);
+}
+
+/* ============================================
+   Debug panel — head row
+   ============================================ */
+
+.debug {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.debug__head {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    padding: var(--tk-space-2) var(--tk-space-3);
+    border-bottom: 1px solid var(--tk-border);
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.debug__title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    color: var(--tk-text-primary);
+    font-size: var(--font-md);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.debug__head-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.debug__head-meta > span:not(.debug__head-pip) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.debug__head-pip {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--tk-radius-pill);
+    background: var(--tk-text-muted);
+    flex-shrink: 0;
+}
+
+.debug__head-pip--ok {
+    background: var(--tk-color-success);
+}
+
+.debug__head-spacer {
+    flex: 1;
+    min-width: var(--tk-space-2);
+}
+
+.debug__head-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tk-space-1);
+    padding: 4px var(--tk-space-2);
+    height: 28px;
+    background: var(--tk-bg-app);
+    color: var(--tk-text-primary);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    font-size: var(--font-xs);
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.debug__head-btn--icon {
+    width: 28px;
+    padding: 0;
+    font-size: var(--font-sm);
+}
+
+.debug__head-btn:hover {
+    border-color: var(--tk-color-accent);
+    background: var(--tk-bg-hover);
+}
+
+.debug__head-btn--primary {
+    background: var(--tk-color-accent);
+    color: var(--tk-text-on-accent);
+    border-color: var(--tk-color-accent);
+}
+
+.debug__head-btn--primary:hover {
+    background: var(--tk-color-accent-hover);
+    border-color: var(--tk-color-accent-hover);
+}
+
+.debug__head-btn--active {
+    background: var(--tk-bg-active);
+    border-color: var(--tk-color-accent);
+}
+
+/* ============================================
+   Tab navigation
+   ============================================ */
+
+.debug__tabs {
+    display: flex;
+    gap: var(--tk-space-1);
+    padding: var(--tk-space-2) var(--tk-space-4);
+    border-bottom: 1px solid var(--tk-border);
+    flex-shrink: 0;
+    overflow-x: auto;
+}
+
+.debug__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tk-space-1);
+    padding: 4px var(--tk-space-2);
+    height: 28px;
+    background: transparent;
+    color: var(--tk-text-secondary);
+    border: 1px solid transparent;
+    border-radius: var(--tk-radius-md);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.debug__tab:hover {
+    color: var(--tk-text-primary);
+    background: var(--tk-bg-hover);
+}
+
+.debug__tab--active {
+    color: var(--tk-text-primary);
+    background: var(--tk-bg-active);
+    border-color: var(--tk-color-accent);
+}
+
+.debug__tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    background: var(--tk-bg-raised);
+    color: var(--tk-text-secondary);
+    border-radius: var(--tk-radius-pill);
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.debug__tab-count--warn {
+    background: var(--tk-color-warning-strong);
+    color: var(--tk-text-on-light);
+}
+
+/* ============================================
+   Panel body + scroll region
+   ============================================ */
+
+.debug__body {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--tk-bg-app);
+}
+
+.debug__panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tk-space-3);
+    padding: var(--tk-space-4);
+}
+
+/* `display: flex` above wins against the browser-default
+   `[hidden] { display: none }` rule. Restore the hide so non-active
+   tab panels actually disappear instead of stacking under the active
+   one. */
+.debug__panel[hidden] {
+    display: none;
+}
+
+.debug__section-title {
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================
+   Filter bar (Logs tab)
+   ============================================ */
+
+.debug__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+}
+
+.debug__filter-group {
+    display: inline-flex;
+    gap: var(--tk-space-1);
+}
+
+.debug__chip {
+    padding: 2px var(--tk-space-2);
+    background: var(--tk-bg-raised);
+    color: var(--tk-text-secondary);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-pill);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    text-transform: lowercase;
+}
+
+.debug__chip:hover {
+    color: var(--tk-text-primary);
+    border-color: var(--tk-border-light);
+}
+
+.debug__chip--active {
+    background: var(--tk-bg-active);
+    color: var(--tk-text-primary);
+    border-color: var(--tk-color-accent);
+}
+
+.debug__chip--debug { color: var(--tk-text-muted); }
+.debug__chip--info  { color: var(--tk-color-info); }
+.debug__chip--warn  { color: var(--tk-color-warning-strong); }
+.debug__chip--error { color: var(--tk-color-error); }
+
+/* ============================================
+   Logs tab — log row table
+   ============================================ */
+
+.debug__log {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--tk-bg-darker);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    padding: var(--tk-space-2);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.debug__log-empty {
+    padding: var(--tk-space-4);
+    color: var(--tk-text-muted);
+    text-align: center;
+    font-size: var(--font-sm);
+}
+
+.debug__log-row {
+    display: grid;
+    grid-template-columns: 90px 50px 130px 1fr;
+    gap: var(--tk-space-2);
+    padding: 4px var(--tk-space-2);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+    line-height: 1.5;
+    border-radius: var(--tk-radius-sm);
+}
+
+.debug__log-row:hover {
+    background: var(--tk-bg-hover);
+}
+
+.debug__log-time {
+    color: var(--tk-text-muted);
+}
+
+.debug__log-level {
+    text-transform: lowercase;
+    font-weight: 600;
+}
+
+.debug__log-level--debug { color: var(--tk-text-muted); }
+.debug__log-level--info  { color: var(--tk-color-info); }
+.debug__log-level--warn  { color: var(--tk-color-warning-strong); }
+.debug__log-level--error { color: var(--tk-color-error); }
+
+.debug__log-src {
+    color: var(--tk-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.debug__log-msg {
+    color: var(--tk-text-primary);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+/* ============================================
+   Connections tab — row card
+   ============================================ */
+
+.debug__conn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tk-space-1);
+    padding: var(--tk-space-2) var(--tk-space-3);
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+}
+
+.debug__conn--warn {
+    border-color: var(--tk-color-warning-strong);
+}
+
+.debug__conn-row {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+}
+
+.debug__conn-name {
+    color: var(--tk-text-primary);
+    font-weight: 500;
+    font-size: var(--font-sm);
+}
+
+.debug__conn-url {
+    color: var(--tk-text-muted);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+}
+
+.debug__conn-meta {
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+    padding-left: 18px;
+}
+
+.debug__conn-err {
+    color: var(--tk-color-warning-strong);
+    font-size: var(--font-xs);
+    padding-left: 18px;
+}
+
+/* ============================================
+   Indexer + AI tabs — stat tiles + progress
+   ============================================ */
+
+.debug__stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--tk-space-2);
+}
+
+.debug__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--tk-space-2);
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+}
+
+.debug__stat-label {
+    color: var(--tk-text-muted);
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.debug__stat-value {
+    color: var(--tk-text-primary);
+    font-size: var(--font-md);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.debug__stat-value--ok {
+    color: var(--tk-color-success);
+}
+
+.debug__progress {
+    height: 6px;
+    background: var(--tk-bg-raised);
+    border-radius: var(--tk-radius-pill);
+    overflow: hidden;
+}
+
+.debug__progress-fill {
+    height: 100%;
+    background: var(--tk-color-accent);
+    transition: width 0.18s ease-out;
+}
+
+.debug__batch {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--tk-space-2);
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+}
+
+.debug__batch-row {
+    display: flex;
+    justify-content: space-between;
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+}
+
+.debug__batch-row span:last-child {
+    color: var(--tk-text-primary);
+    font-family: var(--tk-font-mono);
+}
+
+.debug__btn {
+    align-self: flex-start;
+    padding: 6px var(--tk-space-3);
+    background: var(--tk-bg-raised);
+    color: var(--tk-text-primary);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    font-size: var(--font-xs);
+    cursor: pointer;
+}
+
+.debug__btn:hover {
+    border-color: var(--tk-color-accent);
+    background: var(--tk-bg-hover);
+}
+
+/* ============================================
+   AI tab — request table
+   ============================================ */
+
+.debug__table {
+    display: flex;
+    flex-direction: column;
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    overflow: hidden;
+}
+
+.debug__table-head,
+.debug__table-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 70px 100px 60px 60px;
+    gap: var(--tk-space-2);
+    padding: var(--tk-space-2);
+    align-items: center;
+    font-size: var(--font-xs);
+}
+
+.debug__table-head {
+    background: var(--tk-bg-raised);
+    color: var(--tk-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    border-bottom: 1px solid var(--tk-border);
+}
+
+.debug__table-row {
+    color: var(--tk-text-primary);
+    border-bottom: 1px solid var(--tk-border);
+    cursor: pointer;
+}
+
+.debug__table-row:last-child {
+    border-bottom: none;
+}
+
+.debug__table-row:hover {
+    background: var(--tk-bg-hover);
+}
+
+.debug__table-row--expanded {
+    background: var(--tk-bg-darker);
+}
+
+.debug__table-detail {
+    grid-column: 1 / -1;
+    padding: var(--tk-space-2);
+    border-top: 1px solid var(--tk-border);
+    background: var(--tk-bg-darker);
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+}
+
+.debug__mono {
+    font-family: var(--tk-font-mono);
+}
+
+.debug__pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px var(--tk-space-2);
+    border-radius: var(--tk-radius-pill);
+    font-size: 10px;
+    text-transform: lowercase;
+    font-weight: 600;
+}
+
+.debug__pill--ok {
+    background: var(--tk-bg-app);
+    color: var(--tk-color-success);
+    border: 1px solid var(--tk-color-success);
+}
+
+.debug__pill--warn {
+    background: var(--tk-bg-app);
+    color: var(--tk-color-warning-strong);
+    border: 1px solid var(--tk-color-warning-strong);
+}
+
+.debug__pill--error {
+    background: var(--tk-bg-app);
+    color: var(--tk-color-error);
+    border: 1px solid var(--tk-color-error);
+}
+
+/* ============================================
+   Plugins tab — row card
+   ============================================ */
+
+.debug__plugin {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tk-space-1);
+    padding: var(--tk-space-2) var(--tk-space-3);
+    background: var(--tk-bg-surface);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+}
+
+.debug__plugin--error {
+    border-color: var(--tk-color-error);
+}
+
+.debug__plugin--warn {
+    border-color: var(--tk-color-warning-strong);
+}
+
+.debug__plugin-row {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+}
+
+.debug__plugin-name {
+    color: var(--tk-text-primary);
+    font-weight: 500;
+    font-size: var(--font-sm);
+    flex: 1;
+}
+
+.debug__plugin-ver {
+    color: var(--tk-text-muted);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+}
+
+.debug__plugin-msg {
+    color: var(--tk-text-secondary);
+    font-size: var(--font-xs);
+    padding-left: var(--tk-space-2);
+}
+
+/* ============================================
+   Mobile (≤640px)
+   ============================================ */
+
+@media (max-width: 640px) {
+    .slide-out {
+        width: 100vw;
+    }
+
+    .debug__stat-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .debug__table-head,
+    .debug__table-row {
+        grid-template-columns: 70px 1fr 50px 50px;
+    }
+
+    .debug__table-head > :nth-child(4),
+    .debug__table-row > :nth-child(4),
+    .debug__table-head > :nth-child(5),
+    .debug__table-row > :nth-child(5) {
+        display: none;
+    }
+
+    .debug__log-row {
+        grid-template-columns: 70px 40px 1fr;
+    }
+
+    .debug__log-row > :nth-child(3) {
+        display: none;
+    }
+}

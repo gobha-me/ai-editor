@@ -197,48 +197,12 @@
     </div>
 </div>
 
-<!-- Error Log Modal -->
-<div class="modal-overlay" id="errorLogModal" role="dialog" aria-modal="true" aria-labelledby="errorLogTitle">
-    <div class="modal" style="max-width: 800px;">
-        <div class="modal-header">
-            <h2 id="errorLogTitle">🐛 Error Log (<span id="errorLogCount">0</span>)</h2>
-            <button type="button" class="modal-close" onclick="window.closeErrorLog()" aria-label="Close error log">×</button>
-        </div>
-        <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
-            <div id="errorLogContent">
-                <!-- Error logs rendered here by error-logger.js -->
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.clearErrorLog()">🗑️ Clear</button>
-            <button type="button" class="btn btn-secondary" onclick="window.copyErrorLog()">📋 Copy</button>
-            <button type="button" class="btn btn-primary" onclick="window.exportErrorLog()">📥 Export</button>
-        </div>
-    </div>
-</div>
-
-<!-- LLM Debug Modal -->
-<div class="modal-overlay" id="llmDebugModal" role="dialog" aria-modal="true" aria-labelledby="llmDebugTitle">
-    <div class="modal" style="max-width: 900px;">
-        <div class="modal-header">
-            <h2 id="llmDebugTitle">🔬 LLM Debug (<span id="llmDebugCount">0</span> exchanges)</h2>
-            <button type="button" class="modal-close" onclick="window.closeLLMDebug()" aria-label="Close debug log">×</button>
-        </div>
-        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-            <div id="llmDebugContent">
-                <!-- Debug exchanges rendered here by llm-debug-modal.js -->
-            </div>
-        </div>
-        <div class="modal-footer">
-            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: var(--font-md); margin-right: auto;">
-                <input type="checkbox" id="llmDebugAutoScroll" checked> Auto-scroll
-            </label>
-            <button type="button" class="btn btn-secondary" onclick="window.clearLLMDebug()">🗑️ Clear</button>
-            <button type="button" class="btn btn-secondary" onclick="window.copyLLMDebug()">📋 Copy</button>
-            <button type="button" class="btn btn-primary" onclick="window.exportLLMDebug()">📥 Export</button>
-        </div>
-    </div>
-</div>
+<!-- 1.3.9: Error Log Modal + LLM Debug Modal retired. Both surfaces
+     consolidated into the Debug slide-out (`html/debug-slideout.html`,
+     loaded via template-loader as a sibling of modals). The data
+     layer (ErrorLogger.logs, LLMDebug.exchanges) is unchanged; the
+     window.* shims in js/app.js still resolve, redirecting into the
+     slide-out's Logs / AI tabs respectively. -->
 
 <!-- Quick Open Overlay (Ctrl+P) -->
 <div class="quick-open-overlay" id="quickOpenOverlay">

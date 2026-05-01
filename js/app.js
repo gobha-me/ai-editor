@@ -18,6 +18,7 @@ import { loadCodeMirror, setLineNumbersVisible, setKeybindingMode, setInvisibleU
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
+import { initDebugSlideOut, openDebugSlideOut, closeDebugSlideOut, copyDiagnosticBundle } from './debug-slideout.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
 import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
@@ -148,6 +149,12 @@ window.closeLLMDebug = closeLLMDebug;
 window.clearLLMDebug = clearLLMDebug;
 window.copyLLMDebug = copyLLMDebug;
 window.exportLLMDebug = exportLLMDebug;
+
+// 1.3.9: Debug slide-out — single entry point that supersedes the
+// 1.3.6 dropdown bridge and the legacy error/LLM debug modals.
+window.openDebugSlideOut = openDebugSlideOut;
+window.closeDebugSlideOut = closeDebugSlideOut;
+window.copyDiagnosticBundle = copyDiagnosticBundle;
 
 window.QuickOpen = QuickOpen;
 
@@ -767,37 +774,12 @@ function closePluginModal() {
 /**
  * Initialize the top-bar Debug dropdown (1.3.6).
  *
- * Consolidates the prior `#btnErrorLog` + `#btnLLMDebug` icons into a
- * single 🐛 menu button. Bridge until §1.3.9 ships the full Debug
- * slide-out; the items here move into that surface as tabs.
+ * 1.3.9: the dropdown bridge (Error log + LLM debug log menu items)
+ * is retired; the same `#btnDebugMenu` button now opens the Debug
+ * slide-out. Wiring lives in `js/debug-slideout.js` —
+ * `initDebugSlideOut()` attaches the click handler, the keyboard
+ * shortcut, and the live event subscriptions.
  */
-function initDebugMenu() {
-    const btn = document.getElementById('btnDebugMenu');
-    const dropdown = document.getElementById('tbDebugDropdown');
-    if (!btn || !dropdown) return;
-
-    const setOpen = (open) => {
-        if (open) dropdown.removeAttribute('hidden');
-        else dropdown.setAttribute('hidden', '');
-        btn.setAttribute('aria-expanded', String(open));
-    };
-
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        setOpen(dropdown.hasAttribute('hidden'));
-    });
-    document.addEventListener('click', () => setOpen(false));
-    dropdown.addEventListener('click', (e) => e.stopPropagation());
-
-    document.getElementById('tbDebugErrorLog')?.addEventListener('click', () => {
-        setOpen(false);
-        openErrorLog();
-    });
-    document.getElementById('tbDebugLLM')?.addEventListener('click', () => {
-        setOpen(false);
-        openLLMDebug();
-    });
-}
 
 /**
  * Initialize the top-bar branch indicator (1.3.6).
@@ -1135,7 +1117,7 @@ async function init() {
     });
 
     // Top-bar Debug menu + branch indicator (1.3.6)
-    initDebugMenu();
+    initDebugSlideOut();
     initBranchIndicator();
 
     // Initialize built-in plugins. Plugin-registered toolbar actions render
