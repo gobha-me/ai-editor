@@ -7,21 +7,22 @@
  *
  * - get_ci_status({ ref })           — one-shot status snapshot
  * - wait_for_ci({ ref, timeoutMs })  — polls until terminal state or timeout
- * - get_ci_logs({ ref, jobName?, tailLines? }) — fetches a job's tailed log
+ * - get_ci_logs({ ref, jobName? })   — downloads a job's full log into the
+ *                                      virtual CI log cache and returns the
+ *                                      path. The model then uses read_lines
+ *                                      / search_in_files / scan_file on it.
  */
 
 import { ToolRegistry } from './registry.js';
 import { State } from '../core.js';
 import { Git } from '../git.js';
+import * as CiLogCache from '../intelligence/test-loop/log-cache.js';
 
 // Backoff schedule (ms) for wait_for_ci polling. Steady-state polls every 30s.
 const POLL_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
 
 const DEFAULT_WAIT_MS = 5 * 60 * 1000;
 const MAX_WAIT_MS = 10 * 60 * 1000;
-
-const DEFAULT_TAIL_LINES = 200;
-const MAX_TAIL_LINES = 1000;
 
 const TERMINAL_STATES = new Set(['success', 'failure', 'error', 'cancelled']);
 
@@ -41,14 +42,6 @@ function summarizeStatuses(statuses) {
     }, {});
     const parts = Object.entries(counts).map(([k, v]) => `${v} ${k}`);
     return `${statuses.length} checks: ${parts.join(', ')}`;
-}
-
-function tailLines(text, n) {
-    if (!text) return { tail: '', truncated: false, totalBytes: 0 };
-    const totalBytes = text.length;
-    const lines = text.split('\n');
-    if (lines.length <= n) return { tail: text, truncated: false, totalBytes };
-    return { tail: lines.slice(-n).join('\n'), truncated: true, totalBytes };
 }
 
 // ============================================
@@ -172,14 +165,12 @@ ToolRegistry.register('wait_for_ci', waitForCi, {
 // get_ci_logs
 // ============================================
 
-async function getCiLogs({ ref, jobName, tailLines: tailN }) {
+async function getCiLogs({ ref, jobName }) {
     const proj = projectOrError();
     if (proj.error) return proj;
     if (!ref || typeof ref !== 'string') {
         return { error: 'Required argument "ref" (commit SHA or branch name) is missing.' };
     }
-
-    const tail = Math.min(Math.max(Number(tailN) || DEFAULT_TAIL_LINES, 1), MAX_TAIL_LINES);
 
     let runs;
     try {
@@ -247,17 +238,17 @@ async function getCiLogs({ ref, jobName, tailLines: tailN }) {
         };
     }
 
-    const { tail: logTail, truncated, totalBytes } = tailLines(logText, tail);
+    const logPath = CiLogCache.pathFor(candidate.id, job.id, job.name);
+    const { totalBytes, truncatedAtCap } = CiLogCache.write(logPath, logText);
     return {
         run_id: candidate.id,
         run_head_sha: candidate.headSha || null,
         job_id: job.id,
         job_name: job.name,
         conclusion: job.conclusion,
-        log_tail: logTail,
-        truncated,
+        log_path: logPath,
         total_bytes: totalBytes,
-        tail_lines: tail,
+        truncated_at_cap: truncatedAtCap,
         used_fallback_run: usedFallback,
         ...(usedFallback ? { warning: `No run matched ref ${ref}; returned the most recent run (${candidate.headSha || 'unknown SHA'}).` } : {})
     };
@@ -267,13 +258,12 @@ ToolRegistry.register('get_ci_logs', getCiLogs, {
     type: 'function',
     function: {
         name: 'get_ci_logs',
-        description: 'Fetch the tailed log output of a CI job for a given commit SHA. Defaults to the first failed job in the most recent matching run. Truncates to a line cap so log size stays bounded. Use this after wait_for_ci returns a failure to diagnose what broke.',
+        description: 'Download the full log of a CI job for a given commit SHA into a virtual cache and return its path (under .aieditor/ci-cache/). Defaults to the first failed job in the most recent matching run. Then inspect the returned `log_path` with the regular file tools: `read_file` for a head+tail summary, `read_lines` for a specific range, `scan_file` for line_count/size_bytes, or `read_file` with `full=true` for the entire log. Use this after wait_for_ci returns a failure to diagnose what broke.',
         parameters: {
             type: 'object',
             properties: {
                 ref: { type: 'string', description: 'Commit SHA or branch name. Used to find the matching workflow run.' },
-                jobName: { type: 'string', description: 'Optional: specific job name to fetch. If omitted, picks the first failed job (or the first job if all passed).' },
-                tailLines: { type: 'number', description: `Optional: how many trailing log lines to return (default ${DEFAULT_TAIL_LINES}, hard max ${MAX_TAIL_LINES}).` }
+                jobName: { type: 'string', description: 'Optional: specific job name to fetch. If omitted, picks the first failed job (or the first job if all passed).' }
             },
             required: ['ref']
         }
@@ -287,11 +277,8 @@ export const __test__ = {
     waitForCi,
     getCiLogs,
     summarizeStatuses,
-    tailLines,
     POLL_BACKOFF_MS,
     DEFAULT_WAIT_MS,
     MAX_WAIT_MS,
-    DEFAULT_TAIL_LINES,
-    MAX_TAIL_LINES,
     TERMINAL_STATES
 };

@@ -15,6 +15,7 @@
 
 import { State, EventBus, Storage, Plugins } from './core.js';
 import { GitProviderRegistry } from './git-providers/index.js';
+import * as CiLogCache from './intelligence/test-loop/log-cache.js';
 
 // ============================================
 // RE-EXPORT ENCODING UTILITIES
@@ -192,6 +193,13 @@ const Git = {
     },
 
     async getFile(owner, repo, path, ref = 'main', opts = {}) {
+        // Virtual CI log paths short-circuit the provider so the model can
+        // drive read_lines / search_in_files / scan_file over downloaded
+        // logs the same way it does over real source files.
+        if (CiLogCache.isCachePath(path)) {
+            const cached = CiLogCache.read(path);
+            if (cached) return cached;
+        }
         const { provider, connection } = resolveCurrentConnection();
         return provider.getFile(connection, owner, repo, path, ref, opts);
     },

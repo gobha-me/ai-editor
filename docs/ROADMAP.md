@@ -14,7 +14,7 @@
 
 | Phase | Track | Status |
 |---|---|---|
-| **Now** | Tools follow-ups (1.4.x): ghost text + tuning/eviction remain | Phase 1 shipped at 1.4.0 (79.5% token reduction live); 1.4.1 semantic `find_tool` ✓, 1.4.2 MCP bridge ✓, 1.4.4 workspace-scoped settings ✓, 1.4.5 test-driven loop ✓. 1.4.6 ghost text + tuning still sized but not started. |
+| **Now** | Tools follow-ups (1.4.x): ghost text + tuning/eviction remain | Phase 1 shipped at 1.4.0 (79.5% token reduction live); 1.4.1 semantic `find_tool` ✓, 1.4.2 MCP bridge ✓, 1.4.4 workspace-scoped settings ✓, 1.4.5 test-driven loop ✓, 1.4.6 scan-driven CI logs ✓. 1.4.7 ghost text + 1.4.8 tuning still sized but not started. |
 | **Next** | Retrieval Phase 1 (1.5.0) | Designed; not started. |
 | **Later** | Profiles → 2.0 | Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items | See *Deferred / unscheduled* — triage owed. |
@@ -110,8 +110,9 @@ Tools Phase 1 shipped at **1.4.0** with the 79.5%-token-reduction observation cl
 - **1.4.3:** *(slipped — slot consumed by the test-runner IMPORT FAILED hot-fix; planned scope re-sequenced below to 1.4.5).*
 - **1.4.4:** ✅ **Shipped.** Workspace-scoped settings — `.aieditor/settings.json` overrides a curated safelist of keys per-repo, with auto-stage on unprotected branches and a "reset to global" affordance.
 - **1.4.5:** ✅ **Shipped.** Test-driven loop — bounded agentic CI iterator. Three new LLM tools (`get_ci_status` / `wait_for_ci` / `get_ci_logs`) plus a chat-input "🔁 Loop" trigger that drives "edit → commit → wait CI → read failure log → loop" under user-tunable bounds (iterations, wall-clock, tokens/iter, CI poll). Reuses the 1.1.1 idle-timeout for the wait-for-CI step. Per-iteration records flow through the unified `TaskLedger.loop_iterations[]` (third consumer of the same struct). Roadmap originally sequenced this as 1.4.3.
-- **1.4.6:** *Inline AI suggestions (ghost text, hotkey-only).* Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
-- **1.4.7:** *Lazy expansion threshold tuning + LRU eviction on the static set when memory pressure exceeds budget.* (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 + 1.4.5 fill in fields on the same struct.)
+- **1.4.6:** ✅ **Shipped.** Scan-driven CI logs. `get_ci_logs` downloads the full job log into a virtual in-memory cache under `.aieditor/ci-cache/<runId>-<jobId>-<slug>.log` and returns the path; the model uses regular file tools (`read_file` / `read_lines` / `scan_file`) to inspect it. Single chokepoint hook in `Git.getFile()`; cache evicts on `loop:finished` with a 5-entry LRU + 10MB-per-entry backstop. Replaces the old fixed-size tail (which silently lost top-of-log failures).
+- **1.4.7:** *Inline AI suggestions (ghost text, hotkey-only).* Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
+- **1.4.8:** *Lazy expansion threshold tuning + LRU eviction on the static set when memory pressure exceeds budget.* (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 + 1.4.5 fill in fields on the same struct.)
 
 ---
 

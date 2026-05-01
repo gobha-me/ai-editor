@@ -102,24 +102,28 @@ test('resolveBounds: honors configured values', () => {
 test('buildIterationPrompt: includes goal + iteration markers', () => {
     const prompt = buildIterationPrompt({
         iteration: 1, maxIterations: 5, goal: 'fix tests/foo.mjs',
-        testHint: 'tests/foo.mjs', lastCiState: null, lastCiSummary: null, lastLogTail: null,
+        testHint: 'tests/foo.mjs', lastCiState: null, lastCiSummary: null, lastLogPath: null,
     });
     assert.match(prompt, /iteration 1 of 5/);
     assert.match(prompt, /fix tests\/foo\.mjs/);
     assert.match(prompt, /tests\/foo\.mjs/);
 });
 
-test('buildIterationPrompt: includes prior CI state + log tail on iter 2+', () => {
+test('buildIterationPrompt: points at cached log path + tool hints on iter 2+', () => {
     const prompt = buildIterationPrompt({
         iteration: 2, maxIterations: 5, goal: 'fix bug',
         testHint: null,
         lastCiState: 'failure', lastCiSummary: '1 check: 1 failure',
-        lastLogTail: 'Error: undefined is not a function',
+        lastLogPath: '.aieditor/ci-cache/100-201-test.log',
     });
     assert.match(prompt, /Previous CI/);
     assert.match(prompt, /failure/);
-    assert.match(prompt, /undefined is not a function/);
+    assert.match(prompt, /\.aieditor\/ci-cache\/100-201-test\.log/);
+    assert.match(prompt, /read_file/);
+    assert.match(prompt, /read_lines/);
+    assert.match(prompt, /scan_file/);
     assert.match(prompt, /Adjust your patch/);
+    assert.doesNotMatch(prompt, /```/, 'no embedded log block — model fetches via tools');
 });
 
 /* ---------------- runTestLoop control flow ---------------- */

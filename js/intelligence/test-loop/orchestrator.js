@@ -40,9 +40,14 @@ import {
     updateLastLoopIteration,
 } from '../../chat/task-state.js';
 import { __test__ as ciTools } from '../../tools/ci-tools.js';
+import * as CiLogCache from './log-cache.js';
 import * as LoopState from './state.js';
 
 const { waitForCi, getCiLogs } = ciTools;
+
+// Drop the per-loop CI log cache when a loop finishes. The 5-entry LRU
+// inside log-cache.js is a backstop; this is the primary eviction path.
+EventBus.on('loop:finished', () => CiLogCache.evictAll());
 
 /**
  * @typedef {Object} LoopBounds
@@ -90,7 +95,7 @@ export function resolveBounds() {
  * @param {string|null} ctx.testHint
  * @param {string|null} ctx.lastCiState
  * @param {string|null} ctx.lastCiSummary
- * @param {string|null} ctx.lastLogTail
+ * @param {string|null} ctx.lastLogPath
  */
 export function buildIterationPrompt({
     iteration,
@@ -99,7 +104,7 @@ export function buildIterationPrompt({
     testHint,
     lastCiState,
     lastCiSummary,
-    lastLogTail,
+    lastLogPath,
 }) {
     const lines = [
         `[Test-driven loop · iteration ${iteration} of ${maxIterations}]`,
@@ -113,12 +118,10 @@ export function buildIterationPrompt({
         lines.push('');
         lines.push(`Previous CI: **${lastCiState}** — ${lastCiSummary || '(no summary)'}`);
     }
-    if (lastLogTail) {
+    if (lastLogPath) {
         lines.push('');
-        lines.push('Most recent failing job log (tail):');
-        lines.push('```');
-        lines.push(lastLogTail);
-        lines.push('```');
+        lines.push(`Failing job log cached at: \`${lastLogPath}\``);
+        lines.push(`Inspect it with file tools: \`read_file("${lastLogPath}")\` for a head+tail summary (catches most failures near the start or end), \`scan_file("${lastLogPath}")\` for line_count + size_bytes, \`read_lines("${lastLogPath}", start, end)\` for a specific range, or \`read_file("${lastLogPath}", full=true)\` for the full log.`);
     }
     lines.push('');
     lines.push(
@@ -202,7 +205,7 @@ export async function runTestLoop({
     let lastCommitSha = /** @type {string|null} */ (null);
     let lastCiState = /** @type {string|null} */ (null);
     let lastCiSummary = /** @type {string|null} */ (null);
-    let lastLogTail = /** @type {string|null} */ (null);
+    let lastLogPath = /** @type {string|null} */ (null);
     let exitReason = /** @type {string} */ ('error');
 
     try {
@@ -240,7 +243,7 @@ export async function runTestLoop({
                 testHint: testHint || null,
                 lastCiState,
                 lastCiSummary,
-                lastLogTail,
+                lastLogPath,
             });
 
             const turnStartedAt = Date.now();
@@ -296,15 +299,15 @@ export async function runTestLoop({
             if (ciResult.error) {
                 lastCiState = 'unknown';
                 lastCiSummary = ciResult.error;
-                lastLogTail = null;
+                lastLogPath = null;
             } else {
                 lastCiState = ciResult.state;
                 lastCiSummary = ciResult.summary;
-                lastLogTail = null;
+                lastLogPath = null;
                 if (ciResult.state === 'failure' || ciResult.state === 'error') {
                     const logResult = await getCiLogs({ ref: ciRef });
-                    if (logResult && !logResult.error && logResult.log_tail) {
-                        lastLogTail = logResult.log_tail;
+                    if (logResult && !logResult.error && logResult.log_path) {
+                        lastLogPath = logResult.log_path;
                     }
                 }
             }

@@ -4,6 +4,75 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-05-01
+
+**Tools 1.4.x — scan-driven CI logs.** `get_ci_logs` no longer returns a
+fixed-size tail. It now downloads the full job log into a virtual
+in-memory cache under `.aieditor/ci-cache/<runId>-<jobId>-<slug>.log`
+and returns the path. The model then uses the regular file tools
+(`read_file`, `read_lines`, `scan_file`) to inspect the log the same way
+it inspects source code — so a failure at line 12 of a 50K-line build
+is just as findable as one at line 49,995.
+
+The cache lives behind a single intercept in `Git.getFile()`
+([`js/git.js`](js/git.js)): when a path is in the
+`.aieditor/ci-cache/` namespace and present in the cache, the facade
+short-circuits the provider call and returns a synthetic file object
+shaped like `{ path, content, sha: 'virtual', size, encoding }`. Cache
+miss falls through to the provider as normal.
+
+Eviction is two-layered:
+- The test-loop orchestrator subscribes to `loop:finished` and calls
+  `evictAll()` so a completed loop doesn't leak megabytes between runs.
+- A 5-entry LRU and a 10MB-per-entry cap inside
+  [`js/intelligence/test-loop/log-cache.js`](js/intelligence/test-loop/log-cache.js)
+  are the memory-pressure backstops. Oversized logs keep the tail (CI
+  failures cluster near the end) and flag `truncated_at_cap: true`.
+
+The orchestrator's iteration prompt no longer embeds the failing log
+tail. It surfaces only the cached `log_path` plus a one-line tool hint —
+the model fetches what it needs. This trims the iteration prompt by
+~200 lines on a typical CI failure.
+
+### Changed
+
+- **[`js/tools/ci-tools.js`](js/tools/ci-tools.js)** — `getCiLogs` no
+  longer takes `tailLines` and no longer returns `log_tail` /
+  `truncated` / `tail_lines`. New return shape: `{ run_id, run_head_sha,
+  job_id, job_name, conclusion, log_path, total_bytes,
+  truncated_at_cap, used_fallback_run, warning? }`. Tool description
+  updated to point the model at `read_file` / `read_lines` /
+  `scan_file` over the returned path.
+
+- **[`js/git.js`](js/git.js)** — `Git.getFile()` now checks the CI log
+  cache first; namespace match returns synthetic file, miss delegates
+  to the provider. Single intercept, no provider plumbing changes.
+
+- **[`js/intelligence/test-loop/orchestrator.js`](js/intelligence/test-loop/orchestrator.js)**
+  — `lastLogTail` → `lastLogPath`. `buildIterationPrompt` no longer
+  embeds log content; emits a one-line cache pointer with tool hints.
+  Subscribes to `loop:finished` to evict the cache.
+
+### Added
+
+- **[`js/intelligence/test-loop/log-cache.js`](js/intelligence/test-loop/log-cache.js)**
+  — `pathFor(runId, jobId, jobName)`, `isCachePath(path)`, `write(path,
+  content)`, `read(path)`, `has(path)`, `evictAll()`. Backed by a
+  `Map`; LRU + per-entry cap enforced inline.
+
+- **[`tests/test-ci-log-cache.mjs`](tests/test-ci-log-cache.mjs)** —
+  unit + integration tests covering pathFor sanitization, LRU
+  eviction, oversize truncation, the `Git.getFile` chokepoint, and
+  `read_file` / `read_lines` / `scan_file` resolving cached paths.
+
+### Known limitation
+
+`search_in_files` still iterates `State.fileTree` and filters by
+source-code extensions — it does not work over a single virtual log
+path. The model uses `read_file` (head+tail summary) +
+`read_lines` (range) + `scan_file` (line_count metadata) instead.
+Extending `search_in_files` to a single-file mode is deferred.
+
 ## [1.4.5] - 2026-05-01
 
 **Tools 1.4.x — test-driven loop.** Bounded agentic CI iterator. The

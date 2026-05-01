@@ -16,17 +16,15 @@ import assert from 'node:assert/strict';
 import { State } from '../js/core.js';
 import { Git } from '../js/git.js';
 import { __test__ as ci } from '../js/tools/ci-tools.js';
+import * as CiLogCache from '../js/intelligence/test-loop/log-cache.js';
 
 const {
     getCiStatus,
     waitForCi,
     getCiLogs,
     summarizeStatuses,
-    tailLines,
     DEFAULT_WAIT_MS,
     MAX_WAIT_MS,
-    DEFAULT_TAIL_LINES,
-    MAX_TAIL_LINES,
 } = ci;
 
 /* ---------------- Helpers ---------------- */
@@ -70,28 +68,6 @@ test('summarizeStatuses counts states', () => {
     assert.match(s, /3 checks/);
     assert.match(s, /2 success/);
     assert.match(s, /1 failure/);
-});
-
-test('tailLines returns whole text when under cap', () => {
-    const r = tailLines('a\nb\nc', 5);
-    assert.equal(r.tail, 'a\nb\nc');
-    assert.equal(r.truncated, false);
-    assert.equal(r.totalBytes, 5);
-});
-
-test('tailLines truncates when over cap', () => {
-    const lines = Array.from({ length: 50 }, (_, i) => `line${i}`);
-    const r = tailLines(lines.join('\n'), 5);
-    assert.equal(r.truncated, true);
-    assert.equal(r.tail.split('\n').length, 5);
-    assert.ok(r.tail.endsWith('line49'));
-});
-
-test('tailLines safe on empty input', () => {
-    const r = tailLines('', 5);
-    assert.equal(r.tail, '');
-    assert.equal(r.truncated, false);
-    assert.equal(r.totalBytes, 0);
 });
 
 /* ---------------- get_ci_status ---------------- */
@@ -251,8 +227,9 @@ test('get_ci_logs: no runs → error', async () => {
     });
 });
 
-test('get_ci_logs: matches headSha → fetches first failed job log', async () => {
+test('get_ci_logs: matches headSha → caches first failed job log + returns path', async () => {
     await withProject(async () => {
+        CiLogCache.evictAll();
         const restore = stubGit({
             listWorkflowRuns: async () => [
                 { id: 99, name: 'Wrong', headSha: 'aaaaaaaa', status: 'completed' },
@@ -276,14 +253,22 @@ test('get_ci_logs: matches headSha → fetches first failed job log', async () =
             assert.equal(r.job_id, 201);
             assert.equal(r.job_name, 'test');
             assert.equal(r.conclusion, 'failure');
-            assert.match(r.log_tail, /AssertionError/);
+            assert.equal(r.log_path, '.aieditor/ci-cache/100-201-test.log');
+            assert.equal(r.total_bytes, 'AssertionError: expected 1 got 2'.length);
+            assert.equal(r.truncated_at_cap, false);
             assert.equal(r.used_fallback_run, false);
-        } finally { restore(); }
+            assert.equal(r.log_tail, undefined, 'log_tail removed in 1.4.6');
+            // Cached entry is readable via Git.getFile chokepoint.
+            const file = await Git.getFile('me', 'app', r.log_path, 'main');
+            assert.match(file.content, /AssertionError/);
+            assert.equal(file.path, r.log_path);
+        } finally { restore(); CiLogCache.evictAll(); }
     });
 });
 
 test('get_ci_logs: fallback to most-recent run when ref does not match', async () => {
     await withProject(async () => {
+        CiLogCache.evictAll();
         const restore = stubGit({
             listWorkflowRuns: async () => [
                 { id: 100, name: 'CI', headSha: 'differentsha', status: 'completed' },
@@ -295,12 +280,14 @@ test('get_ci_logs: fallback to most-recent run when ref does not match', async (
             const r = await getCiLogs({ ref: 'sha1' });
             assert.equal(r.used_fallback_run, true);
             assert.match(r.warning, /No run matched/);
-        } finally { restore(); }
+            assert.equal(r.log_path, '.aieditor/ci-cache/100-200-test.log');
+        } finally { restore(); CiLogCache.evictAll(); }
     });
 });
 
 test('get_ci_logs: jobName argument selects specific job', async () => {
     await withProject(async () => {
+        CiLogCache.evictAll();
         const restore = stubGit({
             listWorkflowRuns: async () => [{ id: 100, name: 'CI', headSha: 'sha1' }],
             listWorkflowJobs: async () => [
@@ -315,8 +302,10 @@ test('get_ci_logs: jobName argument selects specific job', async () => {
         try {
             const r = await getCiLogs({ ref: 'sha1', jobName: 'lint' });
             assert.equal(r.job_name, 'lint');
-            assert.equal(r.log_tail, 'lint log');
-        } finally { restore(); }
+            assert.equal(r.log_path, '.aieditor/ci-cache/100-200-lint.log');
+            const file = await Git.getFile('me', 'app', r.log_path, 'main');
+            assert.equal(file.content, 'lint log');
+        } finally { restore(); CiLogCache.evictAll(); }
     });
 });
 
@@ -335,34 +324,26 @@ test('get_ci_logs: jobName not found → structured error', async () => {
     });
 });
 
-test('get_ci_logs: tail line cap honored', async () => {
+test('get_ci_logs: oversize log truncated_at_cap and tail preserved', async () => {
     await withProject(async () => {
-        const lines = Array.from({ length: 500 }, (_, i) => `line${i}`).join('\n');
+        CiLogCache.evictAll();
+        // Build a payload larger than the 10MB per-entry cap with a unique
+        // marker at the very end so we can assert the tail is the slice kept.
+        const padBytes = CiLogCache.__test__.PER_ENTRY_CAP_BYTES + 1024;
+        const oversize = 'x'.repeat(padBytes) + '\nFINAL_MARKER_LINE';
         const restore = stubGit({
             listWorkflowRuns: async () => [{ id: 100, name: 'CI', headSha: 'sha1' }],
             listWorkflowJobs: async () => [{ id: 200, name: 'lint', conclusion: 'failure' }],
-            getJobLog: async () => lines,
+            getJobLog: async () => oversize,
         });
         try {
-            const r = await getCiLogs({ ref: 'sha1', tailLines: 10 });
-            assert.equal(r.truncated, true);
-            assert.equal(r.log_tail.split('\n').length, 10);
-            assert.equal(r.tail_lines, 10);
-        } finally { restore(); }
-    });
-});
-
-test('get_ci_logs: tail line cap clamped to MAX_TAIL_LINES', async () => {
-    await withProject(async () => {
-        const restore = stubGit({
-            listWorkflowRuns: async () => [{ id: 100, name: 'CI', headSha: 'sha1' }],
-            listWorkflowJobs: async () => [{ id: 200, name: 'lint', conclusion: 'failure' }],
-            getJobLog: async () => 'short log',
-        });
-        try {
-            const r = await getCiLogs({ ref: 'sha1', tailLines: MAX_TAIL_LINES * 10 });
-            assert.equal(r.tail_lines, MAX_TAIL_LINES);
-        } finally { restore(); }
+            const r = await getCiLogs({ ref: 'sha1' });
+            assert.equal(r.truncated_at_cap, true);
+            assert.equal(r.total_bytes, oversize.length);
+            const file = await Git.getFile('me', 'app', r.log_path, 'main');
+            assert.equal(file.size, CiLogCache.__test__.PER_ENTRY_CAP_BYTES);
+            assert.ok(file.content.endsWith('FINAL_MARKER_LINE'), 'tail of oversize log is preserved');
+        } finally { restore(); CiLogCache.evictAll(); }
     });
 });
 
@@ -393,6 +374,3 @@ test('get_ci_logs: provider returns null log → structured error', async () => 
     });
 });
 
-test('get_ci_logs: defaults tail to DEFAULT_TAIL_LINES when omitted', () => {
-    assert.equal(DEFAULT_TAIL_LINES, 200);
-});
