@@ -103,6 +103,16 @@ body {
     color: var(--text-primary);
 }
 
+/* Form elements don't inherit font-family from <body> by default in any
+ * browser (UA stylesheet sets `-apple-system-body` / Arial / etc.). With
+ * named self-hosted fonts (1.3.12+), that fall-through is visible — a
+ * Helvetica button in an Inter UI is exactly the OS-divergence the
+ * Touch 2 PROBE was meant to close. Force inherit so every form element
+ * reads through `--tk-font-sans` like the rest of the chrome. */
+button, input, textarea, select {
+    font-family: inherit;
+}
+
 /* ============================================
    LAYOUT
    ============================================ */

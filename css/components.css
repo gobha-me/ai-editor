@@ -403,7 +403,7 @@
     border-radius: 4px;
     color: var(--text-primary, #e0e0e0);
     font-size: var(--font-lg, 14px);
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--tk-font-mono);
 }
 
 .search-input-wrapper input:focus {
@@ -435,7 +435,7 @@
     padding: 4px 8px;
     border-radius: 3px;
     border: 1px solid transparent;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--tk-font-mono);
 }
 
 .search-option:hover {
@@ -469,7 +469,7 @@
     border-radius: 4px;
     color: var(--text-primary, #e0e0e0);
     font-size: var(--font-lg, 14px);
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--tk-font-mono);
 }
 
 .replace-input:focus {
@@ -559,7 +559,7 @@
 
 .match-content {
     flex: 1;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--tk-font-mono);
     white-space: pre;
     overflow: hidden;
     text-overflow: ellipsis;

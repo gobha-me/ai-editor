@@ -4,6 +4,142 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-05-01
+
+Lands **self-hosted woff2 fonts** — PR 8 of the Touch 2 facelift arc
+and the typography PROBE called out in
+[`docs/design/touch-2-facelift/project/pushback.jsx:85-89`](docs/design/touch-2-facelift/project/pushback.jsx).
+Replaces the system-stack values that 1.3.5 froze into
+`--tk-font-{sans,serif,mono}` with five named families served from
+`assets/fonts/`: **Inter** (Refined IDE UI), **IBM Plex Sans** +
+**Source Serif 4** (Editorial Calm), **JetBrains Mono** + **IBM Plex
+Mono** (code surfaces). Pre-1.3.12 the editor rendered with SF on
+macOS, Segoe on Windows, and "whatever's installed" on Linux; the
+hierarchy varied per OS even though every component read from the same
+token. Post-1.3.12 every user — across OSes and across themes — sees
+identical typography by metric, not just by intent.
+
+**Offline by construction.** All 19 `.woff2` files (Latin subset only,
+weights matching the 400 / 500 / 600 / 700 / italic-400 grid that
+component CSS actually consumes) ship with the source under
+`assets/fonts/`. No `fonts.googleapis.com`, no CDN registration at
+runtime, no Dockerfile changes — fonts pass through the existing
+`COPY . /usr/share/nginx/html/` step the same way `assets/favicon.svg`
+does today. Air-gapped Docker builds and offline dev mode render the
+same typography as internet-connected ones, matching the
+offline-by-construction ethos established by 1.3.11 (Lucide icons
+inlined as SVG strings).
+
+**Theme-token contract.** No new public tokens — `--tk-font-sans`,
+`--tk-font-serif`, `--tk-font-mono` keep their existing names but now
+*lead* their stacks with the self-hosted families. System stacks remain
+in trailing position as a safety net so a missing or corrupt `.woff2`
+file degrades to the OS font rather than a Times-equivalent default.
+The `font-display: swap` directive on every `@font-face` rule means
+text renders immediately in the fallback and the woff2 face swaps in
+once loaded — no FOIT, no blank wait. Refined IDE and Editorial Calm
+both consume the same contract; only the leading family name differs.
+
+### Added
+
+- **`assets/fonts/`** *(new directory)* — 19 `.woff2` files totalling
+  ~407 KB on disk. Provenance, license terms, source URLs, and
+  per-package version pinning recorded in
+  [`assets/fonts/SOURCES.md`](assets/fonts/SOURCES.md). All five
+  families ship under SIL Open Font License 1.1.
+
+- **`css/themes/fonts.css`** *(new)* — 19 `@font-face` declarations
+  (one per `.woff2` file) with `font-display: swap` and Latin-only
+  `unicode-range` so the browser skips the lookup entirely for CJK /
+  Cyrillic / Greek glyphs and falls straight through to the system
+  stack via the `--tk-font-*` chain. Loaded in
+  [`index.html`](index.html) **before** `tokens.css` so the families
+  are registered by name before any token resolves them.
+
+- **Font preload hints** in [`index.html`](index.html) — `<link
+  rel="preload" as="font" type="font/woff2" crossorigin>` for the two
+  most-used Refined IDE faces (`inter-latin-400-normal.woff2` and
+  `inter-latin-500-normal.woff2`) so the first paint isn't reflowed
+  when the swap fires.
+
+### Changed
+
+- **[`css/themes/tokens.css`](css/themes/tokens.css)** — `--tk-font-sans`
+  now leads with `'Inter'`; `--tk-font-serif` with `'Source Serif 4'`;
+  `--tk-font-mono` with `'JetBrains Mono'`. System stacks demoted to
+  trailing fallback positions. The 1.3.5 placeholder comment ("a
+  follow-up patch self-hosts woff2…") replaced with a back-reference
+  to `assets/fonts/SOURCES.md`.
+
+- **[`css/themes/refined.css`](css/themes/refined.css)** — mirrors the
+  new token defaults explicitly so Refined IDE picks Inter for UI and
+  JetBrains Mono for code rather than relying on token inheritance.
+  Zero visual regression for users on system fonts: the woff2 Inter
+  was the implicit visual reference for Refined IDE all along; the
+  patch makes that choice load-bearing instead of OS-dependent.
+
+- **[`css/themes/editorial.css`](css/themes/editorial.css)** — the
+  font-stack values were already correct (Editorial named IBM Plex
+  Sans / Source Serif 4 / IBM Plex Mono back in 1.3.5 with system
+  fallbacks); only the inline comment updates to reflect that the
+  primary families are now actually backed by `@font-face` rules.
+
+- **Three remaining `'Consolas', 'Monaco', monospace` fallbacks swept
+  onto the contract:**
+  - [`css/components.css`](css/components.css) — three search-input /
+    code-display blocks (lines 406, 438, 472, 562) now read
+    `var(--tk-font-mono)`.
+  - [`css/editor.css`](css/editor.css) — `.blame-table` (line 1118)
+    drops the `var(--font-mono, 'Fira Code', …)` hardcoded fallback in
+    favor of the contract token.
+
+  Every `font-family:` declaration in `css/` outside of `themes/` and
+  `@font-face` blocks now reads through `var(--tk-*)` or `inherit`.
+
+- **Form-element font-family reset** added to
+  [`css/base.css`](css/base.css): `button, input, textarea, select {
+  font-family: inherit; }`. The browser UA stylesheet sets a
+  platform-default font on form elements (Helvetica / Arial in
+  Chromium, `-apple-system-body` on Safari, Segoe UI on Edge) — pre-1.3.12
+  this fell through invisibly because the surrounding chrome was
+  already `-apple-system` / `Segoe UI` from the system stack. With
+  Inter named explicitly, an Arial button in an Inter UI is exactly
+  the OS-divergence the PROBE was meant to close. The reset closes
+  it. Several individual components had been patching this with
+  per-class `font-family: inherit;` overrides; those remain harmless
+  but are now superseded by the universal reset.
+
+- **[`js/version.js`](js/version.js)** — `1.3.11` → `1.3.12`.
+
+### Out of scope for 1.3.12
+
+These deferrals match the patch's "self-host the families the design
+PROBE actually named, on the surfaces that consume them today" framing
+and avoid expanding the public token vocabulary speculatively:
+
+- **`--tk-font-display`** — `tokens.jsx` mentions a display-headings
+  token; no component CSS reads `--tk-font-serif` or anything
+  `display`-named today. Adding a heading consumer is a separate UX
+  call (Editorial Calm-only? heading-tag-only?). Defer until a real
+  consumer surfaces.
+- **Subsetting beyond Latin** — Cyrillic / Greek / Vietnamese / CJK.
+  The codebase has no i18n layer; user content with exotic glyphs
+  falls through to the system stack via the `unicode-range` clip in
+  `fonts.css`. Acceptable. Revisit only if i18n shows up.
+- **Variable fonts** — Inter ships a variable `.woff2` (~120 KB single
+  file replacing four weight files). Tempting on bundle size but the
+  `font-variation-settings` syntax is more brittle to debug; static
+  weights are simpler and the size delta isn't the point. Revisit if
+  size pressure emerges.
+- **Editorial Calm typography polish** — tighter line-heights, looser
+  tracking on serif headings, the lighter visual feel the design
+  canvas hints at. Belongs in a separate Editorial-polish patch
+  alongside any new heading consumer of `--tk-font-serif`.
+- **Per-OS font-stack tuning** — `local()` hints, `font-stretch`
+  declarations, OS-specific descriptor overrides. Modern browsers
+  handle the `@font-face` lookup well; over-engineering the fallback
+  chain is a 1-month-from-now learning, not a now decision.
+
 ## [1.3.11] - 2026-05-01
 
 Lands the **Lucide icon family swap** — PR 7 of the Touch 2 facelift arc

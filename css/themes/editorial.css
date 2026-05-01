@@ -92,9 +92,11 @@
     --tk-space-6:          32px;
     --tk-space-8:          40px;
 
-    /* Fonts — serif headings, sans body, mono code
-       Stacks fall back to widely-installed serif/sans until
-       woff2 self-hosting lands in a follow-up patch. */
+    /* Fonts — serif slot reserved, sans body, mono code.
+       All three primaries (IBM Plex Sans, Source Serif 4, IBM Plex
+       Mono) are self-hosted woff2 since 1.3.12 — see
+       css/themes/fonts.css and assets/fonts/SOURCES.md. The system
+       fallbacks remain as a safety net. */
     --tk-font-sans:        'IBM Plex Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --tk-font-serif:       'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', Times, serif;
     --tk-font-mono:        'IBM Plex Mono', 'JetBrains Mono', 'Fira Code', Consolas, monospace;

@@ -1115,7 +1115,7 @@
 .blame-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: var(--font-mono, 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace);
+    font-family: var(--tk-font-mono);
     font-size: 12px;
     line-height: 1.5;
 }

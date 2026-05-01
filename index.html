@@ -6,6 +6,14 @@
     <title>AI Editor</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+    <!-- Self-hosted woff2 fonts (1.3.12+) — must register @font-face
+         rules before any token resolves the families by name. Latin
+         subsets, 19 files in assets/fonts/. Provenance in
+         assets/fonts/SOURCES.md. Preload the two most-used Refined IDE
+         faces so first paint isn't reflowed. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./assets/fonts/inter-latin-400-normal.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./assets/fonts/inter-latin-500-normal.woff2">
+    <link rel="stylesheet" href="./css/themes/fonts.css">
     <!-- Theme tokens — public --tk-* contract (frozen) + active theme.
          Load order matters: tokens.css defines the contract with
          placeholder values; the theme file overrides them. base.css
