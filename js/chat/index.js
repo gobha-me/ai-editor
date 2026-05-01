@@ -20,6 +20,7 @@ import { registerEvalTools } from '../tools/eval-tools.js';
 import { registerCursorTools } from '../tools/cursor-tools.js';
 import { registerPluginTools } from '../tools/plugin-tools.js';
 import { registerMemoryTools } from '../tools/memory-tools.js';
+import { registerMetaTools } from '../tools/meta-tools.js';
 
 // Import submodules
 import { 
@@ -54,7 +55,11 @@ import { executeToolCall } from './tools.js';
 // TOOL REGISTRATION
 // ============================================
 
-// Initialize tools on module load
+// Initialize tools on module load. Meta-tools first — they introspect the
+// catalog at call time, so order is not load-bearing, but registering them
+// at index 0 is the defensive choice for any future stamp-at-registration
+// behavior.
+registerMetaTools(ToolRegistry);
 registerFileTools(ToolRegistry);
 registerScanTools(ToolRegistry);
 registerEditTools(ToolRegistry);

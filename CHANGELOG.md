@@ -4,6 +4,128 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.16] - 2026-05-01
+
+Closes the `unresolved_static` gap surfaced by the 1.3.14 Composer. Three
+discovery handlers — `list_tool_categories`, `list_tools_by_category`,
+`find_tool` — register on app boot and resolve through the
+[`Catalog`](js/intelligence/tools/catalog.js) like every other tool. After
+this PR, `composeAdmission(...)` against `coder.v1.tools.static` returns
+`unresolved_static: []` and admits **9/9** static names instead of 6/9 —
+the meta-tool names that have sat in the static set since 1.3.4 finally
+do something.
+
+PR 3 of 4 in the §1.4.0 Tools Phase 1 arc (1.3.4 foundation → 1.3.14
+Composer → 1.3.15 system-prompt admission → **1.3.16 meta-tools** →
+1.4.0 measurement). Lands as 1.3.16 (not 1.4.0) because the §1.4.0 exit
+criterion (70% token reduction measured on real coder sessions via the
+1.2.1 cost dashboard) is downstream of meta-tools landing.
+
+The meta-tools are themselves tools — they live in the catalog with
+`category: 'meta'`, are pinned to `coder.v1.tools.static`, and cost ~50
+tokens each in admitted form. The price of admission to a sub-prompt
+that lets the model navigate the rest of the catalog without paying the
+full ~10K-token enumeration up front. DESIGN-tools.md §"Meta-Tools" is
+the contract for the return shapes.
+
+**`find_tool` is categorical/text scoring only in 1.3.16.** Tokenize the
+query (lowercased, ≥2-char tokens), score each tool by name/description/
+category match, sort score DESC with cost-tie-break ASC, return top 8.
+Semantic matching (k-NN over tool embeddings) ships in 1.4.1 per ROADMAP
+§1.4.1. The handler's response carries a `note` field that sets the
+model's expectation honestly — *"categorical/text match only; semantic
+search ships in 1.4.1"* — so callers don't assume embedding-quality
+ranking from a substring match.
+
+**Sticky admission stays out of scope.** Discovery in 1.3.16 stops at
+"the model now sees what's available." A discovered tool only becomes
+invocable on the *next* turn if it was already in the static set — which
+for `coder.v1` covers `read_file`, `read_lines`, `scan_file`, `edit_file`,
+`commit_files`, `list_dirty_files`, plus the three meta-tools themselves.
+Anything outside the static set still requires the model to call the
+relevant meta-tool again before invoking. Sticky admission via the
+unified `TaskLedger` arrives in a later 1.4.x patch.
+
+### Added
+
+- **[`js/tools/meta-tools.js`](js/tools/meta-tools.js)** *(new)* — three
+  OpenAI-function-calling handlers and the `registerMetaTools(registry)`
+  factory. All three register with `roles: 'all'` — discovery is read-only
+  introspection and gating it by role just leaves a `pm` user confused
+  about what the session contains. Invocation is still gated by the
+  existing [`ToolRegistry.checkRoleAccess()`](js/tools/registry.js).
+  - `list_tool_categories()` → `{categories: CategoryInfo[]}` — thin
+    wrapper over `Catalog.listCategories()`. Cheapest discovery call;
+    no parameters.
+  - `list_tools_by_category(category: string)` → `{category, count, tools: ToolSummary[]}` —
+    wraps `Catalog.listByCategoryPrefix()` and projects via
+    `Catalog.defToToolSummary()`. Empty `category` returns `{error}`.
+  - `find_tool(description: string)` → `{description, count, tools: ToolSummary[], note}` —
+    categorical/text scoring (exact-name 100, name substring 30,
+    description substring 10, category substring 5; sum across tokens).
+    Tie-break by `cost_estimate` ASC. Top K=8.
+
+- **[`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)**
+  *(extended)* — three additions:
+  - `Catalog.listCategories()` — aggregates `buildAll()` by category;
+    returns `CategoryInfo[]` sorted alphabetically with `tool_count` per
+    entry and `description` from the new `CATEGORY_DESCRIPTIONS` map.
+  - `Catalog.defToToolSummary(td)` — dual of `defToToolDef()`. Same input,
+    lighter `ToolSummary` output (no `schema`, no `full_doc`,
+    flattens cost+side_effects).
+  - `CATEGORY_DESCRIPTIONS` constant — 1-line description per category,
+    parallel to `CATEGORY_BY_NAME`. Categories without an entry yield
+    `description: ''` (surfaces gaps honestly rather than fabricating
+    labels).
+
+- **[`tests/test-meta-tools.mjs`](tests/test-meta-tools.mjs)** *(new)* —
+  ten tests covering: meta-tool catalog resolution, the
+  `list_tool_categories` shape, `list_tools_by_category` prefix matching
+  and empty-string error path, `find_tool` ranking + cap + error path +
+  self-discovery, and the **Composer integration** that asserts
+  `unresolved_static: []` and `admitted.length === CODER_V1.tools.static.length`
+  against the live (post-1.3.16) registry.
+
+### Changed
+
+- **[`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)** —
+  `CATEGORY_BY_NAME` and `SIDE_EFFECTS_BY_NAME` gain three new entries
+  for the meta-tool names (`category: 'meta'`, `side_effects: 'read'`).
+  The `Catalog` public surface gains `listCategories` and
+  `defToToolSummary`; the `_testing` seam gains `defToToolSummary` and
+  `CATEGORY_DESCRIPTIONS`.
+
+- **[`js/chat/index.js`](js/chat/index.js)** — imports
+  `registerMetaTools` from `js/tools/meta-tools.js` and calls it as the
+  first registration in the bootstrap block. The catalog reads
+  dynamically so registration order doesn't affect correctness; first
+  slot is the defensive choice.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.3.15 → 1.3.16. The CI
+  version-coherence lint requires this be paired with the `[1.3.16]`
+  CHANGELOG promotion; both ride this PR.
+
+### Notes
+
+- **Prompt impact: positive side-effect, no source change required.**
+  `js/prompts.js`'s dynamic enumeration (1.3.15) already renders from
+  the admitted `ToolDef[]`. After 1.3.16, the three meta-tools simply
+  appear as bullets in that block whenever `coder.v1` is active —
+  `LLMTools.getAdmittedTools()` returns 9 entries instead of 6, and the
+  prompt grows three lines describing the discovery interface. No
+  hardcoded references to meta-tool names exist in `js/prompts.js`
+  (verified post-merge of 1.3.15).
+
+- **Removability check.** With `js/tools/meta-tools.js` removed and the
+  `registerMetaTools` call deleted, the editor reverts to the 1.3.15
+  state: 6/9 static admitted, 3 names in `unresolved_static`,
+  diagnostics show the gap. No crash, no broken UI surface. The
+  meta-tools are purely additive; their absence is the *previous*
+  released behavior.
+
+- **Roadmap.** Flips ROADMAP §1.3.16 from `[PLANNED]` to `[SHIPPED]` and
+  bumps the header's "Current released version" line.
+
 ## [1.3.15] - 2026-05-01
 
 Closes the **system-prompt admission gap** surfaced post-merge of 1.3.14.

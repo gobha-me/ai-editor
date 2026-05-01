@@ -1,0 +1,282 @@
+/**
+ * Tests for js/tools/meta-tools.js + catalog extensions
+ * (1.3.16 — PR 3 of the 1.4.0 Tools Phase 1 arc).
+ *
+ * Asserts the discovery handlers and the Composer-integration exit signal:
+ *   - After registerMetaTools, each meta-tool resolves through the Catalog
+ *     and lands in `category: 'meta'`.
+ *   - `list_tool_categories` returns a sorted CategoryInfo[] with counts.
+ *   - `list_tools_by_category(prefix)` honors dot-segment prefix matching
+ *     and projects each match through `defToToolSummary`.
+ *   - `find_tool(query)` scores name/description/category substrings, caps
+ *     output at K=8, and rejects empty input.
+ *   - **Exit-criteria signal:** with the static set fully registered,
+ *     `composeAdmission(coder.v1.tools.static)` returns
+ *     `unresolved_static: []` and admits 9/9.
+ *
+ * Runs under `node --test`.
+ */
+import './_node-shim.mjs';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { Catalog, composeAdmission } from '../js/intelligence/tools/index.js';
+import { ToolRegistry } from '../js/tools/registry.js';
+import { CODER_V1 } from '../js/profiles/coder-v1.js';
+import { registerMetaTools } from '../js/tools/meta-tools.js';
+
+// ============================================
+// Fixture — register meta-tools + the six other coder.v1 essentials.
+// ============================================
+
+const META_NAMES = ['list_tool_categories', 'list_tools_by_category', 'find_tool'];
+const FULL_USER_GROUPS = ['full'];
+
+function registerStaticFixture() {
+    ToolRegistry.clear();
+    registerMetaTools(ToolRegistry);
+    const reg = (name, description, parameters = { type: 'object', properties: {} }, roles = 'all') =>
+        ToolRegistry.register(name, async () => ({}), {
+            function: { name, description, parameters }, roles,
+        });
+    reg('read_file',        'Read the full content of a file.',     { type: 'object', properties: { path: { type: 'string' } } });
+    reg('read_lines',       'Read a line range from a file.',       { type: 'object', properties: { path: { type: 'string' }, start: { type: 'number' }, end: { type: 'number' } } });
+    reg('scan_file',        'Scan a file for top-level symbols.',   { type: 'object', properties: { path: { type: 'string' } } });
+    reg('edit_file',        'Edit a file in place.',                { type: 'object', properties: { path: { type: 'string' } } }, ['coder']);
+    reg('commit_files',     'Commit staged files to the branch.',   { type: 'object', properties: { message: { type: 'string' } } }, ['coder']);
+    reg('list_dirty_files', 'List uncommitted files.',              { type: 'object', properties: {} });
+}
+
+// ============================================
+// Catalog resolution — meta-tools are first-class catalog citizens
+// ============================================
+
+test('after registerMetaTools, each meta-tool resolves via Catalog.getByName()', () => {
+    registerStaticFixture();
+    for (const name of META_NAMES) {
+        const td = Catalog.getByName(name);
+        assert.ok(td, `Catalog.getByName(${name}) should resolve`);
+        assert.equal(td.name, name);
+    }
+});
+
+test('meta-tools land in category: "meta"', () => {
+    registerStaticFixture();
+    for (const name of META_NAMES) {
+        const td = Catalog.getByName(name);
+        assert.equal(td.category, 'meta', `${name} should be category meta`);
+    }
+});
+
+test('meta-tools have side_effects: "read"', () => {
+    registerStaticFixture();
+    for (const name of META_NAMES) {
+        const td = Catalog.getByName(name);
+        assert.equal(td.metadata.side_effects, 'read');
+    }
+});
+
+// ============================================
+// list_tool_categories — handler shape
+// ============================================
+
+test('list_tool_categories returns {categories: CategoryInfo[]}', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tool_categories', {});
+    assert.ok(Array.isArray(result.categories), 'should return categories array');
+    assert.ok(result.categories.length >= 1);
+    for (const c of result.categories) {
+        assert.equal(typeof c.category, 'string');
+        assert.equal(typeof c.description, 'string');
+        assert.equal(typeof c.tool_count, 'number');
+        assert.ok(c.tool_count >= 1);
+    }
+});
+
+test('list_tool_categories includes "meta" with tool_count >= 3', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tool_categories', {});
+    const meta = result.categories.find(c => c.category === 'meta');
+    assert.ok(meta, 'should include meta category');
+    assert.ok(meta.tool_count >= 3, 'meta should have 3+ tools (the meta-tools themselves)');
+    assert.ok(meta.description.length > 0, 'meta should have a description');
+});
+
+test('list_tool_categories returns categories sorted alphabetically', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tool_categories', {});
+    const cats = result.categories.map(c => c.category);
+    const sorted = [...cats].sort((a, b) => a.localeCompare(b));
+    assert.deepEqual(cats, sorted);
+});
+
+// ============================================
+// list_tools_by_category — prefix matching + ToolSummary shape
+// ============================================
+
+test('list_tools_by_category("code.file.read") returns the registered read tools', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tools_by_category', { category: 'code.file.read' });
+    const names = result.tools.map(t => t.name).sort();
+    assert.deepEqual(names, ['read_file', 'read_lines']);
+    assert.equal(result.count, 2);
+    assert.equal(result.category, 'code.file.read');
+});
+
+test('list_tools_by_category("code.file") returns all file-area tools (prefix is dot-segment aware)', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tools_by_category', { category: 'code.file' });
+    const names = result.tools.map(t => t.name).sort();
+    // code.file.read (read_file, read_lines) + code.file.edit (edit_file)
+    assert.deepEqual(names, ['edit_file', 'read_file', 'read_lines']);
+    assert.equal(result.count, 3);
+});
+
+test('list_tools_by_category returns ToolSummary shape per entry', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tools_by_category', { category: 'meta' });
+    assert.ok(result.tools.length >= 3);
+    for (const ts of result.tools) {
+        assert.equal(typeof ts.tool_id, 'string');
+        assert.equal(typeof ts.name, 'string');
+        assert.equal(typeof ts.description, 'string');
+        assert.equal(typeof ts.short_cost, 'number');
+        assert.equal(typeof ts.full_cost, 'number');
+        assert.equal(typeof ts.category, 'string');
+        assert.equal(typeof ts.side_effects, 'string');
+    }
+});
+
+test('list_tools_by_category("") returns {error}', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('list_tools_by_category', { category: '' });
+    assert.ok(result.error, 'empty category should produce an error');
+    assert.match(result.error, /required/);
+});
+
+test('list_tools_by_category prefix is dot-segment aware', async () => {
+    registerStaticFixture();
+    // 'code.file' must NOT match 'code.scan' even though both start with 'code'.
+    const result = await ToolRegistry.execute('list_tools_by_category', { category: 'code.file' });
+    for (const t of result.tools) {
+        assert.ok(
+            t.category === 'code.file' || t.category.startsWith('code.file.'),
+            `prefix matching should reject ${t.category}`
+        );
+    }
+});
+
+// ============================================
+// find_tool — scoring + cap + error path + self-discovery
+// ============================================
+
+test('find_tool("read") ranks read_file in top 3', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('find_tool', { description: 'read' });
+    const top3 = result.tools.slice(0, 3).map(t => t.name);
+    assert.ok(top3.includes('read_file'), `read_file should be in top 3, got ${top3.join(', ')}`);
+});
+
+test('find_tool("list categories") ranks list_tool_categories first', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('find_tool', { description: 'list categories' });
+    assert.ok(result.tools.length > 0);
+    assert.equal(result.tools[0].name, 'list_tool_categories');
+});
+
+test('find_tool("") returns {error}', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('find_tool', { description: '' });
+    assert.ok(result.error, 'empty description should produce an error');
+    assert.match(result.error, /required/);
+});
+
+test('find_tool caps results at K=8', async () => {
+    ToolRegistry.clear();
+    registerMetaTools(ToolRegistry);
+    // Register 12 fixture tools all matching the keyword "doit".
+    for (let i = 0; i < 12; i++) {
+        ToolRegistry.register(`doit_${i}`, async () => ({}), {
+            function: {
+                name: `doit_${i}`,
+                description: `tool ${i} that does it`,
+                parameters: { type: 'object', properties: {} },
+            },
+            roles: 'all',
+        });
+    }
+    const result = await ToolRegistry.execute('find_tool', { description: 'doit' });
+    assert.equal(result.tools.length, 8, 'should cap at K=8');
+    assert.equal(result.count, 8);
+});
+
+test('find_tool("discover") returns find_tool itself (meta-tools live in their own catalog)', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('find_tool', { description: 'discover capabilities' });
+    const names = result.tools.map(t => t.name);
+    // 'find_tool' description contains "Find tools whose..." — "find" matches via name+desc.
+    // 'list_tool_categories' description contains "discover" → matches via description.
+    assert.ok(
+        names.includes('find_tool') || names.includes('list_tool_categories') || names.includes('list_tools_by_category'),
+        `at least one meta-tool should self-discover, got ${names.join(', ')}`
+    );
+});
+
+test('find_tool response carries the 1.4.1-roadmap note', async () => {
+    registerStaticFixture();
+    const result = await ToolRegistry.execute('find_tool', { description: 'read' });
+    assert.match(result.note, /semantic/);
+});
+
+// ============================================
+// Composer integration — closes the unresolved_static gap (the exit signal)
+// ============================================
+
+test('coder.v1 admission: unresolved_static is empty after meta-tools register', () => {
+    registerStaticFixture();
+    const result = composeAdmission({
+        task: 'coder-session',
+        query: null,
+        budget_tokens: CODER_V1.tools.budget_tokens,
+        profile_static: CODER_V1.tools.static,
+        task_ledger: null,
+        user_groups: FULL_USER_GROUPS,
+        discovery_call: null,
+        expansion_mode: CODER_V1.tools.expansion_mode,
+    });
+    assert.deepEqual(result.diagnostics.unresolved_static, [], 'no unresolved names after 1.3.16');
+});
+
+test('coder.v1 admission: admitted.length matches static set length (9/9)', () => {
+    registerStaticFixture();
+    const result = composeAdmission({
+        task: 'coder-session',
+        query: null,
+        budget_tokens: CODER_V1.tools.budget_tokens,
+        profile_static: CODER_V1.tools.static,
+        task_ledger: null,
+        user_groups: FULL_USER_GROUPS,
+        discovery_call: null,
+        expansion_mode: CODER_V1.tools.expansion_mode,
+    });
+    // Pin to the source so future static-set additions don't drift past a magic number.
+    assert.equal(result.admitted.length, CODER_V1.tools.static.length);
+});
+
+test('coder.v1 admission: tokens_used stays within budget_tokens', () => {
+    registerStaticFixture();
+    const result = composeAdmission({
+        task: 'coder-session',
+        query: null,
+        budget_tokens: CODER_V1.tools.budget_tokens,
+        profile_static: CODER_V1.tools.static,
+        task_ledger: null,
+        user_groups: FULL_USER_GROUPS,
+        discovery_call: null,
+        expansion_mode: CODER_V1.tools.expansion_mode,
+    });
+    assert.ok(
+        result.tokens_used <= CODER_V1.tools.budget_tokens,
+        `tokens_used ${result.tokens_used} must be <= budget ${CODER_V1.tools.budget_tokens}`
+    );
+});

@@ -50,6 +50,11 @@ const TOOL_VERSION = '1';
  * @type {Object.<string, string>}
  */
 const CATEGORY_BY_NAME = {
+    // meta — discovery interface (1.3.16; ROADMAP §1.3.16, DESIGN-tools.md §"Meta-Tools").
+    'list_tool_categories':   'meta',
+    'list_tools_by_category': 'meta',
+    'find_tool':              'meta',
+
     // code.file
     'read_file': 'code.file.read',
     'read_lines': 'code.file.read',
@@ -176,6 +181,9 @@ const SIDE_EFFECTS_BY_NAME = {
     'read_plugin_source': 'read',
     'list_user_plugins': 'read',
     'read_docs': 'read',
+    'list_tool_categories': 'read',
+    'list_tools_by_category': 'read',
+    'find_tool': 'read',
 
     'edit_file': 'write',
     'replace_lines': 'write',
@@ -205,6 +213,38 @@ const SIDE_EFFECTS_BY_NAME = {
     'add_issue_comment': 'external',
     'run_plugin': 'external',
     'run_code': 'external',
+};
+
+/**
+ * One-line descriptions for each category, used by the `list_tool_categories`
+ * meta-tool (1.3.16). Parallel to `CATEGORY_BY_NAME`. A category with no
+ * entry surfaces an empty `description: ''` at lookup — surfaces the gap
+ * honestly rather than fabricating a label.
+ *
+ * @type {Object.<string, string>}
+ */
+const CATEGORY_DESCRIPTIONS = {
+    'meta':              'Discovery: enumerate tools and find capabilities by description.',
+    'code.file.read':    'Read-only file access (full files, line ranges, current buffer).',
+    'code.file.navigate':'Open files in the editor and inspect open tabs.',
+    'code.file.write':   'Create, overwrite, or delete entire files.',
+    'code.file.edit':    'In-place edits — replace, insert, or delete lines or selection.',
+    'code.scan':         'Read-only structural scans: symbols, references, project text search.',
+    'code.cursor':       'Move the editor cursor or change the selection.',
+    'code.project':      'Project-tree introspection and active-project switching.',
+    'code.project.xref': 'Cross-project peeks — read trees and files outside the active project.',
+    'code.git.commit':   'Commit staged file changes to the active branch.',
+    'code.git.status':   'Read uncommitted file state.',
+    'code.git.pr':       'Pull-request lifecycle: create, list, review, merge.',
+    'code.git.ci':       'CI status and log retrieval.',
+    'code.issue':        'Issue tracker CRUD (provider-backed).',
+    'code.context':      'Retrieval bridge — semantic file relevance and project indexing.',
+    'memory':            'Long-term curated facts (cross-session, scoped).',
+    'scratchpad':        'Session-scoped key-value notes (cleared per task).',
+    'plugin':            'Plugin source read/write and runtime invocation.',
+    'docs':              'Read project / app documentation.',
+    'eval':              'Execute code in a sandboxed runner.',
+    'misc':              'Uncategorized — fallback bucket.',
 };
 
 /**
@@ -377,11 +417,63 @@ function listAll() {
     return buildAll();
 }
 
+/**
+ * Aggregate the catalog by category. One entry per unique category seen
+ * across registered tools, with `tool_count` and a 1-line description from
+ * `CATEGORY_DESCRIPTIONS`. Categories absent from the description map yield
+ * an empty `description` — surfaces a gap to the operator rather than
+ * crashing the discovery flow.
+ *
+ * The `list_tool_categories` meta-tool (1.3.16) is a thin wrapper over this.
+ *
+ * @returns {import('./contracts.js').CategoryInfo[]}
+ */
+function listCategories() {
+    const all = buildAll();
+    const counts = new Map();
+    for (const td of all) {
+        counts.set(td.category, (counts.get(td.category) || 0) + 1);
+    }
+    /** @type {import('./contracts.js').CategoryInfo[]} */
+    const out = [];
+    for (const [category, tool_count] of counts.entries()) {
+        out.push({
+            category,
+            description: CATEGORY_DESCRIPTIONS[category] || '',
+            tool_count,
+        });
+    }
+    out.sort((a, b) => a.category.localeCompare(b.category));
+    return out;
+}
+
+/**
+ * Project a `ToolDef` to the cheap, schema-less `ToolSummary` shape returned
+ * by every meta-tool (1.3.16). Dual of `defToToolDef` — same input, lighter
+ * output, no `schema`/`full_doc`/`metadata` blob.
+ *
+ * @param {ToolDef} td
+ * @returns {import('./contracts.js').ToolSummary}
+ */
+function defToToolSummary(td) {
+    return {
+        tool_id: td.id,
+        name: td.name,
+        description: td.description,
+        short_cost: td.metadata.short_cost,
+        full_cost: td.metadata.cost_estimate,
+        category: td.category,
+        side_effects: td.metadata.side_effects,
+    };
+}
+
 export const Catalog = {
     getById,
     getByName,
     listByCategoryPrefix,
     listAll,
+    listCategories,
+    defToToolSummary,
 };
 
 // Test seams — unit tests assert on derivation in isolation from the
@@ -389,9 +481,11 @@ export const Catalog = {
 // signals "do not import from product code."
 export const _testing = {
     defToToolDef,
+    defToToolSummary,
     deriveCategory,
     deriveSideEffects,
     approxTokens,
+    CATEGORY_DESCRIPTIONS,
     PROFILE_NAMESPACE,
     TOOL_VERSION,
 };
