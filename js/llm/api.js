@@ -63,6 +63,9 @@ import { applyModelOverrides } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
+import { composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
+import { CODER_V1 } from '../profiles/coder-v1.js';
+import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -838,21 +841,80 @@ export const LLMTools = {
     },
 
     /**
-     * Get tools filtered by the currently active role.
+     * Get tools for the active role.
+     *
+     * Two paths:
+     *
+     *   1. **Composer path** (default, 1.3.14+) — when a profile with a
+     *      populated `tools.static` set is active and the
+     *      `?toolsCompose=off` URL flag is *not* set, the static set is
+     *      resolved through the `js/intelligence/tools/` Composer:
+     *      authorization gate via `metadata.authorization.required_groups`,
+     *      budget packing, skip-not-throw on unresolved names. Diagnostics
+     *      land in `LLMDebug` for the next exchange.
+     *
+     *   2. **Legacy path** (kill-switch via `?toolsCompose=off`, plus the
+     *      fallback when no profile carries a static set) — the pre-1.3.14
+     *      behavior: every registered tool, role-filtered, every call.
+     *
+     * The roadmap §1.4.0 removability check requires the kill-switch.
+     *
      * @returns {ToolDefinition[]}
      */
     getToolsForRole() {
         const defs = ToolRegistry.getDefinitions();
         console.log('[LLMTools] getToolsForRole: registry has', defs.length, 'tools');
-        
+
         if (defs.length === 0) {
             console.warn('[LLMTools] ⚠️ ToolRegistry is empty! Tools may not be registered yet.');
             return [];
         }
-        
-        const filtered = Roles.filterTools(defs);
-        console.log('[LLMTools] After role filtering:', filtered.length, 'tools for role', State.settings.role);
-        return filtered;
+
+        // Kill-switch: ?toolsCompose=off bypasses the Composer entirely.
+        if (isToolsComposeDisabled()) {
+            const filtered = Roles.filterTools(defs);
+            console.log('[LLMTools] Composer DISABLED via flag — legacy path:', filtered.length, 'tools for role', State.settings.role);
+            return filtered;
+        }
+
+        // Profile resolution: 1.3.14 only wires `coder.v1`. Other roles
+        // fall through to the legacy path until their profiles register.
+        const role = State.settings.role;
+        const useComposer = role === 'coder'
+            && Array.isArray(CODER_V1.tools.static)
+            && CODER_V1.tools.static.length > 0;
+
+        if (!useComposer) {
+            const filtered = Roles.filterTools(defs);
+            console.log('[LLMTools] No profile static set for role', role, '— legacy path:', filtered.length, 'tools');
+            return filtered;
+        }
+
+        const result = composeAdmission({
+            task: 'chat',
+            query: null,
+            budget_tokens: CODER_V1.tools.budget_tokens,
+            profile_static: CODER_V1.tools.static,
+            task_ledger: null,
+            user_groups: [role],
+            discovery_call: null,
+            expansion_mode: CODER_V1.tools.expansion_mode,
+        });
+
+        // Stash diagnostics + token-cost baseline for the upcoming exchange.
+        LLMDebug.attachToolDiagnostics({
+            ...result.diagnostics,
+            tokens_used: result.tokens_used,
+            tool_def_tokens: result.tokens_used,
+        });
+
+        console.log(
+            '[LLMTools] Composer admitted', result.admitted.length,
+            '/', CODER_V1.tools.static.length,
+            '(', result.tokens_used, 'tokens; unresolved:', result.diagnostics.unresolved_static.join(',') || 'none', ')'
+        );
+
+        return renderForLLM(result);
     }
 };
 

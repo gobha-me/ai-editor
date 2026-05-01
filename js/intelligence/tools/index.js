@@ -2,9 +2,11 @@
 /**
  * Public surface of the tools-admission subsystem.
  *
- * Phase 1 / 1.3.4 ships only the data foundation: the `Catalog` adapter
- * and the `computeToolID` hash. The Composer (admission algorithm) lands
- * in 1.4.0 PR 2; meta-tools in PR 3; sticky admission in PR 4.
+ * Phase 1 / 1.3.4 shipped the data foundation: the `Catalog` adapter and
+ * the `computeToolID` hash. PR 2 / 1.3.14 adds the Composer (static
+ * admission + authorization + budget packing) and `renderForLLM` for the
+ * OpenAI tool-array rendering. Meta-tools, sticky admission, and lazy
+ * expansion arrive in subsequent PRs.
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -15,3 +17,4 @@
 
 export { Catalog } from './catalog.js';
 export { computeToolID } from './tool-id.js';
+export { composeAdmission, renderForLLM } from './composer.js';

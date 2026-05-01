@@ -171,11 +171,20 @@
  * Diagnostic counters surfaced in the LLM debug modal (1.4.0 PR 5).
  * Phase 1 ships at least the four counters below; later phases add more.
  *
+ * `unresolved_static` lists names from `ToolRequest.profile_static` that
+ * did not resolve via `Catalog.getByName()` — e.g. PR-3 meta-tools
+ * (`list_tool_categories`, `list_tools_by_category`, `find_tool`) declared
+ * in `coder.v1.tools.static` but not yet registered. The Composer is
+ * contractually required to skip-not-throw on these (CHANGELOG §1.3.4)
+ * and to surface them here so operators can tell "missing on purpose"
+ * apart from "registry forgot to register."
+ *
  * @typedef {Object} ToolDiagnostics
- * @property {number} static_admitted
- * @property {number} sticky_admitted
- * @property {number} discovery_admitted
- * @property {number} suppressed
+ * @property {number}   static_admitted
+ * @property {number}   sticky_admitted
+ * @property {number}   discovery_admitted
+ * @property {number}   suppressed
+ * @property {string[]} unresolved_static
  */
 
 /**

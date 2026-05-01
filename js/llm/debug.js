@@ -42,6 +42,10 @@ export const LLMDebug = {
             // 1.2.0 — Compactor diagnostics for the most recent
             // compression pass that fed this exchange.
             compression: null,
+            // 1.3.14 — Tools Composer admission diagnostics
+            // (static_admitted / suppressed counters, unresolved_static
+            // names, tokens_used). Mirrors the compression slot above.
+            tools: null,
         };
         this._current = exchange;
         // Drain any compression diagnostics that landed BEFORE the
@@ -50,6 +54,13 @@ export const LLMDebug = {
         if (this._pendingCompression) {
             exchange.compression = this._pendingCompression;
             this._pendingCompression = null;
+        }
+        // Drain any tools diagnostics that landed BEFORE the exchange
+        // started (the Composer runs in LLMTools.getToolsForRole(),
+        // which executes in handlers.js before LLM.chat opens the request).
+        if (this._pendingTools) {
+            exchange.tools = this._pendingTools;
+            this._pendingTools = null;
         }
         this.exchanges.push(exchange);
         if (this.exchanges.length > this.maxExchanges) {
@@ -76,6 +87,25 @@ export const LLMDebug = {
             this._current.compression = diagnostics;
         } else {
             this._pendingCompression = diagnostics;
+        }
+    },
+
+    /**
+     * Attach Composer diagnostics to the *upcoming* exchange. Called by
+     * `LLMTools.getToolsForRole()` immediately after `composeAdmission()`
+     * returns and before `LLM.chat()` opens the stream. Same shape and
+     * pin/stash split as `attachCompressionDiagnostics`.
+     *
+     * @param {object} diagnostics  A `ToolDiagnostics` payload extended with
+     *   `tokens_used` and `tool_def_tokens` for the cost baseline.
+     * @since 1.3.14
+     */
+    attachToolDiagnostics(diagnostics) {
+        if (!diagnostics) return;
+        if (this._current) {
+            this._current.tools = diagnostics;
+        } else {
+            this._pendingTools = diagnostics;
         }
     },
 

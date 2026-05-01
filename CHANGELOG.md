@@ -4,6 +4,132 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-05-01
+
+Lands the **Tools Composer** — PR 2 of the 1.4.0 Tools Phase 1 arc, and
+the first PR on the tools track that *changes runtime behavior*. The
+1.3.4 foundation (data-only catalog adapter + `coder.v1.tools.static`
+declaration) is now load-bearing: when a coder-role session opens an LLM
+exchange, the `LLMTools.getToolsForRole()` seam in
+[`js/llm/api.js`](js/llm/api.js) routes through `composeAdmission()`
+instead of returning every registered tool. The static set is resolved
+through the `Catalog`, authorized against the active role, packed
+against `coder.v1.tools.budget_tokens`, and rendered to the OpenAI
+tool-array shape that the existing chat path already consumes — zero
+changes to [`js/chat/handlers.js`](js/chat/handlers.js) or
+[`js/tools/registry.js`](js/tools/registry.js).
+
+The track lands as **1.3.14 instead of 1.4.0** — same scaffold-as-patch
+pattern as 1.3.4 — because §1.4.0 Phase 1's exit criteria (70%+ token
+reduction, working discovery roundtrip, full LLM debug modal
+diagnostics rendering) are not yet satisfied. The meta-tools that
+discovery requires (`list_tool_categories`, `list_tools_by_category`,
+`find_tool`) ship in PR 3; the Composer admits them today only if a
+profile's static set names them, and skip-not-throws on the three
+declared-but-unregistered names from `coder.v1.tools.static` while
+surfacing them in `diagnostics.unresolved_static`. 1.4.0 is reserved
+for when the admission *and* discovery loops both run.
+
+**Why now:** the 1.3.x facelift arc closed at 1.3.13 (Touch 2 PR 9).
+`[Unreleased]` is empty. The Composer is small enough to ship as one
+PR and is the natural next step before meta-tools — without an
+admission consumer, meta-tools have nowhere to land.
+
+### Added
+
+- **[`js/intelligence/tools/composer.js`](js/intelligence/tools/composer.js)**
+  *(new module)* — pure-function admission consumer.
+  - **`composeAdmission(request: ToolRequest): ToolAdmissionResult`** —
+    walks `profile_static` names, resolves each via
+    `Catalog.getByName()`, applies the authorization gate via
+    `metadata.authorization.required_groups` (mirroring
+    `Roles.filterTools()` semantics: `'full'` user-group bypasses; `'all'`
+    required-group always admits; otherwise overlap), packs against
+    `budget_tokens` in declared order. Over-budget tools land in
+    `suppressed[]` with `reason: 'over_budget'`; unauthorized tools with
+    `reason: 'unauthorized'`. Names that fail to resolve are skipped (not
+    thrown) and listed in `diagnostics.unresolved_static`.
+  - **`renderForLLM(result: ToolAdmissionResult): ToolDefinition[]`** —
+    converts the admitted set to the OpenAI tool-array shape that the
+    existing chat path consumes, preserving declared order. Re-resolves
+    through `Catalog.getById()` rather than parsing
+    `AdmittedTool.rendered` so a registry mutation between admit and
+    render does the right thing.
+
+- **[`js/utils/tools-compose-flag.js`](js/utils/tools-compose-flag.js)**
+  *(new module)* — `?toolsCompose=off` URL flag (also `=false` / `=0` /
+  `=disabled`). Read-once, cached, mirrors
+  [`js/utils/compression-flag.js`](js/utils/compression-flag.js)'s
+  shape. **This is the explicit removability kill-switch the §1.4.0
+  roadmap removability check requires** — 1.3.4's removability was
+  implicit ("delete the directory"); 1.3.14 changes runtime behavior so
+  it ships an in-product switch the operator can flip without
+  redeploying.
+
+- **`LLMDebug.attachToolDiagnostics(diagnostics)`** in
+  [`js/llm/debug.js`](js/llm/debug.js) — same pin/stash split as
+  `attachCompressionDiagnostics` (lines 73–80). New `tools` field on the
+  exchange record, defaulted to `null`. The Composer call in
+  `getToolsForRole()` runs *before* `LLM.chat()` opens the request, so
+  diagnostics stash on `_pendingTools` and drain when `startExchange`
+  fires. The HTML rendering of the new field (the LLM debug modal's new
+  "Tools" section) is deferred to a polish PR; the data lands now so
+  next-PR work can read it.
+
+- **[`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs)**
+  *(new, 24 tests across 5 areas)* — admission semantics, render-shape
+  compatibility, `coder.v1` integration, internal `isAuthorized` helper,
+  `LLMDebug.attachToolDiagnostics` pin/stash split, and the URL-flag
+  cache lifecycle. Picked up automatically by the
+  `node --test tests/test-*.mjs` step in
+  [`.gitea/workflows/ci.yaml`](.gitea/workflows/ci.yaml).
+
+- **`unresolved_static: string[]`** field on the `ToolDiagnostics`
+  typedef in [`js/intelligence/tools/contracts.js`](js/intelligence/tools/contracts.js).
+  Lists names from `ToolRequest.profile_static` that the Catalog could
+  not resolve — e.g. PR-3 meta-tools declared in
+  `coder.v1.tools.static` but not yet registered. Lets diagnostics
+  distinguish "missing on purpose" from "registry forgot."
+
+### Changed
+
+- **[`js/llm/api.js:844-856`](js/llm/api.js)** — `LLMTools.getToolsForRole()`
+  body rewritten. Three branches:
+  1. Empty registry → `[]` (unchanged).
+  2. `?toolsCompose=off` → legacy path (`Roles.filterTools(defs)`).
+  3. Active profile carries a populated `tools.static` →
+     `composeAdmission()` + `renderForLLM()`.
+  Otherwise → legacy path. Currently only the `coder` role is wired
+  through; `pm` / `reviewer` / `plugin-dev` / `full` continue on the
+  legacy path until their profiles register. Single call site
+  ([`js/chat/handlers.js:301`](js/chat/handlers.js)) is unchanged — same
+  return type.
+
+- **[`js/intelligence/tools/index.js`](js/intelligence/tools/index.js)**
+  barrel — `composeAdmission` and `renderForLLM` added to the public
+  surface alongside `Catalog` and `computeToolID`.
+
+### Notes
+
+- **Removability check.** With `?toolsCompose=off` set in the URL, the
+  editor behaves byte-for-byte as it did at 1.3.13: every registered
+  tool ships per call, role-filtered, no admission diagnostics emitted.
+  The Composer code is reachable but inert. Confirms the `js/intelligence/tools/`
+  module can be reverted to "scaffolding only" without breaking the
+  chat path.
+
+- **Token-cost baseline.** The Composer surfaces `tokens_used` and
+  `tool_def_tokens` to the debug exchange via
+  `attachToolDiagnostics`. The cost-dashboard "tools per turn" line
+  promised in §1.4.0 lands in a later PR; this patch only sets the
+  measurable baseline so the eventual 70% claim has a delta to point at.
+
+- **Out of scope:** meta-tools (PR 3 / 1.3.15), sticky admission via
+  `TaskLedger.tool_admissions` / `tool_invocations` (later PR), lazy
+  schema expansion (1.4.1 alongside semantic `find_tool`), active-tools
+  chip row above chat input (later PR), LLM debug modal HTML rendering
+  of the `tools` field (later polish PR).
+
 ## [1.3.13] - 2026-05-01
 
 Lands **rem-based UI scaling** — PR 9 of the Touch 2 facelift arc and
