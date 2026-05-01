@@ -89,22 +89,31 @@ function isAuthorized(requiredGroups, userGroups) {
 
 /**
  * Render one `ToolDef` to the OpenAI tool-array shape that
- * `js/chat/handlers.js` and `js/llm/api.js` already consume. The shape is
- * identical to what `ToolRegistry.getDefinitions()` returns today, minus
- * the internal `_registeredRoles` field (the admission decision has
- * already happened, so callers don't need to re-filter).
+ * `js/chat/handlers.js` and `js/llm/api.js` already consume.
  *
- * @param {ToolDef} td
+ * `form: "short"` (1.4.1 lazy expansion) omits the `parameters` key
+ * entirely; the OpenAI tool-call spec defaults missing `parameters` to
+ * `{type: "object", properties: {}}`, so the model still sees a callable
+ * function — just without the schema. The first successful invocation
+ * promotes the ledger entry to `"full"` (see `task-state.js#recordInvocation`),
+ * after which the next-turn admission renders the full schema.
+ *
+ * @param {ToolDef}                td
+ * @param {"short"|"full"}        [form]  Defaults to `"full"` for back-compat.
  * @returns {ToolDefinition}
  */
-function toOpenAIShape(td) {
+function toOpenAIShape(td, form) {
+    /** @type {{name: string, description: string, parameters?: Object}} */
+    const fn = {
+        name: td.name,
+        description: td.description,
+    };
+    if (form !== 'short') {
+        fn.parameters = td.schema;
+    }
     return {
         type: 'function',
-        function: {
-            name: td.name,
-            description: td.description,
-            parameters: td.schema,
-        },
+        function: fn,
     };
 }
 
@@ -174,8 +183,8 @@ export function composeAdmission(request) {
 
         admitted.push({
             tool_id: td.id,
-            form: 'full',           // Always full on the static path; lazy expansion arrives later.
-            rendered: JSON.stringify(toOpenAIShape(td)),
+            form: 'full',           // Static path is always full; lazy expansion (1.4.1) only applies to discovery.
+            rendered: JSON.stringify(toOpenAIShape(td, 'full')),
             source: 'static',
         });
         tokensUsed += cost;
@@ -226,24 +235,29 @@ export function composeAdmission(request) {
                 continue;
             }
 
-            const cost = td.metadata.cost_estimate;
+            // Honor the ledger's recorded form. Pre-1.4.1 ledgers wrote
+            // `'full'` only; 1.4.1's `recordDiscoveryAdmissions` adds
+            // `'short'` entries that promote to `'full'` on first
+            // successful invocation. Default to `'full'` for back-compat.
+            // Cost differs by form: short admissions pay `short_cost`
+            // (~50 tokens) instead of `cost_estimate` (~200-800).
+            const form = rec.form === 'short' ? 'short' : 'full';
+            const cost = form === 'short'
+                ? (typeof td.metadata.short_cost === 'number' ? td.metadata.short_cost : td.metadata.cost_estimate)
+                : td.metadata.cost_estimate;
             if (tokensUsed + cost > budget) {
                 suppressed.push({
                     tool_id: td.id,
                     reason: 'over_budget',
-                    detail: `cost=${cost}, used=${tokensUsed}, budget=${budget}`,
+                    detail: `cost=${cost}, used=${tokensUsed}, budget=${budget}, form=${form}`,
                 });
                 continue;
             }
 
             admitted.push({
                 tool_id: td.id,
-                // Honor the ledger's recorded form. 1.3.17 always writes
-                // `'full'` (lazy expansion lands as a later patch); the
-                // copy-not-coerce keeps this branch correct when that
-                // patch lands without a follow-up touch here.
-                form: rec.form === 'short' ? 'short' : 'full',
-                rendered: JSON.stringify(toOpenAIShape(td)),
+                form,
+                rendered: JSON.stringify(toOpenAIShape(td, form)),
                 source: 'sticky',
             });
             admittedIds.add(td.id);
@@ -290,7 +304,7 @@ export function renderForLLM(result) {
     for (const a of result.admitted) {
         const td = Catalog.getById(a.tool_id);
         if (!td) continue; // tool was removed between admit and render — drop silently
-        out.push(toOpenAIShape(td));
+        out.push(toOpenAIShape(td, a.form));
     }
     return out;
 }

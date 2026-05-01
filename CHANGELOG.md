@@ -4,6 +4,97 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-01
+
+**Tools 1.4.x — semantic `find_tool` + lazy schema expansion.** First
+follow-up after the 1.4.0 promotion. Replaces the categorical/text-only
+ranker (1.3.16) with k-NN over tool embeddings, and lights up the
+`form: "short"|"full"` admission contract that the 1.3.4 contracts +
+1.3.17 sticky-admission scaffolded but never exercised: discovery
+results land as short-form admissions (~50 tokens each, name +
+description, no schema) and promote to full only on first successful
+invocation.
+
+### Added
+
+- **[`js/intelligence/tools/embeddings.js`](js/intelligence/tools/embeddings.js)** —
+  new module owning the tool-embedding side-table (Catalog rebuilds
+  defs every call, so embeddings can't live on the def itself).
+  - `findToolsBySemantic(query, defs, {topK, threshold}) → {ranked, mode}`
+    — k-NN ranking via `EmbeddingsClient.cosineSimilarity`. `mode`
+    returns one of `"semantic"`, `"disabled"` (embeddings off),
+    `"unavailable"` (embedder errored). Threshold-gated; default 0.4
+    (sized for `all-MiniLM-L6-v2` / `bge-small-en-v1.5`).
+  - `getToolEmbedding(td)` — lazy cache lookup keyed by `td.id`. On
+    miss embeds `name + description + category`. Returns null on
+    disabled / failure.
+  - Subscribes to `embeddings:cacheCleared` to wipe the side-table on
+    model swap.
+  - Constants: `DEFAULT_THRESHOLD = 0.4`, `DEFAULT_TOP_K = 8`,
+    `DISCOVERY_ADMISSION_CAP = 3`.
+
+- **[`tests/test-find-tool-semantic.mjs`](tests/test-find-tool-semantic.mjs)** —
+  17 cases covering: ranking + threshold gate, `mode: "disabled"` on
+  disabled embedder, `mode: "unavailable"` when embed throws, cache
+  hit on second call, cache invalidation on `embeddings:cacheCleared`,
+  semantic→categorical handler fallback, K=8 cap under fallback,
+  `recordDiscoveryAdmissions` cap + dedup + short-form persistence,
+  short→full promotion on first invocation, full→full re-invocation
+  preserves cost.
+
+### Changed
+
+- **[`js/tools/meta-tools.js`](js/tools/meta-tools.js)** — `find_tool`
+  handler now tries semantic first, falls through to the existing
+  categorical scorer transparently. Response gains `mode: "semantic"|"categorical"`
+  for diagnostics. Note copy enumerates the fallback reason (`"semantic
+  disabled"`, `"semantic unavailable"`, `"no semantic matches above
+  threshold"`, etc.). Schema unchanged — no leaky `args.semantic` knob.
+
+- **[`js/intelligence/tools/composer.js`](js/intelligence/tools/composer.js)** —
+  `toOpenAIShape(td, form)` is now form-aware: `form === 'short'`
+  emits `{type: 'function', function: {name, description}}` and omits
+  `parameters` (OpenAI spec defaults missing `parameters` to
+  `{type: "object", properties: {}}`, so the model still sees a
+  callable function). `renderForLLM` threads `a.form` per entry.
+  Sticky-path budget accounting now charges `short_cost` (~50 tokens)
+  for short admissions instead of the full `cost_estimate`.
+
+- **[`js/chat/task-state.js`](js/chat/task-state.js)** —
+  - `recordInvocation` now promotes `form: "short" → "full"` on first
+    successful invocation of a discovered tool, upgrading `cost` to
+    the full estimate. Pre-existing full admissions are pure
+    `last_used_at` bumps (cost preserved).
+  - New export `recordDiscoveryAdmissions({conversationId, surface,
+    candidates, cap, now})` — writes short-form admissions for the
+    top matches from `find_tool`. Dedupes against existing ledger
+    entries; respects the cap.
+
+- **[`js/chat/handlers.js`](js/chat/handlers.js)** — post-tool-call
+  hook now also promotes `find_tool`'s top results into the ledger
+  via `recordDiscoveryAdmissions`, capped at `DISCOVERY_ADMISSION_CAP = 3`.
+  Gated to the `coder` role for parity with `recordInvocation`.
+
+- **[`tests/test-meta-tools.mjs`](tests/test-meta-tools.mjs)** —
+  replaced the `note` regex assertion with a `mode` field assertion
+  (semantic|categorical).
+
+- **[`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs)** —
+  three new cases: `renderForLLM` omits `parameters` for short
+  admissions; mixed short+full ledger renders per-entry; sticky budget
+  accounting charges `short_cost` for short admissions.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.4.0 → 1.4.1.
+
+### Removability check (Decision §7)
+
+Deleting `js/intelligence/tools/embeddings.js` and reverting
+`meta-tools.js` to the categorical path: the lazy-expansion
+machinery in composer + task-state stays in place but has no producer
+of short-form admissions; recall on paraphrased capability descriptions
+drops to the 1.4.0 baseline. Ledger format, persisted state, OpenAI
+request shape unchanged. No migration.
+
 ## [1.4.0] - 2026-05-01
 
 **Tools Phase 1 promotion.** Closes the four-PR Tools admission arc

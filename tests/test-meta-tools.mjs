@@ -222,10 +222,12 @@ test('find_tool("discover") returns find_tool itself (meta-tools live in their o
     );
 });
 
-test('find_tool response carries the 1.4.1-roadmap note', async () => {
+test('find_tool response carries a mode field (semantic|categorical)', async () => {
     registerStaticFixture();
     const result = await ToolRegistry.execute('find_tool', { description: 'read' });
-    assert.match(result.note, /semantic/);
+    assert.equal(typeof result.mode, 'string');
+    assert.ok(result.mode === 'semantic' || result.mode === 'categorical',
+        `expected mode ∈ {semantic, categorical}, got ${result.mode}`);
 });
 
 // ============================================

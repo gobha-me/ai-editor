@@ -33,7 +33,8 @@ import { enrichToolResultTurn } from './turn-enrich.js';
 import { getCompressedContextMessages } from './compactor-integration.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
-import { recordInvocation as recordToolInvocation } from './task-state.js';
+import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
+import { DISCOVERY_ADMISSION_CAP } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
 
@@ -581,6 +582,31 @@ export async function handleGeneralRequest(input) {
                             staticNames: CODER_V1.tools.static,
                             toolCost: td ? td.metadata.cost_estimate : 0,
                         });
+
+                        // 1.4.1 — when the model just called `find_tool`,
+                        // promote its top matches into the ledger as
+                        // short-form discovery admissions. The next turn
+                        // will render `{name, description}` for each
+                        // (no schema) at `short_cost`; first invocation
+                        // promotes the entry to full via `recordInvocation`.
+                        if (toolName === 'find_tool'
+                            && toolResult
+                            && !toolResult.error
+                            && Array.isArray(toolResult.tools)
+                            && toolResult.tools.length > 0) {
+                            const candidates = toolResult.tools
+                                .filter(s => s && typeof s.name === 'string')
+                                .map(s => ({
+                                    toolName: s.name,
+                                    shortCost: typeof s.short_cost === 'number' ? s.short_cost : 0,
+                                }));
+                            recordDiscoveryAdmissions({
+                                conversationId: ConversationManager.getActiveId(),
+                                surface: CODER_V1.name,
+                                candidates,
+                                cap: DISCOVERY_ADMISSION_CAP,
+                            });
+                        }
                     }
 
                     // Memory PR #6 — when memory_remember enqueues an

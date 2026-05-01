@@ -559,6 +559,94 @@ test('sticky admission: ledger.form = "short" is honored on the admitted entry',
 });
 
 // ============================================
+// 1.4.1 — lazy schema expansion via `form: 'short'` rendering
+// ============================================
+
+test('renderForLLM omits `parameters` when admission form is "short"', () => {
+    registerStickyFixture();
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    ledger.tool_admissions.push({
+        tool_id: 'find_references',
+        admitted_at: 1700000000000,
+        form: 'short',
+        source: 'discovery',
+        cost: 50,
+        last_used_at: 1700000000000,
+    });
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['read_file'],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const rendered = renderForLLM(result);
+    const findRef = rendered.find(r => r.function.name === 'find_references');
+    assert.ok(findRef, 'find_references renders');
+    assert.equal(typeof findRef.function.name, 'string');
+    assert.equal(typeof findRef.function.description, 'string');
+    assert.ok(!('parameters' in findRef.function),
+        '`parameters` MUST be absent on short-form admissions (lazy schema expansion)');
+
+    const readFile = rendered.find(r => r.function.name === 'read_file');
+    assert.ok(readFile, 'read_file (static, full form) renders');
+    assert.equal(typeof readFile.function.parameters, 'object',
+        '`parameters` MUST be present on full-form admissions');
+});
+
+test('renderForLLM mixed short+full ledger renders each per-entry form', () => {
+    registerStickyFixture();
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    ledger.tool_admissions.push({
+        tool_id: 'find_references',
+        admitted_at: 1700000000000, form: 'short', source: 'discovery', cost: 50, last_used_at: 1700000000000,
+    });
+    ledger.tool_admissions.push({
+        tool_id: 'search_in_files',
+        admitted_at: 1700000000000, form: 'full', source: 'discovery', cost: 200, last_used_at: 1700000000000,
+    });
+    const result = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: [],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const rendered = renderForLLM(result);
+    const findRef = rendered.find(r => r.function.name === 'find_references');
+    const search = rendered.find(r => r.function.name === 'search_in_files');
+    assert.ok(!('parameters' in findRef.function), 'short → no parameters');
+    assert.equal(typeof search.function.parameters, 'object', 'full → has parameters');
+});
+
+test('sticky admission: short-form pays short_cost against budget (not cost_estimate)', () => {
+    registerStickyFixture();
+    // Probe the full cost so we can size budget tightly between short and full.
+    const probe = composeAdmission({
+        task: 'unit', query: null, budget_tokens: 100000,
+        profile_static: ['find_references'], task_ledger: null,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    const fullCost = probe.tokens_used;
+    const shortCost = Catalog.getByName('find_references').metadata.short_cost;
+    assert.ok(shortCost < fullCost, 'short_cost should be smaller than cost_estimate');
+
+    // Budget that fits the short entry but NOT the full one.
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    ledger.tool_admissions.push({
+        tool_id: 'find_references',
+        admitted_at: 1700000000000, form: 'short', source: 'discovery', cost: shortCost, last_used_at: 1700000000000,
+    });
+    const result = composeAdmission({
+        task: 'unit', query: null,
+        budget_tokens: shortCost,           // only short fits
+        profile_static: [],
+        task_ledger: ledger,
+        user_groups: FULL_USER_GROUPS, discovery_call: null, expansion_mode: 'full',
+    });
+    assert.equal(result.admitted.length, 1, 'short-form fits where full would have been over-budget');
+    assert.equal(result.tokens_used, shortCost);
+});
+
+// ============================================
 // URL flag — ?toolsCompose=off
 // ============================================
 

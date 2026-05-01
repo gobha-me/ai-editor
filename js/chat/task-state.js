@@ -198,6 +198,16 @@ export function recordInvocation({
     if (!isStatic) {
         const existing = ledger.tool_admissions.find(a => a.tool_id === toolName);
         if (existing) {
+            // 1.4.1 lazy-expansion promotion. A short-form discovery
+            // admission (written by `recordDiscoveryAdmissions` after
+            // `find_tool`) graduates to full on its first successful
+            // invocation — the model has now committed to using it, so
+            // the next turn renders the schema. Cost upgrades to the
+            // full estimate so budget accounting tracks reality.
+            if (existing.form === 'short') {
+                existing.form = 'full';
+                if (typeof toolCost === 'number') existing.cost = toolCost;
+            }
             existing.last_used_at = t;
         } else {
             /** @type {ToolAdmissionRecord} */
@@ -215,4 +225,66 @@ export function recordInvocation({
     }
 
     return { recorded: true, admitted };
+}
+
+/**
+ * Record short-form discovery admissions from a `find_tool` result. Each
+ * candidate becomes a `tool_admissions[]` entry with `form: "short"`,
+ * `source: "discovery"`, paying only `short_cost` against the next-turn
+ * budget. The Composer admits these on the following turn (in name +
+ * description form, no schema); on first invocation `recordInvocation`
+ * promotes to `"full"`.
+ *
+ * Dedupes against existing ledger entries (skip if `tool_id` already
+ * present in `tool_admissions[]` regardless of form). Respects the cap to
+ * protect budget when `find_tool` returns many matches.
+ *
+ * @param {Object}  params
+ * @param {string|null} params.conversationId
+ * @param {string}  params.surface
+ * @param {Array<{toolName: string, shortCost: number}>} params.candidates
+ * @param {number} [params.cap]
+ * @param {number} [params.now]
+ * @returns {{ added: string[], skipped: string[] }}
+ */
+export function recordDiscoveryAdmissions({
+    conversationId,
+    surface,
+    candidates,
+    cap,
+    now,
+}) {
+    const added = [];
+    const skipped = [];
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+        return { added, skipped };
+    }
+    const ledger = getOrCreateLedger(conversationId, surface, { now });
+    if (!ledger) return { added, skipped };
+
+    const limit = typeof cap === 'number' && cap > 0 ? cap : candidates.length;
+    const t = typeof now === 'number' ? now : Date.now();
+
+    for (const c of candidates) {
+        if (added.length >= limit) break;
+        if (!c || typeof c.toolName !== 'string' || c.toolName.length === 0) continue;
+        // Dedup against any pre-existing admission (any form, any source).
+        if (ledger.tool_admissions.some(a => a.tool_id === c.toolName)) {
+            skipped.push(c.toolName);
+            continue;
+        }
+        /** @type {ToolAdmissionRecord} */
+        const adm = {
+            tool_id: c.toolName,
+            admitted_at: t,
+            form: 'short',
+            source: 'discovery',
+            cost: typeof c.shortCost === 'number' ? c.shortCost : 0,
+            last_used_at: t,
+        };
+        ledger.tool_admissions.push(adm);
+        added.push(c.toolName);
+    }
+
+    return { added, skipped };
 }

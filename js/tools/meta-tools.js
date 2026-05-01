@@ -30,12 +30,38 @@
  */
 
 import { Catalog } from '../intelligence/tools/catalog.js';
+import { findToolsBySemantic, DEFAULT_TOP_K } from '../intelligence/tools/embeddings.js';
 
 /* -------------------------------------------------------------------------- */
-/* find_tool — categorical/text scoring                                       */
+/* find_tool — semantic (1.4.1) with categorical fallback                     */
 /* -------------------------------------------------------------------------- */
 
-const FIND_TOOL_K = 8;
+const FIND_TOOL_K = DEFAULT_TOP_K;
+
+/**
+ * Categorical scoring path — preserved verbatim from 1.3.16 as the
+ * fallback when semantic ranking is unavailable (embeddings disabled,
+ * embedder errored, no matches above threshold). Public so tests can
+ * exercise it directly.
+ *
+ * @param {string} description
+ * @param {import('../intelligence/tools/contracts.js').ToolDef[]} defs
+ * @returns {Array<{td: import('../intelligence/tools/contracts.js').ToolDef, score: number}>}
+ */
+function _scoreCategorical(description, defs) {
+    const terms = description
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(t => t.length >= 2);
+    if (terms.length === 0) return [];
+    const scored = [];
+    for (const td of defs) {
+        const s = _scoreToolForQuery(td, terms);
+        if (s > 0) scored.push({ td, score: s });
+    }
+    scored.sort((x, y) => (y.score - x.score) || (x.td.metadata.cost_estimate - y.td.metadata.cost_estimate));
+    return scored;
+}
 
 /**
  * Score a `ToolDef` for a tokenized query. Higher is better.
@@ -138,40 +164,55 @@ export function registerMetaTools(registry) {
                 error: 'description is required (string). Describe the capability you need (e.g. "read a file", "create pull request").',
             };
         }
-        const terms = description
-            .toLowerCase()
-            .split(/\s+/)
-            .filter(t => t.length >= 2);
-        if (terms.length === 0) {
-            return {
-                description,
-                count: 0,
-                tools: [],
-                note: 'no scorable terms (need ≥2-char tokens); categorical/text match only in 1.3.16, semantic in 1.4.1',
-            };
-        }
 
         const all = Catalog.listAll();
-        /** @type {{td: import('../intelligence/tools/contracts.js').ToolDef, score: number}[]} */
-        const scored = [];
-        for (const td of all) {
-            const s = _scoreToolForQuery(td, terms);
-            if (s > 0) scored.push({ td, score: s });
-        }
-        scored.sort((x, y) => (y.score - x.score) || (x.td.metadata.cost_estimate - y.td.metadata.cost_estimate));
 
-        const top = scored.slice(0, FIND_TOOL_K).map(({ td }) => Catalog.defToToolSummary(td));
+        // Semantic path first (k-NN over tool embeddings). Falls back to
+        // categorical when embeddings are disabled, the embedder errored,
+        // or nothing scored above the threshold.
+        let mode = 'categorical';
+        let note = '';
+        let ranked = [];
+
+        try {
+            const sem = await findToolsBySemantic(description, all, { topK: FIND_TOOL_K });
+            if (sem.mode === 'semantic' && sem.ranked.length > 0) {
+                mode = 'semantic';
+                note = 'semantic match (cosine ≥ threshold)';
+                ranked = sem.ranked;
+            } else if (sem.mode === 'disabled') {
+                note = 'semantic disabled, categorical fallback';
+            } else if (sem.mode === 'unavailable') {
+                note = 'semantic unavailable (embeddings error); categorical fallback';
+            } else {
+                // semantic ran but returned 0 above threshold
+                note = 'no semantic matches above threshold; categorical fallback';
+            }
+        } catch (e) {
+            note = `semantic raised (${e?.message || e}); categorical fallback`;
+        }
+
+        if (mode !== 'semantic') {
+            const cat = _scoreCategorical(description, all);
+            ranked = cat.slice(0, FIND_TOOL_K);
+            if (ranked.length === 0 && note === '') {
+                note = 'no scorable terms (need ≥2-char tokens for categorical match)';
+            }
+        }
+
+        const tools = ranked.map(({ td }) => Catalog.defToToolSummary(td));
         return {
             description,
-            count: top.length,
-            tools: top,
-            note: 'categorical/text match only; semantic search ships in 1.4.1',
+            count: tools.length,
+            tools,
+            mode,
+            note,
         };
     }, {
         type: 'function',
         function: {
             name: 'find_tool',
-            description: 'Find tools whose name, description, or category match a freeform capability description. Returns up to 8 ToolSummary entries ranked by match strength. Categorical/text match in 1.3.16; semantic match in 1.4.1. Use this when you know what you want to do but not which tool name does it.',
+            description: 'Find tools whose name, description, or category match a freeform capability description. Returns up to 8 ToolSummary entries ranked by match strength. Semantic match (k-NN over embeddings) when available, with categorical fallback. Use this when you know what you want to do but not which tool name does it.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -190,5 +231,6 @@ export function registerMetaTools(registry) {
 // Test seams.
 export const _testing = {
     _scoreToolForQuery,
+    _scoreCategorical,
     FIND_TOOL_K,
 };
