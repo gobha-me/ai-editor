@@ -375,7 +375,7 @@ export async function createRelease() {
     } finally {
         if (createBtn) {
             createBtn.disabled = false;
-            createBtn.textContent = '🚀 Create Release';
+            createBtn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg><span>Create Release</span>';
         }
     }
 }

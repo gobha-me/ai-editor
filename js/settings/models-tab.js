@@ -6,6 +6,7 @@ import { State, Storage } from '../core.js';
 import { LLM } from '../llm.js';
 import { showModelCapabilities, populateCommitModelSelect } from './llm-tab.js';
 import { applyModelOverrides, DEFAULT_CAPABILITIES } from '../providers/registry.js';
+import { Icon } from '../ui/icons.js';
 
 /**
  * Populate the model select dropdowns (default model + commit model).
@@ -229,12 +230,12 @@ export function populateModelsTab() {
 
         // Build capability badges
         const badges = [];
-        if (hasTools) badges.push('<span class="cap-badge cap-yes" title="Tool/function calling">🔧</span>');
-        else badges.push('<span class="cap-badge cap-no" title="No tool support — limited editor functionality">🚫</span>');
-        if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes" title="Extended thinking">🧠</span>');
-        if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes" title="Vision">👁</span>');
-        if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes" title="Code-optimized">💻</span>');
-        if (caps.supportsWebSearch) badges.push('<span class="cap-badge cap-yes" title="Web search">🔍</span>');
+        if (hasTools) badges.push(`<span class="cap-badge cap-yes" title="Tool/function calling">${Icon.Wrench}</span>`);
+        else badges.push(`<span class="cap-badge cap-no" title="No tool support — limited editor functionality">${Icon.X}</span>`);
+        if (caps.supportsReasoning) badges.push(`<span class="cap-badge cap-yes" title="Extended thinking">${Icon.Brain}</span>`);
+        if (caps.supportsVision) badges.push(`<span class="cap-badge cap-yes" title="Vision">${Icon.Eye}</span>`);
+        if (caps.optimizedForCode) badges.push(`<span class="cap-badge cap-yes" title="Code-optimized">${Icon.Code}</span>`);
+        if (caps.supportsWebSearch) badges.push(`<span class="cap-badge cap-yes" title="Web search">${Icon.Globe}</span>`);
 
         // Pricing
         let priceCell = '<span style="color: var(--text-muted);">—</span>';

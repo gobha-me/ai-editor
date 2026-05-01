@@ -1,0 +1,71 @@
+/**
+ * AI Editor — Icon Component Styles
+ *
+ * The `.icn` class is the public render contract for SVG icons output by
+ * `js/ui/icons.js`. Sizing, stroke weight, and color all flow through the
+ * 1.3.5 `--tk-*` token vocabulary — no hex literals, no per-theme variants.
+ *
+ * Added: 1.3.11 (2026-05-01) — Touch 2 PROBE iconography.
+ */
+
+.icn {
+    width: var(--tk-icon-size-md);
+    height: var(--tk-icon-size-md);
+    stroke-width: var(--tk-icon-stroke);
+    color: inherit;
+    flex-shrink: 0;
+    vertical-align: middle;
+    pointer-events: none;
+}
+
+.icn--sm {
+    width: var(--tk-icon-size-sm);
+    height: var(--tk-icon-size-sm);
+}
+
+.icn--lg {
+    width: var(--tk-icon-size-lg);
+    height: var(--tk-icon-size-lg);
+}
+
+/* ============================================================
+   Surface adjustments
+   The .icn defaults render at md (18px). Most surfaces want that.
+   Top-bar icon buttons sit slightly tighter; large hero icons in
+   modals (onboarding hero, zip drop, splash) want a presence size.
+   ============================================================ */
+
+.tb__btn .icn,
+.tb__cmd-icon .icn,
+.tb__branch-icon .icn,
+.tb__brand-mark .icn {
+    width: var(--tk-icon-size-md);
+    height: var(--tk-icon-size-md);
+}
+
+/* Buttons that combine an icon with a text label want a small gap */
+.btn .icn + *,
+.tb__btn .icn + *,
+button .icn + * {
+    margin-inline-start: 0.4em;
+}
+
+/* Hero icons — onboarding, zip drop, splash, welcome screens */
+.icn--hero {
+    width: 48px;
+    height: 48px;
+    stroke-width: calc(var(--tk-icon-stroke) - 0.2);
+    color: var(--tk-color-accent);
+}
+
+/* Status / capability badge icons should match surrounding small text */
+.cap-badge .icn,
+.connection-card-icon .icn {
+    width: var(--tk-icon-size-sm);
+    height: var(--tk-icon-size-sm);
+}
+
+.connection-card-icon .icn {
+    width: var(--tk-icon-size-lg);
+    height: var(--tk-icon-size-lg);
+}

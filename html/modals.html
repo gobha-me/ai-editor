@@ -2,9 +2,14 @@
 <div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal settings-modal" id="settingsModalInner">
         <div class="modal-header settings-modal__header">
-            <h2 id="settingsTitle">⚙️ Settings</h2>
+            <h2 id="settingsTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1 1.7 1.7 0 0 0 .3 1.8M3 11a2 2 0 1 0 0 4h.1a1.7 1.7 0 0 1 1.5 1M5.6 5.6a2 2 0 0 0 0 2.8M11 3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5"/></svg>
+                <span>Settings</span>
+            </h2>
             <div class="settings-modal__search">
-                <span class="settings-modal__search-icon" aria-hidden="true">🔍</span>
+                <span class="settings-modal__search-icon" aria-hidden="true">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                </span>
                 <input type="search" id="settingsSidebarSearch" class="settings-modal__search-input"
                        placeholder="Search settings…" aria-label="Filter settings sections"
                        autocomplete="off" spellcheck="false">
@@ -48,12 +53,21 @@
 
         <div class="modal-footer" style="justify-content: space-between;">
             <div style="display: flex; gap: 0.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">📤 Export</button>
-                <button type="button" class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">📥 Import</button>
+                <button type="button" class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                    <span>Export</span>
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+                    <span>Import</span>
+                </button>
             </div>
             <div style="display: flex; gap: 0.5rem;">
                 <button type="button" class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="window.saveSettings()">💾 Save</button>
+                <button type="button" class="btn btn-primary" onclick="window.saveSettings()">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+                    <span>Save</span>
+                </button>
             </div>
         </div>
     </div>
@@ -63,7 +77,10 @@
 <div class="modal-overlay" id="revertModal" role="dialog" aria-modal="true" aria-labelledby="revertTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2 id="revertTitle">↩️ Revert Changes</h2>
+            <h2 id="revertTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>
+                <span>Revert Changes</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeRevertModal()" aria-label="Close revert dialog">×</button>
         </div>
         <div class="modal-body">
@@ -75,10 +92,12 @@
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <button type="button" class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
-                    📄 Revert Current File Only
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                    <span>Revert Current File Only</span>
                 </button>
                 <button type="button" class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
-                    🔥 Revert ALL Files
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v4M12 17h.01"/></svg>
+                    <span>Revert ALL Files</span>
                 </button>
             </div>
         </div>
@@ -92,7 +111,10 @@
 <div class="modal-overlay" id="commitModal" role="dialog" aria-modal="true" aria-labelledby="commitTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2 id="commitTitle">📦 Commit Changes</h2>
+            <h2 id="commitTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                <span>Commit Changes</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeCommitModal()" aria-label="Close commit dialog">×</button>
         </div>
         <div class="modal-body">
@@ -113,7 +135,8 @@
                 <textarea id="commitMessage" rows="4" placeholder="Describe your changes..."></textarea>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                     <button type="button" class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
-                        ✨ Generate with AI
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
+                        <span>Generate with AI</span>
                     </button>
                 </div>
                 <small id="commitModelInfo" style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
@@ -123,7 +146,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">✅ Commit</button>
+            <button type="button" class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                <span>Commit</span>
+            </button>
         </div>
     </div>
 </div>
@@ -132,7 +158,10 @@
 <div class="modal-overlay" id="newBranchModal" role="dialog" aria-modal="true" aria-labelledby="newBranchTitle">
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2 id="newBranchTitle">🌿 Create New Branch</h2>
+            <h2 id="newBranchTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="3" r="2"/><circle cx="6" cy="21" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 5v14M6 14a6 6 0 0 1 6-6h2a4 4 0 0 0 4-4"/></svg>
+                <span>Create New Branch</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeNewBranchModal()" aria-label="Close new branch dialog">×</button>
         </div>
         <div class="modal-body">
@@ -150,7 +179,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.createNewBranch()">✅ Create Branch</button>
+            <button type="button" class="btn btn-primary" onclick="window.createNewBranch()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                <span>Create Branch</span>
+            </button>
         </div>
     </div>
 </div>
@@ -159,7 +191,10 @@
 <div class="modal-overlay" id="newFileModal" role="dialog" aria-modal="true" aria-labelledby="newFileTitle">
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2 id="newFileTitle">📄 Create New File</h2>
+            <h2 id="newFileTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/></svg>
+                <span>Create New File</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeNewFileModal()" aria-label="Close new file dialog">×</button>
         </div>
         <div class="modal-body">
@@ -171,7 +206,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.createNewFile()">✅ Create File</button>
+            <button type="button" class="btn btn-primary" onclick="window.createNewFile()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                <span>Create File</span>
+            </button>
         </div>
     </div>
 </div>
@@ -180,7 +218,10 @@
 <div class="modal-overlay" id="renameFileModal" role="dialog" aria-modal="true" aria-labelledby="renameFileTitle">
     <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2 id="renameFileTitle">✏️ Rename / Move File</h2>
+            <h2 id="renameFileTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                <span>Rename / Move File</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeRenameModal()" aria-label="Close rename dialog">×</button>
         </div>
         <div class="modal-body">
@@ -192,7 +233,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeRenameModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.submitRename()">✅ Rename</button>
+            <button type="button" class="btn btn-primary" onclick="window.submitRename()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                <span>Rename</span>
+            </button>
         </div>
     </div>
 </div>
@@ -224,7 +268,9 @@
         <div class="modal-header">
             <h2 id="issueDetailTitle">Issue</h2>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <a id="issueDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">🌐</a>
+                <a id="issueDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
+                </a>
                 <button type="button" class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
             </div>
         </div>
@@ -263,7 +309,10 @@
         </div>
         <div class="modal-footer modal-footer-split">
             <button type="button" class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
-            <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">✏️ Start Work</button>
+            <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                <span>Start Work</span>
+            </button>
         </div>
     </div>
 </div>
@@ -272,7 +321,10 @@
 <div class="modal-overlay" id="createPRModal" role="dialog" aria-modal="true" aria-labelledby="createPRTitle">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
-            <h2 id="createPRTitle">🔀 Create Pull Request</h2>
+            <h2 id="createPRTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 8v8M11 6h3a4 4 0 0 1 4 4v6"/></svg>
+                <span>Create Pull Request</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeCreatePRModal()" aria-label="Close create PR">×</button>
         </div>
         <div class="modal-body">
@@ -299,7 +351,10 @@
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
             <button type="button" class="btn btn-secondary" onclick="window.closeCreatePRModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnSubmitPR" onclick="window.submitCreatePR()">🚀 Create Pull Request</button>
+            <button type="button" class="btn btn-primary" id="btnSubmitPR" onclick="window.submitCreatePR()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                <span>Create Pull Request</span>
+            </button>
         </div>
     </div>
 </div>
@@ -310,7 +365,9 @@
         <div class="modal-header">
             <h2 id="prDetailTitle">Pull Request</h2>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">🌐</a>
+                <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
+                </a>
                 <button type="button" class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
             </div>
         </div>
@@ -348,10 +405,12 @@
                 <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" class="textarea-mono"></textarea>
                 <div class="comment-actions">
                     <button type="button" class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
-                        ✨ Generate with AI
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
+                        <span>Generate with AI</span>
                     </button>
                     <button type="button" class="btn btn-primary" onclick="window.submitPRComment()" id="btnPostPRComment">
-                        📝 Post
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                        <span>Post</span>
                     </button>
                 </div>
             </div>
@@ -369,7 +428,10 @@
                 <label class="label-inline-check">
                     <input type="checkbox" id="prDeleteBranch" checked> Delete branch
                 </label>
-                <button type="button" class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">✅ Merge</button>
+                <button type="button" class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                    <span>Merge</span>
+                </button>
             </div>
         </div>
     </div>
@@ -379,13 +441,18 @@
 <div class="modal-overlay" id="zipUploadModal" role="dialog" aria-modal="true" aria-labelledby="zipUploadTitle">
     <div class="modal" style="max-width: 650px;">
         <div class="modal-header">
-            <h2 id="zipUploadTitle">📦 Upload Zip</h2>
+            <h2 id="zipUploadTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                <span>Upload Zip</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeZipUpload()" aria-label="Close zip upload">×</button>
         </div>
         <div class="modal-body">
             <!-- Drop Zone -->
             <div class="zip-drop-zone" id="zipDropZone">
-                <div class="zip-drop-icon">📦</div>
+                <div class="zip-drop-icon">
+                    <svg class="icn icn--hero" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                </div>
                 <div class="zip-drop-text">Drop a .zip file here</div>
                 <div class="zip-drop-hint">or click to browse</div>
                 <input type="file" id="zipFileInput" accept=".zip"
@@ -401,7 +468,10 @@
                 <div class="zip-select-controls">
                     <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
-                    <button type="button" class="btn btn-secondary btn-sm zip-git-only" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">🔍 Scan for Diffs</button>
+                    <button type="button" class="btn btn-secondary btn-sm zip-git-only" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        <span>Scan for Diffs</span>
+                    </button>
                 </div>
 
                 <!-- File List -->
@@ -430,7 +500,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">📤 Upload</button>
+            <button type="button" class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                <span>Upload</span>
+            </button>
         </div>
     </div>
 </div>
@@ -451,7 +524,10 @@
 <div class="modal-overlay" id="newProjectModal" role="dialog" aria-modal="true" aria-labelledby="newProjectTitle">
     <div class="modal" style="width: 440px;">
         <div class="modal-header">
-            <h3 id="newProjectTitle">➕ New Project</h3>
+            <h3 id="newProjectTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                <span>New Project</span>
+            </h3>
             <button type="button" class="modal-close" id="btnCloseNewProject" aria-label="Close">&times;</button>
         </div>
         <div class="modal-body" style="padding: 1rem;">
@@ -480,7 +556,10 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" id="btnCancelNewProject">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnSubmitNewProject">🚀 Create</button>
+            <button type="button" class="btn btn-primary" id="btnSubmitNewProject">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                <span>Create</span>
+            </button>
         </div>
     </div>
 </div>
@@ -499,23 +578,31 @@
 
         <!-- Step 0: Welcome -->
         <div class="onboard-step active" data-step="0">
-            <div class="onboard-hero">⚡</div>
+            <div class="onboard-hero">
+                <svg class="icn icn--hero" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+            </div>
             <h2>Welcome to AI Editor</h2>
             <p class="onboard-subtitle">Browser-based code editor with AI assistance.<br>No backend, no build step — your code stays in your Git host.</p>
 
             <div class="onboard-paths">
                 <div class="onboard-path" data-goto="1">
-                    <div class="onboard-path-icon">🔗</div>
+                    <div class="onboard-path-icon">
+                        <svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg>
+                    </div>
                     <div class="onboard-path-label">Connect to Git + LLM</div>
                     <div class="onboard-path-desc">Full experience — browse repos, edit with AI assistance</div>
                 </div>
                 <div class="onboard-path" data-goto="1">
-                    <div class="onboard-path-icon">📦</div>
+                    <div class="onboard-path-icon">
+                        <svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                    </div>
                     <div class="onboard-path-label">Just browse & edit code</div>
                     <div class="onboard-path-desc">Connect Git, skip AI — upload zips or browse repos</div>
                 </div>
                 <div class="onboard-path" data-finish>
-                    <div class="onboard-path-icon">🚀</div>
+                    <div class="onboard-path-icon">
+                        <svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                    </div>
                     <div class="onboard-path-label">Zip upload only</div>
                     <div class="onboard-path-desc">No setup needed — drag & drop a zip to start editing</div>
                 </div>
@@ -526,7 +613,10 @@
 
         <!-- Step 1: Git Connection -->
         <div class="onboard-step" data-step="1">
-            <h2>🔗 Connect a Git Provider</h2>
+            <h2>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg>
+                <span>Connect a Git Provider</span>
+            </h2>
             <p class="onboard-subtitle">Gitea, GitHub, or GitLab. You'll need an API token — <a href="#" id="obSetupGuideLink" class="setup-guide-link">see setup guide</a>.</p>
 
             <div class="onboard-form">
@@ -547,7 +637,10 @@
                     <input type="password" id="obGitToken" placeholder="Your API token">
                 </div>
                 <div class="onboard-form-actions">
-                    <button type="button" class="btn btn-secondary" id="obGitTest">🔌 Test</button>
+                    <button type="button" class="btn btn-secondary" id="obGitTest">
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5M9 7V2M15 7V2M6 13V8h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4Z"/></svg>
+                        <span>Test</span>
+                    </button>
                     <button type="button" class="btn btn-primary" id="obGitSave">Save & Continue</button>
                 </div>
                 <div id="obGitStatus" class="onboard-status" style="display:none;"></div>
@@ -561,7 +654,10 @@
 
         <!-- Step 2: LLM Provider -->
         <div class="onboard-step" data-step="2">
-            <h2>🤖 Connect an LLM</h2>
+            <h2>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 2.2 3 3 0 0 0-.5 1.8 3 3 0 0 0 3 3 3 3 0 0 0 2.5 1.5A3 3 0 0 0 12 21V5a3 3 0 0 0-3-3M15 5a3 3 0 0 1 3 3 3 3 0 0 1 3 3 3 3 0 0 1-1 2.2 3 3 0 0 1 .5 1.8 3 3 0 0 1-3 3 3 3 0 0 1-2.5 1.5A3 3 0 0 1 12 21"/></svg>
+                <span>Connect an LLM</span>
+            </h2>
             <p class="onboard-subtitle">Any OpenAI-compatible API. AI features are optional — the editor works without them.</p>
 
             <div class="onboard-form">
@@ -595,16 +691,33 @@
 
         <!-- Step 3: Done -->
         <div class="onboard-step" data-step="3">
-            <div class="onboard-hero">🎉</div>
+            <div class="onboard-hero">
+                <svg class="icn icn--hero" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
+            </div>
             <h2>You're all set!</h2>
             <p class="onboard-subtitle">Here's what you can do next:</p>
 
             <div class="onboard-next-steps">
-                <div class="onboard-next-item">📂 <strong>Select a project</strong> from the sidebar dropdown</div>
-                <div class="onboard-next-item">📦 <strong>Upload a zip</strong> — click 📦 in the Files header</div>
-                <div class="onboard-next-item">💬 <strong>Ask the AI</strong> to explain, edit, or refactor code</div>
-                <div class="onboard-next-item">⚙️ <strong>Settings (Ctrl+,)</strong> to fine-tune connections, models, and roles</div>
-                <div class="onboard-next-item">❓ <strong>F1</strong> for keyboard shortcuts</div>
+                <div class="onboard-next-item">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/></svg>
+                    <strong>Select a project</strong> from the sidebar dropdown
+                </div>
+                <div class="onboard-next-item">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                    <strong>Upload a zip</strong> — click the box icon in the Files header
+                </div>
+                <div class="onboard-next-item">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+                    <strong>Ask the AI</strong> to explain, edit, or refactor code
+                </div>
+                <div class="onboard-next-item">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1 1.7 1.7 0 0 0 .3 1.8M3 11a2 2 0 1 0 0 4h.1a1.7 1.7 0 0 1 1.5 1M5.6 5.6a2 2 0 0 0 0 2.8M11 3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5"/></svg>
+                    <strong>Settings (Ctrl+,)</strong> to fine-tune connections, models, and roles
+                </div>
+                <div class="onboard-next-item">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                    <strong>F1</strong> for keyboard shortcuts
+                </div>
             </div>
 
             <button type="button" class="btn btn-primary onboard-done-btn" data-finish>Start Editing</button>
@@ -617,7 +730,10 @@
 <div class="modal-overlay" id="releaseModal" role="dialog" aria-modal="true" aria-labelledby="releaseModalTitle">
     <div class="modal modal-release">
         <div class="modal-header">
-            <h2 id="releaseModalTitle">🏷️ Release Manager</h2>
+            <h2 id="releaseModalTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+                <span>Release Manager</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeReleaseModal()" aria-label="Close">×</button>
         </div>
 
@@ -637,7 +753,10 @@
                         <option value="">Loading…</option>
                     </select>
                 </div>
-                <button type="button" id="btnGenerateRelease" class="btn btn-primary" onclick="window.generateReleaseNotes()">✨ Generate Notes</button>
+                <button type="button" id="btnGenerateRelease" class="btn btn-primary" onclick="window.generateReleaseNotes()">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
+                    <span>Generate Notes</span>
+                </button>
             </div>
 
             <!-- Release notes textarea -->
@@ -674,7 +793,10 @@
 
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="window.closeReleaseModal()">Close</button>
-            <button type="button" id="btnCreateRelease" class="btn btn-primary" onclick="window.createRelease()">🚀 Create Release</button>
+            <button type="button" id="btnCreateRelease" class="btn btn-primary" onclick="window.createRelease()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                <span>Create Release</span>
+            </button>
         </div>
     </div>
 </div>
@@ -683,14 +805,19 @@
 <div class="modal-overlay" id="replayModal" role="dialog" aria-modal="true" aria-labelledby="replayTitle">
     <div class="modal replay-modal" id="replayModalInner">
         <div class="modal-header">
-            <h2 id="replayTitle">▶ Session Replay</h2>
+            <h2 id="replayTitle">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 14 9-14 9V3Z"/></svg>
+                <span>Session Replay</span>
+            </h2>
             <button type="button" class="modal-close" onclick="window.closeReplayModal()" aria-label="Close replay">×</button>
         </div>
         <div class="modal-body replay-body" id="replayBody">
             <!-- Empty state: drop zone for an .aieditor.session file. Replaced
                  by the stepper layout once a payload has been parsed. -->
             <div class="replay-drop-zone" id="replayDropZone" role="region" aria-label="Drop a session archive">
-                <div class="replay-drop-icon">📥</div>
+                <div class="replay-drop-icon">
+                    <svg class="icn icn--hero" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+                </div>
                 <div class="replay-drop-text">Drop a <code>.aieditor.session</code> file here</div>
                 <div class="replay-drop-hint">or click to browse</div>
                 <input type="file" id="replayFileInput" accept=".aieditor.session,.json,application/json" hidden>

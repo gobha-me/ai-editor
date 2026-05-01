@@ -141,13 +141,13 @@ export async function buildAppLayout() {
         ${templates.get('header')}
         ${templates.get('search-panel')}
         <main class="main-content">
-            <div class="panel-edge-tab panel-edge-tab-left" id="sidebarExpandTab" title="Show sidebar" aria-label="Expand sidebar" role="button" tabindex="0" style="display:none;">📁</div>
+            <div class="panel-edge-tab panel-edge-tab-left" id="sidebarExpandTab" title="Show sidebar" aria-label="Expand sidebar" role="button" tabindex="0" style="display:none;"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/></svg></div>
             ${templates.get('sidebar')}
             <div class="resize-handle resize-handle-sidebar" id="resizeHandleSidebar" title="Drag to resize sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
             ${templates.get('editor-panel')}
             <div class="resize-handle resize-handle-chat" id="resizeHandleChat" title="Drag to resize chat" role="separator" aria-orientation="vertical" aria-label="Resize chat panel"></div>
             ${templates.get('chat-panel')}
-            <div class="panel-edge-tab panel-edge-tab-right" id="chatExpandTab" title="Show chat" aria-label="Expand chat" role="button" tabindex="0" style="display:none;">💬</div>
+            <div class="panel-edge-tab panel-edge-tab-right" id="chatExpandTab" title="Show chat" aria-label="Expand chat" role="button" tabindex="0" style="display:none;"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg></div>
         </main>
         ${templates.get('modals')}
         ${templates.get('debug-slideout')}

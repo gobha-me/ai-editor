@@ -9,6 +9,7 @@ import { ContextManager } from '../context-manager.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
 import { ChatSummarizer } from '../chat/summarizer.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
+import { Icon } from '../ui/icons.js';
 
 // ── Provider description ──
 
@@ -77,16 +78,16 @@ export function showModelCapabilities() {
     }
     
     const capBadges = [];
-    if (caps.supportsFunctionCalling) capBadges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
-    if (caps.supportsReasoning) capBadges.push('<span class="cap-badge cap-yes">🧠 Reasoning</span>');
-    if (caps.supportsVision) capBadges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
-    if (caps.supportsWebSearch) capBadges.push('<span class="cap-badge cap-yes">🔍 Web</span>');
-    if (caps.supportsResponseSchema) capBadges.push('<span class="cap-badge cap-yes">📐 Schema</span>');
-    if (caps.optimizedForCode) capBadges.push('<span class="cap-badge cap-yes">💻 Code</span>');
-    if (caps.supportsAudioInput) capBadges.push('<span class="cap-badge cap-yes">🎙 Audio</span>');
-    if (caps.supportsVideoInput) capBadges.push('<span class="cap-badge cap-yes">🎬 Video</span>');
-    
-    if (!caps.supportsFunctionCalling) capBadges.push('<span class="cap-badge cap-no">🚫 No Tools</span>');
+    if (caps.supportsFunctionCalling) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Wrench}<span>Tools</span></span>`);
+    if (caps.supportsReasoning) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Brain}<span>Reasoning</span></span>`);
+    if (caps.supportsVision) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Eye}<span>Vision</span></span>`);
+    if (caps.supportsWebSearch) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Globe}<span>Web</span></span>`);
+    if (caps.supportsResponseSchema) capBadges.push(`<span class="cap-badge cap-yes">${Icon.ListChecks}<span>Schema</span></span>`);
+    if (caps.optimizedForCode) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Code}<span>Code</span></span>`);
+    if (caps.supportsAudioInput) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Mic}<span>Audio</span></span>`);
+    if (caps.supportsVideoInput) capBadges.push(`<span class="cap-badge cap-yes">${Icon.Video}<span>Video</span></span>`);
+
+    if (!caps.supportsFunctionCalling) capBadges.push(`<span class="cap-badge cap-no">${Icon.X}<span>No Tools</span></span>`);
     
     let html = `<div style="font-size: var(--font-sm);">
         <div style="margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 600;">${model.name}</div>

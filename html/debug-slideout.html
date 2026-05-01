@@ -8,7 +8,7 @@
         <div class="debug">
             <div class="debug__head">
                 <div class="debug__title" id="debugSlideOutTitle">
-                    <span aria-hidden="true">🐛</span>
+                    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h8v6a4 4 0 0 1-8 0ZM2 22l3-3M22 22l-3-3"/></svg>
                     <span>Debug</span>
                 </div>
                 <div class="debug__head-meta" id="debugSessionMeta" aria-live="polite">
@@ -18,40 +18,47 @@
                 <div class="debug__head-spacer" aria-hidden="true"></div>
                 <button type="button" class="debug__head-btn debug__head-btn--icon"
                         id="debugPauseBtn" title="Pause stream"
-                        aria-label="Pause stream" aria-pressed="false">⏸</button>
+                        aria-label="Pause stream" aria-pressed="false">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                </button>
                 <button type="button" class="debug__head-btn debug__head-btn--primary"
-                        id="debugCopyBundleBtn" title="Copy diagnostic bundle">📋 Copy bundle</button>
+                        id="debugCopyBundleBtn" title="Copy diagnostic bundle">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+                    <span>Copy bundle</span>
+                </button>
                 <button type="button" class="debug__head-btn debug__head-btn--icon"
-                        id="debugCloseBtn" title="Close (Esc)" aria-label="Close">✕</button>
+                        id="debugCloseBtn" title="Close (Esc)" aria-label="Close">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
             </div>
 
             <div class="debug__tabs" role="tablist">
                 <button type="button" class="debug__tab debug__tab--active" role="tab"
                         data-debug-tab="logs" aria-selected="true">
-                    <span aria-hidden="true">📜</span>
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v2a2 2 0 0 1-2 2H4M16 3v2a2 2 0 0 0 2 2h2M5 7h14v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM8 11h8M8 15h6"/></svg>
                     <span>Logs</span>
                     <span class="debug__tab-count" id="debugTabCountLogs" hidden>0</span>
                 </button>
                 <button type="button" class="debug__tab" role="tab"
                         data-debug-tab="conn" aria-selected="false">
-                    <span aria-hidden="true">🔌</span>
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5M9 7V2M15 7V2M6 13V8h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4Z"/></svg>
                     <span>Connections</span>
                     <span class="debug__tab-count" id="debugTabCountConn" hidden>0</span>
                 </button>
                 <button type="button" class="debug__tab" role="tab"
                         data-debug-tab="indexer" aria-selected="false">
-                    <span aria-hidden="true">🗃</span>
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
                     <span>Indexer</span>
                 </button>
                 <button type="button" class="debug__tab" role="tab"
                         data-debug-tab="ai" aria-selected="false">
-                    <span aria-hidden="true">✨</span>
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
                     <span>AI</span>
                     <span class="debug__tab-count" id="debugTabCountAI" hidden>0</span>
                 </button>
                 <button type="button" class="debug__tab" role="tab"
                         data-debug-tab="plugins" aria-selected="false">
-                    <span aria-hidden="true">🧩</span>
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 11h2a2 2 0 0 1 0 4h-2v2a2 2 0 0 1-2 2h-2a2 2 0 1 1 0-4v-2a2 2 0 0 1 2-2h2zM4 12a2 2 0 0 1 2-2h2V8a2 2 0 0 1 2-2h2a2 2 0 1 1 0 4h2v2a2 2 0 0 1-2 2h-2a2 2 0 1 0 0 4H6a2 2 0 0 1-2-2v-2z"/></svg>
                     <span>Plugins</span>
                     <span class="debug__tab-count" id="debugTabCountPlugins" hidden>0</span>
                 </button>

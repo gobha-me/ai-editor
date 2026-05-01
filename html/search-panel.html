@@ -2,7 +2,9 @@
 <div class="search-panel" id="searchPanel" role="search" aria-label="Project search">
     <div class="search-panel-header">
         <div class="search-input-wrapper">
-            <span class="search-icon" aria-hidden="true">🔍</span>
+            <span class="search-icon" aria-hidden="true">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            </span>
             <label for="searchInput" class="sr-only">Search in project</label>
             <input type="text" id="searchInput" placeholder="Search in project..." autocomplete="off" spellcheck="false" aria-label="Search query">
         </div>
@@ -19,8 +21,12 @@
         </div>
         <div class="search-actions">
             <button type="button" class="btn btn-primary" id="btnDoSearch" aria-label="Run search">Search</button>
-            <button type="button" class="btn btn-secondary" id="btnToggleReplace" title="Toggle replace" aria-label="Toggle replace" aria-expanded="false" aria-controls="replaceBar">⇄</button>
-            <button type="button" class="btn btn-secondary" id="btnCloseSearch" title="Close" aria-label="Close search panel">✕</button>
+            <button type="button" class="btn btn-secondary" id="btnToggleReplace" title="Toggle replace" aria-label="Toggle replace" aria-expanded="false" aria-controls="replaceBar">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 4-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnCloseSearch" title="Close" aria-label="Close search panel">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
         </div>
     </div>
 

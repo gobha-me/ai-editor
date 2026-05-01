@@ -25,7 +25,7 @@ export async function refreshProjects() {
             const key = repo.connectionId;
             if (!grouped.has(key)) {
                 grouped.set(key, {
-                    label: `${repo.providerIcon} ${repo.connectionLabel}`,
+                    label: repo.connectionLabel,
                     repos: []
                 });
             }
@@ -54,8 +54,10 @@ export async function refreshProjects() {
             for (const [connId, group] of grouped) {
                 const optgroup = document.createElement('optgroup');
                 const isDown = downIds.has(connId);
+                // optgroup.label is plain text (no HTML); use a textual prefix
+                // for offline state instead of an emoji.
                 optgroup.label = isDown
-                    ? `⚠️ ${group.label} — OFFLINE`
+                    ? `[OFFLINE] ${group.label}`
                     : group.label;
                 group.repos.forEach(repo => {
                     const option = document.createElement('option');
@@ -113,7 +115,7 @@ export async function switchProject(connectionId, owner, repo, { branch } = {}) 
         editorContainer.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.4em;"><svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg><span>AI Editor</span></h2>
                     <p>Select a file to edit</p>
                 </div>
             </div>
@@ -207,7 +209,7 @@ export async function onBranchChange(e) {
         document.getElementById('editorContainer').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.4em;"><svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg><span>AI Editor</span></h2>
                     <p>Select a file to edit</p>
                 </div>
             </div>
@@ -361,7 +363,7 @@ export async function clearProject() {
         editorContainer.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem;">⚡ AI Editor</h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.4em;"><svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg><span>AI Editor</span></h2>
                     <p>Select a project to get started</p>
                 </div>
             </div>
@@ -426,7 +428,7 @@ export function renderIssues() {
             const depLinks = issue.dependencies.map(depNum => 
                 `<span class="dep-link" onclick="event.stopPropagation(); window.Chat.sendMessage('Show me issue #${depNum}')">#${depNum}</span>`
             ).join(', ');
-            depsHtml = `<div class="issue-deps">⛓️ Depends on: ${depLinks}</div>`;
+            depsHtml = `<div class="issue-deps"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg> Depends on: ${depLinks}</div>`;
         }
 
         // Highlight if this issue is active (working) or focused (triaging)
@@ -655,7 +657,7 @@ export async function submitCreatePR() {
         errorEl.textContent = `Failed: ${e.message}`;
         errorEl.style.display = '';
         btn.disabled = false;
-        btn.textContent = '🚀 Create Pull Request';
+        btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg><span>Create Pull Request</span>';
     }
 }
 
@@ -763,7 +765,7 @@ export async function submitNewProject() {
         console.error('[NewProject] Create failed:', error);
         window.showToast(`Failed to create repo: ${error.message}`, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '🚀 Create'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg><span>Create</span>'; }
     }
 }
 

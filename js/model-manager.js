@@ -7,6 +7,7 @@ import { applyModelOverrides } from './providers/registry.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 import { LLM } from './llm.js';
 import { populateSettingsModelSelects } from './settings-manager.js';
+import { Icon } from './ui/icons.js';
 
 export async function fetchModels() {
     try {
@@ -19,14 +20,10 @@ export async function fetchModels() {
         enabledModels.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
-            // Show friendly name + key capability hints
-            const hints = [];
-            if (model.capabilities?.supportsFunctionCalling) hints.push('🔧');
-            if (model.capabilities?.supportsReasoning) hints.push('🧠');
-            if (model.capabilities?.supportsVision) hints.push('👁');
-            if (model.capabilities?.optimizedForCode) hints.push('💻');
-            const suffix = hints.length ? ' ' + hints.join('') : '';
-            option.textContent = (model.name || model.id) + suffix;
+            // 1.3.11: capability hints moved out of the option text into
+            // the Lucide-rendered status bar above the chat input. Option
+            // elements are plain-text-only and can't render SVG.
+            option.textContent = model.name || model.id;
             select.appendChild(option);
         });
 
@@ -70,19 +67,19 @@ export function updateModelStatusBar() {
 
     // Role badge
     if (role && role.id !== 'full') {
-        badges.push(`<span class="cap-badge cap-yes">${role.icon} ${role.name}</span>`);
+        badges.push(`<span class="cap-badge cap-yes">${role.name}</span>`);
     }
-    
+
     if (model && model.capabilities) {
         const caps = model.capabilities;
         if (caps.supportsFunctionCalling) {
-            badges.push('<span class="cap-badge cap-yes">🔧 Tools</span>');
+            badges.push(`<span class="cap-badge cap-yes">${Icon.Wrench}<span>Tools</span></span>`);
         } else {
-            badges.push('<span class="cap-badge cap-no">🚫 Tools</span>');
+            badges.push(`<span class="cap-badge cap-no">${Icon.X}<span>Tools</span></span>`);
         }
-        if (caps.supportsReasoning) badges.push('<span class="cap-badge cap-yes">🧠 Think</span>');
-        if (caps.supportsVision) badges.push('<span class="cap-badge cap-yes">👁 Vision</span>');
-        if (caps.optimizedForCode) badges.push('<span class="cap-badge cap-yes">💻 Code</span>');
+        if (caps.supportsReasoning) badges.push(`<span class="cap-badge cap-yes">${Icon.Brain}<span>Think</span></span>`);
+        if (caps.supportsVision) badges.push(`<span class="cap-badge cap-yes">${Icon.Eye}<span>Vision</span></span>`);
+        if (caps.optimizedForCode) badges.push(`<span class="cap-badge cap-yes">${Icon.Code}<span>Code</span></span>`);
         if (model.pricing) {
             badges.push(`<span class="cap-badge cap-neutral">$${model.pricing.input}/$${model.pricing.output}</span>`);
         }
@@ -102,7 +99,7 @@ export function updateModelStatusBar() {
 export function populateRoleSelector() {
     const select = document.getElementById('roleSelect');
     select.innerHTML = Roles.list().map(role =>
-        `<option value="${role.id}" ${role.id === State.settings.role ? 'selected' : ''}>${role.icon} ${role.name}</option>`
+        `<option value="${role.id}" ${role.id === State.settings.role ? 'selected' : ''}>${role.name}</option>`
     ).join('');
 }
 
@@ -122,13 +119,11 @@ function _repopulateMainModelSelect() {
     enabledModels.forEach(model => {
         const option = document.createElement('option');
         option.value = model.id;
-        const hints = [];
-        if (model.capabilities?.supportsFunctionCalling) hints.push('🔧');
-        if (model.capabilities?.supportsReasoning) hints.push('🧠');
-        if (model.capabilities?.supportsVision) hints.push('👁');
-        if (model.capabilities?.optimizedForCode) hints.push('💻');
-        const suffix = hints.length ? ' ' + hints.join('') : '';
-        option.textContent = (model.name || model.id) + suffix;
+        // Option text is rendered as plain text (no HTML), so capability
+        // hints stay omitted here — the per-model edit panel and the
+        // status bar above the chat input render the Lucide capability
+        // badges via Icon.* (1.3.11).
+        option.textContent = model.name || model.id;
         select.appendChild(option);
     });
 
@@ -155,7 +150,7 @@ export function onRoleChange(e) {
     });
 
     const role = Roles.get(e.target.value);
-    window.showToast(`Role: ${role.icon} ${role.name}`, 'success');
+    window.showToast(`Role: ${role.name}`, 'success');
 }
 
 // ============================================

@@ -8,11 +8,25 @@
             </div>
         </div>
         <div class="editor-toolbar" role="toolbar" aria-label="Editor tools">
-            <button type="button" class="btn btn-secondary btn-toolbar" id="btnRevert" title="Revert current file to last commit (Ctrl+Shift+Z)" aria-label="Revert file" disabled>↩️ Revert</button>
-            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)" aria-label="Toggle line numbers">🔢</button>
-            <button type="button" class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" aria-label="Toggle preview" disabled>👁 Preview</button>
-            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" aria-label="Toggle diff view" disabled>± Diff</button>
-            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleBlame" title="Toggle Blame (Ctrl+Shift+B)" aria-label="Toggle blame view" disabled>🔍 Blame</button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnRevert" title="Revert current file to last commit (Ctrl+Shift+Z)" aria-label="Revert file" disabled>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>
+                <span>Revert</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleLineNumbers" title="Toggle Line Numbers (Ctrl+Shift+L)" aria-label="Toggle line numbers">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnTogglePreview" title="Toggle Preview (Ctrl+Shift+P)" aria-label="Toggle preview" disabled>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Preview</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleDiff" title="Toggle Diff (Ctrl+Shift+D)" aria-label="Toggle diff view" disabled>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 6h6a4 4 0 0 1 4 4v8M17 18h-6a4 4 0 0 1-4-4V6"/></svg>
+                <span>Diff</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-toolbar" id="btnToggleBlame" title="Toggle Blame (Ctrl+Shift+B)" aria-label="Toggle blame view" disabled>
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <span>Blame</span>
+            </button>
         </div>
     </div>
 
@@ -22,14 +36,19 @@
         <div class="editor-container" id="editorContainer" role="region" aria-label="Code editor content">
             <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
                 <div style="text-align: center; max-width: 360px;">
-                    <h2 style="font-size: var(--font-2xl); margin-bottom: 0.75rem;">⚡ <span id="welcomeAppName"></span></h2>
+                    <h2 style="font-size: var(--font-2xl); margin-bottom: 0.75rem; display: inline-flex; align-items: center; gap: 0.4em;">
+                        <svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+                        <span id="welcomeAppName"></span>
+                    </h2>
                     <p style="margin-bottom: 1rem;">Select a project from the sidebar, or upload a zip to start editing.</p>
                     <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
                         <button type="button" class="btn btn-primary" onclick="window.openSettings()">
-                            ⚙️ Settings
+                            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1 1.7 1.7 0 0 0 .3 1.8M3 11a2 2 0 1 0 0 4h.1a1.7 1.7 0 0 1 1.5 1M5.6 5.6a2 2 0 0 0 0 2.8M11 3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5"/></svg>
+                            <span>Settings</span>
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="window.openZipUpload && window.openZipUpload()">
-                            📦 Upload Zip
+                            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                            <span>Upload Zip</span>
                         </button>
                     </div>
                     <p style="margin-top: 1rem; font-size: var(--font-md); color: var(--text-muted);">
@@ -47,8 +66,12 @@
             <div class="secondary-pane-header">
                 <span id="secondaryPaneTitle">Preview</span>
                 <div class="secondary-pane-actions">
-                    <button type="button" class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">⛶</button>
-                    <button type="button" class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">✕</button>
+                    <button type="button" class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">
+                        <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V4h4M21 8V4h-4M3 16v4h4M21 16v4h-4"/></svg>
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">
+                        <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
                 </div>
             </div>
             <div class="secondary-pane-content" id="secondaryPaneContent">

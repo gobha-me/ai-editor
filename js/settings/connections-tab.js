@@ -179,7 +179,7 @@ function showConnectionEditor(connId, preselectProvider = null) {
     const providerSelect = document.getElementById('connEditProvider');
     const providers = GitProviderRegistry.list().filter(p => !p.hidden);
     providerSelect.innerHTML = providers.map(p =>
-        `<option value="${escapeAttr(p.id)}">${p.icon} ${escapeHtml(p.name)}</option>`
+        `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name)}</option>`
     ).join('');
 
     if (connId) {

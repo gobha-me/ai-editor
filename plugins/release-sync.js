@@ -355,14 +355,16 @@ const ReleaseSyncPlugin = {
     async init() {
         // Register UI button + modal
         Plugins.registerButton(PLUGIN_ID, {
-            icon: '📦',
+            // icon omitted — picks up the Lucide fallback in
+            // settings/plugins-tab.js (1.3.11 Touch 2 PROBE: UI uses Lucide,
+            // emoji is reserved for user content)
             label: 'Release Sync',
             onClick: () => window.openPluginModal(MODAL_ID)
         });
 
         Plugins.registerModal(PLUGIN_ID, {
             id: MODAL_ID,
-            title: '📦 Release Sync',
+            title: 'Release Sync',
             width: '700px',
             render: (container) => renderModal(container)
         });

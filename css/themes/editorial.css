@@ -109,4 +109,12 @@
        a future tuning pass may grow it for the calmer feel. */
     --tk-header-height:    56px;
     --tk-cmd-placeholder:  var(--tk-text-muted);
+
+    /* Icons — 1.3.11
+       Editorial Calm renders icons with a thinner 1.4 stroke to
+       match the lighter typographic feel; sizes track the contract. */
+    --tk-icon-size-sm:     16px;
+    --tk-icon-size-md:     18px;
+    --tk-icon-size-lg:     24px;
+    --tk-icon-stroke:      1.4;
 }

@@ -4,6 +4,172 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-05-01
+
+Lands the **Lucide icon family swap** — PR 7 of the Touch 2 facelift arc
+and the iconography PROBE called out in
+[`docs/design/touch-2-facelift/project/pushback.jsx:77-81`](docs/design/touch-2-facelift/project/pushback.jsx).
+Replaces the emoji scattered across UI chrome (top bar, sidebar,
+editor toolbar, chat panel, settings, modals, slide-outs, onboarding)
+with one Lucide-shaped line-icon family. **Emoji stays for user
+content** — chat messages, commit messages, code comments, and
+external Git host comments are untouched.
+
+**Offline by construction.** All SVG paths are inlined as strings in
+`js/ui/icons.js` — no `lucide-static` vendor download, no CDN fetch,
+no font file. The icon set ships with the JS bundle, so air-gapped
+Docker builds and offline dev mode render the same iconography as
+internet-connected ones. The "vendor bundle entry" the roadmap calls
+for is satisfied by the inline-SVG module; a future swap to a curated
+Lucide subset would route through the existing Stage-1 esbuild step
+the same way CodeMirror et al. do today.
+
+**Theme-token contract.** `--tk-icon-size-{sm,md,lg}` and
+`--tk-icon-stroke` join the public `--tk-*` vocabulary frozen in 1.3.5.
+Refined IDE renders the contract-default 1.6 stroke; Editorial Calm
+opts into 1.4 to match its lighter typographic feel — proves the
+token is genuinely tunable, not just decorative.
+
+### Added
+
+- **`js/ui/icons.js`** *(new)* — 70+ Lucide-shaped SVG icons exported
+  as ready-to-render HTML strings. Use directly in template literals
+  (`${Icon.Bolt}`) or `innerHTML` paths. `renderIcon(name, opts)`
+  helper for the rare case needing an extra class or aria-label
+  override. Also installed on `window.Icon` for non-module callers.
+
+- **`css/icons.css`** *(new)* — `.icn` base class plus `.icn--sm` /
+  `.icn--lg` / `.icn--hero` modifiers and surface adjustments
+  (top-bar buttons, capability badges, hero icons in onboarding /
+  zip drop / splash). Every value reads through `--tk-*`; zero hex
+  literals; zero per-theme variants. Loaded after `memory.css` and
+  before `mobile.css` in [`index.html`](index.html).
+
+- **Icon tokens** in [`css/themes/tokens.css`](css/themes/tokens.css):
+  `--tk-icon-size-sm: 16px`, `--tk-icon-size-md: 18px`,
+  `--tk-icon-size-lg: 24px`, `--tk-icon-stroke: 1.6`. Public contract;
+  removing or renaming becomes a breaking change for plugin theme
+  authors.
+
+### Changed
+
+- **`css/themes/refined.css`** — populates the four icon tokens
+  (1.6 stroke; the contract default).
+- **`css/themes/editorial.css`** — populates the icon tokens with
+  the lighter 1.4 stroke for Editorial Calm.
+- **`index.html`** — links `css/icons.css`; replaces the boot-splash
+  `⚡` emoji with inline Bolt SVG so the loading state renders the
+  same iconography even before any JS executes.
+- **Static HTML partials swept end-to-end** — every emoji used as UI
+  chrome replaced with inline SVG (so the markup renders correctly
+  on first paint without waiting for `js/ui/icons.js` to load):
+  - [`html/header.html`](html/header.html) — brand, branch, command,
+    commit, settings, help, debug
+  - [`html/editor-panel.html`](html/editor-panel.html) — toolbar
+    (Revert / Line numbers / Preview / Diff / Blame), welcome
+    heading + buttons, secondary-pane fullscreen + close
+  - [`html/sidebar.html`](html/sidebar.html) — collapse, new project,
+    refresh, clear, new branch, download zip, release manager,
+    file-tree actions (refresh, zip, new file, new folder)
+  - [`html/chat-panel.html`](html/chat-panel.html) — conversations,
+    export, replay, new chat, model refresh, collapse, issue
+    expand/dismiss, accept/deny/comment/start-work, conversation
+    sort, attach/send/stop
+  - [`html/search-panel.html`](html/search-panel.html) — search icon,
+    toggle replace, close
+  - [`html/help-slideout.html`](html/help-slideout.html) — title,
+    close, search, GitHub + Coffee footer links
+  - [`html/debug-slideout.html`](html/debug-slideout.html) — title,
+    pause/copy-bundle/close, all 5 tab icons (Logs / Connections /
+    Indexer / AI / Plugins)
+  - [`html/modals.html`](html/modals.html) — settings, revert, commit,
+    new branch, new file, rename, issue/PR external links + start
+    work, create PR (title + button), zip upload (title + drop +
+    scan + upload), new project (title + create), onboarding
+    (hero, paths, Git/LLM steps, success hero, next-steps), release
+    manager (title + generate + create), session replay (title +
+    drop)
+  - [`html/settings-tabs.html`](html/settings-tabs.html) — connection
+    test/save, fetch models, embedder header, model edit close,
+    fetch API models, clear embeddings cache, ignore reset,
+    summarizer header + Cost-tab section headers (Current session /
+    Last 30 days / Conversations / Tools / Budget alerts) + save
+    budget. Drops decorative emoji from radio labels (Aggressive /
+    Balanced / Conservative / Custom) and the in-browser
+    embedder option.
+  - [`js/template-loader.js`](js/template-loader.js) — sidebar /
+    chat panel-edge expand tabs.
+
+- **Dynamic JS templates updated to consume the `Icon` module:**
+  - [`js/chat/messages.js`](js/chat/messages.js) — chat welcome
+    heading.
+  - [`js/release-manager.js`](js/release-manager.js) — create-release
+    button.
+  - [`js/zip-upload.js`](js/zip-upload.js) — upload button label
+    (preserves the modal's inline icon SVG).
+  - [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) —
+    plugin toolbar fallback icon, external-plugin icon, user-plugin
+    edit icon, plugin-type heuristic (billing / cross-provider /
+    venice / generic), enable/disable toggle, configure button.
+    Imports `Icon` from `js/ui/icons.js`.
+  - [`js/settings/llm-tab.js`](js/settings/llm-tab.js) — capability
+    badge row (Tools / Reasoning / Vision / Web / Schema / Code /
+    Audio / Video / No Tools).
+  - [`js/settings/models-tab.js`](js/settings/models-tab.js) — table
+    capability column.
+  - [`js/help/index.js`](js/help/index.js) — `NAV_ITEMS` `icon` field
+    is now an Icon-module key (Sparkles / Hash / Search / Box /
+    Settings / Palette / AtSign / Brain / Server / GitBranch).
+  - [`js/settings/connections-tab.js`](js/settings/connections-tab.js)
+    — provider dropdown drops the leading icon (option text is plain
+    string, can't render SVG).
+  - [`js/project-manager.js`](js/project-manager.js) — three
+    welcome/no-file-open splashes, optgroup OFFLINE prefix, issue
+    dependency block, two PR/Create button labels.
+  - [`js/app.js`](js/app.js) — download button reset state, template
+    load error heading.
+
+- **`plugins/release-sync.js`** — bundled plugin: drops the
+  `Plugins.registerButton({ icon: '📦' })` arg so the Lucide fallback
+  picks up; modal title strips its emoji prefix.
+
+- **`css/mobile.css`** — drops the `#btnCommit::before { content: '📦' }`
+  pseudo-element trick. Mobile commit button now hides the trailing
+  text span (`#btnCommit > span { display: none; }`); the inline SVG
+  icon already in the markup stays visible.
+
+### Out of scope for 1.3.11
+
+These deferrals match the design memo's "emoji stays for user content"
+distinction and the roadmap's "self-contained" framing for §1.3.11:
+
+- **Zip-upload file-type icons** ([`js/zip-upload.js`](js/zip-upload.js))
+  — language indicators (`📜 ⚛️ 📘 🐍 🦀 ⚙️ 🐚 🐳 🖼️`) on user-uploaded
+  files. These decorate user content (the file tree being imported),
+  not app chrome. Defer with design input on whether these map to a
+  Lucide subset (e.g. `<FileCode>` everywhere) or stay glyph-rich.
+- **Issue / PR detail modal flows** ([`js/issue-detail.js`](js/issue-detail.js),
+  [`js/pr-detail.js`](js/pr-detail.js)) — branch-info badges, Start
+  Work button-state labels, CI status row, mergeable indicator. UI
+  chrome but deeper-flow surfaces; follow-up patch.
+- **External-host comment templates** ([`js/issue-detail.js`](js/issue-detail.js))
+  — `Git.createIssueComment(..., '✅ **Accepted**\n\n${body}')` and
+  similar. The comment IS the message the user is sending to GitHub
+  / Gitea / GitLab; emoji is appropriate user-content there.
+- **Plugin-author-controlled icon strings** — `Plugins.registerButton({
+  icon: ... })` accepts a plain string (rendered via `escapeHtml`).
+  Shipping SVG through this API is a small contract change to defer
+  until a plugin-API revision pass.
+- **SlotManager-bound provider panel icons**
+  ([`js/git-providers/{gitea,github,gitlab}.js`](js/git-providers/gitea.js))
+  — `📋` Issues / `🔀` PRs entries are inert data until SlotManager
+  ships (PLAN.md / UI #15 / 1.4.x).
+- **Tool descriptions and `console.log` strings** — text sent to the
+  LLM or written to the developer console, not rendered as UI.
+- **Test fixture markup** — `tests/test-debug-slideout.js` /
+  `tests/test-help-slideout.js` mock-DOM strings reference pre-1.3.11
+  emoji as fixture data; leave until the next test-suite refresh.
+
 ## [1.3.10] - 2026-05-01
 
 Lands the **Help slide-out** — PR 6 of the Touch 2 facelift arc and the

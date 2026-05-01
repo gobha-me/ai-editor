@@ -40,7 +40,7 @@ function buildReasoningHtml(reasoning) {
     return `
         <details class="message-reasoning">
             <summary class="reasoning-summary">
-                <span class="reasoning-icon">💭</span>
+                <span class="reasoning-icon"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 2.2 3 3 0 0 0-.5 1.8 3 3 0 0 0 3 3 3 3 0 0 0 2.5 1.5A3 3 0 0 0 12 21V5a3 3 0 0 0-3-3M15 5a3 3 0 0 1 3 3 3 3 0 0 1 3 3 3 3 0 0 1-1 2.2 3 3 0 0 1 .5 1.8 3 3 0 0 1-3 3 3 3 0 0 1-2.5 1.5A3 3 0 0 1 12 21"/></svg></span>
                 <span class="reasoning-label">Reasoning</span>
                 ${meta ? `<span class="reasoning-meta">${escapeHtml(meta)}</span>` : ''}
             </summary>
@@ -104,8 +104,8 @@ export function addStreamingMessage() {
     messageEl.id = 'streaming-message';
     messageEl.innerHTML = `
         <div class="message-header">
-            <span class="message-role">🤖 Assistant</span>
-            <span class="message-time" id="streaming-elapsed">⏱️ ${formatElapsedTime(getStreamingElapsed())}</span>
+            <span class="message-role"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg> Assistant</span>
+            <span class="message-time" id="streaming-elapsed">${formatElapsedTime(getStreamingElapsed())}</span>
         </div>
         <div class="message-content">
             <span class="typing-indicator">●●●</span>
@@ -255,7 +255,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
             // Standard assistant message buttons (continue/copy)
             actionsEl.innerHTML = `
                 <button class="btn-action btn-continue" onclick="window.Chat.continueResponse()" title="Continue generating">🔄 Continue</button>
-                <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard">📋 Copy</button>
+                <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
             `;
         }
         
@@ -307,12 +307,16 @@ export function renderMessage(message, isLastUserMessage = false) {
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${message.role}`;
     
-    const roleIcon = {
-        user: '👤',
-        assistant: '🤖',
-        system: 'ℹ️',
-        error: '❌'
-    }[message.role] || '💬';
+    // 1.3.11: role icon swapped from emoji to inline Lucide SVG. The map
+    // is hand-maintained alongside `js/ui/icons.js` rather than imported,
+    // because messages.js is loaded in many contexts and these strings
+    // are short enough not to warrant a circular-dep risk.
+    const roleIconSvg = {
+        user:      '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+        assistant: '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>',
+        system:    '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+        error:     '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v4M12 17h.01"/></svg>'
+    }[message.role] || '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
 
     const roleName = {
         user: 'You',
@@ -375,7 +379,7 @@ export function renderMessage(message, isLastUserMessage = false) {
 
     messageEl.innerHTML = `
         <div class="message-header">
-            <span class="message-role">${roleIcon} ${roleName}</span>
+            <span class="message-role">${roleIconSvg} ${roleName}</span>
             <span class="message-time">${timeDisplay}</span>
         </div>
         ${imageHtml}
@@ -388,7 +392,7 @@ export function renderMessage(message, isLastUserMessage = false) {
         const actionsEl = document.createElement('div');
         actionsEl.className = 'message-actions';
         actionsEl.innerHTML = `
-            <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard">📋 Copy</button>
+            <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
         `;
         messageEl.appendChild(actionsEl);
     } else if (message.role === 'user' && isLastUserMessage) {
@@ -396,8 +400,8 @@ export function renderMessage(message, isLastUserMessage = false) {
         const actionsEl = document.createElement('div');
         actionsEl.className = 'message-actions';
         actionsEl.innerHTML = `
-            <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend">✏️ Edit</button>
-            <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request">🔁 Retry</button>
+            <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>
+            <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg> Retry</button>
         `;
         messageEl.appendChild(actionsEl);
     }
@@ -608,7 +612,10 @@ export function renderMessages(historyOverride = null) {
     if (history.length === 0) {
         chatContainer.innerHTML = `
             <div class="chat-welcome">
-                <h3>👋 Welcome to AI Editor</h3>
+                <h3 style="display: inline-flex; align-items: center; gap: 0.4em;">
+                    <svg class="icn icn--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
+                    <span>Welcome to AI Editor</span>
+                </h3>
                 <p>Ask me to:</p>
                 <ul>
                     <li>Edit or refactor code</li>

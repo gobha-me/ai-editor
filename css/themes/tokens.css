@@ -156,4 +156,17 @@
        ======================================================== */
     --tk-header-height:    56px;
     --tk-cmd-placeholder:  var(--tk-text-muted);
+
+    /* ========================================================
+       Iconography — 1.3.11 (Touch 2 PROBE)
+       Lucide-shaped line icons rendered through `js/ui/icons.js`
+       and styled by `css/icons.css`. Sizes are intent-named (sm
+       for inline-with-text, md for buttons/chrome, lg for cards
+       and connection avatars). Stroke is exposed so themes can
+       tune visual weight (Refined IDE: 1.6; Editorial Calm: 1.4).
+       ======================================================== */
+    --tk-icon-size-sm:     16px;
+    --tk-icon-size-md:     18px;
+    --tk-icon-size-lg:     24px;
+    --tk-icon-stroke:      1.6;
 }

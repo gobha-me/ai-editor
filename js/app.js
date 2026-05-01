@@ -775,7 +775,7 @@ function setupEventListeners() {
             console.error('[Download] Archive failed:', err);
             showToast(`Download failed: ${err.message}`, 'error');
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '📥'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>'; }
         }
     });
     safeAdd('btnRefreshFiles', 'click', () => {
@@ -883,7 +883,7 @@ async function init() {
         document.getElementById('app').innerHTML = `
             <div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #f88;">
                 <div style="text-align: center;">
-                    <h2 style="font-size: 24px; margin-bottom: 1rem;">⚠️ Template Load Error</h2>
+                    <h2 style="font-size: 24px; margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.4em;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v4M12 17h.01"/></svg><span>Template Load Error</span></h2>
                     <p>Failed to load application layout.</p>
                     <pre style="margin-top: 1rem; text-align: left; background: #222; padding: 1rem; border-radius: 4px; font-size: 11px;">${error.message}\n${error.stack}</pre>
                 </div>

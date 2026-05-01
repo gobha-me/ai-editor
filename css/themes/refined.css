@@ -95,4 +95,10 @@
     /* Top bar — 1.3.6 */
     --tk-header-height:    56px;
     --tk-cmd-placeholder:  var(--tk-text-muted);
+
+    /* Icons — 1.3.11 — Refined IDE uses the contract-default 1.6 stroke */
+    --tk-icon-size-sm:     16px;
+    --tk-icon-size-md:     18px;
+    --tk-icon-size-lg:     24px;
+    --tk-icon-stroke:      1.6;
 }

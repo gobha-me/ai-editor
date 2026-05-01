@@ -46,10 +46,16 @@
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-            <button type="button" class="btn btn-secondary" id="btnTestConnection">🔌 Test</button>
+            <button type="button" class="btn btn-secondary" id="btnTestConnection">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5M9 7V2M15 7V2M6 13V8h12v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4Z"/></svg>
+                <span>Test</span>
+            </button>
             <div style="flex: 1;"></div>
             <button type="button" class="btn btn-secondary" id="btnCancelConnection">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnSaveConnection">💾 Save Connection</button>
+            <button type="button" class="btn btn-primary" id="btnSaveConnection">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+                <span>Save Connection</span>
+            </button>
         </div>
 
         <div id="connectionTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); display: none;"></div>
@@ -74,7 +80,8 @@
         <label for="settingLlmApiKey">LLM API Key:</label>
         <input type="password" id="settingLlmApiKey" placeholder="sk-...">
         <button type="button" class="btn btn-secondary" onclick="window.fetchModelsForSettings()" style="margin-top: 0.5rem;">
-            🔄 Fetch Models
+            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+            <span>Fetch Models</span>
         </button>
     </div>
 
@@ -127,7 +134,7 @@
 <div class="settings-tab-content" id="tabModels">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
         <p style="font-size: var(--font-base); color: var(--text-secondary); margin: 0;">
-            Enable or disable models for the chat selector. Tool support (🔧) is required for full editor functionality.
+            Enable or disable models for the chat selector. Tool support is required for full editor functionality.
         </p>
     </div>
 
@@ -164,7 +171,9 @@
     <div id="modelEditPanel" style="display:none; border: 1px solid var(--border); border-radius: 4px; padding: 1rem; margin-top: 0.5rem; background: var(--bg-secondary);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <strong id="modelEditPanelTitle" style="font-size: var(--font-md);"></strong>
-            <button type="button" id="modelEditPanelClose" style="background:none; border:none; cursor:pointer; font-size: 1.1rem; color: var(--text-muted);" title="Close">✕</button>
+            <button type="button" id="modelEditPanelClose" style="background:none; border:none; cursor:pointer; color: var(--text-muted);" title="Close">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
         </div>
         <div style="margin-bottom: 0.75rem;">
             <div style="font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em;">Capabilities</div>
@@ -295,7 +304,10 @@
 <div class="settings-tab-content" id="tabContext">
     <!-- Summarizer Settings -->
     <div>
-        <h3 style="font-size: var(--font-lg); margin-bottom: 0.75rem;">📋 Chat Summarizer</h3>
+        <h3 style="font-size: var(--font-lg); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4em;">
+            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+            <span>Chat Summarizer</span>
+        </h3>
         <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
             Controls how aggressively older messages are compressed into summaries.
             Lower values = more aggressive (less context kept). Higher values = more context but higher token cost.
@@ -306,19 +318,19 @@
             <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap;">
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                     <input type="radio" name="summarizerMode" id="summarizerModeAggressive" value="aggressive">
-                    🔥 Aggressive
+                    Aggressive
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                     <input type="radio" name="summarizerMode" id="summarizerModeBalanced" value="balanced">
-                    ⚖️ Balanced
+                    Balanced
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                     <input type="radio" name="summarizerMode" id="summarizerModeConservative" value="conservative">
-                    🧊 Conservative
+                    Conservative
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                     <input type="radio" name="summarizerMode" id="summarizerModeCustom" value="custom">
-                    🔧 Custom
+                    Custom
                 </label>
             </div>
             <small style="display: block; color: var(--text-muted); margin-top: 0.35rem;">
@@ -370,7 +382,10 @@
 
 <!-- Embeddings Tab -->
 <div class="settings-tab-content" id="tabEmbeddings">
-    <h3 style="font-size: var(--font-lg); margin-bottom: 0.5rem;">🧬 Embedder Provider</h3>
+    <h3 style="font-size: var(--font-lg); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4em;">
+        <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 2.2 3 3 0 0 0-.5 1.8 3 3 0 0 0 3 3 3 3 0 0 0 2.5 1.5A3 3 0 0 0 12 21V5a3 3 0 0 0-3-3M15 5a3 3 0 0 1 3 3 3 3 0 0 1 3 3 3 3 0 0 1-1 2.2 3 3 0 0 1 .5 1.8 3 3 0 0 1-3 3 3 3 0 0 1-2.5 1.5A3 3 0 0 1 12 21"/></svg>
+        <span>Embedder Provider</span>
+    </h3>
     <small style="display: block; margin-bottom: 1rem; color: var(--text-muted);">
         The embedder powers semantic file search (<code>find_relevant_files</code>). Choose how it runs — locally in your browser (Transformers.js) or via an OpenAI-compatible API endpoint. The embedder's credentials are independent from the chat LLM, so you can point them at different hosts.
     </small>
@@ -380,7 +395,7 @@
         <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap;">
             <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                 <input type="radio" name="embeddingProvider" id="embeddingProviderLocal" value="local">
-                💻 In browser (Transformers.js)
+                In browser (Transformers.js)
             </label>
             <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                 <input type="radio" name="embeddingProvider" id="embeddingProviderOpenai" value="openai">
@@ -445,7 +460,8 @@
                  confusing because the wrong options always appear non-functional. -->
             <datalist id="embeddingModelsList"></datalist>
             <button type="button" class="btn btn-secondary" onclick="window.fetchEmbeddingModelsForSettings()" style="margin-top: 0.5rem;">
-                🔄 Fetch API Models
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+                <span>Fetch API Models</span>
             </button>
             <small style="display: block; margin-top: 0.5rem; color: var(--text-muted);">
                 Local models (<code>Xenova/*</code>) run in browser. Others use the embedder endpoint above.
@@ -482,7 +498,8 @@
 
         <div class="form-group">
             <button type="button" class="btn btn-secondary" id="btnClearEmbeddingsCache">
-                🗑️ Clear Embeddings Cache
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                <span>Clear Embeddings Cache</span>
             </button>
         </div>
 
@@ -517,7 +534,10 @@
     </div>
 
     <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
-        <button type="button" class="btn btn-secondary" id="btnResetIgnore">↩ Reset to Defaults</button>
+        <button type="button" class="btn btn-secondary" id="btnResetIgnore">
+            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>
+            <span>Reset to Defaults</span>
+        </button>
         <span id="ignoreStats" style="font-size: var(--font-sm); color: var(--text-muted); margin-left: auto;"></span>
     </div>
 
@@ -613,14 +633,20 @@
 
     <!-- Live session card -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600;">📈 Current session</h4>
+        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V11M9 21V3M15 21v-7M21 21v-4"/></svg>
+            <span>Current session</span>
+        </h4>
         <div id="costSessionGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem;"></div>
     </div>
 
     <!-- 30-day chart -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
-            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">📅 Last 30 days</h4>
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                <span>Last 30 days</span>
+            </h4>
             <span id="costChartTotal" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
         </div>
         <div id="costChartContainer" style="position: relative; min-height: 90px;"></div>
@@ -630,7 +656,10 @@
     <!-- Conversations list -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
-            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">💬 Conversations</h4>
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+                <span>Conversations</span>
+            </h4>
             <span id="costConversationsCount" style="font-size: var(--font-sm); color: var(--text-muted);"></span>
         </div>
         <div id="costConversationsList" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px;">
@@ -644,7 +673,10 @@
     <!-- Per-tool breakdown -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
-            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">🔧 Tools (active conversation)</h4>
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7a3 3 0 1 0 3 3l4 4-4 4-4-4 1-2-2-1 2-2-1-2Z"/></svg>
+                <span>Tools (active conversation)</span>
+            </h4>
             <span style="font-size: var(--font-sm); color: var(--text-muted);" title="Tokens are split between tools by the size of each tool's output. Treat these as ballpark figures, not exact measurements.">Estimated&nbsp;ⓘ</span>
         </div>
         <div id="costToolsList">
@@ -654,7 +686,10 @@
 
     <!-- Budget alerts -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
-        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600;">🛎 Budget alerts</h4>
+        <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            <span>Budget alerts</span>
+        </h4>
         <small style="display: block; margin-bottom: 0.75rem; color: var(--text-muted);">
             Soft warnings only — banner appears above the chat input at 80% and 100% of cap. Requests are never blocked.
         </small>
@@ -671,7 +706,10 @@
             <span id="costBudgetMonthlyHint" style="margin-left: 0.5rem; font-size: var(--font-sm); color: var(--text-muted);"></span>
         </div>
 
-        <button type="button" class="btn btn-secondary" id="btnSaveCostBudget">💾 Save budget</button>
+        <button type="button" class="btn btn-secondary" id="btnSaveCostBudget">
+            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+            <span>Save budget</span>
+        </button>
     </div>
 
     <!-- Provider note -->

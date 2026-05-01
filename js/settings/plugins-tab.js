@@ -6,6 +6,7 @@ import { Plugins, EventBus } from '../core.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { installPlugin, uninstallPlugin, getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
+import { Icon } from '../ui/icons.js';
 
 // Re-render the Plugins tab when plugin button registration changes,
 // but only if the tab is currently visible (avoid spurious DOM work).
@@ -58,7 +59,7 @@ export function populatePluginsTab() {
 
     // ------------------------------------------
     // Toolbar actions section (1.3.6)
-    // Plugin-registered buttons formerly lived in the top-bar `⚡` dropdown;
+    // Plugin-registered buttons formerly lived in the top-bar dropdown;
     // they now surface here. List is empty when no plugin has registered an
     // action — the section header collapses with it.
     // ------------------------------------------
@@ -68,13 +69,13 @@ export function populatePluginsTab() {
         toolbarHtml = `<div class="plugin-section-header">Toolbar actions</div>`;
         toolbarHtml += toolbarButtons.map((b, i) => `
             <div class="connection-card" data-plugin-toolbar-row="${i}">
-                <div class="connection-card-icon">${escapeHtml(b.icon || '⚡')}</div>
+                <div class="connection-card-icon">${b.icon ? escapeHtml(b.icon) : Icon.Bolt}</div>
                 <div class="connection-card-info">
                     <div class="connection-card-label">${escapeHtml(b.label || 'Action')}</div>
                     <div class="connection-card-meta">Registered by ${escapeHtml(b.pluginId)}</div>
                 </div>
                 <div class="connection-card-actions">
-                    <button type="button" data-plugin-toolbar-run="${i}" title="Run action">▶</button>
+                    <button type="button" data-plugin-toolbar-run="${i}" title="Run action">${Icon.Play}</button>
                 </div>
             </div>
         `).join('');
@@ -90,20 +91,20 @@ export function populatePluginsTab() {
         externalHtml += installed.map(entry => {
             const hasError = !!entry.error;
             const statusIcon = hasError
-                ? '<span style="color: var(--error);" title="Load error">⚠</span>'
+                ? `<span style="color: var(--error);" title="Load error">${Icon.AlertTriangle}</span>`
                 : '<span style="color: var(--success);" title="Loaded">●</span>';
             const meta = hasError
                 ? `<span style="color: var(--error);">Error: ${escapeHtml(entry.error)}</span>`
                 : escapeHtml(entry.url);
             return `
                 <div class="connection-card" data-ext-plugin-url="${escapeAttr(entry.url)}">
-                    <div class="connection-card-icon">📦</div>
+                    <div class="connection-card-icon">${Icon.Box}</div>
                     <div class="connection-card-info">
                         <div class="connection-card-label">${statusIcon} ${escapeHtml(entry.name || entry.pluginId || 'Unknown')}</div>
                         <div class="connection-card-meta plugin-external-meta">${meta}</div>
                     </div>
                     <div class="connection-card-actions">
-                        <button type="button" class="danger" data-uninstall-url="${escapeAttr(entry.url)}" title="Uninstall">✕</button>
+                        <button type="button" class="danger" data-uninstall-url="${escapeAttr(entry.url)}" title="Uninstall">${Icon.X}</button>
                     </div>
                 </div>
             `;
@@ -126,13 +127,13 @@ export function populatePluginsTab() {
                 : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
             return `
                 <div class="connection-card" data-user-plugin-id="${escapeAttr(id)}">
-                    <div class="connection-card-icon">✏️</div>
+                    <div class="connection-card-icon">${Icon.Pencil}</div>
                     <div class="connection-card-info">
                         <div class="connection-card-label">${statusDot} ${escapeHtml(entry.name || id)}</div>
                         <div class="connection-card-meta plugin-external-meta">Saved ${new Date(entry.savedAt).toLocaleDateString()}</div>
                     </div>
                     <div class="connection-card-actions">
-                        <button type="button" data-edit-plugin="${escapeAttr(id)}" title="Edit">✏️</button>
+                        <button type="button" data-edit-plugin="${escapeAttr(id)}" title="Edit">${Icon.Pencil}</button>
                     </div>
                 </div>
             `;
@@ -152,11 +153,11 @@ export function populatePluginsTab() {
             const statusDot = p.enabled
                 ? '<span style="color: var(--success);" title="Enabled">●</span>'
                 : '<span style="color: var(--text-muted);" title="Disabled">○</span>';
-            const icon = isExternal ? '📦'
-                : p.id.includes('billing') ? '💰'
-                : p.id.includes('cross') ? '🔀'
-                : p.id.includes('venice') ? '🌊'
-                : '🧩';
+            const icon = isExternal ? Icon.Box
+                : p.id.includes('billing') ? Icon.DollarSign
+                : p.id.includes('cross') ? Icon.GitCompare
+                : p.id.includes('venice') ? Icon.Sparkles
+                : Icon.Puzzle;
 
             // Build config fields HTML
             const configFields = (p.configSchema || []).map(field => {
@@ -196,8 +197,8 @@ export function populatePluginsTab() {
                         <div class="connection-card-meta">v${escapeHtml(p.version || '1.0')}${p.author ? ` · by ${escapeHtml(p.author)}` : ''} · ${escapeHtml(p.description || '')}</div>
                     </div>
                     <div class="connection-card-actions">
-                        ${hasConfig ? `<button type="button" data-plugin-expand="${escapeAttr(p.id)}" title="Configure">⚙️</button>` : ''}
-                        <button data-plugin-toggle="${escapeAttr(p.id)}" title="${p.enabled ? 'Disable' : 'Enable'}">${p.enabled ? '✅' : '⬜'}</button>
+                        ${hasConfig ? `<button type="button" data-plugin-expand="${escapeAttr(p.id)}" title="Configure">${Icon.Settings}</button>` : ''}
+                        <button data-plugin-toggle="${escapeAttr(p.id)}" title="${p.enabled ? 'Disable' : 'Enable'}">${p.enabled ? Icon.SquareCheck : Icon.Square}</button>
                     </div>
                 </div>
                 ${hasConfig ? `

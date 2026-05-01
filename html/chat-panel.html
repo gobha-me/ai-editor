@@ -2,10 +2,18 @@
 <aside class="chat-panel" id="chatPanel" role="complementary" aria-label="AI chat">
     <div class="chat-header">
         <div class="chat-header-row">
-            <button type="button" class="btn btn-secondary" id="btnConversations" title="Conversations" aria-label="Show conversations">📚</button>
-            <button type="button" class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard" aria-label="Copy chat to clipboard">📋</button>
-            <button type="button" class="btn btn-secondary" id="btnReplay" title="Open session replay viewer" aria-label="Open session replay viewer" onclick="window.openReplayModal()">▶</button>
-            <button type="button" class="btn btn-secondary" id="btnNewChat" title="New Chat" aria-label="Start new chat">➕</button>
+            <button type="button" class="btn btn-secondary" id="btnConversations" title="Conversations" aria-label="Show conversations">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2ZM22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8Z"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnExportChat" title="Copy chat to clipboard" aria-label="Copy chat to clipboard">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnReplay" title="Open session replay viewer" aria-label="Open session replay viewer" onclick="window.openReplayModal()">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 14 9-14 9V3Z"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnNewChat" title="New Chat" aria-label="Start new chat">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
             <div class="chat-header-spacer"></div>
             <div class="model-selector">
                 <label for="roleSelect" class="sr-only">Role</label>
@@ -16,9 +24,13 @@
                 <select id="modelSelect" aria-label="Select model">
                     <option value="">Select model...</option>
                 </select>
-                <button type="button" class="btn btn-secondary" id="btnFetchModels" title="Refresh models" aria-label="Refresh models" style="padding: 0.25rem 0.5rem;">🔄</button>
+                <button type="button" class="btn btn-secondary" id="btnFetchModels" title="Refresh models" aria-label="Refresh models" style="padding: 0.25rem 0.5rem;">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+                </button>
             </div>
-            <button type="button" class="panel-collapse-btn" id="btnCollapseChat" title="Collapse chat" aria-label="Collapse chat">▶</button>
+            <button type="button" class="panel-collapse-btn" id="btnCollapseChat" title="Collapse chat" aria-label="Collapse chat">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+            </button>
         </div>
     </div>
     <div class="model-status-bar" id="modelStatusBar" role="status" aria-live="polite" style="display: none;">
@@ -30,18 +42,34 @@
         <div class="issue-focus-header">
             <div class="issue-focus-title" id="issueFocusTitle"></div>
             <div class="issue-focus-controls">
-                <button type="button" class="btn btn-sm" id="btnIssueFocusExpand" title="Full details" aria-label="Show full issue details">📄</button>
-                <button type="button" class="btn btn-sm" id="btnIssueFocusDismiss" title="Dismiss" aria-label="Dismiss issue focus">✕</button>
+                <button type="button" class="btn btn-sm" id="btnIssueFocusExpand" title="Full details" aria-label="Show full issue details">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </button>
+                <button type="button" class="btn btn-sm" id="btnIssueFocusDismiss" title="Dismiss" aria-label="Dismiss issue focus">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
             </div>
         </div>
         <div class="issue-focus-meta" id="issueFocusMeta"></div>
         <div class="issue-focus-body" id="issueFocusBody"></div>
         <div class="issue-focus-comments" id="issueFocusComments"></div>
         <div class="issue-focus-actions" role="group" aria-label="Issue actions">
-            <button type="button" class="btn btn-sm btn-accept" id="btnIssueFocusAccept" title="Accept — comment and keep open" aria-label="Accept issue">✅ Accept</button>
-            <button type="button" class="btn btn-sm btn-deny" id="btnIssueFocusDeny" title="Deny — close with comment" aria-label="Deny issue">❌ Deny</button>
-            <button type="button" class="btn btn-sm btn-comment" id="btnIssueFocusComment" title="Add comment" aria-label="Comment on issue">💬 Comment</button>
-            <button type="button" class="btn btn-sm btn-work" id="btnIssueFocusWork" title="Create branch and start work" aria-label="Start work on issue">🚀 Start Work</button>
+            <button type="button" class="btn btn-sm btn-accept" id="btnIssueFocusAccept" title="Accept — comment and keep open" aria-label="Accept issue">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
+                <span>Accept</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-deny" id="btnIssueFocusDeny" title="Deny — close with comment" aria-label="Deny issue">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                <span>Deny</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-comment" id="btnIssueFocusComment" title="Add comment" aria-label="Comment on issue">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+                <span>Comment</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-work" id="btnIssueFocusWork" title="Create branch and start work" aria-label="Start work on issue">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                <span>Start Work</span>
+            </button>
         </div>
     </div>
 
@@ -50,7 +78,9 @@
         <div class="conv-drawer-header">
             <span>Conversations</span>
             <div class="conv-drawer-controls">
-                <button type="button" class="btn-icon conv-sort-btn" id="btnConvSort" title="Sort order" aria-label="Change sort order">↕</button>
+                <button type="button" class="btn-icon conv-sort-btn" id="btnConvSort" title="Sort order" aria-label="Change sort order">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 4-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7"/></svg>
+                </button>
             </div>
         </div>
         <div class="conv-search-bar">
@@ -77,9 +107,15 @@
                 aria-label="Chat message input"
             ></textarea>
             <div class="chat-input-actions">
-                <button type="button" id="btnAttachImage" title="Attach image (or paste/drop)" aria-label="Attach image">📎</button>
-                <button type="button" id="btnSend" title="Send (Enter)" aria-label="Send message">📤</button>
-                <button type="button" id="btnStop" class="btn-stop" title="Stop" aria-label="Stop generation" style="display: none;">⏹</button>
+                <button type="button" id="btnAttachImage" title="Attach image (or paste/drop)" aria-label="Attach image">
+                    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11-9 9a5 5 0 1 1-7-7l9-9a3.5 3.5 0 1 1 5 5l-8.9 9a2 2 0 1 1-3-3l8.4-8.4"/></svg>
+                </button>
+                <button type="button" id="btnSend" title="Send (Enter)" aria-label="Send message">
+                    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
+                </button>
+                <button type="button" id="btnStop" class="btn-stop" title="Stop" aria-label="Stop generation" style="display: none;">
+                    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+                </button>
             </div>
         </div>
     </div>

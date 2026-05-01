@@ -21,19 +21,21 @@ import { renderThemes } from './pages/themes.js';
 import { renderMarkdownPage } from './pages/markdown-pages.js';
 import { buildSearchIndex, search } from './search-index.js';
 import { escapeHtml } from '../utils/html.js';
+import { Icon } from '../ui/icons.js';
 
 // Nav groups + items (display order). Matches help.jsx navItems.
+// `icon` is now a key into the Icon module (1.3.11 — Lucide swap).
 const NAV_ITEMS = [
-    { id: 'getting-started', label: 'Getting started', icon: '✨', group: '' },
-    { id: 'hotkeys',         label: 'Hotkeys',         icon: '#',  group: '' },
-    { id: 'command-palette', label: 'Command palette', icon: '🔍', group: '' },
-    { id: 'plugin-sdk',      label: 'Plugin SDK',      icon: '📦', group: 'Building' },
-    { id: 'tools',           label: 'Tools API',       icon: '⚙️', group: 'Building' },
-    { id: 'themes',          label: 'Themes',          icon: '🎨', group: 'Building' },
-    { id: 'roles',           label: 'Roles',           icon: '@',  group: 'Concepts' },
-    { id: 'memory',          label: 'Memory',          icon: '🧠', group: 'Concepts' },
-    { id: 'architecture',    label: 'Architecture',    icon: '🖥', group: 'Concepts' },
-    { id: 'changelog',       label: 'Changelog',       icon: '⎇',  group: 'Reference' },
+    { id: 'getting-started', label: 'Getting started', icon: 'Sparkles',   group: '' },
+    { id: 'hotkeys',         label: 'Hotkeys',         icon: 'Hash',       group: '' },
+    { id: 'command-palette', label: 'Command palette', icon: 'Search',     group: '' },
+    { id: 'plugin-sdk',      label: 'Plugin SDK',      icon: 'Box',        group: 'Building' },
+    { id: 'tools',           label: 'Tools API',       icon: 'Settings',   group: 'Building' },
+    { id: 'themes',          label: 'Themes',          icon: 'Palette',    group: 'Building' },
+    { id: 'roles',           label: 'Roles',           icon: 'AtSign',     group: 'Concepts' },
+    { id: 'memory',          label: 'Memory',          icon: 'Brain',      group: 'Concepts' },
+    { id: 'architecture',    label: 'Architecture',    icon: 'Server',     group: 'Concepts' },
+    { id: 'changelog',       label: 'Changelog',       icon: 'GitBranch',  group: 'Reference' },
 ];
 
 const STATIC_PAGES = new Set(['getting-started', 'hotkeys', 'command-palette', 'themes']);
@@ -167,7 +169,7 @@ function _renderNav() {
             : '';
         const itemsHtml = g.items.map(it => `
             <button type="button" class="help__nav-item" data-help-page="${escapeHtml(it.id)}">
-                <span class="help__nav-item-icon" aria-hidden="true">${escapeHtml(it.icon)}</span>
+                <span class="help__nav-item-icon" aria-hidden="true">${Icon[it.icon] || ''}</span>
                 <span>${escapeHtml(it.label)}</span>
             </button>
         `).join('');

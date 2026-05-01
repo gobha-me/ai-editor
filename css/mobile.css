@@ -212,13 +212,10 @@
         white-space: nowrap;
     }
 
-    /* Commit button: icon-only on mobile */
-    #btnCommit {
-        font-size: 0;
-    }
-    #btnCommit::before {
-        content: '📦';
-        font-size: var(--font-base);
+    /* Commit button: icon-only on mobile (1.3.11 — hide the trailing label
+       span; the inline SVG icon stays visible). */
+    #btnCommit > span {
+        display: none;
     }
 
     /* ---- Editor toolbar ---- */

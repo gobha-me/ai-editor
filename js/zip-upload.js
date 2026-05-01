@@ -73,9 +73,16 @@ export function openZipUpload() {
     const gitControls = modal.querySelectorAll('.zip-git-only');
     gitControls.forEach(el => el.style.display = isLocalMode ? 'none' : '');
     
-    // Update upload button text
+    // Update upload button text — keep the inline icon (set in modals.html)
+    // and swap only the trailing label span.
     if (btn) {
-        btn.textContent = isLocalMode ? '📂 Load into Editor' : '📦 Upload';
+        const labelSpan = btn.querySelector('span:not(.icn-wrap)');
+        const label = isLocalMode ? 'Load into Editor' : 'Upload';
+        if (labelSpan) {
+            labelSpan.textContent = label;
+        } else {
+            btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg><span>' + label + '</span>';
+        }
     }
     
     modal.classList.add('active');
