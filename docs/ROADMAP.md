@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-01 · Current released version: **1.3.17** · Authoring branch: `claude/jolly-volhard-998f9f`
+> Last updated: 2026-05-01 · Current released version: **1.4.0** · Authoring branch: `claude/jolly-volhard-998f9f`
 
 ## How to read this doc
 
@@ -14,9 +14,9 @@
 
 | Phase | Track | Status |
 |---|---|---|
-| **Now** | Tools — admission layer, meta-tools, sticky admission | In flight. 1.3.4 / 1.3.14 / 1.3.15 / 1.3.16 / 1.3.17 shipped. Outstanding before §1.4.0 promotion: cost-recorder wiring for the 70% token-reduction exit criterion. |
-| **Next** | Tools follow-ups (1.4.x): MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text | Sized; not started. |
-| **Later** | Retrieval Phase 1 (1.5.0) → Profiles 2.0 | Designed; not started. |
+| **Now** | Tools follow-ups (1.4.x): MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text | Sized; not started. §1.4.0 Phase 1 shipped (1.3.4 / 1.3.14 / 1.3.15 / 1.3.16 / 1.3.17 / 1.4.0); **79.5% token reduction observed** on coder session vs role-filter baseline. |
+| **Next** | Retrieval Phase 1 (1.5.0) | Designed; not started. |
+| **Later** | Profiles → 2.0 | Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items | See *Deferred / unscheduled* — triage owed. |
 
 ---
@@ -49,12 +49,12 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 ---
 
-## What's in production today (1.3.17)
+## What's in production today (1.4.0)
 
 - **Editor / Git / providers** — CodeMirror 6, 19 languages, multi-tab, diff/blame/preview; 4 Git providers (Gitea/GitHub/GitLab/in-memory zip); 4 LLM providers (Venice, OpenRouter, Ollama, generic OpenAI).
 - **Memory subsystem (1.3.0–1.3.3)** — persistent `user` + `workspace` scopes, hybrid IDB + `.aieditor/memory/*.md` storage, 3 LLM tools (`memory_remember`/`memory_recall`/`memory_revise`), Settings → Memory tab, `@memory` chip, agent-proposal consent flow, cross-device session sync, session replay viewer.
 - **Touch 2 facelift (1.3.5–1.3.13)** — frozen `--tk-*` token vocabulary, top-bar restructure, Settings sidebar, Connections panel, Debug + Help slide-outs, Lucide icon family, self-hosted woff2 fonts, rem-based UI scaling.
-- **Tools subsystem (1.3.4 / 1.3.14–1.3.17, ongoing)** — `ToolDef`/`ToolID`/`Catalog` foundation, Composer admission with `?toolsCompose=off` kill-switch, system-prompt admission alignment, meta-tools (`list_tool_categories`/`list_tools_by_category`/`find_tool`), sticky admission via `TaskLedger.tool_admissions[]`/`tool_invocations[]` in `js/chat/task-state.js`. Cost-recorder wiring is the remaining gate before §1.4.0 promotion.
+- **Tools subsystem (1.3.4 / 1.3.14–1.3.17 / 1.4.0, Phase 1 shipped)** — `ToolDef`/`ToolID`/`Catalog` foundation, Composer admission with `?toolsCompose=off` kill-switch, system-prompt admission alignment, meta-tools (`list_tool_categories`/`list_tools_by_category`/`find_tool`), sticky admission via `TaskLedger.tool_admissions[]`/`tool_invocations[]` in `js/chat/task-state.js`, cost-recorder wiring persisting per-turn admitted/baseline/unfiltered tool-definition tokens with the reduction percentage rendered in the LLM Debug modal. **79.5% token reduction observed live** on a coder session in the html-games repo against the role-filter baseline (target: ≥70%). 1.4.x follow-ups (MCP bridge, semantic `find_tool`, test-driven loop, workspace-scoped settings, ghost text) sized but not started.
 - **Plugins / security / tab isolation** — manifest registration, lifecycle hooks, modal/button/CSS injection; 1.0.4 hardening pass; multi-tab Storage scoping (since 0.9.40).
 
 ## What drifted from the original sequence
@@ -63,16 +63,16 @@ The original 1.x → 2.0 plan was **Foundations → Compression → Memory → T
 
 - **Memory jumped first** (1.3.0–1.3.3) — Touch 1 design landed and the Git-native story was the externally-tellable feature; took priority over compression.
 - **Touch 2 facelift inserted** (1.3.5–1.3.13) — whole-app refresh dropped into the 1.3.x slot once the deliverable arrived.
-- **Tools is shipping as 1.3.x patches** (1.3.4 + 1.3.14–1.3.16 + 1.3.17 in flight) — the §1.4.0 milestone label survives but the work is flowing as in-track patches; promotion to 1.4.0 happens when the 70%-token-reduction exit criterion is measurable end-to-end.
+- **Tools shipped via 1.3.x patches → 1.4.0 promotion.** The §1.4.0 milestone label survived while the work flowed as in-track patches (1.3.4 + 1.3.14–1.3.17). Promotion to 1.4.0 landed when the 70%-token-reduction exit criterion measured 79.5% live on a coder session.
 - **Foundations (1.1.x) and Compression (1.2.x) skipped.** Several feature branches exist (`feat/1.1.0-*`, `feat/1.1.1-*`, `feat/1.1.2-*`, `feat/1.1.3-*`, `feat/1.2.0-*`, `feat/1.2.x-*`); current status of each item is unclear and needs triage. See *Deferred / unscheduled* below.
 
 Practical consequence: roadmap entries that referenced "the unified `TaskLedger` from 1.1.0" or "the cost dashboard from 1.2.1" are talking about infrastructure that didn't ship as Foundations. The Tools track built its own ledger anyway — `TaskLedger.tool_admissions[]` / `tool_invocations[]` landed in `js/chat/task-state.js` as part of 1.3.17, scoped to tool admissions. Retrieval / Profiles entries that wanted to extend the same struct (chunk admissions, profile-resolved task ledger) now plug into the shipped one rather than waiting on a Foundations item. The cost dashboard remains deferred and still gates the compression track.
 
 ---
 
-## Active track: Tools (1.3.x ongoing → 1.4.x)
+## Active track: Tools (Phase 1 shipped at 1.4.0 → 1.4.x follow-ups)
 
-Tools work continues to ship as 1.3.x patches until the 70%-token-reduction exit criterion lands; promotion to 1.4.0 happens then. 1.4.x follow-ups are sized but not started.
+Tools Phase 1 shipped at **1.4.0** with the 79.5%-token-reduction observation closing the §1.4.0 exit criterion. 1.4.x follow-ups are sized but not started.
 
 ### 1.4.0 — Tools Phase 1 [target: ~3 weeks after 1.3]
 

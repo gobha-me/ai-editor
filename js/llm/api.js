@@ -554,12 +554,23 @@ export const LLM = {
             }
         }
 
+        // 1.3.18 — forward the last Composer run's tool-definition token
+        // metrics so the cost-recorder can persist them per turn. Reading
+        // from `LLMTools._lastMetrics` (a sidecar slot set in
+        // `getToolsForRole()`) rather than `LLMDebug._current` because
+        // `endExchange()` clears `_current` before this runs. Defaults to
+        // 0 when no Composer ran (e.g. first request before tools registry
+        // populates) so the cost-store sums stay clean.
+        const m = LLMTools._lastMetrics;
         EventBus.emit('cost:updated', {
             usage,
             sessionCost: State.sessionCost,
             modelId,
             messages: context?.messages,
             toolCalls: context?.toolCalls,
+            toolDefTokens: m?.admitted ?? 0,
+            toolDefBaseline: m?.baseline ?? 0,
+            toolDefUnfiltered: m?.unfiltered ?? 0,
         });
     },
 
@@ -830,6 +841,39 @@ export const LLM = {
 // ============================================
 
 /**
+ * 1.3.18 — sum the per-tool token cost across an OpenAI-shape definition
+ * list. Resolves each entry through the `Catalog` so `metadata.cost_estimate`
+ * (`approxTokens(name+description) + approxTokens(schema)`) is the same
+ * number the Composer sums into `result.tokens_used`. Tools the Catalog
+ * cannot resolve fall back to a JSON-stringify length proxy so kill-switch
+ * runs (whose tools never touch the Composer) still produce a defensible
+ * baseline.
+ *
+ * @param {ToolDefinition[]} defs
+ * @returns {number}
+ */
+function sumDefCosts(defs) {
+    if (!Array.isArray(defs) || defs.length === 0) return 0;
+    let total = 0;
+    for (const d of defs) {
+        const name = d?.function?.name;
+        const td = name ? Catalog.getByName(name) : null;
+        if (td) {
+            total += td.metadata.cost_estimate;
+            continue;
+        }
+        // Fallback: ~4 chars/token proxy on the JSON-stringified definition.
+        // Mirrors `approxTokens` in catalog.js for unresolvable entries.
+        try {
+            total += Math.ceil(JSON.stringify(d).length / 4);
+        } catch {
+            // Unstringifiable — skip.
+        }
+    }
+    return total;
+}
+
+/**
  * Thin facade over ToolRegistry — used by the chat loop to fetch
  * tool definitions with role-based filtering applied.
  */
@@ -914,36 +958,88 @@ export const LLMTools = {
 
         if (defs.length === 0) {
             console.warn('[LLMTools] ⚠️ ToolRegistry is empty! Tools may not be registered yet.');
+            this._lastMetrics = null;
             return [];
         }
+
+        // 1.3.18 — baseline = what THIS request would have shipped without
+        // the Composer (role-filtered legacy set). Unfiltered = ungated whole
+        // registry. Both computed from `Catalog` so `metadata.cost_estimate`
+        // (`approxTokens(name+description) + approxTokens(schema)`) is the
+        // single source of truth for per-tool size — same number the Composer
+        // sums into `result.tokens_used`.
+        const baseline = sumDefCosts(Roles.filterTools(defs));
+        const unfiltered = sumDefCosts(defs);
 
         const { result, composerActive, role } = this._runComposer();
 
         if (!composerActive) {
             const filtered = Roles.filterTools(defs);
+            const filteredCost = sumDefCosts(filtered);
             const reason = isToolsComposeDisabled() ? 'kill-switch' : `no profile static set for role ${role}`;
-            console.log('[LLMTools] Legacy path (', reason, '):', filtered.length, 'tools');
+            console.log('[LLMTools] Legacy path (', reason, '):', filtered.length, 'tools,', filteredCost, 'tokens (0% reduction)');
+            // Emit metrics on the legacy path too so the dashboard zeroes
+            // correctly — `admitted === baseline` ⇒ 0% reduction. Useful
+            // diagnostic when `?toolsCompose=off` is flipped.
+            this._lastMetrics = {
+                admitted: filteredCost,
+                baseline: filteredCost,
+                unfiltered,
+                role,
+                composerActive: false,
+            };
             return filtered;
         }
+
+        const reductionPct = baseline > 0
+            ? ((baseline - result.tokens_used) / baseline) * 100
+            : 0;
 
         // Stash diagnostics + token-cost baseline for the upcoming exchange.
         LLMDebug.attachToolDiagnostics({
             ...result.diagnostics,
             tokens_used: result.tokens_used,
             tool_def_tokens: result.tokens_used,
+            tool_def_baseline: baseline,
+            tool_def_unfiltered: unfiltered,
         });
+
+        // 1.3.18 — sidecar metrics consumed by `_trackUsage()` after the
+        // exchange finalizes (`LLMDebug._current` is null by then). Module-
+        // level slot, single-conversation: overwritten on each composer run.
+        this._lastMetrics = {
+            admitted: result.tokens_used,
+            baseline,
+            unfiltered,
+            role,
+            composerActive: true,
+        };
 
         console.log(
             '[LLMTools] Composer admitted', result.admitted.length,
             '(', result.diagnostics.static_admitted, 'static +',
             result.diagnostics.sticky_admitted, 'sticky)',
             '/', CODER_V1.tools.static.length, 'static declared;',
-            result.tokens_used, 'tokens; unresolved:',
-            result.diagnostics.unresolved_static.join(',') || 'none'
+            'tool defs:', result.tokens_used, '/', baseline, 'tokens (',
+            reductionPct.toFixed(1), '% reduction vs role-filter baseline);',
+            'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
         return renderForLLM(result);
     },
+
+    /**
+     * 1.3.18 — last Composer run's token metrics, set as a side effect of
+     * `getToolsForRole()`. Read by `_trackUsage()` to forward into the
+     * `cost:updated` event payload (the cost-recorder needs them per-turn).
+     *
+     * Single-slot: overwritten on each call; `null` when the registry is
+     * empty. Reading from `LLMDebug._current` would be wrong because
+     * `endExchange()` clears `_current` before `_trackUsage()` runs.
+     *
+     * @type {{admitted: number, baseline: number, unfiltered: number, role: string, composerActive: boolean}|null}
+     */
+    _lastMetrics: null,
 
     /**
      * Get the admitted `ToolDef[]` for the active role — the same admission

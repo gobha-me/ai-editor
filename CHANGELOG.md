@@ -4,6 +4,145 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-01
+
+**Tools Phase 1 promotion.** Closes the four-PR Tools admission arc
+(1.3.4 foundation → 1.3.14 Composer → 1.3.15 system-prompt admission →
+1.3.16 meta-tools → 1.3.17 sticky admission) by landing the last gating
+item: per-turn cost-recorder wiring so the 70%-token-reduction exit
+criterion is measurable AND measured. The cost dashboard UI from 1.2.1
+stays deferred; this release ships the numbers it will read.
+
+§1.4.0 exit criteria — all four green:
+
+- **≥70% token reduction.** Observed **79.5%** live on a coder session
+  in the html-games repo (qwen-3-6-plus, 47 exchanges, sticky
+  admission engaged): admitted **1,342 / 6,555** tokens vs role-filter
+  baseline. *Target was 70%; delivered with margin.*
+- **Discovery roundtrip works.** Shipped 1.3.16 (categorical
+  meta-tools) + 1.3.17 (sticky admission via `TaskLedger`); the
+  observed `9 static + 1 sticky` admission per turn confirms the
+  roundtrip.
+- **Authorization filter respects role gates.** Shipped 1.3.14 —
+  Composer applies `metadata.authorization.required_groups` against
+  caller `user_groups`. The admitted set on coder is exactly the 9
+  declared static tools.
+- **Removability check.** `?toolsCompose=off` URL flag (1.3.14) flips
+  to the legacy `Roles.filterTools()` path; the LLM Debug modal's new
+  tool-admission block reads `0% reduction` (admitted == baseline) in
+  that mode — verified pre-PR.
+
+This is the version held back since the start of Touch 2 — the Tools
+track had been shipping under 1.3.x patches but the §1.4.0 milestone
+label survived. Promotion happens here, against measured baselines.
+
+UI items deferred to 1.4.x as polish (not gating):
+
+- Active tools chip row above the chat input (the LLM Debug modal
+  block shipped here is the user-visible surface for "what tools is
+  the model using" until the chip row lands).
+- Settings → Tools catalog browser (PLAN.md item).
+
+### Added
+
+- **[`js/llm/api.js`](js/llm/api.js)** —
+  - `sumDefCosts(defs)` (module-level helper) — sums `metadata.cost_estimate`
+    across an OpenAI-shape definition list via `Catalog.getByName`. Falls
+    back to a JSON-stringify length proxy for entries the Catalog cannot
+    resolve so the kill-switch path still produces a defensible baseline.
+    Single source of truth for per-tool size — same number the Composer
+    sums into `result.tokens_used`.
+  - `LLMTools._lastMetrics` — sidecar slot set as a side effect of
+    `getToolsForRole()`, read by `_trackUsage()` to forward into the
+    `cost:updated` event. Reading from `LLMDebug._current` would be wrong
+    because `endExchange()` clears `_current` before `_trackUsage()` runs.
+  - `getToolsForRole()` now computes `tool_def_baseline` (= role-filtered
+    legacy set) and `tool_def_unfiltered` (= whole registry), stashes both
+    plus `tool_def_tokens` (= admitted) into `LLMDebug.attachToolDiagnostics`
+    and onto `_lastMetrics`. Console line surfaces the percentage:
+    `tool defs: 1820 / 6420 tokens (71.7% reduction vs role-filter baseline)`.
+  - **Kill-switch invariant.** Legacy path (`?toolsCompose=off` or no
+    profile static set) emits `admitted === baseline === filteredCost`,
+    so the dashboard reads `0% reduction` — verifiable in two clicks
+    during the live demo.
+
+- **[`js/llm-debug-modal.js`](js/llm-debug-modal.js)** —
+  `renderToolDiagnostics(diag)` parallels `renderCompressionDiagnostics()`.
+  The `ex.tools` slot has been captured since 1.3.14 but never rendered;
+  this is the user-visible deliverable that satisfies "available for
+  whoever opens a coder session and looks at it." Surfaces:
+  - `Tool defs: <admitted> / <baseline> tokens (<pct>% reduction vs role-filter baseline)`
+  - `Tool defs: <admitted> / <unfiltered> tokens (<pct>% vs ungated registry)`
+  - `suppressed` count + `unresolved_static` names when non-empty.
+
+- **[`tests/test-cost-store.mjs`](tests/test-cost-store.mjs)** — five new
+  cases covering: aggregation of the three new fields across requests on
+  ConvCost AND DailyEntry; default-to-zero when the emitter omits the
+  fields; NaN-safety against legacy on-disk records (both ConvCost and
+  DailyEntry) where the fields don't exist yet; `getDailySeries` zero-fill
+  for missing days.
+
+- **[`tests/test-cost-recorder.mjs`](tests/test-cost-recorder.mjs)** —
+  four new cases covering: `_onCostUpdated` forwards the three new fields
+  into ConvCost; defaults absent fields to 0; the kill-switch
+  `admitted == baseline` invariant; `usage: null` payloads still ignored.
+  Required exposing `_onCostUpdated` via `__test`.
+
+### Changed
+
+- **[`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js)** —
+  `_onCostUpdated()` extracts `toolDefTokens` / `toolDefBaseline` /
+  `toolDefUnfiltered` from the `cost:updated` payload and forwards them
+  to `recordTurn()`. Defaults to 0 when absent so legacy emitters (none
+  today, but still) keep working. `__test` now exports `_onCostUpdated`
+  for unit testing.
+
+- **[`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js)** —
+  - `ConvCost`, `DailyEntry`, `TurnRecord` typedefs each gain
+    `toolDefTokens` / `toolDefBaseline` / `toolDefUnfiltered`.
+  - `emptyConvCost()` zero-inits the three new fields.
+  - New `emptyDailyEntry()` helper extracted from the inline literal in
+    `recordTurn`/`getDailySeries`; both call sites now use it.
+  - `recordTurn()` aggregates the three new fields into both the
+    per-conversation aggregate AND the daily rollup, with **`|| 0`
+    defensive reads** on `prev` so legacy on-disk records (lacking the
+    new fields) don't yield `NaN` after `+=`.
+  - `getDailySeries()` zero-fill default uses `emptyDailyEntry()`, so
+    consumers of the series get 0 (not `undefined`) for missing days.
+
+- **[`js/llm/api.js`](js/llm/api.js)** — `_trackUsage()` reads
+  `LLMTools._lastMetrics` and forwards `toolDefTokens` /
+  `toolDefBaseline` / `toolDefUnfiltered` into the `cost:updated` event
+  payload. Defaults to 0 when no Composer ran (e.g. before tools
+  registry populates on first request) so cost-store sums stay clean.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.3.17 → 1.3.18. Paired
+  with this CHANGELOG promotion per the version-coherence lint.
+
+### Notes
+
+- **Removability check.** With `_lastMetrics` reverted to never being
+  set and `_onCostUpdated` ignoring the three new fields, the editor
+  reverts to 1.3.17 behavior: the Composer still admits / suppresses,
+  the LLM Debug modal still shows static/sticky counts (lacking the
+  reduction percentage), and per-conversation cost aggregates lose the
+  three new fields but keep input/output/cost/cacheSavings totals.
+  Persistence is forward-compatible — old ConvCost records lacking the
+  fields are NaN-safe and sum cleanly with new turns.
+
+- **Kill-switch verification.** Open a coder conversation, inspect the
+  AI tab in the Debug slideout — the new tool-admission block should
+  read `~70% reduction`. Reload with `?toolsCompose=off`; the same
+  block now reads `0% reduction` (admitted == baseline). This dual
+  observation gates the §1.4.0 promotion.
+
+- **Why one PR, not two.** Splitting the cost-store typedef extension
+  from the recorder/baseline emission would create a half-step where
+  storage accepts fields nobody supplies — meaningless. Total surface
+  is ~120 lines across five files (api.js / cost-recorder.js /
+  cost-store.js / llm-debug-modal.js / two test files), small enough to
+  ship coherent.
+
 ## [1.3.17] - 2026-05-01
 
 Sticky tool admission via the unified `TaskLedger`. Closes the discovery

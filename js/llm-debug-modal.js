@@ -117,6 +117,60 @@ function renderCompressionDiagnostics(diag) {
 }
 
 /**
+ * Render the per-exchange Composer admission diagnostics block. Mirrors
+ * `renderCompressionDiagnostics` shape so the AI tab reads consistently
+ * across the two intelligence subsystems with debug surfaces today.
+ *
+ * Captures the §1.4.0 measurement contract: tool-definition tokens
+ * (admitted vs role-filtered baseline vs ungated registry), with the
+ * % reduction that gates promotion. The `?toolsCompose=off` kill-switch
+ * path emits `admitted == baseline`, so this widget reads `0% reduction`
+ * — verifiable in two clicks during the live demo.
+ *
+ * @param {object} diag  Composer ToolDiagnostics extended with
+ *   `tokens_used` / `tool_def_tokens` / `tool_def_baseline` / `tool_def_unfiltered`.
+ * @returns {string}
+ * @since 1.3.18
+ */
+function renderToolDiagnostics(diag) {
+    const admitted   = diag.tool_def_tokens     ?? diag.tokens_used ?? 0;
+    const baseline   = diag.tool_def_baseline   ?? 0;
+    const unfiltered = diag.tool_def_unfiltered ?? 0;
+    const totalAdmitted = (diag.static_admitted || 0) + (diag.sticky_admitted || 0) + (diag.discovery_admitted || 0);
+
+    const pctVsBaseline = baseline > 0
+        ? ((baseline - admitted) / baseline) * 100
+        : 0;
+    const pctVsUnfiltered = unfiltered > 0
+        ? ((unfiltered - admitted) / unfiltered) * 100
+        : 0;
+
+    let html = '';
+    html += `<details style="margin: 0.5rem 0; border-left: 2px solid #6f6; padding-left: 0.5rem;" open>`;
+    html += `<summary style="cursor: pointer; color: #6f6;"><strong>🛠️ Tool admission</strong> `;
+    html += `<span style="color: var(--text-muted);">— ${totalAdmitted} admitted (${diag.static_admitted || 0} static + ${diag.sticky_admitted || 0} sticky) · ${admitted} tokens · ${pctVsBaseline.toFixed(1)}% reduction</span>`;
+    html += `</summary>`;
+    html += `<div style="padding: 0.5rem 0;">`;
+
+    html += `<div>tool defs: <strong>${admitted}</strong> / <strong>${baseline}</strong> tokens `;
+    html += `(<strong>${pctVsBaseline.toFixed(1)}%</strong> reduction vs role-filter baseline)</div>`;
+    html += `<div>tool defs: <strong>${admitted}</strong> / <strong>${unfiltered}</strong> tokens `;
+    html += `(<strong>${pctVsUnfiltered.toFixed(1)}%</strong> reduction vs ungated registry)</div>`;
+
+    if (diag.suppressed > 0) {
+        html += `<div style="margin-top: 4px; color: #fa0;">suppressed: ${diag.suppressed}</div>`;
+    }
+
+    if (Array.isArray(diag.unresolved_static) && diag.unresolved_static.length > 0) {
+        html += `<div style="margin-top: 4px; color: #fa0;">unresolved_static (${diag.unresolved_static.length}): `;
+        html += diag.unresolved_static.map(esc).join(', ') + `</div>`;
+    }
+
+    html += `</div></details>`;
+    return html;
+}
+
+/**
  * Render the per-exchange detail HTML (request, compression, result,
  * think events, raw SSE chunks). Factored out of `renderLLMDebug` in
  * 1.3.9 so the new Debug slide-out's AI tab can reuse the exact same
@@ -141,6 +195,13 @@ export function renderExchangeDetail(ex) {
     // 1.2.0 — Compression decisions section.
     if (ex.compression) {
         html += renderCompressionDiagnostics(ex.compression);
+    }
+
+    // 1.3.18 — Tool admission diagnostics (Composer). The slot is
+    // captured since 1.3.14 but only rendered here. Surfaces the
+    // §1.4.0 measurement contract: admitted vs baseline vs unfiltered.
+    if (ex.tools) {
+        html += renderToolDiagnostics(ex.tools);
     }
 
     // Result

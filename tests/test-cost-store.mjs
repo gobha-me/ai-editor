@@ -296,3 +296,102 @@ test('_resetDaily clears rollup but per-conv records survive', () => {
     assert.deepEqual(getDailyMap(), {});
     assert.ok(getConvCost('c1'), 'per-conv survives');
 });
+
+// ============================================
+// 1.3.18 — tool-definition cost recorder fields
+// ============================================
+
+test('recordTurn aggregates toolDefTokens / toolDefBaseline / toolDefUnfiltered', () => {
+    clearStorage();
+    recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'venice',
+        inputTokens: 1000, outputTokens: 500, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.10, cacheSavings: 0, byTool: {},
+        toolDefTokens: 1500, toolDefBaseline: 5000, toolDefUnfiltered: 10000,
+    });
+    recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'venice',
+        inputTokens: 2000, outputTokens: 800, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.20, cacheSavings: 0, byTool: {},
+        toolDefTokens: 1700, toolDefBaseline: 5000, toolDefUnfiltered: 10000,
+    });
+
+    const cc = getConvCost('c1');
+    assert.equal(cc.toolDefTokens, 3200);
+    assert.equal(cc.toolDefBaseline, 10000);
+    assert.equal(cc.toolDefUnfiltered, 20000);
+
+    const today = localDateKey();
+    const day = getDailyMap()[today];
+    assert.equal(day.toolDefTokens, 3200);
+    assert.equal(day.toolDefBaseline, 10000);
+    assert.equal(day.toolDefUnfiltered, 20000);
+});
+
+test('recordTurn defaults missing tool-def fields to 0 (legacy emitters)', () => {
+    clearStorage();
+    recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'p',
+        inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.01, cacheSavings: 0, byTool: {},
+        // toolDef* fields intentionally omitted.
+    });
+    const cc = getConvCost('c1');
+    assert.equal(cc.toolDefTokens, 0);
+    assert.equal(cc.toolDefBaseline, 0);
+    assert.equal(cc.toolDefUnfiltered, 0);
+});
+
+test('recordTurn is NaN-safe over legacy on-disk ConvCost (no toolDef fields)', () => {
+    clearStorage();
+    // Simulate a record written by 1.3.17 or earlier: the new fields
+    // are absent on disk. The next recordTurn must NOT yield NaN sums.
+    Storage.set('cost-by-conv-c1', {
+        id: 'c1',
+        inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.01, cacheSavings: 0, requests: 1,
+        byTool: {}, byModel: {}, firstAt: 1, lastAt: 1,
+        // toolDefTokens / toolDefBaseline / toolDefUnfiltered missing
+    });
+    recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'p',
+        inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.001, cacheSavings: 0, byTool: {},
+        toolDefTokens: 100, toolDefBaseline: 500, toolDefUnfiltered: 1000,
+    });
+    const cc = getConvCost('c1');
+    assert.equal(cc.toolDefTokens, 100, 'undefined + 100 must be 100, not NaN');
+    assert.equal(cc.toolDefBaseline, 500);
+    assert.equal(cc.toolDefUnfiltered, 1000);
+    assert.equal(Number.isFinite(cc.toolDefTokens), true);
+});
+
+test('recordTurn is NaN-safe over legacy on-disk DailyEntry (no toolDef fields)', () => {
+    clearStorage();
+    const today = localDateKey();
+    // Simulate a daily entry from before 1.3.18.
+    Storage.set('cost-daily', {
+        [today]: { inputTokens: 100, outputTokens: 50, cost: 0.01, requests: 1, byProvider: {} },
+    });
+    recordTurn({
+        conversationId: null, modelId: 'm', provider: 'p',
+        inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.001, cacheSavings: 0, byTool: {},
+        toolDefTokens: 200, toolDefBaseline: 1000, toolDefUnfiltered: 2000,
+    });
+    const day = getDailyMap()[today];
+    assert.equal(day.toolDefTokens, 200);
+    assert.equal(day.toolDefBaseline, 1000);
+    assert.equal(day.toolDefUnfiltered, 2000);
+});
+
+test('getDailySeries zero-fills tool-def fields on missing days', () => {
+    clearStorage();
+    const series = getDailySeries(3);
+    assert.equal(series.length, 3);
+    for (const { entry } of series) {
+        assert.equal(entry.toolDefTokens, 0);
+        assert.equal(entry.toolDefBaseline, 0);
+        assert.equal(entry.toolDefUnfiltered, 0);
+    }
+});

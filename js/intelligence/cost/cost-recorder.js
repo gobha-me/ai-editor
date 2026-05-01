@@ -54,7 +54,7 @@ export function init() {
 }
 
 /**
- * @param {{usage: any, sessionCost: any, messages?: any[], toolCalls?: any[]|null, modelId?: string}} payload
+ * @param {{usage: any, sessionCost: any, messages?: any[], toolCalls?: any[]|null, modelId?: string, toolDefTokens?: number, toolDefBaseline?: number, toolDefUnfiltered?: number}} payload
  */
 function _onCostUpdated(payload) {
     if (!payload || !payload.usage) return;
@@ -94,6 +94,12 @@ function _onCostUpdated(payload) {
         cost,
         cacheSavings,
         byTool,
+        // 1.3.18 — tool-definition token metrics from the Composer.
+        // `admitted == baseline` (and 0% reduction) when the kill-switch is
+        // engaged or no profile static-set is configured.
+        toolDefTokens:     payload.toolDefTokens     || 0,
+        toolDefBaseline:   payload.toolDefBaseline   || 0,
+        toolDefUnfiltered: payload.toolDefUnfiltered || 0,
         timestamp: Date.now(),
     });
 
@@ -235,4 +241,4 @@ function _emitBudgetWarningIfNeeded() {
 }
 
 // Expose for tests.
-export const __test = { _attributeTools };
+export const __test = { _attributeTools, _onCostUpdated };

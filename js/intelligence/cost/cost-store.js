@@ -91,6 +91,9 @@ export function daysBetween(a, b) {
  * @property {Object<string, ModelSpend>} byModel
  * @property {number}  firstAt
  * @property {number}  lastAt
+ * @property {number}  toolDefTokens     1.3.18 — Σ admitted tool-definition tokens across requests.
+ * @property {number}  toolDefBaseline   1.3.18 — Σ role-filtered legacy baseline (the would-have-been cost).
+ * @property {number}  toolDefUnfiltered 1.3.18 — Σ ungated whole-registry baseline.
  */
 
 /** @returns {ConvCost} */
@@ -108,6 +111,9 @@ function emptyConvCost(id) {
         byModel: {},
         firstAt: 0,
         lastAt: 0,
+        toolDefTokens: 0,
+        toolDefBaseline: 0,
+        toolDefUnfiltered: 0,
     };
 }
 
@@ -139,7 +145,29 @@ export function removeConvCost(id) {
  * @property {number} cost
  * @property {number} requests
  * @property {Object<string, {tokens: number, cost: number}>} byProvider
+ * @property {number} [toolDefTokens]     1.3.18 — Σ admitted tool-definition tokens for the day.
+ * @property {number} [toolDefBaseline]   1.3.18 — Σ role-filtered baseline.
+ * @property {number} [toolDefUnfiltered] 1.3.18 — Σ ungated registry baseline.
  */
+
+/**
+ * Zero-default for a `DailyEntry`. Used by `getDailySeries()` to back-fill
+ * missing days and by `recordTurn()` when the day's first turn lands.
+ *
+ * @returns {DailyEntry}
+ */
+function emptyDailyEntry() {
+    return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: 0,
+        requests: 0,
+        byProvider: {},
+        toolDefTokens: 0,
+        toolDefBaseline: 0,
+        toolDefUnfiltered: 0,
+    };
+}
 
 /** @returns {Object<string, DailyEntry>} */
 export function getDailyMap() {
@@ -165,7 +193,7 @@ export function getDailySeries(days = 30, endDate) {
         const key = localDateKey(d);
         out.push({
             date: key,
-            entry: map[key] || { inputTokens: 0, outputTokens: 0, cost: 0, requests: 0, byProvider: {} },
+            entry: map[key] || emptyDailyEntry(),
         });
     }
     return out;
@@ -233,6 +261,9 @@ export function setBudget(budget) {
  * @property {number}      cost
  * @property {number}      cacheSavings
  * @property {Object<string, ToolSpend>} byTool
+ * @property {number}      [toolDefTokens]     1.3.18 — admitted tool-definition tokens this turn.
+ * @property {number}      [toolDefBaseline]   1.3.18 — role-filtered legacy baseline this turn.
+ * @property {number}      [toolDefUnfiltered] 1.3.18 — ungated registry baseline this turn.
  * @property {number}      [timestamp]
  */
 
@@ -258,6 +289,12 @@ export function recordTurn(rec) {
         prev.requests        += 1;
         prev.firstAt = prev.firstAt || ts;
         prev.lastAt  = ts;
+        // 1.3.18 — `|| 0` defensive reads protect against legacy on-disk
+        // ConvCost records that were written before these fields existed
+        // (without the fallback, `undefined + N === NaN` poisons the sum).
+        prev.toolDefTokens     = (prev.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
+        prev.toolDefBaseline   = (prev.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
+        prev.toolDefUnfiltered = (prev.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
 
         if (rec.byTool) {
             for (const [name, spend] of Object.entries(rec.byTool)) {
@@ -281,13 +318,15 @@ export function recordTurn(rec) {
     // ── Daily rollup ──
     const dailyMap = getDailyMap();
     const today = localDateKey(ts);
-    const dayEntry = dailyMap[today] || {
-        inputTokens: 0, outputTokens: 0, cost: 0, requests: 0, byProvider: {},
-    };
+    const dayEntry = dailyMap[today] || emptyDailyEntry();
     dayEntry.inputTokens  += rec.inputTokens || 0;
     dayEntry.outputTokens += rec.outputTokens || 0;
     dayEntry.cost         += rec.cost || 0;
     dayEntry.requests     += 1;
+    // 1.3.18 — same `|| 0` defensive read pattern as the per-conv aggregate.
+    dayEntry.toolDefTokens     = (dayEntry.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
+    dayEntry.toolDefBaseline   = (dayEntry.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
+    dayEntry.toolDefUnfiltered = (dayEntry.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
 
     const provider = rec.provider || 'unknown';
     const provSlot = dayEntry.byProvider[provider] || { tokens: 0, cost: 0 };

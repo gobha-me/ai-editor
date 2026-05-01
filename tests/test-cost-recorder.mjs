@@ -10,9 +10,21 @@ import './_node-shim.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { Storage } from '../js/core.js';
+import { getConvCost } from '../js/intelligence/cost/cost-store.js';
 import { __test } from '../js/intelligence/cost/cost-recorder.js';
 
-const { _attributeTools } = __test;
+const { _attributeTools, _onCostUpdated } = __test;
+
+function clearCostStorage() {
+    if (typeof globalThis.localStorage?.clear === 'function') {
+        globalThis.localStorage.clear();
+    }
+    Storage.remove('cost-daily');
+    Storage.remove('cost-budget');
+    for (let i = 0; i < 100; i++) Storage.remove(`cost-by-conv-c${i}`);
+    Storage.remove('cost-by-conv-cR');
+}
 
 test('attribute returns empty when no tool messages', () => {
     const out = _attributeTools([
@@ -92,4 +104,80 @@ test('attribute uses "unknown" when neither tool_call_id nor name resolves', () 
         { role: 'tool', content: 'orphan' },
     ], 50);
     assert.equal(out.unknown.calls, 1);
+});
+
+// ============================================
+// 1.3.18 — _onCostUpdated forwards tool-def metrics
+// ============================================
+
+test('_onCostUpdated forwards toolDef* fields into the per-conv ConvCost', () => {
+    clearCostStorage();
+    Storage.set('activeConversation', 'cR');
+
+    _onCostUpdated({
+        usage: { prompt_tokens: 1000, completion_tokens: 500 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+        toolDefTokens: 1820,
+        toolDefBaseline: 6420,
+        toolDefUnfiltered: 10400,
+    });
+
+    const cc = getConvCost('cR');
+    assert.ok(cc, 'ConvCost record exists');
+    assert.equal(cc.toolDefTokens, 1820);
+    assert.equal(cc.toolDefBaseline, 6420);
+    assert.equal(cc.toolDefUnfiltered, 10400);
+});
+
+test('_onCostUpdated defaults absent toolDef* fields to 0 (legacy emitter)', () => {
+    clearCostStorage();
+    Storage.set('activeConversation', 'cR');
+
+    _onCostUpdated({
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+        // toolDefTokens / toolDefBaseline / toolDefUnfiltered intentionally absent
+    });
+
+    const cc = getConvCost('cR');
+    assert.ok(cc);
+    assert.equal(cc.toolDefTokens, 0);
+    assert.equal(cc.toolDefBaseline, 0);
+    assert.equal(cc.toolDefUnfiltered, 0);
+});
+
+test('_onCostUpdated kill-switch invariant: admitted == baseline ⇒ 0% reduction', () => {
+    clearCostStorage();
+    Storage.set('activeConversation', 'cR');
+
+    // Mirrors the legacy-path emission in `getToolsForRole()` when
+    // `?toolsCompose=off` flips composerActive false.
+    const same = 6420;
+    _onCostUpdated({
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+        toolDefTokens: same,
+        toolDefBaseline: same,
+        toolDefUnfiltered: 10400,
+    });
+
+    const cc = getConvCost('cR');
+    assert.equal(cc.toolDefTokens, cc.toolDefBaseline,
+        'kill-switch path: admitted equals baseline so the dashboard reads 0%');
+});
+
+test('_onCostUpdated ignores payloads without usage', () => {
+    clearCostStorage();
+    Storage.set('activeConversation', 'cR');
+    _onCostUpdated({ usage: null });
+    assert.equal(getConvCost('cR'), null);
 });
