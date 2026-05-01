@@ -4,6 +4,63 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-05-01
+
+**Test runner — IMPORT FAILED is now a real failure.** A regression
+where the browser test harness rendered an `IMPORT FAILED` block for a
+suite whose dynamic `import()` rejected, but did **not** count it
+toward the failure tally — the summary truthfully reported `0 failed`
+while the screen above showed an obvious red box. The harness lied;
+this PR makes it tell the truth, so any future broken import is
+unmissable in the totals (and impossible to ship past CI without
+noticing).
+
+The visible failure that surfaced this was
+`Memory Chip — match helpers — IMPORT FAILED`. Root cause was double:
+the two `tests/test-memory-chip-{match,controller}.mjs` files use
+Node-only `node:test` + `node:assert/strict` specifiers (already
+exercised by `node --test`, where they pass 36/36), and they were
+mistakenly listed in [`tests/index.html`](tests/index.html) where
+browsers can't resolve `node:` specifiers. The `.mjs` lines have been
+removed from the browser manifest; the tests continue to run under
+Node alongside the other ~48 `.mjs` suites.
+
+While in there: [`tests/test-theme-tokens.js`](tests/test-theme-tokens.js)
+dynamically injects `css/base.css` to verify the `--tk-*` alias bridge,
+and that file sets `html, body { height: 100%; overflow: hidden }` for
+the live editor's fixed-height shell. On the test runner page that
+clobbered native scrolling — once the suite list grew past one
+viewport, the tail was unreachable. The runner's inline `<style>` now
+forces `overflow: visible !important` on `html, body` so app CSS can
+inject without breaking the runner's own layout.
+
+### Changed
+
+- **[`tests/index.html`](tests/index.html)** —
+  `render(errors)` now adds `errors.length` to `totalFail`, emits
+  `(K imports failed)` in the summary string, and appends one
+  `suite-pill fail` per failed import next to the real-suite pills.
+  Summary class flips to `has-fail` whenever any import rejects, so a
+  bad import can never paint the green border again. Also drops the
+  two browser-incompatible `await import('./test-memory-chip-*.mjs')`
+  lines from `run()` (replaced by an inline comment pointing at
+  `node --test` for that coverage), and adds an `html, body { height:
+  auto !important; overflow: visible !important; }` rule so injected
+  app CSS can't disable runner scrolling.
+
+### Known issue (not addressed in this PR)
+
+- **`Memory Tab — DOM integration` / `Initial render reached 3 rows
+  within deadline` is intermittently flaky in the browser runner.**
+  The failure surfaced once during this PR's verification, then
+  passed cleanly on six consecutive reloads with no other changes.
+  The 1500 ms `_waitForRows` deadline in
+  [`tests/test-memory-tab.js`](tests/test-memory-tab.js) gates a few
+  ms of in-memory IDB + Preact mount work, so it shouldn't be tight —
+  but I couldn't reproduce, so I don't yet have a root cause to fix.
+  Filed here as a known-issue note rather than band-aided behind a
+  larger deadline; the next failure is the real signal.
+
 ## [1.4.2] - 2026-05-01
 
 **Tools 1.4.x — MCP bridge plugin.** New
