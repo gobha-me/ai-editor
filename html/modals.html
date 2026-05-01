@@ -24,6 +24,7 @@
                     <h3 class="settings-sidebar__group-label">Workspace</h3>
                     <button type="button" class="settings-tab settings-sidebar__item active" data-tab="tabConnections" role="tab" aria-selected="true" aria-controls="tabConnections">Connections</button>
                     <button type="button" class="settings-tab settings-sidebar__item" data-tab="tabIgnore" role="tab" aria-selected="false" aria-controls="tabIgnore">Ignore</button>
+                    <button type="button" class="settings-tab settings-sidebar__item" data-tab="tabWorkspaceSettings" role="tab" aria-selected="false" aria-controls="tabWorkspaceSettings">Workspace Settings</button>
                 </section>
                 <section class="settings-sidebar__group" data-group="ai">
                     <h3 class="settings-sidebar__group-label">AI</h3>
@@ -130,6 +131,9 @@
             </div>
             <div id="commitSessionsSection">
                 <!-- Session updates section (1.3.2) — populated by openCommitModal() when sessions-sync has pending writes. Empty when none. -->
+            </div>
+            <div id="commitWorkspaceSettingsSection">
+                <!-- Workspace settings section (1.4.4) — populated by openCommitModal() when the workspace-settings file layer has pending writes. Empty when none. -->
             </div>
             <div class="form-group">
                 <label for="commitMessage">Commit message:</label>

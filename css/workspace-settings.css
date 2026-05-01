@@ -1,0 +1,201 @@
+/* ============================================================================
+ * Workspace Settings (1.4.4)
+ *
+ * Two surfaces:
+ *   1. Settings → Workspace Settings tab — toggle + override list +
+ *      diagnostics. Vanilla DOM rendered by
+ *      js/settings/workspace-settings-tab.js.
+ *   2. Inline decoration on every other settings tab — orange border-left +
+ *      "Workspace" badge on form-groups whose key is currently overridden by
+ *      .aieditor/settings.json. Decoration is purely additive.
+ *
+ * Uses the existing --tk-color-orange "modified" token; no new tokens
+ * introduced.
+ * ========================================================================= */
+
+/* ---------- Workspace Settings tab body ---------- */
+
+#tabWorkspaceSettings .ws-help {
+    font-size: var(--font-sm, 0.85rem);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 0.75rem 0;
+}
+
+#tabWorkspaceSettings .ws-help code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 1px 4px;
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+    border-radius: 2px;
+}
+
+#tabWorkspaceSettings .ws-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+#tabWorkspaceSettings .ws-toggle input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#tabWorkspaceSettings .ws-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-xs, 0.75rem);
+    font-weight: 600;
+    font-family: var(--font-mono);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    margin-left: 0.4rem;
+}
+
+#tabWorkspaceSettings .ws-status--ok {
+    background: color-mix(in srgb, var(--accent, #4eb1f3) 18%, transparent);
+    color: var(--accent, #4eb1f3);
+}
+
+#tabWorkspaceSettings .ws-status--warn {
+    background: rgba(217, 122, 58, 0.18);
+    color: var(--tk-color-orange);
+}
+
+#tabWorkspaceSettings .ws-status--muted {
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.18));
+    color: var(--text-muted);
+}
+
+#tabWorkspaceSettings .ws-override-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+#tabWorkspaceSettings .ws-override-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--tk-color-orange);
+    border-radius: 4px;
+    background: rgba(217, 122, 58, 0.05);
+    font-size: var(--font-sm, 0.85rem);
+}
+
+#tabWorkspaceSettings .ws-override-row__main {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#tabWorkspaceSettings .ws-override-row__key {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    background: transparent;
+    padding: 0;
+    font-weight: 600;
+}
+
+#tabWorkspaceSettings .ws-override-row__values {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+#tabWorkspaceSettings .ws-override-row__label {
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: var(--font-xs, 0.75rem);
+}
+
+#tabWorkspaceSettings .ws-override-row__values code {
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.18));
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 0.95em;
+}
+
+#tabWorkspaceSettings .ws-override-row__values code.ws-override-row__global {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--text-muted);
+}
+
+#tabWorkspaceSettings .ws-empty {
+    padding: 0.75rem 0.85rem;
+    font-size: var(--font-sm, 0.85rem);
+    color: var(--text-muted);
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.12));
+    border-radius: 4px;
+    line-height: 1.5;
+}
+
+#tabWorkspaceSettings .ws-diagnostics {
+    list-style: none;
+    margin: 0.4rem 0 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+#tabWorkspaceSettings .ws-diagnostics__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.7rem;
+    font-size: var(--font-sm, 0.85rem);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--tk-color-orange);
+    border-radius: 4px;
+    background: rgba(217, 122, 58, 0.05);
+}
+
+#tabWorkspaceSettings .ws-diagnostics__type {
+    font-family: var(--font-mono);
+    font-size: var(--font-xs, 0.75rem);
+    color: var(--tk-color-orange);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+}
+
+/* ---------- Inline decoration across other tabs ---------- */
+
+.settings-tab-content .form-group.setting-overridden {
+    position: relative;
+    padding-left: 0.85rem;
+    margin-left: -0.85rem;
+    border-left: 3px solid var(--tk-color-orange);
+    background: rgba(217, 122, 58, 0.05);
+    border-radius: 0 3px 3px 0;
+}
+
+.settings-tab-content .setting-overridden__badge {
+    display: inline-block;
+    margin-left: 0.45rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--tk-color-orange);
+    color: var(--tk-text-on-light);
+    font-size: var(--font-xs, 0.7rem);
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+    cursor: help;
+}

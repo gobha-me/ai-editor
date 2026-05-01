@@ -5,7 +5,7 @@
 // Each tab owns its own DOM population and event wiring.
 // Persistence owns DOM→State collection and localStorage.
 
-import { State, Providers, ProviderRegistry, saveSettings as coreSaveSettings } from './core.js';
+import { State, Providers, ProviderRegistry, EventBus, saveSettings as coreSaveSettings } from './core.js';
 import { ContextManager } from './context-manager.js';
 import { IgnoreManager } from './ignore.js';
 import { EmbeddingsClient } from './embeddings-client.js';
@@ -16,6 +16,7 @@ import { escapeHtml, escapeAttr } from './utils/html.js';
 import { collectAndSave, exportSettings, importSettings } from './settings/persistence.js';
 import { initConnectionsTab } from './settings/connections-tab.js';
 import { initMCPServersTab } from './settings/mcp-servers-tab.js';
+import { initWorkspaceSettingsTab, decorateOverriddenControls } from './settings/workspace-settings-tab.js';
 import { populateRoleCards } from './settings/roles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
 import { renderStorageMetrics } from './storage-metrics.js';
@@ -69,8 +70,22 @@ export async function openSettings() {
     populateSettingsForm();
     initConnectionsTab();
     initMCPServersTab();
+    initWorkspaceSettingsTab();
+    decorateOverriddenControls();
     updateEmbeddingsStatus();
     document.getElementById('settingsModal').classList.add('active');
+
+    // 1.4.4 — keep inline decoration in sync if the override map changes
+    // while the modal is open (e.g. user clicks Reset to global on the
+    // Workspace Settings tab). Subscription is idempotent — replaces the
+    // previous binding so re-opens don't accumulate handlers.
+    if (window._workspaceSettingsDecorateUnsub) {
+        try { window._workspaceSettingsDecorateUnsub(); } catch { /* ignore */ }
+    }
+    window._workspaceSettingsDecorateUnsub = EventBus.on(
+        'workspaceSettings:changed',
+        () => decorateOverriddenControls(),
+    );
 
     // Reset the sidebar search and focus it so typing immediately filters.
     const search = document.getElementById('settingsSidebarSearch');
@@ -379,6 +394,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabCost') populateCostTab();
             // Mount the Memory tab Preact tree on first activation; idempotent.
             if (tab.dataset.tab === 'tabMemory') mountMemoryTab();
+            // Refresh Workspace Settings tab on switch (1.4.4).
+            if (tab.dataset.tab === 'tabWorkspaceSettings') initWorkspaceSettingsTab();
         };
     });
 

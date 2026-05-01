@@ -105,7 +105,7 @@
 
     <hr>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="llmIdleTimeout">
         <label for="settingLlmIdleTimeout">
             Idle Timeout (since last token):
             <span title="Timer resets each time the API streams a chunk. If no token arrives within this window, the request is aborted. Reasoning models that pause to think are no longer falsely aborted at the wall-clock boundary." style="cursor: help; color: var(--text-muted);">ⓘ</span>
@@ -117,13 +117,13 @@
         </small>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="toolTimeout">
         <label for="settingToolTimeout">Tool Timeout:</label>
         <input type="range" id="settingToolTimeout" min="5" max="120" step="5">
         <span id="toolTimeoutValue">30s</span>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="summaryTimeout">
         <label for="settingSummaryTimeout">Summary Timeout:</label>
         <input type="range" id="settingSummaryTimeout" min="10" max="180" step="10">
         <span id="summaryTimeoutValue">60s</span>
@@ -216,7 +216,7 @@
 
 <!-- Appearance Tab -->
 <div class="settings-tab-content" id="tabAppearance">
-    <div class="form-group">
+    <div class="form-group" data-setting-key="theme">
         <label for="settingTheme" style="font-weight: 600;">Theme:</label>
         <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
             Refined IDE matches the classic dark palette. Editorial Calm uses serif headings, warm neutrals, and generous spacing — the contrarian alternate.
@@ -229,7 +229,7 @@
 
     <hr>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="uiScale">
         <label for="settingUiScale">UI Scale:</label>
         <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
             Scales chrome (header, sidebar, chat, modals). Editor font size is separate so code can be sized independently.
@@ -240,7 +240,7 @@
         <span id="uiScaleValue">100%</span>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="editorFontSize">
         <label for="settingEditorFontSize">Editor Font Size (code):</label>
         <input type="range" id="settingEditorFontSize" min="8" max="32" step="1">
         <span id="editorFontSizeValue">14px</span>
@@ -248,7 +248,7 @@
 
     <hr>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="editorKeybindingMode">
         <label style="font-weight: 600;">Keybinding mode:</label>
         <small style="display: block; margin: 0.25rem 0 0.5rem; color: var(--text-muted);">
             Switch the editor's modal/motion model. Applies to all open tabs.
@@ -267,14 +267,14 @@
 
     <hr>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="showLineNumbers">
         <label>
             <input type="checkbox" id="settingShowLineNumbers">
             Show line numbers by default
         </label>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="editorScanInvisibleUnicode">
         <label>
             <input type="checkbox" id="settingEditorScanInvisibleUnicode">
             Scan for invisible Unicode (glassworm / Trojan Source)
@@ -284,14 +284,14 @@
         </small>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="showIssues">
         <label>
             <input type="checkbox" id="settingShowIssues">
             Show Issues panel
         </label>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-setting-key="showPullRequests">
         <label>
             <input type="checkbox" id="settingShowPullRequests">
             Show Pull Requests panel
@@ -551,6 +551,12 @@
                 border: 1px solid var(--border); margin: 0; white-space: pre-wrap;"></pre>
         </div>
     </div>
+</div>
+
+<!-- Workspace Settings Tab (1.4.4) — content rendered by
+     js/settings/workspace-settings-tab.js#initWorkspaceSettingsTab. -->
+<div class="settings-tab-content" id="tabWorkspaceSettings">
+    <!-- Populated dynamically. -->
 </div>
 
 <div class="settings-tab-content" id="tabRoles">

@@ -14,7 +14,8 @@ import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry, Git } from './git.js';
 import { IgnoreManager } from './ignore.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
-import { loadCodeMirror, setLineNumbersVisible, setKeybindingMode, setInvisibleUnicodeEnabled } from './editor.js';
+import { loadCodeMirror, setKeybindingMode, setInvisibleUnicodeEnabled } from './editor.js';
+import { applyVisualSettings, applyLineNumbersVisibility } from './utils/apply-visual-settings.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
@@ -96,6 +97,14 @@ import {
     getActiveWorkspaceId as memoryFileLayerWorkspaceId,
     consentClearAll as memoryConsentClearAll,
 } from './intelligence/memory/index.js';
+import {
+    installFileLayer as installWorkspaceSettingsFileLayer,
+    getPendingContent as workspaceSettingsGetPendingContent,
+    listPendingPaths as workspaceSettingsListPendingPaths,
+    getDiagnostics as workspaceSettingsGetDiagnostics,
+    isEnabled as workspaceSettingsIsEnabled,
+    getActiveWorkspaceId as workspaceSettingsActiveWorkspaceId,
+} from './intelligence/workspace-settings/index.js';
 import {
     installSessionsSync,
     getPendingContent as sessionsGetPendingContent,
@@ -249,41 +258,10 @@ window.clearAllDrafts = clearAllDrafts;
 window.clearProjectDrafts = clearProjectDrafts;
 
 // ============================================
-// VISUAL SETTINGS
+// VISUAL SETTINGS — applyVisualSettings + applyLineNumbersVisibility live
+// in js/utils/apply-visual-settings.js since 1.4.4 so the workspace-settings
+// file layer can re-paint after merging .aieditor/settings.json overrides.
 // ============================================
-
-function applyVisualSettings() {
-    // Theme — swap the active theme stylesheet to match persisted setting.
-    // Must run before any font/panel calculations so theme-driven font
-    // stacks resolve correctly. Imported lazily to avoid a circular dep
-    // on settings-manager.js during early app boot.
-    import('./settings-manager.js').then(({ applyTheme }) => {
-        applyTheme(State.settings.theme || 'refined');
-    });
-
-    // Font sizes — uiScale (1.3.13) drives both UI and chat font sizes from a 13px base
-    const uiPx = Math.round(13 * (State.settings.uiScale || 100) / 100);
-    document.documentElement.style.setProperty('--ui-font-size', uiPx + 'px');
-    document.documentElement.style.setProperty('--chat-font-size', uiPx + 'px');
-    document.documentElement.style.setProperty('--editor-font-size', (State.settings.editorFontSize || 14) + 'px');
-
-    // Panel visibility - with null checks
-    const issuesSections = document.querySelectorAll('[data-collapse="issuesPanelBody"]');
-    const prsSections = document.querySelectorAll('[data-collapse="prsPanelBody"]');
-    
-    issuesSections.forEach(el => {
-        const section = el.closest('.sidebar-section');
-        if (section) {
-            section.style.display = State.settings.showIssues !== false ? '' : 'none';
-        }
-    });
-    prsSections.forEach(el => {
-        const section = el.closest('.sidebar-section');
-        if (section) {
-            section.style.display = State.settings.showPullRequests !== false ? '' : 'none';
-        }
-    });
-}
 
 // ============================================
 // LINE NUMBERS TOGGLE
@@ -295,23 +273,6 @@ function toggleLineNumbers() {
     applyLineNumbersVisibility();
     updateToolbarButtons();
     showToast(State.settings.showLineNumbers ? 'Line numbers shown' : 'Line numbers hidden', 'success');
-}
-
-function applyLineNumbersVisibility() {
-    const show = State.settings.showLineNumbers !== false;
-    
-    // Primary: CM6 compartment-based toggle (works reliably with CM6 layout system)
-    setLineNumbersVisible(show);
-    
-    // Fallback: CSS class on container (in case compartment isn't ready yet)
-    const container = document.getElementById('editorContainer');
-    if (!container) return;
-    
-    if (show) {
-        container.classList.remove('hide-line-numbers');
-    } else {
-        container.classList.add('hide-line-numbers');
-    }
 }
 
 function initSidebarCollapse() {
@@ -937,6 +898,7 @@ async function init() {
     initCostRecorder();
     installMemoryFileLayer();
     installSessionsSync();
+    installWorkspaceSettingsFileLayer();
     installReplay();
     // Memory PR #6 — drop pending consent candidates when chat clears.
     // The conversational context that produced agent-proposed proposals is
@@ -960,6 +922,13 @@ async function init() {
             getDiagnostics: sessionsGetDiagnostics,
             isEnabled: sessionsIsEnabled,
             getActiveWorkspaceId: sessionsActiveWorkspaceId,
+        };
+        window.AIEditor.workspaceSettings = {
+            getPendingContent: workspaceSettingsGetPendingContent,
+            listPendingPaths: workspaceSettingsListPendingPaths,
+            getDiagnostics: workspaceSettingsGetDiagnostics,
+            isEnabled: workspaceSettingsIsEnabled,
+            getActiveWorkspaceId: workspaceSettingsActiveWorkspaceId,
         };
     }
     initSessionListeners();

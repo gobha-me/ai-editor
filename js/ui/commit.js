@@ -31,6 +31,16 @@ import {
     renderSessionUpdatesSection,
     wireSessionUpdatesSection,
 } from './commit-sessions-section.js';
+import {
+    isEnabled as workspaceSettingsIsEnabled,
+    listPendingPaths as workspaceSettingsListPendingPaths,
+    getPendingContent as workspaceSettingsGetPendingContent,
+    discardPendingWrites as workspaceSettingsDiscardPendingWrites,
+} from '../intelligence/workspace-settings/index.js';
+import {
+    renderWorkspaceSettingsSection,
+    wireWorkspaceSettingsSection,
+} from './commit-workspace-settings-section.js';
 
 // ============================================
 // COMMIT MODAL
@@ -65,12 +75,14 @@ export function openCommitModal() {
 
     _renderMemorySection();
     _renderSessionsSection();
+    _renderWorkspaceSettingsSection();
 
     const isProtected = _currentBranchIsProtected();
     const memCount = (memoryFileLayerIsEnabled() ? memoryListPendingPaths().length : 0);
     const sessCount = (sessionsSyncIsEnabled() ? sessionsListPendingPaths().length : 0);
+    const wsCount = (workspaceSettingsIsEnabled() ? workspaceSettingsListPendingPaths().length : 0);
     document.getElementById('btnDoCommit').textContent =
-        (isProtected && (memCount > 0 || sessCount > 0))
+        (isProtected && (memCount > 0 || sessCount > 0 || wsCount > 0))
             ? `✅ Commit ${dirtyTabs.length} file(s) (code only)`
             : `✅ Commit ${dirtyTabs.length} file(s)`;
 
@@ -137,6 +149,29 @@ function _renderSessionsSection() {
         branch: State.currentBranch || '',
     });
     wireSessionUpdatesSection(root, { closeModal: closeCommitModal });
+}
+
+function _renderWorkspaceSettingsSection() {
+    const root = document.getElementById('commitWorkspaceSettingsSection');
+    if (!root) return;
+
+    if (!workspaceSettingsIsEnabled()) {
+        root.innerHTML = '';
+        return;
+    }
+    const pendingPaths = workspaceSettingsListPendingPaths();
+    if (pendingPaths.length === 0) {
+        root.innerHTML = '';
+        return;
+    }
+
+    const isProtected = _currentBranchIsProtected();
+    root.innerHTML = renderWorkspaceSettingsSection({
+        isProtected,
+        pendingPaths,
+        branch: State.currentBranch || '',
+    });
+    wireWorkspaceSettingsSection(root, { closeModal: closeCommitModal });
 }
 
 export async function generateCommitMsg() {
@@ -210,7 +245,22 @@ export async function commitAndPush() {
         sha: undefined,
     }));
 
-    const allTabs = tabsToCommit.concat(memoryPseudoTabs).concat(sessionPseudoTabs);
+    // 1.4.4 — same Flow 3A/3B gate for workspace settings (.aieditor/settings.json).
+    const workspaceSettingsPaths = (
+        workspaceSettingsIsEnabled() && !_currentBranchIsProtected()
+            ? workspaceSettingsListPendingPaths()
+            : []
+    );
+    const workspaceSettingsPseudoTabs = workspaceSettingsPaths.map((path) => ({
+        path,
+        content: workspaceSettingsGetPendingContent(path) || '',
+        sha: undefined,
+    }));
+
+    const allTabs = tabsToCommit
+        .concat(memoryPseudoTabs)
+        .concat(sessionPseudoTabs)
+        .concat(workspaceSettingsPseudoTabs);
 
     if (allTabs.length === 0) {
         showToast('No changes to commit', 'warning');
@@ -238,6 +288,12 @@ export async function commitAndPush() {
             const sessionsCommitted = sessionPaths.filter((p) => committedSet.has(p));
             if (sessionsCommitted.length > 0) {
                 discardPendingSessionWrites(sessionsCommitted);
+            }
+        }
+        if (workspaceSettingsPaths.length > 0) {
+            const wsCommitted = workspaceSettingsPaths.filter((p) => committedSet.has(p));
+            if (wsCommitted.length > 0) {
+                workspaceSettingsDiscardPendingWrites(wsCommitted);
             }
         }
 

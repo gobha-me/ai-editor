@@ -11,6 +11,12 @@ import { collectProviderSettings } from './llm-tab.js';
 import { getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
 import { IgnoreManager } from '../ignore.js';
+import {
+    SAFELIST as WORKSPACE_SETTINGS_SAFELIST,
+    isEnabled as workspaceSettingsIsEnabled,
+    recordChanges as workspaceSettingsRecordChanges,
+    getOriginalGlobals as workspaceSettingsGetOriginalGlobals,
+} from '../intelligence/workspace-settings/index.js';
 
 /**
  * Helper to get numeric value from input (returns undefined if empty).
@@ -206,59 +212,83 @@ export function collectAndSave() {
 
     // Persist to localStorage is handled by the caller (coreSaveSettings)
 
+    // 1.4.4 — route safelisted writes to .aieditor/settings.json when the
+    // workspace-settings file layer is active. Pass every safelisted key;
+    // the file-layer compares against its applied snapshot and only marks
+    // genuinely-changed keys as pending. No-op when the layer is disabled.
+    try {
+        if (workspaceSettingsIsEnabled()) {
+            workspaceSettingsRecordChanges(WORKSPACE_SETTINGS_SAFELIST);
+        }
+    } catch (err) {
+        console.warn('[settings/persistence] workspace-settings recordChanges failed:', err);
+    }
+
     return State.settings;
 }
 
 /**
  * Export all settings to JSON file for backup/transfer.
+ *
+ * 1.4.4 — when the workspace-settings file layer is active, the user's
+ * `State.settings` reflects per-workspace overrides on top of their
+ * true global values. Exporting that merged view would silently bake
+ * the open project's theme/role/etc. into a "global" backup. We pull
+ * the un-merged originals from the file layer for safelisted keys.
  */
 export function exportSettings() {
+    const wsActive = (() => {
+        try { return workspaceSettingsIsEnabled(); } catch { return false; }
+    })();
+    const originals = wsActive ? workspaceSettingsGetOriginalGlobals() : {};
+    const pickGlobal = (key) => (key in originals ? originals[key] : State.settings[key]);
+
     const settings = {
         // Git Connections
         connections: State.settings.connections || [],
-        
+
         // LLM Configuration
         llmEndpoint: State.settings.llmEndpoint,
         llmApiKey: State.settings.llmApiKey,
         llmModel: State.settings.llmModel,
         commitModel: State.settings.commitModel,
         apiProvider: State.settings.apiProvider,
-        
+
         // Timeouts
-        llmIdleTimeout: State.settings.llmIdleTimeout,
-        toolTimeout: State.settings.toolTimeout,
-        summaryTimeout: State.settings.summaryTimeout,
-        
+        llmIdleTimeout: pickGlobal('llmIdleTimeout'),
+        toolTimeout: pickGlobal('toolTimeout'),
+        summaryTimeout: pickGlobal('summaryTimeout'),
+
         // Embeddings
-        useEmbeddings: State.settings.useEmbeddings,
-        embeddingProvider: State.settings.embeddingProvider,
+        useEmbeddings: pickGlobal('useEmbeddings'),
+        embeddingProvider: pickGlobal('embeddingProvider'),
         embeddingEndpoint: State.settings.embeddingEndpoint,
         embeddingApiKey: State.settings.embeddingApiKey,
-        embeddingModel: State.settings.embeddingModel,
-        embeddingCacheExpiry: State.settings.embeddingCacheExpiry,
-        autoReindex: State.settings.autoReindex,
-        maxRelevantFiles: State.settings.maxRelevantFiles,
-        maxIndexFiles: State.settings.maxIndexFiles,
-        
+        embeddingModel: pickGlobal('embeddingModel'),
+        embeddingCacheExpiry: pickGlobal('embeddingCacheExpiry'),
+        autoReindex: pickGlobal('autoReindex'),
+        maxRelevantFiles: pickGlobal('maxRelevantFiles'),
+        maxIndexFiles: pickGlobal('maxIndexFiles'),
+
         // Appearance
-        theme: State.settings.theme,
-        uiScale: State.settings.uiScale,
-        editorFontSize: State.settings.editorFontSize,
-        showLineNumbers: State.settings.showLineNumbers,
-        editorKeybindingMode: State.settings.editorKeybindingMode,
-        editorScanInvisibleUnicode: State.settings.editorScanInvisibleUnicode,
-        showIssues: State.settings.showIssues,
-        showPullRequests: State.settings.showPullRequests,
-        
+        theme: pickGlobal('theme'),
+        uiScale: pickGlobal('uiScale'),
+        editorFontSize: pickGlobal('editorFontSize'),
+        showLineNumbers: pickGlobal('showLineNumbers'),
+        editorKeybindingMode: pickGlobal('editorKeybindingMode'),
+        editorScanInvisibleUnicode: pickGlobal('editorScanInvisibleUnicode'),
+        showIssues: pickGlobal('showIssues'),
+        showPullRequests: pickGlobal('showPullRequests'),
+
         // Advanced Parameters
         advancedParams: State.settings.advancedParams,
-        
+
         // Provider-specific parameters (all registered providers)
         veniceParameters: State.settings.veniceParameters,
         openRouterParameters: State.settings.openRouterParameters,
-        
+
         // Other
-        role: State.settings.role,
+        role: pickGlobal('role'),
         disabledModels: State.settings.disabledModels || [],
         ignorePatterns: State.settings.ignorePatterns,
         

@@ -4,6 +4,173 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-05-01
+
+**Tools 1.4.x — workspace-scoped settings.** New
+[`.aieditor/settings.json`](.aieditor/settings.json) per-repo override
+file for a curated subset of `State.settings` keys. Theme, UI scale,
+role, summarizer, line numbers, etc. travel with the code; credentials
+(API keys, OAuth tokens, git provider tokens, MCP bearer tokens) NEVER
+appear here — denylisted in
+[`safelist.js`](js/intelligence/workspace-settings/safelist.js) with a
+test asserting it. Defense-in-depth: the parser strips unsafe keys at
+read time even if a hostile branch added them, surfaces them as
+diagnostics in the Workspace Settings tab.
+
+Per-workspace opt-in via Settings → Workspace Settings → toggle. When
+the toggle is on and the current branch is unprotected (Decision §4),
+edits to safelisted keys auto-stage `.aieditor/settings.json` in the
+commit modal alongside memory + sessions (Touch 1 Flow 3A). Protected
+branches get the disabled escape-hatch flow (Flow 3B). Pairs naturally
+with the existing `.aieditor/` directory convention from 1.3.0 memory.
+
+Workstation-personal keys (`apiProvider`, `llmModel`, `commitModel`,
+`disabledModels`, `modelOverrides`, `advancedParams`) are explicitly
+denylisted: committing them silently changes teammates' available models
+or breaks chat when the paired credentials aren't set. Start-tight
+philosophy — relax later only with explicit per-key justification.
+
+### Added
+
+- **[`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js)**
+  — frozen `SAFELIST` (21 keys) + `DENYLIST` (14 keys) +
+  `isSafelisted` / `isDenylisted` / `filterToSafelisted` helpers. The
+  security boundary; tests assert no overlap and full credential
+  coverage.
+
+- **[`js/intelligence/workspace-settings/serializer.js`](js/intelligence/workspace-settings/serializer.js)**
+  — JSON parser that strips non-safelisted keys at read time with
+  diagnostic warnings; writer emits keys in lexicographic order so
+  `serialize(x)` is byte-stable.
+
+- **[`js/intelligence/workspace-settings/file-layer.js`](js/intelligence/workspace-settings/file-layer.js)**
+  — mirrors the memory file-layer pattern. `enable(workspaceId)`
+  snapshots original global values (so `disable()` and `project:cleared`
+  can restore); `loadFromGit({owner, repo, branch})` reads
+  `.aieditor/settings.json` via `Git.getFile`, merges safelisted keys
+  into `State.settings`, calls `applyVisualSettings` to re-paint;
+  `recordChanges(setKeys)` populates the pending JSON file when
+  workspace mode is on; `resetToGlobal(key)` reverts a single key from
+  the snapshot. Per-workspace opt-in tracked at
+  `localStorage.workspaceSettings.optIn` as a `{ [workspaceId]: true }`
+  map.
+
+- **[`js/utils/apply-visual-settings.js`](js/utils/apply-visual-settings.js)**
+  — extracted from `js/app.js#applyVisualSettings` +
+  `applyLineNumbersVisibility`. The file layer calls this after
+  merging overrides on `project:loaded` so theme / uiScale / panel
+  visibility / line numbers re-paint without a reload. No behavior
+  change.
+
+- **[`js/settings/workspace-settings-tab.js`](js/settings/workspace-settings-tab.js)**
+  — Settings → Workspace Settings panel. Vanilla DOM (not Preact).
+  Toggle + status row (`Active` / `Disabled` / `Branch protected —
+  read-only` / `No project loaded`) + override list with per-row
+  `Reset to global` buttons + diagnostics surface. Also exports
+  `decorateOverriddenControls()` — single-pass visitor over every
+  `[data-setting-key]` form-group across the modal that adds an orange
+  border-left + "Workspace" badge to overridden controls. Purely
+  additive DOM; removing the module restores baseline.
+
+- **[`js/ui/commit-workspace-settings-section.js`](js/ui/commit-workspace-settings-section.js)**
+  — mirror of `commit-memory-section.js`. Renders a
+  `commit-section--mem` panel on unprotected branches (auto-staged) or a
+  `commit-section--warn` panel on protected branches (disabled checkbox
+  + Keep pending / Discard). Single-file case (always
+  `.aieditor/settings.json`).
+
+- **[`css/workspace-settings.css`](css/workspace-settings.css)** — tab
+  body styles + inline decoration. Reuses `--tk-color-orange` (the
+  conventional "modified" token); no new tokens.
+
+- **[`tests/test-workspace-settings-safelist.mjs`](tests/test-workspace-settings-safelist.mjs)**
+  — 11 cases. Frozen-list assertions, credential-key denylist coverage,
+  disjointness invariant, `apiProvider` / `modelOverrides` /
+  `disabledModels` regression guard, `filterToSafelisted` edge cases.
+
+- **[`tests/test-workspace-settings-serializer.mjs`](tests/test-workspace-settings-serializer.mjs)**
+  — 12 cases. Stable key order, round-trip equality, malformed-JSON
+  diagnostic, non-object-root rejection, unsafe-key strip with source
+  path threading.
+
+- **[`tests/test-workspace-settings-file-layer.mjs`](tests/test-workspace-settings-file-layer.mjs)**
+  — 22 cases. Opt-in registry round-trip, enable/disable snapshot &
+  restore, idempotent enable, loadFromGit applies safelisted +
+  re-applies visual settings, unsafe-key warnings land in diagnostics
+  not `State.settings`, `recordChanges` skips no-op writes, malformed
+  JSON surfaces a diagnostic, `resetToGlobal` restores per-key + drops
+  the pending file when empty, `discardPendingWrites` doesn't touch
+  applied overrides, `getOriginalGlobals` snapshot is immutable.
+
+### Changed
+
+- **[`js/app.js`](js/app.js)** — imports `applyVisualSettings` and
+  `applyLineNumbersVisibility` from the new helper module; the inline
+  copies of both functions removed. New
+  `installWorkspaceSettingsFileLayer()` boot wiring alongside the
+  memory + sessions installs. New `window.AIEditor.workspaceSettings`
+  surface mirroring `memoryFileLayer` / `sessionsSync`.
+
+- **[`js/settings/persistence.js`](js/settings/persistence.js)** —
+  `collectAndSave()` calls `workspaceSettings.recordChanges(SAFELIST)`
+  after persisting State; the file-layer compares each safelisted
+  key's current value against its applied snapshot and only marks
+  genuinely-changed keys as pending. `exportSettings()` now reads the
+  un-merged original globals from the file layer for safelisted keys
+  when the layer is active — exporting the merged view would silently
+  bake the open project's theme / role / summarizer into a "global"
+  backup.
+
+- **[`js/settings-manager.js`](js/settings-manager.js)** — wires
+  `initWorkspaceSettingsTab()` and `decorateOverriddenControls()` into
+  `openSettings()`; subscribes the decoration pass to
+  `workspaceSettings:changed` so the modal stays in sync when the user
+  clicks Reset to global.
+
+- **[`js/ui/commit.js`](js/ui/commit.js)** — renders the
+  workspace-settings section alongside memory + sessions; auto-stages
+  the pending file on unprotected branches and discards committed
+  paths on success.
+
+- **[`html/modals.html`](html/modals.html)** — adds the
+  `tabWorkspaceSettings` sidebar entry under the Workspace group, plus
+  the `#commitWorkspaceSettingsSection` mount in the commit modal.
+
+- **[`html/settings-tabs.html`](html/settings-tabs.html)** — new
+  `tabWorkspaceSettings` panel; `data-setting-key` attributes added to
+  Appearance + LLM Timeout form-groups for the inline decoration pass.
+
+- **[`index.html`](index.html)** — links `css/workspace-settings.css`.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.4.3 → 1.4.4.
+
+### Removability check (Decision §7)
+
+Deleting `js/intelligence/workspace-settings/`,
+`js/utils/apply-visual-settings.js` (inlining the helpers back into
+`app.js`), `js/settings/workspace-settings-tab.js`,
+`js/ui/commit-workspace-settings-section.js`,
+`css/workspace-settings.css`, the new HTML tab + sidebar entry + commit
+section, the `data-setting-key` attributes, and reverting the
+single-line hooks in `app.js` / `settings-manager.js` /
+`settings/persistence.js` / `ui/commit.js`: editor reverts to 1.4.3
+behavior. Any committed `.aieditor/settings.json` becomes inert. No
+user-visible degradation; no migration. The `localStorage`
+`workspaceSettings.optIn` map becomes orphan data, harmless.
+
+### Notes
+
+- **Kill switch / opt-out.** No URL flag; Settings → Workspace Settings
+  → toggle off restores the snapshotted global values immediately.
+  Disabling the toggle doesn't delete `.aieditor/settings.json` —
+  re-enabling the toggle re-applies it.
+
+- **Why one PR, not three.** Splitting foundation from the tab from the
+  inline decoration would create half-step releases where the file
+  layer is wired but invisible (or vice versa). Total surface ~1100
+  lines across 8 source files + 3 test files; small enough to ship
+  coherent. Same coherence argument as 1.4.2 (MCP bridge).
+
 ## [1.4.3] - 2026-05-01
 
 **Test runner — IMPORT FAILED is now a real failure.** A regression
