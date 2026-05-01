@@ -536,6 +536,38 @@ The Memory UX (these three flows) is the scope of the **Touch 1 design engagemen
 
 ---
 
+### Post-2.0 candidates [unscoped]
+
+**Placeholder, not committed work.** Two ideas surfaced during planning that don't fit the 1.x → 2.0 arc but are worth recording so they aren't forgotten. Both get scoped post-2.0 against measured signal, not speculation. They sit alongside the 3.0 UI consolidation stub — orthogonal to it, not gated by it.
+
+#### Sub-agents
+
+**The idea.** A tool call that spawns a bounded child conversation with its own context, tool catalog, and budget allocation drawn from the parent's. The child runs a sub-task to completion and returns a structured result the parent decides what to admit into its own context. Lets the editor parallelize independent searches, protect the parent's context window from large intermediate results, and assign different profiles to different sub-tasks (parent on `coder.v1`, sub-agent on `kb.v1` for a docs lookup, etc.).
+
+**Why it fits the architecture.** Profiles (2.0) make this tractable — a sub-agent is a child profile with a budget allocation. Memory (1.3.x) gives sub-agents a way to surface findings without round-tripping through chat. The unified `TaskLedger` (1.1.0) already supports the "this admission came from sub-agent N" attribution an audit trail wants.
+
+**What's hard.** The design surface, not the wiring. Open questions: when does the user see a sub-agent vs. the parent driving silently? How are mid-run results surfaced (collapsed cards, side panel, conversation drawer entry)? What's the depth cap and runaway-cost guard? How does cancel propagate? The cost dashboard (1.2.1) needs a sub-agent attribution column or it goes blind to a new spend category.
+
+**What would need to be true to commit it.** Profiles need to have settled (post-2.0) so "child profile" is a real abstraction rather than a speculative one. At least one task in the wild — code review across N files, a refactor that touches independent modules — needs to be measurably bottlenecked on context exhaustion that decomposition would solve. If by 2.x we haven't hit that wall on real work, sub-agents stay parked.
+
+**Removability check (preemptive).** With sub-agents removed, the parent does the same work serially with bigger context spend. If the only measurable difference is wall-clock time on tasks the user wasn't going to run anyway, the feature didn't earn its complexity.
+
+#### Browser-in-browser preview (multi-file web apps)
+
+**The idea.** The current preview pane (`js/secondary-pane.js`) renders single-file content via `srcdoc` — fine for one HTML file, a markdown doc, or an SVG. Multi-file static web apps (an `index.html` that imports `./app.js` which imports `./utils/foo.js` which fetches `./data.json`) don't render correctly today; the user has to deploy to see them work. The candidate: a sandboxed iframe whose `fetch` requests are intercepted by a Service Worker that serves files from the editor's in-memory file tree. Same pattern as StackBlitz-classic and CodeSandbox v1.
+
+**Why it fits.** Web-only (HTML/CSS/JS/ESM/JSON/assets) is the sweet spot — no Node runtime, no `npm install`, no build step needed. The "no build step" project constraint isn't violated; it's reinforced. The file tree is already in-memory; the Service Worker just needs read access. ES modules, relative imports, sibling `fetch()`, image/font assets all work without source rewriting.
+
+**What's hard.** Service Worker scope and registration is the fiddly part — the worker has to register against a path that doesn't conflict with the editor itself, and the iframe has to be served from a location inside that scope. Storage isolation (so the preview's `localStorage`/`IndexedDB` doesn't bleed into the editor's) needs careful origin handling. Debugging runs through the iframe's devtools, one click further than today. None of these are blockers; they're the reason a Phase 1 implementation is larger than its surface suggests.
+
+**What's out of scope even at the candidate stage.** Node runtime (no WebContainers — that's StackBlitz's proprietary tech, not portable). Real network requests to non-self origins beyond what browser CORS already permits. A "publish this preview" button — that's a deploy story, not a preview story.
+
+**What would need to be true to commit it.** Real users hitting the multi-file wall on real projects. The current preview handles roughly 80% of "show me what this looks like" — the question is whether the missing 20% (multi-page sites, ESM apps, asset-loading examples) shows up often enough to justify the build. Likely yes for users shipping static-site projects; less obvious for users primarily on backend code where preview isn't the loop.
+
+**Removability check (preemptive).** With the SW preview removed, the `srcdoc` preview returns. Multi-file users go back to deploying-to-see. If the deploy loop via Gitea CI is fast enough (it is today), the SW preview's value is "saves N seconds per iteration" — real, but needs measuring against the maintenance cost of a Service Worker registration the rest of the editor coexists with.
+
+---
+
 ## UI improvements (cross-cutting)
 
 These slot into patch releases of whatever track is current. Some are enabled by track work, others stand alone.
