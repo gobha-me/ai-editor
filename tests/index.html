@@ -171,6 +171,10 @@
             } catch (e) { errors.push(['Memory Tab', e]); }
 
             try {
+                await import('./test-settings-sidebar.js');
+            } catch (e) { errors.push(['Settings Sidebar', e]); }
+
+            try {
                 await import('./test-commit-modal-memory.js');
             } catch (e) { errors.push(['Commit Modal Memory', e]); }
 

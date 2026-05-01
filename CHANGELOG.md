@@ -4,6 +4,96 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-05-01
+
+Lands the **Settings sidebar Restructure** — PR 3 of the Touch 2 facelift
+arc, and the second LOCKED-for-ship layout per the design pushback memo
+(`docs/design/touch-2-facelift/project/pushback.jsx`): *"tabs in Settings
+are dead. Stop treating them like they have a future."* The 13-tab
+horizontal strip is replaced by a vertical sidebar grouped **Workspace /
+AI / App** that scales to 30+ items without redesign. The modal header
+gains a local search input that filters sidebar items by label as the
+user types — independent of the global ⌘K palette, so it works the
+moment the modal opens.
+
+Reads every value through the `--tk-*` contract 1.3.5 froze. Both shipped
+themes (Refined IDE, Editorial Calm) render the same component — no
+per-theme variants, no hex literals. Lucide icons next to each item are
+deferred to 1.3.11's icon-family swap; this patch is structurally focused.
+
+**Why now:** Connections (1.3.8) is sequenced to render its N-of-each
+list against the new sidebar shell, so the sidebar shape must settle
+first. Same for 1.3.13's rem-based UI scaling — the slider rebuild
+interacts with this layout.
+
+### Added
+
+- **`css/settings-sidebar.css`** *(new)* — `.settings-modal`,
+  `.settings-modal__header`, `.settings-modal__search` (input + `Ctrl K`
+  kbd), `.settings-shell` (2-column grid: 196px sidebar | content),
+  `.settings-sidebar`, `.settings-sidebar__group`,
+  `.settings-sidebar__group-label`, `.settings-sidebar__group--empty`,
+  `.settings-sidebar__item`, `.settings-sidebar__empty`,
+  `.settings-content`. Active state uses
+  `color-mix(in srgb, var(--tk-color-accent) 20%, transparent)`
+  (theme-neutral overlay technique already present in `modals.css`); no
+  hex literals; CI lint passes. Mobile breakpoint stacks the sidebar
+  above the content. Loaded after `css/topbar.css` in `index.html` so
+  source order favors sidebar overrides at equal selector specificity.
+
+- **Local sidebar search.** `#settingsSidebarSearch` input in the modal
+  header. As the user types, items whose label doesn't match are
+  hidden via the `[hidden]` attribute; groups whose every item is
+  hidden collapse via `.settings-sidebar__group--empty`; an empty-state
+  line (`#settingsSidebarEmpty`) appears when nothing matches. Esc
+  clears the input. Modal-open focuses the input so typing immediately
+  filters. Independent of the global ⌘K palette — works inside the
+  modal without any palette wiring.
+
+- **`tests/test-settings-sidebar.js`** *(new)* — browser-based
+  integration test pinning: 3 groups in spec order, 13 items with the
+  expected `data-tab` IDs, exclusive active state on click, Memory
+  click triggers the mount stub, search filters items + collapses
+  empty groups + reveals empty-state when nothing matches. Registered
+  in `tests/index.html`.
+
+### Changed
+
+- **`html/modals.html` Settings modal** — replaces the 13-tab
+  `.settings-tabs-nav` strip with the LOCKED Restructure layout: header
+  gains the search input slot; body becomes a `.settings-shell` 2-column
+  grid containing `<aside class="settings-sidebar">` (three
+  `<section class="settings-sidebar__group">` blocks: Workspace,
+  AI, App) and `<div class="settings-content">` wrapping the existing
+  `#settingsTabsContainer`. Sidebar items keep `.settings-tab` so the
+  existing tab-switching loop matches them by selector — no JS-contract
+  break.
+
+- **`js/settings-manager.js`** — drops the horizontal-strip scroll
+  helpers (`initTabArrows`, `updateTabArrows`,
+  `window.scrollSettingsTabs`) and the inline `tab.scrollIntoView` call
+  in the click handler; they targeted DOM that no longer exists. Adds
+  `initSidebarSearch()` + `applySidebarFilter()` for the local filter.
+  `openSettings()` resets the filter and focuses the input on every
+  open. Help modal still uses the legacy strip and its own
+  `_updateHelpTabArrows` / `window.scrollHelpTabs` in `js/app.js` — the
+  shared `.settings-tabs-*` CSS rules in `css/modals.css` stay in
+  place and continue to drive Help until 1.3.10 retires the strip.
+
+### Why this layout, not a tab strip with overflow
+
+A horizontal strip with overflow-fade or a "more…" menu masks the
+problem (13 tabs that already overflow at 14") rather than fixing it.
+The sidebar admits the structure was always there: Workspace concerns
+(connections, ignore patterns) belong with the repo; AI concerns (LLM,
+models, context, embeddings, roles, memory) belong with the chat
+profile; App concerns (appearance, plugins, storage, cost, advanced)
+belong with the editor itself. The grouping is now visible to the
+user instead of carried in implicit tab order. Touch 2's pushback memo
+reaches the same conclusion: *"this is a git focused UI — programmers"*
+— the engineer-facing IDE pattern beats the editor-facing top-tabs
+pattern at this size.
+
 ## [1.3.6] - 2026-04-30
 
 Lands the **top bar Restructure** — PR 2 of the Touch 2 facelift arc, and

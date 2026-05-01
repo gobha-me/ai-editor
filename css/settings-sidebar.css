@@ -1,0 +1,213 @@
+/**
+ * Settings sidebar — 1.3.7 Touch 2 Restructure
+ *
+ * Replaces the 11+ tab horizontal strip with a vertical sidebar
+ * grouped Workspace / AI / App. Both shipped themes (Refined IDE,
+ * Editorial Calm) render the same component via the frozen `--tk-*`
+ * contract — no per-theme variants, no hex literals.
+ *
+ * The sidebar items keep `.settings-tab` so the existing tab-switching
+ * loop in `js/settings-manager.js` matches them by selector. The
+ * sidebar-specific overrides below win because this file loads after
+ * `css/modals.css` (source order at equal specificity).
+ *
+ * Help modal still uses the legacy `.settings-tabs-nav` strip; those
+ * rules remain in `css/modals.css` and are untouched. 1.3.10 retires
+ * Help's strip when the slide-out lands.
+ */
+
+/* ----- Modal sizing ----- */
+
+.settings-modal {
+    width: min(1100px, 92vw);
+    max-width: min(1100px, 92vw);
+}
+
+.settings-modal__header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: var(--tk-space-3);
+}
+
+/* ----- Search input ----- */
+
+.settings-modal__search {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    height: 28px;
+    padding: 0 var(--tk-space-2);
+    background: var(--tk-bg-app);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-md);
+    transition: border-color 0.12s;
+}
+
+.settings-modal__search:focus-within {
+    border-color: var(--tk-color-accent);
+}
+
+.settings-modal__search-icon {
+    color: var(--tk-text-muted);
+    font-size: var(--font-sm);
+}
+
+.settings-modal__search-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--tk-text-primary);
+    font: inherit;
+    font-size: var(--font-sm);
+}
+
+.settings-modal__search-input::placeholder {
+    color: var(--tk-cmd-placeholder);
+}
+
+.settings-modal__search-input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.settings-modal__search-kbd {
+    padding: 1px 6px;
+    background: var(--tk-bg-raised);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius-sm);
+    color: var(--tk-text-secondary);
+    font-family: var(--tk-font-mono);
+    font-size: var(--font-xs);
+    line-height: 1.4;
+}
+
+/* ----- Two-column shell (sidebar | content) ----- */
+
+.settings-shell {
+    display: grid;
+    grid-template-columns: 196px minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ----- Sidebar ----- */
+
+.settings-sidebar {
+    overflow-y: auto;
+    padding: var(--tk-space-2) var(--tk-space-2) var(--tk-space-3);
+    background: var(--tk-bg-surface);
+    border-right: 1px solid var(--tk-border);
+}
+
+.settings-sidebar__group + .settings-sidebar__group {
+    margin-top: var(--tk-space-3);
+}
+
+.settings-sidebar__group--empty {
+    display: none;
+}
+
+.settings-sidebar__group-label {
+    margin: 0;
+    padding: var(--tk-space-2) var(--tk-space-2) var(--tk-space-1);
+    color: var(--tk-text-muted);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Sidebar items override the horizontal-strip `.settings-tab` rules
+   (border-bottom, white-space, etc.) for the vertical context. */
+.settings-sidebar__item {
+    display: flex;
+    align-items: center;
+    gap: var(--tk-space-2);
+    width: 100%;
+    padding: var(--tk-space-1) var(--tk-space-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--tk-radius-sm);
+    color: var(--tk-text-secondary);
+    font-size: var(--font-md);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    /* Transition only `background`. Transitioning `color` here latched the
+       active item to the pre-theme-swap accent: a CSS-variable change on
+       `:root` doesn't reliably retrigger a `color` transition driven by
+       `var(--tk-color-accent)`, so the property gets stuck on the start
+       value until the element is reflowed by another state change. */
+    transition: background 0.12s;
+    white-space: normal;
+}
+
+.settings-sidebar__item:hover {
+    background: var(--tk-bg-hover);
+    color: var(--tk-text-primary);
+}
+
+.settings-sidebar__item:focus-visible {
+    outline: 2px solid var(--tk-color-accent);
+    outline-offset: -2px;
+}
+
+.settings-sidebar__item.active {
+    /* Translucent accent fill — theme-neutral overlay technique used
+       elsewhere in modals.css; survives a missing theme link. */
+    background: color-mix(in srgb, var(--tk-color-accent) 20%, transparent);
+    color: var(--tk-color-accent);
+}
+
+.settings-sidebar__item[hidden] {
+    display: none;
+}
+
+.settings-sidebar__empty {
+    margin: var(--tk-space-3) var(--tk-space-2) 0;
+    color: var(--tk-text-muted);
+    font-size: var(--font-sm);
+    font-style: italic;
+}
+
+/* ----- Content pane ----- */
+
+.settings-content {
+    overflow-y: auto;
+    padding: var(--tk-space-4);
+}
+
+/* ----- Mobile collapse — sidebar stacks above content ----- */
+@media (max-width: 768px) {
+    .settings-modal {
+        width: 100vw;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .settings-modal__header {
+        grid-template-columns: 1fr auto;
+        row-gap: var(--tk-space-2);
+    }
+
+    .settings-modal__search {
+        grid-column: 1 / -1;
+        order: 3;
+    }
+
+    .settings-shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .settings-sidebar {
+        max-height: 30vh;
+        border-right: none;
+        border-bottom: 1px solid var(--tk-border);
+    }
+}

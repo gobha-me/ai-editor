@@ -69,6 +69,14 @@ export async function openSettings() {
     initConnectionsTab();
     updateEmbeddingsStatus();
     document.getElementById('settingsModal').classList.add('active');
+
+    // Reset the sidebar search and focus it so typing immediately filters.
+    const search = document.getElementById('settingsSidebarSearch');
+    if (search) {
+        search.value = '';
+        applySidebarFilter('');
+        search.focus({ preventScroll: true });
+    }
 }
 
 export function closeSettings() {
@@ -352,10 +360,7 @@ function populateSettingsForm() {
             tab.classList.add('active');
             tab.setAttribute('aria-selected', 'true');
             document.getElementById(tab.dataset.tab).classList.add('active');
-            
-            // Scroll clicked tab into view
-            tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-            
+
             // Update embeddings status when switching to Embeddings tab
             if (tab.dataset.tab === 'tabEmbeddings') updateEmbeddingsStatus();
             // Populate Models tab when switching to it
@@ -370,58 +375,53 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabCost') populateCostTab();
             // Mount the Memory tab Preact tree on first activation; idempotent.
             if (tab.dataset.tab === 'tabMemory') mountMemoryTab();
-            
-            // Re-check arrow visibility after scroll settles
-            setTimeout(updateTabArrows, 100);
         };
     });
 
-    // --- Settings tab arrow buttons ---
-    initTabArrows();
+    // --- Sidebar search filter (1.3.7) ---
+    initSidebarSearch();
 }
 
-// ── Tab arrow navigation ──
+// ── Sidebar search filter ──
+// Filters .settings-sidebar__item by label text. Hides any group whose
+// items are all filtered out so the group header doesn't strand.
+// Esc clears; modal-open focuses the input automatically.
 
-function initTabArrows() {
-    const container = document.querySelector('.settings-tabs');
-    if (!container) return;
+function initSidebarSearch() {
+    const input = document.getElementById('settingsSidebarSearch');
+    if (!input || input.dataset.bound === '1') return;
+    input.dataset.bound = '1';
 
-    container.addEventListener('scroll', updateTabArrows);
-
-    let arrowRafId = null;
-    const observer = new ResizeObserver(() => {
-        if (arrowRafId) return;
-        arrowRafId = requestAnimationFrame(() => {
-            updateTabArrows();
-            arrowRafId = null;
-        });
+    input.addEventListener('input', () => applySidebarFilter(input.value));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && input.value) {
+            e.stopPropagation();
+            input.value = '';
+            applySidebarFilter('');
+        }
     });
-    observer.observe(container);
-
-    updateTabArrows();
 }
 
-function updateTabArrows() {
-    const container = document.querySelector('.settings-tabs');
-    if (!container) return;
+function applySidebarFilter(query) {
+    const q = (query || '').trim().toLowerCase();
+    const sidebar = document.querySelector('.settings-sidebar');
+    if (!sidebar) return;
 
-    const leftBtn = document.querySelector('.settings-tabs-arrow-left');
-    const rightBtn = document.querySelector('.settings-tabs-arrow-right');
-    if (!leftBtn || !rightBtn) return;
+    let totalVisible = 0;
+    sidebar.querySelectorAll('.settings-sidebar__group').forEach(group => {
+        let groupVisible = 0;
+        group.querySelectorAll('.settings-sidebar__item').forEach(item => {
+            const matches = !q || item.textContent.toLowerCase().includes(q);
+            item.hidden = !matches;
+            if (matches) groupVisible++;
+        });
+        group.classList.toggle('settings-sidebar__group--empty', groupVisible === 0);
+        totalVisible += groupVisible;
+    });
 
-    const canScrollLeft = container.scrollLeft > 1;
-    const canScrollRight = container.scrollLeft < (container.scrollWidth - container.clientWidth - 1);
-
-    leftBtn.classList.toggle('visible', canScrollLeft);
-    rightBtn.classList.toggle('visible', canScrollRight);
+    const empty = document.getElementById('settingsSidebarEmpty');
+    if (empty) empty.hidden = totalVisible > 0;
 }
-
-window.scrollSettingsTabs = function(direction) {
-    const container = document.querySelector('.settings-tabs');
-    if (!container) return;
-    const step = container.clientWidth * 0.6;
-    container.scrollBy({ left: direction * step, behavior: 'smooth' });
-};
 
 // ── Ignore tab helpers ──
 
