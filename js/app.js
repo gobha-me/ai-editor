@@ -130,6 +130,7 @@ import '../plugins/cross-repo-issues.js';
 import '../plugins/release-sync.js';
 import '../plugins/venice-billing.js';
 import '../plugins/openrouter-billing.js';
+import '../plugins/mcp-bridge.js';
 
 // Log version on startup
 console.log(`Starting ${VERSION_DISPLAY}`);

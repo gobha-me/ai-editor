@@ -6,6 +6,7 @@
 
 import { State, Storage, ProviderRegistry } from '../core.js';
 import { GitProviderRegistry } from '../git-providers/index.js';
+import { MCPServerRegistry } from '../mcp/registry.js';
 import { collectProviderSettings } from './llm-tab.js';
 import { getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
@@ -37,6 +38,9 @@ export function collectAndSave() {
 
     // Persist connections from registry into State
     State.settings.connections = GitProviderRegistry.listConnections();
+
+    // Persist MCP servers from registry into State (1.4.2)
+    State.settings.mcpServers = MCPServerRegistry.serialize();
 
     // Timeouts (convert seconds to milliseconds)
     State.settings.llmIdleTimeout = parseInt(document.getElementById('settingLlmIdleTimeout').value) * 1000 || 90000;

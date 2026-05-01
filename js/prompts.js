@@ -116,6 +116,7 @@ You have access to these tools:
 3. **Minimum tools needed.** Skip steps you don't need:
    - If you already know which file to look at → don't search again
    - If a discovery tool is admitted to you and you don't know which files are relevant → use it FIRST (semantic discovery beats grep when you don't know exact identifiers)
+   - If the user asks about external services (issue trackers, chat, file storage, calendars, etc.), call \`find_tool\` first to see whether an MCP-bridged capability is admitted before answering "I can't" — the user may have connected a Model Context Protocol server that exposes the action.
    - If you have enough context to respond → just respond, no tools needed
 4. **For edits, the minimum path is:** read the relevant lines → make the edit with exact line numbers.
 5. **For investigation, scale to complexity:** Simple questions may need 0-1 tool calls. Complex refactors may need 4-6.

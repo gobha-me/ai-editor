@@ -327,10 +327,18 @@ function defToToolDef(def) {
         superseded_by: null,
     };
 
+    // Registration-time category override (1.4.2). MCP-bridged tools know
+    // their category at registration (e.g. `mcp.<serverId>`); the
+    // `CATEGORY_BY_NAME` map only knows the static catalog. Prefer the
+    // declared category when present, fall back to the lookup otherwise.
+    const category = typeof def.category === 'string' && def.category.length > 0
+        ? def.category
+        : deriveCategory(name);
+
     return {
         id: computeToolID(PROFILE_NAMESPACE, name, TOOL_VERSION),
         name,
-        category: deriveCategory(name),
+        category,
         description,
         schema,
         full_doc: '',

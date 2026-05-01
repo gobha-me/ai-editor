@@ -15,6 +15,7 @@ import { escapeHtml, escapeAttr } from './utils/html.js';
 // Sub-modules
 import { collectAndSave, exportSettings, importSettings } from './settings/persistence.js';
 import { initConnectionsTab } from './settings/connections-tab.js';
+import { initMCPServersTab } from './settings/mcp-servers-tab.js';
 import { populateRoleCards } from './settings/roles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
 import { renderStorageMetrics } from './storage-metrics.js';
@@ -67,6 +68,7 @@ export async function openSettings() {
     
     populateSettingsForm();
     initConnectionsTab();
+    initMCPServersTab();
     updateEmbeddingsStatus();
     document.getElementById('settingsModal').classList.add('active');
 

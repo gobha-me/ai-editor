@@ -1164,6 +1164,64 @@ const Plugins = {
     },
 
     /**
+     * Convenience wrapper around the MCP bridge. Plugins can register a
+     * connection to a Model Context Protocol server; on success the
+     * server's advertised tools land in `ToolRegistry` (and therefore the
+     * Catalog) under the canonical name `mcp__<serverId>__<toolName>`,
+     * with category `mcp.<serverId>`. The MCP tools are NOT in any
+     * profile's static set — they reach the model only via discovery
+     * (`find_tool` / `list_tools_by_category`) + sticky admission, in
+     * line with the §1.4.0 admissibility principle.
+     *
+     * 1.4.2 supports `transport: "streamable-http"` (default) only; `"sse"`
+     * is plumbed but falls through with a warning until a real-world
+     * server forces a dedicated implementation. Stdio is not supported
+     * (browser runtime, no subprocess capability).
+     *
+     * @param {string} pluginId - Owning plugin ID (for logging)
+     * @param {Object} opts
+     * @param {string} opts.id - Stable server id (slug). Used in tool names + persistence.
+     * @param {string} opts.url - HTTP endpoint of the MCP server.
+     * @param {string} [opts.label] - Display label (defaults to id).
+     * @param {string} [opts.token] - Bearer token for the `Authorization` header.
+     * @param {string} [opts.transport] - "streamable-http" (default) | "sse".
+     * @param {boolean} [opts.enabled] - Default true.
+     * @returns {Promise<{ ok: boolean, toolCount: number, error?: string }>}
+     */
+    async registerMCPServer(pluginId, opts) {
+        if (!opts || !opts.id || !opts.url) {
+            console.error(`[Plugins.registerMCPServer] ${pluginId}: id and url required`);
+            return { ok: false, toolCount: 0, error: 'id and url required' };
+        }
+        try {
+            const { MCPServerRegistry } = await import('./mcp/registry.js');
+            const bridge = await import('./mcp/bridge.js');
+
+            // If the registry already knows about this id, leave its
+            // persisted record alone; only add when the plugin-supplied
+            // record is genuinely new. This lets the bundled plugin call
+            // through after `loadServers(...)` has populated state.
+            if (!MCPServerRegistry.getServer(opts.id)) {
+                MCPServerRegistry.addServer({
+                    id: opts.id,
+                    label: opts.label || opts.id,
+                    url: opts.url,
+                    token: opts.token || '',
+                    transport: opts.transport || 'streamable-http',
+                    enabled: opts.enabled !== false,
+                });
+            }
+
+            const result = await bridge.connect(opts.id);
+            EventBus.emit('plugin:mcpServerRegistered', { pluginId, serverId: opts.id, ok: result.ok, toolCount: result.toolCount });
+            return result;
+        } catch (err) {
+            console.error(`[Plugins.registerMCPServer] ${pluginId}: failed to register ${opts.id}:`, err);
+            return { ok: false, toolCount: 0, error: err?.message || String(err) };
+        }
+    },
+
+    /**
      * Inject a scoped <style> tag for a plugin.
      * Multiple calls with the same pluginId replace the previous sheet.
      *

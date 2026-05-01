@@ -89,10 +89,30 @@ export const ToolRegistry = {
         
         this.handlers.set(name, handler);
         this.definitions.push(enrichedDefinition);
-        
+
         console.log(`[ToolRegistry] ✅ Registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
     },
-    
+
+    /**
+     * Remove a previously registered tool. Used by the MCP bridge on
+     * disconnect; harmless to call for an unknown name.
+     *
+     * @param {string} name
+     * @returns {boolean} True if a tool was actually removed.
+     */
+    unregister(name) {
+        const hadHandler = this.handlers.delete(name);
+        const idx = this.definitions.findIndex(d => d.function?.name === name);
+        if (idx !== -1) {
+            this.definitions.splice(idx, 1);
+        }
+        const removed = hadHandler || idx !== -1;
+        if (removed) {
+            console.log(`[ToolRegistry] 🗑 Unregistered tool: ${name}`);
+        }
+        return removed;
+    },
+
     /**
      * Check whether the active role is allowed to invoke a given tool.
      * @param {string} name - Tool name

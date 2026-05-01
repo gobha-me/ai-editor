@@ -221,6 +221,20 @@ The catalog is the registry of all `ToolDef`s available to a profile. It is shar
 
 Catalog management (adding, deprecating, upgrading tools) happens at the profile level. Profiles compose their catalogs from their static set plus any discoverable tools they grant access to. A KB profile may have a catalog of 5 tools; a coder profile may have 200.
 
+### MCP-bridged tools (1.4.2)
+
+Model Context Protocol servers are **catalog producers**, not static-set members. The bundled `plugins/mcp-bridge.js` calls `Plugins.registerMCPServer({id, url, token, transport})`; the bridge handshakes with the server, calls `tools/list`, and registers each advertised tool into `ToolRegistry` under the canonical name `mcp__<serverId>__<toolName>` with `category: 'mcp.<serverId>'`. The Catalog is a read-only adapter over `ToolRegistry`, so MCP tools become first-class `ToolDef`s automatically — no Catalog mutation needed.
+
+MCP tools are **never** added to a profile's `tools.static` array. They reach the model only through the existing discovery + sticky paths:
+
+- `find_tool("send slack message")` → semantic match against `mcp.<id>` entries.
+- `list_tools_by_category("mcp")` → categorical browsing of all bridged servers.
+- After first invocation, the tool stays admitted via `task_ledger.tool_admissions[]` for the rest of the task.
+
+This preserves the §1.4.0 admissibility win: connecting an MCP server costs ~0 baseline tokens. Disconnect (server removed in Settings, or `?mcpBridge=off`) calls `ToolRegistry.unregister(name)` for each registered name, aborts in-flight `tools/call` requests, and sweeps `task_ledger.tool_admissions[]` so orphaned sticky entries don't accumulate.
+
+Browser-only constraint: HTTP transports only (Streamable HTTP per current MCP spec; SSE for legacy servers). Stdio servers require a backend relay, which is out of scope for the 1.x → 2.0 arc.
+
 ---
 
 ## Meta-Tools: The Always-Loaded Discovery Interface

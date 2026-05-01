@@ -4,6 +4,174 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-01
+
+**Tools 1.4.x — MCP bridge plugin.** New
+[`Plugins.registerMCPServer({id, url, token, transport})`](js/core.js)
+API translates Model Context Protocol JSON-RPC tool definitions into
+`ToolDef` records so they enter the Catalog under
+`mcp.<serverId>` and play by the §1.4.0 admission rules. MCP tools
+are **not** added to any profile's static set — they reach the model
+only via `find_tool` discovery + sticky admission, so connecting a
+server costs ~0 baseline tokens. Inherits the entire MCP server
+ecosystem (filesystem, GitHub, Linear, calendars, etc.) at the
+marginal cost of one HTTP transport.
+
+Browser-only constraint: HTTP transports only. Streamable HTTP
+(default) and legacy SSE are wired; stdio is unavailable in the
+browser and explicitly out of scope for 1.4.2.
+
+### Added
+
+- **[`js/mcp/protocol.js`](js/mcp/protocol.js)** — MCP JSON-RPC 2.0
+  client over Streamable HTTP. `initialize` / `toolsList` / `toolsCall`
+  + per-server `abort(serverId)` that rejects in-flight calls cleanly
+  on disconnect. Handles `application/json` and `text/event-stream`
+  response bodies; captures `Mcp-Session-Id` on initialize and echoes
+  it on subsequent calls per spec. 30 s request timeout, AbortController
+  per call. Maps HTTP 401/403 to `AUTH_INVALID_TOKEN`, JSON-RPC error
+  envelopes to `EditorError`. Bearer auth via `Authorization` header
+  (omitted when no token).
+
+- **[`js/mcp/registry.js`](js/mcp/registry.js)** —
+  `MCPServerRegistry`, mirroring `GitProviderRegistry`. CRUD over
+  `{id, label, url, token, transport, enabled, _toolCount, _lastSync,
+  _unreachable}` records. `addServer` rejects duplicate IDs;
+  `loadServers` is null-safe and coerces missing fields. Persisted
+  via `State.settings.mcpServers[]`.
+
+- **[`js/mcp/bridge.js`](js/mcp/bridge.js)** — Connect/disconnect
+  orchestration. `connect(serverId)`: handshake → `tools/list` →
+  register each MCP tool as `mcp__<serverId>__<toolName>` with
+  category `mcp.<serverId>`, description prefixed `[MCP <label>]`,
+  handler closing over the live `MCPServerRegistry` record so disabled
+  servers short-circuit at call time. `disconnect(serverId)`:
+  (1) `ToolRegistry.unregister` each registered name,
+  (2) `protocol.abort` rejects in-flight promises,
+  (3) `sweepLedgersByToolId` walks every live `TaskLedger` and drops
+  `tool_admissions` / `tool_invocations` records matching the
+  disconnected server's prefix — orphans don't pile up across
+  reloads. Idempotent connect (clears stale registrations first), so
+  schema changes on the server side don't leave dangling tool names.
+
+- **[`plugins/mcp-bridge.js`](plugins/mcp-bridge.js)** — Bundled
+  plugin. `defaultEnabled: false`. `init()` loads
+  `State.settings.mcpServers[]` into the registry and bootstraps
+  every enabled server via `Plugins.registerMCPServer`. Subscribes
+  to `mcp:serversChanged` for live re-bootstrap when the Settings
+  tab mutates the registry. **Kill-switch:** `?mcpBridge=off` skips
+  bootstrap; the `Plugins.registerMCPServer` API itself is unaffected
+  so user-installed third-party MCP plugins still work even with the
+  bundled bridge off.
+
+- **[`js/settings/mcp-servers-tab.js`](js/settings/mcp-servers-tab.js)** —
+  Settings → MCP Servers panel. Mirrors `connections-tab.js`. Per-server
+  card: label / URL / transport dropdown / token (password input) /
+  enabled toggle / Test button / Edit / Remove. "+ Add MCP Server"
+  button. Test re-issues `initialize` + `tools/list` so the live tool
+  count reflects server-side updates. Slug ID derived from label;
+  collisions get a timestamp suffix.
+
+- **[`tests/test-mcp-protocol.mjs`](tests/test-mcp-protocol.mjs)** —
+  12 cases covering initialize handshake + session-id capture,
+  tools/list parse, tools/call argument shape, SSE response framing,
+  JSON-RPC error mapping, HTTP 401/503 mapping, abort rejects
+  in-flight calls, Bearer omitted when no token.
+
+- **[`tests/test-mcp-registry.mjs`](tests/test-mcp-registry.mjs)** —
+  12 cases over CRUD, duplicate-ID rejection, transport coercion,
+  enabled-only filter, serialize strips runtime fields, loadServers
+  null-safety.
+
+- **[`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs)** —
+  9 cases: connect translates `tools/list` into namespaced registry
+  entries with `mcp.<id>` category, Catalog auto-derives, handler
+  routes through `tools/call`, `isError` envelopes surface as handler
+  errors, disconnect unregisters + aborts + sweeps ledger, reconnect
+  clears stale registrations, failed connect marks `_unreachable`,
+  disabled server short-circuits at call time,
+  `sweepLedgersByToolId` is predicate-scoped.
+
+- **[`tests/test-mcp-servers-panel.js`](tests/test-mcp-servers-panel.js)** —
+  Browser smoke tests for the Settings panel.
+
+### Changed
+
+- **[`js/tools/registry.js`](js/tools/registry.js)** — New
+  `unregister(name)`, symmetric to `register`. Required for clean
+  MCP disconnect. Live consumers all re-derive from
+  `getDefinitions()` per call (no memoization), so mid-session
+  removal is safe.
+
+- **[`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)** —
+  `defToToolDef` prefers `def.category` (top-level) when present,
+  else falls back to `deriveCategory(name)`. MCP-bridged tools
+  declare `category: 'mcp.<serverId>'` at registration; static tools
+  are unaffected.
+
+- **[`js/core.js`](js/core.js)** — New
+  `Plugins.registerMCPServer(pluginId, opts)`. Lazy-imports
+  `js/mcp/registry.js` + `js/mcp/bridge.js`. Mirrors the
+  `Plugins.registerTool` lazy-import shape.
+
+- **[`js/chat/task-state.js`](js/chat/task-state.js)** — New
+  `sweepLedgersByToolId(predicate)` walks every live ledger and
+  drops `tool_admissions` / `tool_invocations` whose `tool_id`
+  matches. Used by the MCP bridge on disconnect to evict orphans
+  before the Catalog stops resolving them — without this, ledgers
+  would accumulate stale `mcp__*` records forever.
+
+- **[`js/settings/persistence.js`](js/settings/persistence.js)** —
+  `collectAndSave()` persists `State.settings.mcpServers` from
+  `MCPServerRegistry.serialize()`.
+
+- **[`js/settings-manager.js`](js/settings-manager.js)** — Imports
+  and calls `initMCPServersTab` from `openSettings()` alongside
+  `initConnectionsTab()`.
+
+- **[`html/modals.html`](html/modals.html)** — Adds the "MCP Servers"
+  sidebar entry under the AI group.
+
+- **[`html/settings-tabs.html`](html/settings-tabs.html)** — Adds the
+  `tabMCPServers` panel + editor form.
+
+- **[`js/app.js`](js/app.js)** — Imports
+  `'../plugins/mcp-bridge.js'` alongside the other bundled plugins.
+
+- **[`js/prompts.js`](js/prompts.js)** — One additional clause under
+  EFFICIENCY RULES nudging the model to call `find_tool` first when
+  the user asks about external services. ~50 tokens. No per-tool
+  enumeration — would defeat the §1.4.0 admission savings.
+
+- **[`js/version.js`](js/version.js)** — bumped 1.4.1 → 1.4.2.
+
+### Removability check (Decision §7)
+
+Deleting `js/mcp/`, `plugins/mcp-bridge.js`,
+`js/settings/mcp-servers-tab.js`, plus reverting the HTML and import
+additions: the editor reverts to 1.4.1 behavior.
+`ToolRegistry.unregister` + `def.category` flow-through stay live
+with no producer; static tools keep using `deriveCategory(name)`.
+`sweepLedgersByToolId` stays live with no caller. Persisted
+`State.settings.mcpServers` becomes inert. No user-visible
+degradation; no migration.
+
+### Notes
+
+- **Kill-switch verification.** Open with `?mcpBridge=off`. Settings →
+  MCP Servers still lists servers + the Test button works
+  (`testConnection` doesn't depend on the bundled plugin's
+  bootstrap). But no MCP tools register: the LLM Debug modal's tool
+  admission block shows the same static count as before, no `mcp.*`
+  category in `list_tool_categories`. The third-party MCP plugin
+  path is unaffected — `Plugins.registerMCPServer` itself is alive.
+
+- **Why one PR, not three.** Splitting the protocol/registry from
+  the bridge from the Settings panel would create half-step releases
+  where MCP tools register but have no UI (or vice versa). Total
+  surface is ~750 lines across 8 source files, small enough to ship
+  coherent.
+
 ## [1.4.1] - 2026-05-01
 
 **Tools 1.4.x — semantic `find_tool` + lazy schema expansion.** First

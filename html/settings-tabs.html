@@ -575,6 +575,75 @@
     <div id="memoryTabRoot" class="mem-tab-root"></div>
 </div>
 
+<!-- MCP Servers Tab — 1.4.2. Configure Model Context Protocol servers; tools land in the Catalog under `mcp.<serverId>` and reach the model via discovery. -->
+<div class="settings-tab-content" id="tabMCPServers">
+    <div class="conn">
+        <div class="conn__head">
+            <h3 class="conn__title">MCP Servers</h3>
+            <p class="conn__sub">Connect Model Context Protocol servers (HTTP transports only — stdio is unavailable in the browser). Each server's tools enter the Catalog under <code>mcp.&lt;serverId&gt;</code> and reach the model via <code>find_tool</code> discovery + sticky admission. Adding a server costs ~0 baseline tokens.</p>
+        </div>
+
+        <div id="mcpServersList">
+            <!-- Populated by js/settings/mcp-servers-tab.js -->
+        </div>
+
+        <div style="margin-top: 0.75rem;">
+            <button type="button" class="btn btn-primary" id="btnAddMCPServer">
+                <span>＋ Add MCP Server</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MCP Server Editor (hidden by default, shown on Add/Edit). -->
+    <div id="mcpServerEditor" class="connection-editor" style="display: none;">
+        <h4 id="mcpServerEditorTitle" style="margin: 0 0 0.75rem 0; font-size: var(--font-base); font-weight: 600;">New MCP Server</h4>
+        <input type="hidden" id="mcpEditId">
+
+        <div class="form-group">
+            <label for="mcpEditLabel">Label:</label>
+            <input type="text" id="mcpEditLabel" placeholder="e.g. Filesystem, GitHub, Linear">
+        </div>
+
+        <div class="form-group">
+            <label for="mcpEditUrl">URL:</label>
+            <input type="text" id="mcpEditUrl" placeholder="https://mcp.example.com/mcp">
+        </div>
+
+        <div class="form-group">
+            <label for="mcpEditTransport">Transport:</label>
+            <select id="mcpEditTransport">
+                <option value="streamable-http">Streamable HTTP (default)</option>
+                <option value="sse">SSE (legacy)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="mcpEditToken">Bearer Token (optional):</label>
+            <input type="password" id="mcpEditToken" placeholder="Bearer token, if the server requires one">
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="mcpEditEnabled" checked>
+                Enabled
+            </label>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+            <button type="button" class="btn btn-secondary" id="btnTestMCPServer">
+                <span>🧪 Test</span>
+            </button>
+            <div style="flex: 1;"></div>
+            <button type="button" class="btn btn-secondary" id="btnCancelMCPServer">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSaveMCPServer">
+                <span>Save Server</span>
+            </button>
+        </div>
+
+        <div id="mcpServerTestResult" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: var(--font-md); display: none;"></div>
+    </div>
+</div>
+
 <!-- Advanced Tab -->
 <!-- Plugins Tab -->
 <div class="settings-tab-content" id="tabPlugins">

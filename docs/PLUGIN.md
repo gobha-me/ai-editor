@@ -224,6 +224,30 @@ async init(config) {
 
 The `parameters` field uses [JSON Schema](https://json-schema.org/) format. The `roles` field controls which roles can access the tool (`'all'` or an array of role IDs).
 
+### Register an MCP server (1.4.2)
+
+Connect a [Model Context Protocol](https://modelcontextprotocol.io) server. The plugin's `init()` calls `Plugins.registerMCPServer(...)` once per server; the bridge handshakes (`initialize` → `tools/list`) and registers each advertised tool into the Catalog as `mcp__<serverId>__<toolName>` under category `mcp.<serverId>`. Tools reach the model only via discovery (`find_tool`, `list_tools_by_category`) + sticky admission — they're **not** added to any profile's static set, so a connected server costs ~0 baseline tokens per turn.
+
+```javascript
+async init(config) {
+    await Plugins.registerMCPServer('my-plugin', {
+        id: 'fs',                            // stable slug, used in tool names + persistence
+        label: 'Filesystem',                 // display label
+        url: 'https://mcp.example.com/mcp',  // HTTP endpoint
+        token: config.token,                 // optional Bearer token
+        transport: 'streamable-http',        // or 'sse' (legacy)
+        enabled: true,
+    });
+    return {};
+}
+```
+
+**Browser-only constraint.** AI Editor runs in a browser with no subprocess capability, so MCP **stdio** transport is unsupported. 1.4.2 ships HTTP transports only; `streamable-http` is the default per the current MCP spec. A future backend relay companion would unlock stdio servers for users who run one themselves.
+
+**Auth.** Bearer token in the `Authorization` header (omitted when no token). OAuth flows are not supported in 1.4.2.
+
+**Kill-switch.** The bundled `mcp-bridge` plugin honors `?mcpBridge=off` to skip bootstrap. Third-party plugins that call `Plugins.registerMCPServer` directly are unaffected by the kill-switch — only the bundled plugin's auto-load of `State.settings.mcpServers[]` is gated.
+
 ### CSS Injection
 
 Add custom styles. Multiple calls with the same plugin ID replace the previous stylesheet:

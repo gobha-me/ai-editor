@@ -135,6 +135,42 @@ export function _resetForTests() {
 }
 
 /**
+ * Sweep `tool_admissions` and `tool_invocations` across every live ledger,
+ * dropping entries whose `tool_id` matches `predicate(toolId)`. Used by the
+ * MCP bridge on server disconnect to evict orphaned sticky entries before
+ * the Catalog stops resolving them — without this, ledgers accumulate stale
+ * `mcp__*` records forever.
+ *
+ * @param {(toolId: string) => boolean} predicate
+ * @returns {{ ledgersTouched: number, admissionsRemoved: number, invocationsRemoved: number }}
+ */
+export function sweepLedgersByToolId(predicate) {
+    let ledgersTouched = 0;
+    let admissionsRemoved = 0;
+    let invocationsRemoved = 0;
+    if (typeof predicate !== 'function') {
+        return { ledgersTouched, admissionsRemoved, invocationsRemoved };
+    }
+    for (const ledger of _ledgers.values()) {
+        let touched = false;
+        const beforeAdm = ledger.tool_admissions.length;
+        ledger.tool_admissions = ledger.tool_admissions.filter(a => !predicate(a.tool_id));
+        if (ledger.tool_admissions.length !== beforeAdm) {
+            admissionsRemoved += beforeAdm - ledger.tool_admissions.length;
+            touched = true;
+        }
+        const beforeInv = ledger.tool_invocations.length;
+        ledger.tool_invocations = ledger.tool_invocations.filter(i => !predicate(i.tool_id));
+        if (ledger.tool_invocations.length !== beforeInv) {
+            invocationsRemoved += beforeInv - ledger.tool_invocations.length;
+            touched = true;
+        }
+        if (touched) ledgersTouched++;
+    }
+    return { ledgersTouched, admissionsRemoved, invocationsRemoved };
+}
+
+/**
  * Record one successful tool invocation against the conversation's ledger
  * and, if the tool isn't in the static set or already-admitted, auto-admit
  * it with `source: 'discovery'`. The Composer will read these records on
