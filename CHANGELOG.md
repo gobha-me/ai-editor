@@ -4,6 +4,61 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-05-02
+
+**Retrieval Phase 1 — ConversationChunker (PR 4 of 1.5.0).** Third chunker
+on the 1.4.9 foundation, fourth PR in the 1.5.0 chunker stream. Implements
+the conversation row of `docs/DESIGN-retrieval.md` §"Chunker": **1 turn =
+1 chunk, never split, no overlap.** Pure function — `(input) → Chunk[]`
+mirroring the contract pinned by [`prose-chunker.js`](js/intelligence/retrieval/chunkers/prose-chunker.js)
+at 1.4.10 and [`code-chunker.js`](js/intelligence/retrieval/chunkers/code-chunker.js)
+at 1.4.11.
+
+**Input format.** `ChunkerInput.bytes` carries a JSON-serialized
+[`HistoryTurn`](js/intelligence/retrieval/contracts.js)`[]`. The chunker
+parses, validates the array shape and per-turn `role`+`content`
+invariants, and emits one Chunk per turn. The contract's `bytes: string`
+shape stays intact — no per-content-type discriminated union sprawl in
+`ChunkerInput`. The alternative (a sibling `turns` field) was considered
+and rejected: it forks the contract for one chunker.
+
+**Per-chunk content + metadata.** The chunk's `content` is the turn's
+`content` field (the user-facing text), not the JSON envelope.
+`metadata.custom` carries `role`, `turn_index`, plus any non-(role|content)
+top-level fields on the source turn (e.g. `timestamp`, `tool_name`,
+`tool_result_for`) and any keys from the turn's `metadata` sub-object
+(HistoryTurn shape). Caller-supplied `metadata.custom` from the
+[`ChunkerInput`](js/intelligence/retrieval/contracts.js) takes precedence
+over per-turn extras on key conflict — the input-level custom is the
+loader's per-source tagging, the turn-level extras are the conversation's
+payload. Per the design's note "On the conversation chunker":
+`metadata.custom` is the extensibility seam for surface-specific fields;
+the chunker preserves, never invents.
+
+**Byte-range semantics.** Conversation `byte_range`s are computed over the
+concatenation of canonical per-turn serializations (`JSON.stringify
+(turn_i)`), not over `input.bytes`. This decouples ChunkID stability from
+caller serialization choices: the same logical conversation produces
+identical ChunkIDs regardless of whether the caller pretty-printed the
+JSON envelope. Adjacency holds: `chunks[i+1].byte_range[0] ===
+chunks[i].byte_range[1]`.
+
+**ChunkID under `CHUNKER_VERSION.conversation`.** The frozen registry's
+`conversation: 'v1'` slot (set in 1.4.9) goes live. UTF-8 byte counting
+follows the same surrogate-aware mapping the prose / code chunkers use.
+
+**No runtime wire-up:** nothing imports `chunkConversation` outside the
+test suite yet. The Composer placeholder in [`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call. `find_relevant_files`, indexing, embedding, and
+Tools all behave identically. Removability holds (Decision §7).
+
+Tests: 29 cases covering empty / single-turn / multi-turn / role variety
+(user, assistant, tool, system) / custom-metadata pass-through + merge
+precedence / byte-range adjacency / ChunkID stability across runs and
+across compact-vs-pretty JSON envelopes / chunker-version invalidation /
+UTF-8 multi-byte content / and the validation rejection paths (malformed
+JSON, non-array root, missing role/content, non-object turns).
+
 ## [1.4.11] - 2026-05-02
 
 **Retrieval Phase 1 — CodeChunker (PR 3 of 1.5.0).** Second chunker on
