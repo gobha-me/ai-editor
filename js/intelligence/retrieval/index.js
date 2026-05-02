@@ -100,7 +100,20 @@
  * (owner / repo / ref) closes over the loader so `source_uri` is a plain
  * in-repo path. No app-boot integration in 1.5.1 — the comparison harness
  * PR triggers ingestion when its test runs; `find_relevant_files` keeps
- * running through legacy `js/context-manager.js` until 1.5.3.
+ * running through legacy `js/context-manager.js` until 1.5.4.
+ * 1.5.2 adds `createComparisonHarness` plus the default normalizers
+ * (`normalizeLegacyResult`, `normalizeComposerResult`) and metrics
+ * (`jaccardSimilarity`, `precisionAtK`) — the measurement infrastructure
+ * for the §1.5.0 ≥80% legacy-vs-new agreement exit criterion. Pure DI
+ * over two opaque retrieval runners; `compareBatch` aggregates per-query
+ * Jaccard into a `ComparisonReport` with histogram and mean. Eighteenth
+ * PR in the 1.5.0 stream — runs on top of 1.5.1's production wiring at
+ * the consumer's call site. Subsequent PRs add (a) the test-query
+ * fixture corpus the harness drives (1.5.3) and (b) the actual ≥80%
+ * agreement measurement that promotes the track to 1.5.0-final. No
+ * runtime wire-up: `find_relevant_files` keeps running through legacy
+ * `ContextManager.findRelevantFiles` until 1.5.4 (renumbered from 1.5.3
+ * to make room for the corpus PR).
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -142,3 +155,10 @@ export {
     createProductionEmbedder,
     createProductionIngestWalker,
 } from './wiring.js';
+export {
+    createComparisonHarness,
+    normalizeLegacyResult,
+    normalizeComposerResult,
+    jaccardSimilarity,
+    precisionAtK,
+} from './comparison.js';

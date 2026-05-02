@@ -541,6 +541,59 @@
  */
 
 /**
+ * One row of the 1.5.2 comparison harness output: the outcome of running
+ * one query through both the legacy `ContextManager.findRelevantFiles`
+ * pipeline (via `runLegacy`) and the new Composer pipeline (via
+ * `runNew`). `legacyPaths` / `newPaths` are the normalized top-K path
+ * lists; either is `null` only when the corresponding runner threw and
+ * the matching `legacyError` / `newError` carries the cause.
+ * `agreement` is `null` when either side errored — agreement requires
+ * two samples to compute.
+ *
+ * Shape committed at 1.5.2 so the corpus PR and the measurement PR can
+ * consume it without re-deriving the surface.
+ *
+ * @typedef {Object} ComparisonResult
+ * @property {string} query
+ * @property {string[]|null} legacyPaths
+ * @property {string[]|null} newPaths
+ * @property {Error|null} legacyError
+ * @property {Error|null} newError
+ * @property {number|null} agreement      0..1; null if either side errored.
+ * @property {number} durationMs
+ */
+
+/**
+ * Histogram buckets for `agreement` values across a `ComparisonReport`.
+ * Buckets are left-closed, right-open except the last (`0.8-1.0`) which
+ * includes 1.0. Σ of the five values equals
+ * `total - (queries where either runner errored)`.
+ *
+ * @typedef {Object} AgreementHistogram
+ * @property {number} '0.0-0.2'
+ * @property {number} '0.2-0.4'
+ * @property {number} '0.4-0.6'
+ * @property {number} '0.6-0.8'
+ * @property {number} '0.8-1.0'
+ */
+
+/**
+ * Aggregate over a batch of comparisons. `meanAgreement` is `null` when
+ * no query produced a non-null agreement value (e.g. every runner
+ * errored, or the input was empty). `legacyFailures` / `newFailures`
+ * count per-side: a query where both runners threw counts in *both*.
+ *
+ * @typedef {Object} ComparisonReport
+ * @property {number} total
+ * @property {ComparisonResult[]} perQuery   In input order.
+ * @property {number|null} meanAgreement     Mean of non-null `agreement` values across `perQuery`.
+ * @property {AgreementHistogram} histogram
+ * @property {number} legacyFailures
+ * @property {number} newFailures
+ * @property {number} durationMs
+ */
+
+/**
  * Frozen registry of chunker versions, one per `ContentType`. Bumping a
  * version invalidates the corresponding ChunkIDs (see DESIGN-retrieval
  * §"Chunk Identity and Stability"); two chunkers can coexist during a

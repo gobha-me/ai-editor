@@ -4,6 +4,97 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-05-02
+
+**Retrieval Phase 1 — Comparison harness (PR 18 of 1.5.0).** New module
+[`js/intelligence/retrieval/comparison.js`](js/intelligence/retrieval/comparison.js)
+plus default normalizers, default metrics, and result-shape typedefs in
+[`contracts.js`](js/intelligence/retrieval/contracts.js). The measurement
+infrastructure for the §1.5.0 exit criterion: *"Existing
+`find_relevant_files` results (legacy) and new Composer results agree
+for ≥80% of test queries."* This PR ships the **structural seam**; the
+next two PRs ship the test-query fixture corpus and the actual ≥80%
+agreement run that promotes the track to 1.5.0-final.
+
+**Public surface** — re-exported from [the retrieval barrel](js/intelligence/retrieval/index.js):
+
+- `createComparisonHarness({ runLegacy, runNew, normalizeLegacy?, normalizeNew?, metric?, topK?, now? }) → ComparisonHarness`
+  — opaque-runner DI; both runners receive the query string and resolve
+  to whatever shape the corresponding normalizer understands. The handle
+  exposes `compare(query, opts?)` (one query, both pipelines),
+  `compareBatch(queries, opts?)` (many queries, aggregated into a
+  `ComparisonReport` with `histogram` + `meanAgreement`), and `stats()`
+  (lifetime totals across every comparison).
+- `normalizeLegacyResult(raw, { topK }) → string[]` — accepts the legacy
+  `Array<{ path, similarity, summary }>` (the
+  `ContextManager.findRelevantFiles` shape at
+  [`js/context-manager.js`](js/context-manager.js)) plus the
+  `{ files: [...] }` envelope shape the `find_relevant_files` LLM tool
+  wraps the result in at [`js/tools/context-tools.js`](js/tools/context-tools.js).
+  Defensive: malformed entries silently skipped, never thrown.
+- `normalizeComposerResult(raw, { topK }) → string[]` — accepts a
+  `RetrievalResult` (the shape `compose()` resolves to) and walks
+  `blocks` in `position` order, collecting unique `chunks_by_id[id]
+  .metadata.source_uri` values. Attention-aware, dedup'd, capped at
+  `topK`.
+- `jaccardSimilarity(a, b) → number` — symmetric set Jaccard. Both
+  empty → 1.0; either empty (other not) → 0.0.
+- `precisionAtK(predicted, reference, k) → number` — asymmetric
+  precision-at-k. Divides by `k`, not by `predicted.length` — a runner
+  returning fewer than `k` results cannot achieve precision 1.0.
+
+**Phase-1 scope decisions** (called out so future readers don't
+reverse-engineer them from behavior):
+
+- **Sequential per-query, sequential within-query.** Both runners share
+  an embedding provider in production; running them concurrently risks
+  rate-limit churn against the same backend. The corpus is O(20-200)
+  queries; a sequential pass finishes in seconds. Explicit concurrency
+  is a future knob if a corpus consumer demands it.
+- **Per-query error isolation.** A throw in either runner is caught;
+  the offending side records `legacyError` / `newError`, the result
+  records `agreement: null`, and the batch continues. Same posture the
+  walker took at 1.5.0 for `controller.ingest` failures.
+- **Both-empty agreement = 1.0** (Jaccard of two empty sets).
+  Semantically correct ("both pipelines agree nothing is relevant"),
+  but the corpus PR is where empty-result filtering / weighting belongs
+  if the eventual measurement needs it — not the harness.
+- **Defensive normalizers — never throw.** A malformed entry is
+  skipped; the harness's job is *measurement*, not validation. A
+  misshapen result counts as a zero-overlap sample and the report keeps
+  moving.
+- **Histogram buckets:** `[0.0, 0.2)`, `[0.2, 0.4)`, `[0.4, 0.6)`,
+  `[0.6, 0.8)`, `[0.8, 1.0]`. Five buckets, 1.0 included in the last.
+- **`onProgress` errors swallowed.** Diagnostic callbacks must not
+  abort the comparison. Same posture as the walker.
+- **Injectable `now()`** for deterministic `durationMs`. Same DI
+  posture every retrieval module took.
+
+**Out of scope for this PR (later PRs):** the test-query fixture corpus
+the harness drives (next PR — 1.5.3 in the renumbered schedule); the
+actual ≥80% agreement *measurement* run (the PR after that); wiring
+against the real `ContextManager.findRelevantFiles` (browser-bound —
+the legacy module imports `core.js`, so the runner is constructed at
+the consumer's call site); migration of `find_relevant_files` off
+`js/context-manager.js` (1.5.6 in the renumbered schedule); concurrency /
+retry / per-query embedding cache between runs.
+
+**No runtime wire-up.** Nothing imports `createComparisonHarness`
+outside the test suite. With this module deleted, the barrel re-exports
+removed, and the typedefs removed, no production behavior degrades —
+`find_relevant_files` keeps running through legacy
+`ContextManager.findRelevantFiles` exactly as before. Removability
+holds (Decision §7). 44 unit cases under
+`node --test tests/test-retrieval-comparison.mjs`.
+
+**Roadmap renumber.** This PR takes the 1.5.2 slot; the corpus PR claims
+1.5.3 and the agreement-measurement PR claims 1.5.4 (newly enumerated as
+in-stream slots); the previously-listed 1.5.2 (Thematic) → 1.5.5, 1.5.3
+(legacy `context-manager.js` removal) → 1.5.6, 1.5.4 (cost-dashboard
+retrieval extension) → 1.5.7, 1.5.5 (query / structural expansion cache)
+→ 1.5.8, 1.5.6 (AST-based code chunker) → 1.5.9 in
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"1.5.x — Retrieval follow-ups".
+
 ## [1.5.1] - 2026-05-02
 
 **Retrieval Phase 1 — Production wiring (PR 17 of 1.5.0).** Bridges the
