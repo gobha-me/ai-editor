@@ -161,6 +161,11 @@ function renderToolDiagnostics(diag) {
         html += `<div style="margin-top: 4px; color: #fa0;">suppressed: ${diag.suppressed}</div>`;
     }
 
+    if ((diag.evicted_count || 0) > 0) {
+        html += `<div style="margin-top: 4px; color: #fa0;">LRU evicted: <strong>${diag.evicted_count}</strong> tools `;
+        html += `(reclaimed <strong>${diag.tokens_evicted || 0}</strong> tokens)</div>`;
+    }
+
     if (Array.isArray(diag.unresolved_static) && diag.unresolved_static.length > 0) {
         html += `<div style="margin-top: 4px; color: #fa0;">unresolved_static (${diag.unresolved_static.length}): `;
         html += diag.unresolved_static.map(esc).join(', ') + `</div>`;

@@ -163,7 +163,7 @@
  *
  * @typedef {Object} SuppressionRecord
  * @property {ToolID} tool_id
- * @property {"unauthorized"|"over_budget"|"not_discovered"|"deprecated"} reason
+ * @property {"unauthorized"|"over_budget"|"not_discovered"|"deprecated"|"evicted_for_budget"} reason
  * @property {string} [detail]
  */
 
@@ -184,6 +184,8 @@
  * @property {number}   sticky_admitted
  * @property {number}   discovery_admitted
  * @property {number}   suppressed
+ * @property {number}   evicted_count    Non-static tools dropped under budget pressure (1.4.8 LRU). Mirrors DESIGN-tools.md §Diagnostics.
+ * @property {number}   tokens_evicted   Sum of `cost` for entries the eviction pass dropped. Sums into the same denominator as `tokens_used`.
  * @property {string[]} unresolved_static
  */
 

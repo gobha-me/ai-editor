@@ -34,7 +34,7 @@ import { getCompressedContextMessages } from './compactor-integration.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
-import { DISCOVERY_ADMISSION_CAP } from '../intelligence/tools/embeddings.js';
+import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
 
@@ -604,7 +604,7 @@ export async function handleGeneralRequest(input) {
                                 conversationId: ConversationManager.getActiveId(),
                                 surface: CODER_V1.name,
                                 candidates,
-                                cap: DISCOVERY_ADMISSION_CAP,
+                                cap: _readDiscoveryCap(),
                             });
                         }
                     }

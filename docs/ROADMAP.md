@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-01 · Current released version: **1.4.5** · Authoring branch: `claude/jolly-volhard-998f9f`
+> Last updated: 2026-05-02 · Current released version: **1.4.8** · Authoring branch: `claude/jolly-volhard-998f9f`
 
 ## How to read this doc
 
@@ -14,7 +14,7 @@
 
 | Phase | Track | Status |
 |---|---|---|
-| **Now** | Tools follow-ups (1.4.x): ghost text + tuning/eviction remain | Phase 1 shipped at 1.4.0 (79.5% token reduction live); 1.4.1 semantic `find_tool` ✓, 1.4.2 MCP bridge ✓, 1.4.4 workspace-scoped settings ✓, 1.4.5 test-driven loop ✓, 1.4.6 scan-driven CI logs ✓. 1.4.7 ghost text + 1.4.8 tuning still sized but not started. |
+| **Now** | Tools track fully shipped at 1.4.8 — Retrieval Phase 1 (1.5.0) opens next | Phase 1 shipped at 1.4.0 (79.5% token reduction live); 1.4.1 semantic `find_tool` ✓, 1.4.2 MCP bridge ✓, 1.4.4 workspace-scoped settings ✓, 1.4.5 test-driven loop ✓, 1.4.6 scan-driven CI logs ✓, 1.4.7 ghost text ✓, 1.4.8 tuning + LRU eviction ✓. |
 | **Next** | Retrieval Phase 1 (1.5.0) | Designed; not started. |
 | **Later** | Profiles → 2.0 | Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items | See *Deferred / unscheduled* — triage owed. |
@@ -49,8 +49,9 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 ---
 
-## What's in production today (1.4.5)
+## What's in production today (1.4.8)
 
+- **Tools 1.4.7–1.4.8 follow-ups** — ghost text (1.4.7) plus the LRU eviction safety-net + Settings → Tools tuning surface (1.4.8) close the 1.4.x in-track sequence.
 - **Editor / Git / providers** — CodeMirror 6, 19 languages, multi-tab, diff/blame/preview; 4 Git providers (Gitea/GitHub/GitLab/in-memory zip); 4 LLM providers (Venice, OpenRouter, Ollama, generic OpenAI).
 - **Memory subsystem (1.3.0–1.3.3)** — persistent `user` + `workspace` scopes, hybrid IDB + `.aieditor/memory/*.md` storage, 3 LLM tools (`memory_remember`/`memory_recall`/`memory_revise`), Settings → Memory tab, `@memory` chip, agent-proposal consent flow, cross-device session sync, session replay viewer.
 - **Touch 2 facelift (1.3.5–1.3.13)** — frozen `--tk-*` token vocabulary, top-bar restructure, Settings sidebar, Connections panel, Debug + Help slide-outs, Lucide icon family, self-hosted woff2 fonts, rem-based UI scaling.
@@ -111,8 +112,8 @@ Tools Phase 1 shipped at **1.4.0** with the 79.5%-token-reduction observation cl
 - **1.4.4:** ✅ **Shipped.** Workspace-scoped settings — `.aieditor/settings.json` overrides a curated safelist of keys per-repo, with auto-stage on unprotected branches and a "reset to global" affordance.
 - **1.4.5:** ✅ **Shipped.** Test-driven loop — bounded agentic CI iterator. Three new LLM tools (`get_ci_status` / `wait_for_ci` / `get_ci_logs`) plus a chat-input "🔁 Loop" trigger that drives "edit → commit → wait CI → read failure log → loop" under user-tunable bounds (iterations, wall-clock, tokens/iter, CI poll). Reuses the 1.1.1 idle-timeout for the wait-for-CI step. Per-iteration records flow through the unified `TaskLedger.loop_iterations[]` (third consumer of the same struct). Roadmap originally sequenced this as 1.4.3.
 - **1.4.6:** ✅ **Shipped.** Scan-driven CI logs. `get_ci_logs` downloads the full job log into a virtual in-memory cache under `.aieditor/ci-cache/<runId>-<jobId>-<slug>.log` and returns the path; the model uses regular file tools (`read_file` / `read_lines` / `scan_file`) to inspect it. Single chokepoint hook in `Git.getFile()`; cache evicts on `loop:finished` with a 5-entry LRU + 10MB-per-entry backstop. Replaces the old fixed-size tail (which silently lost top-of-log failures).
-- **1.4.7:** *Inline AI suggestions (ghost text, hotkey-only).* Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
-- **1.4.8:** *Lazy expansion threshold tuning + LRU eviction on the static set when memory pressure exceeds budget.* (The "tool ledger merges with task ledger" item that previously lived here disappeared because the unified `TaskLedger` shipped in 1.1.0 — 1.4.0 + 1.4.5 fill in fields on the same struct.)
+- **1.4.7:** ✅ **Shipped.** Inline AI suggestions (ghost text, hotkey-only). Pressing a hotkey (default: `Tab`, configurable) requests a single completion at the cursor — never automatic, no idle polling. Renders as CodeMirror 6 decoration; `Tab` accepts, `Esc` dismisses. Throttled (one in-flight at a time). The cost-control framing is intentional — automatic ghost text is a Cursor-style cost trap; hotkey-triggered respects the user's intent.
+- **1.4.8:** ✅ **Shipped.** Lazy expansion threshold tuning + LRU eviction safety net. The Composer now drops the longest-unused non-static admitted entries when `tokens_used > budget_tokens` after sticky packing (LRU keyed on `task_ledger.tool_admissions[i].last_used_at`); static is privileged and never evicted, per `docs/DESIGN-tools.md` §"Static is privileged." `evicted_count` / `tokens_evicted` surface in `ToolDiagnostics` and the LLM Debug modal. Settings → Tools tab exposes `findToolThreshold` / `findToolTopK` / `discoveryAdmissionCap` under the `State.settings.tools.*` subtree (workspace-overridable via the 1.4.4 safelist); the legacy flat `State.settings.findToolThreshold` is honored as fallback. Closes the 1.4.x in-track sequence — Retrieval Phase 1 (1.5.0) opens next.
 
 ---
 

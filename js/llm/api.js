@@ -1015,6 +1015,8 @@ export const LLMTools = {
             composerActive: true,
         };
 
+        const evictedCount = result.diagnostics.evicted_count || 0;
+        const tokensEvicted = result.diagnostics.tokens_evicted || 0;
         console.log(
             '[LLMTools] Composer admitted', result.admitted.length,
             '(', result.diagnostics.static_admitted, 'static +',
@@ -1022,6 +1024,7 @@ export const LLMTools = {
             '/', CODER_V1.tools.static.length, 'static declared;',
             'tool defs:', result.tokens_used, '/', baseline, 'tokens (',
             reductionPct.toFixed(1), '% reduction vs role-filter baseline);',
+            evictedCount > 0 ? `evicted ${evictedCount} for ${tokensEvicted}t;` : '',
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 

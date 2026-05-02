@@ -30,11 +30,22 @@
  *     Surfaced in `diagnostics.unresolved_static` so callers can tell
  *     "missing on purpose" (PR-3 meta-tools) from "registry forgot".
  *
+ * **1.4.8 addition — LRU eviction.** After the sticky pass, if `tokens_used`
+ * still exceeds `budget_tokens`, drop the longest-unused non-static entries
+ * (by `task_ledger.tool_admissions[i].last_used_at` ASC; null-or-missing
+ * sorts first as "never used → evict first") until the budget is honored.
+ * Static is privileged and never evicted (per `docs/DESIGN-tools.md` §"Static
+ * is privileged"); a static-set whose cost alone exceeds budget surfaces as
+ * a profile-configuration error — the eviction pass leaves it intact and the
+ * caller sees `tokens_used > budget_tokens` with no evictions, signalling
+ * "this is on you, not the runtime." Evictees go to `suppressed[]` with
+ * `reason: 'evicted_for_budget'`; counts surface in `diagnostics.evicted_count`
+ * and `diagnostics.tokens_evicted`.
+ *
  * **Out of scope (subsequent PRs):**
  *   - Discovery (categorical / semantic) — sub-prompt that returns "admit
  *     these" hints to the Composer mid-call.
  *   - Lazy schema expansion (`form: "short"` on discovery).
- *   - LRU eviction of sticky entries when memory pressure exceeds budget.
  *   - Deprecation handling (`metadata.deprecated`).
  *
  * Pure function — no `State` reads, no DOM, no logging side effects. The
@@ -266,12 +277,43 @@ export function composeAdmission(request) {
         }
     }
 
+    // 1.4.8 — LRU eviction safety net. Sticky packing already rejects
+    // entries that would push past `budget_tokens`, so this pass only fires
+    // when the budget shrinks under our feet (a workspace-settings override
+    // dropped it mid-task, a profile reload narrowed it, or a future caller
+    // forgets the per-entry budget gate). Static is privileged: if the
+    // static set alone exceeds budget, we leave it in place and let
+    // `tokens_used > budget_tokens` surface in diagnostics.
+    let evictedCount = 0;
+    let tokensEvicted = 0;
+    if (Number.isFinite(budget) && tokensUsed > budget) {
+        const lru = _orderNonStaticByLRU(admitted, ledger);
+        for (const entry of lru) {
+            if (tokensUsed <= budget) break;
+            const cost = _resolveCost(entry, ledger);
+            const idx = admitted.findIndex(a => a.tool_id === entry.tool_id && a.source !== 'static');
+            if (idx === -1) continue;
+            admitted.splice(idx, 1);
+            tokensUsed -= cost;
+            evictedCount++;
+            tokensEvicted += cost;
+            suppressed.push({
+                tool_id: entry.tool_id,
+                reason: 'evicted_for_budget',
+                detail: `cost=${cost}, last_used_at=${entry.last_used_at == null ? 'never' : entry.last_used_at}`,
+            });
+            stickyAdmitted = Math.max(0, stickyAdmitted - 1);
+        }
+    }
+
     /** @type {ToolDiagnostics} */
     const diagnostics = {
         static_admitted: staticCount,
         sticky_admitted: stickyAdmitted,
         discovery_admitted: 0,
         suppressed: suppressed.length,
+        evicted_count: evictedCount,
+        tokens_evicted: tokensEvicted,
         unresolved_static: unresolved,
     };
 
@@ -281,6 +323,72 @@ export function composeAdmission(request) {
         diagnostics,
         tokens_used: tokensUsed,
     };
+}
+
+/**
+ * Order non-static admitted entries oldest-LRU-first using the ledger's
+ * `last_used_at`. Entries with no ledger record or `last_used_at == null`
+ * sort before any timestamp ("never used → evict first," per
+ * `docs/DESIGN-tools.md` §"Eviction is LRU-by-task-use").
+ *
+ * Returns objects shaped `{tool_id, last_used_at, source}` so the caller
+ * can both find-and-remove from `admitted[]` and emit the LRU detail in the
+ * suppression record.
+ *
+ * @param {AdmittedTool[]} admitted
+ * @param {{tool_admissions?: Array<{tool_id: string, last_used_at?: number|null}>}|null|undefined} ledger
+ * @returns {Array<{tool_id: string, last_used_at: number|null, source: string}>}
+ */
+function _orderNonStaticByLRU(admitted, ledger) {
+    const ledgerByName = new Map();
+    if (ledger && Array.isArray(ledger.tool_admissions)) {
+        for (const rec of ledger.tool_admissions) {
+            if (rec && typeof rec.tool_id === 'string') {
+                ledgerByName.set(rec.tool_id, rec);
+            }
+        }
+    }
+    /** @type {Array<{tool_id: string, last_used_at: number|null, source: string}>} */
+    const non = [];
+    for (const a of admitted) {
+        if (a.source === 'static') continue;
+        const td = Catalog.getById(a.tool_id);
+        const nameKey = td ? td.name : a.tool_id;
+        const rec = ledgerByName.get(nameKey) || ledgerByName.get(a.tool_id) || null;
+        const ts = rec && typeof rec.last_used_at === 'number' ? rec.last_used_at : null;
+        non.push({ tool_id: a.tool_id, last_used_at: ts, source: a.source });
+    }
+    non.sort((x, y) => {
+        if (x.last_used_at == null && y.last_used_at == null) return 0;
+        if (x.last_used_at == null) return -1;
+        if (y.last_used_at == null) return 1;
+        return x.last_used_at - y.last_used_at;
+    });
+    return non;
+}
+
+/**
+ * Resolve the per-entry cost the eviction pass should subtract from
+ * `tokens_used`. Mirrors the cost choice in the sticky pass — short-form
+ * entries pay `short_cost`; full-form entries pay `cost_estimate`.
+ *
+ * @param {{tool_id: string}} entry
+ * @param {{tool_admissions?: Array<{tool_id: string, form?: string, cost?: number}>}|null|undefined} ledger
+ * @returns {number}
+ */
+function _resolveCost(entry, ledger) {
+    const td = Catalog.getById(entry.tool_id);
+    if (!td) return 0;
+    let form = 'full';
+    if (ledger && Array.isArray(ledger.tool_admissions)) {
+        const nameKey = td.name;
+        const rec = ledger.tool_admissions.find(r => r && (r.tool_id === entry.tool_id || r.tool_id === nameKey));
+        if (rec && rec.form === 'short') form = 'short';
+    }
+    if (form === 'short' && typeof td.metadata.short_cost === 'number') {
+        return td.metadata.short_cost;
+    }
+    return td.metadata.cost_estimate;
 }
 
 /**
@@ -312,4 +420,6 @@ export function renderForLLM(result) {
 export const _testing = {
     isAuthorized,
     toOpenAIShape,
+    _orderNonStaticByLRU,
+    _resolveCost,
 };

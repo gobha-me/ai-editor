@@ -400,3 +400,93 @@ test('DEFAULT_THRESHOLD is 0.4 (the sized-for-MiniLM/bge-small default)', () => 
 test('DISCOVERY_ADMISSION_CAP is 3 (per ROADMAP §1.4.1)', () => {
     assert.equal(DISCOVERY_ADMISSION_CAP, 3);
 });
+
+/* -------------------------------------------------------------------------- */
+/* 1.4.8 — settings-driven tuning knobs                                       */
+/* -------------------------------------------------------------------------- */
+//
+// `_readThreshold` (private to embeddings.js) is invoked when the caller
+// omits `opts.threshold` on `findToolsBySemantic`. Settings precedence:
+// nested `State.settings.tools.findToolThreshold` > legacy flat
+// `State.settings.findToolThreshold` > `DEFAULT_THRESHOLD` (0.4). Each
+// test stages two vectors — a 1.0 cosine match and a 0.5 cosine match
+// (≈1/√2 vector pair). At threshold 0.95 only the 1.0 match seats; at
+// 0.4 both seat.
+
+function _vectorsForTwoSeats(query, all, primaryName) {
+    const vecMap = { [query]: [1, 0] };
+    for (const td of all) {
+        const text = `${td.name} ${td.description || ''} ${td.category || ''}`.trim();
+        if (td.name === primaryName) {
+            vecMap[text] = [1, 0];                  // cosine 1.0
+        } else if (td.name === 'list_pull_requests') {
+            vecMap[text] = [1 / Math.sqrt(2), 1 / Math.sqrt(2)];  // cosine ≈0.707
+        } else {
+            vecMap[text] = [0, 1];                  // cosine 0.0
+        }
+    }
+    return vecMap;
+}
+
+test('1.4.8: State.settings.tools.findToolThreshold overrides the default', async () => {
+    registerFixture();
+    const all = Catalog.listAll();
+    setupEmbedder(makeStubEmbedder({
+        vectors: _vectorsForTwoSeats('open a pr', all, 'create_pull_request'),
+    }));
+    const { State } = await import('../js/core.js');
+    const prev = State.settings;
+    State.settings = { ...(prev || {}), tools: { findToolThreshold: 0.95 } };
+    try {
+        const result = await findToolsBySemantic('open a pr', all);
+        assert.equal(result.mode, 'semantic');
+        assert.equal(result.ranked.length, 1);
+        assert.equal(result.ranked[0].td.name, 'create_pull_request');
+    } finally {
+        State.settings = prev;
+    }
+});
+
+test('1.4.8: legacy flat State.settings.findToolThreshold still honored when nested absent', async () => {
+    registerFixture();
+    const all = Catalog.listAll();
+    setupEmbedder(makeStubEmbedder({
+        vectors: _vectorsForTwoSeats('open a pr', all, 'create_pull_request'),
+    }));
+    const { State } = await import('../js/core.js');
+    const prev = State.settings;
+    State.settings = { ...(prev || {}), findToolThreshold: 0.95 };
+    try {
+        const result = await findToolsBySemantic('open a pr', all);
+        assert.equal(result.mode, 'semantic');
+        assert.equal(result.ranked.length, 1);
+        assert.equal(result.ranked[0].td.name, 'create_pull_request');
+    } finally {
+        State.settings = prev;
+    }
+});
+
+test('1.4.8: nested findToolThreshold beats legacy flat key when both present', async () => {
+    registerFixture();
+    const all = Catalog.listAll();
+    setupEmbedder(makeStubEmbedder({
+        vectors: _vectorsForTwoSeats('open a pr', all, 'create_pull_request'),
+    }));
+    const { State } = await import('../js/core.js');
+    const prev = State.settings;
+    // Flat key would gate at 0.95 (only 1.0 seats); nested at 0.4 (1.0
+    // + 0.707 seat). Nested must win → ≥2 candidates surface.
+    State.settings = {
+        ...(prev || {}),
+        findToolThreshold: 0.95,
+        tools: { findToolThreshold: 0.4 },
+    };
+    try {
+        const result = await findToolsBySemantic('open a pr', all);
+        assert.equal(result.mode, 'semantic');
+        assert.ok(result.ranked.length >= 2,
+            `nested threshold (0.4) should admit ≥2 candidates; got ${result.ranked.length}`);
+    } finally {
+        State.settings = prev;
+    }
+});

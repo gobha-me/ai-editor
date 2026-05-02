@@ -4,6 +4,130 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-05-02
+
+**Tools 1.4.x — lazy expansion threshold tuning + LRU eviction.** The
+last sized 1.4.x patch fills in the safety net Phase 1 left out of scope
+and surfaces the find-tool tuning knobs that 1.4.1 stashed behind an
+undocumented `State.settings.findToolThreshold` flag.
+
+LRU eviction is the fourth admission rule in `docs/DESIGN-tools.md`
+("Eviction is LRU-by-task-use"): when the Composer's `tokens_used`
+exceeds the profile's `budget_tokens` after the sticky pass, drop the
+longest-unused non-static entries first (keyed by
+`task_ledger.tool_admissions[i].last_used_at`, with `null` sorting first
+as "never used → evict first") until the budget is honored. **Static is
+privileged** — the static set is admitted first and is never evicted; if
+the static set alone exceeds budget, that surfaces as a profile-config
+error in the LLM Debug modal (`tokens_used > budget_tokens`, no
+evictions), per the design doc's "Static is privileged" rule.
+
+The Settings → Tools tab is the first user-facing knob surface for the
+Tools subsystem. Three sliders persist under `State.settings.tools.*`:
+`findToolThreshold` (0–1, default 0.4), `findToolTopK` (1–25, default
+8), and `discoveryAdmissionCap` (1–25, default 3). The legacy flat
+`State.settings.findToolThreshold` is still honored as fallback so
+sessions that hand-edited it before 1.4.8 keep working until the user
+re-saves through the new UI.
+
+Removability (Decision §7): with the eviction pass reverted, budget
+overrun reverts to "everything admits, budget silently exceeded" —
+acceptable since 1.4.0–1.4.7 shipped without it. With the Settings tab
+reverted, the undocumented flat-settings escape hatch still works for
+power users.
+
+This patch closes the 1.4.x in-track sequence — the Tools track has now
+fully shipped its planned patches. Next up: 1.5.0 Retrieval Phase 1.
+
+### Added
+
+- **[`js/settings/tools-tab.js`](js/settings/tools-tab.js)** — new
+  Settings → Tools tab. Exports `initToolsTab()`, `render()`, and a
+  `__test__` seam (`_read` / `_persist` / `TOOLS_DEFAULTS`). Defaults
+  are a frozen mirror of `embeddings.js`'s `DEFAULT_THRESHOLD` /
+  `DEFAULT_TOP_K` / `DISCOVERY_ADMISSION_CAP` so the tab and the
+  runtime can never disagree on what the floor is.
+
+- **[`tests/test-tools-tab.mjs`](tests/test-tools-tab.mjs)** —
+  node:test suite covering defaults shape, `_read` clamp behavior on
+  out-of-range values, persistence round-trip + EventBus emission, the
+  embeddings-side `_readTopK` / `_readDiscoveryCap` readers honoring
+  `State.settings.tools.*`, and safelist coverage.
+
+### Changed
+
+- **[`js/intelligence/tools/composer.js`](js/intelligence/tools/composer.js)**
+  — adds the LRU eviction pass after sticky admission. Two new
+  helpers: `_orderNonStaticByLRU(admitted, ledger)` and
+  `_resolveCost(entry, ledger)` (both exposed via `_testing` for unit
+  cover). Eviction never touches `source: 'static'` entries; evictees
+  land in `suppressed[]` with `reason: 'evicted_for_budget'` and detail
+  carrying `cost` + `last_used_at`. Updated module-doc comment to flag
+  the new rule and removed the outdated "out of scope" bullet.
+
+- **[`js/intelligence/tools/contracts.js`](js/intelligence/tools/contracts.js)**
+  — extends `SuppressionRecord.reason` with `"evicted_for_budget"`,
+  and `ToolDiagnostics` with `evicted_count: number` +
+  `tokens_evicted: number` (mirrors `docs/DESIGN-tools.md` §Diagnostics
+  line 463).
+
+- **[`js/intelligence/tools/embeddings.js`](js/intelligence/tools/embeddings.js)**
+  — `_readThreshold()` now reads `State.settings.tools.findToolThreshold`
+  with fallback to the legacy flat `State.settings.findToolThreshold`
+  and finally `DEFAULT_THRESHOLD`. Two new exported helpers `_readTopK()`
+  and `_readDiscoveryCap()` mirror the same precedence for top-K and
+  cap. The semantic search default fallback now reads through
+  `_readTopK()` instead of the bare constant.
+
+- **[`js/chat/handlers.js`](js/chat/handlers.js)** — switches the
+  `find_tool` discovery hook from importing `DISCOVERY_ADMISSION_CAP`
+  directly to invoking `_readDiscoveryCap()`, so settings overrides
+  apply per-call.
+
+- **[`js/llm/api.js`](js/llm/api.js)** — composer console-log now
+  prints "evicted N for Mt" when the eviction pass fires. Diagnostics
+  attached to `LLMDebug` already spread the new fields automatically
+  via the existing object-rest path.
+
+- **[`js/llm-debug-modal.js`](js/llm-debug-modal.js)** — renders an
+  "LRU evicted: N tools (reclaimed M tokens)" row in the tool
+  admission section when `evicted_count > 0`.
+
+- **[`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js)**
+  — adds `'tools'` (whole subtree) to the safelist. Tunables are
+  non-secret and per-repo overrides are valuable: a codebase whose
+  tool-admission patterns are well-known can ship a tighter threshold
+  so teammates' sessions converge on the same admission shape.
+
+- **[`js/settings-manager.js`](js/settings-manager.js)** — registers
+  `initToolsTab()` on settings open and on tab switch (mirrors
+  `initTestLoopTab` in shape).
+
+- **[`js/settings/persistence.js`](js/settings/persistence.js)** —
+  `exportSettings()` round-trips the `tools` subtree alongside
+  `ghostText`, threading through `pickGlobal()` so workspace-override
+  resolution doesn't bake project-local values into a "global" backup.
+
+- **[`html/modals.html`](html/modals.html)** — adds the "Tools" entry
+  to the AI section of the Settings sidebar nav.
+
+- **[`html/settings-tabs.html`](html/settings-tabs.html)** — adds the
+  `<div class="settings-tab-content" id="tabTools">` mount point that
+  `initToolsTab()` populates.
+
+- **[`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs)**
+  — six new test cases covering LRU ordering (timestamp ASC),
+  null-`last_used_at` evict-first behavior, static-never-evicted
+  invariant, short-form cost resolution on eviction, zero-eviction
+  diagnostics shape, and the static-set-exceeds-budget config-error
+  path (eviction must NOT touch static even when budget is too small
+  for it).
+
+- **[`tests/test-find-tool-semantic.mjs`](tests/test-find-tool-semantic.mjs)**
+  — three new cases asserting the settings precedence chain: nested
+  `tools.findToolThreshold` over default, legacy flat key as fallback,
+  and nested wins when both are present.
+
 ## [1.4.7] - 2026-05-01
 
 **Tools 1.4.x — inline AI suggestions (ghost text, hotkey-only).** A

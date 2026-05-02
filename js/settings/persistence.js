@@ -301,6 +301,7 @@ export function exportSettings() {
         editorKeybindingMode: pickGlobal('editorKeybindingMode'),
         editorScanInvisibleUnicode: pickGlobal('editorScanInvisibleUnicode'),
         ghostText: pickGlobal('ghostText'),
+        tools: pickGlobal('tools'),
         showIssues: pickGlobal('showIssues'),
         showPullRequests: pickGlobal('showPullRequests'),
 

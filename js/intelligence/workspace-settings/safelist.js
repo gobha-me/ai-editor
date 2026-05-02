@@ -87,6 +87,14 @@ export const SAFELIST = Object.freeze([
     // Test-driven loop bounds (1.4.5). Whole subtree — `testLoop.enabled`
     // / `testLoop.maxIterations` etc. travel together. No credentials.
     'testLoop',
+
+    // Tools admission tuning (1.4.8). Whole subtree —
+    // `tools.findToolThreshold` / `.findToolTopK` /
+    // `.discoveryAdmissionCap`. No credentials. Per-repo overrides are
+    // valuable: a codebase whose tool-admission patterns are well known
+    // can ship a tighter threshold so teammates' sessions converge on the
+    // same admission shape.
+    'tools',
 ]);
 
 /**

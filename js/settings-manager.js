@@ -18,6 +18,7 @@ import { initConnectionsTab } from './settings/connections-tab.js';
 import { initMCPServersTab } from './settings/mcp-servers-tab.js';
 import { initWorkspaceSettingsTab, decorateOverriddenControls } from './settings/workspace-settings-tab.js';
 import { initTestLoopTab } from './settings/test-loop-tab.js';
+import { initToolsTab } from './settings/tools-tab.js';
 import { populateRoleCards } from './settings/roles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
 import { renderStorageMetrics } from './storage-metrics.js';
@@ -73,6 +74,7 @@ export async function openSettings() {
     initMCPServersTab();
     initWorkspaceSettingsTab();
     initTestLoopTab();
+    initToolsTab();
     decorateOverriddenControls();
     updateEmbeddingsStatus();
     document.getElementById('settingsModal').classList.add('active');
@@ -413,6 +415,8 @@ function populateSettingsForm() {
             if (tab.dataset.tab === 'tabWorkspaceSettings') initWorkspaceSettingsTab();
             // Refresh Test Loop tab on switch (1.4.5).
             if (tab.dataset.tab === 'tabTestLoop') initTestLoopTab();
+            // Refresh Tools tab on switch (1.4.8).
+            if (tab.dataset.tab === 'tabTools') initToolsTab();
         };
     });
 

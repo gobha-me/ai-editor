@@ -104,13 +104,48 @@ export async function getToolEmbedding(td) {
 }
 
 /**
- * Read the configured threshold; falls back to `DEFAULT_THRESHOLD` when the
- * setting is missing or non-numeric. Undocumented escape hatch — operator
- * tuning lives here, not in UI.
+ * Read the configured threshold from `State.settings.tools.findToolThreshold`
+ * (1.4.8 nested namespace), with fallback to the legacy flat
+ * `State.settings.findToolThreshold` (the undocumented escape hatch shipped
+ * before Settings → Tools existed). Default `DEFAULT_THRESHOLD` if both are
+ * absent or non-numeric.
  */
 function _readThreshold() {
-    const t = State?.settings?.findToolThreshold;
-    return typeof t === 'number' && Number.isFinite(t) && t >= 0 && t <= 1 ? t : DEFAULT_THRESHOLD;
+    const nested = State?.settings?.tools?.findToolThreshold;
+    if (typeof nested === 'number' && Number.isFinite(nested) && nested >= 0 && nested <= 1) {
+        return nested;
+    }
+    const legacy = State?.settings?.findToolThreshold;
+    if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 0 && legacy <= 1) {
+        return legacy;
+    }
+    return DEFAULT_THRESHOLD;
+}
+
+/**
+ * Read the configured top-K from `State.settings.tools.findToolTopK`. Falls
+ * back to `DEFAULT_TOP_K` (8). Range gate: positive integer ≤ 25 (a sane
+ * upper bound — beyond ~25 the budget would never seat them all anyway).
+ */
+export function _readTopK() {
+    const nested = State?.settings?.tools?.findToolTopK;
+    if (typeof nested === 'number' && Number.isFinite(nested) && nested > 0 && nested <= 25) {
+        return Math.floor(nested);
+    }
+    return DEFAULT_TOP_K;
+}
+
+/**
+ * Read the configured discovery-admission cap from
+ * `State.settings.tools.discoveryAdmissionCap`. Falls back to
+ * `DISCOVERY_ADMISSION_CAP` (3). Range gate: positive integer ≤ topK.
+ */
+export function _readDiscoveryCap() {
+    const nested = State?.settings?.tools?.discoveryAdmissionCap;
+    if (typeof nested === 'number' && Number.isFinite(nested) && nested > 0 && nested <= 25) {
+        return Math.floor(nested);
+    }
+    return DISCOVERY_ADMISSION_CAP;
 }
 
 /**
@@ -160,7 +195,7 @@ export async function findToolsBySemantic(query, defs, opts) {
     if (!sim) return { ranked: [], mode: 'unavailable' };
 
     const threshold = typeof opts?.threshold === 'number' ? opts.threshold : _readThreshold();
-    const topK = typeof opts?.topK === 'number' && opts.topK > 0 ? opts.topK : DEFAULT_TOP_K;
+    const topK = typeof opts?.topK === 'number' && opts.topK > 0 ? opts.topK : _readTopK();
 
     /** @type {Array<{td: ToolDef, score: number}>} */
     const scored = [];
