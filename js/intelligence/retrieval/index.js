@@ -34,9 +34,14 @@
  * the ledger as a side effect. Composer's `compose()` calls into it
  * automatically when `req.task_ledger` is present; standalone use is
  * supported for callers that want to consult a ledger outside the
- * full pipeline. The migration off `js/context-manager.js` arrives
- * at 1.5.2 (sequenced toward the 1.5.0 promotion when legacy-vs-new
- * agreement on test queries clears 80%; see `docs/ROADMAP.md`).
+ * full pipeline. 1.4.19 adds `runChunkerPipeline` — the single
+ * callable entrypoint that dispatches by `content_type` to the right
+ * chunker and runs `extractStructure` as a post-pass; subsequent
+ * ingest PRs (Store, Loader, controller, parallel-execution harness)
+ * build on it instead of re-inlining the switch + extractor pass.
+ * The migration off `js/context-manager.js` arrives at 1.5.2
+ * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
+ * on test queries clears 80%; see `docs/ROADMAP.md`).
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -52,6 +57,7 @@ export { chunkCode } from './chunkers/code-chunker.js';
 export { chunkConversation } from './chunkers/conversation-chunker.js';
 export { chunkStructured } from './chunkers/structured-chunker.js';
 export { extractStructure, NODE_KIND } from './structure-extractor.js';
+export { runChunkerPipeline } from './pipeline.js';
 export { createSemanticStrategy } from './strategies/semantic.js';
 export { createStructuralStrategy } from './strategies/structural.js';
 export { compose } from './composer.js';

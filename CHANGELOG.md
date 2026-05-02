@@ -4,6 +4,78 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.19] - 2026-05-02
+
+**Retrieval Phase 1 — Chunker pipeline (PR 11 of 1.5.0).** Eleventh PR
+in the 1.5.0 stream and the first PR of the **ingest-pipeline branch**
+of the design. Lifts content-type-dispatched chunker selection +
+StructureExtractor post-pass into one callable so subsequent ingest PRs
+(Store, Loader, controller, parallel-execution harness) target a single
+entrypoint instead of re-inlining the switch. Mirrors the 1.4.14
+StructureExtractor PR pattern: pure `(input) → output`, no I/O, no
+async, no runtime wire-up; the load-bearing decision is encoding
+**"chunker output is always structure-extracted"** as the public
+contract so the next chunker added to the dispatch table inherits
+structural enrichment by default.
+
+**Public surface:**
+[`runChunkerPipeline(input)`](js/intelligence/retrieval/pipeline.js)
+returns `Chunk[]`. Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). Dispatch
+table:
+
+| `metadata.content_type` | Chunker invoked     |
+|---                      |---                  |
+| `prose`                 | `chunkProse`        |
+| `code`                  | `chunkCode`         |
+| `conversation`          | `chunkConversation` |
+| `structured`            | `chunkStructured`   |
+
+`spec` is rejected with `TypeError` (deferred past Phase 1 per
+[docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) §"Chunker"); any
+other unknown / missing `content_type` is rejected. **Empty bytes
+short-circuit** (`input.bytes.length === 0` → `[]` before dispatch) —
+centralizes a behavior every chunker already implements so the
+invariant lives in one place rather than drifting across consumers.
+
+**What's deliberately not here:**
+- Chunk Store (lands 1.4.20) — the pipeline is *consumed by* the
+  store, not the same PR.
+- Loader / file walker (1.4.21) — content-type detection from a file
+  extension is the Loader's job, not the pipeline's. The pipeline
+  rejects an unknown `content_type` rather than auto-detecting because
+  two sources of truth (extension vs. explicit) would let production
+  state drift silently from test fixtures.
+- Mixed-content_type batches — by construction one `ChunkerInput` has
+  one `content_type`; `extractStructure` already rejects mixed batches
+  downstream and the pipeline does not need to duplicate the check.
+- Embedder integration (1.4.22), incremental ingest controller
+  (1.4.23), and the migration of `find_relevant_files` (1.5.2).
+
+**Test coverage.** `tests/test-retrieval-pipeline.mjs` (22 cases under
+`node --test`):
+- The load-bearing property — for each Phase 1 content_type,
+  `runChunkerPipeline(input)` is `deepEqual` to
+  `extractStructure(chunkX(input))`. Catches accidental input
+  mutation, a skipped extractor pass, and re-ordering, and any future
+  chunker added to the dispatch table without a corresponding
+  extractor wiring.
+- Round-trip shape per content_type: prose chunks carry heading-derived
+  `structural`, code chunks carry declaration-kind labels with
+  `parent_id = null`, conversation + structured chunks pass through
+  with `structural = null`.
+- Empty bytes returns `[]` for every Phase 1 content_type.
+- Null / non-object input, missing / empty / unknown / `'spec'`
+  content_type all throw `TypeError`.
+- Input is not mutated (deep-clone snapshot before/after for each
+  content_type).
+- `runChunkerPipeline` is exported from the retrieval barrel.
+
+**No runtime wire-up.** Nothing imports `runChunkerPipeline` outside
+the test suite; `find_relevant_files` keeps running through legacy
+`js/context-manager.js` until 1.5.2. With `pipeline.js` deleted, no
+user-visible behavior degrades — Removability holds (Decision §7).
+
 ## [1.4.18] - 2026-05-02
 
 **Retrieval Phase 1 — Ledger consumer (PR 10 of 1.5.0).** Tenth and
