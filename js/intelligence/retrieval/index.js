@@ -58,6 +58,18 @@
  * `computeSourceHash` ship alongside for callers that need the
  * extension-dispatch logic or the change-detection fingerprint without
  * instantiating a Loader.
+ * 1.4.22 adds `createEmbedder` — the back-fill seam between the chunker
+ * pipeline (1.4.19) and the chunk store (1.4.20). Fourth and final
+ * ingest-pipeline node before the controller. Per DESIGN-retrieval
+ * §"Embedder" lines 304-308, embeddings are cached by
+ * `(content_hash, embedder_model_id)`; the factory takes an injected
+ * `embedFn` (production wires `(t) => EmbeddingsClient.embed(t)` after
+ * `EmbeddingsClient.init()` resolves — same DI posture as 1.4.15's
+ * `embedQuery`) plus a `modelId` that participates in the cache key, and
+ * returns an `Embedder` exposing `embed(chunks)` / `embedOne(chunk)` /
+ * `stats()`. Failures degrade — `embedFn` returning `null` or throwing
+ * leaves `chunk.embedding = null` (the Store's `chunkVectorSearch`
+ * already filters those out). Idempotent on already-embedded chunks.
  * The migration off `js/context-manager.js` arrives at 1.5.2
  * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
  * on test queries clears 80%; see `docs/ROADMAP.md`).
@@ -94,3 +106,4 @@ export {
 } from './ledger-consumer.js';
 export { createInMemoryChunkStore } from './store.js';
 export { createLoader, detectContentType, computeSourceHash } from './loader.js';
+export { createEmbedder } from './embedder.js';

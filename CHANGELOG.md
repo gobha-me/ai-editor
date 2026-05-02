@@ -4,6 +4,132 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.22] - 2026-05-02
+
+**Retrieval Phase 1 — Embedder integration (PR 14 of 1.5.0).** Fourteenth
+PR in the 1.5.0 stream and the **fourth (and final) PR of the
+ingest-pipeline branch** of [docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md)
+§"Ingest Pipeline" (lines 265–331) before the controller arriving at
+1.4.23. Implements the `Embedder` contract per lines 304–308:
+
+> Resolves an embedding provider via a fallback chain (local /
+> self-hosted / cloud) **at library initialization**, not per-call.
+> Swapping providers requires reinitializing. … Embeddings are cached
+> by `(content_hash, embedder_model_id)`. A provider swap invalidates
+> cache; a content edit invalidates cache for that chunk only.
+
+Sits between `runChunkerPipeline` (1.4.19) and `ChunkStore.upsert`
+(1.4.20). The design's incremental-ingest pseudocode at lines 313–328
+names this seam `embed(to_add)` — a one-line call between
+`chunk(load(source_uri))` and `store.upsert(to_add)`. With this PR all
+four ingest nodes (Loader → Chunker → Embedder → Store) ship as pure,
+DI-friendly factories; the controller at 1.4.23 sequences them.
+
+**Public surface:**
+[`createEmbedder({ embedFn, modelId, cache? })`](js/intelligence/retrieval/embedder.js)
+returns an `Embedder` handle exposing
+`embed(chunks: Chunk[]|ChunkRef[]) => Promise<ChunkRef[]>` (batch
+back-fill), `embedOne(chunk) => Promise<ChunkRef>` (single-chunk
+convenience), and `stats() => { hits, misses, failures, cached }` (cache
++ success-rate introspection for diagnostics + tests). Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). The optional
+`EmbedderCache` typedef pins the `{ get, set, size }` shape so callers
+wiring an IDB-backed or shared cache at 1.5.x have a contract to
+implement against.
+
+**Phase-1 scope decisions** (called out so future readers don't have to
+reverse-engineer them):
+
+- **Cache key is `${modelId}::${chunk.metadata.content_hash}`.** Both
+  pieces are pinned: `modelId` participates so a provider/model swap
+  invalidates cleanly (the design's "swapping providers requires
+  reinitializing"); `content_hash` participates so a content edit
+  invalidates cache for that chunk only. The cache lives module-private
+  as a `Map<string, EmbeddingVector>` unless the caller injects one —
+  same layering as the Loader's stateless-by-default pattern (1.4.21).
+- **Failures degrade, don't throw.** `embedFn` returning `null` (or
+  throwing, or returning a non-array contract violation) leaves
+  `chunk.embedding = null` in the output. The Store's
+  `chunkVectorSearch` already filters such chunks out
+  ([`tests/test-retrieval-store.mjs`](tests/test-retrieval-store.mjs)
+  "chunkVectorSearch skips chunks whose embedding is null"). A
+  single-chunk failure does not poison the batch, and a failed embed is
+  not cached so a subsequent retry hits `embedFn` again.
+- **Sequential `await` over the batch in Phase 1.** The Embedder
+  iterates `chunks` and awaits `embedFn` per chunk. Concurrency /
+  batching belongs to the controller (1.4.23) which knows the rate-limit
+  envelope of the production wire-up. Same restraint the Loader took on
+  concurrency.
+- **Idempotent on already-embedded chunks.** A chunk arriving with
+  `embedding != null` passes through untouched (no cache lookup, no
+  `embedFn` call) and its existing `provenance` is preserved verbatim.
+  Supports two real flows: testing fixtures with pre-baked vectors, and
+  the controller running ingest a second time over a partially-embedded
+  snapshot. Critically, a pre-embedded chunk's vector is **not** cached
+  under the embedder's key — its embedding may have come from a
+  different model, and caching it under the current `(modelId,
+  content_hash)` would poison subsequent lookups.
+- **No provider initialization here.** `createEmbedder` does not call
+  `EmbeddingsClient.init()`. The caller wires
+  `embedFn = (text) => EmbeddingsClient.embed(text)` *after*
+  `EmbeddingsClient.init()` has resolved. This keeps the module DOM-free
+  and matches how 1.4.15's Semantic strategy wires its `embedQuery` —
+  the same browser-coupling reason ([`js/embeddings-client.js`](js/embeddings-client.js)
+  imports `State` / `EventBus` / `Storage` from `core.js` and is not
+  node-test-safe).
+- **Inputs are typed `Chunk[] | ChunkRef[]`.** Chunks straight off
+  `runChunkerPipeline` lack `provenance` + `embedding` — the Embedder
+  doesn't need either to do its job. Outputs are `ChunkRef`-shaped:
+  `embedding` populated (or `null` on failure), `provenance` echoed if
+  present on input or set to a minimal stub keyed off
+  `metadata.source_uri` + `byte_range` otherwise. Callers can chain
+  `runChunkerPipeline(...) → embedder.embed(...) → store.upsert(...)`
+  without an intermediate adapter.
+- **Missing `content_hash` → never cached, always re-embedded.** A
+  chunk without a `metadata.content_hash` field still hits `embedFn`,
+  but its result is not stored under any key (the cache key would be
+  meaningless). Defensive — every shipped chunker populates
+  `content_hash`, so this branch only fires for hand-rolled inputs.
+- **No batching API yet.** The signature is `embed(chunks)`, not
+  `embedBatch(chunks, {concurrency})`. Batching ships when a real
+  consumer demands it.
+
+**What's deliberately not here:**
+- Provider selection / fallback chain — `EmbeddingsClient` already does
+  that at library initialization.
+- Production wire-up to `EmbeddingsClient.embed` (1.4.23 controller).
+- Persistent cache (IDB / localStorage). The in-memory cache turns over
+  on process restart, same lifetime as the in-memory Store. Persistence
+  is a 1.5.x concern.
+- BM25 index construction (still deferred per
+  [`loader.js`](js/intelligence/retrieval/loader.js) lines 60–63;
+  producer ships between 1.4.22 and 1.5.1).
+- Migration of `find_relevant_files` off `js/context-manager.js`
+  (1.5.2).
+- Concurrency / retry / backoff (controller's job).
+
+**No runtime wire-up:** nothing imports `createEmbedder` outside the
+test suite; `find_relevant_files` keeps running through the legacy
+`js/context-manager.js` path. With `embedder.js` deleted and the barrel
+export removed, no production behavior degrades — **Removability holds
+(Decision §7).**
+
+**Test coverage:** 24 unit cases under
+`node --test tests/test-retrieval-embedder.mjs`, anchored on the
+load-bearing invariants: round-trip back-fill across a batch + ChunkRef
+output shape + input immutability + empty-input short-circuit; cache hit
+on same `(modelId, content_hash)`; cache miss across model swap and
+across distinct content hashes; missing-`content_hash` skip-cache
+fallback; failure tolerance for `embedFn` returning `null`, throwing,
+and returning a non-array contract violation; idempotence for
+pre-embedded chunks (pass-through + provenance preserved + no cache
+poisoning); `embedOne` ↔ `embed([chunk])` parity; injected cache is
+consulted instead of the default and `stats().cached` reflects the
+injected backing; `stats()` shape (hits / misses / failures / cached)
+across mixed-outcome batches; argument validation
+(missing options / non-function `embedFn` / non-string `modelId` /
+malformed `cache` / non-array `chunks` / non-object `chunk`).
+
 ## [1.4.21] - 2026-05-02
 
 **Retrieval Phase 1 — Loader (PR 13 of 1.5.0).** Thirteenth PR in the
