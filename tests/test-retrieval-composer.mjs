@@ -1,9 +1,12 @@
 /**
- * Composer tests (1.4.17).
+ * Composer tests (extended at 1.4.18 to cover step 6.5).
  *
  * Covers `js/intelligence/retrieval/composer.js` per
- * `docs/DESIGN-retrieval.md` §"Composition Algorithm" steps 1–8 (with
- * step 6.5 stubbed — the ledger consumer lands as PR 10 / 1.4.18).
+ * `docs/DESIGN-retrieval.md` §"Composition Algorithm" steps 1–8.
+ * Step 6.5 (ledger consultation) lit up at 1.4.18 — see
+ * `tests/test-retrieval-ledger-consumer.mjs` for unit coverage of the
+ * consumer; the integration tests at the bottom of this file verify
+ * the Composer's wiring.
  *
  * Pure-data, no DOM / State / network — runs under `node --test`. The
  * Composer is dependency-injected (strategies + getChunkByID), so tests
@@ -15,6 +18,7 @@ import assert from 'node:assert/strict';
 
 import { compose } from '../js/intelligence/retrieval/composer.js';
 import { CHUNKER_VERSION } from '../js/intelligence/retrieval/contracts.js';
+import { createTaskLedger } from '../js/profiles/task-ledger.js';
 
 /* ---------------- Fixture builders ---------------- */
 
@@ -370,27 +374,97 @@ test('per-strategy budget cuts off overflowing chunks', async () => {
     assert.equal(retrievedBlocks.length, 2, `expected 2 chunks (one per strategy), got ${retrievedBlocks.length}`);
 });
 
-/* ---------------- Step 6.5: Ledger no-op (PR 9 stub) ---------------- */
+/* ---------------- Step 6.5: Ledger consultation (1.4.18) ---------------- */
 
-test('with task_ledger supplied: ledger_consulted=false, no mutation', async () => {
-    const ledger = { admissions: [], exclusions: [], task_id: 't', surface: 's', started_at: 0, capacity: {} };
-    const sem = fakeStrategy('semantic', 0.9, [makeChunk('content', { tokens: 50 })]);
-    const r = await compose(baseReq({ task_ledger: ledger }), {
-        strategies: [sem],
-        getChunkByID: noPinsGetter,
-    });
-    assert.equal(r.diagnostics.ledger_consulted, false);
+test('with task_ledger supplied: ledger_consulted=true; cold candidates seed admissions', async () => {
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    const c = makeChunk('content', { tokens: 50 });
+    const sem = fakeStrategy('semantic', 0.9, [c]);
+    const r = await compose(
+        baseReq({ task_ledger: ledger, turn_id: 'turn_1' }),
+        { strategies: [sem], getChunkByID: noPinsGetter },
+    );
+    assert.equal(r.diagnostics.ledger_consulted, true);
     assert.equal(r.diagnostics.ledger_suppressions, 0);
-    // Ledger arrays untouched.
-    assert.deepEqual(ledger.admissions, []);
-    assert.deepEqual(ledger.exclusions, []);
+    // Cold candidate seeded the ledger.
+    assert.equal(ledger.admissions.length, 1);
+    assert.equal(ledger.admissions[0].chunk_id, c.id);
+    assert.equal(ledger.admissions[0].turn_id, 'turn_1');
 });
 
-test('without task_ledger: ledger_consulted=false', async () => {
+test('without task_ledger: ledger_consulted=false (default path unchanged)', async () => {
     const sem = fakeStrategy('semantic', 0.9, []);
     const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter });
     assert.equal(r.diagnostics.ledger_consulted, false);
     assert.equal(r.diagnostics.ledger_suppressions, 0);
+});
+
+test('low-novelty re-admission flows to suppression marker + exclusion record', async () => {
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1', startedAt: 0 });
+    const c = makeChunk('content', { tokens: 50, id: 'chunk_repeat' });
+    // Seed a recent identical-query admission so novelty composite goes ~0.
+    ledger.admissions.push({
+        chunk_id: c.id,
+        admitted_at: 1_700_000_000_000,
+        turn_id: 'turn_prev',
+        tokens: 50,
+        query: 'authentication middleware',
+        query_embedding: null,
+        strategy: 'semantic',
+        facets_covered: [],
+    });
+    const sem = fakeStrategy('semantic', 0.9, [c]);
+    const r = await compose(
+        baseReq({ task_ledger: ledger, turn_id: 'turn_now' }),
+        { strategies: [sem], getChunkByID: noPinsGetter },
+        { now: 1_700_000_001_000 },
+    );
+    assert.equal(r.diagnostics.ledger_consulted, true);
+    assert.equal(r.diagnostics.ledger_suppressions, 1);
+    // The suppressed chunk's content was replaced with a marker.
+    const retrievedBlocks = r.blocks.filter((b) => b.role === 'retrieved');
+    assert.equal(retrievedBlocks.length, 1);
+    assert.match(retrievedBlocks[0].content, /^\[Already admitted: chunk_repeat/);
+    // chunks_by_id carries the marker; original id is parseable from marker id.
+    const markerKey = Object.keys(r.chunks_by_id).find((k) => k.startsWith('ledger_marker:'));
+    assert.ok(markerKey);
+    assert.match(markerKey, /^ledger_marker:chunk_repeat:/);
+    // Exclusion record landed on the ledger.
+    assert.equal(ledger.exclusions.length, 1);
+    assert.equal(ledger.exclusions[0].reason, 'already_admitted_low_novelty');
+    assert.equal(ledger.exclusions[0].turn_id, 'turn_now');
+});
+
+test('synthesized turn_id (no req.turn_id, no opts.turnId) emits LEDGER_TURN_SYNTHESIZED warning', async () => {
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    const sem = fakeStrategy('semantic', 0.9, [makeChunk('content', { tokens: 50 })]);
+    const r = await compose(
+        baseReq({ task_ledger: ledger, turn_id: null }),
+        { strategies: [sem], getChunkByID: noPinsGetter },
+    );
+    const w = r.diagnostics.warnings.find((x) => x.code === 'LEDGER_TURN_SYNTHESIZED');
+    assert.ok(w, 'expected LEDGER_TURN_SYNTHESIZED warning');
+    assert.match(w.detail, /composer:\d+:\d+/);
+});
+
+test('emptyResult path with ledger present: ledger_consulted=false (consultation never invoked)', async () => {
+    // retrieval_budget < 0 forces the early-return emptyResult path; the
+    // Composer never reaches step 6 / 6.5, so consultation was honestly
+    // not consulted — the diagnostic surface reports that truthfully.
+    const ledger = createTaskLedger({ taskId: 't', surface: 'coder.v1' });
+    const sem = fakeStrategy('semantic', 0.9, [makeChunk('content', { tokens: 50 })]);
+    const r = await compose(
+        baseReq({
+            task_ledger: ledger,
+            budget: { total_tokens: 1000, system_reserve: 500, output_reserve: 500, history_reserve: 100 },
+        }),
+        { strategies: [sem], getChunkByID: noPinsGetter },
+    );
+    assert.ok(r.diagnostics.warnings.find((w) => w.code === 'NO_BUDGET'));
+    assert.equal(r.diagnostics.ledger_consulted, false);
+    assert.equal(r.diagnostics.ledger_suppressions, 0);
+    assert.deepEqual(ledger.admissions, []);
+    assert.deepEqual(ledger.exclusions, []);
 });
 
 /* ---------------- Step 7: Overflow handling ---------------- */

@@ -26,10 +26,17 @@
  * with budget accounting, per-strategy quotas, ChunkID dedup,
  * round-robin overflow handling, and attention-aware block assembly;
  * the ledger-consultation step (design pseudocode 6.5) is stubbed in
- * this PR and lands as the ledger consumer in PR 10. The migration
- * off `js/context-manager.js` arrives at 1.5.2 (sequenced toward the
- * 1.5.0 promotion when legacy-vs-new agreement on test queries
- * clears 80%; see `docs/ROADMAP.md`).
+ * this PR and lands as the ledger consumer in PR 10. 1.4.18 adds
+ * `consultLedger` (the ledger consumer) — fills in step 6.5 of the
+ * Composer's algorithm: when a `RetrievalRequest.task_ledger` is
+ * supplied, low-novelty re-admissions are replaced with ~20-token
+ * marker surrogates and admission/exclusion records are appended to
+ * the ledger as a side effect. Composer's `compose()` calls into it
+ * automatically when `req.task_ledger` is present; standalone use is
+ * supported for callers that want to consult a ledger outside the
+ * full pipeline. The migration off `js/context-manager.js` arrives
+ * at 1.5.2 (sequenced toward the 1.5.0 promotion when legacy-vs-new
+ * agreement on test queries clears 80%; see `docs/ROADMAP.md`).
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -54,3 +61,9 @@ export {
     DEFAULT_FALLBACK_QUOTA,
     VIABILITY_THRESHOLD,
 } from './router.js';
+export {
+    consultLedger,
+    DEFAULT_NOVELTY_THRESHOLD,
+    DEFAULT_TIME_DECAY_MS,
+    MARKER_TOKEN_COST,
+} from './ledger-consumer.js';

@@ -4,6 +4,128 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.18] - 2026-05-02
+
+**Retrieval Phase 1 — Ledger consumer (PR 10 of 1.5.0).** Tenth and
+penultimate PR in the 1.5.0 stream. Fills in the explicit no-op stub
+the Composer left at step 6.5 (`consult_ledger`) in 1.4.17 — the only
+piece of `docs/DESIGN-retrieval.md` §"Composition Algorithm" that PR 9
+deliberately deferred. With this PR, only the `find_relevant_files`
+migration off `js/context-manager.js` (1.5.2) remains before Retrieval
+Phase 1 promotes to 1.5.0 (gated on legacy-vs-new agreement clearing
+80% on test queries).
+
+**Public surface:**
+[`consultLedger(selected, req, ledger, opts)`](js/intelligence/retrieval/ledger-consumer.js)
+returns `{ kept, suppressedCount, admittedCount, turnIdSynthesized,
+turnId }` and mutates `ledger.admissions` / `ledger.exclusions` as a
+side effect (per the design's "appends new admission records as a side
+effect of retrieval" rule). `DEFAULT_NOVELTY_THRESHOLD = 0.4`,
+`DEFAULT_TIME_DECAY_MS = 30 * 60 * 1000`, `MARKER_TOKEN_COST = 20`
+exposed as named exports for tunability and tests. Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js); the
+Composer wires the call automatically when `req.task_ledger` is
+present.
+
+**Algorithm (mirrors `docs/DESIGN-retrieval.md` lines 464–471):**
+
+For each candidate chunk in the post-step-6 set:
+
+1. **Pinned bypass.** Chunks whose id is in `req.priority_pins` are
+   never suppressed; admission is recorded with `strategy: "pinned"`.
+2. **Cold candidate.** No prior admission for this `chunk_id` →
+   append a fresh `AdmissionRecord` and keep the chunk.
+3. **Prior admission exists.** Compute composite **novelty score**
+   from four signals:
+   - **Token-set Jaccard** between current `req.query` and
+     `prior.query` — weight `0.45`. Tokenization: lowercase, split on
+     `/[^a-z0-9]+/`, drop tokens shorter than 3 chars, drop a small
+     stop-set. `1 - jaccard`. When either side is empty, contributes
+     `1.0` (re-admit when in doubt).
+   - **Cosine distance** between current and prior `query_embedding`
+     when both present — weight `0.30`. `1 - cosine`. When either is
+     null, weight redistributes onto Jaccard (Jaccard then carries
+     `0.75`); the consumer never grows an embedder dep just to
+     compute this signal.
+   - **Time elapsed** since `prior.admitted_at`, scaled by
+     `opts.timeDecayMs` (default 30 min) — weight `0.25`. Saturates
+     at `1.0` past the decay window.
+   - **Explicit re-examination** — short-circuits to novelty `1.0`
+     when `req.strategy_hints` carries either a `mode: "force"` entry
+     matching `prior.strategy`, or any hint with
+     `reason: "re_examine:<chunk_id>"` matching the candidate id.
+4. **High novelty** (`≥ opts.noveltyThreshold`, default `0.4`,
+   the design's "conservative default — re-admit when in doubt") →
+   append a fresh admission; chunk passes through unchanged.
+5. **Low novelty** → suppress; replace chunk in the kept list with a
+   marker surrogate (`id: "ledger_marker:<original_id>:<turn_id>"`,
+   `tokens: 20`, `provenance.retrieved_by: "ledger_marker"`); append
+   an `ExclusionRecord` with `reason: "already_admitted_low_novelty"`.
+
+**Composer wire-up.** [`composer.js`](js/intelligence/retrieval/composer.js)
+imports `consultLedger` and invokes it between step 6
+(`interleaveAndDedup`) and step 7 (`dropOverflow`) when
+`req.task_ledger` is present. `Diagnostics.ledger_consulted` and
+`ledger_suppressions` are now set truthfully instead of always `false`/`0`.
+The `emptyResult` early-return path keeps `ledger_consulted: false`
+because consultation is genuinely never invoked when the budget is
+negative.
+
+**`turn_id` resolution.** New optional `RetrievalRequest.turn_id`
+typedef field threads a per-call turn identifier into ledger records.
+`compose()` accepts `opts.turnId` as override (test seam).
+When neither is supplied and a ledger is present, the consumer
+synthesizes `"composer:<Date.now()>:<counter>"` (a module-level
+monotonic counter disambiguates same-millisecond calls) and emits a
+`LEDGER_TURN_SYNTHESIZED` info-warning so the silent fallback is
+observable. Production callers that wire the Composer to ledger-aware
+surfaces (the migration in 1.5.2) will set `turn_id` explicitly.
+
+**Marker namespace.** The `ledger_marker:<original_id>:<turn_id>`
+prefix is documented as a reserved `ChunkID` namespace in
+[contracts.js](js/intelligence/retrieval/contracts.js) — downstream
+citation code that walks `chunks_by_id` should treat any id starting
+with `ledger_marker:` as a marker (the substring after
+`ledger_marker:` up to the next `:` is the suppressed chunk's
+original id). The marker `metadata.custom` also carries explicit
+`suppressed_chunk_id` + `prior_turn_id` fields for callers that
+prefer not to parse.
+
+**Phase 1 known limitation.** Admissions are appended in step 6.5,
+*before* step 7's overflow guard. A chunk that step 7 then evicts
+for budget reasons leaves an admission record behind that the next
+call will see and may suppress against. The design's pseudocode
+places consultation before overflow, so this PR honors that ordering
+and documents the trade-off rather than diverging; a post-overflow
+ledger reconciliation pass is deferred to a 1.5.x follow-up.
+
+**Capacity spill.** When `ledger.admissions.length` reaches
+`ledger.capacity`, older records should spill to a compact form
+(drop `query_embedding`) and eventually drop entirely. That's the
+ledger owner's job (`js/profiles/task-ledger.js`), not the
+consumer's — the module appends unconditionally and carries a
+`TODO(1.5.x)` referencing the owner.
+
+**Removability holds (Decision §7).** Like every PR in 1.5.0, no
+production wiring: `find_relevant_files` continues to run through
+`js/context-manager.js`. With `ledger-consumer.js` deleted and the
+step-6.5 call removed from `composer.js`, nothing in production
+degrades.
+
+**Tests.** 24 new unit cases in
+[tests/test-retrieval-ledger-consumer.mjs](tests/test-retrieval-ledger-consumer.mjs)
+covering pinned bypass, cold candidates, all four novelty signals
+(including cosine fallback when one side is null), time decay
+flipping borderline cases, threshold tunability, marker shape +
+parseability of original id, and synth turn_id collision-resistance.
+4 new integration cases in
+[tests/test-retrieval-composer.mjs](tests/test-retrieval-composer.mjs)
+verify the Composer correctly threads ledger options, flips
+`ledger_consulted` true, materializes markers in `chunks_by_id`,
+emits the `LEDGER_TURN_SYNTHESIZED` warning when synthesis happens,
+and keeps `ledger_consulted: false` honestly on the early-return
+empty-budget path.
+
 ## [1.4.17] - 2026-05-02
 
 **Retrieval Phase 1 — Composer (PR 9 of 1.5.0).** Ninth PR in the

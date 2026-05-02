@@ -2,10 +2,9 @@
 /**
  * Composer — turns a `RetrievalRequest` into a `RetrievalResult`.
  * Implements [DESIGN-retrieval.md](../../../docs/DESIGN-retrieval.md)
- * §"Composition Algorithm" (lines 395–456) end-to-end with one explicit
- * stub: step 6.5 (`consult_ledger`) is a no-op in 1.4.17 and lands as the
- * "ledger consumer" PR (PR 10 of the 1.5.0 stream). PR 9 honors the
- * `RetrievalRequest.task_ledger` field but does not read or write it.
+ * §"Composition Algorithm" (lines 395–471) end-to-end. Steps 1–8
+ * shipped in PR 9 (1.4.17); step 6.5 (`consult_ledger`) shipped in
+ * PR 10 (1.4.18) via [`ledger-consumer.js`](./ledger-consumer.js).
  *
  * Algorithm (mirrors design pseudocode):
  *
@@ -18,8 +17,10 @@
  *      strategy's throw doesn't tank the call).
  *   5. Pinned chunks consume budget first.
  *   6. Interleave with per-strategy token budgets, dedup by ChunkID.
- *   6.5 Ledger consultation — DEFERRED to PR 10. `diagnostics.ledger_consulted`
- *      is always `false` in this PR.
+ *   6.5 Ledger consultation — when `req.task_ledger` is supplied, replace
+ *      low-novelty re-admissions with ~20-token reference markers and
+ *      append admission/exclusion records to the ledger. See
+ *      `ledger-consumer.js` for the novelty composite + marker shape.
  *   7. Overflow guard: if selected exceeds budget, drop non-pinned chunks
  *      via round-robin across strategies, lowest-score-first within each.
  *      Phase 1 simplification — scores aren't comparable across strategies
@@ -41,6 +42,7 @@
 
 import { CHUNKER_VERSION } from './contracts.js';
 import { selectStrategies } from './router.js';
+import { consultLedger } from './ledger-consumer.js';
 
 /**
  * @typedef {import('./contracts.js').RetrievalRequest} RetrievalRequest
@@ -397,6 +399,10 @@ function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReason
  * @param {Object} [opts]
  * @param {number} [opts.totalQuota]           Override `DEFAULT_TOTAL_QUOTA` (tests).
  * @param {number} [opts.fallbackQuota]        Override `DEFAULT_FALLBACK_QUOTA` (tests).
+ * @param {string} [opts.turnId]               Per-call turn identifier; threaded into ledger admissions when `req.task_ledger` is supplied. Falls back to `req.turn_id`, then a synthesized `"composer:<ms>:<counter>"` id.
+ * @param {number[]} [opts.queryEmbedding]     Optional current-query embedding; the ledger consumer (step 6.5) uses it for cosine novelty scoring when both this and the prior admission's `query_embedding` are present. The Composer never embeds on its own.
+ * @param {number} [opts.noveltyThreshold]     Override the ledger consumer's default `0.4` re-admission threshold.
+ * @param {number} [opts.timeDecayMs]          Override the ledger consumer's default 30-minute time-elapsed decay window.
  * @returns {Promise<RetrievalResult>}
  */
 export async function compose(req, deps, opts = {}) {
@@ -472,10 +478,33 @@ export async function compose(req, deps, opts = {}) {
 
     const interleaved = interleaveAndDedup(pinned, retrieved, applicabilityByName, remainingBudget);
 
-    // Step 6.5 — DEFERRED to PR 10. Composer ignores `req.task_ledger`.
-    // `diagnostics.ledger_consulted = false`; `ledger_suppressions = 0`.
+    // Step 6.5 — Ledger consultation. When a TaskLedger is supplied, the
+    // consumer suppresses low-novelty re-admissions (replacing them with
+    // ~20-token marker surrogates) and appends admission/exclusion records
+    // as a side effect. See `ledger-consumer.js` for the algorithm.
+    let postLedger = interleaved;
+    let ledgerConsulted = false;
+    let ledgerSuppressions = 0;
+    if (req.task_ledger) {
+        const ledgerOpts = {};
+        if (typeof opts.turnId === 'string') ledgerOpts.turnId = opts.turnId;
+        if (Array.isArray(opts.queryEmbedding)) ledgerOpts.queryEmbedding = opts.queryEmbedding;
+        if (typeof opts.noveltyThreshold === 'number') ledgerOpts.noveltyThreshold = opts.noveltyThreshold;
+        if (typeof opts.timeDecayMs === 'number') ledgerOpts.timeDecayMs = opts.timeDecayMs;
+        const consult = consultLedger(interleaved, req, req.task_ledger, ledgerOpts);
+        postLedger = consult.kept;
+        ledgerConsulted = true;
+        ledgerSuppressions = consult.suppressedCount;
+        if (consult.turnIdSynthesized) {
+            warnings.push({
+                level: 'info',
+                code: 'LEDGER_TURN_SYNTHESIZED',
+                detail: `synthesized turn_id=${consult.turnId}; supply req.turn_id or opts.turnId to disambiguate`,
+            });
+        }
+    }
 
-    const overflow = dropOverflow(interleaved, pinned, retrievalBudget);
+    const overflow = dropOverflow(postLedger, pinned, retrievalBudget);
     const finalChunks = overflow.kept;
 
     const blocks = assembleBlocks(finalChunks, historyPack.kept, typeof req.task === 'string' ? req.task : '');
@@ -498,8 +527,8 @@ export async function compose(req, deps, opts = {}) {
             tokens_used: tokensUsed,
             tokens_budget: retrievalBudget,
             tokens_truncated: overflow.droppedTokens,
-            ledger_consulted: false,
-            ledger_suppressions: 0,
+            ledger_consulted: ledgerConsulted,
+            ledger_suppressions: ledgerSuppressions,
             latency_per_strategy_ms: latency,
             cache_hits: {},
             degraded_strategies: degraded,

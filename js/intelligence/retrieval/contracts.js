@@ -36,6 +36,13 @@
  *
  * Computation lives in `chunk-id.js` (`computeChunkID`).
  *
+ * **Reserved id namespaces.** The ledger consumer (1.4.18) synthesizes
+ * surrogate `ChunkID`s with the prefix `ledger_marker:<original_id>:<turn_id>`
+ * for low-novelty re-admission markers. Downstream consumers that walk
+ * `chunks_by_id` should treat any id starting with `ledger_marker:` as a
+ * marker (the substring after `ledger_marker:` up to the next `:` is the
+ * suppressed chunk's original id).
+ *
  * @typedef {string} ChunkID
  */
 
@@ -279,6 +286,7 @@
  * @property {StrategyHint[]|null}    strategy_hints
  * @property {ChunkID[]|null}         priority_pins   Caller-supplied must-includes.
  * @property {TaskLedger|null}        task_ledger     Per-task admission record; see DESIGN-profiles.md.
+ * @property {string|null|undefined} [turn_id]        Optional turn identifier; used by the ledger consumer (1.4.18) when stamping `AdmissionRecord.turn_id` / `ExclusionRecord.turn_id`. The Composer also accepts `opts.turnId` as an override; if both are absent and a `task_ledger` is supplied, the consumer synthesizes one and emits a `LEDGER_TURN_SYNTHESIZED` info-warning.
  */
 
 /**
