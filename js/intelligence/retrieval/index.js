@@ -114,6 +114,23 @@
  * runtime wire-up: `find_relevant_files` keeps running through legacy
  * `ContextManager.findRelevantFiles` until 1.5.4 (renumbered from 1.5.3
  * to make room for the corpus PR).
+ * 1.5.3 adds `QUERY_CORPUS` + `QUERY_FIXTURES` + `QUERY_CATEGORIES` +
+ * `getQueriesByCategory` (`./test-corpus.js`) — the test-query fixture
+ * corpus the comparison harness drives. Two parallel shapes: a flat
+ * frozen `string[]` directly consumable by `compareBatch(QUERY_CORPUS)`
+ * and a richer `QueryFixture[]` of `{ id, query, category, intent }`
+ * letting the 1.5.4 measurement PR stratify agreement by category
+ * without re-classifying. Six categories (file-discovery,
+ * function-discovery, topic, bug-investigation, onboarding,
+ * task-related) roughly balanced across 42 queries reflecting realistic
+ * coder-mode retrieval shapes against this codebase. Nineteenth PR in
+ * the 1.5.0 stream. Pure data — no runtime wire-up; with this module
+ * deleted, the barrel re-exports removed, and the typedefs removed,
+ * `find_relevant_files` keeps running through legacy
+ * `ContextManager.findRelevantFiles` exactly as before. The next PR
+ * (1.5.4) drives this corpus through `createComparisonHarness` against
+ * a real wired-up Composer + the live legacy `ContextManager.findRelevantFiles`
+ * and reports the number that promotes the track to 1.5.0-final.
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -162,3 +179,9 @@ export {
     jaccardSimilarity,
     precisionAtK,
 } from './comparison.js';
+export {
+    QUERY_CORPUS,
+    QUERY_FIXTURES,
+    QUERY_CATEGORIES,
+    getQueriesByCategory,
+} from './test-corpus.js';

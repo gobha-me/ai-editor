@@ -4,6 +4,98 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-05-02
+
+**Retrieval Phase 1 — Test-query fixture corpus (PR 19 of 1.5.0).** New
+data module
+[`js/intelligence/retrieval/test-corpus.js`](js/intelligence/retrieval/test-corpus.js)
+plus a small accessor helper. The corpus the comparison harness
+([`createComparisonHarness`](js/intelligence/retrieval/comparison.js),
+shipped at 1.5.2) drives through both legacy
+[`js/context-manager.js`](js/context-manager.js) and the new Composer
+pipeline. The next PR (1.5.4) runs the actual ≥80% legacy-vs-new
+agreement *measurement* — the number that promotes the §1.5.0 track to
+1.5.0-final.
+
+**Public surface** — re-exported from [the retrieval barrel](js/intelligence/retrieval/index.js):
+
+- `QUERY_CORPUS: ReadonlyArray<string>` — flat frozen string corpus
+  directly consumable by `compareBatch(QUERY_CORPUS)`. Element order
+  matches `QUERY_FIXTURES` index-for-index.
+- `QUERY_FIXTURES: ReadonlyArray<QueryFixture>` — parallel richer shape
+  with `{ id, query, category, intent }` per query so the 1.5.4
+  measurement PR can stratify agreement by category without
+  re-classifying. 42 fixtures across six categories, roughly balanced.
+- `QUERY_CATEGORIES` — frozen enum-like map: `FILE_DISCOVERY`,
+  `FUNCTION_DISCOVERY`, `TOPIC`, `BUG_INVESTIGATION`, `ONBOARDING`,
+  `TASK_RELATED`. Reference these constants when adding new fixtures so
+  the corpus tests verify every fixture references a known category.
+- `getQueriesByCategory(category) → string[]` — partitions the corpus
+  by category. Returns a fresh array each call; defensive — returns
+  `[]` (does not throw) on unknown / non-string input.
+
+**Phase-1 scope decisions** (called out so future readers don't
+reverse-engineer them from behavior):
+
+- **Two parallel shapes, not one.** `QUERY_CORPUS` is the
+  lowest-friction consumer of the harness; `QUERY_FIXTURES` is the
+  richer object form for the 1.5.4 measurement to bucket agreement by
+  category. Built side-by-side (`QUERY_CORPUS = QUERY_FIXTURES.map(f
+  => f.query)`) so they cannot drift; element order is parallel.
+- **Six categories, ~7 queries each.** `file-discovery`,
+  `function-discovery`, `topic`, `bug-investigation`, `onboarding`,
+  `task-related`. Roughly balanced so a stratified report has
+  comparable per-bucket sample sizes; chosen from the retrieval
+  shapes the legacy `find_relevant_files` LLM tool sees in real
+  coder-mode usage today.
+- **Queries reflect AI Editor itself.** A coder using AI Editor on AI
+  Editor would ask "how does Composer work?" — domain terms like
+  "Venice", "ChunkRef", "task ledger", "find_relevant_files" are
+  legitimate query content. The 1.5.4 measurement is a self-hosted
+  benchmark; portability across other repos is a future concern.
+- **Stable `id` per fixture.** Kebab-case slugs. Once published, never
+  renumbered — the 1.5.4 measurement PR may reference specific
+  fixtures in its report. Treat the `id` as a public contract;
+  appending new fixtures is fine, renaming an existing one breaks
+  downstream reports.
+- **`intent` is human-readable rationale.** One short phrase per
+  fixture so a reviewer scanning the file can tell *why* a query was
+  included without back-deriving from the text. The 1.5.4 report does
+  not programmatically gate on it.
+- **No `expected_paths` / ground-truth slot.** The §1.5.0 exit
+  criterion is *legacy-vs-new agreement*, not *correctness vs. a
+  hand-labeled gold set*. Both pipelines being wrong in the same way
+  still scores 1.0 — that's the contract: we are measuring whether
+  the new pipeline can replace the old one without behavior
+  regression. A future PR (post-1.5.0) may ship a separately-measured
+  ground-truth corpus.
+- **Frozen at module load.** `QUERY_CORPUS`, `QUERY_FIXTURES`, and
+  `QUERY_CATEGORIES` are `Object.freeze`'d so a misbehaving consumer
+  cannot mutate the corpus mid-batch and skew the measurement. The
+  accessor helper returns a fresh array each call.
+- **Defensive accessor.** `getQueriesByCategory(unknown)` returns
+  `[]`, not throws. Same posture every other retrieval helper took
+  (Composer normalizers, ledger consumer, Loader's
+  `detectContentType`).
+
+**Out of scope for this PR (later PRs):** the actual ≥80% measurement
+run (next PR — 1.5.4); empty-result pair filtering / weighting (1.5.4 —
+at the call site, where it can be tuned against actual numbers, see
+`comparison.js` lines 60-66); stratified report aggregation by category
+(1.5.4 — uses the `category` field this PR ships); cross-repo /
+portable query corpus (post-1.5.0 if at all); ground-truth /
+hand-labeled correctness corpus (post-1.5.0).
+
+**No runtime wire-up.** Nothing imports `QUERY_CORPUS` outside the
+test suite. With this module deleted, the four barrel re-exports
+removed, and the `QueryFixture` typedef removed, no production
+behavior degrades — `find_relevant_files` keeps running through legacy
+`ContextManager.findRelevantFiles` exactly as before. Removability
+holds (Decision §7). 23 unit cases under
+`node --test tests/test-retrieval-test-corpus.mjs`, including an
+end-to-end integration that drives `QUERY_CORPUS` through
+`createComparisonHarness.compareBatch` against synthetic runners.
+
 ## [1.5.2] - 2026-05-02
 
 **Retrieval Phase 1 — Comparison harness (PR 18 of 1.5.0).** New module
