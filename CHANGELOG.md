@@ -4,6 +4,85 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.13] - 2026-05-02
+
+**Retrieval Phase 1 — StructuredChunker (PR 5 of 1.5.0).** Fourth and
+final Phase-1 chunker on the 1.4.9 foundation, fifth PR in the 1.5.0
+chunker stream. Implements the structured row of `docs/DESIGN-retrieval.md`
+§"Chunker": **per record over top-level keys / array elements.** Pure
+function — `(input) → Chunk[]` mirroring the contract pinned by
+[`prose-chunker.js`](js/intelligence/retrieval/chunkers/prose-chunker.js)
+at 1.4.10, [`code-chunker.js`](js/intelligence/retrieval/chunkers/code-chunker.js)
+at 1.4.11, and [`conversation-chunker.js`](js/intelligence/retrieval/chunkers/conversation-chunker.js)
+at 1.4.12. With this PR the Phase 1 chunker stream is complete (`spec`
+deferred past Phase 1).
+
+**Scope decision (v1).** Two formats: **JSON** and **JSONL** (a.k.a.
+NDJSON). CSV / YAML / TOML are deferred until a real consumer asks. The
+roadmap gates this scope decision explicitly because "per record" is
+format-specific in a way Conversation's "1 turn = 1 chunk" is not — so
+formats outside this list need a fresh decision rather than a quiet
+extension.
+
+**Sub-format dispatch.** The chunker resolves the sub-format from
+`input.metadata.custom.format` (`'json'` | `'jsonl'`, explicit override)
+or, failing that, from the `input.metadata.source_uri` extension
+(`.json` | `.jsonl` | `.ndjson`). Unknown / missing → `TypeError`. No
+content-sniffing heuristics; mirrors Conversation's "invalid input is a
+programmer error" stance. The dispatch hint is filtered out before
+`metadata.custom` pass-through (it's a chunker knob, not a chunk-level
+field).
+
+**Record semantics.**
+- JSON top-level **array** `[a, b, c]` → one chunk per element.
+  `metadata.custom.record_index = i`. Canonical record bytes:
+  `JSON.stringify(element)`.
+- JSON top-level **object** `{k1: v1, k2: v2}` → one chunk per
+  key/value pair in `Object.keys()` insertion order.
+  `metadata.custom.record_key = k`, `record_index = i`. Canonical
+  record bytes: `JSON.stringify({[k]: v})` so the key participates in
+  chunk identity (two values with the same JSON form under different
+  keys get distinct ChunkIDs through byte_range ordering and distinct
+  `content_hash`es through the canonical bytes).
+- JSON top-level **scalar** (string / number / boolean / null) → reject.
+  "Per record" implies a container.
+- **Empty container** (`[]` / `{}`) → return `[]` (matches Conversation's
+  empty-turns behavior).
+- **JSONL** → one chunk per non-blank line. Whitespace-only lines are
+  skipped. Each line must parse as JSON; any parse failure rejects the
+  whole input (no partial success). CRLF endings are tolerated.
+  `record_index = i` over **non-blank** lines.
+
+**Byte-range semantics.** Mirroring Conversation, structured byte_ranges
+are computed over the concatenation of canonical per-record
+serializations (`JSON.stringify(record_i)`), **not** over `input.bytes`.
+This decouples ChunkID stability from caller serialization choices: the
+same logical structured payload produces identical ChunkIDs regardless
+of whether the caller pretty-printed JSON, used CRLF endings, padded
+JSONL whitespace, etc. Adjacency holds: `chunks[i+1].byte_range[0] ===
+chunks[i].byte_range[1]`.
+
+**ChunkID under `CHUNKER_VERSION.structured`.** The frozen registry's
+`structured: 'v1'` slot (set in 1.4.9) goes live. UTF-8 byte counting
+follows the same surrogate-aware mapping the prose / code / conversation
+chunkers use.
+
+**No runtime wire-up:** nothing imports `chunkStructured` outside the
+test suite yet. The Composer placeholder in [`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call. `find_relevant_files`, indexing, embedding, and
+Tools all behave identically. Removability holds (Decision §7).
+
+Tests: 42 cases covering empty / JSON arrays of mixed types / JSON
+objects with insertion-order key dispatch / JSONL with blank-line
+skipping and CRLF tolerance / format dispatch via custom override and
+source_uri extension (`.json` / `.jsonl` / `.ndjson`) / byte-range
+adjacency for all three sub-cases / ChunkID stability across compact-vs-
+pretty JSON envelopes and JSONL whitespace variations / chunker-version
+invalidation / UTF-8 multi-byte content / `metadata.custom` pass-through
++ precedence + `format`-key filtering / and the validation rejection
+paths (malformed JSON, top-level scalars, JSONL one-bad-line, missing
+source_uri / collection / bytes, unknown format value).
+
 ## [1.4.12] - 2026-05-02
 
 **Retrieval Phase 1 — ConversationChunker (PR 4 of 1.5.0).** Third chunker

@@ -6,11 +6,13 @@
  * surface in [contracts.js](./contracts.js). 1.4.10 adds `chunkProse` and
  * pins the chunker contract; 1.4.11 adds `chunkCode` (Phase 1 heuristic
  * regex chunker for JS/TS/Python); 1.4.12 adds `chunkConversation`
- * (1 turn = 1 chunk over a JSON-serialized HistoryTurn[]). The remaining
- * chunker (`structured`; `spec` deferred past Phase 1), the
- * StructureExtractor, the strategies, and the Composer arrive in
- * follow-up PRs (sequenced toward the 1.5.0 promotion when legacy-vs-new
- * agreement on test queries clears 80%; see `docs/ROADMAP.md`).
+ * (1 turn = 1 chunk over a JSON-serialized HistoryTurn[]); 1.4.13 adds
+ * `chunkStructured` (1 record per top-level array element / object key,
+ * over JSON or JSONL). With this PR the Phase 1 chunker stream is
+ * complete (`spec` deferred past Phase 1). The StructureExtractor, the
+ * strategies, and the Composer arrive in follow-up PRs (sequenced toward
+ * the 1.5.0 promotion when legacy-vs-new agreement on test queries
+ * clears 80%; see `docs/ROADMAP.md`).
  *
  * The placeholder `compose` export establishes the public surface so
  * downstream consumers can wire imports today and have those imports
@@ -29,6 +31,7 @@ export { CHUNKER_VERSION } from './contracts.js';
 export { chunkProse } from './chunkers/prose-chunker.js';
 export { chunkCode } from './chunkers/code-chunker.js';
 export { chunkConversation } from './chunkers/conversation-chunker.js';
+export { chunkStructured } from './chunkers/structured-chunker.js';
 
 /**
  * Placeholder for the eventual `compose(req: RetrievalRequest) => Promise<RetrievalResult>`
