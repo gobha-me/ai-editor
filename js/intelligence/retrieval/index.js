@@ -84,12 +84,23 @@
  * shared async iterator runs `controller.ingest(uri)` across N source
  * URIs with per-source error isolation, optional progress reporting, and
  * abort support (in-flight calls finish; no new dispatch). Pure DI; no
- * production wire-up. First PR opening the 1.5.0 minor — subsequent
- * 1.5.0-betaN PRs add (a) production wiring to `Git.getFile()` /
- * `EmbeddingsClient.embed()`, (b) the comparison harness running queries
- * through both legacy `js/context-manager.js` and the new Composer,
- * (c) a test-query fixture corpus, and (d) the actual ≥80% agreement
- * measurement that promotes the track.
+ * production wire-up. First PR opening the 1.5.0 minor — subsequent PRs
+ * add (a) production wiring to `Git.getFile()` / `EmbeddingsClient.embed()`,
+ * (b) the comparison harness running queries through both legacy
+ * `js/context-manager.js` and the new Composer, (c) a test-query fixture
+ * corpus, and (d) the actual ≥80% agreement measurement that promotes
+ * the track.
+ * 1.5.1 adds `createProductionLoader` / `createProductionEmbedder` /
+ * `createProductionIngestWalker` — the integration seam (`./wiring.js`)
+ * that bridges the production `Git` and `EmbeddingsClient` modules to the
+ * existing pure-DI factories. Closes the two contract gaps: `Git.getFile`
+ * returns a file object (`{name, path, sha, size, content, encoding}`),
+ * not raw bytes, and `EmbeddingsClient.init()` must be awaited once at
+ * library startup per DESIGN-retrieval lines 304-308. Project context
+ * (owner / repo / ref) closes over the loader so `source_uri` is a plain
+ * in-repo path. No app-boot integration in 1.5.1 — the comparison harness
+ * PR triggers ingestion when its test runs; `find_relevant_files` keeps
+ * running through legacy `js/context-manager.js` until 1.5.3.
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -126,3 +137,8 @@ export { createLoader, detectContentType, computeSourceHash } from './loader.js'
 export { createEmbedder } from './embedder.js';
 export { createIngestController } from './ingest-controller.js';
 export { createIngestWalker } from './walker.js';
+export {
+    createProductionLoader,
+    createProductionEmbedder,
+    createProductionIngestWalker,
+} from './wiring.js';

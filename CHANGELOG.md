@@ -4,6 +4,94 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-05-02
+
+**Retrieval Phase 1 — Production wiring (PR 17 of 1.5.0).** Bridges the
+production [`Git`](js/git.js) and [`EmbeddingsClient`](js/embeddings-client.js)
+modules to the existing pure-DI factories shipped through 1.5.0
+(Loader 1.4.21, Embedder 1.4.22, Store 1.4.20, Controller 1.4.23, Walker
+1.5.0). Closes the two contract gaps that prevented the existing
+factories from being called against the production modules directly.
+
+**Public surface.** Three new exports re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js):
+
+- `createProductionLoader({ Git, project, contentTypeOverride? }) → Loader`
+  — wraps `Git.getFile(owner, repo, path, ref)` to fit the loader's
+  `fetchBytes(uri) → string` contract. The project triple
+  (`{ owner, repo, ref }`) closes over the loader; `source_uri` becomes a
+  plain in-repo path.
+- `createProductionEmbedder({ EmbeddingsClient, modelId, cache? }) → Promise<Embedder>`
+  — awaits `EmbeddingsClient.init()` exactly once at construction so
+  every chunk emitted by the returned Embedder is guaranteed to see a
+  ready provider. `embedFn` is the bare `(text) => EmbeddingsClient.embed(text)`.
+- `createProductionIngestWalker({ Git, EmbeddingsClient, project, modelId, store?, collection?, concurrency?, onProgress?, embeddingCache?, contentTypeOverride? }) → Promise<{ walker, controller, store }>`
+  — one-shot composition over Loader → Embedder → in-memory Store →
+  Controller → Walker. Returns three handles so callers can `walk()`,
+  inspect controller stats, and look up chunks for the comparison
+  harness arriving in the next PR.
+
+The two contract gaps closed:
+
+1. `Git.getFile` returns `{ name, path, sha, size, content, encoding }`
+   — a *file object*, not raw bytes. The wiring unwraps `.content`.
+2. `EmbeddingsClient.init()` must be awaited once at library startup per
+   [docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) lines 304-308
+   (*"Provider initialization at library startup, not per-call"*). The
+   embedder factory awaits it before returning the handle.
+
+**Phase-1 scope decisions.**
+
+- **Project context closes over the loader.** `project = { owner, repo, ref }`
+  is bound at construction. No URI-scheme parsing in Phase 1; a future
+  multi-repo walker (deferred) revisits this. Mirrors how 1.4.15's
+  Semantic strategy closes over `embedQuery` rather than threading it per
+  call.
+- **No catching of `Git.getFile` errors.** The controller (1.4.23)
+  already converts thrown loader errors into `failed` IngestResults per
+  its documented contract; preserving that posture means a missing file
+  or network blip flows through existing error isolation rather than
+  being silently swallowed in the wiring.
+- **`EmbeddingsClient.init()` awaited exactly once at construction.**
+  `init()` is internally idempotent (returns early on `_initialized`),
+  so a caller who already initialized the client pays no extra cost. We
+  still await defensively to honor the design's "library startup"
+  contract.
+- **No `State` / `localStorage` / DOM read.** The wiring does not read
+  global state. The caller threads `project` and `modelId` in. That keeps
+  this module node-test-safe (under fakes) and matches the DI posture
+  every other retrieval factory took.
+- **Composition factory returns three handles** (`{ walker, controller,
+  store }`) so callers can `walk()`, inspect stats, and look up chunks
+  via `store.getChunkByID` for downstream consumers.
+
+**Out of scope (later 1.5.x PRs).** App-boot integration (no `js/app.js`
+changes; nothing imports `wiring.js` at boot); the comparison harness
+running queries through both legacy `js/context-manager.js` and the new
+Composer (next PR); test-query fixture corpus (later PR); the actual
+≥80% legacy-vs-new agreement measurement that promotes the track (later
+PR); migration of `find_relevant_files` off `js/context-manager.js`
+(1.5.3 after the §1.5.x renumber that this PR lands); walker
+tree-walking / source-URI enumeration from `State.fileTree` (consumer's
+job); persistent embedding cache / IDB-backed storage (Phase 1.5.x);
+file-size ceiling / filetype filters (Foundations 1.1.2 branch);
+multi-repo / cross-workspace URI scheme.
+
+**Roadmap renumber.** With this PR landing as 1.5.1, the original
+`1.5.x` follow-ups in [docs/ROADMAP.md](docs/ROADMAP.md) shift one slot
+later: Thematic strategy → 1.5.2; legacy `context-manager.js` retirement
++ `find_relevant_files` migration → 1.5.3; cost-dashboard retrieval
+extension → 1.5.4; query / structural caches → 1.5.5; AST code chunker
+→ 1.5.6.
+
+**No runtime wire-up.** Nothing imports `createProductionLoader` /
+`createProductionEmbedder` / `createProductionIngestWalker` outside the
+test suite. With `wiring.js` deleted (and the three barrel re-exports
+removed) no production behavior degrades — Removability holds (Decision
+§7). `find_relevant_files` keeps running through legacy
+`js/context-manager.js` exactly as before. 24 unit cases under
+`node --test tests/test-retrieval-wiring.mjs`.
+
 ## [1.5.0] - 2026-05-02
 
 **Retrieval Phase 1 — Parallel-execution walker (PR 16 of 1.5.0; opens the

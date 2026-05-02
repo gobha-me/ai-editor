@@ -458,6 +458,89 @@
  */
 
 /**
+ * Project triple closed over by the production-wired Loader (1.5.1).
+ * `source_uri` at the loader is then a plain in-repo path; `Git.getFile`
+ * is invoked as `getFile(owner, repo, path, ref)`. Multi-repo / multi-ref
+ * walking is deferred — Phase 1 binds one project per loader.
+ *
+ * @typedef {Object} Project
+ * @property {string} owner  Git host owner / org slug.
+ * @property {string} repo   Repository slug.
+ * @property {string} ref    Branch name, tag, or commit SHA.
+ */
+
+/**
+ * Options to `createProductionLoader` (1.5.1). The injected `Git` is the
+ * production `js/git.js` namespace (or a node-test fake exposing the same
+ * `getFile(owner, repo, path, ref)` signature returning
+ * `{ content: string }`).
+ *
+ * @typedef {Object} ProductionLoaderOptions
+ * @property {{ getFile: (owner: string, repo: string, path: string, ref: string) => Promise<{ content: string }> }} Git
+ *   Production Git namespace. Only `getFile` is consumed; additional fields
+ *   on the resolved file object (`name`, `path`, `sha`, `size`, `encoding`)
+ *   are ignored by the wiring.
+ * @property {Project} project
+ * @property {((source_uri: string) => (ContentType|null))|undefined} [contentTypeOverride]
+ *   Optional. Resolves URIs without an extension (e.g. `memory://session/...`)
+ *   to a `ContentType` before extension-based detection runs. Threaded
+ *   directly to `createLoader`'s `contentTypeOverride`.
+ */
+
+/**
+ * Options to `createProductionEmbedder` (1.5.1). Awaits
+ * `EmbeddingsClient.init()` once at construction so the returned handle
+ * is guaranteed to see a ready provider on every `embed` call.
+ *
+ * @typedef {Object} ProductionEmbedderOptions
+ * @property {{ init: () => Promise<*>, embed: (text: string) => Promise<EmbeddingVector|null> }} EmbeddingsClient
+ *   Production `js/embeddings-client.js` singleton (or a node-test fake
+ *   exposing the same two methods).
+ * @property {string} modelId  Opaque label that participates in the
+ *   embedder cache key (`${modelId}::${content_hash}`); typically
+ *   `State.settings.embeddingModel` at the production call site.
+ * @property {import('./embedder.js').EmbedderCache|undefined} [cache]
+ *   Optional injected embedding cache; threaded to `createEmbedder`.
+ */
+
+/**
+ * Options to `createProductionIngestWalker` (1.5.1). One-shot composition
+ * factory: wires Loader, Embedder, in-memory Store, Controller, Walker
+ * against production `Git` + `EmbeddingsClient`.
+ *
+ * @typedef {Object} ProductionIngestWalkerOptions
+ * @property {ProductionLoaderOptions["Git"]} Git
+ * @property {ProductionEmbedderOptions["EmbeddingsClient"]} EmbeddingsClient
+ * @property {Project} project
+ * @property {string} modelId
+ * @property {import('./store.js').ChunkStore|undefined} [store]
+ *   Optional store override (defaults to `createInMemoryChunkStore()`).
+ * @property {CollectionName|undefined} [collection]
+ *   Optional collection name threaded to the controller (defaults to
+ *   `"default"`).
+ * @property {number|undefined} [concurrency]
+ *   Optional walker concurrency (defaults to 4).
+ * @property {((done: number, total: number, latestResult: IngestResult) => void)|undefined} [onProgress]
+ *   Optional walker progress callback.
+ * @property {import('./embedder.js').EmbedderCache|undefined} [embeddingCache]
+ *   Optional embedder cache override.
+ * @property {((source_uri: string) => (ContentType|null))|undefined} [contentTypeOverride]
+ *   Optional loader content-type override.
+ */
+
+/**
+ * Handle returned by `createProductionIngestWalker` (1.5.1). The walker
+ * is the primary surface; the controller and store are surfaced so
+ * callers can inspect ingest stats and look up chunks for downstream
+ * consumers (the comparison harness's job at the next PR).
+ *
+ * @typedef {Object} ProductionIngestWalkerHandle
+ * @property {import('./walker.js').IngestWalker} walker
+ * @property {import('./ingest-controller.js').IngestController} controller
+ * @property {import('./store.js').ChunkStore} store
+ */
+
+/**
  * Frozen registry of chunker versions, one per `ContentType`. Bumping a
  * version invalidates the corresponding ChunkIDs (see DESIGN-retrieval
  * §"Chunk Identity and Stability"); two chunkers can coexist during a
