@@ -8,11 +8,15 @@
  * regex chunker for JS/TS/Python); 1.4.12 adds `chunkConversation`
  * (1 turn = 1 chunk over a JSON-serialized HistoryTurn[]); 1.4.13 adds
  * `chunkStructured` (1 record per top-level array element / object key,
- * over JSON or JSONL). With this PR the Phase 1 chunker stream is
- * complete (`spec` deferred past Phase 1). The StructureExtractor, the
- * strategies, and the Composer arrive in follow-up PRs (sequenced toward
- * the 1.5.0 promotion when legacy-vs-new agreement on test queries
- * clears 80%; see `docs/ROADMAP.md`).
+ * over JSON or JSONL). With 1.4.13 the Phase 1 chunker stream is complete
+ * (`spec` deferred past Phase 1). 1.4.14 adds `extractStructure` — the
+ * StructureExtractor pass that populates `metadata.structural` for prose
+ * (heading hierarchy) and code (declaration-kind labeling) so the
+ * Phase 1 Structural strategy can ancestor-walk over chunk metadata
+ * without a separate tree artifact. The strategies, the Composer, and
+ * the migration off `js/context-manager.js` arrive in follow-up PRs
+ * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
+ * on test queries clears 80%; see `docs/ROADMAP.md`).
  *
  * The placeholder `compose` export establishes the public surface so
  * downstream consumers can wire imports today and have those imports
@@ -32,6 +36,7 @@ export { chunkProse } from './chunkers/prose-chunker.js';
 export { chunkCode } from './chunkers/code-chunker.js';
 export { chunkConversation } from './chunkers/conversation-chunker.js';
 export { chunkStructured } from './chunkers/structured-chunker.js';
+export { extractStructure, NODE_KIND } from './structure-extractor.js';
 
 /**
  * Placeholder for the eventual `compose(req: RetrievalRequest) => Promise<RetrievalResult>`
@@ -42,5 +47,5 @@ export { chunkStructured } from './chunkers/structured-chunker.js';
  * @returns {Promise<import('./contracts.js').RetrievalResult>}
  */
 export async function compose(_req) {
-    throw new Error('retrieval Composer not implemented; lands after the 1.4.9 foundation patch — see docs/ROADMAP.md §1.5.0');
+    throw new Error('retrieval Composer not implemented; lands as PR 9 of 1.5.0 — see docs/ROADMAP.md §1.5.0');
 }

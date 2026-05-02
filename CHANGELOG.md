@@ -4,6 +4,99 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.14] - 2026-05-02
+
+**Retrieval Phase 1 — StructureExtractor (PR 6 of 1.5.0).** Sixth PR in
+the 1.5.0 stream and the first non-chunker piece. Implements
+`docs/DESIGN-retrieval.md` §"StructureExtractor": a pure post-chunker
+pass that populates `Chunk.metadata.structural` for content types with
+meaningful hierarchy (prose, code), so the Phase 1 Structural strategy
+(PR 8 of 1.5.0) can ancestor-walk over chunk metadata without a separate
+tree artifact. The "tree" is the transitive closure of `parent_id` across
+chunks — there is no tree to store.
+
+**Pure function:** `(chunks: Chunk[]) → Chunk[]`. No I/O, no async, no
+external state. Returns fresh chunks (input array is never mutated).
+Mixed `content_type` in a single batch → `TypeError` (the extractor runs
+per-source; surfacing the mixed case at the boundary catches upstream
+wiring bugs early). Empty input returns the input array unchanged.
+
+**Dispatch by `content_type`:**
+
+- **prose** ([`extractProse`](js/intelligence/retrieval/structure-extractor.js)) —
+  walks markdown-style heading levels (`#`/`##`/`###`...) using a
+  line-anchored regex, builds a heading stack to compute `parent_id`
+  (chunk-id of the parent heading, null at root) and `heading_path` (the
+  full chain to here), assigns `node_kind: "section"`, and tracks
+  `sibling_order` per (parent_id) bucket. Continuation chunks (no leading
+  heading of their own) inherit the most-recent heading-bearing chunk's
+  `parent_id` + `heading_path`. **Documents with no headings** → chunks
+  pass through unchanged (`structural` stays null), per the design's
+  "with heading structure" qualifier.
+
+- **code** ([`extractCode`](js/intelligence/retrieval/structure-extractor.js)) —
+  declaration-kind labeling per chunk. Detects the first non-blank,
+  non-decorator line and maps it to a `node_kind`: `function` (JS/TS
+  `function` declarations and Python `def` / `async def`), `class`,
+  `variable` (JS/TS `const` / `let` / `var`), `type` (JS/TS `type` /
+  `interface` / `enum`), `import`, `export` (`export {…}` / `export *`).
+  Exported functions still label as `"function"` so the JS/TS function
+  surface is one bucket regardless of export shape. Phase 1 CodeChunker
+  emits flat top-level declarations, so `parent_id` is always null,
+  `heading_path` is `[]`, and `sibling_order` matches chunk index. Code
+  for unknown extensions (CodeChunker's degenerate single-chunk-per-file
+  path) labels as the generic `"code"` kind. The Structural strategy's
+  ancestor-walk is a no-op for code in Phase 1 — `node_kind` filtering is
+  the still-useful citation context, and the walk gains power either
+  when AST chunking lands (1.5.5, gated) or when the extractor learns to
+  nest function-inside-class.
+
+- **conversation / structured / spec** — pass through unchanged. The
+  design says these don't carry hierarchical structural metadata; the
+  spec chunker is deferred past Phase 1 anyway.
+
+**Overlap-noise suppression for prose.** The prose chunker's 100-char
+overlap (1.4.10) can pull earlier chunks' headings forward into chunk
+N's content — especially when prior chunks were shorter than 100 chars
+(the entire previous chunk becomes the next chunk's overlap prefix), and
+the leak chains through multiple chunks for short documents. For each
+chunk the extractor walks every heading candidate and picks the first
+one whose `(level, text)` hasn't already been emitted in this batch. The
+dedup set is per-`extractStructure` call, so the same `(level, text)`
+across different documents (different batches) is not affected. Known
+limitation: two genuinely-identical sibling headings (`## Examples`
+twice in one doc) collapse to the first; the cost dashboard will surface
+if it matters.
+
+**Mirrors the chunker boundary patterns.** The JS/TS / Python boundary
+regexes deliberately duplicate the patterns from
+[`code-chunker.js`](js/intelligence/retrieval/chunkers/code-chunker.js)'s
+`matchJsBoundary` / `matchPyBoundary` rather than importing them — a
+chunker tweak shouldn't silently shift the extractor's labeling. A
+future cleanup PR can lift them into a shared module once both
+stabilize.
+
+**No runtime wire-up:** nothing imports `extractStructure` outside the
+test suite yet. The Composer placeholder in
+[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call. `find_relevant_files`, indexing, embedding, and
+Tools all behave identically. Removability holds (Decision §7).
+
+Tests: 28 cases covering empty input / non-array rejection / mixed
+`content_type` rejection / prose with no headings (passthrough) / single
+heading with continuation chunks / two same-level headings with
+sibling_order / nested heading hierarchy with parent_id chains and
+sibling_order across levels / heading-level skip (`#` → `###`) /
+returning to a higher level (stack pop) / non-mutation of input chunks
+/ each JS/TS declaration kind (function, class, variable, type,
+import, export-binding) / TypeScript type/interface/enum collapsing to
+"type" / exported-function labels as "function" / Python def/async
+def/class/import/from-import / Python decorator skipped (kind from
+following def/class) / sibling_order across multiple constructs /
+unknown extension fallback to "code" / comment-only fallback to "code"
+/ conversation passthrough / structured passthrough / spec passthrough
+/ determinism across runs.
+
 ## [1.4.13] - 2026-05-02
 
 **Retrieval Phase 1 — StructuredChunker (PR 5 of 1.5.0).** Fourth and
