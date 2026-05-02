@@ -163,6 +163,57 @@
  */
 
 /**
+ * Chunker output — a `ChunkRef` minus the fields populated downstream of the
+ * chunker. `provenance` is set by the ingest layer (a chunker has no business
+ * knowing how a retrieval *will* score it); `embedding` is set by the embedder.
+ *
+ * `byte_range` rides on the chunk so the ingest layer can thread the
+ * chunker's chosen identity range into `Provenance` without recomputing it,
+ * and so chunker tests can verify adjacency directly. Reported in UTF-8
+ * bytes — the cross-loader interchange unit per DESIGN-retrieval.
+ *
+ * The chunker is a pure `(input) → Chunk[]` function with no awareness of
+ * strategies, scoring, or the embedder. See DESIGN-retrieval §"Chunker":
+ * "Each chunker is pure: `(bytes, metadata) → []Chunk`."
+ *
+ * @typedef {Object} Chunk
+ * @property {ChunkID}          id
+ * @property {CollectionName}   collection
+ * @property {string}           content      With chunker-specific overlap when applicable.
+ * @property {number}           tokens       Precomputed estimate; the Composer trusts this.
+ * @property {Metadata}         metadata
+ * @property {[number, number]} byte_range   Half-open `[start, end)` UTF-8 byte range; the chunker's identity range.
+ */
+
+/**
+ * What a chunker receives. Bytes from the loader plus enough framing for the
+ * chunker to compute stable IDs. The chunker does not own `Metadata` — it
+ * receives a partial view and returns chunks that fill it in (specifically
+ * `content_hash` per chunked region, plus `structural` when a
+ * StructureExtractor is wired in for that content type).
+ *
+ * @typedef {Object} ChunkerInput
+ * @property {string}         bytes       Source content; chunker treats as opaque text.
+ * @property {CollectionName} collection  Logical collection the resulting chunks join.
+ * @property {Object}         metadata    Loader-supplied metadata seed.
+ * @property {string}         metadata.source_uri
+ * @property {ContentType}    metadata.content_type
+ * @property {number}         metadata.created_at
+ * @property {number}         metadata.updated_at
+ * @property {Object<string, *>|undefined} metadata.custom
+ */
+
+/**
+ * Pure chunker function. `(input) → Chunk[]` per DESIGN-retrieval §"Chunker".
+ * No I/O, no async — chunkers run inline on loader output.
+ *
+ * Chunkers are content-type-dispatched at the call site (the ingest pipeline
+ * picks `chunkProse` / `chunkCode` / etc. by `metadata.content_type`).
+ *
+ * @typedef {(input: ChunkerInput) => Chunk[]} Chunker
+ */
+
+/**
  * Per-call budget envelope. Per DESIGN-retrieval §"RetrievalRequest":
  *   retrieval_budget = total - system_reserve - output_reserve - history_reserve.
  *

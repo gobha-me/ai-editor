@@ -3,10 +3,11 @@
  * Public surface of the retrieval-admission subsystem.
  *
  * 1.4.9 ships the data foundation: the `ChunkID` hash and the typedef
- * surface in [contracts.js](./contracts.js). The Composer, the Strategy
- * implementations, and the ingest pipeline arrive in subsequent PRs
- * (currently sequenced as 1.4.10 → ... → 1.5.0 promotion when the legacy-
- * vs-new agreement on test queries clears 80%; see `docs/ROADMAP.md`).
+ * surface in [contracts.js](./contracts.js). 1.4.10 adds the first chunker
+ * (`chunkProse`); subsequent chunkers (`code`, `conversation`, `structured`,
+ * `spec`), the StructureExtractor, the strategies, and the Composer arrive
+ * in follow-up PRs (sequenced toward the 1.5.0 promotion when legacy-vs-new
+ * agreement on test queries clears 80%; see `docs/ROADMAP.md`).
  *
  * The placeholder `compose` export establishes the public surface so
  * downstream consumers can wire imports today and have those imports
@@ -22,6 +23,7 @@
 
 export { computeChunkID, normalizeByteRange } from './chunk-id.js';
 export { CHUNKER_VERSION } from './contracts.js';
+export { chunkProse } from './chunkers/prose-chunker.js';
 
 /**
  * Placeholder for the eventual `compose(req: RetrievalRequest) => Promise<RetrievalResult>`

@@ -4,6 +4,74 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-05-02
+
+**Retrieval Phase 1 — ProseChunker (PR 2 of 1.5.0).** First chunker on the
+1.4.9 foundation. Implements the prose row of `docs/DESIGN-retrieval.md`
+§"Chunker": paragraph + heading boundaries, 800-1200 char target with
+100-char overlap, deterministic split-at-sentence-boundary fallback for
+oversized blocks. Pure function — `(input) → Chunk[]` per the design contract.
+
+Why prose first rather than code: shipping prose pins the chunker contract,
+overlap mechanics, and ChunkID stability story under review *before* the
+language-aware regex work in CodeChunker (`docs/DESIGN-retrieval.md` §"On
+code chunking specifically" dedicates a whole subsection to its difficulty).
+Every later chunker (`code`, `conversation`, `structured`, `spec`) is a thin
+producer over the same `Chunk` shape.
+
+No runtime wire-up: nothing imports `chunkProse` outside the test suite yet.
+The Composer placeholder in [`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call. `find_relevant_files`, indexing, embedding, and Tools
+all behave identically. The `task_ledger.admissions[]` / `exclusions[]` slots
+scaffolded in 1.1.0 stay empty until the Composer lands.
+
+Removability (Decision §7): with `js/intelligence/retrieval/chunkers/`
+removed and the barrel export reverted, no user-visible behavior degrades —
+nothing outside the retrieval module imports it.
+
+### Added
+
+- **[`js/intelligence/retrieval/chunkers/prose-chunker.js`](js/intelligence/retrieval/chunkers/prose-chunker.js)**
+  — pure `chunkProse(input)` function. Tokenizes into paragraph + heading
+  blocks (markdown-style `#+\s` heading detection), greedy-packs into
+  800-1200 char chunks with heading-forces-boundary, splits oversized
+  paragraphs at sentence boundaries (`. `/`! `/`? `) with a hard-cut
+  fallback at TARGET_MAX, and emits chunks contiguously over the source so
+  consecutive chunks share `byte_range[i+1][0] === byte_range[i][1]` and the
+  100-char overlap slices uniformly from the source. Surrogate-safe at all
+  cut points; reports `byte_range` in UTF-8 bytes via a precomputed offset
+  table.
+
+- **[`tests/test-retrieval-prose-chunker.mjs`](tests/test-retrieval-prose-chunker.mjs)**
+  — 24-test `node:test` suite covering empty/whitespace/short/long input,
+  heading-forces-boundary (single + multiple), 100-char overlap, sentence-
+  boundary splits, hard-cut fallback for boundary-free runs, ChunkID
+  stability across runs, ChunkID match against `computeChunkID(...,
+  CHUNKER_VERSION.prose)`, version invalidation under a hypothetical bump,
+  byte-range adjacency + endpoints, surrogate-pair safety with embedded
+  emoji, UTF-8 byte counting for multi-byte content, input validation,
+  `metadata.structural === null` placeholder, and `metadata.custom`
+  passthrough.
+
+### Changed
+
+- **[`js/intelligence/retrieval/contracts.js`](js/intelligence/retrieval/contracts.js)**
+  — pins the chunker-side typedefs that every follow-up chunker PR
+  (`code`, `conversation`, `structured`, `spec`) conforms to: `Chunk`
+  (`ChunkRef` minus `provenance`/`embedding`, plus the chunker's
+  `byte_range` so the ingest layer threads it into `Provenance` without
+  recomputing), `ChunkerInput` (loader bytes + collection + metadata seed),
+  `Chunker` (`(input) → Chunk[]` function shape).
+
+- **[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)**
+  — re-exports `chunkProse` from the barrel so consumers don't reach into
+  `chunkers/`. Module-level doc updated to reflect 1.4.10's slot.
+
+- **[`js/version.js`](js/version.js)** — `1.4.9` → `1.4.10`.
+
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — adds the 1.4.10 entry under the
+  1.4.x follow-ups; updates the *Now* row.
+
 ## [1.4.9] - 2026-05-02
 
 **Retrieval foundation — ChunkRef contract + module scaffolding (PR 1
