@@ -4,6 +4,131 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.16] - 2026-05-02
+
+**Retrieval Phase 1 — Structural strategy (PR 8 of 1.5.0).** Eighth PR
+in the 1.5.0 stream and the second retrieval *strategy*. Implements
+`docs/DESIGN-retrieval.md` §"Structural (Phase 1: ancestor-walk)":
+candidate semantic chunks → walk one step up to immediate parent if
+parent fits per-chunk budget → dedup by ChunkID → return top `quota`.
+The whole expansion is a single `getChunkByID` lookup per candidate
+over the structural metadata populated at ingest by
+[`extractStructure`](js/intelligence/retrieval/structure-extractor.js)
+(1.4.14) — no LLM, microseconds of work.
+
+**Public surface:**
+[`createStructuralStrategy({ runSemanticRetrieve, getChunkByID })`](js/intelligence/retrieval/strategies/structural.js)
+returns a `Strategy`-shaped `{ name: "structural", applies_to,
+retrieve }` consistent with the typedef pinned at 1.4.9.
+
+**Algorithm interpretation: smallest fitting ancestor = immediate
+parent.** "Walk up `parent_id` to find the smallest ancestor whose
+token count fits the per-chunk budget" is read literally — one step up
+to the immediate parent. If the parent fits, return it; if not, no
+larger ancestor will either (ancestors only get bigger), so return the
+original chunk. Multi-step climbing for the worked example's
+"fragment → function → class" case is gated on richer code chunking
+(deferred to 1.5.5). For Phase 1 prose, paragraph fragments expand to
+their heading-bearing parent chunk. For Phase 1 code,
+[`extractCode`](js/intelligence/retrieval/structure-extractor.js) emits
+flat top-level declarations with `parent_id = null`, so structural is
+a **no-op for code in Phase 1** (chunks pass through with semantic
+provenance preserved) — gains power either when AST chunking lands or
+when the extractor learns to nest function-inside-class.
+
+**Dependency injection mirrors Semantic (1.4.15).** Two required deps:
+
+- `runSemanticRetrieve(req, k)` — caller-supplied semantic step,
+  delegated entirely so the strategy doesn't reinvent embed/k-NN
+  logic. Production callers wire
+  `(req, k) => createSemanticStrategy({...}).retrieve(req, k)` at the
+  Composer call site (PR 9). The Composer can later optimize the
+  duplicate semantic call by sharing one result across both
+  strategies; for Phase 1, each strategy is independent. Tests inject
+  a deterministic fake.
+- `getChunkByID(id)` — resolves a chunk by ID for the parent lookup.
+  Real implementation lands with the chunk-store ingest PR; today
+  it's faked in tests.
+
+**Per-chunk budget math.** Per the design, `default:
+retrieval_budget / quota` where `retrieval_budget = total_tokens -
+system_reserve - output_reserve - history_reserve`. Computed inside
+`retrieve` and floored. Non-positive perChunkBudget (heavy reserves
+vs small total) disables expansion — semantic candidates pass through
+unchanged.
+
+**Headroom:** the upstream semantic step receives `k = quota * 3` —
+mirrors Semantic's own k-NN headroom. After dedup-by-shared-ancestor +
+per-chunk-budget rejection the working set typically thins, so 3×
+headroom is the same heuristic.
+
+**Provenance for expanded chunks:**
+
+- `retrieved_by: "structural"`
+- `score_kind: "structural_expanded"`
+- `score`: copied from the original semantic candidate's
+  `provenance.score` so a downstream consumer can still rank by
+  relevance.
+- `byte_range` / `line_range` / `source_uri`: from the parent chunk
+  (the result references the parent's region, not the candidate's
+  fragment).
+
+**Provenance for non-expanded (degraded) chunks:** preserved verbatim
+from the semantic candidate (`retrieved_by: "semantic"` / `score_kind:
+"cosine" | "hybrid" | "bm25"` per the path Semantic took). Phase-1
+acceptable per design's graceful-degrade rule — the diagnostics
+surface for `structural_too_large` lands with the Composer in PR 9.
+
+**Failure-mode behavior matches the design:**
+
+- Chunk has no `metadata.structural` → return chunk unchanged.
+- Chunk's `parent_id` is null (root section) → return chunk unchanged.
+- `getChunkByID` returns null (stale parent ref after re-ingest) →
+  return chunk unchanged.
+- Parent `tokens > perChunkBudget` → return chunk unchanged
+  (Phase-1 silent; Composer in PR 9 will collect the
+  `structural_too_large` flag).
+- `quota <= 0` → empty result.
+- Empty `req.collections` → empty result.
+- Empty/null/whitespace `req.query` → empty result (mirrors
+  `applies_to` returning score 0).
+- `runSemanticRetrieve` returns `[]` → empty result.
+
+**`applies_to(req)` returns** score 0 when `req.query` is null /
+empty / whitespace (structural piggybacks on the semantic step which
+itself requires a query — that's thematic territory, deferred to
+Phase 2), score 0.8 with non-empty query (Phase-1 default per the
+design's rule for queries with structural-meta corpus; the full
+"corpus has >20% structural meta" condition needs a probe the strategy
+can't do from `req` alone — the router consumer in PR 9 is
+responsible for that gate, mirroring the Semantic strategy's same
+simplification).
+
+**No runtime wire-up:** nothing imports `createStructuralStrategy`
+outside the test suite yet. The Composer placeholder in
+[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call; `find_relevant_files` keeps running through the
+legacy file-level path in `js/context-manager.js`. With
+`js/intelligence/retrieval/strategies/structural.js` deleted, no
+user-visible behavior degrades — Removability holds (Decision §7).
+The migration of `find_relevant_files` to call the new Composer lands
+with 1.5.2 per the roadmap.
+
+Tests: 24 cases covering factory validation (missing/invalid
+runSemanticRetrieve / getChunkByID, returns Strategy-shaped object) /
+`applies_to` (null/empty/whitespace returns 0, non-empty returns 0.8) /
+happy-path expansion (single chunk → parent with score_kind labeling,
+sibling-share dedup to one parent, quota cap) / graceful-degrade paths
+(structural=null, parent_id=null, stale parent ref, oversized parent)
+/ empty-result paths (quota ≤ 0, empty collections, empty query, empty
+semantic result) / budget math (k = quota × 3 headroom verified,
+non-positive perChunkBudget disables expansion) / determinism (same
+input → same output) / non-mutation of input candidates / code
+passthrough (Phase-1 no-op verified) / provenance carry-forward (parent
+byte_range used, mixed-result batch with expanded + degraded chunks
+coexisting). Pure-data, no DOM / State / network — runs under
+`node --test` like the chunker and Semantic suites.
+
 ## [1.4.15] - 2026-05-02
 
 **Retrieval Phase 1 — Semantic strategy (PR 7 of 1.5.0).** Seventh PR

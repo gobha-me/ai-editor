@@ -16,11 +16,15 @@
  * without a separate tree artifact. 1.4.15 adds `createSemanticStrategy`
  * — the Phase-1 Semantic strategy (hybrid k-NN + BM25 + RRF) wrapping
  * the shipped 1.1.2 embedder, with the chunk-level vector store as an
- * injected callback until the ingest PR lands. The Structural strategy,
- * the Composer, the ledger consumer, and the migration off
- * `js/context-manager.js` arrive in follow-up PRs (sequenced toward the
- * 1.5.0 promotion when legacy-vs-new agreement on test queries clears
- * 80%; see `docs/ROADMAP.md`).
+ * injected callback until the ingest PR lands. 1.4.16 adds
+ * `createStructuralStrategy` — the Phase-1 Structural strategy
+ * (ancestor-walk over `parent_id` metadata) consuming the structural
+ * meta produced by `extractStructure` and delegating the embed → k-NN
+ * step to a caller-supplied `runSemanticRetrieve`. The Composer, the
+ * ledger consumer, and the migration off `js/context-manager.js`
+ * arrive in follow-up PRs (sequenced toward the 1.5.0 promotion when
+ * legacy-vs-new agreement on test queries clears 80%; see
+ * `docs/ROADMAP.md`).
  *
  * The placeholder `compose` export establishes the public surface so
  * downstream consumers can wire imports today and have those imports
@@ -42,6 +46,7 @@ export { chunkConversation } from './chunkers/conversation-chunker.js';
 export { chunkStructured } from './chunkers/structured-chunker.js';
 export { extractStructure, NODE_KIND } from './structure-extractor.js';
 export { createSemanticStrategy } from './strategies/semantic.js';
+export { createStructuralStrategy } from './strategies/structural.js';
 
 /**
  * Placeholder for the eventual `compose(req: RetrievalRequest) => Promise<RetrievalResult>`
