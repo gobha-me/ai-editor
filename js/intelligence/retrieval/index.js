@@ -48,6 +48,16 @@
  * revisits this with a 7-day grace tombstone); `upsert` is full
  * replace on id collision (trust the new payload — same content_hash
  * by construction, but possibly a freshly back-filled embedding).
+ * 1.4.21 adds `createLoader` — the source-fetching seam of the ingest
+ * pipeline. Per DESIGN-retrieval §"Ingest Pipeline" lines 273-275, a
+ * Loader returns `(bytes, source_uri, content_hash, content_type_hint)`
+ * given a source URI. Single dependency-injected factory: callers wire
+ * `fetchBytes` to whichever byte source is appropriate (`Git.getFile`
+ * for production at 1.4.23, in-memory `Map` for tests, MCP fetcher for
+ * plugin sources). Pure helpers `detectContentType` and
+ * `computeSourceHash` ship alongside for callers that need the
+ * extension-dispatch logic or the change-detection fingerprint without
+ * instantiating a Loader.
  * The migration off `js/context-manager.js` arrives at 1.5.2
  * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
  * on test queries clears 80%; see `docs/ROADMAP.md`).
@@ -83,3 +93,4 @@ export {
     MARKER_TOKEN_COST,
 } from './ledger-consumer.js';
 export { createInMemoryChunkStore } from './store.js';
+export { createLoader, detectContentType, computeSourceHash } from './loader.js';

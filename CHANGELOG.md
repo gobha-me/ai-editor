@@ -4,6 +4,122 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.21] - 2026-05-02
+
+**Retrieval Phase 1 — Loader (PR 13 of 1.5.0).** Thirteenth PR in the
+1.5.0 stream and the **third PR of the ingest-pipeline branch** of
+[docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) §"Ingest Pipeline"
+(lines 265–331). Implements the `Loader` contract per lines 273–275:
+
+> Fetches raw source. One loader per source kind. Loaders return
+> `(bytes, source_uri, content_hash, content_type_hint)`. They do not
+> interpret content — that is the chunker's job.
+
+Mirrors the 1.4.9–1.4.20 PR pattern: shipped in isolation, no
+production wire-up; the production caller is the incremental-ingest
+controller arriving at 1.4.23.
+
+**Public surface:**
+[`createLoader({ fetchBytes, contentTypeOverride? })`](js/intelligence/retrieval/loader.js)
+returns a `Loader` handle exposing a single async method
+`load(source_uri) => Promise<{bytes, source_uri, content_hash, content_type_hint}>`.
+Two pure helpers ship alongside for callers that want the dispatch
+logic or the change-detection fingerprint without instantiating a
+Loader: [`detectContentType(source_uri)`](js/intelligence/retrieval/loader.js)
+maps a URI's file extension to a Phase-1 `ContentType` (or `null`),
+and [`computeSourceHash(bytes)`](js/intelligence/retrieval/loader.js)
+returns the FNV-1a-twice 16-character hex fingerprint the design's
+incremental-ingest pseudocode (lines 313–316) stores via
+`store.setSourceHash`. All three are re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). The
+`LoadedSource` typedef the four-tuple shapes is pinned in
+[contracts.js](js/intelligence/retrieval/contracts.js) beside the
+existing `Metadata` / `Provenance` typedefs.
+
+**Phase-1 scope decisions** (called out so future readers don't have to
+reverse-engineer them):
+
+- **Single factory, not three.** "One loader per source kind" resolves
+  at the *call site*, not in this module. `fetchBytes` is the integration
+  seam — production wires it to `Git.getFile(...)` (controller at 1.4.23),
+  tests wire it to an in-memory `Map`, plugin sources can wire it to an
+  MCP fetcher. Mirrors the DI pattern the strategies use for `embedQuery`
+  (1.4.15) and `getChunkByID` (1.4.16, 1.4.17).
+- **`contentTypeOverride` for extension-less URIs.** `memory://session/...`
+  conversation payloads have no extension; the override callback returns
+  a non-null `ContentType` to win over extension dispatch. `null` falls
+  through to extension detection so callers can supply a per-prefix
+  override without coding the full table.
+- **Unknown extension throws, doesn't default to prose.** Loaders fail
+  loudly on accidental wire-up of unsupported types — mirrors
+  `runChunkerPipeline`'s rejection of unknown `content_type`. The caller
+  decides what to do: skip the source, supply a `contentTypeOverride`,
+  or surface a diagnostic.
+- **Stateless across `load()` calls.** No internal cache. Caller controls
+  freshness; the chunk store caches embeddings keyed by `content_hash`,
+  which is the right level for re-ingest economy.
+- **No binary detection in Phase 1.** The walker (1.4.23) is the right
+  boundary — `IgnoreManager.isIgnored` already filters production paths.
+  If `fetchBytes` returns binary-as-string the chunkers produce noise
+  but don't crash; a binary-rejection helper can ship at 1.4.23 if
+  measurement shows it's needed.
+- **No file-size limit.** The 250KB legacy ceiling lives in the walker,
+  not at this seam. The Loader returns whatever `fetchBytes` gives it.
+- **`content_hash` algorithm: FNV-1a-twice.** Same as
+  [`chunk-id.js`](js/intelligence/retrieval/chunk-id.js) (the
+  change-detection fingerprint is non-cryptographic — what the design's
+  incremental-ingest protocol needs is "different bytes → different hash
+  with overwhelming probability," nothing more). The FNV routine is
+  inlined here rather than imported from `chunk-id.js` because that
+  module's `fnv1a32` is private; promotion to a shared util is deferred
+  until a third consumer appears, matching the inline-cosine decision
+  from 1.4.20's store.
+- **Empty bytes → fixed sentinel hash** (`"0000000000000000"`), so
+  `getSourceHash` round-trips across an empty source even though the
+  chunker pipeline short-circuits to `[]` on `bytes.length === 0`.
+
+**Phase-1 extension table** (case-insensitive on extension):
+
+| ContentType | Extensions |
+|---|---|
+| `code` | `js`, `mjs`, `cjs`, `jsx`, `ts`, `tsx`, `py`, `pyw`, `pyi` |
+| `prose` | `md`, `markdown`, `txt`, `rst` |
+| `structured` | `json`, `jsonl`, `ndjson` |
+| `conversation` | (none — supplied via `contentTypeOverride`) |
+| `spec` | (deferred past Phase 1) |
+
+Mirrors the legacy [`js/context-manager.js`](js/context-manager.js)
+mapping for the subset of types the shipped chunkers handle. URIs with
+query strings or fragments are stripped before extension lookup so
+`memory://x.json?v=1` resolves to `structured`. Dotfiles and
+extension-less paths return `null`.
+
+**What's deliberately not here:**
+- File-system / Git-tree walking (1.4.23 ingest controller).
+- Production wire-up to `Git.getFile(...)` (1.4.23 controller).
+- BM25 index construction (`tokenizeBM25` is exported from
+  [`strategies/semantic.js`](js/intelligence/retrieval/strategies/semantic.js);
+  the producer ships between 1.4.22 and 1.5.1).
+- Concurrency / retry / backoff (controller's job).
+- Migration of `find_relevant_files` off `js/context-manager.js`
+  (1.5.2).
+
+**No runtime wire-up:** nothing imports `createLoader` outside the
+test suite; `find_relevant_files` keeps running through the legacy
+`js/context-manager.js` path. With `loader.js` deleted and the three
+barrel exports removed, no production behavior degrades —
+**Removability holds (Decision §7).**
+
+**Test coverage:** 42 unit cases under
+`node --test tests/test-retrieval-loader.mjs`, anchored on
+`detectContentType` extension-table parity (each Phase-1 type +
+case-insensitivity + query/fragment stripping + dotfile + multi-dot
+behavior), `computeSourceHash` determinism + mutation detection +
+empty-string sentinel + multi-byte UTF-8 stability, and `createLoader`
+factory validation + `load()` four-tuple shape + override semantics +
+unknown-extension rejection + invalid-input handling + fetchBytes
+error propagation + statelessness across calls.
+
 ## [1.4.20] - 2026-05-02
 
 **Retrieval Phase 1 — Chunk Store (PR 12 of 1.5.0).** Twelfth PR in the

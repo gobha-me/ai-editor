@@ -134,6 +134,34 @@
  */
 
 /**
+ * Loader output. The four-tuple a Loader returns per
+ * `docs/DESIGN-retrieval.md` §"Ingest Pipeline" lines 273-275:
+ *
+ *   > Fetches raw source. One loader per source kind. Loaders return
+ *   > `(bytes, source_uri, content_hash, content_type_hint)`. They do
+ *   > not interpret content — that is the chunker's job.
+ *
+ * The Loader sits upstream of the chunker pipeline (1.4.19) and feeds
+ * its `ChunkerInput` — the pipeline maps `LoadedSource` directly:
+ * `{ bytes, collection, metadata: { source_uri, content_type:
+ * content_type_hint, created_at, updated_at, custom } }`. The
+ * ingest controller (1.4.23) is the production caller; for Phase 1 the
+ * Loader ships in isolation with `fetchBytes` injected by tests.
+ *
+ * `content_hash` is computed over the **entire source bytes** (not
+ * per-chunk) — it's the change-detection fingerprint the design's
+ * incremental-ingest pseudocode at lines 313-316 stores via
+ * `store.setSourceHash` and compares on subsequent passes via
+ * `store.getSourceHash`.
+ *
+ * @typedef {Object} LoadedSource
+ * @property {string}       bytes              UTF-8 source content; chunkers treat as opaque text.
+ * @property {string}       source_uri         Echo of the input URI, validated.
+ * @property {string}       content_hash       Fingerprint of `bytes` for incremental ingest.
+ * @property {ContentType}  content_type_hint  Drives chunker dispatch in `runChunkerPipeline`.
+ */
+
+/**
  * Where a returned chunk came from and how it was scored. `score_kind` is
  * required to keep different scales from being silently averaged.
  *
