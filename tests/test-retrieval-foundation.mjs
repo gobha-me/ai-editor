@@ -196,13 +196,13 @@ test('CHUNKER_VERSION drives ChunkID invalidation through computeChunkID', () =>
     assert.notEqual(idAtRegistry, idAtV2);
 });
 
-/* ---------------- Composer placeholder ---------------- */
+/* ---------------- Composer surface ---------------- */
 
-test('compose() throws "not implemented" until the Composer ships', async () => {
-    await assert.rejects(
-        () => compose(/** @type {any} */ ({})),
-        /not implemented/,
-    );
+test('compose() is exported from the barrel as an async function (1.4.17)', () => {
+    // The placeholder was replaced in 1.4.17 with the real Composer.
+    // Full algorithm coverage lives in `test-retrieval-composer.mjs`;
+    // this asserts only that the barrel still exposes it.
+    assert.equal(typeof compose, 'function');
 });
 
 /* ---------------- ChunkRef structural round-trip ---------------- */

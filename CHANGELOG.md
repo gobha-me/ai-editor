@@ -4,6 +4,139 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.17] - 2026-05-02
+
+**Retrieval Phase 1 — Composer (PR 9 of 1.5.0).** Ninth PR in the
+1.5.0 stream and the orchestration piece that turns a
+`RetrievalRequest` into a `RetrievalResult`. Implements
+`docs/DESIGN-retrieval.md` §"Composition Algorithm" (lines 395–456)
+end-to-end with a single explicit stub: step 6.5 (`consult_ledger`) is
+a no-op in 1.4.17 and lands as the *ledger consumer* in PR 10. The
+Composer wires together everything PRs 1–8 built — chunkers, the
+StructureExtractor, the Semantic and Structural strategies — behind
+`compose(req, deps)`.
+
+**Public surface:**
+[`compose(req, { strategies, getChunkByID })`](js/intelligence/retrieval/composer.js)
+returns a `RetrievalResult` shaped per the typedef pinned at 1.4.9.
+The strategy router lives next door at
+[`selectStrategies(strategies, req)`](js/intelligence/retrieval/router.js)
+with `DEFAULT_TOTAL_QUOTA = 12`, `DEFAULT_FALLBACK_QUOTA = 6`, and
+`VIABILITY_THRESHOLD = 0.3` exposed as named exports for testability.
+Both are re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js); the
+throwing placeholder `compose` from 1.4.9 is replaced.
+
+**Algorithm steps (mirroring the design pseudocode):**
+
+1. **Budget accounting.** `retrieval_budget = total - system_reserve
+   - output_reserve - history_reserve`. `retrieval_budget < 0`
+   produces an empty-blocks result with a `NO_BUDGET` warning.
+2. **History packaging.** Per-turn token estimate
+   (`Math.ceil(content.length / 4)`); pack oldest→newest until
+   `history_reserve` is exhausted, drop oldest first; emits a
+   `HISTORY_TRUNCATED` info-level warning when anything dropped.
+3. **Strategy selection.** `selectStrategies(strategies, req)` filters
+   by `applies_to(req).score >= 0.3`. None viable + Semantic in list
+   → fallback at score 0.5 with `DEFAULT_FALLBACK_QUOTA`. None viable
+   + no Semantic → empty selection (history + task still emitted).
+   Skipped strategies surface in `Diagnostics.strategies_skipped`
+   with their reasons.
+4. **Per-strategy retrieval.** `Promise.allSettled` so a throwing
+   strategy degrades the call rather than failing it; throws land in
+   `Diagnostics.degraded_strategies` with a `STRATEGY_THREW` warning.
+   Latency captured per strategy.
+5. **Pinned chunks first.** `priority_pins` resolved via the injected
+   `getChunkByID`. Stale pins (lookup returns `null`) emit a
+   `STALE_PIN` warning and are skipped. Single pin > total budget
+   throws `OVERSIZED_PIN` per design §"Failure Modes" (line 525) —
+   a caller-visible error, not a silent failure. Duplicate pin IDs
+   resolve once.
+6. **Interleave + dedup.** Each viable strategy gets a token share
+   proportional to its applicability (`applicability.score / sum`,
+   mirroring the router's chunk-quota normalization so per-strategy
+   chunk- and token-budgets stay in step). ChunkID dedup spans
+   pinned + every strategy — a chunk returned by both Semantic and
+   Structural is admitted once.
+7. **Overflow guard.** When step 6's selections exceed
+   `retrieval_budget`, drop non-pinned chunks via **round-robin
+   across the strategies** that produced them, lowest-score-first
+   within each strategy. Phase 1 simplification documented in the
+   module: scores aren't comparable across strategies (the design's
+   `ScoreKind` rule, lines 458, 67–71), so cross-strategy fairness
+   beats raw-score comparison. Pinned chunks are never dropped here;
+   the OVERSIZED_PIN throw in step 5 already guarantees no single
+   pin exceeds the total budget. `tokens_truncated` tracks the drop.
+8. **Block assembly.** One `retrieved` block per surviving chunk
+   (`position: "body"`); one `history` block per surviving turn
+   (`position: "body"`); one `task` block carrying `req.task`
+   (`position: "tail"`). Phase 1 emits no `system_context` block —
+   the typedef reserves the role but `RetrievalRequest` has no
+   system-context field; caller-provided framing rides outside the
+   Composer.
+
+**Step 6.5 ledger consultation — DEFERRED to PR 10.** PR 9 honors the
+`RetrievalRequest.task_ledger` field (already in the typedef from
+1.4.9) but does **not** read or write it. `Diagnostics.ledger_consulted`
+is always `false`; `ledger_suppressions` is always `0`. The design's
+novelty-score path lives in the ledger consumer that ships next.
+
+**Dependency injection mirrors 1.4.15 / 1.4.16.** Two required deps:
+
+- `strategies: Strategy[]` — pre-built strategy instances. The
+  Composer doesn't import `createSemanticStrategy` /
+  `createStructuralStrategy` itself; production callers wire them
+  at the call site (lands with the migration off `context-manager.js`
+  at 1.5.2). Tests inject `Strategy`-shaped fakes with deterministic
+  `applies_to` and `retrieve`.
+- `getChunkByID: (id) => Promise<ChunkRef|null>` — resolves
+  `priority_pins`. Real implementation lands with the chunk-store
+  ingest PR; tests build a `Map` lookup over fixture chunks.
+
+`opts.totalQuota` and `opts.fallbackQuota` are accepted for test
+override but not user-tunable in 1.4.17; the constants will become
+profile-driven in 2.0.
+
+**Failure modes (per design §"Failure Modes"):**
+
+| Failure | Behavior | Surface |
+|---|---|---|
+| `retrieval_budget < 0` | Empty result, history + task still emitted | `warnings: NO_BUDGET` |
+| Stale pin (null lookup) | Skip with warning | `warnings: STALE_PIN` |
+| Pin lookup throws | Skip with warning | `warnings: PIN_LOOKUP_FAILED` |
+| Pin > total budget | Throws `OVERSIZED_PIN` Error | Caller-visible |
+| Strategy throws | Caught, others continue, marked degraded | `degraded_strategies` + `warnings: STRATEGY_THREW` |
+| All non-viable + no Semantic | Empty viable, history + task still emitted | `strategies_skipped` |
+| Step-6 selections > budget | Round-robin drop until fits | `tokens_truncated` |
+| History overflows reserve | Drop oldest first | `warnings: HISTORY_TRUNCATED` |
+
+**Diagnostics.** Every result carries the full `Diagnostics` field
+set from the typedef: `strategies_used`, `strategies_skipped`,
+`chunks_returned_per_strategy`, `tokens_used`, `tokens_budget`,
+`tokens_truncated`, `ledger_consulted` (always `false` in 1.4.17),
+`ledger_suppressions` (always `0`), `latency_per_strategy_ms`,
+`cache_hits` (empty until strategies populate it),
+`degraded_strategies`, `warnings`, `chunker_versions` (echoes
+`CHUNKER_VERSION` from the foundation patch for reproducibility).
+
+**No runtime wire-up:** `find_relevant_files` keeps running through
+the legacy `js/context-manager.js` path. Nothing in production
+imports `compose` outside the test suite. With `composer.js` and
+`router.js` deleted nothing degrades — the migration of
+`find_relevant_files` to the new Composer lands with 1.5.2.
+Removability holds (Decision §7).
+
+**Tests:** 32 cases in
+[`tests/test-retrieval-composer.mjs`](tests/test-retrieval-composer.mjs)
+(steps 1–8 + ledger no-op + diagnostics + factory validation) plus
+18 cases in
+[`tests/test-retrieval-router.mjs`](tests/test-retrieval-router.mjs)
+(applicability gating, quota normalization, fallback path, defensive
+behavior). The 1.4.9 foundation test that asserted the placeholder
+throws is updated to assert the barrel still exposes `compose` as
+a function — full algorithm coverage moves to the new Composer
+test file.
+
 ## [1.4.16] - 2026-05-02
 
 **Retrieval Phase 1 — Structural strategy (PR 8 of 1.5.0).** Eighth PR

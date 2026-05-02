@@ -20,16 +20,16 @@
  * `createStructuralStrategy` — the Phase-1 Structural strategy
  * (ancestor-walk over `parent_id` metadata) consuming the structural
  * meta produced by `extractStructure` and delegating the embed → k-NN
- * step to a caller-supplied `runSemanticRetrieve`. The Composer, the
- * ledger consumer, and the migration off `js/context-manager.js`
- * arrive in follow-up PRs (sequenced toward the 1.5.0 promotion when
- * legacy-vs-new agreement on test queries clears 80%; see
- * `docs/ROADMAP.md`).
- *
- * The placeholder `compose` export establishes the public surface so
- * downstream consumers can wire imports today and have those imports
- * fail loudly until the Composer ships, rather than swap import paths
- * mid-track.
+ * step to a caller-supplied `runSemanticRetrieve`. 1.4.17 ships
+ * `compose` (the Composer) and `selectStrategies` (the Strategy
+ * Router) — turning a `RetrievalRequest` into a `RetrievalResult`
+ * with budget accounting, per-strategy quotas, ChunkID dedup,
+ * round-robin overflow handling, and attention-aware block assembly;
+ * the ledger-consultation step (design pseudocode 6.5) is stubbed in
+ * this PR and lands as the ledger consumer in PR 10. The migration
+ * off `js/context-manager.js` arrives at 1.5.2 (sequenced toward the
+ * 1.5.0 promotion when legacy-vs-new agreement on test queries
+ * clears 80%; see `docs/ROADMAP.md`).
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -47,15 +47,10 @@ export { chunkStructured } from './chunkers/structured-chunker.js';
 export { extractStructure, NODE_KIND } from './structure-extractor.js';
 export { createSemanticStrategy } from './strategies/semantic.js';
 export { createStructuralStrategy } from './strategies/structural.js';
-
-/**
- * Placeholder for the eventual `compose(req: RetrievalRequest) => Promise<RetrievalResult>`
- * Composer entry point. Throws on call until the implementation lands so
- * accidental wire-up fails loudly during the transition.
- *
- * @param {import('./contracts.js').RetrievalRequest} _req
- * @returns {Promise<import('./contracts.js').RetrievalResult>}
- */
-export async function compose(_req) {
-    throw new Error('retrieval Composer not implemented; lands as PR 9 of 1.5.0 — see docs/ROADMAP.md §1.5.0');
-}
+export { compose } from './composer.js';
+export {
+    selectStrategies,
+    DEFAULT_TOTAL_QUOTA,
+    DEFAULT_FALLBACK_QUOTA,
+    VIABILITY_THRESHOLD,
+} from './router.js';
