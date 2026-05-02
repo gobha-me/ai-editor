@@ -200,6 +200,40 @@
  */
 
 /**
+ * Aggregate outcome of `IngestWalker.walk(sourceUris)` (1.5.0). The walker
+ * runs `controller.ingest(uri)` over N sources with bounded parallelism;
+ * `WalkResult` is the rolled-up shape every UI / CLI / test consumer reads.
+ * Mirrors `IngestControllerStats` field-for-field but adds:
+ *
+ *   - `total` (sources observed; equals `results.length`),
+ *   - `results` (per-source `IngestResult[]` in completion order — NOT
+ *     input order under `concurrency > 1`),
+ *   - `aborted` (true iff `opts.signal` fired before all sources dispatched),
+ *   - `durationMs` (wall-clock duration of `walk()`, monotonic, non-negative).
+ *
+ * Invariants the walker tests pin:
+ *
+ *   - `total === results.length`.
+ *   - `total === ingested + noop + failed`.
+ *   - `chunksAdded`, `chunksRemoved`, `embedFailures` equal Σ over `results`.
+ *   - `aborted: true` ⇒ in-flight controller.ingest calls finish (no
+ *     cancellation propagation in Phase 1), but no new sources dispatch.
+ *     A partial `WalkResult` is returned with whatever results landed.
+ *
+ * @typedef {Object} WalkResult
+ * @property {number}          total          Sources observed (dispatched + completed; equals `results.length`).
+ * @property {number}          ingested       Sum of per-source `status === "ingested"`.
+ * @property {number}          noop           Sum of per-source `status === "noop"`.
+ * @property {number}          failed         Sum of per-source `status === "failed"`.
+ * @property {number}          chunksAdded    Σ `results[i].added`.
+ * @property {number}          chunksRemoved  Σ `results[i].removed`.
+ * @property {number}          embedFailures  Σ `results[i].embed_failures`.
+ * @property {IngestResult[]}  results        Per-source results in completion order.
+ * @property {boolean}         aborted        True iff `opts.signal` aborted before all sources dispatched.
+ * @property {number}          durationMs     Non-negative milliseconds from `walk()` start to settle.
+ */
+
+/**
  * Where a returned chunk came from and how it was scored. `score_kind` is
  * required to keep different scales from being silently averaged.
  *

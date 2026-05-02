@@ -4,6 +4,99 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-02
+
+**Retrieval Phase 1 — Parallel-execution walker (PR 16 of 1.5.0; opens the
+1.5.0 minor).** First PR opening the 1.5.0 minor. Layered over the 1.4.23
+single-source [`createIngestController`](js/intelligence/retrieval/ingest-controller.js):
+[`createIngestWalker`](js/intelligence/retrieval/walker.js) runs
+`controller.ingest(uri)` across N source URIs with bounded concurrency
+(default 4), per-source error isolation, optional progress reporting, and
+abort support. The controller owns the *protocol* (Loader → Chunker
+pipeline → Embedder → Store per
+[docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) lines 313–328); the
+walker owns the *iteration*.
+
+**Public surface.** `createIngestWalker({ controller, concurrency?,
+onProgress?, now? })` returns an `IngestWalker` exposing `walk(sourceUris,
+opts?) => Promise<WalkResult>` and `stats() => IngestWalkerStats` (lifetime
+totals across every walk). Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). The
+[`WalkResult`](js/intelligence/retrieval/contracts.js) typedef sits beside
+`IngestResult` and aggregates Σ over per-source results plus `aborted`,
+`durationMs`, and the per-source `IngestResult[]` array (in completion
+order, **not** input order under `concurrency > 1`).
+
+**Phase-1 scope decisions.**
+
+- **Worker-pool over a shared async iterator.** No queue library, no
+  external dependency. `concurrency` workers each loop
+  `iter.next()` → `controller.ingest(uri)` → push result → `onProgress`.
+  `Promise.all(workers)` settles when the iterator drains or the signal
+  aborts. Pure vanilla JS, node-test-safe.
+- **Default `concurrency = 4`** — under typical cloud embedder rate-limit
+  envelopes with headroom; the controller is the per-source bottleneck so
+  4 stays conservative. Callers tune up for local embedders (1.1.2
+  Transformers.js path) or down for paid APIs hitting tight rate windows.
+- **`concurrency: 1` is a legal special case** — the worker pool degenerates
+  to a sequential awaiter; observably equivalent to a caller's
+  `for (const uri of uris) await controller.ingest(uri)` loop. Tested
+  explicitly because debugging callers expect input-order results.
+- **Per-source error isolation.** The controller is documented to never
+  throw (it returns a `failed` `IngestResult` on Loader / chunker
+  exceptions). If the controller *does* throw anyway — defensive against a
+  future controller change, a malformed injected store, etc. — the walker
+  catches and synthesizes a `failed` `IngestResult` of the documented
+  shape. Preserves both the `WalkResult.results.length === total`
+  invariant and the "one bad source never poisons the batch" guarantee.
+- **Abort: in-flight finishes, no new dispatch.** When `opts.signal.aborted`
+  flips, each worker re-checks the flag at the top of its loop and
+  returns. In-flight `controller.ingest` calls are not cancelled (the
+  controller has no abort surface in Phase 1). The walker returns a
+  partial `WalkResult` with `aborted: true` and whatever results landed.
+  A pre-aborted signal at `walk()` entry returns immediately with
+  `total: 0`.
+- **`onProgress` errors swallowed** — a diagnostic callback should not be
+  able to abort an ingest walk. If it throws, the walker catches and
+  continues. Same posture as the controller's stats reporting.
+- **`AsyncIterable` input streams.** `string[]`, sync iterables (`Set`,
+  generators), and `AsyncIterable<string>` all walk fine. For arrays the
+  walker reads `.length` once up front and passes the real total to
+  `onProgress`; for streamed inputs `total` is `-1` (UI callers handle
+  that case).
+- **Injectable `now()` for deterministic `durationMs`** — `Date.now()`
+  resolution can produce `0` in fast tests; tests inject a clock. Same
+  DI posture every other retrieval module took.
+
+**Out of scope (later 1.5.0-betaN / 1.5.x PRs).** Production wiring to
+`Git.getFile()` / `EmbeddingsClient.embed()` and `EmbeddingsClient.init()`
+integration; workspace tree walking (filtered by `IgnoreManager`); the
+comparison harness running queries through both legacy `js/context-manager.js`
+and the new Composer; the test-query fixture corpus; the actual ≥80%
+legacy-vs-new agreement measurement that promotes the track; migration of
+`find_relevant_files` (1.5.2); persistent chunk store / IDB backing
+(1.5.x); cancellation propagation into in-flight `controller.ingest` calls;
+retry / backoff on transient failures.
+
+**No runtime wire-up.** Nothing imports `createIngestWalker` outside the
+test suite. `find_relevant_files` keeps running through legacy
+[`js/context-manager.js`](js/context-manager.js). With `walker.js` deleted,
+the barrel re-export removed, and the `WalkResult` typedef removed, no
+production behavior degrades — Removability holds (Decision §7).
+
+30 unit cases under `node --test tests/test-retrieval-walker.mjs`,
+anchored on the load-bearing invariants: argument validation; empty
+inputs across array / AsyncIterable / non-iterable; iterable shapes
+(array, AsyncIterable, sync generator, `Set`); concurrency-cap watermarks
+(default 4, `1` strictly sequential, `> sources` capped at sources);
+per-source error isolation across mixed status, controller-throws, and
+all-failed; aggregation invariants (Σ over results); deterministic
+`durationMs` via injected clock; `stats()` accumulation + snapshot-clone;
+`onProgress` invocation count + identity + throw-tolerance + `total: -1`
+for AsyncIterable; abort pre-flight, mid-walk, and `concurrency: 1`;
+completion-order semantics under `concurrency > 1`; non-string yielded
+elements rejecting at dispatch.
+
 ## [1.4.23] - 2026-05-02
 
 **Retrieval Phase 1 — Incremental Ingest Controller (PR 15 of 1.5.0).**

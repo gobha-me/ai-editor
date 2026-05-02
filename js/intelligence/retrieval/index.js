@@ -79,6 +79,17 @@
  * / parallel-execution harness and the ≥80% legacy-vs-new agreement gate
  * that promotes the track to 1.5.0 land in 1.5.0 itself. The migration
  * off `js/context-manager.js` arrives at 1.5.2 (see `docs/ROADMAP.md`).
+ * 1.5.0 adds `createIngestWalker` — the parallel-execution harness layered
+ * over the 1.4.23 controller. Bounded-concurrency worker pool over a
+ * shared async iterator runs `controller.ingest(uri)` across N source
+ * URIs with per-source error isolation, optional progress reporting, and
+ * abort support (in-flight calls finish; no new dispatch). Pure DI; no
+ * production wire-up. First PR opening the 1.5.0 minor — subsequent
+ * 1.5.0-betaN PRs add (a) production wiring to `Git.getFile()` /
+ * `EmbeddingsClient.embed()`, (b) the comparison harness running queries
+ * through both legacy `js/context-manager.js` and the new Composer,
+ * (c) a test-query fixture corpus, and (d) the actual ≥80% agreement
+ * measurement that promotes the track.
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -114,3 +125,4 @@ export { createInMemoryChunkStore } from './store.js';
 export { createLoader, detectContentType, computeSourceHash } from './loader.js';
 export { createEmbedder } from './embedder.js';
 export { createIngestController } from './ingest-controller.js';
+export { createIngestWalker } from './walker.js';
