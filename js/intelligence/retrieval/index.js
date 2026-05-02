@@ -39,6 +39,15 @@
  * chunker and runs `extractStructure` as a post-pass; subsequent
  * ingest PRs (Store, Loader, controller, parallel-execution harness)
  * build on it instead of re-inlining the switch + extractor pass.
+ * 1.4.20 adds `createInMemoryChunkStore` — the Phase-1 fulfillment of
+ * the `getChunkByID` and `chunkVectorSearch` seams strategies and
+ * Composer were calling against fakes, plus the incremental-ingest
+ * surface (`getSourceHash` / `setSourceHash` / `chunkIdsForSource` /
+ * `upsert` / `markStale`) the controller will sequence at 1.4.23.
+ * Phase-1 in-memory: `markStale` deletes (a persistent backing store
+ * revisits this with a 7-day grace tombstone); `upsert` is full
+ * replace on id collision (trust the new payload — same content_hash
+ * by construction, but possibly a freshly back-filled embedding).
  * The migration off `js/context-manager.js` arrives at 1.5.2
  * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
  * on test queries clears 80%; see `docs/ROADMAP.md`).
@@ -73,3 +82,4 @@ export {
     DEFAULT_TIME_DECAY_MS,
     MARKER_TOKEN_COST,
 } from './ledger-consumer.js';
+export { createInMemoryChunkStore } from './store.js';

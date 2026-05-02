@@ -4,6 +4,114 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.20] - 2026-05-02
+
+**Retrieval Phase 1 — Chunk Store (PR 12 of 1.5.0).** Twelfth PR in the
+1.5.0 stream and the second PR of the **ingest-pipeline branch** of
+[docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) §"Ingest Pipeline"
+(lines 265–331). Lands the Phase-1 fulfillment of the dependency-injection
+seams the shipped strategies and Composer were already calling against
+fakes — `getChunkByID` per [composer.js:144](js/intelligence/retrieval/composer.js)
+and [strategies/structural.js:261](js/intelligence/retrieval/strategies/structural.js),
+`chunkVectorSearch` per [strategies/semantic.js:97-103](js/intelligence/retrieval/strategies/semantic.js)
+— plus the incremental-ingest API surface the design pseudocode at
+DESIGN-retrieval lines 313–328 names (`getSourceHash`, `setSourceHash`,
+`chunkIdsForSource`, `upsert`, `markStale`). Mirrors the 1.4.9–1.4.19 PR
+pattern: shipped in isolation, no production wire-up; the production
+caller is the incremental-ingest controller arriving at 1.4.23.
+
+**Public surface:**
+[`createInMemoryChunkStore()`](js/intelligence/retrieval/store.js)
+returns a `ChunkStore` handle with the documented method shape
+(`getChunkByID`, `chunkVectorSearch`, `getSourceHash`, `setSourceHash`,
+`chunkIdsForSource`, `upsert`, `markStale`, `stats`). Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). `getChunkByID`
+and `chunkVectorSearch` are async to match the existing `await` call
+sites; the rest are sync (the controller at 1.4.23 sequences them inside
+its own async flow). `chunkVectorSearch` returns candidates **pre-sorted
+by similarity (descending)** — the contract `strategies/semantic.js`
+pinned at "sorted on the way out."
+
+**Phase-1 semantic decisions** (called out so future readers don't have
+to reverse-engineer them):
+
+- **`markStale` deletes.** The design's 7-day grace tombstone is a
+  persistent-store concern; an in-memory store wiped on every process
+  restart cannot meaningfully implement grace, and a tombstone state with
+  no consumer is dead weight. A persistent backing store (Phase 3)
+  revisits this.
+- **`upsert` with a colliding ChunkID is full replace.** ChunkID is
+  content-derived — same id implies byte-identical content — so the
+  legitimate same-id-replace case is the embedder back-filling an
+  embedding on a previously un-embedded chunk. Trust the new payload. If
+  the same id arrives with a different `collection` or `source_uri`
+  (defensive — should not happen by ChunkID construction), the prior
+  index entries are dropped before re-inserting under the new ones.
+- **Inline cosine helper.** [js/embeddings-client.js](js/embeddings-client.js)
+  imports browser-bound `core.js` globals and is not node-test-safe, so
+  a 5-line `cosineSimilarity` lives module-private. Promotion to a shared
+  util is deferred until a second consumer appears.
+- **Length-mismatched embeddings are skipped, not thrown.** Embedder
+  generations may legitimately coexist mid-migration; throwing would
+  explode an entire query because of one stale chunk.
+- **`upsert` accepts `embedding: null`.** The Embedder lands at 1.4.22;
+  until then chunks legitimately store without vectors.
+  `chunkVectorSearch` filters such chunks out.
+- **Zero-norm vectors return similarity `0`, not `NaN`.** A degenerate
+  vector contributes no signal, so "no signal" maps cleanly to "zero
+  similarity."
+
+**What's deliberately not here:**
+
+- Loader / file walker (1.4.21) — content-type detection from a file
+  extension is the Loader's job, not the store's.
+- BM25 index construction — the `BM25Index` typedef at
+  [strategies/semantic.js:78-84](js/intelligence/retrieval/strategies/semantic.js)
+  already exists, but its producer ships once the Loader can stream
+  chunked content into an indexer.
+- Embedder integration (1.4.22) — Phase-1 store accepts un-embedded
+  chunks and filters them out of vector search.
+- Incremental ingest controller (1.4.23) — the orchestrator that
+  sequences `getSourceHash → setSourceHash → chunkIdsForSource → upsert
+  → markStale` per the DESIGN pseudocode.
+- Migration of `find_relevant_files` off
+  [js/context-manager.js](js/context-manager.js) (1.5.2).
+- Persistence / IDB-backed storage / 7-day grace tombstoning — past
+  Phase 1.
+
+**Test coverage.**
+`tests/test-retrieval-store.mjs` (32 cases under `node --test`):
+
+- Factory + isolation: handle shape, two-store isolation, initial
+  `stats()` zero.
+- `upsert`: round-trip + canonical-ref invariant, empty no-op,
+  multi-collection distribution, same-id replace (embedder back-fill
+  case), validation throws on missing `id` / `collection` /
+  `metadata.source_uri` and non-array input.
+- `getChunkByID`: unknown / falsy / empty input → `null`.
+- `chunkVectorSearch`: top-k descending sort, `k=1` / `k > size` /
+  `k≤0` / `NaN`, skips null embeddings, skips mismatched-length
+  embeddings, **collection scoping** (collA invisible to collB),
+  unknown collection → `[]`, rejects empty / non-array `queryVec`,
+  zero-norm vectors finite + don't outrank real matches, monotonic-
+  descending invariant.
+- `getSourceHash` / `setSourceHash`: round-trip, unknown → `null`,
+  validation throws.
+- `chunkIdsForSource`: returns ids after upsert, fresh-array (mutating
+  the result doesn't leak back), unknown → `[]`.
+- `markStale`: removes from `getChunkByID`, removes from
+  `chunkVectorSearch`, removes from `chunkIdsForSource`, idempotent +
+  accurate count, handles non-iterable / empty input.
+- Incremental ingest end-to-end: DESIGN-retrieval lines 313–328
+  pseudocode runs cleanly against the handle (set-arithmetic + upsert
+  + markStale), same-hash early-return path leaves the store unchanged.
+
+**No runtime wire-up.** Nothing imports `createInMemoryChunkStore`
+outside the test suite. Strategies and Composer keep their fakes; the
+production wiring is the incremental-ingest controller's job at 1.4.23.
+With `store.js` deleted, no production behavior degrades — Removability
+holds (Decision §7).
+
 ## [1.4.19] - 2026-05-02
 
 **Retrieval Phase 1 — Chunker pipeline (PR 11 of 1.5.0).** Eleventh PR
