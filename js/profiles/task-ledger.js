@@ -24,10 +24,13 @@
  */
 
 /**
- * Stable identifier for a chunk admission target. Will be a hash of
- * `(collection || source_uri || normalized_byte_range || chunker_version)`
- * once the retrieval subsystem (1.5.0) defines it. For now, treated as an
- * opaque string.
+ * Stable identifier for a chunk admission target. Defined in
+ * `js/intelligence/retrieval/contracts.js` as of 1.4.9 — hash of
+ * `(collection || source_uri || normalized_byte_range || chunker_version)`,
+ * computed via `computeChunkID` in `js/intelligence/retrieval/chunk-id.js`.
+ * This typedef is a local re-alias for record arrays that pre-existed
+ * the retrieval subsystem; it stays a string so the ledger doesn't pull
+ * in retrieval contracts.
  *
  * @typedef {string} ChunkID
  */

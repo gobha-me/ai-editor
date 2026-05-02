@@ -4,6 +4,78 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-05-02
+
+**Retrieval foundation — ChunkRef contract + module scaffolding (PR 1
+of 1.5.0 Retrieval Phase 1).** Lands the retrieval data foundation
+ahead of the chunkers and strategies that consume it. Mirrors the 1.3.4
+tools-foundation precedent: contracts and the deterministic `ChunkID`
+hash ship alone, in isolation, so the seam can be reviewed without
+implementation noise. Subsequent PRs (chunkers, semantic + structural
+strategies, Composer, ledger consumer, migration off
+`js/context-manager.js`) will fill the surface and promote to 1.5.0
+when the legacy-vs-new agreement on test queries clears the 80% exit
+criterion in `docs/ROADMAP.md` §1.5.0.
+
+No runtime wire-up; `find_relevant_files`, indexing, embedding, and the
+Tools subsystem are unchanged. The `task_ledger.admissions[]` /
+`exclusions[]` slots scaffolded in 1.1.0 remain empty until the
+Composer lands.
+
+Removability (Decision §7): with `js/intelligence/retrieval/` removed,
+no user-visible behavior degrades — nothing imports the new module
+yet. The placeholder `compose()` export throws a structured error on
+call so accidental wire-up surfaces immediately rather than silently
+no-opping.
+
+### Added
+
+- **[`js/intelligence/retrieval/contracts.js`](js/intelligence/retrieval/contracts.js)**
+  — `// @ts-check` typedef surface mirroring `docs/DESIGN-retrieval.md`
+  §"Core Contracts": `ChunkID`, `ChunkRef`, `Metadata`, `StructuralMeta`,
+  `Provenance`, `Budget`, `MetadataFilter`, `StrategyHint`,
+  `HistoryTurn`, `RetrievalRequest`, `ContextBlock`, `Diagnostics`,
+  `RetrievalResult`, `Applicability`, `Strategy`. Plus the frozen
+  `CHUNKER_VERSION` registry (one entry per `ContentType`, all `"v1"`
+  to start) — the chunker PRs own their own bumps. No runtime code.
+
+- **[`js/intelligence/retrieval/chunk-id.js`](js/intelligence/retrieval/chunk-id.js)**
+  — synchronous `computeChunkID({collection, source_uri, byte_range,
+  chunker_version})` using the FNV-1a-twice technique from
+  `js/intelligence/tools/tool-id.js` (proven sync, no SubtleCrypto, no
+  build step). Plus `normalizeByteRange([start, end])` which
+  canonicalizes swapped offsets so loaders that report ranges
+  out-of-order don't spawn ghost chunks.
+
+- **[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)**
+  — barrel export. Re-exports `computeChunkID`, `normalizeByteRange`,
+  `CHUNKER_VERSION`, plus a placeholder `compose()` that throws
+  `"retrieval Composer not implemented"`. Establishes the public
+  surface so downstream consumers don't swap import paths mid-track.
+
+- **[`tests/test-retrieval-foundation.mjs`](tests/test-retrieval-foundation.mjs)**
+  — `node:test` suite covering ChunkID determinism, chunker-version /
+  collection / source / range invalidation, NUL-separator boundary
+  safety, byte-range canonicalization (reversed → equal IDs), input
+  validation, the `CHUNKER_VERSION` shape, the placeholder Composer's
+  rejection, and a structural round-trip that threads a typedef-shaped
+  `ChunkRef` through a tiny consumer.
+
+### Changed
+
+- **[`js/profiles/task-ledger.js`](js/profiles/task-ledger.js)** — the
+  `ChunkID` typedef cross-reference now points at
+  `js/intelligence/retrieval/contracts.js` instead of "to be defined in
+  1.5.0." The local typedef stays a string alias so the ledger does
+  not pull in retrieval contracts.
+
+- **[`js/version.js`](js/version.js)** — `1.4.8` → `1.4.9`.
+
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — adds the 1.4.9 entry under
+  the 1.4.x follow-ups, repositions the *Now* row to reflect that
+  retrieval foundation work is in-flight (1.5.0 stays as the
+  promotion milestone).
+
 ## [1.4.8] - 2026-05-02
 
 **Tools 1.4.x — lazy expansion threshold tuning + LRU eviction.** The
