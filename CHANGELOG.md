@@ -4,6 +4,124 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.15] - 2026-05-02
+
+**Retrieval Phase 1 — Semantic strategy (PR 7 of 1.5.0).** Seventh PR
+in the 1.5.0 stream and the first retrieval *strategy*. Implements
+`docs/DESIGN-retrieval.md` §"Semantic (Phase 1)": embed query → k-NN
+(k = quota × 3) → optional BM25 over the candidate set → reciprocal
+rank fusion → metadata filter → top `quota`. Lands the `Strategy`
+typedef (pinned at 1.4.9) as a first concrete consumer:
+[`createSemanticStrategy({ embedQuery, chunkVectorSearch, getBM25Index? })`](js/intelligence/retrieval/strategies/semantic.js)
+returns a `Strategy`-shaped `{ name: "semantic", applies_to,
+retrieve }`.
+
+**Wraps the shipped 1.1.2 embedder, doesn't reinvent embedding.** The
+editor has had `EmbeddingsClient.embed()` ([`js/embeddings-client.js`](js/embeddings-client.js))
+since 1.1.2 — local Transformers.js + remote OpenAI-compat — and
+today's `find_relevant_files` runs through it via
+[`ContextManager.findRelevantFiles()`](js/context-manager.js) at the
+**file** level (one embedding per file summary). The 1.5.0 rebuild
+does not replace the embedder; it replaces the file-level retrieval
+path with a chunk-aware one that pairs with the chunkers landed in
+1.4.10–1.4.13. To keep this strategy a pure function of injected deps
+— and to keep node tests free of the browser-only `core.js` import
+chain that `embeddings-client.js` pulls in — `embedQuery` is a
+required factory parameter rather than a default-to-`EmbeddingsClient`
+import. Production callers wire `(text) => EmbeddingsClient.embed(text)`
+at the call site (the Composer in PR 9 of 1.5.0); tests inject
+deterministic fakes.
+
+**Chunk-level vector store stays an injected seam.** The chunkers
+ship as pure functions nobody calls at ingest, so no chunk embeddings
+exist yet. `chunkVectorSearch(queryVec, collection, k)` is the second
+required dep — its real implementation lands with the ingest PR; today
+it's faked in tests. With both seams external, the strategy itself is
+"given a query embedding and a way to k-NN over chunks, do RRF fusion
+and metadata filtering correctly."
+
+**Algorithm paths and `score_kind` labeling.** Per the design's
+"scores from different strategies are not comparable" rule, the
+strategy stamps each result's `Provenance.score_kind` according to
+which path produced it:
+
+- **Pure-cosine** (`"cosine"`) — happy path when no BM25 index is
+  supplied for the collection. Returns the k-NN candidates ordered by
+  the `similarity` the store reported.
+- **Hybrid** (`"hybrid"`) — k-NN candidates re-scored against the
+  BM25 index and fused via RRF (textbook K = 60, no learned weights).
+  The BM25 ranking is over the cosine candidates only — not the whole
+  corpus — so the index need score at most `quota × 3` chunks per
+  call.
+- **Pure-BM25** (`"bm25"`) — fallback when the embedder is
+  unavailable (`embedQuery` returned null) or the query is too short
+  for useful semantic signal (< 3 tokens, per the design's
+  failure-modes table). Iterates the index's full chunk corpus,
+  scores each, takes top `quota`. Returns empty when no index exists
+  to fall back to.
+
+`Provenance.score` carries the actual similarity (cosine path), the
+RRF fused score (hybrid path), or the BM25 score (BM25 path). The
+score_kind is the discriminator that keeps consumers from comparing
+incomparable scales.
+
+**BM25 math lives in this file.** Pure helpers `tokenizeBM25` (ASCII
+lowercase + word-split, no stemming/stopwords — matching the design's
+"RRF is parameter-free" stance), `scoreBM25Doc` (textbook formula
+with `k1` / `b` defaults of 1.5 / 0.75), `reciprocalRankFusion`, and
+`applyMetadataFilter` are exported alongside the factory for
+testability. Promotion to a shared `scoring.js` module is deferred —
+no other strategy needs BM25 today (Structural is a cosine-fed
+ancestor walk; Thematic is k-means).
+
+**Failure-mode behavior matches the design's table:**
+
+- Query shorter than 3 tokens → pure-BM25 fallback if index
+  available, else empty result.
+- `embedQuery` returns null → pure-BM25 fallback if index available,
+  else empty result.
+- `chunkVectorSearch` returns `[]` → empty result, not error.
+- `req.collections` empty → empty result.
+- `quota <= 0` → empty result.
+- `req.filters.content_types` accept-list and `req.filters.custom`
+  per-key predicates (function or strict-equal value) apply across
+  every path uniformly.
+
+**`applies_to(req)` returns** score 0 when `req.query` is null /
+empty / whitespace (semantic requires a query — that's thematic
+territory, deferred to Phase 2), score 0.9 with non-empty query
+(Phase 1 default for keyword/semantic queries; the router consumer in
+PR 9 will normalize quotas).
+
+**No runtime wire-up:** nothing imports `createSemanticStrategy`
+outside the test suite yet. The Composer placeholder in
+[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call; `find_relevant_files` keeps running through the
+legacy file-level path in `js/context-manager.js`. With
+`js/intelligence/retrieval/strategies/` removed, no user-visible
+behavior degrades — Removability holds (Decision §7). The migration
+of `find_relevant_files` to call the new Composer lands with 1.5.2
+per the roadmap.
+
+Tests: 35 cases covering tokenizer behavior (punctuation drop,
+empties, lowercase) / BM25 math (zero-on-empty, zero-when-no-overlap,
+TF-rewards, length-normalization) / RRF fusion (both-rankings boost,
+empty-rankings, rank ordering) / metadata filter (identity on null,
+content_types accept-list, custom function predicate, custom literal
+predicate, no input mutation) / factory validation (missing/invalid
+embedQuery / chunkVectorSearch / getBM25Index) / `applies_to`
+(null/empty/whitespace returns 0, non-empty returns positive,
+strategy.name is "semantic") / cosine happy path with score_kind
+labeling / k-NN k = quota × 3 contract / provenance byte_range
+carry-forward / hybrid path RRF fusion with score_kind="hybrid" /
+short query → BM25 fallback with score_kind="bm25" / short query
+without BM25 → empty / embedder-unavailable without BM25 → empty /
+embedder-unavailable with BM25 → BM25 fallback / empty k-NN result /
+empty collections in request / quota <= 0 / content_types filter on
+cosine path / custom predicate filter on BM25 path / non-mutation of
+input chunks. Pure-data, no DOM / State / network — runs under
+`node --test` like the chunker suites.
+
 ## [1.4.14] - 2026-05-02
 
 **Retrieval Phase 1 — StructureExtractor (PR 6 of 1.5.0).** Sixth PR in
