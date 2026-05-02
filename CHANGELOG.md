@@ -4,6 +4,96 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-05-02
+
+**Retrieval Phase 1 — CodeChunker (PR 3 of 1.5.0).** Second chunker on
+the 1.4.9 foundation, third PR in the 1.5.0 chunker stream. Implements
+the code row of `docs/DESIGN-retrieval.md` §"Chunker": top-level
+declaration boundaries with **no overlap** (per-construct), language-
+aware regex heuristic for JS/TS/Python (Phase 1; AST-based chunking is
+deferred to 1.5.5 gated on a measured quality gap, per
+§"On code chunking specifically"). Pure function — `(input) → Chunk[]`
+mirroring the contract pinned by [`prose-chunker.js`](js/intelligence/retrieval/chunkers/prose-chunker.js)
+at 1.4.10.
+
+**Boundary rules.**
+JS/TS: `function` / `class` / `abstract class` / top-level `const`/`let`/
+`var` / `type` / `interface` / `enum` / `import` / `export {…}` / `export *`
+/ `export default …`. Python: `def` / `async def` / `class` / `import` /
+`from … import …`, with **decorators (`@…`) attaching to their following
+`def`/`class`** so the boundary shifts back through the decorator stack
+rather than splitting it off. **Consecutive imports coalesce** into a
+single boundary (the design's "import blocks" boundary type), so a typical
+module's stdlib + third-party imports ride together.
+
+**Adjacency, no overlap, hard-cut safety valve.**
+Consecutive chunks share a boundary point (`chunks[i+1].byte_range[0]
+=== chunks[i].byte_range[1]`) — same byte-range adjacency invariant
+ProseChunker holds, just without the 100-char overlap. Leading content
+(shebang lines, file-prefix comments) rides with the first chunk so it's
+never lost. A single oversized construct (>8000 chars) hard-cuts at the
+next newline past the ceiling — termination guarantee analogous to
+ProseChunker's `TARGET_MAX` fallback. Unknown extensions fall back to a
+single-chunk-per-file degenerate path so the chunker never returns
+nothing for non-empty input.
+
+**ChunkID under `CHUNKER_VERSION.code`.**
+The frozen registry's `code: 'v1'` slot (set in 1.4.9) goes live; future
+regex tweaks bump the version so old + new chunks coexist during
+migration without ID collisions (DESIGN-retrieval §"Chunk Identity and
+Stability"). UTF-8 byte ranges + surrogate-safe slicing reuse the same
+patterns ProseChunker uses.
+
+**No runtime wire-up:** nothing imports `chunkCode` outside the test
+suite yet. The Composer placeholder in [`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)
+still throws on call. `find_relevant_files`, indexing, embedding, and
+Tools all behave identically. The `task_ledger.admissions[]` /
+`exclusions[]` slots scaffolded in 1.1.0 stay empty until the Composer
+lands. Removability holds (Decision §7) — with `chunkers/code-chunker.js`
+removed and the barrel export reverted, no user-visible behavior degrades.
+
+### Added
+
+- **[`js/intelligence/retrieval/chunkers/code-chunker.js`](js/intelligence/retrieval/chunkers/code-chunker.js)**
+  — pure `chunkCode(input)` function. Detects language from `metadata
+  .source_uri` extension (`.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.tsx`/`.py`),
+  walks lines, applies language-specific top-level boundary regexes,
+  shifts Python def/class boundaries back through preceding `@decorator`
+  lines, coalesces consecutive imports into a single block, builds
+  adjacent ranges with no overlap, and hard-cuts oversized constructs at
+  the next newline past `MAX_CONSTRUCT_CHARS = 8000`. Surrogate-safe at
+  all cut points; reports `byte_range` in UTF-8 bytes via the same
+  precomputed offset table ProseChunker uses (intentionally duplicated
+  for this PR — extracting shared helpers risks shifting prose
+  byte-ranges in a code-chunker PR).
+
+- **[`tests/test-retrieval-code-chunker.mjs`](tests/test-retrieval-code-chunker.mjs)**
+  — 39-test `node:test` suite covering empty/whitespace/unknown-extension
+  fallback, JS function/class/arrow/export-named/export-default/
+  export-block/async-function boundaries, TS type/interface/enum/
+  abstract-class boundaries, Python def/async-def/class/decorator-attaches/
+  import-block coalesce, hard-cut at `MAX_CONSTRUCT_CHARS` (with and
+  without newlines past the ceiling), ChunkID stability across runs,
+  match against `computeChunkID(..., CHUNKER_VERSION.code)`, version
+  invalidation under a hypothetical bump, byte-range adjacency +
+  endpoints, no-overlap invariant via distinctive markers, surrogate-pair
+  safety with embedded emoji, UTF-8 byte counting for multi-byte content,
+  input validation parity with prose, `metadata.structural === null`
+  placeholder, `metadata.custom` passthrough, `metadata.content_type ===
+  "code"`, and the full chunk contract surface.
+
+### Changed
+
+- **[`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js)**
+  — re-exports `chunkCode` from the barrel so consumers don't reach into
+  `chunkers/`. Module-level doc updated to reflect 1.4.11's slot.
+
+- **[`js/version.js`](js/version.js)** — `1.4.10` → `1.4.11`.
+
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — adds the 1.4.11 entry under
+  the 1.4.x follow-ups; updates the *Now* row from "ProseChunker ✓ →
+  CodeChunker next" to "CodeChunker ✓ → conversation/structured next".
+
 ## [1.4.10] - 2026-05-02
 
 **Retrieval Phase 1 — ProseChunker (PR 2 of 1.5.0).** First chunker on the
