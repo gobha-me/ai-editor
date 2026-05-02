@@ -70,9 +70,15 @@
  * `stats()`. Failures degrade — `embedFn` returning `null` or throwing
  * leaves `chunk.embedding = null` (the Store's `chunkVectorSearch`
  * already filters those out). Idempotent on already-embedded chunks.
- * The migration off `js/context-manager.js` arrives at 1.5.2
- * (sequenced toward the 1.5.0 promotion when legacy-vs-new agreement
- * on test queries clears 80%; see `docs/ROADMAP.md`).
+ * 1.4.23 adds `createIngestController` — the orchestration piece that
+ * sequences Loader → Chunker pipeline → Embedder → Store per the design's
+ * update protocol (DESIGN-retrieval lines 313-328): hash-equality
+ * short-circuit, ChunkID-equality dedup, only-new chunks embedded, stale
+ * chunks `markStale`'d, source hash advanced last for crash-safety. Last
+ * 1.4.x PR before 1.5.0 — single-source orchestrator only; the walker
+ * / parallel-execution harness and the ≥80% legacy-vs-new agreement gate
+ * that promotes the track to 1.5.0 land in 1.5.0 itself. The migration
+ * off `js/context-manager.js` arrives at 1.5.2 (see `docs/ROADMAP.md`).
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -107,3 +113,4 @@ export {
 export { createInMemoryChunkStore } from './store.js';
 export { createLoader, detectContentType, computeSourceHash } from './loader.js';
 export { createEmbedder } from './embedder.js';
+export { createIngestController } from './ingest-controller.js';

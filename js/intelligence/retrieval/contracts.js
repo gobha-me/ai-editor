@@ -162,6 +162,44 @@
  */
 
 /**
+ * One pass of the incremental ingest controller (1.4.23). Encodes the
+ * outcome of `IngestController.ingest(source_uri)` per the design's
+ * update protocol at `docs/DESIGN-retrieval.md` lines 313-328.
+ *
+ * Three statuses cover every path through the pseudocode:
+ *
+ *   - `"noop"` — `current_hash === stored_hash`; no chunker / embedder /
+ *     store mutation. `content_hash` is set, all counters are 0.
+ *
+ *   - `"ingested"` — full pass ran end-to-end. `added` counts chunks
+ *     newly upserted (the design's `to_add`); `removed` counts chunks
+ *     `markStale`'d (the design's `to_remove`); `embedded` and
+ *     `embed_failures` partition `added` by whether the embedder produced
+ *     a vector. Includes the empty-bytes case (`added === 0`,
+ *     `removed === N` if a previous ingest had chunks).
+ *
+ *   - `"failed"` — Loader or chunker pipeline threw. `error` carries the
+ *     thrown value; the store is left untouched and the source hash is
+ *     not advanced, so the next call retries from scratch (the same
+ *     short-circuit the design's pseudocode opens with).
+ *
+ * Per-chunk embedder failures are not `"failed"` — they degrade
+ * (`embedding: null` per the embedder's Phase-1 contract) and surface in
+ * `embed_failures`. The Store accepts null-embedding chunks and
+ * `chunkVectorSearch` filters them at query time.
+ *
+ * @typedef {Object} IngestResult
+ * @property {string}                       source_uri
+ * @property {"noop"|"ingested"|"failed"}   status
+ * @property {string|null}                  content_hash    Null when `status === "failed"` before the loader returned; otherwise the loader-computed hash for this pass.
+ * @property {number}                       added           Chunks newly upserted (`to_add` length).
+ * @property {number}                       removed         Chunks `markStale`'d (`to_remove` length, as reported by the store).
+ * @property {number}                       embedded        Chunks with non-null `embedding` after `embedder.embed(to_add)`.
+ * @property {number}                       embed_failures  Chunks left with `embedding: null` (`added - embedded`).
+ * @property {Error|null}                   error           Non-null only when `status === "failed"`.
+ */
+
+/**
  * Where a returned chunk came from and how it was scored. `score_kind` is
  * required to keep different scales from being silently averaged.
  *

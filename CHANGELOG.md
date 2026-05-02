@@ -4,6 +4,140 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.4.23] - 2026-05-02
+
+**Retrieval Phase 1 — Incremental Ingest Controller (PR 15 of 1.5.0).**
+Fifteenth PR in the 1.5.0 stream and the **last 1.4.x PR before the 1.5.0
+promotion**. Sequences the four shipped ingest-pipeline nodes (Loader
+1.4.21, Chunker pipeline 1.4.19, Embedder 1.4.22, Chunk Store 1.4.20)
+end-to-end per the design's update protocol at
+[docs/DESIGN-retrieval.md](docs/DESIGN-retrieval.md) lines 313–328:
+
+```
+ingest(source_uri):
+  current_hash = hash(load(source_uri))
+  stored_hash  = store.get_source_hash(source_uri)
+  if current_hash == stored_hash:
+    return NoOp
+
+  new_chunks    = chunk(load(source_uri))
+  old_chunk_ids = store.chunk_ids_for_source(source_uri)
+  new_chunk_ids = {c.id for c in new_chunks}
+
+  to_remove = old_chunk_ids - new_chunk_ids
+  to_add    = [c for c in new_chunks if c.id not in old_chunk_ids]
+
+  embed(to_add)
+  store.upsert(to_add)
+  store.mark_stale(to_remove)
+```
+
+Quoting the design directly: *"That is the whole update protocol. No
+Merkle trees, no diff algorithms. Content hash at the source level,
+ChunkID equality at the chunk level."* This module honors that spirit —
+no extra cleverness, just the protocol — and makes it the single
+entrypoint the 1.5.0 walker / parallel-execution harness will call per
+source.
+
+**Public surface:**
+[`createIngestController({ loader, embedder, store, runChunkerPipeline?, collection? })`](js/intelligence/retrieval/ingest-controller.js)
+returns an `IngestController` exposing
+`ingest(sourceUri: string) => Promise<IngestResult>` (the orchestrator)
+and `stats() => IngestControllerStats` (per-controller running totals
+across `calls` / `ingested` / `noop` / `failed` / `chunksAdded` /
+`chunksRemoved` / `embedFailures`). Re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js). The
+`IngestResult` typedef pinned in
+[contracts.js](js/intelligence/retrieval/contracts.js) covers all three
+status paths (`"noop"` | `"ingested"` | `"failed"`) and is the
+diagnostic shape the 1.5.0 harness aggregates over.
+
+**Phase-1 scope decisions** (called out so future readers don't have to
+reverse-engineer them):
+
+- **Single-source orchestrator only.** No `ingestSources(uris)` batch
+  helper, no concurrency knob. The walker / parallel-execution harness
+  is 1.5.0; this module owns the *protocol*, not the iteration. A
+  caller that wants to ingest N sources today writes
+  `for (const uri of uris) await controller.ingest(uri)`; 1.5.0
+  replaces that loop with the production harness wired to a Git-tree
+  walker filtered by `IgnoreManager`.
+- **`setSourceHash` is the last write.** Crash-safety: a partial pass
+  leaves the *old* hash and the next call retries from scratch (the
+  same short-circuit the design's pseudocode opens with). If
+  `setSourceHash` were called early and `upsert` later threw, the next
+  call would short-circuit on a hash whose chunks never landed.
+  Asserted as a regression test (`setSourceHash is the last store call
+  on a successful ingest`) over a `spyStore` that records call order.
+- **`status: "ingested"` even when all chunks fail to embed.** Per-chunk
+  embedder failures are a degradation, not an error
+  ([`embedding: null`](js/intelligence/retrieval/embedder.js) per the
+  embedder's Phase-1 contract). The Store accepts null-embedding chunks
+  and `chunkVectorSearch` filters them at query time
+  ([`tests/test-retrieval-store.mjs`](tests/test-retrieval-store.mjs)
+  "chunkVectorSearch skips chunks whose embedding is null").
+  `embed_failures` in the result tells the caller without hiding the
+  upsert. Two tests exercise this — single-chunk failure and
+  all-chunks failure.
+- **`status: "failed"` only for thrown exceptions.** Loader throws
+  (e.g. unknown extension via `detectContentType`) and chunker-pipeline
+  throws (e.g. invalid `content_type`) both surface as `failed` with
+  the error attached. The store is left untouched and the source hash
+  is not advanced.
+- **Empty load (`bytes.length === 0`).** `runChunkerPipeline`
+  short-circuits to `[]` (1.4.19's centralized invariant). Controller
+  still records the source hash so a later edit triggers re-ingest.
+  `markStale` cleans up any prior chunks — so the empty-bytes case is
+  the documented mechanism for "the file became empty — drop
+  everything." `status: "ingested"`, `added: 0`, `removed: N` if there
+  were prior chunks.
+- **`runChunkerPipeline` is injectable.** Tests substitute deterministic
+  chunkers without faking through the dispatch table — same DI posture
+  the strategies and Composer took. The default is the imported
+  pipeline.
+- **No re-embed of unchanged chunks.** The pseudocode's `to_add` filter
+  is `[c for c in new_chunks if c.id not in old_chunk_ids]`; ChunkID
+  equality means byte-identical content, so chunks already in the store
+  keep their existing embedding (and aren't passed through `embedFn`
+  again). A side-effect: a chunk that previously failed to embed
+  (`embedding: null`) and is re-emitted unchanged stays null on this
+  pass. A future "back-fill nulls" sweep is a separate concern (1.5.x).
+- **`collection` defaults to `"default"`** when not provided; production
+  callers will thread workspace-specific collections at the 1.5.0
+  call site.
+
+**Out of scope for 1.4.23:**
+- File-system / Git-tree walking (1.5.0 parallel-execution harness).
+- Production wire-up to `Git.getFile(...)` / `EmbeddingsClient.embed(...)`
+  (1.5.0 harness; this module is DI-friendly so the wiring is a
+  handful of lines at the call site).
+- Concurrency / retry / backoff (1.5.0 harness).
+- Persistent state between process runs (1.5.x, gated on a persistent
+  chunk store).
+- The ≥80% legacy-vs-new agreement gate that promotes the track to
+  1.5.0 (1.5.0 itself).
+- Migration of `find_relevant_files` off `js/context-manager.js`
+  (1.5.2).
+- Back-fill sweep for chunks with `embedding: null` (1.5.x).
+
+**No runtime wire-up.** Nothing imports `createIngestController` outside
+the test suite. `find_relevant_files` keeps running through legacy
+[`js/context-manager.js`](js/context-manager.js). With the new module
+deleted and the barrel re-export removed, no production behavior
+degrades — Removability holds (Decision §7). 26 unit cases under
+`node --test tests/test-retrieval-ingest-controller.mjs`, anchored on
+the load-bearing pseudocode invariants: factory contract + argument
+validation; first-ingest end-to-end (status / counters / store hash);
+unchanged-source noop with embedder + chunker call-count assertions;
+re-ingest after edit (only-new chunks embedded, only-stale chunks
+removed, survivors preserved); embed-failure tolerance (per-chunk +
+all-chunks); loader-throw and chunker-throw failure paths; crash-safety
+(setSourceHash throwing leaves old hash); empty-bytes paths (fresh +
+after non-empty); `stats()` accumulator + snapshot semantics;
+`collection` threading; setSourceHash-is-last call-order assertion;
+ChunkID-identity regression (same chunk count, edited content → all old
+ids markStale, all new ids embedded).
+
 ## [1.4.22] - 2026-05-02
 
 **Retrieval Phase 1 — Embedder integration (PR 14 of 1.5.0).** Fourteenth
