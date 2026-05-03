@@ -1,0 +1,109 @@
+{
+  "version": "1.5.5",
+  "run_meta": {
+    "project": { "owner": "xcaliber", "repo": "ai-editor", "ref": "main" },
+    "modelId": "jinaai/jina-embeddings-v2-base-code",
+    "topK": 5,
+    "concurrency": 4,
+    "sourceUriCount": 428,
+    "walked": {
+      "ingested": 428,
+      "failed": 0,
+      "chunksAdded": 4489,
+      "embedFailures": 0,
+      "durationMs": 806125
+    },
+    "ranAt": "2026-05-03T17:49:06.786Z",
+    "branch": "feat/1.5.5-composer-tuning-t1-t2-content-type-and-rollup",
+    "commit": "1ed1f07",
+    "note": "First measurement against the 1.5.5 ground-truth reframe. Source URI list reflects 428 files post-1.5.5 corpus edit (+1 over the 2026-05-03-retrieval-agreement.json baseline of 427)."
+  },
+  "report": {
+    "total": 42,
+    "meanAgreement": 0.0026455026455026454,
+    "histogram": {
+      "0.0-0.2": 42,
+      "0.2-0.4": 0,
+      "0.4-0.6": 0,
+      "0.6-0.8": 0,
+      "0.8-1.0": 0
+    },
+    "legacyFailures": 0,
+    "newFailures": 0,
+    "durationMs": 12118,
+    "legacyGroundTruth": {
+      "meanPrecisionAt5": 0.014285714285714287,
+      "meanRecallAt5": 0.01530612244897959,
+      "meanHitAt5": 0.07142857142857142,
+      "meanMRR": 0.016666666666666666,
+      "sampleCount": 42
+    },
+    "newGroundTruth": {
+      "meanPrecisionAt5": 0.319047619047619,
+      "meanRecallAt5": 0.5346371882086167,
+      "meanHitAt5": 0.9285714285714286,
+      "meanMRR": 0.7226190476190475,
+      "sampleCount": 42
+    },
+    "legacyByCategory": {
+      "file-discovery":      { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                    "meanMRR": 0,                    "sampleCount": 8 },
+      "function-discovery":  { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                    "meanMRR": 0,                    "sampleCount": 7 },
+      "topic":               { "meanPrecisionAt5": 0.028571428571428574, "meanRecallAt5": 0.02040816326530612,  "meanHitAt5": 0.14285714285714285,  "meanMRR": 0.028571428571428574, "sampleCount": 7 },
+      "bug-investigation":   { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                    "meanMRR": 0,                    "sampleCount": 7 },
+      "onboarding":          { "meanPrecisionAt5": 0.05714285714285715,  "meanRecallAt5": 0.07142857142857142,  "meanHitAt5": 0.2857142857142857,   "meanMRR": 0.07142857142857142,  "sampleCount": 7 },
+      "task-related":        { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                    "meanMRR": 0,                    "sampleCount": 6 }
+    },
+    "newByCategory": {
+      "file-discovery":      { "meanPrecisionAt5": 0.30000000000000004,  "meanRecallAt5": 0.6125,               "meanHitAt5": 1,                    "meanMRR": 0.74375,              "sampleCount": 8 },
+      "function-discovery":  { "meanPrecisionAt5": 0.3714285714285714,   "meanRecallAt5": 0.9,                  "meanHitAt5": 1,                    "meanMRR": 0.7428571428571429,   "sampleCount": 7 },
+      "topic":               { "meanPrecisionAt5": 0.4,                  "meanRecallAt5": 0.4554421768707483,   "meanHitAt5": 1,                    "meanMRR": 1,                    "sampleCount": 7 },
+      "bug-investigation":   { "meanPrecisionAt5": 0.2285714285714286,   "meanRecallAt5": 0.3428571428571429,   "meanHitAt5": 0.8571428571428571,   "meanMRR": 0.5952380952380951,   "sampleCount": 7 },
+      "onboarding":          { "meanPrecisionAt5": 0.42857142857142855,  "meanRecallAt5": 0.5833333333333333,   "meanHitAt5": 1,                    "meanMRR": 0.8571428571428571,   "sampleCount": 7 },
+      "task-related":        { "meanPrecisionAt5": 0.16666666666666666,  "meanRecallAt5": 0.2638888888888889,   "meanHitAt5": 0.6666666666666666,   "meanMRR": 0.33888888888888885,  "sampleCount": 6 }
+    },
+    "perQueryCondensed": [
+      { "id": "chat-history-render",        "category": "file-discovery",     "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "auth-discovery",             "category": "file-discovery",     "newRecallAt5": 0.4,  "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "file-tree-component",        "category": "file-discovery",     "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "llm-provider-settings",      "category": "file-discovery",     "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "embeddings-client-location", "category": "file-discovery",     "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 0.25 },
+      { "id": "diff-viewer-location",       "category": "file-discovery",     "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "plugin-loader-location",     "category": "file-discovery",     "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "tool-definitions-registry",  "category": "file-discovery",     "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 0.2 },
+      { "id": "parse-git-url",              "category": "function-discovery", "newRecallAt5": 0.8,  "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "stream-chat-completions",    "category": "function-discovery", "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 0.2 },
+      { "id": "compute-chunk-id",           "category": "function-discovery", "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "markdown-to-html",           "category": "function-discovery", "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "mount-settings-sidebar",     "category": "function-discovery", "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "eventbus-emit",              "category": "function-discovery", "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "fetch-embeddings",           "category": "function-discovery", "newRecallAt5": 1,    "newHitAt5": 1, "newMRR": 1 },
+      { "id": "rate-limiting-thematic",     "category": "topic",              "newRecallAt5": 0.25, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "memory-consent-flow",        "category": "topic",              "newRecallAt5": 0.4,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "compression-subsystem",      "category": "topic",              "newRecallAt5": 0.571, "newHitAt5": 1, "newMRR": 1, "note": "ceiling 5/7=0.714 because expectedPaths has 7 entries vs topK=5" },
+      { "id": "tool-admission-flow",        "category": "topic",              "newRecallAt5": 0.4,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "task-state-across-turns",    "category": "topic",              "newRecallAt5": 0.667, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "plugins-register-hooks",     "category": "topic",              "newRecallAt5": 0.4,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "multi-tab-storage-isolation","category": "topic",              "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "venice-429-handling",        "category": "bug-investigation",  "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 0.333 },
+      { "id": "chat-scroll-on-send",        "category": "bug-investigation",  "newRecallAt5": 0.667, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "embedder-skip-large-files",  "category": "bug-investigation",  "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 0.333 },
+      { "id": "git-push-conflict",          "category": "bug-investigation",  "newRecallAt5": 0.4,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "tool-invocation-timeout",    "category": "bug-investigation",  "newRecallAt5": 0,    "newHitAt5": 0, "newMRR": 0, "note": "TODO(jeff)-flagged fixture; new returned [test-llm-idle-timeout.js, ci-tools.js, retry.js, help/index.js, utils/constants.js] — overlapping but not the curated set" },
+      { "id": "session-replay-rendering",   "category": "bug-investigation",  "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "idle-timeout-vs-wallclock",  "category": "bug-investigation",  "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 0.5, "note": "TODO(jeff)-flagged fixture" },
+      { "id": "add-llm-provider",           "category": "onboarding",         "newRecallAt5": 0.75, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "add-git-provider",           "category": "onboarding",         "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 1 },
+      { "id": "write-new-plugin",           "category": "onboarding",         "newRecallAt5": 0.75, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "add-new-chunker",            "category": "onboarding",         "newRecallAt5": 0.25, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "add-new-role",               "category": "onboarding",         "newRecallAt5": 0.667, "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "custom-keybinding",          "category": "onboarding",         "newRecallAt5": 0.5,  "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "register-mcp-server",        "category": "onboarding",         "newRecallAt5": 0.667, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "files-add-chunker",          "category": "task-related",       "newRecallAt5": 0.25, "newHitAt5": 1, "newMRR": 0.333 },
+      { "id": "files-wire-tool-category",   "category": "task-related",       "newRecallAt5": 0,    "newHitAt5": 0, "newMRR": 0, "note": "new returned [intelligence/tools/catalog, test-system-prompt-admission, file-tools, project-tools, context-tools] — `catalog.js` is arguably correct but not in the curated set; review fixture" },
+      { "id": "files-add-settings-tab",     "category": "task-related",       "newRecallAt5": 0.667, "newHitAt5": 1, "newMRR": 0.5 },
+      { "id": "files-ship-memory-scope",    "category": "task-related",       "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 1 },
+      { "id": "files-add-embedding-provider","category": "task-related",      "newRecallAt5": 0.333, "newHitAt5": 1, "newMRR": 0.2 },
+      { "id": "files-add-llm-tool",         "category": "task-related",       "newRecallAt5": 0,    "newHitAt5": 0, "newMRR": 0, "note": "new returned [file-tools, test-system-prompt-admission, test-compression-synthetic-savings, project-tools, context-tools] — concrete tool examples; arguably reasonable but not the curated registration files" }
+    ]
+  }
+}

@@ -541,6 +541,32 @@
  */
 
 /**
+ * Per-pipeline ground-truth metric scores against a hand-curated
+ * `expectedPaths` reference set. Reported per side (legacy / new) when
+ * the comparison was driven with a fixture that carries
+ * `expectedPaths` (1.5.5 reframe — see CHANGELOG §1.5.5 and
+ * `docs/ROADMAP.md` §1.5.0 exit criterion). `null` for a side that
+ * errored before any paths were emitted; otherwise `0.0..1.0`.
+ *
+ * - `precisionAt5` = `|top5 ∩ expected| / 5`. Naturally low when the
+ *   reference set is small (a 1-path expected → ceiling 0.2); read
+ *   alongside `recallAt5` for the full picture.
+ * - `recallAt5` = `|top5 ∩ expected| / |expected|`. The headline metric
+ *   for the §1.5.0 exit gate (`mean recall@5 ≥ 0.80`).
+ * - `hitAt5` = 1 iff at least one expected path is in the top-5; the
+ *   binary "did we find anything correct" sanity floor.
+ * - `mrr` = reciprocal rank of the first expected path in the top-5
+ *   (1.0 if at top-1; 0.2 if at top-5; 0 if no hit). Rewards good
+ *   ranking even when recall is partial.
+ *
+ * @typedef {Object} GroundTruthScores
+ * @property {number|null} precisionAt5
+ * @property {number|null} recallAt5
+ * @property {number|null} hitAt5
+ * @property {number|null} mrr
+ */
+
+/**
  * One row of the 1.5.2 comparison harness output: the outcome of running
  * one query through both the legacy `ContextManager.findRelevantFiles`
  * pipeline (via `runLegacy`) and the new Composer pipeline (via
@@ -550,8 +576,18 @@
  * `agreement` is `null` when either side errored — agreement requires
  * two samples to compute.
  *
- * Shape committed at 1.5.2 so the corpus PR and the measurement PR can
- * consume it without re-deriving the surface.
+ * **1.5.5 reframe.** When the comparison was driven with a fixture that
+ * carried `expectedPaths`, the harness also computes per-pipeline
+ * `legacyGroundTruth` / `newGroundTruth` (precision/recall/hit/MRR @5
+ * against the curated reference set). Both are `null` when no
+ * ground truth was supplied (back-compat with string-only batch
+ * inputs); each side's `GroundTruthScores` is `null` if that side
+ * errored. `expectedPaths` and `category` echo the fixture for
+ * traceability in the report archive.
+ *
+ * Shape originally committed at 1.5.2; ground-truth fields added at
+ * 1.5.5 as additive optional properties — pre-1.5.5 consumers see
+ * them as `null` and ignore them.
  *
  * @typedef {Object} ComparisonResult
  * @property {string} query
@@ -559,8 +595,12 @@
  * @property {string[]|null} newPaths
  * @property {Error|null} legacyError
  * @property {Error|null} newError
- * @property {number|null} agreement      0..1; null if either side errored.
+ * @property {number|null} agreement                 0..1; null if either side errored.
  * @property {number} durationMs
+ * @property {string[]|null} expectedPaths           1.5.5; echo of the fixture's ground-truth set, null when none was supplied.
+ * @property {string|null} category                  1.5.5; echo of the fixture's category, null when none was supplied.
+ * @property {GroundTruthScores|null} legacyGroundTruth  1.5.5; null when no expectedPaths or legacy errored.
+ * @property {GroundTruthScores|null} newGroundTruth     1.5.5; null when no expectedPaths or new errored.
  */
 
 /**
@@ -578,10 +618,44 @@
  */
 
 /**
+ * Per-pipeline aggregated ground-truth scores across a batch.
+ * `null` when no query in the batch had a non-null score for that
+ * metric (e.g. no fixtures supplied `expectedPaths`, or every query
+ * errored on this side).
+ *
+ * @typedef {Object} GroundTruthAggregate
+ * @property {number|null} meanPrecisionAt5
+ * @property {number|null} meanRecallAt5
+ * @property {number|null} meanHitAt5
+ * @property {number|null} meanMRR
+ * @property {number} sampleCount   Queries that contributed a non-null score on this side.
+ */
+
+/**
+ * Per-category roll-up of ground-truth aggregates. Populated only when
+ * fixtures supply a `category` field. Keys are the category strings
+ * (`'file-discovery'`, etc.); each value is a `GroundTruthAggregate`
+ * computed over the queries in that category. Empty `{}` when no
+ * fixtures supplied `category`.
+ *
+ * @typedef {Object<string, GroundTruthAggregate>} GroundTruthByCategory
+ */
+
+/**
  * Aggregate over a batch of comparisons. `meanAgreement` is `null` when
  * no query produced a non-null agreement value (e.g. every runner
  * errored, or the input was empty). `legacyFailures` / `newFailures`
  * count per-side: a query where both runners threw counts in *both*.
+ *
+ * **1.5.5 reframe.** When the batch was driven with fixtures carrying
+ * `expectedPaths`, the report also rolls up per-pipeline ground-truth
+ * aggregates (`legacyGroundTruth` / `newGroundTruth`) and a per-category
+ * breakdown (`legacyByCategory` / `newByCategory`). All four are `null`
+ * / `{}` for back-compat when no ground truth was supplied.
+ *
+ * The agreement metric (legacy-vs-new Jaccard) remains as a secondary
+ * "drift" signal; the headline §1.5.0 exit criterion is now
+ * `newGroundTruth.meanRecallAt5 ≥ 0.80`.
  *
  * @typedef {Object} ComparisonReport
  * @property {number} total
@@ -591,6 +665,10 @@
  * @property {number} legacyFailures
  * @property {number} newFailures
  * @property {number} durationMs
+ * @property {GroundTruthAggregate|null} legacyGroundTruth   1.5.5; null when no fixtures supplied `expectedPaths`.
+ * @property {GroundTruthAggregate|null} newGroundTruth      1.5.5; null when no fixtures supplied `expectedPaths`.
+ * @property {GroundTruthByCategory} legacyByCategory        1.5.5; `{}` when no fixtures supplied `category`.
+ * @property {GroundTruthByCategory} newByCategory           1.5.5; `{}` when no fixtures supplied `category`.
  */
 
 /**

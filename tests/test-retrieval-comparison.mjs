@@ -16,6 +16,9 @@ import {
     normalizeComposerResult,
     jaccardSimilarity,
     precisionAtK,
+    recallAtK,
+    hitAtK,
+    reciprocalRankAtK,
 } from '../js/intelligence/retrieval/comparison.js';
 
 /* ---------------- Fixture builders ---------------- */
@@ -446,7 +449,7 @@ test('compareBatch rejects non-iterable input + non-string elements', async () =
     );
     await assert.rejects(
         () => h.compareBatch(/** @type {any} */ (['ok', 7])),
-        /queries must be strings/,
+        /items must be strings or \{ query/,
     );
 });
 
@@ -559,6 +562,122 @@ test('normalizeComposerResult: skips chunks lacking metadata.source_uri; topK ca
 });
 
 /* ============================================================
+ * T2 — source-uri rollup at the normalizer (1.5.5)
+ *
+ * Scoring-aware fixtures pin the new contract: aggregate per
+ * source_uri (max provenance.score) before truncating to topK so a
+ * code file with one strong chunk beats a docs file with many medium
+ * chunks. Score-less fixtures (the back-compat lock above) tie at 0
+ * and fall back to first-position order — covered by case #4 below.
+ * ============================================================ */
+
+/**
+ * Build a single-block composer result with explicit per-chunk scores.
+ * `entries` is `[{ uri, score }, ...]`; chunk ids are positional and
+ * unique. Mirrors the shape `composerResult([...])` produces but lets
+ * a test author pin `provenance.score` per chunk.
+ *
+ * @param {Array<{ uri: string, score: number }>} entries
+ */
+function composerResultWithScores(entries) {
+    /** @type {Object<string, any>} */
+    const chunks_by_id = {};
+    /** @type {string[]} */
+    const ids = [];
+    entries.forEach(({ uri, score }, i) => {
+        const id = `chunk_${i}`;
+        chunks_by_id[id] = {
+            id,
+            content: `text of ${uri} #${i}`,
+            metadata: { source_uri: uri, content_hash: `h${i}` },
+            tokens: 100,
+            provenance: {
+                source_uri: uri,
+                byte_range: null,
+                line_range: null,
+                retrieved_by: 'semantic',
+                score,
+                score_kind: 'cosine',
+            },
+        };
+        ids.push(id);
+    });
+    return {
+        blocks: [{ role: 'retrieved', content: '', chunks: ids, position: 'retrieved' }],
+        chunks_by_id,
+        used_tokens: 0,
+        diagnostics: {},
+    };
+}
+
+test('normalizeComposerResult: ranks by max provenance.score across a source\'s chunks (T2 rollup)', () => {
+    // a.js: chunks scoring [0.5, 0.85, 0.6] → max 0.85
+    // b.js: chunks scoring [0.7]            → max 0.70
+    // c.js: chunks scoring [0.4, 0.4]       → max 0.40
+    const raw = composerResultWithScores([
+        { uri: 'a.js', score: 0.5 },
+        { uri: 'b.js', score: 0.7 },
+        { uri: 'a.js', score: 0.85 },
+        { uri: 'c.js', score: 0.4 },
+        { uri: 'a.js', score: 0.6 },
+        { uri: 'c.js', score: 0.4 },
+    ]);
+    assert.deepEqual(normalizeComposerResult(raw, { topK: 3 }), ['a.js', 'b.js', 'c.js']);
+});
+
+test('normalizeComposerResult: a single high-scoring chunk beats many medium-scoring chunks for the same file (T2 docs-vs-code regression)', () => {
+    // The 1.5.4-patch divergence pattern: 20 prose chunks @ 0.7 each
+    // crowded a single code chunk @ 0.85 out of the top-K because the
+    // prose file's first chunk was added before the code chunk was
+    // visited. T2 rolls up per source_uri before truncating, so
+    // code.js's max-score 0.85 wins despite docs.md appearing first.
+    const docsChunks = Array.from({ length: 20 }, () => ({ uri: 'docs.md', score: 0.7 }));
+    const raw = composerResultWithScores([
+        ...docsChunks.slice(0, 10),
+        { uri: 'code.js', score: 0.85 },
+        ...docsChunks.slice(10),
+    ]);
+    assert.deepEqual(normalizeComposerResult(raw, { topK: 1 }), ['code.js']);
+    // topK=2 still keeps both; docs.md isn't excluded, just outranked.
+    assert.deepEqual(normalizeComposerResult(raw, { topK: 2 }), ['code.js', 'docs.md']);
+});
+
+test('normalizeComposerResult: ties on score break by first-encounter position (back-compat)', () => {
+    // Three files, all with identical max score. Order in output
+    // matches the order their first chunk was visited.
+    const raw = composerResultWithScores([
+        { uri: 'b.js', score: 0.5 },
+        { uri: 'a.js', score: 0.5 },
+        { uri: 'c.js', score: 0.5 },
+        // Later duplicate of a.js with same score must not promote it
+        // ahead of b.js (b.js was visited first).
+        { uri: 'a.js', score: 0.5 },
+    ]);
+    assert.deepEqual(normalizeComposerResult(raw, { topK: 3 }), ['b.js', 'a.js', 'c.js']);
+});
+
+test('normalizeComposerResult: missing / non-finite provenance.score treated as 0; existing score-less fixtures unchanged (back-compat)', () => {
+    // composerResult() (the existing fixture helper) emits chunks with
+    // no `provenance` field at all — they should all tie at maxScore=0
+    // and fall back to first-position order, matching the pre-T2
+    // attachment-order dedup output exactly.
+    const raw = composerResult(['a.js', 'b.js', 'a.js', 'c.js']);
+    assert.deepEqual(normalizeComposerResult(raw, { topK: 5 }), ['a.js', 'b.js', 'c.js']);
+
+    // NaN / Infinity / non-number scores all coerce to 0 and tie.
+    const weird = {
+        blocks: [{ role: 'retrieved', content: '', chunks: ['c1', 'c2', 'c3', 'c4'], position: 'retrieved' }],
+        chunks_by_id: {
+            c1: { id: 'c1', metadata: { source_uri: 'a.js' }, provenance: { score: NaN } },
+            c2: { id: 'c2', metadata: { source_uri: 'b.js' }, provenance: { score: Infinity } },
+            c3: { id: 'c3', metadata: { source_uri: 'c.js' }, provenance: { score: 'high' } },
+            c4: { id: 'c4', metadata: { source_uri: 'd.js' } /* no provenance */ },
+        },
+    };
+    assert.deepEqual(normalizeComposerResult(weird, { topK: 5 }), ['a.js', 'b.js', 'c.js', 'd.js']);
+});
+
+/* ============================================================
  * Default metrics (~5)
  * ============================================================ */
 
@@ -603,4 +722,195 @@ test('precisionAtK: only first k of predicted are considered (after dedup)', () 
     // first 3 considered: {a, b, c}; ref = {a, b}; hits = 2; / k = 3 ≈ 0.667
     const expected = 2 / 3;
     assert.ok(Math.abs(precisionAtK(['a', 'b', 'c', 'd'], ['a', 'b'], 3) - expected) < 1e-9);
+});
+
+/* ============================================================
+ * 1.5.5 reframe — recall@k, hit@k, MRR (ground-truth metrics)
+ * ============================================================ */
+
+test('recallAtK: divides by reference size, not k; ceiling 1.0 when all relevant landed in top-k', () => {
+    // ref = {a, b, c}; top-5 contains all three → hits/|ref| = 3/3 = 1.0
+    assert.equal(recallAtK(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c'], 5), 1);
+    // ref = {a, b, c}; top-2 contains 2 → 2/3
+    assert.ok(Math.abs(recallAtK(['a', 'b', 'd', 'e'], ['a', 'b', 'c'], 2) - 2 / 3) < 1e-9);
+});
+
+test('recallAtK: small reference set reaches 1.0 where precisionAtK is pegged low', () => {
+    // ref = {a}; top-5 = [a, x, y, z, w] → recall 1.0; precision 0.2
+    assert.equal(recallAtK(['a', 'x', 'y', 'z', 'w'], ['a'], 5), 1);
+    assert.equal(precisionAtK(['a', 'x', 'y', 'z', 'w'], ['a'], 5), 0.2);
+});
+
+test('recallAtK: empty reference → 0 (no relevant set to recall against)', () => {
+    assert.equal(recallAtK(['a', 'b'], [], 5), 0);
+});
+
+test('recallAtK: bad inputs → 0', () => {
+    assert.equal(recallAtK(['a'], ['a'], 0), 0);
+    assert.equal(recallAtK(['a'], ['a'], -1), 0);
+    assert.equal(recallAtK(/** @type {any} */ (null), ['a'], 5), 0);
+});
+
+test('hitAtK: 1 if any expected in top-k else 0', () => {
+    assert.equal(hitAtK(['a', 'b', 'c'], ['c'], 5), 1);
+    assert.equal(hitAtK(['a', 'b', 'c'], ['z'], 5), 0);
+    // hit just outside top-k → 0
+    assert.equal(hitAtK(['a', 'b', 'c', 'd', 'e', 'TARGET'], ['TARGET'], 5), 0);
+    // empty / bad inputs
+    assert.equal(hitAtK(['a'], [], 5), 0);
+    assert.equal(hitAtK(['a'], ['a'], 0), 0);
+});
+
+test('reciprocalRankAtK: 1/rank of first hit, 0 if no hit in top-k', () => {
+    assert.equal(reciprocalRankAtK(['a', 'b', 'c'], ['a'], 5), 1);     // rank 1
+    assert.equal(reciprocalRankAtK(['a', 'b', 'c'], ['b'], 5), 0.5);   // rank 2
+    assert.equal(reciprocalRankAtK(['a', 'b', 'c', 'd', 'e'], ['e'], 5), 0.2); // rank 5
+    assert.equal(reciprocalRankAtK(['a', 'b', 'c', 'd', 'e', 'TARGET'], ['TARGET'], 5), 0); // outside top-k
+    assert.equal(reciprocalRankAtK(['a', 'b'], [], 5), 0);
+});
+
+test('reciprocalRankAtK: dedup applied to predicted before counting rank', () => {
+    // Duplicate 'a' at the front shouldn't shift 'b' beyond rank 2.
+    assert.equal(reciprocalRankAtK(['a', 'a', 'b'], ['b'], 5), 0.5);
+});
+
+/* ============================================================
+ * 1.5.5 reframe — compare() + compareBatch() with ground truth
+ * ============================================================ */
+
+test('compare: opts.expectedPaths populates legacyGroundTruth + newGroundTruth on the result', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['noise.md', 'unrelated.css']),
+        runNew: async () => composerResult(['js/chat/messages.js', 'js/chat/index.js']),
+    });
+    const r = await h.compare('where is the chat history rendered?', {
+        expectedPaths: ['js/chat/messages.js', 'js/chat/index.js', 'js/chat/state.js'],
+        category: 'file-discovery',
+    });
+    assert.deepEqual(r.expectedPaths, ['js/chat/messages.js', 'js/chat/index.js', 'js/chat/state.js']);
+    assert.equal(r.category, 'file-discovery');
+    assert.ok(r.legacyGroundTruth, 'legacyGroundTruth populated');
+    assert.ok(r.newGroundTruth, 'newGroundTruth populated');
+    // Legacy paths {noise.md, unrelated.css} ∩ expected {messages, index, state} = ∅
+    assert.equal(r.legacyGroundTruth.recallAt5, 0);
+    assert.equal(r.legacyGroundTruth.hitAt5, 0);
+    // New paths {messages.js, index.js} ∩ expected = {messages.js, index.js} → 2/3 recall
+    assert.ok(Math.abs(r.newGroundTruth.recallAt5 - 2 / 3) < 1e-9);
+    assert.equal(r.newGroundTruth.hitAt5, 1);
+    assert.equal(r.newGroundTruth.mrr, 1); // first prediction is a hit
+});
+
+test('compare: omitting expectedPaths leaves ground-truth fields null (back-compat)', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async () => composerResult(['a.js']),
+    });
+    const r = await h.compare('q');
+    assert.equal(r.expectedPaths, null);
+    assert.equal(r.category, null);
+    assert.equal(r.legacyGroundTruth, null);
+    assert.equal(r.newGroundTruth, null);
+    // Agreement still computed.
+    assert.equal(r.agreement, 1);
+});
+
+test('compare: expectedPaths still populates ground-truth when one side errors (other side scores; errored side null)', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => { throw new Error('legacy down'); },
+        runNew: async () => composerResult(['a.js']),
+    });
+    const r = await h.compare('q', { expectedPaths: ['a.js'] });
+    assert.ok(r.legacyError, 'legacy errored');
+    assert.equal(r.legacyGroundTruth, null);
+    assert.ok(r.newGroundTruth);
+    assert.equal(r.newGroundTruth.hitAt5, 1);
+});
+
+test('compareBatch: accepts fixture-shaped objects + aggregates ground-truth metrics', async () => {
+    const fixtures = [
+        { query: 'q1', expectedPaths: ['a.js'], category: 'cat-A' },
+        { query: 'q2', expectedPaths: ['b.js', 'c.js'], category: 'cat-A' },
+        { query: 'q3', expectedPaths: ['d.js'], category: 'cat-B' },
+    ];
+    const responses = {
+        q1: ['a.js'],            // hit @ rank 1
+        q2: ['b.js', 'x.js'],    // hit b (rank 1), miss c → recall 0.5
+        q3: ['x.js', 'y.js'],    // no hit
+    };
+    const h = createComparisonHarness({
+        runLegacy: async (q) => legacyResult(responses[q] || []),
+        runNew: async (q) => composerResult(responses[q] || []),
+    });
+    const report = await h.compareBatch(fixtures);
+    assert.equal(report.total, 3);
+    // newGroundTruth: recall = (1 + 0.5 + 0) / 3 = 0.5
+    assert.ok(report.newGroundTruth);
+    assert.ok(Math.abs(report.newGroundTruth.meanRecallAt5 - 0.5) < 1e-9);
+    // hit@5 mean: (1 + 1 + 0) / 3 ≈ 0.667
+    assert.ok(Math.abs(report.newGroundTruth.meanHitAt5 - 2 / 3) < 1e-9);
+    // MRR mean: (1 + 1 + 0) / 3 ≈ 0.667
+    assert.ok(Math.abs(report.newGroundTruth.meanMRR - 2 / 3) < 1e-9);
+    assert.equal(report.newGroundTruth.sampleCount, 3);
+    // Per-category roll-up: cat-A = 2 fixtures, cat-B = 1.
+    assert.ok(report.newByCategory['cat-A']);
+    assert.equal(report.newByCategory['cat-A'].sampleCount, 2);
+    // cat-A recall mean = (1 + 0.5) / 2 = 0.75
+    assert.ok(Math.abs(report.newByCategory['cat-A'].meanRecallAt5 - 0.75) < 1e-9);
+    assert.ok(report.newByCategory['cat-B']);
+    assert.equal(report.newByCategory['cat-B'].sampleCount, 1);
+    assert.equal(report.newByCategory['cat-B'].meanRecallAt5, 0);
+});
+
+test('compareBatch: pure-string input still works (back-compat); ground-truth aggregates are null/empty', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async () => composerResult(['a.js']),
+    });
+    const report = await h.compareBatch(['q1', 'q2']);
+    assert.equal(report.total, 2);
+    assert.equal(report.legacyGroundTruth, null);
+    assert.equal(report.newGroundTruth, null);
+    assert.deepEqual(report.legacyByCategory, {});
+    assert.deepEqual(report.newByCategory, {});
+    // Agreement still aggregated.
+    assert.equal(report.meanAgreement, 1);
+});
+
+test('compareBatch: mixed string + fixture items both work in one batch', async () => {
+    const items = [
+        'plain-string-q',
+        { query: 'fixture-q', expectedPaths: ['a.js'] },
+    ];
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async () => composerResult(['a.js']),
+    });
+    const report = await h.compareBatch(items);
+    assert.equal(report.total, 2);
+    // Only the fixture-q contributed to ground-truth aggregates.
+    assert.ok(report.newGroundTruth);
+    assert.equal(report.newGroundTruth.sampleCount, 1);
+    assert.equal(report.newGroundTruth.meanRecallAt5, 1);
+});
+
+test('compareBatch: rejects fixture object with missing/non-string query', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => [],
+        runNew: async () => composerResult([]),
+    });
+    await assert.rejects(
+        () => h.compareBatch([{ expectedPaths: ['a.js'] }]),
+        /fixture object must have a string `query`/,
+    );
+});
+
+test('compareBatch: rejects fixture object with non-array expectedPaths', async () => {
+    const h = createComparisonHarness({
+        runLegacy: async () => [],
+        runNew: async () => composerResult([]),
+    });
+    await assert.rejects(
+        () => h.compareBatch([{ query: 'q', expectedPaths: 'not-an-array' }]),
+        /fixture `expectedPaths` must be an array or null/,
+    );
 });

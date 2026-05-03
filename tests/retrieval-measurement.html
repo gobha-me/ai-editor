@@ -594,15 +594,36 @@
             const panel = document.getElementById('report-panel');
             panel.classList.remove('hidden');
 
-            const meanAgreement = report.meanAgreement;
-            const promoted = meanAgreement != null && meanAgreement >= 0.8;
-            const headlineCls = promoted ? 'headline' : (meanAgreement != null && meanAgreement >= 0.6 ? 'warn' : 'fail');
+            // 1.5.5 reframe — headline is now mean recall@5 against
+            // hand-curated expectedPaths (see CHANGELOG §1.5.5).
+            // meanAgreement (legacy-vs-new Jaccard) remains as a
+            // secondary drift signal alongside it.
+            const newRecall = report.newGroundTruth ? report.newGroundTruth.meanRecallAt5 : null;
+            const legacyRecall = report.legacyGroundTruth ? report.legacyGroundTruth.meanRecallAt5 : null;
+            const promoted = newRecall != null && newRecall >= 0.8;
+            const headlineCls = promoted ? 'headline' : (newRecall != null && newRecall >= 0.6 ? 'warn' : 'fail');
 
             const summary = document.getElementById('summary');
             summary.innerHTML = `
                 <div class="stat">
-                    <div class="stat-label">Mean agreement</div>
-                    <div class="stat-value ${headlineCls}">${fmtPct(meanAgreement)}</div>
+                    <div class="stat-label">New mean recall@5</div>
+                    <div class="stat-value ${headlineCls}">${fmtPct(newRecall)}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Legacy mean recall@5</div>
+                    <div class="stat-value">${fmtPct(legacyRecall)}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">New mean hit@5</div>
+                    <div class="stat-value">${fmtPct(report.newGroundTruth?.meanHitAt5 ?? null)}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">New MRR</div>
+                    <div class="stat-value">${fmtPct(report.newGroundTruth?.meanMRR ?? null)}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Legacy↔New agreement</div>
+                    <div class="stat-value">${fmtPct(report.meanAgreement)}<small style="color:#94a3b8;display:block;font-size:0.7rem;">drift signal — not the gate</small></div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Total queries</div>
@@ -629,7 +650,7 @@
                     <div class="stat-value">${runMeta.sourceUriCount}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">≥80% gate</div>
+                    <div class="stat-label">§1.5.0 ≥80% recall gate</div>
                     <div class="stat-value ${promoted ? '' : 'fail'}">${promoted ? 'PROMOTE ✓' : 'NOT YET'}</div>
                 </div>
             `;
@@ -649,60 +670,81 @@
             hist.innerHTML = `<h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Agreement histogram</h3>
                 <table style="max-width: 30rem;">${barRows}</table>`;
 
-            // Per-category breakdown
-            const byCategory = new Map();
-            for (let i = 0; i < report.perQuery.length; i += 1) {
-                const fixture = QUERY_FIXTURES[i];
-                if (!fixture) continue;
-                const cat = fixture.category || 'unknown';
-                if (!byCategory.has(cat)) byCategory.set(cat, []);
-                byCategory.get(cat).push(report.perQuery[i]);
-            }
-            const catRows = [...byCategory.entries()]
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([cat, results]) => {
-                    const valid = results.filter((r) => r.agreement != null);
-                    const mean = valid.length === 0 ? null
-                        : valid.reduce((acc, r) => acc + r.agreement, 0) / valid.length;
-                    const cls = mean == null ? 'err' : mean >= 0.8 ? 'high' : mean >= 0.5 ? 'mid' : 'low';
-                    return `<tr>
-                        <td>${escapeHtml(cat)}</td>
-                        <td style="text-align: right;">${results.length}</td>
-                        <td class="agree ${cls}" style="text-align: right;">${fmtPct(mean)}</td>
-                    </tr>`;
-                }).join('');
+            // Per-category breakdown — 1.5.5 reframe surfaces
+            // ground-truth metrics (recall@5, hit@5, MRR) per pipeline.
+            // Reads from the harness's `legacyByCategory` / `newByCategory`
+            // aggregates rather than recomputing.
+            const cats = Object.keys(report.newByCategory || {}).sort();
+            const catRows = cats.map((cat) => {
+                const newAgg = report.newByCategory[cat];
+                const legAgg = (report.legacyByCategory || {})[cat];
+                const newRecallCls = newAgg.meanRecallAt5 >= 0.8 ? 'high'
+                    : newAgg.meanRecallAt5 >= 0.5 ? 'mid' : 'low';
+                return `<tr>
+                    <td>${escapeHtml(cat)}</td>
+                    <td style="text-align: right;">${newAgg.sampleCount}</td>
+                    <td class="agree ${newRecallCls}" style="text-align: right;">${fmtPct(newAgg.meanRecallAt5)}</td>
+                    <td style="text-align: right;">${fmtPct(newAgg.meanHitAt5)}</td>
+                    <td style="text-align: right;">${fmtPct(newAgg.meanMRR)}</td>
+                    <td style="text-align: right; color: #94a3b8;"><small>${fmtPct(legAgg ? legAgg.meanRecallAt5 : null)}</small></td>
+                </tr>`;
+            }).join('');
             const catWrap = document.getElementById('categories-wrap');
-            catWrap.innerHTML = `<h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Per-category mean agreement</h3>
-                <table style="max-width: 30rem;">
-                    <thead><tr><th>Category</th><th style="text-align: right;">Queries</th><th style="text-align: right;">Mean agreement</th></tr></thead>
+            catWrap.innerHTML = `<h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Per-category — new pipeline ground-truth metrics</h3>
+                <p style="font-size: 0.75rem; color: #94a3b8; margin: 0 0 0.25rem 0;">Headline = <strong>new mean recall@5</strong>; legacy column for comparison only.</p>
+                <table style="max-width: 50rem;">
+                    <thead><tr>
+                        <th>Category</th>
+                        <th style="text-align: right;">Queries</th>
+                        <th style="text-align: right;">new recall@5</th>
+                        <th style="text-align: right;">new hit@5</th>
+                        <th style="text-align: right;">new MRR</th>
+                        <th style="text-align: right;">legacy recall@5</th>
+                    </tr></thead>
                     <tbody>${catRows}</tbody>
                 </table>`;
 
-            // Per-query table
-            const rows = report.perQuery.map((r, i) => {
-                const fixture = QUERY_FIXTURES[i];
-                const cat = fixture ? fixture.category : '—';
-                const agreementCls = r.agreement == null ? 'err' : r.agreement >= 0.8 ? 'high' : r.agreement >= 0.5 ? 'mid' : 'low';
-                const agreement = r.agreement == null
+            // Per-query table — show new pipeline's recall@5 + hit + MRR + the
+            // expectedPaths for inspection. Agreement column kept as drift signal.
+            const rows = report.perQuery.map((r) => {
+                const cat = r.category || '—';
+                const ngt = r.newGroundTruth;
+                const recallCls = ngt == null ? 'err'
+                    : ngt.recallAt5 >= 0.8 ? 'high'
+                    : ngt.recallAt5 >= 0.5 ? 'mid' : 'low';
+                const recallCell = ngt == null
                     ? `error: ${escapeHtml((r.legacyError || r.newError || {}).message || 'unknown')}`
-                    : fmtPct(r.agreement);
+                    : fmtPct(ngt.recallAt5);
+                const hitCell = ngt == null ? '—' : fmtPct(ngt.hitAt5);
+                const mrrCell = ngt == null ? '—' : fmtPct(ngt.mrr);
                 return `<tr>
                     <td class="q">${escapeHtml(r.query)}</td>
                     <td><small>${escapeHtml(cat)}</small></td>
-                    <td class="paths">${(r.legacyPaths || []).map(escapeHtml).join('<br>') || '<small>—</small>'}</td>
+                    <td class="paths"><small>${(r.expectedPaths || []).map(escapeHtml).join('<br>') || '—'}</small></td>
                     <td class="paths">${(r.newPaths || []).map(escapeHtml).join('<br>') || '<small>—</small>'}</td>
-                    <td class="agree ${agreementCls}">${agreement}</td>
+                    <td class="agree ${recallCls}" style="text-align: right;">${recallCell}</td>
+                    <td style="text-align: right;">${hitCell}</td>
+                    <td style="text-align: right;">${mrrCell}</td>
                 </tr>`;
             }).join('');
             document.getElementById('perquery-wrap').innerHTML = `
+                <h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Per-query — new pipeline vs hand-curated expectedPaths</h3>
                 <table>
-                    <thead><tr><th>Query</th><th>Category</th><th>Legacy paths</th><th>New paths</th><th>Agreement</th></tr></thead>
+                    <thead><tr>
+                        <th>Query</th>
+                        <th>Category</th>
+                        <th>Expected paths</th>
+                        <th>New top-K</th>
+                        <th>recall@5</th>
+                        <th>hit@5</th>
+                        <th>MRR</th>
+                    </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>`;
 
             // Full JSON
             const reportJson = {
-                version: '1.5.4',
+                version: '1.5.5',
                 run_meta: {
                     project: { owner: window.__measurementContext.owner, repo: window.__measurementContext.repo, ref: window.__measurementContext.ref },
                     modelId: runMeta.modelId,

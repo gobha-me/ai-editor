@@ -397,7 +397,7 @@ test('run: drives compareBatch through both runners and returns a ComparisonRepo
     }
 });
 
-test('run: defaults to QUERY_CORPUS when queries is not supplied', async () => {
+test('run: defaults to QUERY_FIXTURES (with expectedPaths + category) when queries is not supplied (1.5.5 reframe)', async () => {
     const cm = makeFakeContextManager();
     const handle = await createMeasurementHarness({
         Git: makeFakeGit({}),
@@ -410,9 +410,19 @@ test('run: defaults to QUERY_CORPUS when queries is not supplied', async () => {
     // Empty store + empty corpus run is fine — both runners may legitimately
     // return [] for every query; the harness still produces a report.
     const report = await handle.run();
-    // QUERY_CORPUS has 42 entries per 1.5.3.
+    // QUERY_FIXTURES has 42 entries per 1.5.3.
     assert.equal(report.total, 42);
     assert.equal(cm.calls.length, 42, 'legacy runner called once per corpus query');
+    // 1.5.5: every fixture carries expectedPaths + category, so the report
+    // surfaces ground-truth aggregates + per-category roll-ups even when both
+    // runners return empty (every per-query metric is 0; aggregate is 0; not null).
+    assert.ok(report.legacyGroundTruth, 'legacyGroundTruth aggregate present');
+    assert.ok(report.newGroundTruth, 'newGroundTruth aggregate present');
+    assert.equal(report.legacyGroundTruth.sampleCount, 42);
+    assert.equal(report.newGroundTruth.sampleCount, 42);
+    // Per-category buckets: 6 known categories.
+    const cats = Object.keys(report.legacyByCategory);
+    assert.equal(cats.length, 6);
 });
 
 test('run: onProgress fires once per completed query with cumulative counts', async () => {
@@ -448,6 +458,11 @@ test('runner outputs round-trip through default normalizers without custom shape
         project: PROJECT,
         modelId: MODEL_ID,
         sourceUris: ['a.md'],
+        // Default T1 filter excludes prose, which would empty the new
+        // pipeline's result for a prose-only fixture. This test cares
+        // about normalizer shape compat, not T1 — opt out by passing
+        // `null` to restore pre-T1 behavior.
+        composeFilters: null,
     });
     await handle.ingest();
     // Single-query path through `comparison.compare` exercises both default
@@ -458,4 +473,108 @@ test('runner outputs round-trip through default normalizers without custom shape
     assert.equal(result.newError, null, `new runner errored: ${result.newError && result.newError.message}`);
     assert.ok(Array.isArray(result.legacyPaths));
     assert.ok(Array.isArray(result.newPaths));
+});
+
+/* ============================================================
+ * T1 — content-type filter at the comparison harness (1.5.5)
+ *
+ * The default `composeFilters` is a content-type accept-list excluding
+ * `'prose'` — addresses the 1.5.4-patch divergence pattern where the
+ * new pipeline over-prefers `docs/*.md` / `html/*.html`. Observable
+ * via `runner.compose` against a prose-only store: with the default
+ * filter, no prose chunks survive into `chunks_by_id`; with
+ * `composeFilters: null`, they do.
+ * ============================================================ */
+
+test('createMeasurementHarness: rejects bad composeFilters shape', async () => {
+    const base = {
+        Git: makeFakeGit({}),
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: [],
+    };
+    await assert.rejects(
+        () => createMeasurementHarness({ ...base, composeFilters: 'nope' }),
+        /composeFilters must be a MetadataFilter object/,
+    );
+    await assert.rejects(
+        () => createMeasurementHarness({ ...base, composeFilters: { content_types: 'code' } }),
+        /composeFilters\.content_types must be an array/,
+    );
+});
+
+test('runner.compose: default composeFilters excludes prose chunks (T1)', async () => {
+    // Single .md file = single source of prose chunks.
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body.\n\nA second paragraph here.\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md'],
+        // composeFilters omitted → default = exclude 'prose'.
+    });
+    await handle.ingest();
+    const result = await handle.runner.compose('first paragraph body');
+    // Confirm ingest actually produced prose chunks in the store…
+    const stats = handle.store.stats();
+    assert.ok(stats.chunks > 0, 'store has ingested chunks');
+    // …but the default T1 filter strips them all out before they reach
+    // chunks_by_id, so the new-pipeline result has nothing prose.
+    for (const id of Object.keys(result.chunks_by_id)) {
+        const ct = result.chunks_by_id[id].metadata.content_type;
+        assert.notEqual(ct, 'prose', `chunk ${id} leaked into result with content_type=prose despite default T1 filter`);
+    }
+});
+
+test('runner.compose: composeFilters: null restores pre-T1 behavior (prose chunks pass through)', async () => {
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body.\n\nA second paragraph here.\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md'],
+        composeFilters: null,
+    });
+    await handle.ingest();
+    const result = await handle.runner.compose('first paragraph body');
+    // Without the filter, at least one prose chunk should survive into
+    // the result — the prose-only store has nothing else to return.
+    const proseCount = Object.values(result.chunks_by_id).filter(
+        (c) => c.metadata.content_type === 'prose',
+    ).length;
+    assert.ok(proseCount > 0, 'expected prose chunks in result when composeFilters is null');
+});
+
+test('runner.compose: explicit composeFilters override is honored (T1)', async () => {
+    // Asymmetric: ingest both prose AND structured; ask the filter to
+    // accept ONLY structured. Result should have no prose chunks.
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body.\n',
+        'data/b.json': '{"key": "first paragraph body match"}\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md', 'data/b.json'],
+        composeFilters: { content_types: ['structured'] },
+    });
+    await handle.ingest();
+    const result = await handle.runner.compose('first paragraph body');
+    for (const id of Object.keys(result.chunks_by_id)) {
+        const ct = result.chunks_by_id[id].metadata.content_type;
+        assert.equal(ct, 'structured', `chunk ${id} leaked with content_type=${ct} despite explicit accept-list ['structured']`);
+    }
 });

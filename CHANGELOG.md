@@ -6,22 +6,168 @@ All notable changes to AI Editor are documented here.
 
 ### Notes
 
-- **Retrieval Phase 1 §1.5.4-patch — canonical legacy-vs-new agreement run
-  completed 2026-05-03.** Run against this repo using
-  `jinaai/jina-embeddings-v2-base-code` via the in-cluster embedder service
-  (the bottleneck unblock that gated 1.5.4-patch since 2026-05-02). 4474
-  chunks across 427 sources, 0 ingest failures, 0 runner failures (legacy
-  + new), ~12.5 min walk. **`meanAgreement = 0.2027`** over the 42-query
-  corpus — well below the §1.5.0 ≥0.80 exit-criterion target. Pattern
-  identified across the lowest-agreement queries: the new pipeline
-  over-prefers `docs/*.md` and `html/*.html` over implementation files.
-  Per-category breakdown + observed-pattern analysis + four named
-  Composer-tuning items (T1–T4) queued in
-  [`docs/ROADMAP.md`](docs/ROADMAP.md) §"1.5.x — Retrieval follow-ups";
-  raw report archived at
-  [`docs/measurements/2026-05-03-retrieval-agreement.json`](docs/measurements/2026-05-03-retrieval-agreement.json).
-  No version bump — this is bookkeeping that closes the §1.5.4-patch
-  roadmap entry; the first tuning PR claims the next version slot.
+- **1.5.5-patch — first canonical recall@5 measurement run (2026-05-03).**
+  Run against this branch (`feat/1.5.5-composer-tuning-t1-t2-content-type-and-rollup`,
+  commit `1ed1f07`) using `jinaai/jina-embeddings-v2-base-code` via the
+  in-cluster embedder. 4489 chunks across 428 sources, 0 ingest failures,
+  0 runner failures, ~13.4 min walk. **Headline: `newGroundTruth.meanRecallAt5
+  = 0.535`** vs the §1.5.0 ≥0.80 target — gap remains, but a ~35×
+  improvement over the broken legacy baseline (`legacyGroundTruth.meanRecallAt5
+  = 0.015`). Secondary: `meanHitAt5 = 0.929` (the new pipeline finds
+  *at least one* expected file in top-5 for ~93% of queries);
+  `meanMRR = 0.723`. Per-category recall@5 (worst → best): task-related
+  0.264, bug-investigation 0.343, topic 0.455, onboarding 0.583,
+  file-discovery 0.613, **function-discovery 0.900** (already clears
+  the §1.5.0 80% gate). Three `// TODO(jeff)` fixtures
+  (`multi-tab-storage-isolation`, `tool-invocation-timeout`,
+  `idle-timeout-vs-wallclock`) all scored ≤0.333 — verifies the curation
+  instinct. Two task-related fixtures returned 0% but with arguably-
+  reasonable alternative file sets (`js/intelligence/tools/catalog.js`
+  for "wire a new tool category"; existing tool examples for "add a new
+  LLM tool") — suggests curation refinement is the gate before further
+  retrieval tuning. Raw report archived at
+  [`docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-03-retrieval-recall-ground-truth.json).
+  Next: curation refinement → T3 (intent-aware filter) → 1.5.7 legacy
+  retirement (priority bumped given `legacyGroundTruth = 0.015`).
+
+## [1.5.5] - 2026-05-03
+
+**Retrieval Composer tuning T1 + T2 — content-type filter + source-uri
+rollup (PR 1 of N against the §1.5.4-patch baseline).** The 1.5.4-patch
+canonical run on 2026-05-03 measured `meanAgreement = 0.2027` against
+the §1.5.0 ≥0.80 target with the divergence pattern that the new
+chunk-level pipeline over-prefers `docs/*.md` and `html/*.html` over
+implementation files (each docs file emits ~20 individually well-scoring
+prose chunks while a code file emits one). This release ships the two
+smallest, least-coupled tuning levers from the queue in
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"1.5.x — Retrieval follow-ups".
+
+**T1 — content-type filter at the comparison harness.**
+[`createMeasurementHarness`](js/intelligence/retrieval/measurement.js)
+grows a new optional `composeFilters` option threaded into
+`runCompose(query)` as `RetrievalRequest.filters`. Default is a
+content-type accept-list excluding `'prose'`
+(`{ content_types: ['code', 'conversation', 'structured', 'spec'] }`),
+which the Semantic strategy's already-shipped `applyMetadataFilter`
+honors at every retrieval path. Callers pass `composeFilters: null` to
+restore the pre-T1 behavior of `filters: null`, or an explicit
+`MetadataFilter` for T3-style intent-aware experimentation. **No code
+change to `semantic.js` / `composer.js`** — the seam was already wired;
+the harness was just passing `null`. **Live `find_relevant_files` is
+unaffected** — the tool still routes through legacy
+`js/context-manager.js` per
+[`js/tools/context-tools.js`](js/tools/context-tools.js); the new
+Composer migration is deferred to 1.5.6.
+
+**T2 — source-uri rollup at the normalizer.**
+[`normalizeComposerResult`](js/intelligence/retrieval/comparison.js)
+rewritten as a two-pass aggregator: pass 1 walks every block / chunk
+and records `firstPosition` + `maxScore` per `source_uri` (max
+`provenance.score`, with missing / non-finite scores treated as `0`);
+pass 2 sorts by `maxScore` DESC then `firstPosition` ASC and truncates
+to `topK`. This fixes the divergence pattern at the harness side: a
+`code.js` file with one chunk scoring 0.85 now beats a `docs.md` file
+with twenty chunks each scoring 0.7. Score-less fixtures (the existing
+`composerResult([...])` test helper) all tie at `maxScore = 0` and
+fall back to `firstPosition` order, so the back-compat lock is
+preserved — the contract change is "real-scored chunks beat earlier-
+positioned chunks", invisible to callers that don't populate
+`provenance`.
+
+**Tests.** Seven new node test cases.
+[`tests/test-retrieval-comparison.mjs`](tests/test-retrieval-comparison.mjs)
+gains 4 T2 regression cases (rollup ranking, docs-vs-code regression,
+score-tie position fallback, missing-score back-compat) plus a
+`composerResultWithScores` fixture builder.
+[`tests/test-retrieval-measurement.mjs`](tests/test-retrieval-measurement.mjs)
+gains 4 T1 cases (validation rejection, default-filter excludes prose,
+explicit-null restores pre-T1, explicit-override is honored). Full
+retrieval suite (618 tests) green.
+
+**T4 re-measurement gate — and the surprise that triggered the
+measurement reframe (see "Reframe" below).** Per the roadmap rule "no
+tuning PR merges without a measured number," the post-T1+T2 canonical
+re-run was executed against this repo on 2026-05-03 with the in-cluster
+`jinaai/jina-embeddings-v2-base-code` embedder (4489 chunks across 428
+sources, 0 ingest failures, 0 runner failures, ~26.7 min walk). It
+reported `meanAgreement = 0.0026` — a ~99% drop from the 0.2027
+baseline. Per-query inspection revealed that the new pipeline was
+actually returning the *correct* code files for nearly every query
+(`js/chat/messages.js` for "where is the chat history rendered?",
+`js/diff-viewer.js` for "where is the diff viewer?", `js/file-tree.js`
+for "where is the file tree component?", etc.) — meanwhile the legacy
+`js/context-manager.js` pipeline was returning `assets/fonts/SOURCES.md`,
+`evals/pacing.js`, and `css/icons.css` for most queries (file-level
+summary embeddings appear near-degenerate). The agreement metric had
+been measuring alignment with a broken baseline all along; T1's prose
+exclusion just made the divergence visible by removing the only category
+of files where both pipelines coincidentally overlapped.
+
+**1.5.5 also ships the measurement reframe (replaces the §1.5.0 exit
+criterion).** The retired `≥80% legacy-vs-new agreement` gate is
+superseded by `mean recall@5 ≥ 0.80 against hand-curated
+expectedPaths`. Concrete changes:
+
+- **`expectedPaths: string[]` added to every `QueryFixture`** in
+  [`js/intelligence/retrieval/test-corpus.js`](js/intelligence/retrieval/test-corpus.js).
+  3–7 in-repo paths per fixture (137 total entries across 42 fixtures),
+  hand-curated via grep / read of the codebase, alphabetically sorted
+  for minimal diffs. Three fixtures carry inline `// TODO(jeff)` flags
+  for review (multi-tab storage isolation; tool-invocation timeout vs
+  LLM idle timeout; idle-vs-wallclock historical rationale). Decision
+  §6 in the corpus header docblock — which previously rejected ground
+  truth as "out of scope" — is rewritten to document the reframe.
+- **Three new metrics in
+  [`comparison.js`](js/intelligence/retrieval/comparison.js)**:
+  `recallAtK` (`|top-k ∩ expected| / |expected|`, the new headline),
+  `hitAtK` (binary 0/1 floor), `reciprocalRankAtK` (rewards better
+  ranking). Existing `precisionAtK` is kept and reported alongside
+  (naturally pegged low when `|expected| < 5`).
+- **`ComparisonResult` extended** with `expectedPaths`, `category`,
+  `legacyGroundTruth`, `newGroundTruth` (per-side
+  `GroundTruthScores`). `ComparisonReport` extended with overall
+  `legacyGroundTruth` / `newGroundTruth` aggregates plus per-category
+  `legacyByCategory` / `newByCategory` roll-ups. All additive — pre-1.5.5
+  consumers see `null` / `{}` and ignore.
+- **`compareBatch` accepts polymorphic input**: legacy
+  `Iterable<string>` (pre-1.5.5 callers) OR
+  `Iterable<{query, expectedPaths?, category?}>` (the fixture shape).
+  Mixed batches work too. The harness detects per-item.
+- **`createMeasurementHarness` defaults `run()` to
+  `DEFAULT_BATCH_FIXTURES`** — the `{query, expectedPaths, category}`
+  view of `QUERY_FIXTURES` — so the §1.5.0 ≥80% recall gate is
+  measured automatically. Pass `queries: QUERY_CORPUS` to opt back into
+  pre-1.5.5 string-only behavior.
+- **Browser runner UI rewritten**: headline = `New mean recall@5`
+  (with the §1.5.0 ≥80% gate display), legacy mean recall surfaced
+  alongside for the broken-baseline comparison story, secondary
+  metrics (hit@5, MRR, legacy-vs-new agreement as drift signal),
+  per-category table now shows `new recall@5` / `new hit@5` /
+  `new MRR` / `legacy recall@5`, per-query table shows
+  `expectedPaths` next to the new pipeline's top-K with a per-row
+  `recall@5` / `hit@5` / `MRR`. Archive JSON bumped to
+  `version: 1.5.5`.
+- **20 new node tests** across
+  [`tests/test-retrieval-comparison.mjs`](tests/test-retrieval-comparison.mjs)
+  (recall/hit/MRR functions + the new compare/compareBatch contract +
+  back-compat) and
+  [`tests/test-retrieval-test-corpus.mjs`](tests/test-retrieval-test-corpus.mjs)
+  (every fixture has expectedPaths, alphabetically sorted, unique).
+  Full retrieval suite (636 tests) green.
+
+**T3 (intent-aware filter) reprioritized.** With the metric reframed,
+the post-T1+T2 per-category breakdown becomes a meaningful signal —
+not "did topic/onboarding agreement stay above the legacy noise floor"
+but "did topic/onboarding precision against ground truth survive the
+prose-exclusion." T3 ships when that data lands.
+
+**Carries forward §1.5.4-patch bookkeeping.** The 1.5.4-patch entry
+previously under `[Unreleased]` (canonical run completed 2026-05-03;
+4474 chunks across 427 sources; 0 ingest failures; 0 runner failures;
+~12.5 min walk; raw report archived at
+[`docs/measurements/2026-05-03-retrieval-agreement.json`](docs/measurements/2026-05-03-retrieval-agreement.json))
+documents the broken-baseline run that surfaced the need for the
+reframe.
 
 ## [1.5.4] - 2026-05-02
 

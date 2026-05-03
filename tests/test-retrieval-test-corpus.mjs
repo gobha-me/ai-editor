@@ -103,6 +103,43 @@ test('every QUERY_CATEGORIES value is referenced by at least one fixture', () =>
     }
 });
 
+/* ============================================================
+ * 1.5.5 reframe — every fixture has a non-empty curated expectedPaths
+ * ============================================================ */
+
+test('every fixture has expectedPaths: string[] with ≥1 entry (1.5.5 reframe)', () => {
+    for (const f of QUERY_FIXTURES) {
+        assert.ok(Array.isArray(f.expectedPaths), `fixture ${f.id} missing expectedPaths array`);
+        assert.ok(f.expectedPaths.length >= 1, `fixture ${f.id} has empty expectedPaths`);
+        for (const p of f.expectedPaths) {
+            assert.equal(typeof p, 'string', `fixture ${f.id} has non-string entry in expectedPaths`);
+            assert.ok(p.length > 0, `fixture ${f.id} has empty-string entry in expectedPaths`);
+        }
+    }
+});
+
+test('expectedPaths are sorted alphabetically (so diffs are minimal when entries are added)', () => {
+    for (const f of QUERY_FIXTURES) {
+        const sorted = f.expectedPaths.slice().sort();
+        assert.deepEqual(
+            f.expectedPaths,
+            sorted,
+            `fixture ${f.id} expectedPaths not alphabetically sorted`,
+        );
+    }
+});
+
+test('expectedPaths entries are unique within a fixture', () => {
+    for (const f of QUERY_FIXTURES) {
+        const set = new Set(f.expectedPaths);
+        assert.equal(
+            set.size,
+            f.expectedPaths.length,
+            `fixture ${f.id} has duplicate entries in expectedPaths`,
+        );
+    }
+});
+
 test('per-category bucket sizes are within ~3x of the median (rough balance, no big skews)', () => {
     /** @type {Record<string, number>} */
     const counts = {};

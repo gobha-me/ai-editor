@@ -73,14 +73,32 @@
  *      back-deriving from the text. The 1.5.4 report does not
  *      programmatically gate on it.
  *
- *   6. **No expected_paths / ground_truth slot.** The §1.5.0 exit
- *      criterion is *legacy-vs-new agreement*, not *correctness vs.
- *      a hand-labeled gold set*. Both pipelines being wrong in the
- *      same way still scores 1.0 — that's the contract: we are
- *      measuring whether the new pipeline can replace the old one
- *      without behavior regression, not whether either pipeline is
- *      good at retrieval in absolute terms. A future PR (post-1.5.0)
- *      may ship a separately-measured ground-truth corpus.
+ *   6. **`expectedPaths` is hand-curated ground truth (1.5.5 reframe).**
+ *      The original 1.5.3 corpus deliberately omitted ground truth on
+ *      the theory that "legacy-vs-new agreement" was sufficient to
+ *      promote §1.5.0. The 1.5.4-patch canonical run on 2026-05-03
+ *      surfaced the flaw: the legacy `js/context-manager.js` pipeline
+ *      returns `assets/fonts/SOURCES.md` and `evals/pacing.js` for
+ *      most queries (file-level summary embeddings appear near-
+ *      degenerate), so "agreement with legacy" measures alignment
+ *      with a broken baseline. After T1 + T2 stripped prose from the
+ *      new pipeline's results in the same release, the 2026-05-03
+ *      re-run reported `meanAgreement = 0.0026` — but the per-query
+ *      results showed the new pipeline was returning the *correct*
+ *      code files (`js/chat/messages.js` for "where is the chat
+ *      history rendered?", `js/diff-viewer.js` for "where is the
+ *      diff viewer?"), and agreement crashed because legacy was
+ *      returning docs/fonts. The §1.5.0 exit criterion is therefore
+ *      reframed: **mean recall@5 ≥ 0.80 against `expectedPaths`** is
+ *      the new gate. The harness still computes the legacy-vs-new
+ *      Jaccard agreement as a secondary "drift" signal, but it no
+ *      longer promotes the track.
+ *
+ *      Curation methodology: per-fixture grep / read of the
+ *      codebase, with low-confidence fixtures flagged
+ *      `// TODO(jeff)` for review (see in-line comments below). 3–7
+ *      entries per fixture; all entries are real in-repo paths
+ *      verified to exist at curation time (2026-05-03).
  *
  *   7. **Frozen at module load.** `QUERY_CORPUS` and `QUERY_FIXTURES`
  *      are `Object.freeze`'d so a misbehaving consumer cannot mutate
@@ -115,18 +133,38 @@
 
 /**
  * @typedef {Object} QueryFixture
- * @property {string} id        Stable kebab-case slug. Treat as public
- *                              contract once published; downstream reports
- *                              may reference fixtures by id.
- * @property {string} query     The natural-language query string the model
- *                              would issue. Goes through both retrieval
- *                              pipelines unchanged.
- * @property {string} category  One of `QUERY_CATEGORIES`. Lets a
- *                              measurement consumer stratify agreement by
- *                              query shape.
- * @property {string} intent    One-line human-readable rationale for why
- *                              the query was included in the corpus. Not
- *                              machine-consumed.
+ * @property {string}   id            Stable kebab-case slug. Treat as
+ *                                    public contract once published;
+ *                                    downstream reports may reference
+ *                                    fixtures by id.
+ * @property {string}   query         The natural-language query string the
+ *                                    model would issue. Goes through both
+ *                                    retrieval pipelines unchanged.
+ * @property {string}   category      One of `QUERY_CATEGORIES`. Lets a
+ *                                    measurement consumer stratify by
+ *                                    query shape.
+ * @property {string}   intent        One-line human-readable rationale for
+ *                                    why the query was included in the
+ *                                    corpus. Not machine-consumed.
+ * @property {string[]} expectedPaths Hand-curated ground truth — the
+ *                                    in-repo file paths a knowledgeable
+ *                                    developer would say "yes, that's
+ *                                    where this lives". Drives the
+ *                                    `recall@k` / `precision@k` / `hit@k`
+ *                                    / `MRR` metrics in the comparison
+ *                                    harness (1.5.5 reframe; see
+ *                                    Decision §6 below). Sorted
+ *                                    alphabetically so diffs are minimal
+ *                                    when a path is added / removed.
+ *                                    Length is intentionally variable
+ *                                    (1–7 entries per fixture): some
+ *                                    queries map to one canonical file
+ *                                    (`embeddings-client-location` →
+ *                                    `js/embeddings-client.js`); others
+ *                                    legitimately span a subsystem
+ *                                    (`compression-subsystem` → all
+ *                                    seven `js/intelligence/compression/*`
+ *                                    files).
  */
 
 /**
@@ -169,48 +207,78 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'where is the chat history rendered?',
         category: C.FILE_DISCOVERY,
         intent: 'feature-name → component file lookup',
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/chat/index.js',
+            'js/chat/messages.js',
+            'js/chat/state.js',
+        ],
     },
     {
         id: 'auth-discovery',
         query: 'where is authentication handled for Git providers?',
         category: C.FILE_DISCOVERY,
         intent: 'cross-cutting concern by domain term',
+        expectedPaths: [
+            'js/git-providers/base.js',
+            'js/git-providers/gitea.js',
+            'js/git-providers/github.js',
+            'js/git-providers/gitlab.js',
+            'js/git-providers/registry.js',
+        ],
     },
     {
         id: 'file-tree-component',
         query: 'where is the file tree component?',
         category: C.FILE_DISCOVERY,
         intent: 'UI component by canonical name',
+        expectedPaths: ['js/file-tree.js'],
     },
     {
         id: 'llm-provider-settings',
         query: 'where are LLM provider settings stored?',
         category: C.FILE_DISCOVERY,
         intent: 'state location by data shape',
+        expectedPaths: [
+            'js/core.js',
+            'js/providers/registry.js',
+            'js/settings/llm-tab.js',
+            'js/settings/models-tab.js',
+        ],
     },
     {
         id: 'embeddings-client-location',
         query: 'where does the embeddings client live?',
         category: C.FILE_DISCOVERY,
         intent: 'module location by canonical class name',
+        expectedPaths: [
+            'js/embeddings-client.js',
+            'js/intelligence/retrieval/embedder.js',
+        ],
     },
     {
         id: 'diff-viewer-location',
         query: 'where is the diff viewer?',
         category: C.FILE_DISCOVERY,
         intent: 'UI surface by feature name',
+        expectedPaths: ['js/diff-viewer.js', 'js/secondary-pane.js'],
     },
     {
         id: 'plugin-loader-location',
         query: 'where is the plugin loader?',
         category: C.FILE_DISCOVERY,
         intent: 'subsystem entrypoint by responsibility',
+        // `js/core.js` houses `Plugins.register` (the contract); `js/plugin-loader.js` is the loader itself.
+        expectedPaths: ['js/core.js', 'js/plugin-loader.js'],
     },
     {
         id: 'tool-definitions-registry',
         query: 'where are tool definitions registered?',
         category: C.FILE_DISCOVERY,
         intent: 'registry lookup by purpose',
+        // Two registries: the legacy `js/tools/registry.js` (LLM-tool surface) and the
+        // 1.4.x admission catalog (`js/intelligence/tools/catalog.js`).
+        expectedPaths: ['js/intelligence/tools/catalog.js', 'js/tools/registry.js'],
     },
 
     /* ---------------- function-discovery (~7) ---------------- */
@@ -219,42 +287,68 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'find the function that parses a Git URL',
         category: C.FUNCTION_DISCOVERY,
         intent: 'symbol-level retrieval by behavior',
+        // No standalone `parseGitUrl` exports; URL parsing is embedded in
+        // each provider's connection logic via `new URL(...)` (see
+        // `registry.js:277`). All four providers + the base + registry.
+        expectedPaths: [
+            'js/git-providers/base.js',
+            'js/git-providers/gitea.js',
+            'js/git-providers/github.js',
+            'js/git-providers/gitlab.js',
+            'js/git-providers/registry.js',
+        ],
     },
     {
         id: 'stream-chat-completions',
         query: 'find the function that streams chat completions',
         category: C.FUNCTION_DISCOVERY,
         intent: 'symbol-level retrieval by I/O verb',
+        expectedPaths: ['js/llm/api.js', 'js/llm/completion.js'],
     },
     {
         id: 'compute-chunk-id',
         query: 'find the function that computes ChunkID hashes',
         category: C.FUNCTION_DISCOVERY,
         intent: 'symbol-level retrieval by exact domain term',
+        expectedPaths: ['js/intelligence/retrieval/chunk-id.js'],
     },
     {
         id: 'markdown-to-html',
         query: 'find the function that converts markdown to HTML',
         category: C.FUNCTION_DISCOVERY,
         intent: 'symbol-level retrieval by transformation',
+        // marked + DOMPurify wrappers; conversion happens at multiple
+        // call sites (each module loads marked locally).
+        expectedPaths: [
+            'js/help/markdown-loader.js',
+            'js/markdown-modal.js',
+            'js/secondary-pane.js',
+        ],
     },
     {
         id: 'mount-settings-sidebar',
         query: 'find the function that mounts the settings sidebar',
         category: C.FUNCTION_DISCOVERY,
         intent: 'lifecycle hook by UI surface',
+        expectedPaths: ['js/settings-manager.js'],
     },
     {
         id: 'eventbus-emit',
         query: 'find the function that emits events on the eventbus',
         category: C.FUNCTION_DISCOVERY,
         intent: 'pub/sub primitive by name',
+        // EventBus object literal defined at `js/core.js:179`.
+        expectedPaths: ['js/core.js'],
     },
     {
         id: 'fetch-embeddings',
         query: 'find the function that fetches embeddings',
         category: C.FUNCTION_DISCOVERY,
         intent: 'IO function by domain term',
+        expectedPaths: [
+            'js/embeddings-client.js',
+            'js/intelligence/retrieval/embedder.js',
+        ],
     },
 
     /* ---------------- topic (~7) ---------------- */
@@ -263,42 +357,89 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'how does rate limiting work?',
         category: C.TOPIC,
         intent: 'thematic with no exact keyword in code',
+        // No "RateLimiter" class; rate limiting is the venice-billing plugin's
+        // 429 back-off + the generic retry helper + provider wiring.
+        expectedPaths: [
+            'js/llm/api.js',
+            'js/providers/venice.js',
+            'js/retry.js',
+            'plugins/venice-billing.js',
+        ],
     },
     {
         id: 'memory-consent-flow',
         query: 'how does memory consent flow work?',
         category: C.TOPIC,
         intent: 'multi-step flow spanning multiple files',
+        expectedPaths: [
+            'js/chat/consent-card.js',
+            'js/chat/handlers.js',
+            'js/intelligence/memory/consent-queue.js',
+            'js/intelligence/memory/index.js',
+            'js/intelligence/memory/store.js',
+        ],
     },
     {
         id: 'compression-subsystem',
         query: 'how does the compression subsystem work?',
         category: C.TOPIC,
         intent: 'subsystem-level walkthrough',
+        expectedPaths: [
+            'js/intelligence/compression/compactor.js',
+            'js/intelligence/compression/decisions.js',
+            'js/intelligence/compression/index.js',
+            'js/intelligence/compression/rules/invalidation.js',
+            'js/intelligence/compression/rules/subsumption.js',
+            'js/intelligence/compression/rules/summarization.js',
+            'js/intelligence/compression/tokens.js',
+        ],
     },
     {
         id: 'tool-admission-flow',
         query: 'how does tool admission work?',
         category: C.TOPIC,
         intent: 'subsystem-level walkthrough by domain term',
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/chat/task-state.js',
+            'js/intelligence/tools/composer.js',
+            'js/intelligence/tools/index.js',
+            'js/profiles/task-ledger.js',
+        ],
     },
     {
         id: 'task-state-across-turns',
         query: 'how is task state tracked across turns?',
         category: C.TOPIC,
         intent: 'state-machine walkthrough',
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/chat/task-state.js',
+            'js/profiles/task-ledger.js',
+        ],
     },
     {
         id: 'plugins-register-hooks',
         query: 'how do plugins register hooks?',
         category: C.TOPIC,
         intent: 'plugin API by mechanism',
+        expectedPaths: [
+            'docs/PLUGIN.md',
+            'js/core.js',
+            'js/plugin-loader.js',
+            'js/tools/plugin-tools.js',
+            'plugins/venice-ai.js',
+        ],
     },
     {
         id: 'multi-tab-storage-isolation',
         query: 'how does multi-tab storage isolation work?',
         category: C.TOPIC,
         intent: 'cross-cutting infra topic',
+        // TODO(jeff): `js/tab-manager.js` has cross-tab broadcast hooks but
+        // the core State namespacing per tab lives in `js/core.js`'s Storage
+        // wrapper. Verify if `tab-manager.js` should also be on this list.
+        expectedPaths: ['js/core.js', 'js/storage/idb.js'],
     },
 
     /* ---------------- bug-investigation (~7) ---------------- */
@@ -307,42 +448,86 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'what handles a 429 response from Venice?',
         category: C.BUG_INVESTIGATION,
         intent: 'mixed: provider name + HTTP status + error path',
+        expectedPaths: ['js/llm/api.js', 'js/providers/venice.js', 'js/retry.js'],
     },
     {
         id: 'chat-scroll-on-send',
         query: 'what causes the chat panel to scroll on send?',
         category: C.BUG_INVESTIGATION,
         intent: 'UI behavior under specific event',
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/chat/index.js',
+            'js/chat/messages.js',
+        ],
     },
     {
         id: 'embedder-skip-large-files',
         query: 'why might the embedder skip large files?',
         category: C.BUG_INVESTIGATION,
         intent: 'guard / ceiling logic by symptom',
+        // Legacy file-level size limit lives at `js/context-manager.js:27`
+        // (`MAX_INDEX_SIZE: 250_000`). The new pipeline's embedder + ingest
+        // controller surface chunk-level skip logic.
+        expectedPaths: [
+            'js/context-manager.js',
+            'js/intelligence/retrieval/embedder.js',
+            'js/intelligence/retrieval/ingest-controller.js',
+        ],
     },
     {
         id: 'git-push-conflict',
         query: 'what happens when Git push fails with a conflict?',
         category: C.BUG_INVESTIGATION,
         intent: 'error path through provider abstraction',
+        expectedPaths: [
+            'js/git-providers/base.js',
+            'js/git-providers/gitea.js',
+            'js/git-providers/github.js',
+            'js/git-providers/gitlab.js',
+            'js/git.js',
+        ],
     },
     {
         id: 'tool-invocation-timeout',
         query: 'what handles tool invocation timeouts?',
         category: C.BUG_INVESTIGATION,
         intent: 'timeout / abort path by feature',
+        // TODO(jeff): tool-call timeout vs the LLM idle timeout are
+        // overlapping but distinct paths; `js/llm/api.js` owns the
+        // idle timeout, `js/chat/handlers.js` orchestrates tool calls,
+        // and the per-tool defaults live in `js/core.js`. Verify if
+        // any test-loop / orchestrator file belongs here too.
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/core.js',
+            'js/llm/api.js',
+        ],
     },
     {
         id: 'session-replay-rendering',
         query: 'what renders the session replay viewer?',
         category: C.BUG_INVESTIGATION,
         intent: 'specific UI surface by canonical feature name',
+        expectedPaths: [
+            'js/chat/export.js',
+            'js/chat/replay.js',
+            'js/chat/sessions-sync.js',
+        ],
     },
     {
         id: 'idle-timeout-vs-wallclock',
         query: 'why did we switch from wall-clock to idle LLM timeout?',
         category: C.BUG_INVESTIGATION,
         intent: 'historical decision rationale by outcome',
+        // TODO(jeff): the historical "why" lives in CHANGELOG; for
+        // retrieval ground truth I focus on the implementing files +
+        // the regression test that pins the new behavior.
+        expectedPaths: [
+            'js/core.js',
+            'js/llm/api.js',
+            'tests/test-llm-idle-timeout.mjs',
+        ],
     },
 
     /* ---------------- onboarding (~7) ---------------- */
@@ -351,42 +536,85 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'how do I add a new LLM provider?',
         category: C.ONBOARDING,
         intent: 'extension-point walkthrough by surface',
+        // Index, registry, one example provider, and the settings tab.
+        expectedPaths: [
+            'js/providers/index.js',
+            'js/providers/openrouter.js',
+            'js/providers/registry.js',
+            'js/settings/llm-tab.js',
+        ],
     },
     {
         id: 'add-git-provider',
         query: 'how do I add a new Git provider?',
         category: C.ONBOARDING,
         intent: 'extension-point walkthrough by surface',
+        expectedPaths: [
+            'js/git-providers/base.js',
+            'js/git-providers/index.js',
+            'js/git-providers/registry.js',
+            'js/settings/connections-tab.js',
+        ],
     },
     {
         id: 'write-new-plugin',
         query: 'how do I write a new plugin?',
         category: C.ONBOARDING,
         intent: 'top-level extension-author entrypoint',
+        expectedPaths: [
+            'docs/PLUGIN.md',
+            'js/core.js',
+            'js/plugin-loader.js',
+            'plugins/venice-ai.js',
+        ],
     },
     {
         id: 'add-new-chunker',
         query: 'how do I add a new chunker?',
         category: C.ONBOARDING,
         intent: 'subsystem-internal extension-point walkthrough',
+        expectedPaths: [
+            'js/intelligence/retrieval/chunkers/code-chunker.js',
+            'js/intelligence/retrieval/chunkers/prose-chunker.js',
+            'js/intelligence/retrieval/index.js',
+            'js/intelligence/retrieval/pipeline.js',
+        ],
     },
     {
         id: 'add-new-role',
         query: 'how do I add a new role?',
         category: C.ONBOARDING,
         intent: 'configuration-surface extension-point',
+        // BUILTIN_ROLES live in `js/core.js`; per-role tool gates live in
+        // the registry; the Settings → Roles tab edits the live set.
+        expectedPaths: [
+            'js/core.js',
+            'js/settings/roles-tab.js',
+            'js/tools/registry.js',
+        ],
     },
     {
         id: 'custom-keybinding',
         query: 'how do I add a custom keybinding?',
         category: C.ONBOARDING,
         intent: 'user-facing customization walkthrough',
+        expectedPaths: [
+            'js/app.js',
+            'js/editor/instance.js',
+            'js/help/hotkey-registry.js',
+            'js/help/kbd.js',
+        ],
     },
     {
         id: 'register-mcp-server',
         query: 'how do I register an MCP server?',
         category: C.ONBOARDING,
         intent: 'plugin-API extension-point by canonical name',
+        expectedPaths: [
+            'js/core.js',
+            'js/mcp/registry.js',
+            'js/settings/mcp-servers-tab.js',
+        ],
     },
 
     /* ---------------- task-related (~6) ---------------- */
@@ -395,36 +623,70 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'files I would touch to add a new chunker',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by intent',
+        // Differs from `add-new-chunker` (onboarding) by including the
+        // wiring file (`wiring.js`) since "touching" implies registration.
+        expectedPaths: [
+            'js/intelligence/retrieval/chunkers/code-chunker.js',
+            'js/intelligence/retrieval/index.js',
+            'js/intelligence/retrieval/pipeline.js',
+            'js/intelligence/retrieval/wiring.js',
+        ],
     },
     {
         id: 'files-wire-tool-category',
         query: 'files I would touch to wire a new tool category',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by feature work',
+        expectedPaths: [
+            'js/intelligence/tools/embeddings.js',
+            'js/settings/tools-tab.js',
+            'js/tools/registry.js',
+        ],
     },
     {
         id: 'files-add-settings-tab',
         query: 'files I would touch to add a settings tab',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by UI surface',
+        expectedPaths: [
+            'js/settings-manager.js',
+            'js/settings/connections-tab.js',
+            'js/settings/persistence.js',
+        ],
     },
     {
         id: 'files-ship-memory-scope',
         query: 'files I would touch to ship a new memory scope',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by subsystem extension',
+        expectedPaths: [
+            'js/intelligence/memory/file-layer.js',
+            'js/intelligence/memory/index.js',
+            'js/intelligence/workspace-settings/index.js',
+        ],
     },
     {
         id: 'files-add-embedding-provider',
         query: 'files I would touch to add a new embedding provider',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by provider abstraction',
+        expectedPaths: [
+            'js/embeddings-client.js',
+            'js/intelligence/retrieval/embedder.js',
+            'js/settings/models-tab.js',
+        ],
     },
     {
         id: 'files-add-llm-tool',
         query: 'files I would touch to add a new LLM tool',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by tool registration',
+        expectedPaths: [
+            'js/chat/handlers.js',
+            'js/chat/task-state.js',
+            'js/intelligence/tools/composer.js',
+            'js/tools/registry.js',
+        ],
     },
 ]));
 

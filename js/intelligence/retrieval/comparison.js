@@ -278,11 +278,36 @@ export function normalizeLegacyResult(raw, opts) {
 
 /**
  * Default new-Composer normalizer. Accepts a `RetrievalResult` (the
- * shape `compose()` resolves to per
- * [`contracts.js`](./contracts.js)) and walks `blocks` in `position`
- * order, looking each `chunk_id` up in `chunks_by_id` and pushing
- * unique `metadata.source_uri` values. Dedup'd, attention-ordered,
- * capped at `topK`.
+ * shape `compose()` resolves to per [`contracts.js`](./contracts.js))
+ * and reduces it to a dedup'd `string[]` of `metadata.source_uri`
+ * values, ranked by **best chunk score per source**, capped at `topK`.
+ *
+ * **Composer tuning T2 — source-uri rollup at the normalizer**
+ * (1.5.4-patch baseline run on 2026-05-03 measured `meanAgreement =
+ * 0.2027` against the §1.5.0 ≥0.80 target; one of the named tuning
+ * items in [docs/ROADMAP.md](../../../docs/ROADMAP.md) §"1.5.x —
+ * Retrieval follow-ups"). The previous attachment-order dedup let a
+ * docs file with 20 chunks scoring 0.7 each crowd a code file with
+ * one chunk scoring 0.85 out of the top-K because the docs file's
+ * first chunk was added before the code file's chunk was seen. The
+ * rollup walks every block / chunk first, tracks the **max
+ * `provenance.score` per `source_uri`** (with `firstPosition` as
+ * tiebreak for back-compat), then sorts and truncates.
+ *
+ * Two-pass:
+ *   1. **Collect.** Walk `blocks` in arrival order. For each chunk
+ *      with a valid `metadata.source_uri`, record `firstPosition`
+ *      (the index this URI was first seen at) and `maxScore` (max
+ *      `provenance.score`, treating missing / non-finite as `0`).
+ *   2. **Rank + cap.** Sort by `maxScore` DESC, then `firstPosition`
+ *      ASC; take first `topK`.
+ *
+ * Score-less fixtures (the existing `composerResult([...])` test
+ * helper does not set `provenance.score`) all tie at `maxScore = 0`
+ * and fall back to `firstPosition` — observable behavior matches the
+ * pre-T2 attachment-order dedup. The contract change is "code chunks
+ * with real scores can outrank earlier-positioned prose chunks"; the
+ * change is invisible to callers that don't populate `provenance`.
  *
  * Defensive: a missing / non-object `chunks_by_id`, a missing /
  * non-array `blocks`, a chunk without `metadata.source_uri`, or a
@@ -299,20 +324,20 @@ export function normalizeComposerResult(raw, opts) {
     const blocks = /** @type {any} */ (raw).blocks;
     const chunksById = /** @type {any} */ (raw).chunks_by_id;
     if (!Array.isArray(blocks) || !chunksById || typeof chunksById !== 'object') return [];
-    /** @type {string[]} */
-    const out = [];
-    const seen = new Set();
-    // Stable position-then-index iteration. The Composer assigns
-    // `block.position` ∈ {'head','task','retrieved','history','tail'}; we
-    // honor whatever order the result arrived in (the design's "callers
-    // concatenate by position order" contract is the caller's job, not
-    // the harness's). Within each block, chunks are walked in their
-    // emitted order.
+    /** @type {Map<string, { firstPosition: number, maxScore: number }>} */
+    const perSource = new Map();
+    let position = 0;
+    // Pass 1 — collect per-source max-score + first-position. The
+    // Composer assigns `block.position` ∈
+    // {'head','task','retrieved','history','tail'}; we honor whatever
+    // order the result arrived in (the design's "callers concatenate
+    // by position order" contract is the caller's job, not the
+    // harness's). `position` advances on every visited chunk so ties
+    // on `maxScore` resolve to the order chunks appeared across all
+    // blocks.
     for (const block of blocks) {
-        if (out.length >= topK) break;
         if (!block || !Array.isArray(block.chunks)) continue;
         for (const id of block.chunks) {
-            if (out.length >= topK) break;
             if (typeof id !== 'string' || id.length === 0) continue;
             const chunk = chunksById[id];
             if (!chunk || typeof chunk !== 'object') continue;
@@ -320,10 +345,33 @@ export function normalizeComposerResult(raw, opts) {
             if (!meta || typeof meta !== 'object') continue;
             const uri = meta.source_uri;
             if (typeof uri !== 'string' || uri.length === 0) continue;
-            if (seen.has(uri)) continue;
-            seen.add(uri);
-            out.push(uri);
+            const prov = /** @type {any} */ (chunk).provenance;
+            const rawScore = prov && typeof prov === 'object' ? prov.score : undefined;
+            const score = typeof rawScore === 'number' && Number.isFinite(rawScore) ? rawScore : 0;
+            const existing = perSource.get(uri);
+            if (existing === undefined) {
+                perSource.set(uri, { firstPosition: position, maxScore: score });
+            } else if (score > existing.maxScore) {
+                existing.maxScore = score;
+            }
+            position += 1;
         }
+    }
+    if (perSource.size === 0) return [];
+    // Pass 2 — rank and cap.
+    /** @type {Array<{ uri: string, firstPosition: number, maxScore: number }>} */
+    const entries = [];
+    for (const [uri, rec] of perSource) {
+        entries.push({ uri, firstPosition: rec.firstPosition, maxScore: rec.maxScore });
+    }
+    entries.sort((a, b) => {
+        if (b.maxScore !== a.maxScore) return b.maxScore - a.maxScore;
+        return a.firstPosition - b.firstPosition;
+    });
+    /** @type {string[]} */
+    const out = [];
+    for (let i = 0; i < entries.length && out.length < topK; i++) {
+        out.push(entries[i].uri);
     }
     return out;
 }
@@ -383,6 +431,109 @@ export function precisionAtK(predicted, reference, k) {
         if (refSet.has(p)) hits += 1;
     }
     return hits / k;
+}
+
+/**
+ * Asymmetric recall-at-k: `|Set(predicted ∩ reference)| / |reference|`.
+ * Useful when treating `reference` as a hand-curated ground-truth set
+ * and asking "what fraction of the relevant files landed in the
+ * predicted top-k?". Companion to `precisionAtK` for the 1.5.5
+ * ground-truth measurement reframe — when `reference` is short (1-2
+ * canonical paths), `precisionAtK` is naturally pegged to a low
+ * ceiling (1/k); `recallAtK` reaches 1.0 once all the relevant files
+ * are recovered.
+ *
+ * `k <= 0` → `0`. `predicted` longer than `k` → only the first `k`
+ * (after dedup) are considered. Empty `reference` → `0` (no relevant
+ * set to recall against; semantically: "we can't measure recall
+ * without ground truth"; differs from `precisionAtK`'s convention
+ * because there's no analogous "both-empty agree" case here).
+ *
+ * @param {string[]} predicted
+ * @param {string[]} reference
+ * @param {number} k
+ * @returns {number}
+ */
+export function recallAtK(predicted, reference, k) {
+    if (typeof k !== 'number' || !Number.isFinite(k) || k <= 0) return 0;
+    if (!Array.isArray(predicted) || !Array.isArray(reference)) return 0;
+    if (reference.length === 0) return 0;
+    const refSet = new Set(reference);
+    const seen = new Set();
+    let hits = 0;
+    let considered = 0;
+    for (const p of predicted) {
+        if (considered >= k) break;
+        if (typeof p !== 'string' || seen.has(p)) continue;
+        seen.add(p);
+        considered += 1;
+        if (refSet.has(p)) hits += 1;
+    }
+    return hits / refSet.size;
+}
+
+/**
+ * Hit-at-k: `1` iff at least one entry in `predicted[:k]` is in
+ * `reference`, else `0`. The simplest binary "did the retrieval find
+ * anything correct in the top-k?" signal — useful as a sanity floor
+ * even when `precisionAtK` / `recallAtK` are noisy due to small
+ * reference sets.
+ *
+ * `k <= 0` → `0`. Empty `reference` → `0`.
+ *
+ * @param {string[]} predicted
+ * @param {string[]} reference
+ * @param {number} k
+ * @returns {number}
+ */
+export function hitAtK(predicted, reference, k) {
+    if (typeof k !== 'number' || !Number.isFinite(k) || k <= 0) return 0;
+    if (!Array.isArray(predicted) || !Array.isArray(reference)) return 0;
+    if (reference.length === 0) return 0;
+    const refSet = new Set(reference);
+    const seen = new Set();
+    let considered = 0;
+    for (const p of predicted) {
+        if (considered >= k) break;
+        if (typeof p !== 'string' || seen.has(p)) continue;
+        seen.add(p);
+        considered += 1;
+        if (refSet.has(p)) return 1;
+    }
+    return 0;
+}
+
+/**
+ * Reciprocal rank of the first `predicted` entry in `reference`,
+ * capped at rank `k` (`1 / rank`, rank ∈ {1, …, k}). The "good
+ * ranking" signal: a top-1 hit scores `1.0`; a top-5 hit scores
+ * `0.2`; no hit in the top-`k` scores `0`. Mean across queries is
+ * the standard MRR aggregate.
+ *
+ * `k <= 0` → `0`. Empty `reference` → `0`. Dedup is applied to
+ * `predicted` before counting positions (so a duplicate URI doesn't
+ * shift the rank).
+ *
+ * @param {string[]} predicted
+ * @param {string[]} reference
+ * @param {number} k
+ * @returns {number}
+ */
+export function reciprocalRankAtK(predicted, reference, k) {
+    if (typeof k !== 'number' || !Number.isFinite(k) || k <= 0) return 0;
+    if (!Array.isArray(predicted) || !Array.isArray(reference)) return 0;
+    if (reference.length === 0) return 0;
+    const refSet = new Set(reference);
+    const seen = new Set();
+    let rank = 0;
+    for (const p of predicted) {
+        if (rank >= k) break;
+        if (typeof p !== 'string' || seen.has(p)) continue;
+        seen.add(p);
+        rank += 1;
+        if (refSet.has(p)) return 1 / rank;
+    }
+    return 0;
 }
 
 /**
@@ -480,8 +631,27 @@ export function createComparisonHarness(options) {
     let batches = 0;
 
     /**
+     * Score one pipeline's paths against a ground-truth reference. Returns
+     * `null` when paths are null (runner errored). Used for the 1.5.5
+     * ground-truth metrics computed from `opts.expectedPaths`.
+     *
+     * @param {string[]|null} paths
+     * @param {string[]|null} expected
+     * @returns {import('./contracts.js').GroundTruthScores|null}
+     */
+    function scoreAgainstGroundTruth(paths, expected) {
+        if (paths === null || expected === null) return null;
+        return {
+            precisionAt5: precisionAtK(paths, expected, 5),
+            recallAt5: recallAtK(paths, expected, 5),
+            hitAt5: hitAtK(paths, expected, 5),
+            mrr: reciprocalRankAtK(paths, expected, 5),
+        };
+    }
+
+    /**
      * @param {string} query
-     * @param {{ topK?: number }} [opts]
+     * @param {{ topK?: number, expectedPaths?: string[]|null, category?: string|null }} [opts]
      * @returns {Promise<ComparisonResult>}
      */
     async function compare(query, opts) {
@@ -493,6 +663,26 @@ export function createComparisonHarness(options) {
             throw new TypeError(
                 'ComparisonHarness.compare: opts.topK must be a positive integer when provided',
             );
+        }
+        /** @type {string[]|null} */
+        let expectedPaths = null;
+        if (opts && opts.expectedPaths !== undefined && opts.expectedPaths !== null) {
+            if (!Array.isArray(opts.expectedPaths)) {
+                throw new TypeError(
+                    'ComparisonHarness.compare: opts.expectedPaths must be an array of strings or null',
+                );
+            }
+            expectedPaths = opts.expectedPaths;
+        }
+        /** @type {string|null} */
+        let category = null;
+        if (opts && opts.category !== undefined && opts.category !== null) {
+            if (typeof opts.category !== 'string') {
+                throw new TypeError(
+                    'ComparisonHarness.compare: opts.category must be a string or null',
+                );
+            }
+            category = opts.category;
         }
 
         const startedAt = clock();
@@ -538,6 +728,9 @@ export function createComparisonHarness(options) {
             }
         }
 
+        const legacyGroundTruth = scoreAgainstGroundTruth(legacyPaths, expectedPaths);
+        const newGroundTruth = scoreAgainstGroundTruth(newPaths, expectedPaths);
+
         const endedAt = clock();
         return {
             query,
@@ -547,11 +740,118 @@ export function createComparisonHarness(options) {
             newError,
             agreement,
             durationMs: Math.max(0, endedAt - startedAt),
+            expectedPaths,
+            category,
+            legacyGroundTruth,
+            newGroundTruth,
         };
     }
 
     /**
-     * @param {Iterable<string>|AsyncIterable<string>} queries
+     * Coerce a `compareBatch` input item to a normalized
+     * `{ query, expectedPaths, category }` triple. Strings stay
+     * back-compatible (no ground truth, no category). Objects must
+     * carry `query: string` and may carry optional
+     * `expectedPaths: string[]` / `category: string`.
+     *
+     * @param {unknown} item
+     * @returns {{ query: string, expectedPaths: string[]|null, category: string|null }}
+     */
+    function normalizeBatchItem(item) {
+        if (typeof item === 'string') {
+            return { query: item, expectedPaths: null, category: null };
+        }
+        if (item && typeof item === 'object') {
+            const obj = /** @type {any} */ (item);
+            if (typeof obj.query !== 'string') {
+                throw new TypeError(
+                    'ComparisonHarness.compareBatch: fixture object must have a string `query`',
+                );
+            }
+            const ep = obj.expectedPaths;
+            if (ep !== undefined && ep !== null && !Array.isArray(ep)) {
+                throw new TypeError(
+                    'ComparisonHarness.compareBatch: fixture `expectedPaths` must be an array or null',
+                );
+            }
+            const cat = obj.category;
+            if (cat !== undefined && cat !== null && typeof cat !== 'string') {
+                throw new TypeError(
+                    'ComparisonHarness.compareBatch: fixture `category` must be a string or null',
+                );
+            }
+            return {
+                query: obj.query,
+                expectedPaths: Array.isArray(ep) ? ep : null,
+                category: typeof cat === 'string' ? cat : null,
+            };
+        }
+        throw new TypeError(
+            `ComparisonHarness.compareBatch: items must be strings or { query, expectedPaths?, category? } objects (got ${typeof item})`,
+        );
+    }
+
+    /**
+     * Aggregator for ground-truth scores across a batch. Sums per
+     * metric, counts non-null contributions, then divides at the end.
+     * Tracks both an overall pool and an optional per-category pool.
+     *
+     * @returns {{
+     *   add: (gt: import('./contracts.js').GroundTruthScores|null, category: string|null) => void,
+     *   finalizeOverall: () => import('./contracts.js').GroundTruthAggregate|null,
+     *   finalizeByCategory: () => import('./contracts.js').GroundTruthByCategory,
+     * }}
+     */
+    function makeGroundTruthAggregator() {
+        const overall = { p: 0, r: 0, h: 0, m: 0, n: 0 };
+        /** @type {Object<string, { p: number, r: number, h: number, m: number, n: number }>} */
+        const byCat = {};
+        return {
+            add(gt, category) {
+                if (gt === null) return;
+                overall.p += gt.precisionAt5 ?? 0;
+                overall.r += gt.recallAt5 ?? 0;
+                overall.h += gt.hitAt5 ?? 0;
+                overall.m += gt.mrr ?? 0;
+                overall.n += 1;
+                if (category) {
+                    if (!byCat[category]) byCat[category] = { p: 0, r: 0, h: 0, m: 0, n: 0 };
+                    byCat[category].p += gt.precisionAt5 ?? 0;
+                    byCat[category].r += gt.recallAt5 ?? 0;
+                    byCat[category].h += gt.hitAt5 ?? 0;
+                    byCat[category].m += gt.mrr ?? 0;
+                    byCat[category].n += 1;
+                }
+            },
+            finalizeOverall() {
+                if (overall.n === 0) return null;
+                return {
+                    meanPrecisionAt5: overall.p / overall.n,
+                    meanRecallAt5: overall.r / overall.n,
+                    meanHitAt5: overall.h / overall.n,
+                    meanMRR: overall.m / overall.n,
+                    sampleCount: overall.n,
+                };
+            },
+            finalizeByCategory() {
+                /** @type {import('./contracts.js').GroundTruthByCategory} */
+                const out = {};
+                for (const [cat, sums] of Object.entries(byCat)) {
+                    out[cat] = {
+                        meanPrecisionAt5: sums.p / sums.n,
+                        meanRecallAt5: sums.r / sums.n,
+                        meanHitAt5: sums.h / sums.n,
+                        meanMRR: sums.m / sums.n,
+                        sampleCount: sums.n,
+                    };
+                }
+                return out;
+            },
+        };
+    }
+
+    /**
+     * @param {Iterable<string|{query: string, expectedPaths?: string[]|null, category?: string|null}>|AsyncIterable<string|{query: string, expectedPaths?: string[]|null, category?: string|null}>} queries
      * @param {ComparisonBatchOptions} [opts]
      * @returns {Promise<ComparisonReport>}
      */
@@ -571,20 +871,20 @@ export function createComparisonHarness(options) {
 
         /** @type {number} */
         let knownTotal;
-        /** @type {AsyncIterator<string>} */
+        /** @type {AsyncIterator<unknown>} */
         let iter;
         if (Array.isArray(queries)) {
             knownTotal = queries.length;
             iter = syncToAsyncIterator(queries);
         } else if (isAsyncIterable(queries)) {
             knownTotal = -1;
-            iter = /** @type {AsyncIterable<string>} */ (queries)[Symbol.asyncIterator]();
+            iter = /** @type {AsyncIterable<unknown>} */ (queries)[Symbol.asyncIterator]();
         } else if (isSyncIterable(queries)) {
             knownTotal = -1;
-            iter = syncToAsyncIterator(/** @type {Iterable<string>} */ (queries));
+            iter = syncToAsyncIterator(/** @type {Iterable<unknown>} */ (queries));
         } else {
             throw new TypeError(
-                'ComparisonHarness.compareBatch: queries must be an Iterable or AsyncIterable of strings',
+                'ComparisonHarness.compareBatch: queries must be an Iterable or AsyncIterable',
             );
         }
 
@@ -598,17 +898,18 @@ export function createComparisonHarness(options) {
         let agreementCount = 0;
         const histogram = emptyHistogram();
         let dispatched = 0;
+        const legacyAgg = makeGroundTruthAggregator();
+        const newAgg = makeGroundTruthAggregator();
 
         while (true) {
             const next = await iter.next();
             if (next.done) break;
-            const q = next.value;
-            if (typeof q !== 'string') {
-                throw new TypeError(
-                    `ComparisonHarness.compareBatch: queries must be strings (got ${typeof q})`,
-                );
-            }
-            const result = await compare(q, { topK: batchK });
+            const item = normalizeBatchItem(next.value);
+            const result = await compare(item.query, {
+                topK: batchK,
+                expectedPaths: item.expectedPaths,
+                category: item.category,
+            });
             perQuery.push(result);
             if (result.legacyError) legacyFailures += 1;
             if (result.newError) newFailures += 1;
@@ -617,6 +918,8 @@ export function createComparisonHarness(options) {
                 agreementCount += 1;
                 histogram[bucketFor(result.agreement)] += 1;
             }
+            legacyAgg.add(result.legacyGroundTruth, result.category);
+            newAgg.add(result.newGroundTruth, result.category);
             dispatched += 1;
             if (onProgress) {
                 try {
@@ -636,6 +939,10 @@ export function createComparisonHarness(options) {
             legacyFailures,
             newFailures,
             durationMs: Math.max(0, endedAt - startedAt),
+            legacyGroundTruth: legacyAgg.finalizeOverall(),
+            newGroundTruth: newAgg.finalizeOverall(),
+            legacyByCategory: legacyAgg.finalizeByCategory(),
+            newByCategory: newAgg.finalizeByCategory(),
         };
     }
 

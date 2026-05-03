@@ -30,7 +30,10 @@
  *   - `ingest(opts?: { signal? }) => Promise<WalkResult>` — drives the
  *     production walker over the supplied `sourceUris`.
  *   - `run(opts?: { topK?, onProgress?, signal? }) => Promise<ComparisonReport>` —
- *     drives `compareBatch(QUERY_CORPUS)` through both runners.
+ *     drives `compareBatch(DEFAULT_BATCH_FIXTURES)` (the
+ *     `{query, expectedPaths, category}` shape from `QUERY_FIXTURES`)
+ *     through both runners. Pass `queries: QUERY_CORPUS` for the
+ *     pre-1.5.5 string-only / agreement-only behavior.
  *   - `runner.legacy(query)` / `runner.compose(query)` — exposed for ad-hoc
  *     inspection and for callers that want to per-query inspect a single
  *     pipeline without running the full corpus.
@@ -58,7 +61,9 @@
  *      legal but the in-memory store will already be populated; the
  *      controller's `noop` short-circuit handles re-ingest correctly per
  *      the design's incremental-ingest pseudocode.
- *   7. `run()` calls `comparison.compareBatch(QUERY_CORPUS, opts)`.
+ *   7. `run()` calls `comparison.compareBatch(DEFAULT_BATCH_FIXTURES, opts)`
+ *      so each query's hand-curated `expectedPaths` reaches the harness
+ *      and the per-pipeline ground-truth metrics aggregate per category.
  *
  * **Phase-1 scope decisions** (called out so future readers don't have to
  * reverse-engineer them from behavior):
@@ -79,10 +84,19 @@
  *      `history_reserve: 0` so the full budget is retrieval. Caller can
  *      override every field via `composerBudget`.
  *
- *   3. **No history / pins / ledger / filters in the request.** The
- *      measurement compares pure retrieval shapes. A future per-query
- *      stratification (per-category ledger, per-fixture filters) is the
- *      browser runner's concern; the factory stays minimal.
+ *   3. **Default `filters` excludes prose (Composer tuning T1).** The
+ *      1.5.4-patch baseline run on 2026-05-03 measured `meanAgreement =
+ *      0.2027` against the §1.5.0 ≥0.80 target; the divergence pattern
+ *      was the new chunk-level pipeline over-preferring `docs/*.md` and
+ *      `html/*.html` (each emitting ~20 well-scoring prose chunks) over
+ *      implementation files. T1 ships a default content-type accept-list
+ *      (`['code', 'conversation', 'structured', 'spec']`) on
+ *      `req.filters` — Semantic's `applyMetadataFilter` already honors
+ *      it, so the change is one line at the request-construction site.
+ *      Callers can pass `composeFilters: null` to restore pre-T1
+ *      behavior, or pass an explicit `MetadataFilter` for T3-style
+ *      per-category experimentation. History / pins / ledger / hints
+ *      remain pure retrieval shapes — those stay null.
  *
  *   4. **Same `topK` across both runners.** The legacy `findRelevantFiles`
  *      takes `topK` directly; the new pipeline returns up to
@@ -137,7 +151,29 @@ import { createSemanticStrategy } from './strategies/semantic.js';
 import { createStructuralStrategy } from './strategies/structural.js';
 import { compose } from './composer.js';
 import { createComparisonHarness } from './comparison.js';
-import { QUERY_CORPUS } from './test-corpus.js';
+import { QUERY_CORPUS, QUERY_FIXTURES } from './test-corpus.js';
+
+/**
+ * Default batch input for `harness.run()` — the richer
+ * `{query, expectedPaths, category}` shape from `QUERY_FIXTURES` so
+ * the comparison harness computes per-pipeline ground-truth metrics
+ * (precision/recall/hit/MRR @5) and per-category aggregates against
+ * the curated reference set. Drives the §1.5.0 exit criterion at
+ * 1.5.5+ (`mean recall@5 ≥ 0.80`). Callers wanting the pre-1.5.5
+ * agreement-only behavior can pass `queries: QUERY_CORPUS` (flat
+ * strings, no ground truth) explicitly via `run({ queries })`.
+ *
+ * Frozen at module load.
+ *
+ * @type {ReadonlyArray<{ query: string, expectedPaths: string[], category: string }>}
+ */
+const DEFAULT_BATCH_FIXTURES = Object.freeze(
+    QUERY_FIXTURES.map((f) => Object.freeze({
+        query: f.query,
+        expectedPaths: f.expectedPaths,
+        category: f.category,
+    })),
+);
 
 /**
  * @typedef {import('./contracts.js').Project} Project
@@ -172,6 +208,20 @@ const DEFAULT_COMPOSER_BUDGET = Object.freeze({
 
 const DEFAULT_TOP_K = 5;
 const DEFAULT_COLLECTION = 'default';
+
+/**
+ * Composer tuning T1 — default content-type accept-list passed as
+ * `req.filters.content_types`. Excludes `'prose'` (per the 1.5.4-patch
+ * divergence pattern: docs/HTML files dominate the new pipeline's top-K
+ * because each emits ~20 well-scoring chunks). Frozen to prevent caller
+ * mutation; callers wanting a different filter pass `composeFilters`
+ * explicitly (or `null` to restore pre-T1 behavior).
+ *
+ * @type {import('./contracts.js').MetadataFilter}
+ */
+const DEFAULT_COMPOSE_FILTERS = Object.freeze({
+    content_types: Object.freeze(['code', 'conversation', 'structured', 'spec']),
+});
 
 /**
  * The narrow `ContextManager` surface the harness needs. Lifted into a
@@ -236,6 +286,14 @@ const DEFAULT_COLLECTION = 'default';
  *   inside `createProductionIngestWalker`.
  * @property {((source_uri: string) => (string|null))|undefined} [contentTypeOverride]
  *   Optional. Threaded to the loader.
+ * @property {import('./contracts.js').MetadataFilter|null|undefined} [composeFilters]
+ *   Optional. Threaded to the new pipeline as `RetrievalRequest.filters`
+ *   on every `runCompose(query)` invocation. Defaults to a content-type
+ *   accept-list excluding `'prose'` (Composer tuning T1, see
+ *   "Phase-1 scope decisions" §3 above). Pass `null` to restore the
+ *   pre-T1 behavior of `filters: null`. Pass an explicit `MetadataFilter`
+ *   for ad-hoc experimentation (T3 intent-aware filtering will plumb
+ *   through this same knob from the browser runner).
  * @property {AbortSignal|undefined} [signal]
  *   Optional. A pre-aborted signal supplied here is honored at
  *   construction time — `ingest()` will return immediately with a
@@ -295,6 +353,7 @@ function validateOptions(options) {
         concurrency,
         onIngestProgress,
         contentTypeOverride,
+        composeFilters,
     } = options;
 
     if (!Git || typeof Git.getFile !== 'function') {
@@ -391,6 +450,19 @@ function validateOptions(options) {
             'createMeasurementHarness: contentTypeOverride must be a function when provided',
         );
     }
+    if (composeFilters !== undefined && composeFilters !== null) {
+        if (typeof composeFilters !== 'object') {
+            throw new TypeError(
+                'createMeasurementHarness: composeFilters must be a MetadataFilter object, null, or undefined',
+            );
+        }
+        const ct = /** @type {any} */ (composeFilters).content_types;
+        if (ct !== undefined && !Array.isArray(ct)) {
+            throw new TypeError(
+                'createMeasurementHarness: composeFilters.content_types must be an array when provided',
+            );
+        }
+    }
 }
 
 /**
@@ -418,10 +490,14 @@ export async function createMeasurementHarness(options) {
         onIngestProgress,
         store: storeOverride,
         contentTypeOverride,
+        composeFilters,
     } = options;
 
     const finalTopK = topK ?? DEFAULT_TOP_K;
     const finalCollection = collection ?? DEFAULT_COLLECTION;
+    const finalComposeFilters = composeFilters === undefined
+        ? DEFAULT_COMPOSE_FILTERS
+        : composeFilters;
     const finalBudget = {
         total_tokens: composerBudget && typeof composerBudget.total_tokens === 'number'
             ? composerBudget.total_tokens : DEFAULT_COMPOSER_BUDGET.total_tokens,
@@ -468,7 +544,7 @@ export async function createMeasurementHarness(options) {
             collections: [finalCollection],
             budget: finalBudget,
             history: null,
-            filters: null,
+            filters: finalComposeFilters,
             strategy_hints: null,
             priority_pins: null,
             task_ledger: null,
@@ -497,7 +573,7 @@ export async function createMeasurementHarness(options) {
             return walker.walk(sourceUris, signal ? { signal } : undefined);
         },
         async run(opts) {
-            const queries = opts && opts.queries !== undefined ? opts.queries : QUERY_CORPUS;
+            const queries = opts && opts.queries !== undefined ? opts.queries : DEFAULT_BATCH_FIXTURES;
             /** @type {{ topK?: number, onProgress?: (done: number, total: number, latest: import('./contracts.js').ComparisonResult) => void }} */
             const batchOpts = {};
             if (opts && opts.topK !== undefined) batchOpts.topK = opts.topK;
