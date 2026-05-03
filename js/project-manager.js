@@ -187,7 +187,37 @@ export async function onProjectChange(e) {
 
 export async function onBranchChange(e) {
     const previousBranch = State.currentBranch;
-    State.currentBranch = e.target.value;
+    const newBranch = e.target.value;
+    
+    // Check for dirty tabs before switching branches
+    const dirtyTabs = State.openTabs.filter(t => t.dirty);
+    if (dirtyTabs.length > 0) {
+        const { showConfirm } = await import('./ui/dialogs.js');
+        const fileNames = dirtyTabs.map(t => t.path.split('/').pop()).join(', ');
+        const confirmed = await showConfirm(
+            `You have unsaved changes in: ${fileNames}\n\nWhat would you like to do?`,
+            {
+                title: 'Unsaved Changes',
+                okLabel: 'Discard & Switch',
+                cancelLabel: 'Cancel',
+                variant: 'danger',
+            }
+        );
+        if (!confirmed) {
+            // Cancel — revert the branch select back to previous branch
+            e.target.value = previousBranch;
+            return;
+        }
+        // User chose to discard — clear drafts from storage for the old branch
+        if (State.currentProject) {
+            const { owner, repo } = State.currentProject;
+            for (const tab of dirtyTabs) {
+                Storage.clearDraft(owner, repo, previousBranch, tab.path);
+            }
+        }
+    }
+
+    State.currentBranch = newBranch;
     
     // Clear active issue if switching away from its branch
     if (State.currentIssue && State.currentBranch !== State.currentIssue.branch) {
