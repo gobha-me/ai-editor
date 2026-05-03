@@ -4,6 +4,25 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Notes
+
+- **Retrieval Phase 1 §1.5.4-patch — canonical legacy-vs-new agreement run
+  completed 2026-05-03.** Run against this repo using
+  `jinaai/jina-embeddings-v2-base-code` via the in-cluster embedder service
+  (the bottleneck unblock that gated 1.5.4-patch since 2026-05-02). 4474
+  chunks across 427 sources, 0 ingest failures, 0 runner failures (legacy
+  + new), ~12.5 min walk. **`meanAgreement = 0.2027`** over the 42-query
+  corpus — well below the §1.5.0 ≥0.80 exit-criterion target. Pattern
+  identified across the lowest-agreement queries: the new pipeline
+  over-prefers `docs/*.md` and `html/*.html` over implementation files.
+  Per-category breakdown + observed-pattern analysis + four named
+  Composer-tuning items (T1–T4) queued in
+  [`docs/ROADMAP.md`](docs/ROADMAP.md) §"1.5.x — Retrieval follow-ups";
+  raw report archived at
+  [`docs/measurements/2026-05-03-retrieval-agreement.json`](docs/measurements/2026-05-03-retrieval-agreement.json).
+  No version bump — this is bookkeeping that closes the §1.5.4-patch
+  roadmap entry; the first tuning PR claims the next version slot.
+
 ## [1.5.4] - 2026-05-02
 
 **Retrieval Phase 1 — ≥80% legacy-vs-new agreement measurement run (PR 20 of
