@@ -239,6 +239,7 @@ export function applyMetadataFilter(chunks, filter) {
         if (customPreds) {
             let pass = true;
             for (const key of Object.keys(customPreds)) {
+                if (CUSTOM_NON_PREDICATE_KEYS.has(key)) continue;
                 const want = customPreds[key];
                 const got = c.metadata.custom ? c.metadata.custom[key] : undefined;
                 if (typeof want === 'function') {
@@ -252,6 +253,101 @@ export function applyMetadataFilter(chunks, filter) {
         accept.push(c);
     }
     return accept;
+}
+
+/**
+ * Sub-keys of `MetadataFilter.custom` that are *not* predicates against
+ * `chunk.metadata.custom[key]` and must be skipped during admission. The
+ * Semantic strategy consumes them at other lifecycle points (currently
+ * `score_weights` post-rank in `applyScoreWeights`); without this skip,
+ * `applyMetadataFilter` would interpret e.g. the `score_weights` map as
+ * a predicate and reject every chunk that lacks `metadata.custom.score_weights`
+ * (which is every chunk).
+ *
+ * @type {Set<string>}
+ */
+const CUSTOM_NON_PREDICATE_KEYS = new Set(['score_weights']);
+
+/**
+ * Composer tuning T5 (1.5.8) — apply per-axis score multipliers to a
+ * pre-scored list of `{chunk, score}` pairs and return a fresh array
+ * **sorted by weighted score (descending)**.
+ *
+ * Two axes, composed multiplicatively per-chunk:
+ *   - `weights.content_types[chunk.metadata.content_type]` — accept-list
+ *     style lookup against `Metadata.content_type`.
+ *   - `weights.prefixes` — longest matching prefix wins against
+ *     `Metadata.source_uri` (so `js/intelligence/` overrides `js/`).
+ *
+ * Missing weight entries default to `1.0`, so omitting either map (or
+ * the whole `weights` arg) disables that axis cleanly without mutating
+ * scores. Weight values that aren't finite numbers are treated as `1.0`
+ * (forgiving rather than strict — matches the `MetadataFilter.custom`
+ * "opaque to retrieval" convention).
+ *
+ * Applied **post-rank, pre-truncation** by every Semantic path
+ * (`pureBM25Path`, `hybridPath`, `pureCosinePath`); the helper returns
+ * a fresh array and sorts by the post-multiplier score so weighting can
+ * promote a lower-ranked chunk into the top quota. Cannot resurrect
+ * chunks already excluded by `applyMetadataFilter` or absent from the
+ * cosine candidate pool — weighting only re-orders within whatever the
+ * upstream retrieval admitted.
+ *
+ * @param {Array<{chunk: ChunkRef, score: number}>} scored
+ * @param {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null|undefined} weights
+ * @returns {Array<{chunk: ChunkRef, score: number}>}
+ */
+export function applyScoreWeights(scored, weights) {
+    const out = scored.slice();
+    if (!weights || typeof weights !== 'object') {
+        out.sort((a, b) => b.score - a.score);
+        return out;
+    }
+    const ctMap = (weights.content_types && typeof weights.content_types === 'object')
+        ? weights.content_types
+        : null;
+    const prefixMap = (weights.prefixes && typeof weights.prefixes === 'object')
+        ? weights.prefixes
+        : null;
+    const sortedPrefixes = prefixMap
+        ? Object.keys(prefixMap).sort((a, b) => b.length - a.length)
+        : null;
+    for (let i = 0; i < out.length; i++) {
+        const { chunk, score } = out[i];
+        let multiplier = 1;
+        if (ctMap) {
+            const w = ctMap[chunk.metadata.content_type];
+            if (typeof w === 'number' && Number.isFinite(w)) multiplier *= w;
+        }
+        if (sortedPrefixes) {
+            const uri = chunk.metadata.source_uri;
+            for (const p of sortedPrefixes) {
+                if (typeof uri === 'string' && uri.startsWith(p)) {
+                    const w = prefixMap[p];
+                    if (typeof w === 'number' && Number.isFinite(w)) multiplier *= w;
+                    break;
+                }
+            }
+        }
+        out[i] = { chunk, score: score * multiplier };
+    }
+    out.sort((a, b) => b.score - a.score);
+    return out;
+}
+
+/**
+ * Extract `custom.score_weights` from a `MetadataFilter`, returning
+ * `null` if absent or malformed. Lets the path functions thread the
+ * filter through to `applyScoreWeights` without re-implementing the
+ * extraction at every call site.
+ *
+ * @param {MetadataFilter|null|undefined} filter
+ * @returns {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null}
+ */
+function scoreWeightsFromFilter(filter) {
+    if (!filter || !filter.custom || typeof filter.custom !== 'object') return null;
+    const w = filter.custom.score_weights;
+    return w && typeof w === 'object' ? w : null;
 }
 
 /**
@@ -304,8 +400,8 @@ function pureBM25Path(queryTokens, index, filter, quota) {
         const s = scoreBM25Doc(queryTokens, chunk.content, index);
         if (s > 0) scored.push({ chunk, score: s });
     }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, quota).map(({ chunk, score }) => withSemanticProvenance(chunk, score, 'bm25'));
+    const weighted = applyScoreWeights(scored, scoreWeightsFromFilter(filter));
+    return weighted.slice(0, quota).map(({ chunk, score }) => withSemanticProvenance(chunk, score, 'bm25'));
 }
 
 /**
@@ -338,13 +434,13 @@ function hybridPath(queryTokens, candidates, index, filter, quota) {
     /** @type {Map<ChunkID, ChunkRef>} */
     const byId = new Map();
     for (const c of filtered) byId.set(c.id, c);
-    const ordered = [...fused.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, quota);
-    return ordered.map(([id, score]) => {
-        const chunk = /** @type {ChunkRef} */ (byId.get(id));
-        return withSemanticProvenance(chunk, score, 'hybrid');
-    });
+    const fusedScored = [...fused.entries()].map(([id, score]) => ({
+        chunk: /** @type {ChunkRef} */ (byId.get(id)),
+        score,
+    }));
+    const weighted = applyScoreWeights(fusedScored, scoreWeightsFromFilter(filter));
+    return weighted.slice(0, quota).map(({ chunk, score }) =>
+        withSemanticProvenance(chunk, score, 'hybrid'));
 }
 
 /**
@@ -360,8 +456,12 @@ function pureCosinePath(candidates, filter, quota) {
     const filtered = applyMetadataFilter(candidates.map(c => c.chunk), filter);
     if (filtered.length === 0) return [];
     const allowedIds = new Set(filtered.map(c => c.id));
-    const ordered = candidates.filter(c => allowedIds.has(c.chunk.id));
-    return ordered.slice(0, quota).map(c => withSemanticProvenance(c.chunk, c.similarity, 'cosine'));
+    const ordered = candidates
+        .filter(c => allowedIds.has(c.chunk.id))
+        .map(c => ({ chunk: c.chunk, score: c.similarity }));
+    const weighted = applyScoreWeights(ordered, scoreWeightsFromFilter(filter));
+    return weighted.slice(0, quota).map(({ chunk, score }) =>
+        withSemanticProvenance(chunk, score, 'cosine'));
 }
 
 /**

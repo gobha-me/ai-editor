@@ -225,45 +225,89 @@ const DEFAULT_COMPOSE_FILTERS = Object.freeze({
 });
 
 /**
- * Composer tuning T3 — default per-category content-type accept-list. Used
- * by the default `composeFilters` resolver when a fixture supplies a
- * `category`.
+ * Composer tuning T5 (1.5.8) — default per-axis score-weight map merged
+ * into every filter the default resolver returns under `custom.score_weights`.
+ * Consumed by the Semantic strategy's `applyScoreWeights` helper after
+ * scoring (BM25 / cosine / RRF) but before truncation to top quota:
  *
- * **Every entry is `['code']`.** The first T3 cut (2026-05-03 a.m.)
- * admitted `'prose'` for the three mixed categories that have at least
- * one prose canonical (`bug-investigation` → `CHANGELOG.md`,
- * `onboarding` / `topic` → `docs/PLUGIN.md`) on the theory that the T2
- * source-uri max-score rollup would prevent prose dilution. The
- * canonical T4 measurement (2026-05-03 20:20,
- * `docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`)
- * falsified that theory:
+ *   final_per_chunk_multiplier = content_type_weight × longest_matching_prefix_weight
  *
- *   - `bug-investigation` 0.324 → 0.276 (-0.048)
- *   - `onboarding`        0.583 → 0.417 (-0.166)
- *   - `topic`             0.455 → 0.359 (-0.096)
- *   - `task-related`      0.331 → 0.386 (+0.055) ← narrowing helped
- *   - headline            0.541 → 0.497 (-0.044) ← net regression
+ * Educated-guess first cut. Both axes downweight the dominant prose
+ * sources in this corpus (`prose` content-type and `docs/` prefix) at
+ * 0.5 to soften the dilution penalty T1/T3's hard exclusion was working
+ * around. `js/` is left at 1.0 (the dominant code source); `tests/`,
+ * `plugins/`, `css/` get mild downweights (0.7 / 0.8 / 0.6) reflecting
+ * lower per-chunk relevance for the typical coder-mode query. Missing
+ * map entries default to 1.0 — adding entries narrows; removing entries
+ * widens.
  *
- * The prose admission *did* retrieve the prose canonicals (e.g. T4's
- * `write-new-plugin` got `docs/PLUGIN.md` at rank 1, `plugins-register-hooks`
- * got it at rank 2), but the cost was prose chunks displacing code
- * canonicals on other queries in the same bucket: T4's
- * `how do I add a new role?` returned `docs/ROLES_AND_TOOLS.md` +
- * `docs/PLUGIN.md` instead of `js/settings/roles-tab.js`, scoring 0%.
+ * The first-cut → revised pattern from 1.5.7 T3 applies: if the T4
+ * canonical re-measurement shows a regression on any per-category
+ * bucket > 0.05, narrow the weights on a same-branch follow-up commit
+ * before merge.
  *
- * Verdict: the T2 max-score rollup is not strong enough to neutralize
- * prose dominance across a category. The map is therefore narrowed to
- * `['code']` everywhere — the three prose canonicals become unreachable
- * (they were already unreachable under T1's default), but the
- * regression on the rest of the bucket is recovered. The `task-related`
- * +0.055 from narrowing is preserved.
+ * Frozen at module load.
+ *
+ * @type {Readonly<{ content_types: Readonly<Object<string, number>>, prefixes: Readonly<Object<string, number>> }>}
+ */
+export const DEFAULT_SCORE_WEIGHTS = Object.freeze({
+    content_types: Object.freeze({
+        prose: 0.5,
+        structured: 0.7,
+        code: 1.0,
+        conversation: 1.0,
+        spec: 1.0,
+    }),
+    prefixes: Object.freeze({
+        'js/': 1.0,
+        'docs/': 0.5,
+        'tests/': 0.7,
+        'plugins/': 0.8,
+        'css/': 0.6,
+    }),
+});
+
+/**
+ * Composer tuning T3 + T5 — default per-category content-type accept-list.
+ * Used by the default `composeFilters` resolver when a fixture supplies
+ * a `category`.
+ *
+ * **Per-category content-type policy (post-1.5.8 T5 admission widening).**
+ * The four pure-code categories (`function-discovery`, `file-discovery`,
+ * `task-related`, `bug-investigation`) stay narrowed to `['code']` — T3's
+ * 1.5.7 verdict that prose dilutes these buckets stands. The two mixed
+ * categories whose canonical sets include a prose file
+ * (`onboarding` → `docs/PLUGIN.md`, `topic` → `docs/PLUGIN.md`) re-admit
+ * `['code', 'prose']` so T5's `score_weights` can downweight prose at
+ * 0.5 instead of excluding it outright; the T4 first-cut regression on
+ * those two buckets (-0.166 onboarding, -0.096 topic) was diagnosed as
+ * "prose chunks displacing code canonicals on other queries" — the
+ * hypothesis T5 tests is that soft-weighting controls dilution where
+ * the T2 source-uri rollup alone could not.
+ *
+ * **History on the post-T4-narrowing-to-code-only.** The first T3 cut
+ * (2026-05-03 a.m.) admitted `'prose'` for the three mixed categories
+ * that have at least one prose canonical (`bug-investigation` →
+ * `CHANGELOG.md`, `onboarding` / `topic` → `docs/PLUGIN.md`) on the
+ * theory that the T2 source-uri max-score rollup would prevent prose
+ * dilution. The canonical T4 measurement (2026-05-03 20:20) falsified
+ * that theory — the prose admission retrieved the prose canonicals
+ * (T4's `write-new-plugin` got `docs/PLUGIN.md` at rank 1) but cost
+ * code canonicals on other queries in the same bucket. Map narrowed to
+ * `['code']` everywhere at T4 revised (2026-05-03 21:13).
+ *
+ * **Why bug-investigation stays code-only post-T5.** Its sole prose
+ * canonical (`CHANGELOG.md`) is at the repo root, not under `docs/`,
+ * so the T5 prefix downweight on `docs/` doesn't apply; admitting
+ * `'prose'` here would re-introduce the T4 first-cut regression
+ * (-0.048 on this bucket) without a compensating prefix mechanism.
+ * Defer to a follow-up if T5 measurement on the other two mixed
+ * categories validates the soft-weighting approach.
  *
  * `'conversation'` / `'spec'` / `'structured'` are absent because they
  * don't appear as canonicals in this corpus (verified 2026-05-03
  * against `QUERY_FIXTURES`); `'conversation'` is `memory://` only and
  * `'spec'` is post-Phase-1 per `js/intelligence/retrieval/loader.js`.
- * The no-category fallback `DEFAULT_COMPOSE_FILTERS` keeps the
- * historical T1 list for cosmetic back-compat.
  *
  * Frozen at module load (outer object and each entry's `content_types`
  * array) so a downstream caller can't mutate the default map.
@@ -284,28 +328,34 @@ export const DEFAULT_COMPOSE_FILTERS_BY_CATEGORY = Object.freeze({
         content_types: Object.freeze(['code']),
     }),
     [QUERY_CATEGORIES.ONBOARDING]: Object.freeze({
-        content_types: Object.freeze(['code']),
+        content_types: Object.freeze(['code', 'prose']),
     }),
     [QUERY_CATEGORIES.TOPIC]: Object.freeze({
-        content_types: Object.freeze(['code']),
+        content_types: Object.freeze(['code', 'prose']),
     }),
 });
 
 /**
  * Default `composeFilters` resolver — consulted per-call when a caller
  * doesn't pass `composeFilters` explicitly. Looks up the per-category
- * map above and falls back to the no-category T1 default. Pure function;
- * tested in isolation.
+ * map above (or falls back to the no-category T1 default) and merges
+ * the global `DEFAULT_SCORE_WEIGHTS` into the returned filter's
+ * `custom.score_weights` so every default-resolver call carries both
+ * the T3 content-type accept-list and the T5 ranking nudges. Pure
+ * function; returns a fresh object on each call (do not mutate).
  *
  * @param {{ category?: string|null }|null|undefined} opts
  * @returns {import('./contracts.js').MetadataFilter}
  */
 export function defaultComposeFiltersResolver(opts) {
     const cat = opts && typeof opts.category === 'string' ? opts.category : null;
-    if (cat !== null && Object.prototype.hasOwnProperty.call(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY, cat)) {
-        return DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat];
-    }
-    return DEFAULT_COMPOSE_FILTERS;
+    const base = (cat !== null && Object.prototype.hasOwnProperty.call(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY, cat))
+        ? DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat]
+        : DEFAULT_COMPOSE_FILTERS;
+    return {
+        content_types: base.content_types,
+        custom: { ...(base.custom || {}), score_weights: DEFAULT_SCORE_WEIGHTS },
+    };
 }
 
 /**

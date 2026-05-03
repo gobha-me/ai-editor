@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import {
     createMeasurementHarness,
     DEFAULT_COMPOSE_FILTERS_BY_CATEGORY,
+    DEFAULT_SCORE_WEIGHTS,
     defaultComposeFiltersResolver,
 } from '../js/intelligence/retrieval/measurement.js';
 import { QUERY_CATEGORIES } from '../js/intelligence/retrieval/test-corpus.js';
@@ -612,18 +613,35 @@ test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: covers every QUERY_CATEGORIES enum va
     }
 });
 
-test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: every category is exactly [code] post-T4 revision', () => {
-    // The first T3 cut admitted 'prose' for the three mixed categories
-    // with prose canonicals; T4 (2026-05-03) showed prose dilution
-    // outweighed the prose-canonical recall gain. Map narrowed to
-    // ['code'] everywhere. See `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY`
-    // docblock in measurement.js for the per-category deltas.
+test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: pure-code categories are exactly [code] (post-T4); mixed admit prose (post-T5)', () => {
+    // 1.5.8 T5 widens admission for the two mixed categories whose
+    // canonical sets include a prose file under docs/ (onboarding +
+    // topic → docs/PLUGIN.md) so DEFAULT_SCORE_WEIGHTS can downweight
+    // prose at 0.5 instead of excluding outright. The four pure-code
+    // categories stay narrowed to ['code'] — T3's verdict on those
+    // buckets stands. See `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` docblock
+    // in measurement.js for the per-category deltas + the
+    // bug-investigation rationale (CHANGELOG.md is at repo root, no
+    // 'docs/' prefix to downweight).
+    const pureCode = new Set([
+        QUERY_CATEGORIES.FUNCTION_DISCOVERY,
+        QUERY_CATEGORIES.FILE_DISCOVERY,
+        QUERY_CATEGORIES.TASK_RELATED,
+        QUERY_CATEGORIES.BUG_INVESTIGATION,
+    ]);
+    const mixed = new Set([
+        QUERY_CATEGORIES.ONBOARDING,
+        QUERY_CATEGORIES.TOPIC,
+    ]);
     for (const cat of Object.values(QUERY_CATEGORIES)) {
-        assert.deepEqual(
-            [...DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat].content_types],
-            ['code'],
-            `${cat} should be code-only post-T4 narrowing`,
-        );
+        const types = [...DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat].content_types];
+        if (pureCode.has(cat)) {
+            assert.deepEqual(types, ['code'], `${cat} should be code-only`);
+        } else if (mixed.has(cat)) {
+            assert.deepEqual(types, ['code', 'prose'], `${cat} should admit code + prose for T5 weighting`);
+        } else {
+            assert.fail(`${cat} not classified — update the test when a category is added`);
+        }
     }
 });
 
@@ -660,6 +678,100 @@ test('defaultComposeFiltersResolver: null / undefined / missing category falls b
         assert.ok(f.content_types.includes('code'));
         assert.ok(!f.content_types.includes('prose'));
     }
+});
+
+/* ============================================================
+ * T5 — content-type × path-prefix score weighting (1.5.8)
+ *
+ * `DEFAULT_SCORE_WEIGHTS` is merged into every filter the default
+ * resolver returns, under `custom.score_weights`. The Semantic strategy
+ * consumes it post-rank in `applyScoreWeights`. The map is global
+ * (single set of weights for all categories); per-category weight maps
+ * are deferred to a 1.5.x follow-up if global tuning hits a ceiling
+ * per-category gradients could exceed.
+ * ============================================================ */
+
+test('DEFAULT_SCORE_WEIGHTS: shape pins both axes with prose downweighted at 0.5', () => {
+    assert.ok(DEFAULT_SCORE_WEIGHTS.content_types);
+    assert.equal(DEFAULT_SCORE_WEIGHTS.content_types.prose, 0.5);
+    assert.equal(DEFAULT_SCORE_WEIGHTS.content_types.code, 1.0);
+    assert.ok(DEFAULT_SCORE_WEIGHTS.prefixes);
+    assert.equal(DEFAULT_SCORE_WEIGHTS.prefixes['docs/'], 0.5);
+    assert.equal(DEFAULT_SCORE_WEIGHTS.prefixes['js/'], 1.0);
+});
+
+test('DEFAULT_SCORE_WEIGHTS: outer object and both inner maps are frozen', () => {
+    assert.ok(Object.isFrozen(DEFAULT_SCORE_WEIGHTS));
+    assert.ok(Object.isFrozen(DEFAULT_SCORE_WEIGHTS.content_types));
+    assert.ok(Object.isFrozen(DEFAULT_SCORE_WEIGHTS.prefixes));
+});
+
+test('defaultComposeFiltersResolver: every returned filter carries DEFAULT_SCORE_WEIGHTS in custom', () => {
+    // Each per-category lookup + the unknown-category fallback + the
+    // null-category fallback should all merge the score_weights into
+    // the returned filter's `custom` field.
+    const cases = [
+        ...Object.values(QUERY_CATEGORIES).map((c) => ({ category: c })),
+        { category: 'made-up-bucket' },
+        { category: null },
+        {},
+        undefined,
+    ];
+    for (const opts of cases) {
+        const f = defaultComposeFiltersResolver(opts);
+        assert.ok(f.custom, `${JSON.stringify(opts)}: custom must be present`);
+        assert.strictEqual(
+            f.custom.score_weights,
+            DEFAULT_SCORE_WEIGHTS,
+            `${JSON.stringify(opts)}: score_weights must reference DEFAULT_SCORE_WEIGHTS`,
+        );
+    }
+});
+
+test('defaultComposeFiltersResolver: returns a fresh filter object on every call (caller may mutate safely)', () => {
+    const f1 = defaultComposeFiltersResolver({ category: QUERY_CATEGORIES.FUNCTION_DISCOVERY });
+    const f2 = defaultComposeFiltersResolver({ category: QUERY_CATEGORIES.FUNCTION_DISCOVERY });
+    assert.notStrictEqual(f1, f2, 'each call returns a fresh outer object');
+    assert.notStrictEqual(f1.custom, f2.custom, 'each call returns a fresh custom object');
+    // Frozen content_types arrays may be shared (they're frozen anyway).
+    assert.strictEqual(f1.content_types, f2.content_types,
+        'frozen content_types arrays are reused (immutable, shared safely)');
+});
+
+test('runner.compose: default score_weights downweights docs/ prose vs js/ code', async () => {
+    // Asymmetric corpus: docs/a.md (prose under docs/) + js/b.js (code under js/).
+    // Both contain matching tokens. Without weights, prose would win
+    // because each .md emits multiple chunks vs one code chunk. With
+    // T5's defaults (prose 0.5, docs/ 0.5, code 1.0, js/ 1.0), the
+    // js/ code chunk's effective score wins.
+    //
+    // Verifies the defaults make it through createMeasurementHarness →
+    // compose → semantic → applyScoreWeights end-to-end.
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body matching tokens here.\n',
+        'js/b.js': 'function firstParagraphBody() { return "matching tokens"; }\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md', 'js/b.js'],
+        // composeFilters omitted → default resolver, default weights.
+    });
+    await handle.ingest();
+    // Use the topic category (admits ['code', 'prose'] post-T5) so prose
+    // can compete in admission and weighting decides ranking.
+    const result = await handle.runner.compose('first paragraph body matching tokens', {
+        category: QUERY_CATEGORIES.TOPIC,
+    });
+    // Both should be admitted (prose admission re-opened for topic).
+    const ctsAdmitted = new Set(
+        Object.values(result.chunks_by_id).map((c) => c.metadata.content_type),
+    );
+    assert.ok(ctsAdmitted.has('code'), 'code chunks admitted');
+    assert.ok(ctsAdmitted.has('prose'), 'prose chunks admitted under topic category post-T5');
 });
 
 test('createMeasurementHarness: function-form composeFilters is invoked per call with opts.category', async () => {
@@ -771,11 +883,11 @@ test('runner.compose: default per-category filter excludes prose for code-only c
     }
 });
 
-test('runner.compose: default per-category filter excludes prose for every category (post-T4 narrowing)', async () => {
-    // Post-T4 (2026-05-03), all per-category filters are ['code'] —
-    // including the previously-mixed bug-investigation / onboarding /
-    // topic that admitted 'prose' in the first T3 cut. The T4
-    // measurement showed prose admission regressed those buckets.
+test('runner.compose: pure-code categories exclude prose; mixed categories admit prose (post-T5)', async () => {
+    // 1.5.8 T5 split: bug-investigation stays code-only (CHANGELOG.md
+    // is at repo root, T5 prefix downweight on docs/ doesn't apply);
+    // onboarding + topic admit ['code', 'prose'] so DEFAULT_SCORE_WEIGHTS
+    // can downweight prose at 0.5 rather than exclude outright.
     const Git = makeFakeGit({
         'docs/a.md': '# Heading\n\nFirst paragraph body of relevant content here.\n',
     });
@@ -788,16 +900,23 @@ test('runner.compose: default per-category filter excludes prose for every categ
         sourceUris: ['docs/a.md'],
     });
     await handle.ingest();
-    for (const cat of [
-        QUERY_CATEGORIES.BUG_INVESTIGATION,
-        QUERY_CATEGORIES.ONBOARDING,
-        QUERY_CATEGORIES.TOPIC,
-    ]) {
-        const result = await handle.runner.compose('first paragraph body', { category: cat });
-        for (const id of Object.keys(result.chunks_by_id)) {
-            const ct = result.chunks_by_id[id].metadata.content_type;
-            assert.notEqual(ct, 'prose', `${cat}: chunk ${id} leaked content_type=prose despite ['code']-only filter`);
-        }
+    // Pure-code category: prose must NOT leak into chunks_by_id.
+    const bugRes = await handle.runner.compose('first paragraph body', {
+        category: QUERY_CATEGORIES.BUG_INVESTIGATION,
+    });
+    for (const id of Object.keys(bugRes.chunks_by_id)) {
+        const ct = bugRes.chunks_by_id[id].metadata.content_type;
+        assert.notEqual(ct, 'prose',
+            `bug-investigation: chunk ${id} leaked content_type=prose despite ['code']-only filter`);
+    }
+    // Mixed categories: prose CAN survive (downweighted, but admissible).
+    for (const cat of [QUERY_CATEGORIES.ONBOARDING, QUERY_CATEGORIES.TOPIC]) {
+        const res = await handle.runner.compose('first paragraph body', { category: cat });
+        const proseCount = Object.values(res.chunks_by_id).filter(
+            (c) => c.metadata.content_type === 'prose',
+        ).length;
+        assert.ok(proseCount > 0,
+            `${cat}: expected prose chunks to survive admission (downweighted, not excluded)`);
     }
 });
 

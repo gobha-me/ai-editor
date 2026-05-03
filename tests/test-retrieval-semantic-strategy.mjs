@@ -21,6 +21,7 @@ import {
     scoreBM25Doc,
     reciprocalRankFusion,
     applyMetadataFilter,
+    applyScoreWeights,
 } from '../js/intelligence/retrieval/strategies/semantic.js';
 
 /* ---------------- Fixture builders ---------------- */
@@ -220,6 +221,177 @@ test('metadata filter does not mutate input array', () => {
     const input = [a];
     applyMetadataFilter(input, { content_types: ['code'] });
     assert.equal(input.length, 1);
+});
+
+test('metadata filter skips well-known custom.score_weights key (not treated as predicate)', () => {
+    // Regression test: 1.5.8 introduces `custom.score_weights` as a
+    // post-rank ranking signal, NOT a predicate. `applyMetadataFilter`
+    // would otherwise interpret it as "match chunk.metadata.custom.score_weights"
+    // and reject every chunk.
+    const a = makeChunk('a', { custom: {} });
+    const b = makeChunk('b', { custom: {} });
+    const out = applyMetadataFilter([a, b], {
+        custom: { score_weights: { content_types: { prose: 0.5 } } },
+    });
+    assert.equal(out.length, 2, 'score_weights must not gate admission');
+});
+
+/* ---------------- applyScoreWeights (1.5.8 / T5) ---------------- */
+
+test('applyScoreWeights: null/undefined weights → identity sort by score desc', () => {
+    const a = makeChunk('a');
+    const b = makeChunk('b');
+    const c = makeChunk('c');
+    const scored = [
+        { chunk: a, score: 0.3 },
+        { chunk: b, score: 0.9 },
+        { chunk: c, score: 0.5 },
+    ];
+    const outNull = applyScoreWeights(scored, null);
+    assert.deepEqual(outNull.map(s => s.chunk.content), ['b', 'c', 'a']);
+    assert.deepEqual(outNull.map(s => s.score), [0.9, 0.5, 0.3]);
+    const outUndef = applyScoreWeights(scored, undefined);
+    assert.deepEqual(outUndef.map(s => s.chunk.content), ['b', 'c', 'a']);
+});
+
+test('applyScoreWeights: content-type weights downweight prose to lower rank', () => {
+    const proseHi = makeChunk('p', { content_type: 'prose' });
+    const codeMid = makeChunk('c', { content_type: 'code' });
+    const scored = [
+        { chunk: proseHi, score: 0.8 },
+        { chunk: codeMid, score: 0.5 },
+    ];
+    const out = applyScoreWeights(scored, { content_types: { prose: 0.5 } });
+    // prose: 0.8 × 0.5 = 0.4; code: 0.5 × 1.0 = 0.5 → code wins.
+    assert.deepEqual(out.map(s => s.chunk.content), ['c', 'p']);
+    assert.equal(out[0].score, 0.5);
+    assert.equal(out[1].score, 0.4);
+});
+
+test('applyScoreWeights: prefix weights downweight docs/ to lower rank', () => {
+    const docsHi = makeChunk('d', { content_type: 'code', source_uri: 'docs/foo.md' });
+    const jsMid = makeChunk('j', { content_type: 'code', source_uri: 'js/bar.js' });
+    const scored = [
+        { chunk: docsHi, score: 0.8 },
+        { chunk: jsMid, score: 0.5 },
+    ];
+    const out = applyScoreWeights(scored, { prefixes: { 'docs/': 0.5, 'js/': 1.0 } });
+    // docs/: 0.8 × 0.5 = 0.4; js/: 0.5 × 1.0 = 0.5 → js wins.
+    assert.deepEqual(out.map(s => s.chunk.content), ['j', 'd']);
+});
+
+test('applyScoreWeights: content-type and prefix compose multiplicatively', () => {
+    const proseDocsHi = makeChunk('pd', { content_type: 'prose', source_uri: 'docs/x.md' });
+    const codeJs = makeChunk('cj', { content_type: 'code', source_uri: 'js/x.js' });
+    const scored = [
+        { chunk: proseDocsHi, score: 1.0 },
+        { chunk: codeJs, score: 0.5 },
+    ];
+    const out = applyScoreWeights(scored, {
+        content_types: { prose: 0.5, code: 1.0 },
+        prefixes: { 'docs/': 0.5, 'js/': 1.0 },
+    });
+    // prose+docs: 1.0 × 0.5 × 0.5 = 0.25; code+js: 0.5 × 1.0 × 1.0 = 0.5
+    assert.deepEqual(out.map(s => s.chunk.content), ['cj', 'pd']);
+    assert.equal(out[0].score, 0.5);
+    assert.equal(out[1].score, 0.25);
+});
+
+test('applyScoreWeights: missing content-type or prefix entries default to 1.0', () => {
+    const codeJs = makeChunk('cj', { content_type: 'code', source_uri: 'js/x.js' });
+    const structPlugins = makeChunk('sp', { content_type: 'structured', source_uri: 'plugins/x.json' });
+    const scored = [
+        { chunk: codeJs, score: 0.7 },
+        { chunk: structPlugins, score: 0.6 },
+    ];
+    // Map omits 'structured' and 'plugins/' — both default to 1.0.
+    const out = applyScoreWeights(scored, {
+        content_types: { prose: 0.5 },
+        prefixes: { 'docs/': 0.5 },
+    });
+    // Both unchanged; original order by score preserved.
+    assert.deepEqual(out.map(s => s.chunk.content), ['cj', 'sp']);
+    assert.equal(out[0].score, 0.7);
+    assert.equal(out[1].score, 0.6);
+});
+
+test('applyScoreWeights: longest matching prefix wins (js/intelligence/ beats js/)', () => {
+    const inner = makeChunk('inner', { content_type: 'code', source_uri: 'js/intelligence/foo.js' });
+    const outer = makeChunk('outer', { content_type: 'code', source_uri: 'js/bar.js' });
+    const scored = [
+        { chunk: inner, score: 1.0 },
+        { chunk: outer, score: 1.0 },
+    ];
+    const out = applyScoreWeights(scored, {
+        prefixes: { 'js/': 0.1, 'js/intelligence/': 1.0 },
+    });
+    // inner matches longer prefix → 1.0 × 1.0 = 1.0
+    // outer matches only 'js/' → 1.0 × 0.1 = 0.1
+    assert.deepEqual(out.map(s => s.chunk.content), ['inner', 'outer']);
+    assert.equal(out[0].score, 1.0);
+    assert.equal(out[1].score, 0.1);
+});
+
+test('applyScoreWeights: non-finite weights are treated as 1.0 (forgiving)', () => {
+    const a = makeChunk('a', { content_type: 'prose' });
+    const b = makeChunk('b', { content_type: 'code' });
+    const scored = [
+        { chunk: a, score: 1.0 },
+        { chunk: b, score: 0.5 },
+    ];
+    // Garbage weight values for prose; should default to 1.0 not NaN/Infinity.
+    const out = applyScoreWeights(scored, {
+        content_types: { prose: NaN, code: Infinity },
+    });
+    assert.deepEqual(out.map(s => s.chunk.content), ['a', 'b']);
+    assert.equal(out[0].score, 1.0);
+    assert.equal(out[1].score, 0.5);
+});
+
+test('applyScoreWeights: does not mutate input array or input objects', () => {
+    const a = makeChunk('a', { content_type: 'prose' });
+    const input = [{ chunk: a, score: 1.0 }];
+    const out = applyScoreWeights(input, { content_types: { prose: 0.5 } });
+    assert.equal(input[0].score, 1.0, 'input score must not be mutated');
+    assert.notStrictEqual(out, input, 'returns fresh array');
+    assert.equal(out[0].score, 0.5);
+});
+
+test('applyScoreWeights: empty scored array → empty out', () => {
+    assert.deepEqual(applyScoreWeights([], { content_types: { prose: 0.5 } }), []);
+    assert.deepEqual(applyScoreWeights([], null), []);
+});
+
+test('applyScoreWeights: weights with neither content_types nor prefixes is identity sort', () => {
+    const a = makeChunk('a');
+    const b = makeChunk('b');
+    const scored = [
+        { chunk: a, score: 0.3 },
+        { chunk: b, score: 0.7 },
+    ];
+    const out = applyScoreWeights(scored, /** @type {any} */ ({ irrelevant: 'value' }));
+    assert.deepEqual(out.map(s => s.chunk.content), ['b', 'a']);
+});
+
+test('retrieve cosine path: filter.custom.score_weights re-orders by weighted score', async () => {
+    // Cosine candidates with prose at top, code mid; default order would
+    // return prose first. With prose downweighted to 0.5, code wins.
+    const proseHi = makeChunk('p', { content_type: 'prose', source_uri: 'docs/x.md' });
+    const codeMid = makeChunk('c', { content_type: 'code', source_uri: 'js/y.js' });
+    const strat = createSemanticStrategy({
+        embedQuery: embedFake([1, 0, 0]),
+        chunkVectorSearch: knnFake([
+            { chunk: proseHi, score: 0.9, similarity: 0.9 },
+            { chunk: codeMid, score: 0.6, similarity: 0.6 },
+        ]),
+    });
+    const out = await strat.retrieve(baseReq({
+        filters: {
+            custom: { score_weights: { content_types: { prose: 0.5, code: 1.0 } } },
+        },
+    }), 5);
+    // prose: 0.9 × 0.5 = 0.45; code: 0.6 × 1.0 = 0.6 → code first.
+    assert.deepEqual(out.map(c => c.content), ['c', 'p']);
 });
 
 /* ---------------- factory validation ---------------- */

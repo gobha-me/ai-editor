@@ -337,9 +337,28 @@
  * through. Concrete fields will be pinned when the first filter consumer
  * lands.
  *
+ * **`custom.score_weights` (Composer tuning T5, 1.5.8).** A per-axis
+ * post-rank score multiplier consumed by the Semantic strategy after
+ * scoring (BM25 / cosine / RRF) but before truncation to top quota:
+ *
+ * ```
+ * custom: {
+ *   score_weights: {
+ *     content_types: { prose: 0.5, code: 1.0, ... },  // by chunk.metadata.content_type
+ *     prefixes:      { 'js/': 1.0, 'docs/': 0.5, ... } // longest-match against source_uri
+ *   }
+ * }
+ * ```
+ *
+ * Final per-chunk multiplier is `content_type_weight × longest_matching_prefix_weight`;
+ * absent entries default to `1.0`, so omitting either map disables that
+ * axis cleanly. Other `custom.*` keys remain opaque predicates per the
+ * existing convention; this docs the one well-known sub-field.
+ *
  * @typedef {Object} MetadataFilter
  * @property {ContentType[]|undefined} content_types  Accept-list; absent = all.
- * @property {Object<string, *>|undefined} custom     Strategy-specific predicates.
+ * @property {Object<string, *>|undefined} custom     Strategy-specific predicates;
+ *   well-known sub-key `score_weights` is consumed by Semantic at rank-time.
  */
 
 /**

@@ -8,6 +8,130 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.8] - 2026-05-03
+
+**Composer tuning T5 — content-type × path-prefix score weighting (PR
+23 of the 1.5.0 stream).** Soft-weighting alternative to T1/T3's hard
+content-type accept-list. Extends `MetadataFilter.custom` with a
+well-known `score_weights` sub-key consumed by the Semantic strategy
+post-rank (after BM25 / cosine / RRF, before truncation to top quota):
+
+```js
+custom: {
+  score_weights: {
+    content_types: { prose: 0.5, code: 1.0, ... },
+    prefixes:      { 'js/': 1.0, 'docs/': 0.5, ... }  // longest-match
+  }
+}
+```
+
+Final per-chunk multiplier is `content_type_weight × longest_matching_prefix_weight`;
+absent entries default to `1.0`, so omitting either map disables that
+axis cleanly. Cannot resurrect chunks already excluded by
+`applyMetadataFilter` or absent from the cosine candidate pool —
+weighting only re-orders within the upstream-admitted set.
+
+**Why soft weighting now.** 1.5.7 T3 final reported
+`newGroundTruth.meanRecallAt5 = 0.5489` against the §1.5.0 ≥0.80 gate
+with `meanHitAt5 = 0.976` — the right files were already in the top-5
+for 97.6% of queries; the dominant gap is **ranking**, not admission.
+T1/T3 used hard `content_types: ['code']` exclusion to prevent prose
+dilution; T5 swaps that for soft 0.5× downweighting on prose (the
+dominant prose source in this corpus is `docs/*.md`, also downweighted
+0.5× via the prefix axis). The two mixed categories whose canonical
+sets include a prose file under `docs/` (`onboarding` / `topic` →
+`docs/PLUGIN.md`) re-admit `['code', 'prose']` so the weighting can
+operate; the four pure-code categories (`function-discovery`,
+`file-discovery`, `task-related`, `bug-investigation`) stay narrowed
+to `['code']` — T3's verdict on those buckets stands. The
+`bug-investigation` exception (its prose canonical `CHANGELOG.md` is
+at the repo root, no `docs/` prefix to downweight) is documented in
+the `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` docblock.
+
+**T4 canonical re-measurement (2026-05-03 22:48, this branch).** Same
+in-cluster `jinaai/jina-embeddings-v2-base-code` embedder, `topK=5`,
+`concurrency=4`, 429 sources, 4532 chunks, 0 ingest failures, 0
+runner failures, ~27.4 min walk. **Headline:
+`newGroundTruth.meanRecallAt5 = 0.5807`** vs the 1.5.7 baseline of
+0.5489 — **+0.032, real lift.** `meanHitAt5 = 0.976` (matches 1.5.7);
+`meanMRR = 0.751` (vs 0.760 baseline, -0.009). Raw report at
+[`docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-03-retrieval-recall-ground-truth.json)
+(overwrites the 1.5.7 T4 file — same canonical purpose).
+
+**Per-category recall@5 (1.5.7 → 1.5.8 T5):**
+
+| Category | 1.5.7 | 1.5.8 T5 | Δ |
+|---|---:|---:|---:|
+| function-discovery | 0.900 | 0.900 | 0.000 |
+| **file-discovery** | 0.613 | **0.700** | **+0.087** ✓ |
+| **onboarding** | 0.583 | **0.667** | **+0.083** ✓ |
+| topic | 0.455 | 0.455 | 0.000 |
+| bug-investigation | 0.324 | 0.331 | +0.007 |
+| task-related | 0.386 | 0.386 | 0.000 |
+
+**Zero regressions on any bucket > 0.05; first cut is final** — no
+same-branch follow-up needed per the T4 gating rule. Two real wins
+(file-discovery +0.087, onboarding +0.083); the four other buckets
+held steady. file-discovery's lift comes from `js/` chunks now
+out-ranking `tests/` and `plugins/` chunks within the `code` content
+type (the T1/T3 hard accept-list couldn't distinguish those); onboarding
+recovered the prose canonicals (`docs/PLUGIN.md` admitted at 0.5 ×
+0.5 = 0.25 effective weight) without the dilution penalty the T4
+first-cut hit when prose was admitted at full weight.
+
+**New vs corrected legacy baseline.** `legacyGroundTruth.meanRecallAt5 = 0.5393`
+(essentially unchanged from 1.5.7 T4's 0.539). New now leads legacy
+by **+0.041 overall** (0.5807 vs 0.5393) and on five of six buckets:
+function-discovery +0.190, file-discovery +0.025, topic +0.040,
+onboarding +0.048, bug-investigation -0.040, task-related -0.022.
+The "legacy is competitive" framing from 1.5.7 T4 weakens — only
+`bug-investigation` and `task-related` still trail legacy, both
+modestly. Gap to ≥0.80 (-0.219) remains; 1.5.9 (Thematic) and 1.5.10
+(re-scoped legacy retirement) are next decision points.
+
+**Files changed**
+
+- [`js/intelligence/retrieval/strategies/semantic.js`](js/intelligence/retrieval/strategies/semantic.js):
+  new `applyScoreWeights(scored, weights)` exported helper (companion
+  to `applyMetadataFilter`); wired into `pureBM25Path`, `hybridPath`,
+  `pureCosinePath` after scoring, before truncation. `applyMetadataFilter`
+  now skips well-known `custom.*` sub-keys (`score_weights`) instead of
+  treating them as predicates — without this, every chunk would fail
+  admission against the `score_weights` "predicate" since chunks don't
+  carry `metadata.custom.score_weights`.
+- [`js/intelligence/retrieval/measurement.js`](js/intelligence/retrieval/measurement.js):
+  exports `DEFAULT_SCORE_WEIGHTS` (single global map, frozen);
+  `defaultComposeFiltersResolver` now merges it into every returned
+  filter's `custom`; `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` widens the
+  two prose-canonical categories (`onboarding`, `topic`) to admit
+  `['code', 'prose']` so T5 weighting can operate on the candidate
+  pool.
+- [`js/intelligence/retrieval/contracts.js`](js/intelligence/retrieval/contracts.js):
+  `MetadataFilter` JSDoc documents the well-known
+  `custom.score_weights` sub-key convention.
+- [`tests/test-retrieval-semantic-strategy.mjs`](tests/test-retrieval-semantic-strategy.mjs):
+  +12 tests covering `applyScoreWeights` (identity, content-type axis,
+  prefix axis, multiplicative composition, missing-defaults-to-1.0,
+  longest-prefix-wins, non-finite-as-1.0, no-mutation, empty-input,
+  weights without recognized axes, end-to-end through cosine path) +
+  the regression test pinning `applyMetadataFilter`'s skip of the
+  well-known `score_weights` sub-key.
+- [`tests/test-retrieval-measurement.mjs`](tests/test-retrieval-measurement.mjs):
+  +5 tests covering `DEFAULT_SCORE_WEIGHTS` shape + freeze,
+  `defaultComposeFiltersResolver` score_weights merge, fresh-object
+  semantics, end-to-end prose admission for the two mixed categories
+  post-T5; updates the two stale T4 tests (every-category-is-code,
+  excludes-prose-for-every-category) for the T5 admission split.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): extends the 1.5.7 entry with
+  the T5 outcome; renumbers Thematic strategy to 1.5.9 and the
+  remaining 1.5.x entries accordingly; refreshes the Now / Next
+  table.
+- [`js/version.js`](js/version.js): `1.5.7` → `1.5.8`.
+
+**Live `find_relevant_files` is unchanged** — still on legacy
+`js/context-manager.js` until the (re-scoped) 1.5.9 retirement PR.
+This release only affects the new pipeline + the measurement runner.
+
 ## [1.5.7] - 2026-05-03
 
 **Composer tuning T3 — per-category content-type filter (PR 22 of the
