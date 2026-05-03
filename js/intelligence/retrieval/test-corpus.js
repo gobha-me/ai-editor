@@ -95,10 +95,15 @@
  *      longer promotes the track.
  *
  *      Curation methodology: per-fixture grep / read of the
- *      codebase, with low-confidence fixtures flagged
- *      `// TODO(jeff)` for review (see in-line comments below). 3–7
- *      entries per fixture; all entries are real in-repo paths
- *      verified to exist at curation time (2026-05-03).
+ *      codebase. The 1.5.5 corpus carried three fixtures flagged
+ *      `// TODO(jeff)` for low-confidence calls; the 1.5.6 curation
+ *      pass cleared all three (and refined two task-related fixtures
+ *      that scored 0% in the 1.5.5-patch canonical run). All 42
+ *      fixtures are now verified against the codebase as of
+ *      2026-05-03; in-line comments on the previously-TODO'd or
+ *      refined fixtures record the rationale. 1–7 entries per fixture;
+ *      all entries are real in-repo paths verified to exist at
+ *      curation time.
  *
  *   7. **Frozen at module load.** `QUERY_CORPUS` and `QUERY_FIXTURES`
  *      are `Object.freeze`'d so a misbehaving consumer cannot mutate
@@ -436,9 +441,12 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'how does multi-tab storage isolation work?',
         category: C.TOPIC,
         intent: 'cross-cutting infra topic',
-        // TODO(jeff): `js/tab-manager.js` has cross-tab broadcast hooks but
-        // the core State namespacing per tab lives in `js/core.js`'s Storage
-        // wrapper. Verify if `tab-manager.js` should also be on this list.
+        // Verified 2026-05-03: `js/tab-manager.js` is a UI tab/file
+        // switcher (no `BroadcastChannel`, no isolation logic). Tab
+        // namespacing lives in `js/core.js`'s `Storage` wrapper
+        // (`_TAB_SCOPED`, `_initTabId`, `_resolveKey`,
+        // `_migrateTabScopedKeys`, `_cleanStaleTabs`); IDB is the backing
+        // store.
         expectedPaths: ['js/core.js', 'js/storage/idb.js'],
     },
 
@@ -493,15 +501,18 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'what handles tool invocation timeouts?',
         category: C.BUG_INVESTIGATION,
         intent: 'timeout / abort path by feature',
-        // TODO(jeff): tool-call timeout vs the LLM idle timeout are
-        // overlapping but distinct paths; `js/llm/api.js` owns the
-        // idle timeout, `js/chat/handlers.js` orchestrates tool calls,
-        // and the per-tool defaults live in `js/core.js`. Verify if
-        // any test-loop / orchestrator file belongs here too.
+        // Verified 2026-05-03: tool-call timeout (this query) is distinct
+        // from the LLM idle timeout (which lives in `js/llm/api.js`; see
+        // `idle-timeout-vs-wallclock`). The `Promise.race` on tool
+        // execution is at `js/chat/handlers.js:524-535`; default
+        // `toolTimeout: 30000` lives at `js/core.js:278`; UI slider in
+        // `js/settings-manager.js`; persistence in
+        // `js/settings/persistence.js`.
         expectedPaths: [
             'js/chat/handlers.js',
             'js/core.js',
-            'js/llm/api.js',
+            'js/settings-manager.js',
+            'js/settings/persistence.js',
         ],
     },
     {
@@ -520,10 +531,17 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'why did we switch from wall-clock to idle LLM timeout?',
         category: C.BUG_INVESTIGATION,
         intent: 'historical decision rationale by outcome',
-        // TODO(jeff): the historical "why" lives in CHANGELOG; for
-        // retrieval ground truth I focus on the implementing files +
-        // the regression test that pins the new behavior.
+        // Verified 2026-05-03: the query asks "why" — the historical
+        // rationale lives in the 1.1.1 CHANGELOG entry, so include
+        // CHANGELOG.md (same precedent as `docs/PLUGIN.md` being on
+        // `plugins-register-hooks`). `js/chat/handlers.js` was where the
+        // legacy wall-clock `Promise.race` lived; `js/llm/api.js`
+        // implements the new idle timer; `js/core.js` carries the
+        // one-shot migration `llmTimeout → llmIdleTimeout`;
+        // `tests/test-llm-idle-timeout.mjs` is the regression test.
         expectedPaths: [
+            'CHANGELOG.md',
+            'js/chat/handlers.js',
             'js/core.js',
             'js/llm/api.js',
             'tests/test-llm-idle-timeout.mjs',
@@ -637,9 +655,24 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'files I would touch to wire a new tool category',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by feature work',
+        // Refined 2026-05-03 (1.5.6 curation pass). Wiring a new category
+        // means: (1) create a new `js/tools/<name>-tools.js` file
+        // (`ci-tools.js` is the canonical recent example, added in 1.4.5);
+        // (2) register the import in `js/app.js`'s tool-modules block;
+        // (3) add the new tools to `CATEGORY_BY_NAME` at
+        // `js/intelligence/tools/catalog.js:52` (otherwise they fall
+        // back to `"misc"`); (4) keep the parallel enumeration in
+        // `js/prompts.js` in sync (per the
+        // `feedback_prompts_js_parallel_enumeration` rule); (5) the
+        // new file calls into `ToolRegistry.register` from
+        // `js/tools/registry.js`. Drops `embeddings.js` (the
+        // catalog-vector-store seam, still WIP) and `settings/tools-tab.js`
+        // (UI, not wiring).
         expectedPaths: [
-            'js/intelligence/tools/embeddings.js',
-            'js/settings/tools-tab.js',
+            'js/app.js',
+            'js/intelligence/tools/catalog.js',
+            'js/prompts.js',
+            'js/tools/ci-tools.js',
             'js/tools/registry.js',
         ],
     },
@@ -681,10 +714,23 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'files I would touch to add a new LLM tool',
         category: C.TASK_RELATED,
         intent: 'cross-file co-occurrence by tool registration',
+        // Refined 2026-05-03 (1.5.6 curation pass). Adding a single
+        // tool: define the handler in an existing `*-tools.js` file
+        // (`js/tools/file-tools.js` is the canonical "many tools, one
+        // file" example); register via `ToolRegistry.register` from
+        // `js/tools/registry.js`; keep the parallel enumeration in
+        // `js/prompts.js` in sync (per the
+        // `feedback_prompts_js_parallel_enumeration` rule); update the
+        // write-tool allowlist + executor cache in `js/chat/handlers.js`;
+        // expose to the user via `js/settings/tools-tab.js`. Drops
+        // `task-state.js` (per-conversation ledger; only touched when
+        // changing admission policy) and `composer.js` (admission engine;
+        // unchanged when adding a new tool).
         expectedPaths: [
             'js/chat/handlers.js',
-            'js/chat/task-state.js',
-            'js/intelligence/tools/composer.js',
+            'js/prompts.js',
+            'js/settings/tools-tab.js',
+            'js/tools/file-tools.js',
             'js/tools/registry.js',
         ],
     },
