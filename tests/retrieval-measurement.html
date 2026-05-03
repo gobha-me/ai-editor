@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Editor — Retrieval ≥80% measurement (1.5.4)</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: auto !important; overflow: visible !important; }
+        body {
+            font-family: 'Fira Code', 'Cascadia Code', monospace;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 1.5rem;
+            line-height: 1.4;
+            margin: 0;
+        }
+        h1 { color: #7c3aed; margin: 0 0 0.5rem 0; font-size: 1.4rem; }
+        h2 { color: #a78bfa; margin: 1.2rem 0 0.5rem 0; font-size: 1.05rem; }
+        p.lede { color: #94a3b8; margin: 0 0 1rem 0; font-size: 0.85rem; }
+        .panel {
+            background: #16213e;
+            border-radius: 6px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 3px solid #334155;
+        }
+        .panel.ok { border-left-color: #22c55e; }
+        .panel.warn { border-left-color: #f59e0b; }
+        .panel.err { border-left-color: #ef4444; }
+        label {
+            display: block;
+            color: #cbd5e1;
+            margin: 0.25rem 0 0.15rem 0;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        input, select, button {
+            font-family: inherit;
+            font-size: 0.85rem;
+            padding: 0.4rem 0.6rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #e0e0e0;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+        }
+        input { width: 14rem; }
+        select { width: 18rem; }
+        button {
+            background: #7c3aed;
+            border-color: #7c3aed;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover { background: #6d28d9; }
+        button:disabled { background: #475569; border-color: #475569; cursor: not-allowed; }
+        button.ghost { background: transparent; color: #cbd5e1; border-color: #334155; font-weight: 400; }
+        button.ghost:hover { background: #1e293b; color: white; }
+        .row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; margin-bottom: 0.5rem; }
+        .col { display: flex; flex-direction: column; }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+        }
+        .stat {
+            background: #0f172a;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+        }
+        .stat-label { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .stat-value { color: #f0f0f0; font-size: 1.1rem; font-weight: 600; margin-top: 0.15rem; }
+        .stat-value.headline { color: #22c55e; font-size: 1.4rem; }
+        .stat-value.warn { color: #f59e0b; }
+        .stat-value.fail { color: #ef4444; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.5rem; }
+        th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #1e293b; vertical-align: top; }
+        th { color: #a78bfa; background: #0f172a; position: sticky; top: 0; }
+        td.q { color: #cbd5e1; max-width: 22rem; }
+        td.paths { color: #94a3b8; font-size: 0.75rem; }
+        td.agree { font-weight: 600; }
+        td.agree.high { color: #22c55e; }
+        td.agree.mid { color: #f59e0b; }
+        td.agree.low { color: #ef4444; }
+        td.agree.err { color: #ef4444; font-style: italic; }
+        .progress {
+            background: #0f172a;
+            height: 4px;
+            border-radius: 2px;
+            margin: 0.4rem 0;
+            overflow: hidden;
+        }
+        .progress-bar { height: 100%; background: #7c3aed; transition: width 0.2s ease; }
+        pre {
+            background: #0f172a;
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.75rem;
+            max-height: 30rem;
+            margin: 0.5rem 0 0 0;
+        }
+        code { background: #0f172a; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+        small { color: #94a3b8; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Retrieval ≥80% measurement run (1.5.4)</h1>
+    <p class="lede">
+        Drives <code>QUERY_CORPUS</code> (42 queries) through <code>createComparisonHarness</code>
+        against the live legacy <code>ContextManager.findRelevantFiles</code> and a wired-up
+        Composer. Reports the agreement number that promotes Retrieval Phase 1 to 1.5.0-final.
+        See <code>docs/ROADMAP.md</code> §"1.5.0 Retrieval Phase 1" for the exit criteria.
+        The runner passes a permissive <code>contentTypeOverride</code> that maps
+        unknown extensions (.html / .css / .yaml / Dockerfile / etc.) to <code>prose</code>
+        so the new pipeline's coverage matches the legacy <code>ContextManager</code>'s —
+        otherwise the loader's narrow Phase-1 extension table rejects ~98% of the file tree
+        and the comparison degenerates to "the new pipeline can only return what it indexed."
+    </p>
+
+    <div class="panel" id="boot-panel">
+        <h2>1. Bootstrap</h2>
+        <div id="boot-status">Booting…</div>
+    </div>
+
+    <div class="panel hidden" id="project-panel">
+        <h2>2. Project</h2>
+        <div class="row">
+            <div class="col">
+                <label for="connection">Git connection</label>
+                <select id="connection"></select>
+            </div>
+            <div class="col">
+                <label for="owner">Owner</label>
+                <input id="owner" placeholder="acme">
+            </div>
+            <div class="col">
+                <label for="repo">Repo</label>
+                <input id="repo" placeholder="ai-editor">
+            </div>
+            <div class="col">
+                <label for="ref">Ref (branch)</label>
+                <input id="ref" value="main">
+            </div>
+            <div class="col">
+                <label>&nbsp;</label>
+                <button id="load-project">Load project</button>
+            </div>
+        </div>
+        <div id="project-status"><small>No project loaded.</small></div>
+    </div>
+
+    <div class="panel hidden" id="config-panel">
+        <h2>3. Measurement parameters</h2>
+        <div class="row">
+            <div class="col">
+                <label for="topK">topK</label>
+                <input id="topK" type="number" value="5" min="1" max="20">
+            </div>
+            <div class="col">
+                <label for="concurrency">Walker concurrency</label>
+                <input id="concurrency" type="number" value="1" min="1" max="16" title="1 by default — the Gitea circuit breaker (js/git-providers/base.js:596) trips on transient network blips during bulk walks. Lower concurrency + breaker-clear (below) keeps the walk steady.">
+            </div>
+            <div class="col">
+                <label for="modelId">Model id</label>
+                <input id="modelId" value="">
+            </div>
+            <div class="col">
+                <label for="maxFiles">Cap source URIs (debug)</label>
+                <input id="maxFiles" type="number" placeholder="(unlimited)">
+            </div>
+        </div>
+    </div>
+
+    <div class="panel hidden" id="run-panel">
+        <h2>4. Run</h2>
+        <div class="row">
+            <button id="reindex-legacy" class="ghost">Re-index legacy ContextManager</button>
+            <button id="run-measurement">Run measurement</button>
+            <button id="abort" class="ghost" disabled>Abort</button>
+        </div>
+        <div id="run-status"><small>Idle.</small></div>
+        <div class="progress hidden" id="progress-row"><div class="progress-bar" id="progress-bar" style="width: 0%"></div></div>
+    </div>
+
+    <div class="panel hidden" id="report-panel">
+        <h2>5. Report</h2>
+        <div class="summary" id="summary"></div>
+        <div class="row" style="margin-top: 0.5rem;">
+            <button id="copy-report" class="ghost">Copy report JSON</button>
+            <button id="copy-failure-log" class="ghost">Copy failure log</button>
+            <button id="toggle-perquery" class="ghost">Show / hide per-query table</button>
+            <button id="toggle-categories" class="ghost">Show / hide per-category breakdown</button>
+        </div>
+        <div id="histogram-wrap"></div>
+        <div id="categories-wrap" class="hidden"></div>
+        <div id="perquery-wrap" class="hidden"></div>
+        <pre id="report-json" class="hidden"></pre>
+    </div>
+
+    <script type="module">
+        // Boot the editor's core machinery the same way `js/app.js` does.
+        // We need the full core/git/embeddings-client/context-manager
+        // surface because the harness drives them directly.
+        const bootEl = document.getElementById('boot-status');
+        const bootPanel = document.getElementById('boot-panel');
+
+        let State, EventBus, Storage, loadSettings;
+        let Git, GitProviderRegistry, initGitProviders, loadProject;
+        let EmbeddingsClient;
+        let ContextManager;
+        let IgnoreManager;
+        let createMeasurementHarness;
+        let QUERY_FIXTURES;
+
+        try {
+            ({ State, EventBus, Storage, loadSettings } = await import('../js/core.js'));
+            ({ Git, GitProviderRegistry, initGitProviders, loadProject } = await import('../js/git.js'));
+            ({ EmbeddingsClient } = await import('../js/embeddings-client.js'));
+            ({ ContextManager } = await import('../js/context-manager.js'));
+            ({ IgnoreManager } = await import('../js/ignore.js'));
+            ({ createMeasurementHarness, QUERY_FIXTURES } = await import('../js/intelligence/retrieval/index.js'));
+
+            await Storage.init();
+            loadSettings();
+            initGitProviders();
+            IgnoreManager.init();
+
+            bootPanel.classList.add('ok');
+            const conns = (State.settings.connections || []).filter((c) => c.enabled !== false);
+            const modelId = State.settings.embeddingModel || 'unknown';
+            bootEl.innerHTML = `
+                <small>
+                    Booted. Embedding model: <code>${escapeHtml(modelId)}</code>.
+                    Connections found: <code>${conns.length}</code>.
+                    QUERY_CORPUS: <code>${QUERY_FIXTURES.length}</code> queries.
+                </small>
+            `;
+
+            const sel = document.getElementById('connection');
+            sel.innerHTML = '';
+            if (conns.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '(no connections — open the editor first to add one)';
+                sel.appendChild(opt);
+            } else {
+                for (const c of conns) {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.label || c.provider} (${c.url || c.provider}) — ${c.id}`;
+                    sel.appendChild(opt);
+                }
+            }
+            document.getElementById('modelId').value = modelId;
+            document.getElementById('project-panel').classList.remove('hidden');
+            document.getElementById('config-panel').classList.remove('hidden');
+            document.getElementById('run-panel').classList.remove('hidden');
+        } catch (err) {
+            bootPanel.classList.add('err');
+            bootEl.innerHTML = `<strong>Boot failed:</strong> ${escapeHtml(err && err.message || String(err))}`;
+            console.error(err);
+            throw err;
+        }
+
+        /* ---------------- helpers ---------------- */
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function fmtPct(v) {
+            if (v == null || !Number.isFinite(v)) return '—';
+            return `${(v * 100).toFixed(1)}%`;
+        }
+
+        function setStatus(id, html, cls) {
+            const el = document.getElementById(id);
+            el.innerHTML = html;
+            const panel = el.closest('.panel');
+            if (panel) {
+                panel.classList.remove('ok', 'warn', 'err');
+                if (cls) panel.classList.add(cls);
+            }
+        }
+
+        /* ---------------- Helpers ---------------- */
+
+        // The Phase-1 loader's extension table only knows js/mjs/cjs/jsx/ts/tsx/py
+        // (code), md/markdown/txt/rst (prose), and json/jsonl/ndjson (structured).
+        // The legacy `ContextManager.indexProject` ingests any text file that
+        // passes IgnoreManager + size ceiling — including .html, .css, .yaml,
+        // .toml, .svg-as-text, Dockerfile, .gitignore, etc. Without a permissive
+        // override the new pipeline indexes ~1.6% of the legacy file set, which
+        // makes the agreement comparison meaningless ("the new pipeline can only
+        // return what it indexed"). For the measurement run we map anything the
+        // loader doesn't recognize to `prose` so the chunker's paragraph splits
+        // produce *something* indexable. The Phase-1 prose chunker tolerates
+        // arbitrary text — non-prose content just doesn't chunk on heading
+        // boundaries, which is fine for top-K source-URI comparison.
+        const PROSE_ISH_EXTENSIONS = new Set([
+            'html', 'htm', 'css', 'scss', 'sass', 'less',
+            'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'env',
+            'xml', 'svg',
+            'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat',
+            'go', 'rs', 'java', 'kt', 'kts', 'swift', 'rb', 'php',
+            'c', 'h', 'cpp', 'cc', 'hpp', 'cxx', 'm', 'mm',
+            'sql',
+            'log',
+        ]);
+        const PERMISSIVE_PROSE_OVERRIDE = (uri) => {
+            // Filenames without extensions: Dockerfile, Makefile, README, LICENSE, etc.
+            const base = uri.split('/').pop() || '';
+            if (!base.includes('.')) return 'prose';
+            const ext = (base.split('.').pop() || '').toLowerCase();
+            // Don't override known types — let the loader's extension table win.
+            // (Mapping `.js` to prose would lose the code chunker's declaration
+            // boundaries.)
+            const known = new Set([
+                'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx',
+                'py', 'pyw', 'pyi',
+                'md', 'markdown', 'txt', 'rst',
+                'json', 'jsonl', 'ndjson',
+            ]);
+            if (known.has(ext)) return null;
+            if (PROSE_ISH_EXTENSIONS.has(ext)) return 'prose';
+            // Anything else (truly unknown extension) → prose. The Phase-1
+            // measurement prefers a noisy chunk over a silent ingest failure.
+            return 'prose';
+        };
+
+        /* ---------------- 2. Project loader ---------------- */
+
+        document.getElementById('load-project').addEventListener('click', async () => {
+            const connectionId = document.getElementById('connection').value;
+            const owner = document.getElementById('owner').value.trim();
+            const repo = document.getElementById('repo').value.trim();
+            const ref = document.getElementById('ref').value.trim() || 'main';
+            if (!connectionId || !owner || !repo) {
+                setStatus('project-status', `<small><strong>Missing inputs.</strong> Pick a connection and fill owner / repo.</small>`, 'warn');
+                return;
+            }
+            setStatus('project-status', `<small>Loading <code>${escapeHtml(owner)}/${escapeHtml(repo)}@${escapeHtml(ref)}</code>…</small>`);
+            try {
+                State.currentBranch = ref;
+                await loadProject(connectionId, owner, repo);
+                State.currentBranch = ref;
+                // Re-fetch the file tree on the requested ref (loadProject may
+                // have defaulted to repo's defaultBranch).
+                const { provider, connection } = GitProviderRegistry.resolve(connectionId);
+                State.fileTree = await provider.getFileTree(connection, owner, repo, ref);
+                EventBus.emit('project:loaded', { ...State.currentProject, branch: ref });
+
+                const allFiles = (State.fileTree || []).filter((f) => f.type === 'file');
+                const eligible = allFiles.filter((f) => ContextManager.shouldIndex(f.path, f.size));
+                setStatus(
+                    'project-status',
+                    `<small>Loaded <code>${escapeHtml(owner)}/${escapeHtml(repo)}@${escapeHtml(ref)}</code>. ` +
+                    `File tree: <code>${allFiles.length}</code>. After IgnoreManager + 250KB ceiling: <code>${eligible.length}</code>.</small>`,
+                    'ok',
+                );
+                window.__measurementContext = { connectionId, owner, repo, ref, allFiles, eligible };
+            } catch (err) {
+                setStatus('project-status', `<small><strong>Load failed:</strong> ${escapeHtml(err.message || String(err))}</small>`, 'err');
+                console.error(err);
+            }
+        });
+
+        /* ---------------- 4. Re-index legacy / Run measurement ---------------- */
+
+        let abortController = null;
+
+        document.getElementById('reindex-legacy').addEventListener('click', async () => {
+            if (!window.__measurementContext) {
+                setStatus('run-status', `<small><strong>Load a project first.</strong></small>`, 'warn');
+                return;
+            }
+            const btn = document.getElementById('reindex-legacy');
+            btn.disabled = true;
+            setStatus('run-status', `<small>Re-indexing legacy ContextManager (force)…</small>`);
+            try {
+                if (!ContextManager.isEnabled()) {
+                    setStatus('run-status',
+                        `<small><strong>Embeddings disabled.</strong> Enable <code>useEmbeddings</code> in Settings → Embeddings before re-indexing.</small>`,
+                        'warn');
+                    return;
+                }
+                const count = await ContextManager.indexProject(true, false);
+                setStatus('run-status', `<small>Legacy index built: <code>${count}</code> files.</small>`, 'ok');
+            } catch (err) {
+                setStatus('run-status', `<small><strong>Re-index failed:</strong> ${escapeHtml(err.message || String(err))}</small>`, 'err');
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('run-measurement').addEventListener('click', async () => {
+            const ctx = window.__measurementContext;
+            if (!ctx) {
+                setStatus('run-status', `<small><strong>Load a project first.</strong></small>`, 'warn');
+                return;
+            }
+            const topK = Math.max(1, parseInt(document.getElementById('topK').value || '5', 10));
+            const concurrency = Math.max(1, parseInt(document.getElementById('concurrency').value || '4', 10));
+            const modelId = document.getElementById('modelId').value.trim() || (State.settings.embeddingModel || 'default');
+            const maxFiles = parseInt(document.getElementById('maxFiles').value || '0', 10);
+
+            const sourceUris = (maxFiles > 0 ? ctx.eligible.slice(0, maxFiles) : ctx.eligible).map((f) => f.path);
+            if (sourceUris.length === 0) {
+                setStatus('run-status', `<small><strong>No source URIs after filter.</strong></small>`, 'warn');
+                return;
+            }
+
+            const runBtn = document.getElementById('run-measurement');
+            const reidxBtn = document.getElementById('reindex-legacy');
+            const abortBtn = document.getElementById('abort');
+            const progress = document.getElementById('progress-bar');
+            document.getElementById('progress-row').classList.remove('hidden');
+
+            runBtn.disabled = true;
+            reidxBtn.disabled = true;
+            abortBtn.disabled = false;
+            abortController = new AbortController();
+
+            try {
+                setStatus('run-status', `<small>Constructing harness…</small>`);
+
+                // Wrap Git so each getFile() pre-clears the connection's
+                // circuit breaker. Without this, a single transient network
+                // blip mid-walk trips `connection._unreachable` and the
+                // breaker rejects every subsequent call for 60s with
+                // "Connection offline (retry in 60s)" — observed on the
+                // first measurement runs (413 of 424 fetches failed for
+                // exactly this reason while legacy ContextManager.indexProject
+                // succeeded because it has explicit circuit-aware backoff).
+                // For the measurement we want the steady-state behavior the
+                // legacy index already proved works against this Gitea
+                // instance: one in-flight at a time, breaker stays closed.
+                // `_forceRetry` is the documented "let one through" flag at
+                // js/git-providers/base.js:598.
+                const breakerClearingGit = {
+                    ...Git,
+                    getFile: async (owner, repo, path, ref, opts) => {
+                        const conn = GitProviderRegistry.resolve(ctx.connectionId);
+                        if (conn && conn.connection) conn.connection._forceRetry = true;
+                        return Git.getFile(owner, repo, path, ref, opts);
+                    },
+                };
+
+                const harness = await createMeasurementHarness({
+                    Git: breakerClearingGit,
+                    EmbeddingsClient,
+                    ContextManager,
+                    project: { owner: ctx.owner, repo: ctx.repo, ref: ctx.ref },
+                    modelId,
+                    sourceUris,
+                    topK,
+                    concurrency,
+                    contentTypeOverride: PERMISSIVE_PROSE_OVERRIDE,
+                    onIngestProgress: (done, total) => {
+                        const pct = total > 0 ? (done / total) * 100 : 0;
+                        progress.style.width = `${pct}%`;
+                        setStatus('run-status', `<small>Ingesting (Composer pipeline)… <code>${done}/${total}</code></small>`);
+                    },
+                });
+
+                setStatus('run-status', `<small>Walking <code>${sourceUris.length}</code> source URIs…</small>`);
+                const walkResult = await harness.ingest({ signal: abortController.signal });
+                const stats = harness.controller.stats();
+
+                // Diagnostic: group walker failures by error message + extension so we
+                // can see what's actually throwing. Also list a sample of ingested
+                // file paths so we can confirm the override is doing what we think.
+                const ingestedPaths = walkResult.results
+                    .filter((r) => r.status === 'ingested')
+                    .map((r) => r.source_uri);
+                const failedResults = walkResult.results.filter((r) => r.status === 'failed');
+                const failureGroups = new Map();
+                for (const r of failedResults) {
+                    const ext = (r.source_uri.split('/').pop() || '').split('.').pop() || '(none)';
+                    const msg = (r.error && r.error.message) || String(r.error || 'unknown');
+                    const key = `${ext} :: ${msg.slice(0, 120)}`;
+                    if (!failureGroups.has(key)) failureGroups.set(key, []);
+                    failureGroups.get(key).push(r.source_uri);
+                }
+                const groupedFailures = [...failureGroups.entries()]
+                    .sort((a, b) => b[1].length - a[1].length);
+                const failureHtml = groupedFailures.slice(0, 10).map(([key, paths]) =>
+                    `<div style="margin: 0.25rem 0;"><code>${escapeHtml(key)}</code> — <small>${paths.length} files; e.g. <code>${escapeHtml(paths[0])}</code></small></div>`
+                ).join('');
+
+                // Bucket by status so we can see noop/aborted/missing cases.
+                // The walker contract: walkResult.total === results.length;
+                // total === ingested + noop + failed; aborted === true iff
+                // signal fired before all sources dispatched.
+                const noopResults = walkResult.results.filter((r) => r.status === 'noop');
+                const noopByExt = new Map();
+                for (const r of noopResults) {
+                    const ext = (r.source_uri.split('/').pop() || '').split('.').pop() || '(none)';
+                    if (!noopByExt.has(ext)) noopByExt.set(ext, []);
+                    noopByExt.get(ext).push(r.source_uri);
+                }
+                const noopGroups = [...noopByExt.entries()]
+                    .sort((a, b) => b[1].length - a[1].length)
+                    .map(([ext, paths]) => ({ ext, count: paths.length, sample: paths.slice(0, 5) }));
+
+                const sourceUriCount = sourceUris.length;
+                const accountedFor = ingestedPaths.length + failedResults.length + noopResults.length;
+                const missing = sourceUriCount - accountedFor;
+
+                window.__lastIngestDiag = {
+                    sourceUriCount,
+                    walkResult: {
+                        total: walkResult.total,
+                        ingested: walkResult.ingested,
+                        noop: walkResult.noop,
+                        failed: walkResult.failed,
+                        chunksAdded: walkResult.chunksAdded,
+                        chunksRemoved: walkResult.chunksRemoved,
+                        embedFailures: walkResult.embedFailures,
+                        aborted: walkResult.aborted,
+                        durationMs: walkResult.durationMs,
+                    },
+                    accountedFor,
+                    missing,
+                    controllerStats: harness.controller.stats(),
+                    walkerStats: harness.walker.stats(),
+                    ingestedCount: ingestedPaths.length,
+                    ingestedPaths,
+                    failedCount: failedResults.length,
+                    failureGroups: groupedFailures.map(([key, paths]) => ({ key, count: paths.length, sample: paths.slice(0, 5) })),
+                    noopCount: noopResults.length,
+                    noopGroups,
+                };
+
+                setStatus(
+                    'run-status',
+                    `<small>Ingest done. <code>${walkResult.ingested}</code> ingested, ` +
+                    `<code>${walkResult.failed}</code> failed, ` +
+                    `<code>${stats.chunksAdded || walkResult.chunksAdded}</code> chunks indexed, ` +
+                    `<code>${walkResult.embedFailures}</code> embed failures, ` +
+                    `<code>${(walkResult.durationMs / 1000).toFixed(1)}s</code>.</small>` +
+                    (ingestedPaths.length > 0
+                        ? `<details style="margin-top:0.5rem;"><summary><small>Ingested files (${ingestedPaths.length})</small></summary>` +
+                          `<pre style="font-size:0.7rem; max-height:12rem;">${escapeHtml(ingestedPaths.join('\n'))}</pre></details>`
+                        : '') +
+                    (groupedFailures.length > 0
+                        ? `<details open style="margin-top:0.5rem;"><summary><small>Failure groups (top 10 of ${groupedFailures.length})</small></summary>${failureHtml}</details>`
+                        : ''),
+                    walkResult.failed > 0 ? 'warn' : 'ok',
+                );
+
+                progress.style.width = '0%';
+                setStatus('run-status', document.getElementById('run-status').innerHTML +
+                    ` <br><small>Running <code>${QUERY_FIXTURES.length}</code> queries through both pipelines…</small>`);
+                const report = await harness.run({
+                    topK,
+                    onProgress: (done, total) => {
+                        const pct = total > 0 ? (done / total) * 100 : 0;
+                        progress.style.width = `${pct}%`;
+                    },
+                });
+                renderReport(report, walkResult, { topK, concurrency, modelId, sourceUriCount: sourceUris.length });
+                setStatus('run-status', `<small>Done.</small>`, 'ok');
+            } catch (err) {
+                setStatus('run-status', `<small><strong>Run failed:</strong> ${escapeHtml(err.message || String(err))}</small>`, 'err');
+                console.error(err);
+            } finally {
+                runBtn.disabled = false;
+                reidxBtn.disabled = false;
+                abortBtn.disabled = true;
+                abortController = null;
+            }
+        });
+
+        document.getElementById('abort').addEventListener('click', () => {
+            if (abortController) abortController.abort();
+        });
+
+        /* ---------------- 5. Report rendering ---------------- */
+
+        function renderReport(report, walkResult, runMeta) {
+            const panel = document.getElementById('report-panel');
+            panel.classList.remove('hidden');
+
+            const meanAgreement = report.meanAgreement;
+            const promoted = meanAgreement != null && meanAgreement >= 0.8;
+            const headlineCls = promoted ? 'headline' : (meanAgreement != null && meanAgreement >= 0.6 ? 'warn' : 'fail');
+
+            const summary = document.getElementById('summary');
+            summary.innerHTML = `
+                <div class="stat">
+                    <div class="stat-label">Mean agreement</div>
+                    <div class="stat-value ${headlineCls}">${fmtPct(meanAgreement)}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Total queries</div>
+                    <div class="stat-value">${report.total}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Legacy failures</div>
+                    <div class="stat-value ${report.legacyFailures > 0 ? 'fail' : ''}">${report.legacyFailures}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">New failures</div>
+                    <div class="stat-value ${report.newFailures > 0 ? 'fail' : ''}">${report.newFailures}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Duration (run)</div>
+                    <div class="stat-value">${(report.durationMs / 1000).toFixed(1)}s</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Duration (ingest)</div>
+                    <div class="stat-value">${(walkResult.durationMs / 1000).toFixed(1)}s</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Source URIs</div>
+                    <div class="stat-value">${runMeta.sourceUriCount}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">≥80% gate</div>
+                    <div class="stat-value ${promoted ? '' : 'fail'}">${promoted ? 'PROMOTE ✓' : 'NOT YET'}</div>
+                </div>
+            `;
+
+            // Histogram
+            const hist = document.getElementById('histogram-wrap');
+            const buckets = report.histogram;
+            const max = Math.max(1, ...Object.values(buckets));
+            const barRows = Object.entries(buckets).map(([k, v]) => {
+                const pct = (v / max) * 100;
+                return `<tr>
+                    <td style="width: 6rem; color: #94a3b8;">${escapeHtml(k)}</td>
+                    <td><div style="background: #7c3aed; height: 12px; width: ${pct}%; border-radius: 2px; min-width: 2px;"></div></td>
+                    <td style="width: 3rem; text-align: right;">${v}</td>
+                </tr>`;
+            }).join('');
+            hist.innerHTML = `<h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Agreement histogram</h3>
+                <table style="max-width: 30rem;">${barRows}</table>`;
+
+            // Per-category breakdown
+            const byCategory = new Map();
+            for (let i = 0; i < report.perQuery.length; i += 1) {
+                const fixture = QUERY_FIXTURES[i];
+                if (!fixture) continue;
+                const cat = fixture.category || 'unknown';
+                if (!byCategory.has(cat)) byCategory.set(cat, []);
+                byCategory.get(cat).push(report.perQuery[i]);
+            }
+            const catRows = [...byCategory.entries()]
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([cat, results]) => {
+                    const valid = results.filter((r) => r.agreement != null);
+                    const mean = valid.length === 0 ? null
+                        : valid.reduce((acc, r) => acc + r.agreement, 0) / valid.length;
+                    const cls = mean == null ? 'err' : mean >= 0.8 ? 'high' : mean >= 0.5 ? 'mid' : 'low';
+                    return `<tr>
+                        <td>${escapeHtml(cat)}</td>
+                        <td style="text-align: right;">${results.length}</td>
+                        <td class="agree ${cls}" style="text-align: right;">${fmtPct(mean)}</td>
+                    </tr>`;
+                }).join('');
+            const catWrap = document.getElementById('categories-wrap');
+            catWrap.innerHTML = `<h3 style="font-size: 0.9rem; color: #a78bfa; margin: 0.5rem 0 0.25rem 0;">Per-category mean agreement</h3>
+                <table style="max-width: 30rem;">
+                    <thead><tr><th>Category</th><th style="text-align: right;">Queries</th><th style="text-align: right;">Mean agreement</th></tr></thead>
+                    <tbody>${catRows}</tbody>
+                </table>`;
+
+            // Per-query table
+            const rows = report.perQuery.map((r, i) => {
+                const fixture = QUERY_FIXTURES[i];
+                const cat = fixture ? fixture.category : '—';
+                const agreementCls = r.agreement == null ? 'err' : r.agreement >= 0.8 ? 'high' : r.agreement >= 0.5 ? 'mid' : 'low';
+                const agreement = r.agreement == null
+                    ? `error: ${escapeHtml((r.legacyError || r.newError || {}).message || 'unknown')}`
+                    : fmtPct(r.agreement);
+                return `<tr>
+                    <td class="q">${escapeHtml(r.query)}</td>
+                    <td><small>${escapeHtml(cat)}</small></td>
+                    <td class="paths">${(r.legacyPaths || []).map(escapeHtml).join('<br>') || '<small>—</small>'}</td>
+                    <td class="paths">${(r.newPaths || []).map(escapeHtml).join('<br>') || '<small>—</small>'}</td>
+                    <td class="agree ${agreementCls}">${agreement}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('perquery-wrap').innerHTML = `
+                <table>
+                    <thead><tr><th>Query</th><th>Category</th><th>Legacy paths</th><th>New paths</th><th>Agreement</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+
+            // Full JSON
+            const reportJson = {
+                version: '1.5.4',
+                run_meta: {
+                    project: { owner: window.__measurementContext.owner, repo: window.__measurementContext.repo, ref: window.__measurementContext.ref },
+                    modelId: runMeta.modelId,
+                    topK: runMeta.topK,
+                    concurrency: runMeta.concurrency,
+                    sourceUriCount: runMeta.sourceUriCount,
+                    walked: { ingested: walkResult.ingested, failed: walkResult.failed, chunksAdded: walkResult.chunksAdded, embedFailures: walkResult.embedFailures, durationMs: walkResult.durationMs },
+                    ranAt: new Date().toISOString(),
+                },
+                report,
+            };
+            window.__lastReport = reportJson;
+            document.getElementById('report-json').textContent = JSON.stringify(reportJson, replaceErr, 2);
+        }
+
+        function replaceErr(_k, v) {
+            if (v instanceof Error) return { message: v.message, name: v.name };
+            return v;
+        }
+
+        document.getElementById('toggle-perquery').addEventListener('click', () => {
+            document.getElementById('perquery-wrap').classList.toggle('hidden');
+        });
+        document.getElementById('toggle-categories').addEventListener('click', () => {
+            document.getElementById('categories-wrap').classList.toggle('hidden');
+        });
+        document.getElementById('copy-report').addEventListener('click', async () => {
+            const json = document.getElementById('report-json').textContent;
+            try {
+                await navigator.clipboard.writeText(json);
+                document.getElementById('copy-report').textContent = 'Copied!';
+                setTimeout(() => { document.getElementById('copy-report').textContent = 'Copy report JSON'; }, 1500);
+            } catch {
+                document.getElementById('report-json').classList.toggle('hidden');
+            }
+        });
+        document.getElementById('copy-failure-log').addEventListener('click', async () => {
+            const btn = document.getElementById('copy-failure-log');
+            const diag = window.__lastIngestDiag;
+            if (!diag) {
+                btn.textContent = 'No log yet — run measurement first';
+                setTimeout(() => { btn.textContent = 'Copy failure log'; }, 2000);
+                return;
+            }
+            const json = JSON.stringify(diag, null, 2);
+            try {
+                await navigator.clipboard.writeText(json);
+                btn.textContent = `Copied! (${diag.failedCount} failures across ${diag.failureGroups.length} groups)`;
+                setTimeout(() => { btn.textContent = 'Copy failure log'; }, 2500);
+            } catch {
+                // Clipboard API unavailable (insecure context, etc.) — render the JSON
+                // into a visible <pre> the user can manually copy from.
+                let pre = document.getElementById('failure-log-json');
+                if (!pre) {
+                    pre = document.createElement('pre');
+                    pre.id = 'failure-log-json';
+                    document.getElementById('report-panel').appendChild(pre);
+                }
+                pre.textContent = json;
+                pre.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

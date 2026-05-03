@@ -4,6 +4,158 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-05-02
+
+**Retrieval Phase 1 — ≥80% legacy-vs-new agreement measurement run (PR 20 of
+1.5.0).** New module
+[`js/intelligence/retrieval/measurement.js`](js/intelligence/retrieval/measurement.js)
+plus a standalone browser runner at
+[`tests/retrieval-measurement.html`](tests/retrieval-measurement.html). The
+integration that drives the 1.5.3
+[`QUERY_CORPUS`](js/intelligence/retrieval/test-corpus.js) through the 1.5.2
+[`createComparisonHarness`](js/intelligence/retrieval/comparison.js) against
+(a) the live legacy
+[`ContextManager.findRelevantFiles`](js/context-manager.js) pipeline and
+(b) a real wired-up Composer + production walker via
+[`createProductionIngestWalker`](js/intelligence/retrieval/wiring.js) (1.5.1).
+This is the PR that produces the **≥80% legacy-vs-new agreement number**
+that promotes Retrieval Phase 1 to 1.5.0-final per the §"1.5.0 Retrieval
+Phase 1" exit criteria in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+**Public surface** — re-exported from
+[the retrieval barrel](js/intelligence/retrieval/index.js):
+
+- `createMeasurementHarness({ Git, EmbeddingsClient, ContextManager,
+  project, modelId, sourceUris, topK?, composerBudget?, collection?,
+  concurrency?, onIngestProgress?, store?, contentTypeOverride? }) →
+  Promise<MeasurementHarness>` — pure-DI factory that constructs both
+  pipeline runners (`runLegacy(query) =>
+  ContextManager.findRelevantFiles(query, topK)`,
+  `runNew(query) => compose({...}, {strategies, getChunkByID})`) and
+  wires them through `createComparisonHarness`. Async because
+  `createProductionIngestWalker` awaits `EmbeddingsClient.init()` per
+  the design's "library startup, not per-call" rule (DESIGN-retrieval
+  lines 304-308).
+- The `MeasurementHarness` handle exposes `ingest(opts?: {signal?}) =>
+  Promise<WalkResult>` (drives the production walker over the supplied
+  `sourceUris`), `run(opts?: {topK?, onProgress?, queries?}) =>
+  Promise<ComparisonReport>` (drives `compareBatch(QUERY_CORPUS)`
+  through both runners), `runner.legacy(query)` /
+  `runner.compose(query)` introspection, and `walker` / `controller` /
+  `store` / `comparison` handles for diagnostics.
+
+**Browser runner** ([`tests/retrieval-measurement.html`](tests/retrieval-measurement.html)).
+Standalone single-page harness that boots the editor's `core.js` /
+`git.js` / `embeddings-client.js` / `context-manager.js` / `ignore.js`
+the same way `js/app.js` does, lets the user pick a configured Git
+connection + project triple, filters the file tree through
+`ContextManager.shouldIndex` (so both pipelines see the same files),
+re-indexes the legacy `ContextManager`, runs the measurement, and
+displays per-query results + per-category agreement breakdown +
+histogram + `ComparisonReport` JSON for paste-into-CHANGELOG. Stays
+under `tests/` — not auto-imported by `tests/index.html` (so the heavy
+ingest doesn't run on every test-suite open) and removable without
+touching production code.
+
+**Phase-1 scope decisions** (called out so future readers don't have to
+reverse-engineer them from behavior):
+
+- **File-tree enumeration is the call site's job, not the harness's.**
+  Different consumers want different filter sets — the legacy
+  `ContextManager.indexProject` filter (size ceiling + IgnoreManager)
+  vs. a future workspace-tree walker. The harness takes a
+  `sourceUris: string[]` and trusts it; the browser runner builds the
+  URI list against the same filter `ContextManager.indexProject` uses
+  so both pipelines see the same files.
+- **Default Composer budget tuned for the 80% gate.** `total_tokens:
+  8000`, all reserves `0` so the full budget is retrieval. The
+  measurement compares top-K source URIs, not prompt-budget math; the
+  caller can override every field via `composerBudget`.
+- **No history / pins / ledger / filters in the request.** The
+  measurement compares pure retrieval shapes. A future per-query
+  stratification (per-category ledger, per-fixture filters) is the
+  browser runner's concern; the factory stays minimal.
+- **Same `topK` across both runners.** Legacy `findRelevantFiles`
+  takes `topK` directly; the new pipeline returns up to
+  `DEFAULT_TOTAL_QUOTA` chunks but `normalizeComposerResult` caps the
+  derived path list at the harness's `topK`. Defaults to 5 to match
+  the legacy default.
+- **Errors propagate verbatim from `ingest()`; the comparison harness's
+  per-query error isolation handles runner throws during `run()`.**
+  That's the right granularity — an `EmbeddingsClient.init()` failure
+  should surface up; a per-query embedder hiccup should not poison
+  the batch.
+- **Pre-aborted signal short-circuits `ingest()`.** Mirrors the
+  walker's pre-abort behavior. `run()`'s sequential loop checks
+  between queries.
+- **No re-export of the report shape.** The handle returns the 1.5.2
+  `ComparisonReport` verbatim; consumers already import that typedef
+  from the barrel.
+
+**Canonical measurement deferred to a 1.5.4-patch.** Three runs of the
+browser runner against this repo (2026-05-02) surfaced two real
+gating issues that prevent producing an honest ≥80% number on this
+branch:
+
+1. **Browser-local Transformers.js is too slow at chunk granularity.**
+   Each file produces ~20 chunks; each chunk is ~300-600ms of WASM
+   embedding work depending on the model (`bge-small-en-v1.5` vs
+   `bge-base-en-v1.5`). 424 files × 20 chunks × 600ms ≈ ~85 minutes
+   *minimum* before any network or fetch overhead. The legacy
+   `ContextManager.indexProject` survives this because it embeds *one
+   summary per file*, not per chunk; chunk-level retrieval is a 20×
+   embedder-call multiplier the legacy never paid.
+2. **Remote embedder providers hit RPM walls without rate-limit-header
+   respect.** The deferred Foundations item *Provider rate-limit
+   respect* (read `x-ratelimit-*`, pace, back-off on 429) hasn't
+   shipped, so concurrent fetches against a remote provider trigger
+   429-cascade and the run dies before completion. Originally listed
+   as cross-cutting "ships when any track hits pressure"; this PR is
+   the track that hit it.
+
+The unblock is **the in-cluster embedder rollout** (deploys an
+embedder service inside the user's network, removes both the WASM
+bottleneck and the upstream RPM concern). Once deployed, configuring
+the editor's Settings → Embeddings to point at the in-cluster service
+is sufficient — the harness already auto-routes through
+`EmbeddingsClient.embed()` ([js/embeddings-client.js:194-197](js/embeddings-client.js)),
+which respects `State.settings.embeddingProvider`. No runner code
+change required.
+
+The 1.5.4-patch follow-up runs the canonical ≥80% measurement against
+the in-cluster embedder, captures the agreement number + per-category
+breakdown, and either promotes the §1.5.0 track to 1.5.0-final or
+files the per-category divergence as Composer tuning work.
+
+**Other items intentionally deferred:**
+- Migration of `find_relevant_files` off legacy
+  `js/context-manager.js` — that's 1.5.6.
+- Thematic strategy (k-means) — 1.5.5.
+- Cost-dashboard retrieval extension — 1.5.7, gated on cost dashboard.
+- Wiring the harness into the in-app Settings/Debug surface — the
+  standalone HTML runner is sufficient for the one-time measurement.
+- Auto-tuning the Composer if agreement <80% — that's a follow-up
+  patch series before 1.5.5 / 1.5.6.
+- **Persistent embedding cache** (`(content_hash, model_id) →
+  EmbeddingVector`) — the 1.5.x follow-up that would make repeat
+  measurement runs near-instant. The 1.5.2 Embedder factory accepts
+  an injected `EmbedderCache`; the producer ships once a real
+  consumer demands it.
+
+**No runtime wire-up.** Nothing imports `createMeasurementHarness`
+outside the test suite + the standalone HTML runner.
+[`tests/index.html`](tests/index.html) does not auto-import the
+measurement runner. With `measurement.js` deleted (and the barrel
+re-export removed and `tests/retrieval-measurement.html` deleted),
+`find_relevant_files` keeps running through legacy
+`ContextManager.findRelevantFiles` exactly as before — Removability
+holds (Decision §7). The migration off legacy lands at 1.5.6.
+
+22 unit cases under `node --test tests/test-retrieval-measurement.mjs`
+covering the wiring contract end-to-end with fakes for `Git`,
+`EmbeddingsClient`, and `ContextManager` (the real modules import
+browser-bound `core.js` and aren't node-importable).
+
 ## [1.5.3] - 2026-05-02
 
 **Retrieval Phase 1 — Test-query fixture corpus (PR 19 of 1.5.0).** New

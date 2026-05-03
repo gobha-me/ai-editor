@@ -131,6 +131,19 @@
  * (1.5.4) drives this corpus through `createComparisonHarness` against
  * a real wired-up Composer + the live legacy `ContextManager.findRelevantFiles`
  * and reports the number that promotes the track to 1.5.0-final.
+ * 1.5.4 adds `createMeasurementHarness` (`./measurement.js`) — the
+ * integration that drives the 1.5.3 `QUERY_CORPUS` through the 1.5.2
+ * comparison harness against (a) the live legacy
+ * `ContextManager.findRelevantFiles` pipeline and (b) a real wired-up
+ * Composer + production walker. Pure DI; the caller threads in `Git`,
+ * `EmbeddingsClient`, `ContextManager`, the `{ owner, repo, ref }`
+ * triple, and a pre-filtered `sourceUris` list. The browser runner at
+ * `tests/retrieval-measurement.html` ships in the same PR but lives
+ * under `tests/` (not under `js/`) so deleting it removes the runner
+ * without touching production code. Twentieth PR in the 1.5.0 stream
+ * and the piece that produces the **≥80% legacy-vs-new agreement
+ * number** that promotes Retrieval Phase 1 to 1.5.0-final per the
+ * §"1.5.0 Retrieval Phase 1" exit criteria in `docs/ROADMAP.md`.
  *
  * Consumers should import from this barrel rather than reaching into
  * sibling modules, so the public surface remains the only commitment
@@ -185,3 +198,4 @@ export {
     QUERY_CATEGORIES,
     getQueriesByCategory,
 } from './test-corpus.js';
+export { createMeasurementHarness } from './measurement.js';
