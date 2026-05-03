@@ -151,7 +151,7 @@ import { createSemanticStrategy } from './strategies/semantic.js';
 import { createStructuralStrategy } from './strategies/structural.js';
 import { compose } from './composer.js';
 import { createComparisonHarness } from './comparison.js';
-import { QUERY_CORPUS, QUERY_FIXTURES } from './test-corpus.js';
+import { QUERY_CORPUS, QUERY_FIXTURES, QUERY_CATEGORIES } from './test-corpus.js';
 
 /**
  * Default batch input for `harness.run()` — the richer
@@ -211,17 +211,102 @@ const DEFAULT_COLLECTION = 'default';
 
 /**
  * Composer tuning T1 — default content-type accept-list passed as
- * `req.filters.content_types`. Excludes `'prose'` (per the 1.5.4-patch
- * divergence pattern: docs/HTML files dominate the new pipeline's top-K
- * because each emits ~20 well-scoring chunks). Frozen to prevent caller
- * mutation; callers wanting a different filter pass `composeFilters`
- * explicitly (or `null` to restore pre-T1 behavior).
+ * `req.filters.content_types` when no per-fixture category is supplied.
+ * Excludes `'prose'` (per the 1.5.4-patch divergence pattern: docs/HTML
+ * files dominate the new pipeline's top-K because each emits ~20
+ * well-scoring chunks). Frozen to prevent caller mutation; callers
+ * wanting a different filter pass `composeFilters` explicitly (or `null`
+ * to restore pre-T1 behavior).
  *
  * @type {import('./contracts.js').MetadataFilter}
  */
 const DEFAULT_COMPOSE_FILTERS = Object.freeze({
     content_types: Object.freeze(['code', 'conversation', 'structured', 'spec']),
 });
+
+/**
+ * Composer tuning T3 — default per-category content-type accept-list. Used
+ * by the default `composeFilters` resolver when a fixture supplies a
+ * `category`.
+ *
+ * **Every entry is `['code']`.** The first T3 cut (2026-05-03 a.m.)
+ * admitted `'prose'` for the three mixed categories that have at least
+ * one prose canonical (`bug-investigation` → `CHANGELOG.md`,
+ * `onboarding` / `topic` → `docs/PLUGIN.md`) on the theory that the T2
+ * source-uri max-score rollup would prevent prose dilution. The
+ * canonical T4 measurement (2026-05-03 20:20,
+ * `docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`)
+ * falsified that theory:
+ *
+ *   - `bug-investigation` 0.324 → 0.276 (-0.048)
+ *   - `onboarding`        0.583 → 0.417 (-0.166)
+ *   - `topic`             0.455 → 0.359 (-0.096)
+ *   - `task-related`      0.331 → 0.386 (+0.055) ← narrowing helped
+ *   - headline            0.541 → 0.497 (-0.044) ← net regression
+ *
+ * The prose admission *did* retrieve the prose canonicals (e.g. T4's
+ * `write-new-plugin` got `docs/PLUGIN.md` at rank 1, `plugins-register-hooks`
+ * got it at rank 2), but the cost was prose chunks displacing code
+ * canonicals on other queries in the same bucket: T4's
+ * `how do I add a new role?` returned `docs/ROLES_AND_TOOLS.md` +
+ * `docs/PLUGIN.md` instead of `js/settings/roles-tab.js`, scoring 0%.
+ *
+ * Verdict: the T2 max-score rollup is not strong enough to neutralize
+ * prose dominance across a category. The map is therefore narrowed to
+ * `['code']` everywhere — the three prose canonicals become unreachable
+ * (they were already unreachable under T1's default), but the
+ * regression on the rest of the bucket is recovered. The `task-related`
+ * +0.055 from narrowing is preserved.
+ *
+ * `'conversation'` / `'spec'` / `'structured'` are absent because they
+ * don't appear as canonicals in this corpus (verified 2026-05-03
+ * against `QUERY_FIXTURES`); `'conversation'` is `memory://` only and
+ * `'spec'` is post-Phase-1 per `js/intelligence/retrieval/loader.js`.
+ * The no-category fallback `DEFAULT_COMPOSE_FILTERS` keeps the
+ * historical T1 list for cosmetic back-compat.
+ *
+ * Frozen at module load (outer object and each entry's `content_types`
+ * array) so a downstream caller can't mutate the default map.
+ *
+ * @type {Readonly<Object<string, import('./contracts.js').MetadataFilter>>}
+ */
+export const DEFAULT_COMPOSE_FILTERS_BY_CATEGORY = Object.freeze({
+    [QUERY_CATEGORIES.FUNCTION_DISCOVERY]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+    [QUERY_CATEGORIES.FILE_DISCOVERY]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+    [QUERY_CATEGORIES.TASK_RELATED]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+    [QUERY_CATEGORIES.BUG_INVESTIGATION]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+    [QUERY_CATEGORIES.ONBOARDING]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+    [QUERY_CATEGORIES.TOPIC]: Object.freeze({
+        content_types: Object.freeze(['code']),
+    }),
+});
+
+/**
+ * Default `composeFilters` resolver — consulted per-call when a caller
+ * doesn't pass `composeFilters` explicitly. Looks up the per-category
+ * map above and falls back to the no-category T1 default. Pure function;
+ * tested in isolation.
+ *
+ * @param {{ category?: string|null }|null|undefined} opts
+ * @returns {import('./contracts.js').MetadataFilter}
+ */
+export function defaultComposeFiltersResolver(opts) {
+    const cat = opts && typeof opts.category === 'string' ? opts.category : null;
+    if (cat !== null && Object.prototype.hasOwnProperty.call(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY, cat)) {
+        return DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat];
+    }
+    return DEFAULT_COMPOSE_FILTERS;
+}
 
 /**
  * The narrow `ContextManager` surface the harness needs. Lifted into a
@@ -238,8 +323,8 @@ const DEFAULT_COMPOSE_FILTERS = Object.freeze({
  * for one query without going through `compareBatch`.
  *
  * @typedef {Object} MeasurementRunner
- * @property {(query: string) => Promise<Array<{path: string, similarity: number, summary: string}>>} legacy
- * @property {(query: string) => Promise<RetrievalResult>} compose
+ * @property {(query: string, opts?: { category?: string|null }) => Promise<Array<{path: string, similarity: number, summary: string}>>} legacy
+ * @property {(query: string, opts?: { category?: string|null }) => Promise<RetrievalResult>} compose
  */
 
 /**
@@ -286,14 +371,24 @@ const DEFAULT_COMPOSE_FILTERS = Object.freeze({
  *   inside `createProductionIngestWalker`.
  * @property {((source_uri: string) => (string|null))|undefined} [contentTypeOverride]
  *   Optional. Threaded to the loader.
- * @property {import('./contracts.js').MetadataFilter|null|undefined} [composeFilters]
+ * @property {import('./contracts.js').MetadataFilter|null|((opts: { category?: string|null }) => (import('./contracts.js').MetadataFilter|null))|undefined} [composeFilters]
  *   Optional. Threaded to the new pipeline as `RetrievalRequest.filters`
- *   on every `runCompose(query)` invocation. Defaults to a content-type
- *   accept-list excluding `'prose'` (Composer tuning T1, see
- *   "Phase-1 scope decisions" §3 above). Pass `null` to restore the
- *   pre-T1 behavior of `filters: null`. Pass an explicit `MetadataFilter`
- *   for ad-hoc experimentation (T3 intent-aware filtering will plumb
- *   through this same knob from the browser runner).
+ *   on every `runCompose(query, opts)` invocation. Three accepted shapes:
+ *
+ *   - **Function** `(opts: { category?: string|null }) => MetadataFilter|null`
+ *     (Composer tuning T3). Resolved per-call with the per-fixture
+ *     `category` (or `null` for bare-string queries). The default value
+ *     is `defaultComposeFiltersResolver`, which consults
+ *     `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` and falls back to
+ *     `DEFAULT_COMPOSE_FILTERS` when category is absent.
+ *   - **Object** `MetadataFilter`. Used as-is for every call (back-compat
+ *     with T1; behaves identically to passing a constant resolver).
+ *   - **`null`**. Restores the pre-T1 behavior of `filters: null`.
+ *
+ *   The function form is the T3 seam — callers wanting per-fixture
+ *   experimentation supply a custom resolver without touching the
+ *   harness itself. Live `find_relevant_files` (still on legacy
+ *   `js/context-manager.js` until 1.5.9) is unaffected.
  * @property {AbortSignal|undefined} [signal]
  *   Optional. A pre-aborted signal supplied here is honored at
  *   construction time — `ingest()` will return immediately with a
@@ -451,15 +546,20 @@ function validateOptions(options) {
         );
     }
     if (composeFilters !== undefined && composeFilters !== null) {
-        if (typeof composeFilters !== 'object') {
+        if (typeof composeFilters === 'function') {
+            // Function form (T3): resolved per-call. Cannot validate the
+            // resolver's return shape here; defer to runCompose's per-call
+            // type guard.
+        } else if (typeof composeFilters === 'object') {
+            const ct = /** @type {any} */ (composeFilters).content_types;
+            if (ct !== undefined && !Array.isArray(ct)) {
+                throw new TypeError(
+                    'createMeasurementHarness: composeFilters.content_types must be an array when provided',
+                );
+            }
+        } else {
             throw new TypeError(
-                'createMeasurementHarness: composeFilters must be a MetadataFilter object, null, or undefined',
-            );
-        }
-        const ct = /** @type {any} */ (composeFilters).content_types;
-        if (ct !== undefined && !Array.isArray(ct)) {
-            throw new TypeError(
-                'createMeasurementHarness: composeFilters.content_types must be an array when provided',
+                'createMeasurementHarness: composeFilters must be a MetadataFilter object, a (opts) => MetadataFilter|null function, null, or undefined',
             );
         }
     }
@@ -495,9 +595,28 @@ export async function createMeasurementHarness(options) {
 
     const finalTopK = topK ?? DEFAULT_TOP_K;
     const finalCollection = collection ?? DEFAULT_COLLECTION;
-    const finalComposeFilters = composeFilters === undefined
-        ? DEFAULT_COMPOSE_FILTERS
-        : composeFilters;
+    /**
+     * Per-call resolver for `req.filters`. Three caller-supplied shapes
+     * collapse to a single function here so `runCompose` doesn't branch:
+     *
+     *   - `undefined` → `defaultComposeFiltersResolver` (T3 per-category map)
+     *   - `null`      → constant `() => null` (pre-T1 behavior)
+     *   - `function`  → used as-is (T3 caller-supplied resolver)
+     *   - `object`    → wrapped in `() => obj` (T1 back-compat: same filter every call)
+     *
+     * @type {(opts: { category?: string|null }) => (import('./contracts.js').MetadataFilter|null)}
+     */
+    let resolveComposeFilters;
+    if (composeFilters === undefined) {
+        resolveComposeFilters = defaultComposeFiltersResolver;
+    } else if (composeFilters === null) {
+        resolveComposeFilters = () => null;
+    } else if (typeof composeFilters === 'function') {
+        resolveComposeFilters = composeFilters;
+    } else {
+        const constant = composeFilters;
+        resolveComposeFilters = () => constant;
+    }
     const finalBudget = {
         total_tokens: composerBudget && typeof composerBudget.total_tokens === 'number'
             ? composerBudget.total_tokens : DEFAULT_COMPOSER_BUDGET.total_tokens,
@@ -534,9 +653,15 @@ export async function createMeasurementHarness(options) {
 
     /**
      * @param {string} query
+     * @param {{ category?: string|null }} [opts] Per-call options. The
+     *   comparison harness threads each fixture's `category` through here
+     *   so the T3 resolver can pick a per-category content-type filter.
+     *   Single-arg invocation is supported (the resolver sees `category:
+     *   null`) for ad-hoc callers via `harness.runner.compose(query)`.
      * @returns {Promise<RetrievalResult>}
      */
-    async function runCompose(query) {
+    async function runCompose(query, opts) {
+        const filters = resolveComposeFilters(opts || {});
         /** @type {RetrievalRequest} */
         const req = {
             task: '',
@@ -544,7 +669,7 @@ export async function createMeasurementHarness(options) {
             collections: [finalCollection],
             budget: finalBudget,
             history: null,
-            filters: finalComposeFilters,
+            filters,
             strategy_hints: null,
             priority_pins: null,
             task_ledger: null,
@@ -554,9 +679,13 @@ export async function createMeasurementHarness(options) {
 
     /**
      * @param {string} query
+     * @param {{ category?: string|null }} [_opts] Accepted for symmetry
+     *   with the new `runNew(query, opts)` runner contract; the legacy
+     *   `findRelevantFiles` API has no per-fixture seam, so opts is
+     *   ignored.
      * @returns {Promise<Array<{path: string, similarity: number, summary: string}>>}
      */
-    async function runLegacy(query) {
+    async function runLegacy(query, _opts) {
         return ContextManager.findRelevantFiles(query, finalTopK);
     }
 

@@ -92,6 +92,16 @@
  *   8. **Injectable `now()`** for deterministic `durationMs`. Same
  *      DI posture every retrieval module took.
  *
+ *   9. **Per-fixture category threaded to runners (T3, 1.5.7).** Both
+ *      runners accept an optional second arg `(query, { category })`,
+ *      where `category` comes from the per-fixture `category` field on
+ *      `compareBatch` input objects (or `null` for bare-string queries).
+ *      Single-arg legacy runners stay valid — the extra arg is ignored.
+ *      The measurement harness's new-pipeline runner uses this to pick
+ *      a per-category content-type filter (`composeFilters` resolver);
+ *      the legacy runner's signature carries the arg for symmetry but
+ *      `findRelevantFiles(query, topK)` has no per-fixture seam.
+ *
  * **Out of scope (later PRs):**
  *
  *   - The fixture corpus the harness drives (next PR).
@@ -163,12 +173,18 @@
  * Options to `createComparisonHarness`.
  *
  * @typedef {Object} ComparisonHarnessOptions
- * @property {(query: string) => Promise<*>} runLegacy
+ * @property {(query: string, opts?: { category?: string|null }) => Promise<*>} runLegacy
  *   Required. Drives the legacy retrieval pipeline. The shape it
- *   resolves to is whatever `normalizeLegacy` understands.
- * @property {(query: string) => Promise<*>} runNew
+ *   resolves to is whatever `normalizeLegacy` understands. The optional
+ *   second arg carries the per-fixture `category` (when `compareBatch`
+ *   parses a `{ query, category }` object) — single-arg legacy runners
+ *   stay valid (the extra arg is ignored).
+ * @property {(query: string, opts?: { category?: string|null }) => Promise<*>} runNew
  *   Required. Drives the new Composer pipeline. The shape it resolves
- *   to is whatever `normalizeNew` understands.
+ *   to is whatever `normalizeNew` understands. The optional second arg
+ *   is the T3 seam — the measurement harness reads `opts.category` to
+ *   pick a per-category content-type filter. Single-arg runners stay
+ *   valid.
  * @property {((raw: *, opts: { topK: number }) => string[])|undefined} [normalizeLegacy]
  *   Optional. Reduces a legacy raw result to a `string[]` of paths.
  *   Defaults to `normalizeLegacyResult`.
@@ -697,8 +713,10 @@ export function createComparisonHarness(options) {
         /** @type {Error|null} */
         let newError = null;
 
+        const runnerOpts = { category };
+
         try {
-            const raw = await runLegacy(query);
+            const raw = await runLegacy(query, runnerOpts);
             legacyPaths = normLegacy(raw, { topK: k });
             if (!Array.isArray(legacyPaths)) legacyPaths = [];
         } catch (err) {
@@ -707,7 +725,7 @@ export function createComparisonHarness(options) {
         }
 
         try {
-            const raw = await runNew(query);
+            const raw = await runNew(query, runnerOpts);
             newPaths = normNew(raw, { topK: k });
             if (!Array.isArray(newPaths)) newPaths = [];
         } catch (err) {

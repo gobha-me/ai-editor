@@ -22,7 +22,10 @@ import assert from 'node:assert/strict';
 
 import {
     createMeasurementHarness,
+    DEFAULT_COMPOSE_FILTERS_BY_CATEGORY,
+    defaultComposeFiltersResolver,
 } from '../js/intelligence/retrieval/measurement.js';
+import { QUERY_CATEGORIES } from '../js/intelligence/retrieval/test-corpus.js';
 
 /* ---------------- Fixture builders ---------------- */
 
@@ -577,4 +580,230 @@ test('runner.compose: explicit composeFilters override is honored (T1)', async (
         const ct = result.chunks_by_id[id].metadata.content_type;
         assert.equal(ct, 'structured', `chunk ${id} leaked with content_type=${ct} despite explicit accept-list ['structured']`);
     }
+});
+
+/* ============================================================
+ * T3 — per-category content-type filter (1.5.7)
+ *
+ * The default `composeFilters` resolver consults
+ * `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` per call, keyed off the
+ * `category` the comparison harness threads from each fixture. Post-T4
+ * (2026-05-03), every per-category entry is `['code']` — the initial
+ * prose admission for mixed categories regressed three buckets by
+ * 4-17pts and was reverted (see the docblock on
+ * `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` in measurement.js for the T4
+ * data). The no-category fallback preserves the T1 default for
+ * back-compat.
+ * ============================================================ */
+
+test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: covers every QUERY_CATEGORIES enum value', () => {
+    for (const cat of Object.values(QUERY_CATEGORIES)) {
+        assert.ok(
+            Object.prototype.hasOwnProperty.call(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY, cat),
+            `missing per-category default for ${cat}`,
+        );
+        const f = DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat];
+        assert.ok(Array.isArray(f.content_types), `category ${cat}: content_types must be array`);
+        assert.ok(f.content_types.length > 0, `category ${cat}: content_types must be non-empty`);
+        assert.ok(
+            f.content_types.includes('code'),
+            `category ${cat}: every fixture's expectedPaths include code files; 'code' must be admitted`,
+        );
+    }
+});
+
+test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: every category is exactly [code] post-T4 revision', () => {
+    // The first T3 cut admitted 'prose' for the three mixed categories
+    // with prose canonicals; T4 (2026-05-03) showed prose dilution
+    // outweighed the prose-canonical recall gain. Map narrowed to
+    // ['code'] everywhere. See `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY`
+    // docblock in measurement.js for the per-category deltas.
+    for (const cat of Object.values(QUERY_CATEGORIES)) {
+        assert.deepEqual(
+            [...DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat].content_types],
+            ['code'],
+            `${cat} should be code-only post-T4 narrowing`,
+        );
+    }
+});
+
+test('DEFAULT_COMPOSE_FILTERS_BY_CATEGORY: outer object and inner content_types arrays are frozen', () => {
+    assert.ok(Object.isFrozen(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY));
+    for (const cat of Object.keys(DEFAULT_COMPOSE_FILTERS_BY_CATEGORY)) {
+        const filter = DEFAULT_COMPOSE_FILTERS_BY_CATEGORY[cat];
+        assert.ok(Object.isFrozen(filter), `${cat}: filter object must be frozen`);
+        assert.ok(Object.isFrozen(filter.content_types), `${cat}: content_types array must be frozen`);
+    }
+});
+
+test('defaultComposeFiltersResolver: known category dispatches to per-category filter', () => {
+    const f = defaultComposeFiltersResolver({ category: QUERY_CATEGORIES.FUNCTION_DISCOVERY });
+    assert.deepEqual([...f.content_types], ['code']);
+});
+
+test('defaultComposeFiltersResolver: unknown category falls back to no-category default', () => {
+    const f = defaultComposeFiltersResolver({ category: 'made-up-bucket' });
+    // No-category default = T1 accept-list (excludes prose, includes
+    // conversation/structured/spec for cosmetic back-compat).
+    assert.ok(Array.isArray(f.content_types));
+    assert.ok(f.content_types.includes('code'));
+    assert.ok(!f.content_types.includes('prose'));
+});
+
+test('defaultComposeFiltersResolver: null / undefined / missing category falls back to no-category default', () => {
+    const fNull = defaultComposeFiltersResolver({ category: null });
+    const fUndef = defaultComposeFiltersResolver({ category: undefined });
+    const fMissing = defaultComposeFiltersResolver({});
+    const fNoArg = defaultComposeFiltersResolver(undefined);
+    for (const f of [fNull, fUndef, fMissing, fNoArg]) {
+        assert.ok(Array.isArray(f.content_types));
+        assert.ok(f.content_types.includes('code'));
+        assert.ok(!f.content_types.includes('prose'));
+    }
+});
+
+test('createMeasurementHarness: function-form composeFilters is invoked per call with opts.category', async () => {
+    const Git = makeFakeGit({
+        'a.js': 'function foo() { return 1; }\n',
+    });
+    const seenCalls = [];
+    const customResolver = (opts) => {
+        seenCalls.push(opts);
+        return { content_types: ['code'] };
+    };
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['a.js'],
+        composeFilters: customResolver,
+    });
+    await handle.ingest();
+    // No-arg call sees opts: {}
+    await handle.runner.compose('foo');
+    // Two-arg call passes through category
+    await handle.runner.compose('foo', { category: 'bug-investigation' });
+    assert.equal(seenCalls.length, 2);
+    assert.deepEqual(seenCalls[0], {});
+    assert.deepEqual(seenCalls[1], { category: 'bug-investigation' });
+});
+
+test('createMeasurementHarness: function-form composeFilters can return null (pre-T1 behavior per call)', async () => {
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nProse paragraph body here.\n',
+    });
+    // Resolver returns null → no filter → prose passes through.
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md'],
+        composeFilters: () => null,
+    });
+    await handle.ingest();
+    const result = await handle.runner.compose('prose paragraph body');
+    const proseCount = Object.values(result.chunks_by_id).filter(
+        (c) => c.metadata.content_type === 'prose',
+    ).length;
+    assert.ok(proseCount > 0, 'expected prose chunks when resolver returns null');
+});
+
+test('createMeasurementHarness: compareBatch routes per-fixture category through to function-form composeFilters', async () => {
+    const Git = makeFakeGit({
+        'a.js': 'function foo() { return 1; }\n',
+    });
+    const seenCalls = [];
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['a.js'],
+        composeFilters: (opts) => {
+            seenCalls.push(opts);
+            return { content_types: ['code'] };
+        },
+    });
+    await handle.ingest();
+    await handle.run({
+        queries: [
+            { query: 'foo a', category: 'function-discovery' },
+            { query: 'foo b', category: 'bug-investigation' },
+            { query: 'foo c' }, // bare object, no category
+            'foo d',           // bare string
+        ],
+    });
+    // 4 queries × 1 runCompose call each = 4 resolver calls
+    assert.equal(seenCalls.length, 4);
+    assert.deepEqual(seenCalls[0], { category: 'function-discovery' });
+    assert.deepEqual(seenCalls[1], { category: 'bug-investigation' });
+    assert.deepEqual(seenCalls[2], { category: null });
+    assert.deepEqual(seenCalls[3], { category: null });
+});
+
+test('runner.compose: default per-category filter excludes prose for code-only categories', async () => {
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body.\n',
+        'src/a.js': 'function paragraph() { return "body"; }\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md', 'src/a.js'],
+        // composeFilters omitted → defaultComposeFiltersResolver
+    });
+    await handle.ingest();
+    // function-discovery → ['code'] only
+    const result = await handle.runner.compose('first paragraph body', {
+        category: QUERY_CATEGORIES.FUNCTION_DISCOVERY,
+    });
+    for (const id of Object.keys(result.chunks_by_id)) {
+        const ct = result.chunks_by_id[id].metadata.content_type;
+        assert.notEqual(ct, 'prose', `function-discovery category leaked content_type=prose chunk ${id}`);
+    }
+});
+
+test('runner.compose: default per-category filter excludes prose for every category (post-T4 narrowing)', async () => {
+    // Post-T4 (2026-05-03), all per-category filters are ['code'] —
+    // including the previously-mixed bug-investigation / onboarding /
+    // topic that admitted 'prose' in the first T3 cut. The T4
+    // measurement showed prose admission regressed those buckets.
+    const Git = makeFakeGit({
+        'docs/a.md': '# Heading\n\nFirst paragraph body of relevant content here.\n',
+    });
+    const handle = await createMeasurementHarness({
+        Git,
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: makeFakeContextManager(),
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: ['docs/a.md'],
+    });
+    await handle.ingest();
+    for (const cat of [
+        QUERY_CATEGORIES.BUG_INVESTIGATION,
+        QUERY_CATEGORIES.ONBOARDING,
+        QUERY_CATEGORIES.TOPIC,
+    ]) {
+        const result = await handle.runner.compose('first paragraph body', { category: cat });
+        for (const id of Object.keys(result.chunks_by_id)) {
+            const ct = result.chunks_by_id[id].metadata.content_type;
+            assert.notEqual(ct, 'prose', `${cat}: chunk ${id} leaked content_type=prose despite ['code']-only filter`);
+        }
+    }
+});
+
+test('createMeasurementHarness: rejects function-form composeFilters that returns the wrong shape — deferred', () => {
+    // Per-call type guards live inside the runner's compose call; the
+    // factory accepts any function. This test pins that posture so a
+    // future tightening doesn't surprise callers.
+    assert.equal(typeof defaultComposeFiltersResolver, 'function');
 });

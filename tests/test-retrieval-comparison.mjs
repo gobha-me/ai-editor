@@ -914,3 +914,98 @@ test('compareBatch: rejects fixture object with non-array expectedPaths', async 
         /fixture `expectedPaths` must be an array or null/,
     );
 });
+
+/* ============================================================
+ * T3 (1.5.7) — runner contract carries opts.category
+ *
+ * Both runners now receive `(query, { category })`. `compareBatch` reads
+ * `category` from each fixture object (string fixtures and category-less
+ * objects yield `category: null`). Single-arg legacy runners stay valid
+ * (extra arg ignored). The measurement harness uses this seam to pick a
+ * per-category content-type filter; this suite pins the plumbing only.
+ * ============================================================ */
+
+test('compareBatch: per-fixture category reaches runNew via opts (T3)', async () => {
+    const seen = [];
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async (query, opts) => {
+            seen.push({ query, opts });
+            return composerResult(['a.js']);
+        },
+    });
+    await h.compareBatch([
+        { query: 'q1', category: 'function-discovery' },
+        { query: 'q2', category: 'bug-investigation' },
+        { query: 'q3' }, // no category
+        'q4',           // bare string
+    ]);
+    assert.equal(seen.length, 4);
+    assert.deepEqual(seen[0], { query: 'q1', opts: { category: 'function-discovery' } });
+    assert.deepEqual(seen[1], { query: 'q2', opts: { category: 'bug-investigation' } });
+    assert.deepEqual(seen[2], { query: 'q3', opts: { category: null } });
+    assert.deepEqual(seen[3], { query: 'q4', opts: { category: null } });
+});
+
+test('compareBatch: per-fixture category reaches runLegacy via opts (T3 symmetry)', async () => {
+    const seen = [];
+    const h = createComparisonHarness({
+        runLegacy: async (query, opts) => {
+            seen.push({ query, opts });
+            return legacyResult(['a.js']);
+        },
+        runNew: async () => composerResult(['a.js']),
+    });
+    await h.compareBatch([
+        { query: 'q1', category: 'topic' },
+        'q2',
+    ]);
+    assert.equal(seen.length, 2);
+    assert.deepEqual(seen[0].opts, { category: 'topic' });
+    assert.deepEqual(seen[1].opts, { category: null });
+});
+
+test('compareBatch: single-arg legacy runner still works (back-compat)', async () => {
+    // A runner ignoring the second arg must not break.
+    const seen = [];
+    const h = createComparisonHarness({
+        runLegacy: async (query) => {
+            seen.push(query);
+            return legacyResult(['a.js']);
+        },
+        runNew: async (query) => {
+            seen.push(query);
+            return composerResult(['a.js']);
+        },
+    });
+    const report = await h.compareBatch([{ query: 'q1', category: 'topic' }]);
+    assert.equal(report.total, 1);
+    assert.equal(report.legacyFailures, 0);
+    assert.equal(report.newFailures, 0);
+});
+
+test('compare (single-query): direct invocation receives opts.category from per-call opts', async () => {
+    const seen = [];
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async (query, opts) => {
+            seen.push(opts);
+            return composerResult(['a.js']);
+        },
+    });
+    await h.compare('q1', { category: 'onboarding' });
+    assert.deepEqual(seen[0], { category: 'onboarding' });
+});
+
+test('compare (single-query): null category is the explicit default when none supplied', async () => {
+    const seen = [];
+    const h = createComparisonHarness({
+        runLegacy: async () => legacyResult(['a.js']),
+        runNew: async (query, opts) => {
+            seen.push(opts);
+            return composerResult(['a.js']);
+        },
+    });
+    await h.compare('q1');
+    assert.deepEqual(seen[0], { category: null });
+});

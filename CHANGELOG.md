@@ -8,6 +8,158 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.7] - 2026-05-03
+
+**Composer tuning T3 — per-category content-type filter (PR 22 of the
+1.5.0 stream).** Pure plumbing PR: extends the measurement harness's
+`composeFilters` option to accept a function form
+`(opts: { category }) => MetadataFilter | null`, threads each fixture's
+`category` from `compareBatch` through both runners as an opt arg, and
+ships a default per-category content-type accept-list
+(`DEFAULT_COMPOSE_FILTERS_BY_CATEGORY`). Pure-code categories
+(`function-discovery`, `file-discovery`, `task-related`) tighten to
+`['code']`; the three categories with at least one prose canonical
+(`bug-investigation` → `CHANGELOG.md`, `onboarding` /
+`topic` → `docs/PLUGIN.md`) admit `['code', 'prose']`. The no-category
+fallback preserves T1's `['code', 'conversation', 'structured', 'spec']`
+accept-list verbatim for back-compat.
+
+**Why this design.** The roadmap's T3 framing asked: "should the
+Composer consume a `req.intent` or `req.preferred_content_types` knob,
+or does T1's content-type filter already cover this case?" Answer:
+test-corpus inspection shows **every canonical path in this corpus is
+`code` or `prose`** — no `structured` / `conversation` / `spec`
+canonicals exist (verified 2026-05-03 against `QUERY_FIXTURES`). The
+1.5.6 diagnosis ("residual gap is retrieval-pipeline-bound, not
+curation-bound; pipeline returns canonical at rank 1 + four
+semantically-near alternatives, all of the same content type") therefore
+predicts that content-type filtering cannot lift the weak buckets
+(`bug-investigation` 0.324, `task-related` 0.331) further than the
+ceiling: the alternatives diluting the top-K are also `code`.
+
+**What this PR ships.** The plumbing — function-form `composeFilters`,
+per-call category routing, per-category default map, all back-compat for
+T1 callers — lands now so the next lever (path-prefix bias, score
+weighting, intent-aware routing) can swap in a different resolver
+without harness churn. Live `find_relevant_files` (still on legacy
+`js/context-manager.js` until 1.5.9) is untouched.
+
+**Files changed**
+
+- [`js/intelligence/retrieval/measurement.js`](js/intelligence/retrieval/measurement.js):
+  exports `DEFAULT_COMPOSE_FILTERS_BY_CATEGORY` + `defaultComposeFiltersResolver`;
+  resolves `composeFilters` to a per-call function regardless of caller-supplied
+  shape (function / object / null / undefined); `runCompose(query, opts)` and
+  `runner.compose(query, opts?)` accept the per-call category.
+- [`js/intelligence/retrieval/comparison.js`](js/intelligence/retrieval/comparison.js):
+  `runLegacy` / `runNew` runner contract extended to `(query, { category })`;
+  `compareBatch` threads each fixture's category through. Single-arg legacy
+  runners stay valid (back-compat).
+- [`tests/test-retrieval-measurement.mjs`](tests/test-retrieval-measurement.mjs):
+  +13 tests covering the per-category map, the default resolver, function-form
+  dispatch, frozen-array invariants, prose admission for mixed categories,
+  prose exclusion for code-only categories, and `compareBatch` routing.
+- [`tests/test-retrieval-comparison.mjs`](tests/test-retrieval-comparison.mjs):
+  +5 tests covering `opts.category` reaching both runners, single-arg legacy
+  runner back-compat, and direct `compare()` invocation.
+
+**Removability.** Callers can opt out by passing `composeFilters: null`
+(pre-T1 behavior), a static `MetadataFilter` (T1 behavior), or any
+custom resolver function. Default behavior shifts to the per-category
+map.
+
+**T4 canonical run (first cut, 2026-05-03 20:20).** Same in-cluster
+`jinaai/jina-embeddings-v2-base-code`, `topK=5`, `concurrency=4`, 429
+sources, 4519 chunks, 0 failures. **Headline:
+`newGroundTruth.meanRecallAt5 = 0.4971`** vs the 1.5.6 baseline of
+0.541 — **−0.044, net regression.** `meanHitAt5 = 0.929`; `meanMRR =
+0.660`. Raw report at
+[`docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-03-retrieval-recall-ground-truth.json).
+
+**Per-category recall@5 delta (vs 1.5.6 baseline):**
+
+| Category | 1.5.6 | T4 first cut | Δ | filter |
+|---|---:|---:|---:|---|
+| function-discovery | 0.900 | 0.900 | 0.000 | `['code']` |
+| file-discovery | 0.613 | 0.613 | 0.000 | `['code']` |
+| **task-related** | 0.331 | **0.386** | **+0.055** | `['code']` |
+| bug-investigation | 0.324 | 0.276 | -0.048 | `['code', 'prose']` |
+| topic | 0.455 | 0.359 | -0.096 | `['code', 'prose']` |
+| **onboarding** | 0.583 | **0.417** | **-0.166** | `['code', 'prose']` |
+
+**Diagnosis.** Prose admission for the three mixed categories did
+recover the prose canonicals (T4's `write-new-plugin` got
+`docs/PLUGIN.md` at rank 1; `plugins-register-hooks` got it at rank 2),
+but the cost was prose chunks displacing code canonicals on other
+queries in the same bucket — `how do I add a new role?` returned
+`docs/ROLES_AND_TOOLS.md` + `docs/PLUGIN.md` instead of
+`js/settings/roles-tab.js`, scoring 0%. The T2 source-uri max-score
+rollup is not strong enough to neutralize prose dominance per-bucket.
+Meanwhile narrowing `task-related` from T1's
+`['code', 'conversation', 'structured', 'spec']` to `['code']` lifted
+it +0.055 — `'structured'` (.json files) was nudging non-canonical
+files into top-K on some task-related queries.
+
+**Surprise finding — legacy is much better than 1.5.5/1.5.6 measured.**
+T4's `legacyGroundTruth.meanRecallAt5 = 0.539`, not the 0.005-0.015
+the 1.5.5 / 1.5.6 reports showed. Per-category: `function-discovery`
+0.710, `file-discovery` 0.675, `onboarding` 0.619, `topic` 0.415,
+`bug-investigation` 0.371, `task-related` 0.408. Prior runs likely had
+a transient `ContextManager` indexing failure that was masked by
+`runLegacyFailures: 0` (the runner returned an empty array rather than
+throwing). **The 1.5.9 legacy retirement priority needs re-examination
+against the fresh numbers** — legacy is now within ~5pts of the new
+pipeline's headline and ahead on `onboarding` / `topic` /
+`bug-investigation` / `task-related`. Flagged here for the 1.5.9
+scoping pass; this PR's disposition is unaffected.
+
+**Revision (same commit, post-T4).** The per-category map narrowed to
+`['code']` for **every** category. The three prose canonicals become
+unreachable (already unreachable under T1's pre-1.5.7 default), but
+the regression on the rest of the bucket is recovered, and the
+`task-related` gain is preserved.
+
+**Revised T4 canonical run (2026-05-03 21:13).** Same in-cluster
+`jinaai/jina-embeddings-v2-base-code`, `topK=5`, `concurrency=4`, 429
+sources, 4519 chunks, 0 failures. **Headline:
+`newGroundTruth.meanRecallAt5 = 0.5489`** vs the 1.5.6 baseline of
+0.541 — **+0.008, modest improvement.** `meanHitAt5 = 0.976` (matches
+1.5.6); `meanMRR = 0.760` (vs 0.756 baseline, +0.004). Raw report
+overwrote the T4 first-cut file at the same path
+([`docs/measurements/2026-05-03-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-03-retrieval-recall-ground-truth.json)).
+
+**Per-category recall@5 (revised vs 1.5.6 baseline):**
+
+| Category | 1.5.6 | T4 first cut | **T4 revised** | Δ vs 1.5.6 |
+|---|---:|---:|---:|---:|
+| function-discovery | 0.900 | 0.900 | **0.900** | 0.000 |
+| file-discovery | 0.613 | 0.613 | **0.613** | 0.000 |
+| topic | 0.455 | 0.359 | **0.455** | 0.000 (recovered) |
+| onboarding | 0.583 | 0.417 | **0.583** | 0.000 (recovered) |
+| bug-investigation | 0.324 | 0.276 | **0.324** | 0.000 (recovered) |
+| **task-related** | 0.331 | 0.386 | **0.386** | **+0.055** ✓ |
+
+Regressions fully recovered; task-related uplift preserved. The 1.5.7
+disposition is final.
+
+**Verdict on the original T3 question.** The roadmap's framing was:
+*"should the Composer consume a `req.intent` knob, or does T1's
+content-type filter already cover this case?"* **T1's content-type
+filter approximately covers it.** Per-category narrowing buys +0.008
+on the headline (a real but modest win); per-category prose admission
+costs more than it gains. The within-`code` top-K dilution 1.5.6
+flagged remains the dominant gap; the §1.5.0 ≥0.80 gate (-0.251 away)
+requires a different approach. **Next lever** is path-prefix bias /
+score weighting in `applyMetadataFilter` (extending
+`MetadataFilter.custom` with a per-prefix or per-content-type score
+multiplier so prose can be admitted at a fractional weight rather than
+excluded outright) **or** revisit 1.5.9 (legacy retirement) against
+the corrected legacy baseline.
+
+**Verification.** All 653 retrieval node tests pass (`node --test
+tests/test-retrieval-*.mjs`); all 887 browser tests across 129 suites
+pass on `tests/index.html`.
+
 ## [1.5.6] - 2026-05-03
 
 **Retrieval test-corpus curation refinement (PR 2 of N against the

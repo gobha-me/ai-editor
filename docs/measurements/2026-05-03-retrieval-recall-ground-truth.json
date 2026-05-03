@@ -13,477 +13,78 @@
     "walked": {
       "ingested": 429,
       "failed": 0,
-      "chunksAdded": 4512,
+      "chunksAdded": 4519,
       "embedFailures": 0,
-      "durationMs": 792441
+      "durationMs": 1285865
     },
-    "ranAt": "2026-05-03T18:47:35.053Z",
-    "_note_corpus_branch": "test corpus loaded from 1.5.6 branch test-corpus.js (refined expectedPaths); source ingestion ran against ref=main since the 1.5.6 PR was open at run-time. Source files differ between main and 1.5.6 only in test-corpus.js + 3 doc files, all excluded from indexing or unrelated to query targets, so the comparison is canonical for the 1.5.6 corpus."
+    "ranAt": "2026-05-03T21:13:13.854Z"
   },
   "report": {
     "total": 42,
     "perQuery": [
-      {
-        "query": "where is the chat history rendered?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/version.js", "tests/retrieval-measurement.html", "docs/measurements/2026-05-03-retrieval-recall-ground-truth.json"],
-        "newPaths": ["js/chat/messages.js", "js/chat/index.js", "js/chat/export.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 393,
-        "expectedPaths": ["js/chat/handlers.js", "js/chat/index.js", "js/chat/messages.js", "js/chat/state.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.5, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "where is authentication handled for Git providers?",
-        "legacyPaths": ["js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/test-corpus.js"],
-        "newPaths": ["tests/test-debug-slideout.js", "js/git-providers/registry.js", "js/git-providers/index.js", "js/git-providers/gitlab.js", "js/intelligence/workspace-settings/file-layer.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 645,
-        "expectedPaths": ["js/git-providers/base.js", "js/git-providers/gitea.js", "js/git-providers/github.js", "js/git-providers/gitlab.js", "js/git-providers/registry.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.4, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "where is the file tree component?",
-        "legacyPaths": ["tests/test-retrieval-measurement.mjs", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/version.js", "js/intelligence/retrieval/test-corpus.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/file-tree.js", "js/tools/context-tools.js", "js/tools/file-tools.js", "tests/test-summarizer.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 296,
-        "expectedPaths": ["js/file-tree.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "where are LLM provider settings stored?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/measurement.js"],
-        "newPaths": ["js/settings/llm-tab.js", "js/settings/persistence.js", "js/git-providers/local.js", "js/core.js", "js/model-manager.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 282,
-        "expectedPaths": ["js/core.js", "js/providers/registry.js", "js/settings/llm-tab.js", "js/settings/models-tab.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.5, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "where does the embeddings client live?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/contracts.js", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/measurement.js"],
-        "newPaths": ["docs/measurements/2026-05-03-retrieval-agreement.json", "js/tools/memory-tools.js", "js/intelligence/tools/embeddings.js", "js/embeddings-client.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 628,
-        "expectedPaths": ["js/embeddings-client.js", "js/intelligence/retrieval/embedder.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.5, "hitAt5": 1, "mrr": 0.25 }
-      },
-      {
-        "query": "where is the diff viewer?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/version.js", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)"],
-        "newPaths": ["js/secondary-pane.js", "js/diff-viewer.js", "js/editor.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 433,
-        "expectedPaths": ["js/diff-viewer.js", "js/secondary-pane.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "where is the plugin loader?",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/comparison.js", "js/version.js"],
-        "newPaths": ["js/plugin-loader.js", "js/utils/preact-mount.js", "js/tools/plugin-tools.js", "js/plugin-editor.js", "js/intelligence/retrieval/index.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 384,
-        "expectedPaths": ["js/core.js", "js/plugin-loader.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.5, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "where are tool definitions registered?",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/test-corpus.js", "js/intelligence/retrieval/comparison.js", "tests/test-retrieval-measurement.mjs"],
-        "newPaths": ["js/tools/search-tools.js", "js/mcp/bridge.js", "tests/test-summarizer.mjs", "tests/test-summarizer.js", "js/tools/registry.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 319,
-        "expectedPaths": ["js/intelligence/tools/catalog.js", "js/tools/registry.js"],
-        "category": "file-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.5, "hitAt5": 1, "mrr": 0.2 }
-      },
-      {
-        "query": "find the function that parses a Git URL",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/version.js", "js/intelligence/retrieval/contracts.js", "js/intelligence/retrieval/test-corpus.js"],
-        "newPaths": ["js/tools/scan-tools.js", "js/git-providers/github.js", "js/git-providers/gitlab.js", "js/git-providers/registry.js", "js/git-providers/gitea.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 376,
-        "expectedPaths": ["js/git-providers/base.js", "js/git-providers/gitea.js", "js/git-providers/github.js", "js/git-providers/gitlab.js", "js/git-providers/registry.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.8, "recallAt5": 0.8, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "find the function that streams chat completions",
-        "legacyPaths": ["js/intelligence/retrieval/test-corpus.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["tests/test-handlers.js", "js/chat/index.js", "js/chat/summarizer.js", "js/tools/scan-tools.js", "js/llm/completion.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 258,
-        "expectedPaths": ["js/llm/api.js", "js/llm/completion.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.5, "hitAt5": 1, "mrr": 0.2 }
-      },
-      {
-        "query": "find the function that computes ChunkID hashes",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "tests/test-retrieval-measurement.mjs", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-comparison.mjs", "js/intelligence/retrieval/comparison.js"],
-        "newPaths": ["js/intelligence/retrieval/chunk-id.js", "js/intelligence/retrieval/loader.js", "js/intelligence/retrieval/chunkers/code-chunker.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 432,
-        "expectedPaths": ["js/intelligence/retrieval/chunk-id.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "find the function that converts markdown to HTML",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "js/version.js", "tests/retrieval-measurement.html"],
-        "newPaths": ["js/secondary-pane.js", "js/markdown-modal.js", "js/help/search-index.js", "js/help/markdown-loader.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 396,
-        "expectedPaths": ["js/help/markdown-loader.js", "js/markdown-modal.js", "js/secondary-pane.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.6, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "find the function that mounts the settings sidebar",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "tests/retrieval-measurement.html"],
-        "newPaths": ["js/settings-manager.js", "js/ui-helpers.js", "js/utils/apply-visual-settings.js", "js/ui/commit-workspace-settings-section.js", "js/help/pages/hotkeys.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 347,
-        "expectedPaths": ["js/settings-manager.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "find the function that emits events on the eventbus",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js", "tests/test-retrieval-measurement.mjs", "[CHANGELOG.md](http://CHANGELOG.md)"],
-        "newPaths": ["tests/test-eventbus.js", "js/core.js", "tests/test-summarizer.mjs", "tests/test-summarizer.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 393,
-        "expectedPaths": ["js/core.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 1, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "find the function that fetches embeddings",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "[CHANGELOG.md](http://CHANGELOG.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/test-corpus.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/embeddings-client.js", "js/tools/memory-tools.js", "tests/test-idb.js", "docs/measurements/2026-05-03-retrieval-agreement.json", "js/intelligence/retrieval/embedder.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 384,
-        "expectedPaths": ["js/embeddings-client.js", "js/intelligence/retrieval/embedder.js"],
-        "category": "function-discovery",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 1, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how does rate limiting work?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/test-corpus.js", "docs/[ROADMAP.md](http://ROADMAP.md)"],
-        "newPaths": ["plugins/venice-billing.js", "evals/pacing.js", "evals/test-haystack.mjs", "js/tools/ci-tools.js", "js/editor/ghost-text.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 263,
-        "expectedPaths": ["js/llm/api.js", "js/providers/venice.js", "js/retry.js", "plugins/venice-billing.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.25, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how does memory consent flow work?",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/measurement.js"],
-        "newPaths": ["js/intelligence/memory/consent-queue.js", "js/intelligence/memory/index.js", "js/tools/memory-tools.js", "tests/test-memory-consent-tool-flow.mjs"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 340,
-        "expectedPaths": ["js/chat/consent-card.js", "js/chat/handlers.js", "js/intelligence/memory/consent-queue.js", "js/intelligence/memory/index.js", "js/intelligence/memory/store.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.4, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how does the compression subsystem work?",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/comparison.js"],
-        "newPaths": ["js/intelligence/compression/index.js", "js/intelligence/compression/rules/summarization.js", "js/intelligence/compression/compactor.js", "tests/test-compression-synthetic-savings.mjs", "js/intelligence/compression/decisions.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 350,
-        "expectedPaths": ["js/intelligence/compression/compactor.js", "js/intelligence/compression/decisions.js", "js/intelligence/compression/index.js", "js/intelligence/compression/rules/invalidation.js", "js/intelligence/compression/rules/subsumption.js", "js/intelligence/compression/rules/summarization.js", "js/intelligence/compression/tokens.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.8, "recallAt5": 0.5714285714285714, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how does tool admission work?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/test-corpus.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/intelligence/tools/composer.js", "js/intelligence/tools/contracts.js", "js/intelligence/tools/index.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 444,
-        "expectedPaths": ["js/chat/handlers.js", "js/chat/task-state.js", "js/intelligence/tools/composer.js", "js/intelligence/tools/index.js", "js/profiles/task-ledger.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.4, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how is task state tracked across turns?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/contracts.js", "js/version.js"],
-        "newPaths": ["js/chat/task-state.js", "js/intelligence/test-loop/state.js", "js/profiles/task-ledger.js", "js/settings/test-loop-tab.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 293,
-        "expectedPaths": ["js/chat/handlers.js", "js/chat/task-state.js", "js/profiles/task-ledger.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.6666666666666666, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how do plugins register hooks?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/comparison.js", "js/version.js"],
-        "newPaths": ["js/core.js", "js/tools/plugin-tools.js", "js/settings/plugins-tab.js", "js/debug-slideout.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 331,
-        "expectedPaths": ["docs/[PLUGIN.md](http://PLUGIN.md)", "js/core.js", "js/plugin-loader.js", "js/tools/plugin-tools.js", "plugins/venice-ai.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.4, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how does multi-tab storage isolation work?",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/test-corpus.js", "tests/test-retrieval-comparison.mjs", "js/intelligence/retrieval/comparison.js"],
-        "newPaths": ["js/core.js", "tests/test-memory-tab.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 274,
-        "expectedPaths": ["js/core.js", "js/storage/idb.js"],
-        "category": "topic",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.5, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "what handles a 429 response from Venice?",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "js/intelligence/retrieval/comparison.js", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)"],
-        "newPaths": ["js/utils/errors.js", "evals/pacing.js", "js/retry.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 270,
-        "expectedPaths": ["js/llm/api.js", "js/providers/venice.js", "js/retry.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.3333333333333333, "hitAt5": 1, "mrr": 0.3333333333333333 }
-      },
-      {
-        "query": "what causes the chat panel to scroll on send?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/retrieval-measurement.html", "assets/fonts/[SOURCES.md](http://SOURCES.md)", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/chat/messages.js", "js/chat/index.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 353,
-        "expectedPaths": ["js/chat/handlers.js", "js/chat/index.js", "js/chat/messages.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.6666666666666666, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "why might the embedder skip large files?",
-        "legacyPaths": ["tests/test-retrieval-measurement.mjs", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/chat/input.js", "js/intelligence/test-loop/log-cache.js", "js/context-manager.js", "tests/test-retrieval-embedder.mjs", "js/embeddings-client.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 408,
-        "expectedPaths": ["js/context-manager.js", "js/intelligence/retrieval/embedder.js", "js/intelligence/retrieval/ingest-controller.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.3333333333333333, "hitAt5": 1, "mrr": 0.3333333333333333 }
-      },
-      {
-        "query": "what happens when Git push fails with a conflict?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/contracts.js", "tests/test-retrieval-comparison.mjs", "js/intelligence/retrieval/comparison.js"],
-        "newPaths": ["js/git-providers/gitea.js", "js/git-providers/gitlab.js", "tests/test-connections-panel.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 316,
-        "expectedPaths": ["js/git-providers/base.js", "js/git-providers/gitea.js", "js/git-providers/github.js", "js/git-providers/gitlab.js", "js/git.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.4, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "what handles tool invocation timeouts?",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/comparison.js", "tests/test-retrieval-comparison.mjs", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/test-corpus.js"],
-        "newPaths": ["tests/test-llm-idle-timeout.js", "js/tools/ci-tools.js", "js/retry.js", "js/help/index.js", "js/utils/constants.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 408,
-        "expectedPaths": ["js/chat/handlers.js", "js/core.js", "js/settings-manager.js", "js/settings/persistence.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 }
-      },
-      {
-        "query": "what renders the session replay viewer?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "tests/retrieval-measurement.html", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/version.js", "docs/measurements/2026-05-03-retrieval-recall-ground-truth.json"],
-        "newPaths": ["js/chat/replay.js", "js/debug-slideout.js", "js/ui/commit.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 456,
-        "expectedPaths": ["js/chat/export.js", "js/chat/replay.js", "js/chat/sessions-sync.js"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.3333333333333333, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "why did we switch from wall-clock to idle LLM timeout?",
-        "legacyPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs"],
-        "newPaths": ["tests/test-llm-idle-timeout.js", "tests/test-llm-idle-timeout.mjs", "js/tools/ci-tools.js", "js/utils/constants.js", "js/offline-indicator.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 313,
-        "expectedPaths": ["[CHANGELOG.md](http://CHANGELOG.md)", "js/chat/handlers.js", "js/core.js", "js/llm/api.js", "tests/test-llm-idle-timeout.mjs"],
-        "category": "bug-investigation",
-        "legacyGroundTruth": { "precisionAt5": 0.2, "recallAt5": 0.2, "hitAt5": 1, "mrr": 1 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.2, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "how do I add a new LLM provider?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "[CHANGELOG.md](http://CHANGELOG.md)", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/settings/llm-tab.js", "js/providers/registry.js", "js/providers/index.js", "js/core.js", "js/providers/ollama.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 311,
-        "expectedPaths": ["js/providers/index.js", "js/providers/openrouter.js", "js/providers/registry.js", "js/settings/llm-tab.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.6, "recallAt5": 0.75, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how do I add a new Git provider?",
-        "legacyPaths": ["js/version.js", "tests/test-retrieval-measurement.mjs", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/contracts.js", "[CHANGELOG.md](http://CHANGELOG.md)"],
-        "newPaths": ["js/git-providers/index.js", "js/git-providers/registry.js", "js/git.js", "tests/test-connections-panel.js", "tests/test-debug-slideout.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 272,
-        "expectedPaths": ["js/git-providers/base.js", "js/git-providers/index.js", "js/git-providers/registry.js", "js/settings/connections-tab.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.5, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how do I write a new plugin?",
-        "legacyPaths": ["js/version.js", "js/intelligence/retrieval/measurement.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js", "tests/test-retrieval-measurement.mjs"],
-        "newPaths": ["plugins/venice-ai.js", "js/tools/plugin-tools.js", "js/core.js", "js/plugin-loader.js", "plugins/mcp-bridge.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 320,
-        "expectedPaths": ["docs/[PLUGIN.md](http://PLUGIN.md)", "js/core.js", "js/plugin-loader.js", "plugins/venice-ai.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.6, "recallAt5": 0.75, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "how do I add a new chunker?",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/contracts.js", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/measurement.js", "tests/test-retrieval-comparison.mjs"],
-        "newPaths": ["js/intelligence/retrieval/contracts.js", "js/intelligence/retrieval/index.js", "tests/test-retrieval-embedder.mjs"],
-        "legacyError": null, "newError": null, "agreement": 0.14285714285714285, "durationMs": 301,
-        "expectedPaths": ["js/intelligence/retrieval/chunkers/code-chunker.js", "js/intelligence/retrieval/chunkers/prose-chunker.js", "js/intelligence/retrieval/index.js", "js/intelligence/retrieval/pipeline.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.25, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "how do I add a new role?",
-        "legacyPaths": ["js/intelligence/retrieval/contracts.js", "evals/[README.md](http://README.md)", "js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/memory/embeddings.js"],
-        "newPaths": ["js/plugin-editor.js", "js/settings/roles-tab.js", "js/core.js", "js/model-manager.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 339,
-        "expectedPaths": ["js/core.js", "js/settings/roles-tab.js", "js/tools/registry.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.6666666666666666, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "how do I add a custom keybinding?",
-        "legacyPaths": ["js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/git-providers/index.js", ".dockerignore", "js/intelligence/compression/decisions.js"],
-        "newPaths": ["js/chat/replay.js", "js/help/kbd.js", "js/editor/instance.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 410,
-        "expectedPaths": ["js/app.js", "js/editor/instance.js", "js/help/hotkey-registry.js", "js/help/kbd.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.5, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "how do I register an MCP server?",
-        "legacyPaths": ["js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "tests/test-retrieval-measurement.mjs", "js/editor/file-utils.js"],
-        "newPaths": ["js/mcp/registry.js", "plugins/mcp-bridge.js", "js/settings/mcp-servers-tab.js", "js/mcp/bridge.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 333,
-        "expectedPaths": ["js/core.js", "js/mcp/registry.js", "js/settings/mcp-servers-tab.js"],
-        "category": "onboarding",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.6666666666666666, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "files I would touch to add a new chunker",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/contracts.js", "tests/test-retrieval-measurement.mjs", "js/intelligence/retrieval/measurement.js", "tests/test-retrieval-comparison.mjs"],
-        "newPaths": ["js/intelligence/retrieval/contracts.js", "js/intelligence/retrieval/ingest-controller.js", "js/chat/state.js", "js/intelligence/retrieval/index.js", "js/intelligence/memory/file-layer.js"],
-        "legacyError": null, "newError": null, "agreement": 0.1111111111111111, "durationMs": 251,
-        "expectedPaths": ["js/intelligence/retrieval/chunkers/code-chunker.js", "js/intelligence/retrieval/index.js", "js/intelligence/retrieval/pipeline.js", "js/intelligence/retrieval/wiring.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.25, "hitAt5": 1, "mrr": 0.25 }
-      },
-      {
-        "query": "files I would touch to wire a new tool category",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/test-corpus.js", "js/version.js", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js"],
-        "newPaths": ["js/intelligence/tools/catalog.js", "tests/test-system-prompt-admission.mjs", "js/tools/file-tools.js", "js/tools/project-tools.js", "js/tools/context-tools.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 301,
-        "expectedPaths": ["js/app.js", "js/intelligence/tools/catalog.js", "js/prompts.js", "js/tools/ci-tools.js", "js/tools/registry.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.2, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "files I would touch to add a settings tab",
-        "legacyPaths": ["js/version.js", "tests/retrieval-measurement.html", "[CHANGELOG.md](http://CHANGELOG.md)", "docs/[ROADMAP.md](http://ROADMAP.md)", "docs/measurements/2026-05-03-retrieval-recall-ground-truth.json"],
-        "newPaths": ["js/settings/workspace-settings-tab.js", "js/settings-manager.js", "js/settings/plugins-tab.js", "js/settings/persistence.js", "js/app.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 250,
-        "expectedPaths": ["js/settings-manager.js", "js/settings/connections-tab.js", "js/settings/persistence.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.4, "recallAt5": 0.6666666666666666, "hitAt5": 1, "mrr": 0.5 }
-      },
-      {
-        "query": "files I would touch to ship a new memory scope",
-        "legacyPaths": ["js/intelligence/retrieval/measurement.js", "tests/test-retrieval-measurement.mjs", "docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/comparison.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["js/intelligence/memory/file-layer.js", "js/tools/memory-tools.js", "tests/test-ci-log-cache.mjs", "js/intelligence/memory/contracts.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 271,
-        "expectedPaths": ["js/intelligence/memory/file-layer.js", "js/intelligence/memory/index.js", "js/intelligence/workspace-settings/index.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.3333333333333333, "hitAt5": 1, "mrr": 1 }
-      },
-      {
-        "query": "files I would touch to add a new embedding provider",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "tests/test-retrieval-measurement.mjs", "[CHANGELOG.md](http://CHANGELOG.md)", "js/intelligence/retrieval/measurement.js", "js/intelligence/retrieval/contracts.js"],
-        "newPaths": ["docs/measurements/2026-05-03-retrieval-agreement.json", "js/intelligence/memory/index.js", "js/intelligence/memory/file-layer.js", "js/settings/llm-tab.js", "js/embeddings-client.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 249,
-        "expectedPaths": ["js/embeddings-client.js", "js/intelligence/retrieval/embedder.js", "js/settings/models-tab.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.3333333333333333, "hitAt5": 1, "mrr": 0.2 }
-      },
-      {
-        "query": "files I would touch to add a new LLM tool",
-        "legacyPaths": ["docs/[ROADMAP.md](http://ROADMAP.md)", "js/intelligence/retrieval/measurement.js", "js/version.js", "js/intelligence/retrieval/test-corpus.js", "tests/test-retrieval-measurement.mjs"],
-        "newPaths": ["js/tools/file-tools.js", "tests/test-system-prompt-admission.mjs", "tests/test-compression-synthetic-savings.mjs", "js/tools/project-tools.js", "js/tools/context-tools.js"],
-        "legacyError": null, "newError": null, "agreement": 0, "durationMs": 384,
-        "expectedPaths": ["js/chat/handlers.js", "js/prompts.js", "js/settings/tools-tab.js", "js/tools/file-tools.js", "js/tools/registry.js"],
-        "category": "task-related",
-        "legacyGroundTruth": { "precisionAt5": 0, "recallAt5": 0, "hitAt5": 0, "mrr": 0 },
-        "newGroundTruth":    { "precisionAt5": 0.2, "recallAt5": 0.2, "hitAt5": 1, "mrr": 1 }
-      }
+      {"query": "where is the chat history rendered?","legacyPaths": ["js/chat/messages.js","js/chat/export.js","docs/design/touch-2-facelift/project/chat.jsx","js/chat/summarizer.js","js/chat/conversations.js"],"newPaths": ["js/chat/messages.js","js/chat/index.js","js/chat/export.js"],"legacyError": null,"newError": null,"agreement": 0.3333333333333333,"durationMs": 152,"expectedPaths": ["js/chat/handlers.js","js/chat/index.js","js/chat/messages.js","js/chat/state.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1}},
+      {"query": "where is authentication handled for Git providers?","legacyPaths": ["js/git-providers/base.js","docs/DESIGN-git-providers-and-ui-extensions.md","js/git-providers/registry.js","js/git-providers/local.js","js/git-providers/index.js"],"newPaths": ["tests/test-debug-slideout.js","js/git-providers/registry.js","js/git-providers/index.js","js/git-providers/gitlab.js","js/intelligence/workspace-settings/file-layer.js"],"legacyError": null,"newError": null,"agreement": 0.25,"durationMs": 124,"expectedPaths": ["js/git-providers/base.js","js/git-providers/gitea.js","js/git-providers/github.js","js/git-providers/gitlab.js","js/git-providers/registry.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "where is the file tree component?","legacyPaths": ["js/file-tree.js","js/tools/file-tools.js","js/tools/xref-tools.js","js/tools/multifile-tools.js","js/ui/file-create.js"],"newPaths": ["js/file-tree.js","js/tools/context-tools.js","js/tools/file-tools.js","tests/test-summarizer.js"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 117,"expectedPaths": ["js/file-tree.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "where are LLM provider settings stored?","legacyPaths": ["js/settings/persistence.js","js/settings-manager.js","js/model-manager.js","js/settings/llm-tab.js","js/providers/index.js"],"newPaths": ["js/settings/llm-tab.js","js/settings/persistence.js","js/git-providers/local.js","js/core.js","js/model-manager.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 121,"expectedPaths": ["js/core.js","js/providers/registry.js","js/settings/llm-tab.js","js/settings/models-tab.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 0.25},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1}},
+      {"query": "where does the embeddings client live?","legacyPaths": ["js/embeddings-client.js","js/intelligence/retrieval/embedder.js","js/intelligence/retrieval/wiring.js","js/intelligence/tools/embeddings.js","js/intelligence/memory/embeddings.js"],"newPaths": ["js/tools/memory-tools.js","js/intelligence/tools/embeddings.js","js/embeddings-client.js"],"legacyError": null,"newError": null,"agreement": 0.3333333333333333,"durationMs": 121,"expectedPaths": ["js/embeddings-client.js","js/intelligence/retrieval/embedder.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.3333333333333333}},
+      {"query": "where is the diff viewer?","legacyPaths": ["js/editor/diff.js","js/diff-viewer.js","js/secondary-pane.js","js/tools/file-tools.js","html/editor-panel.html"],"newPaths": ["js/secondary-pane.js","js/diff-viewer.js","js/editor.js"],"legacyError": null,"newError": null,"agreement": 0.3333333333333333,"durationMs": 122,"expectedPaths": ["js/diff-viewer.js","js/secondary-pane.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "where is the plugin loader?","legacyPaths": ["js/plugin-loader.js","js/tools/plugin-tools.js","docs/PLUGIN.md","js/settings/plugins-tab.js","js/plugin-editor.js"],"newPaths": ["js/plugin-loader.js","js/utils/preact-mount.js","js/tools/plugin-tools.js","js/plugin-editor.js","js/intelligence/retrieval/index.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 126,"expectedPaths": ["js/core.js","js/plugin-loader.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1}},
+      {"query": "where are tool definitions registered?","legacyPaths": ["js/tools/registry.js","js/intelligence/tools/catalog.js","docs/DESIGN-tools.md","js/tools/meta-tools.js","docs/TOOLS.md"],"newPaths": ["js/tools/search-tools.js","js/mcp/bridge.js","tests/test-summarizer.mjs","tests/test-summarizer.js","js/tools/registry.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 119,"expectedPaths": ["js/intelligence/tools/catalog.js","js/tools/registry.js"],"category": "file-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.2}},
+      {"query": "find the function that parses a Git URL","legacyPaths": ["js/git-providers/base.js","js/git-providers/github.js","js/git-providers/gitlab.js","js/git.js","js/git-providers/registry.js"],"newPaths": ["js/tools/scan-tools.js","js/git-providers/github.js","js/git-providers/gitlab.js","js/git-providers/registry.js","js/git-providers/gitea.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 123,"expectedPaths": ["js/git-providers/base.js","js/git-providers/gitea.js","js/git-providers/github.js","js/git-providers/gitlab.js","js/git-providers/registry.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.8,"recallAt5": 0.8,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.8,"recallAt5": 0.8,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "find the function that streams chat completions","legacyPaths": ["js/chat/handlers.js","js/llm/completion.js","js/chat/summarizer.js","js/chat/memory-chip/match.js","tests/test-handlers.js"],"newPaths": ["tests/test-handlers.js","js/chat/index.js","js/chat/summarizer.js","js/tools/scan-tools.js","js/llm/completion.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 123,"expectedPaths": ["js/llm/api.js","js/llm/completion.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.2}},
+      {"query": "find the function that computes ChunkID hashes","legacyPaths": ["js/intelligence/retrieval/chunk-id.js","js/intelligence/retrieval/chunkers/prose-chunker.js","tests/test-retrieval-foundation.mjs","js/intelligence/tools/tool-id.js","js/intelligence/retrieval/chunkers/code-chunker.js"],"newPaths": ["js/intelligence/retrieval/chunk-id.js","js/intelligence/retrieval/loader.js","js/intelligence/retrieval/chunkers/code-chunker.js"],"legacyError": null,"newError": null,"agreement": 0.3333333333333333,"durationMs": 120,"expectedPaths": ["js/intelligence/retrieval/chunk-id.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "find the function that converts markdown to HTML","legacyPaths": ["js/markdown-modal.js","js/help/markdown-loader.js","js/help/pages/markdown-pages.js","js/utils/html.js","js/help/pages/getting-started.js"],"newPaths": ["js/secondary-pane.js","js/markdown-modal.js","js/help/search-index.js","js/help/markdown-loader.js"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 143,"expectedPaths": ["js/help/markdown-loader.js","js/markdown-modal.js","js/secondary-pane.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.6,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "find the function that mounts the settings sidebar","legacyPaths": ["css/settings-sidebar.css","tests/test-settings-sidebar.js","docs/design/touch-2-facelift/project/settings.jsx","js/settings/workspace-settings-tab.js","js/settings-manager.js"],"newPaths": ["js/settings-manager.js","js/ui-helpers.js","js/utils/apply-visual-settings.js","js/ui/commit-workspace-settings-section.js","js/help/pages/hotkeys.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 130,"expectedPaths": ["js/settings-manager.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 0.2},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "find the function that emits events on the eventbus","legacyPaths": ["tests/test-eventbus.js","plugins/venice-ai.js","js/mcp/bridge.js","tests/test-memory-chip-match.mjs","tests/test-plugin-lifecycle.mjs"],"newPaths": ["tests/test-eventbus.js","js/core.js","tests/test-summarizer.mjs","tests/test-summarizer.js"],"legacyError": null,"newError": null,"agreement": 0.125,"durationMs": 118,"expectedPaths": ["js/core.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0,"recallAt5": 0,"hitAt5": 0,"mrr": 0},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 1,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "find the function that fetches embeddings","legacyPaths": ["js/intelligence/retrieval/embedder.js","js/intelligence/tools/embeddings.js","js/intelligence/retrieval/strategies/semantic.js","js/embeddings-client.js","tests/test-retrieval-semantic-strategy.mjs"],"newPaths": ["js/embeddings-client.js","js/tools/memory-tools.js","tests/test-idb.js","js/intelligence/retrieval/embedder.js"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 110,"expectedPaths": ["js/embeddings-client.js","js/intelligence/retrieval/embedder.js"],"category": "function-discovery","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 1,"hitAt5": 1,"mrr": 1}},
+      {"query": "how does rate limiting work?","legacyPaths": ["evals/pacing.js","js/intelligence/retrieval/router.js","js/retry.js","evals/cost-preflight.js","js/intelligence/cost/cost-recorder.js"],"newPaths": ["plugins/venice-billing.js","evals/pacing.js","evals/test-haystack.mjs","js/tools/ci-tools.js","js/editor/ghost-text.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 113,"expectedPaths": ["js/llm/api.js","js/providers/venice.js","js/retry.js","plugins/venice-billing.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 0.3333333333333333},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 1}},
+      {"query": "how does memory consent flow work?","legacyPaths": ["js/intelligence/memory/consent-queue.js","docs/DESIGN-memory.md","tests/test-memory-consent-tool-flow.mjs","js/intelligence/memory/contracts.js","js/chat/consent-card/MemoryConsentCard.js"],"newPaths": ["js/intelligence/memory/consent-queue.js","js/intelligence/memory/index.js","js/tools/memory-tools.js","tests/test-memory-consent-tool-flow.mjs"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 116,"expectedPaths": ["js/chat/consent-card.js","js/chat/handlers.js","js/intelligence/memory/consent-queue.js","js/intelligence/memory/index.js","js/intelligence/memory/store.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1}},
+      {"query": "how does the compression subsystem work?","legacyPaths": ["js/utils/compression-flag.js","tests/test-compression-pipeline.mjs","js/intelligence/compression/compactor.js","js/intelligence/compression/index.js","docs/DESIGN-compression.md"],"newPaths": ["js/intelligence/compression/index.js","js/intelligence/compression/rules/summarization.js","js/intelligence/compression/compactor.js","tests/test-compression-synthetic-savings.mjs","js/intelligence/compression/decisions.js"],"legacyError": null,"newError": null,"agreement": 0.25,"durationMs": 125,"expectedPaths": ["js/intelligence/compression/compactor.js","js/intelligence/compression/decisions.js","js/intelligence/compression/index.js","js/intelligence/compression/rules/invalidation.js","js/intelligence/compression/rules/subsumption.js","js/intelligence/compression/rules/summarization.js","js/intelligence/compression/tokens.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.2857142857142857,"hitAt5": 1,"mrr": 0.3333333333333333},"newGroundTruth": {"precisionAt5": 0.8,"recallAt5": 0.5714285714285714,"hitAt5": 1,"mrr": 1}},
+      {"query": "how does tool admission work?","legacyPaths": ["js/intelligence/tools/composer.js","docs/DESIGN-tools.md","js/intelligence/tools/index.js","js/intelligence/tools/contracts.js","js/tools/meta-tools.js"],"newPaths": ["js/intelligence/tools/composer.js","js/intelligence/tools/contracts.js","js/intelligence/tools/index.js"],"legacyError": null,"newError": null,"agreement": 0.6,"durationMs": 120,"expectedPaths": ["js/chat/handlers.js","js/chat/task-state.js","js/intelligence/tools/composer.js","js/intelligence/tools/index.js","js/profiles/task-ledger.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1}},
+      {"query": "how is task state tracked across turns?","legacyPaths": ["js/chat/task-state.js","js/intelligence/test-loop/state.js","js/profiles/task-ledger.js","tests/test-test-loop-orchestrator.mjs","tests/test-task-state.mjs"],"newPaths": ["js/chat/task-state.js","js/intelligence/test-loop/state.js","js/profiles/task-ledger.js","js/settings/test-loop-tab.js"],"legacyError": null,"newError": null,"agreement": 0.5,"durationMs": 117,"expectedPaths": ["js/chat/handlers.js","js/chat/task-state.js","js/profiles/task-ledger.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1}},
+      {"query": "how do plugins register hooks?","legacyPaths": ["docs/PLUGIN.md","js/settings/plugins-tab.js","js/tools/plugin-tools.js","js/plugin-loader.js","tests/test-plugin-lifecycle.mjs"],"newPaths": ["js/core.js","js/tools/plugin-tools.js","js/settings/plugins-tab.js","js/debug-slideout.js"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 122,"expectedPaths": ["docs/PLUGIN.md","js/core.js","js/plugin-loader.js","js/tools/plugin-tools.js","plugins/venice-ai.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.6,"recallAt5": 0.6,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1}},
+      {"query": "how does multi-tab storage isolation work?","legacyPaths": ["tests/test-memory-tab.js","js/storage/idb.js","tests/test-storage.js","js/settings/memory-tab/MemoryTab.js","js/intelligence/memory/idb-schema.js"],"newPaths": ["js/core.js","tests/test-memory-tab.js"],"legacyError": null,"newError": null,"agreement": 0.16666666666666666,"durationMs": 119,"expectedPaths": ["js/core.js","js/storage/idb.js"],"category": "topic","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1}},
+      {"query": "what handles a 429 response from Venice?","legacyPaths": ["evals/pacing.js","js/retry.js","js/utils/errors.js","plugins/venice-billing.js","js/providers/venice.js"],"newPaths": ["js/utils/errors.js","evals/pacing.js","js/retry.js"],"legacyError": null,"newError": null,"agreement": 0.6,"durationMs": 117,"expectedPaths": ["js/llm/api.js","js/providers/venice.js","js/retry.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 0.3333333333333333}},
+      {"query": "what causes the chat panel to scroll on send?","legacyPaths": ["js/chat/messages.js","docs/design/touch-2-facelift/project/chat.jsx","html/chat-panel.html","js/chat/export.js","js/resize-manager.js"],"newPaths": ["js/chat/messages.js","js/chat/index.js"],"legacyError": null,"newError": null,"agreement": 0.16666666666666666,"durationMs": 119,"expectedPaths": ["js/chat/handlers.js","js/chat/index.js","js/chat/messages.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1}},
+      {"query": "why might the embedder skip large files?","legacyPaths": ["tests/test-retrieval-embedder.mjs","tests/test-retrieval-wiring.mjs","js/intelligence/retrieval/embedder.js","tests/test-retrieval-measurement.mjs","js/intelligence/retrieval/ingest-controller.js"],"newPaths": ["js/chat/input.js","js/intelligence/test-loop/log-cache.js","js/context-manager.js","tests/test-retrieval-embedder.mjs","js/embeddings-client.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 115,"expectedPaths": ["js/context-manager.js","js/intelligence/retrieval/embedder.js","js/intelligence/retrieval/ingest-controller.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.3333333333333333},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 0.3333333333333333}},
+      {"query": "what happens when Git push fails with a conflict?","legacyPaths": ["js/git-providers/base.js","js/git.js","plugins/cross-repo-issues.js","js/ui/commit.js","js/tools/commit-tools.js"],"newPaths": ["js/git-providers/gitea.js","js/git-providers/gitlab.js","tests/test-connections-panel.js"],"legacyError": null,"newError": null,"agreement": 0,"durationMs": 122,"expectedPaths": ["js/git-providers/base.js","js/git-providers/gitea.js","js/git-providers/github.js","js/git-providers/gitlab.js","js/git.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.4,"hitAt5": 1,"mrr": 1}},
+      {"query": "what handles tool invocation timeouts?","legacyPaths": ["tests/test-llm-idle-timeout.js","tests/test-llm-idle-timeout.mjs","tests/test-ci-tools.mjs","js/chat/tools.js","tests/test-task-state.mjs"],"newPaths": ["tests/test-llm-idle-timeout.js","js/tools/ci-tools.js","js/retry.js","js/help/index.js","js/utils/constants.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 127,"expectedPaths": ["js/chat/handlers.js","js/core.js","js/settings-manager.js","js/settings/persistence.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0,"recallAt5": 0,"hitAt5": 0,"mrr": 0},"newGroundTruth": {"precisionAt5": 0,"recallAt5": 0,"hitAt5": 0,"mrr": 0}},
+      {"query": "what renders the session replay viewer?","legacyPaths": ["js/chat/replay.js","js/ui/commit-sessions-section.js","js/llm-debug-modal.js","docs/design/touch-2-facelift/project/debug.jsx","js/tools/scratchpad-tools.js"],"newPaths": ["js/chat/replay.js","js/debug-slideout.js","js/ui/commit.js"],"legacyError": null,"newError": null,"agreement": 0.14285714285714285,"durationMs": 132,"expectedPaths": ["js/chat/export.js","js/chat/replay.js","js/chat/sessions-sync.js"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 1}},
+      {"query": "why did we switch from wall-clock to idle LLM timeout?","legacyPaths": ["tests/test-llm-idle-timeout.js","tests/test-llm-idle-timeout.mjs","js/intelligence/test-loop/state.js","tests/test-reasoning-streaming.mjs","js/offline-indicator.js"],"newPaths": ["tests/test-llm-idle-timeout.js","tests/test-llm-idle-timeout.mjs","js/tools/ci-tools.js","js/utils/constants.js","js/offline-indicator.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 120,"expectedPaths": ["CHANGELOG.md","js/chat/handlers.js","js/core.js","js/llm/api.js","tests/test-llm-idle-timeout.mjs"],"category": "bug-investigation","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "how do I add a new LLM provider?","legacyPaths": ["js/providers/index.js","js/providers/registry.js","js/llm/api.js","docs/DESIGN-git-providers-and-ui-extensions.md","js/providers/ollama.js"],"newPaths": ["js/settings/llm-tab.js","js/providers/registry.js","js/providers/index.js","js/core.js","js/providers/ollama.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 120,"expectedPaths": ["js/providers/index.js","js/providers/openrouter.js","js/providers/registry.js","js/settings/llm-tab.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.6,"recallAt5": 0.75,"hitAt5": 1,"mrr": 1}},
+      {"query": "how do I add a new Git provider?","legacyPaths": ["docs/DESIGN-git-providers-and-ui-extensions.md","js/git-providers/registry.js","js/git-providers/index.js","js/git-providers/base.js","js/git-providers/local.js"],"newPaths": ["js/git-providers/index.js","js/git-providers/registry.js","js/git.js","tests/test-connections-panel.js","tests/test-debug-slideout.js"],"legacyError": null,"newError": null,"agreement": 0.25,"durationMs": 126,"expectedPaths": ["js/git-providers/base.js","js/git-providers/index.js","js/git-providers/registry.js","js/settings/connections-tab.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.6,"recallAt5": 0.75,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1}},
+      {"query": "how do I write a new plugin?","legacyPaths": ["docs/PLUGIN.md","js/tools/plugin-tools.js","js/settings/plugins-tab.js","js/plugin-loader.js","js/plugin-editor.js"],"newPaths": ["plugins/venice-ai.js","js/tools/plugin-tools.js","js/core.js","js/plugin-loader.js","plugins/mcp-bridge.js"],"legacyError": null,"newError": null,"agreement": 0.25,"durationMs": 129,"expectedPaths": ["docs/PLUGIN.md","js/core.js","js/plugin-loader.js","plugins/venice-ai.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.6,"recallAt5": 0.75,"hitAt5": 1,"mrr": 1}},
+      {"query": "how do I add a new chunker?","legacyPaths": ["js/intelligence/retrieval/chunkers/structured-chunker.js","js/intelligence/retrieval/pipeline.js","js/intelligence/retrieval/chunkers/code-chunker.js","js/intelligence/retrieval/chunkers/prose-chunker.js","js/intelligence/retrieval/chunkers/conversation-chunker.js"],"newPaths": ["js/intelligence/retrieval/contracts.js","js/intelligence/retrieval/index.js","tests/test-retrieval-embedder.mjs"],"legacyError": null,"newError": null,"agreement": 0,"durationMs": 118,"expectedPaths": ["js/intelligence/retrieval/chunkers/code-chunker.js","js/intelligence/retrieval/chunkers/prose-chunker.js","js/intelligence/retrieval/index.js","js/intelligence/retrieval/pipeline.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.6,"recallAt5": 0.75,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "how do I add a new role?","legacyPaths": ["docs/ROLES_AND_TOOLS.md","js/settings/roles-tab.js","js/tools/registry.js","js/plugin-editor.js","tests/test-memory-consent-tool-flow.mjs"],"newPaths": ["js/plugin-editor.js","js/settings/roles-tab.js","js/core.js","js/model-manager.js"],"legacyError": null,"newError": null,"agreement": 0.2857142857142857,"durationMs": 134,"expectedPaths": ["js/core.js","js/settings/roles-tab.js","js/tools/registry.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "how do I add a custom keybinding?","legacyPaths": ["tests/test-keybindings.js","tests/test-keybindings.mjs","js/help/kbd.js","js/help/hotkey-registry.js","js/help/pages/hotkeys.js"],"newPaths": ["js/chat/replay.js","js/help/kbd.js","js/editor/instance.js"],"legacyError": null,"newError": null,"agreement": 0.14285714285714285,"durationMs": 127,"expectedPaths": ["js/app.js","js/editor/instance.js","js/help/hotkey-registry.js","js/help/kbd.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.3333333333333333},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.5,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "how do I register an MCP server?","legacyPaths": ["js/mcp/registry.js","plugins/mcp-bridge.js","tests/test-mcp-registry.mjs","js/settings/mcp-servers-tab.js","tests/test-mcp-servers-panel.js"],"newPaths": ["js/mcp/registry.js","plugins/mcp-bridge.js","js/settings/mcp-servers-tab.js","js/mcp/bridge.js"],"legacyError": null,"newError": null,"agreement": 0.5,"durationMs": 116,"expectedPaths": ["js/core.js","js/mcp/registry.js","js/settings/mcp-servers-tab.js"],"category": "onboarding","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1}},
+      {"query": "files I would touch to add a new chunker","legacyPaths": ["js/intelligence/retrieval/ingest-controller.js","tests/test-retrieval-store.mjs","js/intelligence/retrieval/chunkers/prose-chunker.js","js/intelligence/retrieval/chunkers/code-chunker.js","js/intelligence/retrieval/chunkers/structured-chunker.js"],"newPaths": ["js/intelligence/retrieval/contracts.js","js/intelligence/retrieval/ingest-controller.js","js/chat/state.js","js/intelligence/retrieval/index.js","js/intelligence/memory/file-layer.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 123,"expectedPaths": ["js/intelligence/retrieval/chunkers/code-chunker.js","js/intelligence/retrieval/index.js","js/intelligence/retrieval/pipeline.js","js/intelligence/retrieval/wiring.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 0.25},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.25,"hitAt5": 1,"mrr": 0.25}},
+      {"query": "files I would touch to wire a new tool category","legacyPaths": ["js/intelligence/tools/catalog.js","docs/DESIGN-tools.md","js/tools/meta-tools.js","docs/TOOLS.md","tests/test-tools-foundation.mjs"],"newPaths": ["js/intelligence/tools/catalog.js","tests/test-system-prompt-admission.mjs","js/tools/file-tools.js","js/intelligence/retrieval/test-corpus.js","js/tools/project-tools.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 119,"expectedPaths": ["js/app.js","js/intelligence/tools/catalog.js","js/prompts.js","js/tools/ci-tools.js","js/tools/registry.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 1}},
+      {"query": "files I would touch to add a settings tab","legacyPaths": ["js/settings/workspace-settings-tab.js","js/settings-manager.js","js/settings/persistence.js","js/intelligence/workspace-settings/index.js","js/tab-manager.js"],"newPaths": ["js/settings/workspace-settings-tab.js","js/settings-manager.js","js/settings/plugins-tab.js","js/settings/persistence.js","js/app.js"],"legacyError": null,"newError": null,"agreement": 0.42857142857142855,"durationMs": 118,"expectedPaths": ["js/settings-manager.js","js/settings/connections-tab.js","js/settings/persistence.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5}},
+      {"query": "files I would touch to ship a new memory scope","legacyPaths": ["js/intelligence/memory/file-layer.js","js/ui/commit-memory-section.js","js/intelligence/memory/index.js","js/intelligence/memory/store.js","js/settings/memory-tab/MemoryTab.js"],"newPaths": ["js/intelligence/memory/file-layer.js","js/tools/memory-tools.js","tests/test-ci-log-cache.mjs","js/intelligence/memory/contracts.js"],"legacyError": null,"newError": null,"agreement": 0.125,"durationMs": 118,"expectedPaths": ["js/intelligence/memory/file-layer.js","js/intelligence/memory/index.js","js/intelligence/workspace-settings/index.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 1},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.3333333333333333,"hitAt5": 1,"mrr": 1}},
+      {"query": "files I would touch to add a new embedding provider","legacyPaths": ["js/intelligence/retrieval/wiring.js","js/embeddings-client.js","js/intelligence/retrieval/embedder.js","js/tools/context-tools.js","js/providers/index.js"],"newPaths": ["js/intelligence/memory/index.js","js/intelligence/memory/file-layer.js","js/settings/llm-tab.js","js/embeddings-client.js","js/settings/models-tab.js"],"legacyError": null,"newError": null,"agreement": 0.1111111111111111,"durationMs": 121,"expectedPaths": ["js/embeddings-client.js","js/intelligence/retrieval/embedder.js","js/settings/models-tab.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.5},"newGroundTruth": {"precisionAt5": 0.4,"recallAt5": 0.6666666666666666,"hitAt5": 1,"mrr": 0.25}},
+      {"query": "files I would touch to add a new LLM tool","legacyPaths": ["docs/DESIGN-tools.md","docs/TOOLS.md","js/tools/multifile-tools.js","js/intelligence/tools/catalog.js","js/chat/tools.js"],"newPaths": ["js/tools/file-tools.js","tests/test-system-prompt-admission.mjs","tests/test-compression-synthetic-savings.mjs","js/tools/project-tools.js","js/intelligence/retrieval/test-corpus.js"],"legacyError": null,"newError": null,"agreement": 0,"durationMs": 123,"expectedPaths": ["js/chat/handlers.js","js/prompts.js","js/settings/tools-tab.js","js/tools/file-tools.js","js/tools/registry.js"],"category": "task-related","legacyGroundTruth": {"precisionAt5": 0,"recallAt5": 0,"hitAt5": 0,"mrr": 0},"newGroundTruth": {"precisionAt5": 0.2,"recallAt5": 0.2,"hitAt5": 1,"mrr": 1}}
     ],
-    "meanAgreement": 0.006046863189720332,
-    "histogram": {
-      "0.0-0.2": 42,
-      "0.2-0.4": 0,
-      "0.4-0.6": 0,
-      "0.6-0.8": 0,
-      "0.8-1.0": 0
-    },
-    "legacyFailures": 0,
-    "newFailures": 0,
-    "durationMs": 14781,
-    "legacyGroundTruth": {
-      "meanPrecisionAt5": 0.004761904761904762,
-      "meanRecallAt5":    0.004761904761904762,
-      "meanHitAt5":       0.023809523809523808,
-      "meanMRR":          0.023809523809523808,
-      "sampleCount": 42
-    },
-    "newGroundTruth": {
-      "meanPrecisionAt5": 0.3285714285714285,
-      "meanRecallAt5":    0.540986394557823,
-      "meanHitAt5":       0.9761904761904762,
-      "meanMRR":          0.7563492063492062,
-      "sampleCount": 42
-    },
+    "meanAgreement": 0.26203703703703696,
+    "histogram": {"0.0-0.2": 17,"0.2-0.4": 14,"0.4-0.6": 9,"0.6-0.8": 2,"0.8-1.0": 0},
+    "legacyFailures": 0,"newFailures": 0,"durationMs": 5146,
+    "legacyGroundTruth": {"meanPrecisionAt5": 0.3238095238095239,"meanRecallAt5": 0.539342403628118,"meanHitAt5": 0.9285714285714286,"meanMRR": 0.6912698412698413,"sampleCount": 42},
+    "newGroundTruth": {"meanPrecisionAt5": 0.3333333333333333,"meanRecallAt5": 0.5489229024943311,"meanHitAt5": 0.9761904761904762,"meanMRR": 0.7595238095238095,"sampleCount": 42},
     "legacyByCategory": {
-      "file-discovery":     { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                   "meanMRR": 0,                    "sampleCount": 8 },
-      "function-discovery": { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                   "meanMRR": 0,                    "sampleCount": 7 },
-      "topic":              { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                   "meanMRR": 0,                    "sampleCount": 7 },
-      "bug-investigation":  { "meanPrecisionAt5": 0.028571428571428574, "meanRecallAt5": 0.028571428571428574, "meanHitAt5": 0.14285714285714285, "meanMRR": 0.14285714285714285,  "sampleCount": 7 },
-      "onboarding":         { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                   "meanMRR": 0,                    "sampleCount": 7 },
-      "task-related":       { "meanPrecisionAt5": 0,                    "meanRecallAt5": 0,                    "meanHitAt5": 0,                   "meanMRR": 0,                    "sampleCount": 6 }
+      "file-discovery": {"meanPrecisionAt5": 0.3,"meanRecallAt5": 0.675,"meanHitAt5": 1,"meanMRR": 0.84375,"sampleCount": 8},
+      "function-discovery": {"meanPrecisionAt5": 0.31428571428571433,"meanRecallAt5": 0.7095238095238096,"meanHitAt5": 0.8571428571428571,"meanMRR": 0.6714285714285715,"sampleCount": 7},
+      "topic": {"meanPrecisionAt5": 0.3428571428571429,"meanRecallAt5": 0.41462585034013605,"meanHitAt5": 1,"meanMRR": 0.738095238095238,"sampleCount": 7},
+      "bug-investigation": {"meanPrecisionAt5": 0.2571428571428571,"meanRecallAt5": 0.37142857142857144,"meanHitAt5": 0.8571428571428571,"meanMRR": 0.619047619047619,"sampleCount": 7},
+      "onboarding": {"meanPrecisionAt5": 0.45714285714285713,"meanRecallAt5": 0.619047619047619,"meanHitAt5": 1,"meanMRR": 0.6904761904761906,"sampleCount": 7},
+      "task-related": {"meanPrecisionAt5": 0.26666666666666666,"meanRecallAt5": 0.40833333333333327,"meanHitAt5": 0.8333333333333334,"meanMRR": 0.5416666666666666,"sampleCount": 6}
     },
     "newByCategory": {
-      "file-discovery":     { "meanPrecisionAt5": 0.30000000000000004,  "meanRecallAt5": 0.6125,              "meanHitAt5": 1,                   "meanMRR": 0.74375,              "sampleCount": 8 },
-      "function-discovery": { "meanPrecisionAt5": 0.3714285714285714,   "meanRecallAt5": 0.9,                 "meanHitAt5": 1,                   "meanMRR": 0.7428571428571429,   "sampleCount": 7 },
-      "topic":              { "meanPrecisionAt5": 0.4,                  "meanRecallAt5": 0.4554421768707483,  "meanHitAt5": 1,                   "meanMRR": 1,                    "sampleCount": 7 },
-      "bug-investigation":  { "meanPrecisionAt5": 0.2285714285714286,   "meanRecallAt5": 0.3238095238095239,  "meanHitAt5": 0.8571428571428571,  "meanMRR": 0.5952380952380951,   "sampleCount": 7 },
-      "onboarding":         { "meanPrecisionAt5": 0.42857142857142855,  "meanRecallAt5": 0.5833333333333333,  "meanHitAt5": 1,                   "meanMRR": 0.7857142857142857,   "sampleCount": 7 },
-      "task-related":       { "meanPrecisionAt5": 0.2333333333333333,   "meanRecallAt5": 0.33055555555555555, "meanHitAt5": 1,                   "meanMRR": 0.6583333333333333,   "sampleCount": 6 }
+      "file-discovery": {"meanPrecisionAt5": 0.30000000000000004,"meanRecallAt5": 0.6125,"meanHitAt5": 1,"meanMRR": 0.7541666666666668,"sampleCount": 8},
+      "function-discovery": {"meanPrecisionAt5": 0.3714285714285714,"meanRecallAt5": 0.9,"meanHitAt5": 1,"meanMRR": 0.7428571428571429,"sampleCount": 7},
+      "topic": {"meanPrecisionAt5": 0.4,"meanRecallAt5": 0.4554421768707483,"meanHitAt5": 1,"meanMRR": 1,"sampleCount": 7},
+      "bug-investigation": {"meanPrecisionAt5": 0.2285714285714286,"meanRecallAt5": 0.3238095238095239,"meanHitAt5": 0.8571428571428571,"meanMRR": 0.5952380952380951,"sampleCount": 7},
+      "onboarding": {"meanPrecisionAt5": 0.42857142857142855,"meanRecallAt5": 0.5833333333333333,"meanHitAt5": 1,"meanMRR": 0.7857142857142857,"sampleCount": 7},
+      "task-related": {"meanPrecisionAt5": 0.26666666666666666,"meanRecallAt5": 0.3861111111111111,"meanHitAt5": 1,"meanMRR": 0.6666666666666666,"sampleCount": 6}
     }
   }
 }
