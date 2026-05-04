@@ -338,6 +338,7 @@ export async function handleGeneralRequest(input) {
     let finalContent = '';          // Accumulated across rounds (used for error fallback)
     let lastRoundContent = '';      // Only the current round's text (used for DOM + history)
     let lastRoundReasoning = null;  // Reasoning captured by _handleStream for the last round
+    let textCommittedMidLoop = false; // Track if text was already rendered in DOM mid-loop
     const toolActions = []; // Track all tool executions for fallback summary
     
     // === DUPLICATE TOOL CALL DETECTION ===
@@ -815,6 +816,10 @@ export async function handleGeneralRequest(input) {
                     if (cleanContent.trim()) {
                         partialEl.querySelector('.message-content').innerHTML = formatMessageContent(stripThinkBlocks(cleanContent));
                         partialEl.classList.remove('streaming');
+                        // Text already committed to DOM — clear so finalizeStreamingMessage
+                        // doesn't re-emit it at the end of the tool loop
+                        lastRoundContent = '';
+                        textCommittedMidLoop = true;
                     } else {
                         // Round produced no text (only tool calls) — remove empty element
                         partialEl.remove();
@@ -852,12 +857,23 @@ export async function handleGeneralRequest(input) {
         }
     }
 
+    // If text was already committed mid-loop AND the final round produced no
+    // new text, just clean up the placeholder and skip re-rendering.
+    // But if the final round HAS new text (e.g. a summary after tool calls),
+    // we still need to render it.
+    if (textCommittedMidLoop && !lastRoundContent.trim()) {
+        const placeholder = document.getElementById('streaming-message');
+        if (placeholder) placeholder.remove();
+        return;
+    }
+
     // Use last round's content for the final DOM element.
     // lastRoundReasoning carries the reasoning captured by _handleStream
     // for the round whose content we're rendering; older rounds' reasoning
     // is already attached to the assistant turns pushed during the loop.
+    const finalText = lastRoundContent.trim() ? lastRoundContent : finalContent;
     finalizeStreamingMessage(
-        lastRoundContent.trim() ? lastRoundContent : finalContent,
+        finalText,
         { hasCode: false, reasoning: lastRoundReasoning }
     );
 }
