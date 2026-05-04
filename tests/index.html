@@ -161,6 +161,14 @@
             } catch (e) { errors.push(['LLM Idle Timeout', e]); }
 
             try {
+                await import('./test-tool-loop-progress.js');
+            } catch (e) { errors.push(['Tool Loop Progress', e]); }
+
+            try {
+                await import('./test-chat-history-persistence.js');
+            } catch (e) { errors.push(['Chat History Persistence', e]); }
+
+            try {
                 await import('./test-keybindings.js');
             } catch (e) { errors.push(['Keybindings', e]); }
 

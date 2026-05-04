@@ -173,7 +173,7 @@ const ConversationManager = {
         const pruneStash = Storage.get('chatPruneStash', null);
         const toolActionLog = State.toolActionLog || [];
         Storage.set(`conv-${id}`, {
-            messages: messages.slice(-100),
+            messages,
             summaryInfo,
             pruneStash,
             toolActionLog: toolActionLog.slice(-50)

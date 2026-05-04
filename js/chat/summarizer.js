@@ -531,7 +531,7 @@ SUMMARY:`;
         //    Remove before set — if localStorage is already full, set() would fail
         //    because the OLD big chatHistory is still consuming space.
         Storage.remove('chatHistory');
-        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        Storage.set('chatHistory', State.chatHistory);
 
         // 3. Try to stash pruned messages for undo — may fail if still tight on space
         Storage.set('chatPruneStash', pruned);
@@ -568,7 +568,7 @@ SUMMARY:`;
         State.chatHistory.unshift(...stash);
         Storage.remove('chatPruneStash');
         Storage.remove('chatSummaryInfo');
-        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        Storage.set('chatHistory', State.chatHistory);
         console.log(`[ChatSummarizer] Undo prune — restored ${stash.length} messages`);
         EventBus.emit('chat:pruneUndone');
         return true;

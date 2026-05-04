@@ -60,10 +60,12 @@ export function addMessage(role, content, meta = {}) {
     };
 
     State.chatHistory.push(message);
-    
-    // Persist (keep last 100)
-    const toSave = State.chatHistory.slice(-100);
-    Storage.set('chatHistory', toSave);
+
+    // Persist the full history. Storage is IndexedDB-backed (GB-level
+    // quota); arbitrary truncation here was the root cause of the
+    // "refresh trims chat" bug — messages older than the last 100
+    // were silently lost on every write.
+    Storage.set('chatHistory', State.chatHistory);
 
     // Async summarization — fire and forget, never blocks UI
     if (ChatSummarizer.shouldSummarize()) {
@@ -265,6 +267,14 @@ export function finalizeStreamingMessage(content, meta = {}) {
     // Inject edit/retry buttons on the last user message now that response is complete
     _injectUserEditButtons();
 
+    // Skip persisting empty assistant turns — they pollute chatHistory and
+    // Storage, and `sanitizeMessages` would silently drop them on every
+    // future request anyway. The DOM render above still handled any
+    // visible side; only history persistence is gated here.
+    if (!String(content).trim()) {
+        return;
+    }
+
     // Add to history. Content is the visible response text (reasoning
     // already split off into meta.reasoning by the streaming layer in
     // 1.3.1; pre-1.3.1 turns may still carry inline think blocks, which
@@ -275,7 +285,7 @@ export function finalizeStreamingMessage(content, meta = {}) {
         timestamp: Date.now(),
         ...meta
     });
-    Storage.set('chatHistory', State.chatHistory.slice(-100));
+    Storage.set('chatHistory', State.chatHistory);
 }
 
 /**

@@ -609,14 +609,14 @@ export const LLM = {
         const idleMs = State.settings.llmIdleTimeout || 90000;
         let idleTimer = null;
         let idleTimedOut = false;
-        const armIdle = () => {
+        const armIdle = (ms) => {
             if (idleTimer !== null) clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
                 idleTimedOut = true;
                 try {
                     if (this.abortController) this.abortController.abort();
                 } catch (_) { /* swallow — controller may already be nulled */ }
-            }, idleMs);
+            }, ms ?? idleMs);
         };
         const clearIdle = () => {
             if (idleTimer !== null) {
@@ -625,9 +625,13 @@ export const LLM = {
             }
         };
 
-        try {
-            armIdle();
+        // Arm the idle timer at start with a generous initial window (3× normal).
+        // This gives the LLM time to produce its first token for complex reasoning,
+        // large context, or slow providers. After the first chunk arrives, we reset
+        // to the normal timeout — gaps between chunks indicate a truly stalled connection.
+        armIdle(idleMs * 3);
 
+        try {
             while (true) {
                 let readResult;
                 try {
@@ -638,9 +642,11 @@ export const LLM = {
                     }
                     throw err;
                 }
-                armIdle();
                 const { done, value } = readResult;
                 if (done) break;
+
+                // Reset the idle timer to the normal timeout on every chunk arrival.
+                armIdle();
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');

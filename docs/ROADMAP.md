@@ -419,6 +419,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 
 ### Other deferred
 
+- **`ChatHistoryStore` encapsulation** — `State.chatHistory` is mutated directly by 14 call sites across 5 files (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`, `conversations.js`), and each one is independently responsible for calling `Storage.set('chatHistory', …)` afterward. Three issue #16 patches in a row (1.5.5 stash-restore, 1.5.9 fix #4 clamp removal) had to walk every site to change persistence policy; missing one keeps the bug alive. Scope: introduce a single module exposing `append(msg)`, `splice(from)`, `replace(arr)`, `clear()`, route every consumer through it, drop `Storage.set('chatHistory', …)` from everywhere else. Unblocks the quota-aware eviction strategy Jeff described (embeddings-first → old chats → never active) since it gives that strategy one place to live. Lo-medium pri — current code works after 1.5.9, but the *next* policy change pays the same 5-file walk.
 - **Chat panel facelift** — three Touch 2 variants (Polish, Restructure, Reskin); direction not locked. Will get a slot once a direction is picked or roll into 2.0 with the profile picker.
 - **Persona memory scope** — deferred indefinitely. Workspace + user scopes cover the demand seen so far.
 - **Plugin SlotManager** — designed but not built; on PLAN.md.

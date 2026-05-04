@@ -373,8 +373,14 @@ export async function handleGeneralRequest(input) {
         ...( alreadyInContext ? [] : [{ role: 'user', content: input }] )
     ];
 
-    // Iterative tool call loop — max 8 rounds to support complex workflows
-    const MAX_TOOL_ROUNDS = 8;
+    // Iterative tool call loop. No fixed round cap — instead we break on
+    // a no-forward-progress streak so genuine multi-step investigations
+    // can run as long as the model is still making progress (executing
+    // fresh tools or producing visible text). HARD_CAP is a last-resort
+    // safety net for pathological infinite loops.
+    const NO_PROGRESS_LIMIT = 3;    // Consecutive stall rounds before break
+    const HARD_CAP = 100;           // Absolute safety net
+    let noProgressStreak = 0;
     let finalContent = '';          // Accumulated across rounds (used for error fallback)
     let lastRoundContent = '';      // Only the current round's text (used for DOM + history)
     let lastRoundReasoning = null;  // Reasoning captured by _handleStream for the last round
@@ -384,6 +390,8 @@ export async function handleGeneralRequest(input) {
     // === DUPLICATE TOOL CALL DETECTION ===
     // Track tool+args combinations to prevent re-fetching the same data
     const toolCallCache = new Map(); // key: "toolName|canonicalArgs" → result
+    const duplicateStreak = new Map(); // key: cacheKey → consecutive-duplicate count
+    const DUP_REFUSE_THRESHOLD = 3; // Refuse on 3rd consecutive identical dup call
     let _hasRetried = false;  // One transient-error retry per request
 
     // Keep isGenerating true for the entire tool loop
@@ -391,12 +399,18 @@ export async function handleGeneralRequest(input) {
     EventBus.emit('llm:generating', true);
 
     try {
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        for (let round = 0; round < HARD_CAP; round++) {
             // Check cancellation before each round
             if (isToolLoopCancelled()) {
                 console.log('[TOOL-LOOP] Cancelled by user');
                 break;
             }
+
+            // Reset per-round progress flag. Set to true downstream when the
+            // round (a) produces visible text, (b) executes a fresh tool, or
+            // (c) recovers from a length-truncation. Anything else counts as
+            // a stall round and increments noProgressStreak.
+            let madeProgressThisRound = false;
 
             let content = '';
             let result;
@@ -494,9 +508,10 @@ export async function handleGeneralRequest(input) {
                 };
                 messages.push(guidanceMsg);
                 addMessage('system', guidanceMsg.content);
-                
-                // Allow one more round to recover
-                if (round < MAX_TOOL_ROUNDS - 1) {
+
+                // Length-recovery is legitimate forward motion — reset streak.
+                if (round < HARD_CAP - 1) {
+                    noProgressStreak = 0;
                     continue;
                 }
             }
@@ -524,6 +539,7 @@ export async function handleGeneralRequest(input) {
             lastRoundContent = cleanContent;
             if (cleanContent.trim()) {
                 finalContent = finalContent ? finalContent + '\n\n' + cleanContent : cleanContent;
+                madeProgressThisRound = true;
             }
 
             if (toolCalls.length > 0) {
@@ -568,8 +584,24 @@ export async function handleGeneralRequest(input) {
                         }
                     }
                     
+                    // === DUPLICATE STREAK ENFORCEMENT ===
+                    // Track consecutive identical (tool, args) calls. After
+                    // DUP_REFUSE_THRESHOLD strikes we refuse to execute and
+                    // hand the model a hard error so it stops spiraling.
+                    // Non-dup attempts reset the streak for that key. Writes
+                    // never hit either dup signal, so they bypass refusal.
+                    const isDup = !!cachedResult || crossRequestDuplicate;
+                    const streak = isDup ? (duplicateStreak.get(cacheKey) || 0) + 1 : 0;
+                    duplicateStreak.set(cacheKey, streak);
+
                     let toolResult;
-                    if (crossRequestDuplicate) {
+                    if (isDup && streak >= DUP_REFUSE_THRESHOLD) {
+                        console.warn(`[TOOL-LOOP] Refusing duplicate ${toolName} (streak=${streak})`);
+                        toolResult = {
+                            error: `REFUSED: ${toolName} called ${streak} consecutive times with identical args. Use the prior result or pick a different approach.`,
+                            _refused: true
+                        };
+                    } else if (crossRequestDuplicate) {
                         // Return a synthetic result telling the AI it already did this
                         const lastEntry = State.toolActionLog.slice(-30).reverse().find(e => e.tool === toolName && e.success);
                         toolResult = {
@@ -586,6 +618,10 @@ export async function handleGeneralRequest(input) {
                         };
                         console.log(`[TOOL-LOOP] Cache hit for ${toolName}(${JSON.stringify(args).slice(0, 80)})`);
                     } else {
+                        // A real execution path — counts as forward progress
+                        // even if the tool errors. The model gets new info to
+                        // react to either way.
+                        madeProgressThisRound = true;
                         // Execute with configurable timeout (default 30s)
                         const toolTimeout = State.settings.toolTimeout || 30000;
                         try {
@@ -856,7 +892,7 @@ export async function handleGeneralRequest(input) {
                 }
                 
                 State.chatHistory.push(assistantMsg);
-                Storage.set('chatHistory', State.chatHistory.slice(-100));
+                Storage.set('chatHistory', State.chatHistory);
 
                 // Save tool results to State.chatHistory for context continuity
                 if (toolCallSource === 'structured') {
@@ -866,7 +902,7 @@ export async function handleGeneralRequest(input) {
                             timestamp: Date.now()
                         });
                     }
-                    Storage.set('chatHistory', State.chatHistory.slice(-100));
+                    Storage.set('chatHistory', State.chatHistory);
                 }
 
                 if (toolCallSource === 'structured') {
@@ -888,6 +924,26 @@ export async function handleGeneralRequest(input) {
                         role: 'user',
                         content: `Tool results:\n${summary}\n\nUse these results to continue. Only call additional tools if you are MISSING information needed to complete the task — do not re-read data you already have.`
                     });
+                }
+
+                // === FORWARD-PROGRESS CHECK ===
+                // If the round produced no fresh tool execution and no
+                // visible text, it's a stall round. After NO_PROGRESS_LIMIT
+                // consecutive stalls, break out of the loop. Placing this
+                // BEFORE the partialEl/addStreamingMessage block keeps the
+                // existing streaming placeholder around so finalizeStreamingMessage
+                // can render the stop notice in-place.
+                if (madeProgressThisRound) {
+                    noProgressStreak = 0;
+                } else {
+                    noProgressStreak++;
+                    if (noProgressStreak >= NO_PROGRESS_LIMIT) {
+                        console.warn(`[TOOL-LOOP] No forward progress for ${noProgressStreak} rounds — breaking`);
+                        if (!finalContent.trim()) {
+                            finalContent = `*(Stopped after ${noProgressStreak} consecutive rounds with no new tool calls or visible text. The model may need a clearer prompt or different approach.)*`;
+                        }
+                        break;
+                    }
                 }
 
                 // Prepare UI for next round — commit THIS round's text only
@@ -976,7 +1032,7 @@ function _rollbackHistory(snapshotLength) {
     const removed = State.chatHistory.length - snapshotLength;
     if (removed > 0) {
         State.chatHistory.length = snapshotLength;
-        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        Storage.set('chatHistory', State.chatHistory);
         console.warn(`[_rollbackHistory] Rolled back ${removed} message(s) from failed request`);
     }
 }

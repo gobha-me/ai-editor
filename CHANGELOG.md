@@ -8,6 +8,77 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.9] - 2026-05-04
+
+**Four fixes for the tool-loop and chat-history bugs surfaced under
+issue #16 (follow-up to the 1.5.8 idle-timer commits).** The 1.5.8 fix
+kept the stream alive past the first chunk, but three other mechanisms
+still cut off active investigations and forced the user to retype
+"continue" every few minutes — and a fourth path was silently
+discarding chat history older than 100 messages on every Storage
+write.
+
+1. **`MAX_TOOL_ROUNDS = 8` hard cap removed.** The for-loop in
+   `handleGeneralRequest` now bounds at `HARD_CAP = 100` purely as an
+   infinite-loop safety net and breaks early only when the model
+   produces no forward progress for `NO_PROGRESS_LIMIT = 3`
+   consecutive rounds. A round counts as forward progress when it
+   produces visible text, executes a fresh tool (cache-miss + not a
+   cross-request duplicate + not refused), or recovers from a
+   `finish_reason: 'length'` truncation. Long, legitimate multi-step
+   investigations now run to completion the way Claude Code does;
+   genuine stalls still break out promptly.
+
+2. **Duplicate-tool refusal at N=3.** Cross-request and in-request
+   duplicate detection used to be advisory — the model received a
+   `_cache_note` and routinely ignored it. After three consecutive
+   identical `(tool, args)` calls the loop now hands back a hard
+   `REFUSED:` error result instead of executing, which the model
+   reliably reads as a stop signal. Per-cacheKey streaks reset on the
+   first non-duplicate attempt, so a model that intersperses fresh
+   tool calls between repeats keeps moving.
+
+3. **Empty assistant turns no longer persist.**
+   `finalizeStreamingMessage` previously coerced null/undefined
+   content to `''` and pushed unconditionally; combined with
+   `sanitizeMessages` silently dropping empty assistants on every
+   later request, this produced ~50× `[sanitizeMessages] Dropping
+   empty assistant message` warnings per session and polluted
+   `chatHistory` Storage forever. The push is now gated on
+   non-whitespace content. The DOM render path still runs.
+
+4. **Stop arbitrarily trimming `chatHistory` on every Storage write.**
+   Every write of `chatHistory` to Storage was hard-clamped to
+   `slice(-100)` at twelve different sites, and `initChat()` further
+   truncated to the last 50 messages on page load (or last
+   `RECENT_COUNT` ≈ 8–60 when a summary existed). After ~100 turns
+   the older messages were silently dropped from BOTH the UI and the
+   LLM context — a refresh effectively "summary-trimmed without
+   summarizing." The 1.5.5 stash-restore fix prevented loss of
+   *recently pruned* messages, but did nothing about the
+   messages-past-100-discarded-on-write path. Storage is
+   IndexedDB-backed (GB-level quota); the 100-message cap was shy
+   strategy, not a hard requirement. Removed the clamp at every
+   `Storage.set('chatHistory', …)` site
+   (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`,
+   `conversations.js`) and the init-read truncations. `initChat()` now
+   restores the full persisted history into `State.chatHistory`. Tool
+   messages are still filtered out of the rendered DOM (they show as
+   collapsible widgets in the live tool loop, not raw JSON on reload),
+   but they STAY in `State.chatHistory` so the LLM sees the full
+   thread. The render still windows the DOM to the last 100 messages
+   for paint performance — that's a render-time concern, no longer a
+   data-loss one.
+
+**Tests.** `tests/test-tool-loop-progress.js` pins the algorithmic
+shape of fixes 1–3 (forward-progress break, duplicate-streak refusal,
+empty-message non-persistence). `tests/test-chat-history-persistence.js`
+covers fix 4 — pushes 250 messages through `addMessage`, verifies
+`finalizeStreamingMessage` persists past the old 100-boundary, and
+round-trips a 500-message synthetic history through Storage. End-to-end
+verification of the live tool loop is manual per
+`reference_testing_ci.md` (browser tests, no CI runner).
+
 ## [1.5.8] - 2026-05-03
 
 **Composer tuning T5 — content-type × path-prefix score weighting (PR

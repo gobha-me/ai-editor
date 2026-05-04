@@ -98,30 +98,22 @@ function initChat(containerEl, inputEl) {
     const summaryInfo = Storage.get('chatSummaryInfo', null);
     const pruneStash = Storage.get('chatPruneStash', null);
 
-    // CRITICAL FIX: Restore pruned messages on page refresh so the full
-    // conversation is available to both the UI and the LLM context.
-    // Without this, a page refresh after summarization permanently loses
-    // the pruned conversation history (stash is flushed on next message).
+    // Restore the FULL persisted chat history so neither the UI nor the
+    // LLM context loses messages on refresh. Storage is IndexedDB-backed
+    // (GB-level quota); the previous slice(-50) / slice(-RECENT_COUNT)
+    // truncations were the root cause of the "refresh trims chat" bug.
+    // Tool messages are filtered out of the rendered DOM (they show as
+    // collapsible widgets in the live tool loop, not raw JSON on reload),
+    // but they STAY in State.chatHistory so the LLM sees the full thread.
     let displayHistory;
     if (pruneStash && Array.isArray(pruneStash) && pruneStash.length > 0) {
         State.chatHistory = [...pruneStash, ...savedHistory];
-        displayHistory = State.chatHistory.filter(msg => msg.role !== 'tool');
-        // Persist the restored full history so it survives further operations
-        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        Storage.set('chatHistory', State.chatHistory);
         console.log(`[initChat] Restored ${pruneStash.length} pruned messages from stash`);
     } else {
-        // CRITICAL FIX: Filter out tool messages from display on page load
-        // Tool messages should only be rendered in real-time as collapsible tool call widgets
-        // When loading from cache, we skip rendering tool messages to avoid showing raw JSON
-        displayHistory = savedHistory.filter(msg => msg.role !== 'tool');
-
-        if (summaryInfo?.summary && displayHistory.length > ChatSummarizer.RECENT_COUNT) {
-            // Keep recent messages + prepend summary reference
-            State.chatHistory = savedHistory.slice(-ChatSummarizer.RECENT_COUNT);
-        } else {
-            State.chatHistory = savedHistory.slice(-50);
-        }
+        State.chatHistory = savedHistory;
     }
+    displayHistory = State.chatHistory.filter(msg => msg.role !== 'tool');
 
     if (window.__AIE_DEBUG_METADATA) {
         const report = probeMetadataCoverage(State.chatHistory);
@@ -326,7 +318,7 @@ function retryLastMessage() {
     
     // Truncate from the user message onward (removes user + assistant + tool messages)
     State.chatHistory.splice(lastUserIdx);
-    Storage.set('chatHistory', State.chatHistory.slice(-100));
+    Storage.set('chatHistory', State.chatHistory);
     renderMessages();
     
     // Resend the same content as a fresh message
@@ -360,7 +352,7 @@ function editAndResend(newContent) {
 
     // Truncate from the user message onward
     State.chatHistory.splice(lastUserIdx);
-    Storage.set('chatHistory', State.chatHistory.slice(-100));
+    Storage.set('chatHistory', State.chatHistory);
     renderMessages();
 
     // Send the edited content as a fresh message
