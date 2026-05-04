@@ -10,7 +10,7 @@
  */
 
 import { EventBus } from './core.js';
-import { ContextManager } from './context-manager.js';
+import { RetrievalManager } from './intelligence/retrieval/manager.js';
 
 /** @type {HTMLElement|null} */
 let containerEl = null;
@@ -48,7 +48,7 @@ function _createWidget() {
     btnEl.title = 'Pause indexing';
     btnEl.setAttribute('aria-label', 'Pause context indexing');
     btnEl.textContent = '⏸';
-    btnEl.onclick = () => ContextManager.togglePause();
+    btnEl.onclick = () => RetrievalManager.togglePause();
 
     progressEl = document.createElement('span');
     progressEl.className = 'index-indicator-text';
@@ -112,7 +112,7 @@ function _show() {
     if (containerEl) {
         containerEl.style.display = '';
         containerEl.classList.remove('index-partial');
-        if (btnEl) btnEl.onclick = () => ContextManager.togglePause();
+        if (btnEl) btnEl.onclick = () => RetrievalManager.togglePause();
         _updatePauseState(false, false, false);
     }
 }
@@ -138,8 +138,8 @@ function _showPartial(indexed, total) {
 
     // Swap click handler to resume
     btnEl.onclick = () => {
-        btnEl.onclick = () => ContextManager.togglePause(); // Restore normal handler
-        ContextManager.indexProject(false, true); // resume=true
+        btnEl.onclick = () => RetrievalManager.togglePause(); // Restore normal handler
+        RetrievalManager.indexProject(false, true); // resume=true
     };
 }
 
@@ -175,11 +175,11 @@ function _updatePauseState(paused, manual, auto) {
 
 function _triggerAutoPause() {
     clearTimeout(autoResumeTimer);
-    ContextManager.autoPause();
+    RetrievalManager.autoPause();
 }
 
 function _triggerAutoResume() {
     // Small delay before resuming — avoids flapping during rapid tool calls
     clearTimeout(autoResumeTimer);
-    autoResumeTimer = setTimeout(() => ContextManager.autoResume(), 2000);
+    autoResumeTimer = setTimeout(() => RetrievalManager.autoResume(), 2000);
 }

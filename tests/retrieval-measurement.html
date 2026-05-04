@@ -208,7 +208,7 @@
     <div class="panel hidden" id="run-panel">
         <h2>4. Run</h2>
         <div class="row">
-            <button id="reindex-legacy" class="ghost">Re-index legacy ContextManager</button>
+            <button id="reindex-legacy" class="ghost" disabled title="Legacy ContextManager retired at 1.5.14">Re-index legacy (retired)</button>
             <button id="run-measurement">Run measurement</button>
             <button id="abort" class="ghost" disabled>Abort</button>
         </div>
@@ -233,15 +233,16 @@
 
     <script type="module">
         // Boot the editor's core machinery the same way `js/app.js` does.
-        // We need the full core/git/embeddings-client/context-manager
-        // surface because the harness drives them directly.
+        // We need core/git/embeddings-client; the legacy `context-manager`
+        // module was retired at 1.5.14 — `ContextManager` is omitted from
+        // the harness, so `runLegacy` returns [] and recall@5 vs ground
+        // truth measures only the new pipeline.
         const bootEl = document.getElementById('boot-status');
         const bootPanel = document.getElementById('boot-panel');
 
         let State, EventBus, Storage, loadSettings;
         let Git, GitProviderRegistry, initGitProviders, loadProject;
         let EmbeddingsClient;
-        let ContextManager;
         let IgnoreManager;
         let createMeasurementHarness;
         let QUERY_FIXTURES;
@@ -252,7 +253,6 @@
             ({ State, EventBus, Storage, loadSettings } = await import('../js/core.js'));
             ({ Git, GitProviderRegistry, initGitProviders, loadProject } = await import('../js/git.js'));
             ({ EmbeddingsClient } = await import('../js/embeddings-client.js'));
-            ({ ContextManager } = await import('../js/context-manager.js'));
             ({ IgnoreManager } = await import('../js/ignore.js'));
             ({ createMeasurementHarness, QUERY_FIXTURES, buildParaphraserFromSettings } = await import('../js/intelligence/retrieval/index.js'));
             ({ LLM } = await import('../js/llm/api.js'));
@@ -408,7 +408,7 @@
                 EventBus.emit('project:loaded', { ...State.currentProject, branch: ref });
 
                 const allFiles = (State.fileTree || []).filter((f) => f.type === 'file');
-                const eligible = allFiles.filter((f) => ContextManager.shouldIndex(f.path, f.size));
+                const eligible = allFiles.filter((f) => !IgnoreManager.isIgnored(f.path, f.size) && (typeof f.size !== 'number' || f.size <= 250_000));
                 setStatus(
                     'project-status',
                     `<small>Loaded <code>${escapeHtml(owner)}/${escapeHtml(repo)}@${escapeHtml(ref)}</code>. ` +
@@ -426,29 +426,14 @@
 
         let abortController = null;
 
-        document.getElementById('reindex-legacy').addEventListener('click', async () => {
-            if (!window.__measurementContext) {
-                setStatus('run-status', `<small><strong>Load a project first.</strong></small>`, 'warn');
-                return;
-            }
-            const btn = document.getElementById('reindex-legacy');
-            btn.disabled = true;
-            setStatus('run-status', `<small>Re-indexing legacy ContextManager (force)…</small>`);
-            try {
-                if (!ContextManager.isEnabled()) {
-                    setStatus('run-status',
-                        `<small><strong>Embeddings disabled.</strong> Enable <code>useEmbeddings</code> in Settings → Embeddings before re-indexing.</small>`,
-                        'warn');
-                    return;
-                }
-                const count = await ContextManager.indexProject(true, false);
-                setStatus('run-status', `<small>Legacy index built: <code>${count}</code> files.</small>`, 'ok');
-            } catch (err) {
-                setStatus('run-status', `<small><strong>Re-index failed:</strong> ${escapeHtml(err.message || String(err))}</small>`, 'err');
-                console.error(err);
-            } finally {
-                btn.disabled = false;
-            }
+        // Legacy ContextManager retired at 1.5.14. The "Re-index legacy"
+        // button is disabled at boot below; this handler stays as a
+        // documented no-op surfacing the retirement notice if clicked
+        // anyway (e.g. via dev console).
+        document.getElementById('reindex-legacy').addEventListener('click', () => {
+            setStatus('run-status',
+                `<small><strong>Legacy <code>ContextManager</code> was retired at 1.5.14.</strong> Recall@5 still measures the new pipeline against ground truth; the legacy comparison column reads as 0.</small>`,
+                'warn');
         });
 
         document.getElementById('run-measurement').addEventListener('click', async () => {
@@ -534,7 +519,8 @@
                 const harness = await createMeasurementHarness({
                     Git: breakerClearingGit,
                     EmbeddingsClient,
-                    ContextManager,
+                    // ContextManager retired at 1.5.14 — runLegacy returns [].
+                    ContextManager: null,
                     project: { owner: ctx.owner, repo: ctx.repo, ref: ctx.ref },
                     modelId,
                     sourceUris,

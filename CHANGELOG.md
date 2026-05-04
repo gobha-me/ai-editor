@@ -8,6 +8,138 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.14] - 2026-05-04
+
+**Legacy `js/context-manager.js` retirement (PR 28 of the 1.5.0 stream).**
+Production cutover: `find_relevant_files` now drives the new chunk-level
+Composer pipeline, the legacy 1085-line file-summary embedding module is
+deleted, and the `Settings → Retrieval` paraphrase-mode toggle that
+1.5.12 deferred is wired into production.
+
+**Why now.** §1.5.0 shipped at 1.5.13 with the canonical 1.5.11 T7
+recall@5 = 0.6382 (hit@5 = 1.000; MRR = 0.817) clearing the reframed
+≥0.65 gate. The new pipeline beats legacy by +0.099 overall and on every
+per-category bucket (function-discovery +0.190, file-discovery +0.113,
+topic +0.057, onboarding +0.048, bug-investigation +0.064, task-related
++0.122) — there is no defensible reason to keep maintaining the legacy
+file-level summary embedding path. Disposition framed on
+maintenance / code-reduction grounds rather than the
+"legacy-is-unmaintainably-bad" framing that turned out to be a
+1.5.5 / 1.5.6 measurement artifact.
+
+**What ships.**
+
+- **New** [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+  — production singleton owning the chunk-level pipeline lifecycle.
+  Public surface drop-in compatible with the seven legacy importers:
+  `findRelevantFiles(query, topK)`, `getStats()`, `isEnabled()`,
+  `indexProject(force, resume)`, `togglePause()` / `autoPause()` /
+  `autoResume()`, `clearIndex()` / `removeIndexForBranch()` /
+  `copyIndexForBranch()` / `cleanupOrphanedIndexes()` /
+  `reindexChanged()`, `loadIndexFromStorage()` / `saveIndexToStorage()`.
+  New getters replace the legacy private-field reads:
+  `getFilesIndexed()`, `getIndexProgress()`, `isIndexing()`,
+  `isPaused()`, `getIndexedProject()`. Built on the shipped
+  `createInMemoryChunkStore` (1.4.20), `createProductionIngestWalker`
+  (1.5.1), `createSemanticStrategy` + `createStructuralStrategy` +
+  `createThematicStrategy`, `compose` (1.4.17 + 1.5.12 paraphrase opt),
+  `buildBM25Index` (1.5.11), `buildParaphraserFromSettings` (1.5.12),
+  `defaultComposeFiltersResolver` + `DEFAULT_SCORE_WEIGHTS`. Same
+  recipe as the canonical 1.5.11 T7 measurement so live
+  `find_relevant_files` calls match the gate-clearing run.
+- **New** [`js/intelligence/retrieval/manager-helpers.js`](js/intelligence/retrieval/manager-helpers.js)
+  — pure helpers (`rollupToFiles`, `summaryForChunk`,
+  `projectKeyFromString`) factored out of the singleton so node-test
+  can exercise them without dragging in browser-bound `core.js` /
+  `git.js` / `embeddings-client.js` / `llm/api.js`.
+- **`find_relevant_files` cutover.** [`js/tools/context-tools.js`](js/tools/context-tools.js)
+  now calls `RetrievalManager.findRelevantFiles` instead of
+  `ContextManager.findRelevantFiles`. Same `{path, similarity, summary}`
+  return shape; `summary` now synthesizes from the highest-scoring
+  chunk per file (heading-path for prose, first non-blank line for
+  code) — a behavior shift visible to the model (legacy generated an
+  LLM summary; new returns a structural marker).
+- **Paraphrase production wire.** `RetrievalManager.findRelevantFiles`
+  invokes `buildParaphraserFromSettings(State.settings, { chatFn: LLM.chat })`
+  on every call and threads the resulting handle into
+  `compose(req, deps, { queryParaphraser })`. When
+  `State.settings.retrieval.paraphraseMode === 'off'` (default), the
+  builder returns `null` and the Composer skips paraphrase. When set
+  to `'primary'` or `'utility'`, paraphrase activates per the 1.5.12
+  contract — see `Settings → Retrieval`. The 1.5.12 T8b finding (net
+  regression on this codebase's corpus) means most users should leave
+  the default `'off'`; the lever exists for users on different
+  corpora.
+- **Lifecycle event hooks** — `project:loaded`, `branch:switch`,
+  `branch:created`, `git:branchDeleted`, `branches:refresh`,
+  `context:prMerged`, `git:fileCreated` / `git:fileUpdated` /
+  `git:fileDeleted` / `git:fileRenamed` — all migrated from the legacy
+  module to the new manager. Auto-walk on project load (1s delay,
+  same as legacy); incremental `controller.ingest(uri)` on file CRUD;
+  branch-keyed in-memory store via the collection name; pause/resume
+  via `AbortController` threaded into the walker.
+- **IDB persistence** — chunk-store snapshots persist under the new
+  `retrieval-chunks-${owner}/${repo}@${branch}` key prefix
+  (legacy was `embeddings-index-${owner}/${repo}@${branch}`,
+  file-summary shape). On project load: load the snapshot if present
+  and not stale (`State.settings.embeddingCacheExpiry` days, default
+  7); else walk fresh. Branch copy clones the snapshot under the new
+  key; branch delete drops it; `cleanupOrphanedIndexes` sweeps stale
+  entries on `branches:refresh`.
+- **Seven importer migrations.** [`js/storage-metrics.js`](js/storage-metrics.js)
+  (per-index UI now reads `retrieval-chunks-*` keys; field-access
+  reads use new getters), [`js/prompts.js`](js/prompts.js) (system-prompt
+  `🔍 SEMANTIC SEARCH ACTIVE` line via `RetrievalManager.getStats()`),
+  [`js/index-indicator.js`](js/index-indicator.js) (header widget),
+  [`js/debug-slideout.js`](js/debug-slideout.js) (Indexer panel +
+  diagnostic dump), [`js/settings/llm-tab.js`](js/settings/llm-tab.js)
+  (Settings → Embeddings status block),
+  [`js/settings-manager.js`](js/settings-manager.js) (`Clear Cache`
+  button), [`js/embeddings-client.js`](js/embeddings-client.js)
+  (`clearCache` now sweeps both `retrieval-chunks-*` and any legacy
+  `embeddings-index-*` keys for upgraders).
+- **Measurement harness** [`js/intelligence/retrieval/measurement.js`](js/intelligence/retrieval/measurement.js)
+  — `ContextManager` parameter is now optional. When omitted/null,
+  `runLegacy` returns `[]`; recall@5 vs ground truth still measures
+  the new pipeline alone. The browser runner at
+  [`tests/retrieval-measurement.html`](tests/retrieval-measurement.html)
+  passes `ContextManager: null`; the "Re-index legacy" button is
+  disabled with a retirement notice.
+- **Deleted** [`js/context-manager.js`](js/context-manager.js) —
+  1085 lines.
+
+**Result-shape behavior shift.** Legacy `findRelevantFiles` returned
+`summary` as an LLM-generated `summarizeFile` output (file path +
+extracted imports/functions/exports + raw head/tail content). New
+`findRelevantFiles` returns `summary` as a structural marker from the
+highest-scoring chunk per file: prose chunks return their
+`structural.heading_path` joined with ` › ` (e.g.
+`"Setup › Installation › Linux"`); code chunks return the first
+non-blank line (e.g. `"export function findRelevantFiles({ query }) {"`).
+Capped at ~120 chars. The `path` and `similarity` fields are unchanged
+in shape (similarity now reflects the chunk's `provenance.score` per
+the 1.5.5 T2 max-score-per-source rollup, which is BM25/cosine/RRF
+hybrid — same scale as the canonical 1.5.11 T7 measurement).
+
+**Test plan.** New
+[`tests/test-retrieval-manager.mjs`](tests/test-retrieval-manager.mjs)
+covers the pure helpers (20 cases: `summaryForChunk` heading-path /
+fall-through / cap; `rollupToFiles` per-source max-score / tiebreak /
+top-K / summary synthesis / dedup across blocks / malformed-input
+guards; `projectKeyFromString` decomposition). Updated
+[`tests/test-retrieval-measurement.mjs`](tests/test-retrieval-measurement.mjs)
+covers the optional-`ContextManager` contract. Full retrieval node
+test suite passes (832 cases across 25 modules). Live
+`find_relevant_files` verified in the browser preview against this
+repo's project.
+
+**Removability.** Restore `js/context-manager.js`, revert the seven
+importers + the barrel + `embeddings-client.clearCache` + the
+measurement harness opt-handling, and `find_relevant_files` returns
+to the legacy file-level pipeline. Two new files
+(`manager.js`, `manager-helpers.js`) plus a deletion are the entire
+production-code footprint. Decision §7 holds.
+
 ## [1.5.13] - 2026-05-04
 
 **§1.5.0 retrieval gate reframe + LLM reranker scoping (PR 27 of the

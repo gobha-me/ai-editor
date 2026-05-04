@@ -125,7 +125,7 @@ test('createMeasurementHarness: rejects missing EmbeddingsClient methods', async
     }), /EmbeddingsClient must expose init\(\) and embed\(\)/);
 });
 
-test('createMeasurementHarness: rejects missing ContextManager.findRelevantFiles', async () => {
+test('createMeasurementHarness: rejects malformed ContextManager (object missing findRelevantFiles)', async () => {
     await assert.rejects(() => createMeasurementHarness({
         Git: makeFakeGit({}),
         EmbeddingsClient: makeFakeEmbeddingsClient(),
@@ -133,7 +133,22 @@ test('createMeasurementHarness: rejects missing ContextManager.findRelevantFiles
         project: PROJECT,
         modelId: MODEL_ID,
         sourceUris: [],
-    }), /ContextManager must expose findRelevantFiles/);
+    }), /must expose findRelevantFiles/);
+});
+
+test('createMeasurementHarness: accepts null ContextManager (post-1.5.14 — legacy retired)', async () => {
+    // Post-1.5.14: legacy ContextManager file was deleted. Callers may pass
+    // `null` or omit the option entirely; runLegacy then returns [].
+    const harness = await createMeasurementHarness({
+        Git: makeFakeGit({}),
+        EmbeddingsClient: makeFakeEmbeddingsClient(),
+        ContextManager: null,
+        project: PROJECT,
+        modelId: MODEL_ID,
+        sourceUris: [],
+    });
+    const legacy = await harness.runner.legacy('any query');
+    assert.deepStrictEqual(legacy, [], 'runLegacy returns [] when no ContextManager supplied');
 });
 
 test('createMeasurementHarness: rejects bad project triple', async () => {

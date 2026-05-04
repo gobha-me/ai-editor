@@ -3,7 +3,7 @@
  */
 
 import { ToolRegistry } from './registry.js';
-import { ContextManager } from '../context-manager.js';
+import { RetrievalManager } from '../intelligence/retrieval/manager.js';
 import { State } from '../core.js';
 
 /**
@@ -21,7 +21,7 @@ async function findRelevantFiles({ query, max_files }) {
     const maxFiles = max_files || State.settings.maxRelevantFiles || 5;
     
     try {
-        const results = await ContextManager.findRelevantFiles(query, maxFiles);
+        const results = await RetrievalManager.findRelevantFiles(query, maxFiles);
         
         if (results.length === 0) {
             return {
@@ -55,7 +55,7 @@ async function findRelevantFiles({ query, max_files }) {
  * Get embeddings system status
  */
 async function getEmbeddingsStatus() {
-    const stats = ContextManager.getStats();
+    const stats = RetrievalManager.getStats();
     
     return {
         enabled: State.settings.useEmbeddings,
@@ -79,7 +79,7 @@ async function indexProject({ force }) {
     }
 
     try {
-        const count = await ContextManager.indexProject(force === true);
+        const count = await RetrievalManager.indexProject(force === true);
         return {
             success: true,
             message: `Indexed ${count} files`,

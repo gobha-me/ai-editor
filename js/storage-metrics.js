@@ -9,7 +9,7 @@
  */
 
 import { Storage, State, EventBus } from './core.js';
-import { ContextManager } from './context-manager.js';
+import { RetrievalManager } from './intelligence/retrieval/manager.js';
 
 // ============================================
 // CATEGORY DEFINITIONS
@@ -20,7 +20,7 @@ const CATEGORIES = [
     { id: 'drafts',     label: 'Drafts',         color: '#f0883e', match: k => k.startsWith('draft-') },
     { id: 'settings',   label: 'Settings',       color: '#8b949e', match: k => /^(settings|pluginState)$/.test(k) },
     { id: 'models',     label: 'Model Cache',    color: '#bc8cff', match: k => k === 'models' },
-    { id: 'embeddings', label: 'Embeddings',     color: '#3fb950', match: k => k.startsWith('embeddings-index-') },
+    { id: 'embeddings', label: 'Embeddings',     color: '#3fb950', match: k => k.startsWith('retrieval-chunks-') },
     { id: 'ui',         label: 'UI State',       color: '#484f58', match: k => /^(chatHidden|chatWidth|previewWidthPct|sidebarHidden|sidebarWidth|searchHistory)$/.test(k) },
 ];
 
@@ -237,16 +237,15 @@ function _renderKeyList(items, totalBytes) {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const key = btn.dataset.key;
-            const projectName = key.replace('embeddings-index-', '');
+            const projectName = key.replace('retrieval-chunks-', '');
             const { showConfirm } = await import('./ui/dialogs.js');
             if (!await showConfirm(`Delete embedding index for "${projectName}"?`, { title: 'Delete Index', okLabel: 'Delete', variant: 'danger' })) return;
 
             Storage.remove(key);
 
-            // If this was the active in-memory index, clear it
-            if (ContextManager._indexedProject === projectName) {
-                ContextManager._fileIndex.clear();
-                ContextManager._indexedProject = null;
+            // If this was the active in-memory index, clear it too.
+            if (RetrievalManager.getIndexedProject() === projectName) {
+                RetrievalManager.clearIndex();
             }
 
             renderStorageMetrics();
@@ -265,10 +264,11 @@ function _renderEmbeddingIndex(item, totalBytes, cat) {
     } catch { /* ignore */ }
 
     const barWidth = pct(item.bytes, totalBytes);
-    const projectName = item.key.replace('embeddings-index-', '');
+    const projectName = item.key.replace('retrieval-chunks-', '');
 
     // Extract stats
-    const fileCount = meta?.files?.length || '?';
+    const itemCount = meta?.chunks?.length || meta?.files?.length || '?';
+    const itemLabel = meta?.chunks ? 'chunks' : 'files';
     const builtAt = meta?.timestamp ? _timeAgo(meta.timestamp) : 'unknown';
     const queryCount = meta?.queryCount || 0;
     const lastQueried = meta?.lastQueried ? _timeAgo(meta.lastQueried) : 'never';
@@ -293,7 +293,7 @@ function _renderEmbeddingIndex(item, totalBytes, cat) {
                 <button type="button" class="btn-icon-danger btn-delete-embedding" data-key="${_escapeAttr(item.key)}" title="Delete this index">&times;</button>
             </div>
             <div style="display: flex; gap: 1rem; font-size: var(--font-xs); color: var(--text-muted);">
-                <span>${fileCount} files</span>
+                <span>${itemCount} ${itemLabel}</span>
                 <span>built ${builtAt}</span>
                 <span>last queried: ${lastQueried}</span>
             </div>

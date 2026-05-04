@@ -214,3 +214,17 @@ export {
     DEFAULT_PARAPHRASE_ROUNDS,
     DEFAULT_PARAPHRASE_TEMPERATURE,
 } from './query-paraphraser.js';
+// `RetrievalManager` is the production singleton at `./manager.js`. It
+// imports browser-bound modules (`core.js` / `git.js` /
+// `embeddings-client.js` / `llm/api.js`) and is intentionally **not**
+// re-exported from this barrel — importing the barrel from a node test
+// would otherwise transitively pull in `core.js` and break the test
+// runner (`window is not defined`). Consumers import directly:
+//     import { RetrievalManager } from './intelligence/retrieval/manager.js'
+// The pure helpers used by the manager are exported in
+// `./manager-helpers.js` for node-test coverage.
+export {
+    rollupToFiles,
+    summaryForChunk,
+    projectKeyFromString,
+} from './manager-helpers.js';

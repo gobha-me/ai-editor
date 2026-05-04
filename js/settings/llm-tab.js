@@ -5,7 +5,7 @@
 // summarizer sliders, and embeddings status.
 
 import { State, Providers, ProviderRegistry, EventBus } from '../core.js';
-import { ContextManager } from '../context-manager.js';
+import { RetrievalManager } from '../intelligence/retrieval/manager.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
 import { ChatSummarizer } from '../chat/summarizer.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
@@ -491,7 +491,7 @@ export function updateEmbeddingsStatus() {
     const statusText = document.getElementById('embeddingsStatusText');
     if (!statusText) return;
 
-    const stats = ContextManager.getStats();
+    const stats = RetrievalManager.getStats();
     const clientStats = EmbeddingsClient.getCacheStats();
     const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
     const mode = modelName.startsWith('Xenova/') ? 'Local (Browser)' : 'Remote (API)';

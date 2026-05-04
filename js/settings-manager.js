@@ -6,7 +6,7 @@
 // Persistence owns DOM→State collection and localStorage.
 
 import { State, Providers, ProviderRegistry, EventBus, saveSettings as coreSaveSettings } from './core.js';
-import { ContextManager } from './context-manager.js';
+import { RetrievalManager } from './intelligence/retrieval/manager.js';
 import { IgnoreManager } from './ignore.js';
 import { EmbeddingsClient } from './embeddings-client.js';
 import { injectTemplate } from './template-loader.js';
@@ -346,7 +346,7 @@ function populateSettingsForm() {
     const clearCacheBtn = document.getElementById('btnClearEmbeddingsCache');
     if (clearCacheBtn) {
         clearCacheBtn.onclick = () => {
-            ContextManager.clearIndex();
+            RetrievalManager.clearIndex();
             EmbeddingsClient.clearCache();
             updateEmbeddingsStatus();
             window.showToast('Embeddings cache cleared', 'success');

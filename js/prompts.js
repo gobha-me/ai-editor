@@ -12,7 +12,7 @@
 
 import { State, Roles } from './core.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
-import { ContextManager } from './context-manager.js';
+import { RetrievalManager } from './intelligence/retrieval/manager.js';
 import { getCursorContext } from './editor.js';
 import { isConnectionDown } from './offline-indicator.js';
 
@@ -310,7 +310,7 @@ function buildSystemPrompt(opts = {}) {
     // otherwise the announcement points at a capability the model can reach
     // through whichever discovery tool admission has surfaced (or via the
     // 1.3.16 meta-tools when those land).
-    const ctxStats = ContextManager.getStats();
+    const ctxStats = RetrievalManager.getStats();
     if (ctxStats.enabled && ctxStats.filesIndexed > 0) {
         const findRelevantAdmitted = admittedNames === null || admittedNames.has('find_relevant_files');
         const invocationHint = findRelevantAdmitted

@@ -414,8 +414,9 @@ const EmbeddingsClient = {
     /**
      * Clear all cached embedder state. Wipes:
      *   1. The in-memory `_cache` Map (per-text embedding results).
-     *   2. The persisted `embeddings-index-*` Storage keys (per-project file
-     *      vectors built by `ContextManager.buildIndex()`).
+     *   2. The persisted `retrieval-chunks-*` Storage keys (per-project chunk
+     *      vectors built by `RetrievalManager`). Also clears any legacy
+     *      `embeddings-index-*` keys left over from pre-1.5.14 sessions.
      *   3. The Cache-API `transformers-cache` store (model files fetched
      *      by Transformers.js — config.json, tokenizer.json, ONNX weights).
      * Also resets the `embedder.cacheWiped.1.1.3` sentinel so a future
@@ -427,14 +428,16 @@ const EmbeddingsClient = {
     async clearCache() {
         this._cache.clear();
 
-        // Persisted per-project indexes — match `embeddings-index-*` keys
-        // written by `ContextManager._persistIndex()`.
+        // Persisted per-project indexes — match `retrieval-chunks-*` keys
+        // (production, since 1.5.14) plus any legacy `embeddings-index-*`
+        // keys left over from pre-1.5.14 file-level summary embeddings.
         let indexesRemoved = 0;
         try {
-            const indexKeys = Storage.keys('embeddings-index-');
-            for (const k of indexKeys) {
-                Storage.remove(k);
-                indexesRemoved++;
+            for (const prefix of ['retrieval-chunks-', 'embeddings-index-']) {
+                for (const k of Storage.keys(prefix)) {
+                    Storage.remove(k);
+                    indexesRemoved++;
+                }
             }
         } catch (e) {
             console.warn('[Embeddings] Failed to enumerate Storage indexes:', e?.message || e);

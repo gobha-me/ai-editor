@@ -8,7 +8,7 @@
  *   - Logs       — live `ErrorLogger.logs` stream + level filter
  *   - Connections — git providers (reuses `statusFor` from the 1.3.8
  *                   Settings → Connections tab) + active AI model
- *   - Indexer    — `ContextManager` queue + last batch + re-index
+ *   - Indexer    — `RetrievalManager` queue + last batch + re-index
  *   - AI         — `LLMDebug.exchanges` table; click row to expand
  *                   the per-exchange detail rendered by the existing
  *                   `renderExchangeDetail` (factored from
@@ -31,7 +31,7 @@ import { LLMDebug } from './llm.js';
 import { renderExchangeDetail } from './llm-debug-modal.js';
 import { GitProviderRegistry } from './git.js';
 import { statusFor as connStatusFor } from './settings/connections-tab.js';
-import { ContextManager } from './context-manager.js';
+import { RetrievalManager } from './intelligence/retrieval/manager.js';
 import { escapeHtml } from './utils/html.js';
 import { VERSION } from './version.js';
 
@@ -380,10 +380,10 @@ function _renderConnRow(conn, provider) {
 // ============================================
 
 function _renderIndexer() {
-    const indexed = ContextManager._fileIndex?.size ?? 0;
-    const progress = ContextManager._indexProgress;
-    const indexing = !!ContextManager._indexing;
-    const paused = !!ContextManager.paused;
+    const indexed = RetrievalManager.getFilesIndexed();
+    const progress = RetrievalManager.getIndexProgress();
+    const indexing = RetrievalManager.isIndexing();
+    const paused = RetrievalManager.isPaused();
     const total = progress?.total || indexed || 0;
     const current = progress?.current || indexed;
     const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : (indexed > 0 ? 100 : 0);
@@ -416,7 +416,7 @@ function _renderIndexer() {
             </div>
             <div class="debug__stat">
                 <div class="debug__stat-label">Project</div>
-                <div class="debug__stat-value" style="font-size: var(--font-sm);">${escapeHtml(_truncate(ContextManager._indexedProject || State?.currentProject || '—', 22))}</div>
+                <div class="debug__stat-value" style="font-size: var(--font-sm);">${escapeHtml(_truncate(RetrievalManager.getIndexedProject() || State?.currentProject || '—', 22))}</div>
             </div>
             <div class="debug__stat">
                 <div class="debug__stat-label">Paused</div>
@@ -444,7 +444,7 @@ function _wireIndexerBtn() {
         if (btn) btn.addEventListener('click', async () => {
             btn.disabled = true;
             try {
-                await ContextManager.indexProject(true, false);
+                await RetrievalManager.indexProject(true, false);
             } finally {
                 btn.disabled = false;
                 _renderActive();
@@ -623,10 +623,10 @@ export function buildDiagnosticBundle() {
         })),
         connections: conns,
         indexer: {
-            indexed: ContextManager._fileIndex?.size ?? 0,
-            indexing: !!ContextManager._indexing,
-            paused: !!ContextManager.paused,
-            project: ContextManager._indexedProject || null,
+            indexed: RetrievalManager.getFilesIndexed(),
+            indexing: RetrievalManager.isIndexing(),
+            paused: RetrievalManager.isPaused(),
+            project: RetrievalManager.getIndexedProject(),
             lastEvent: _lastIndexerEvent,
         },
         plugins: Plugins.list().map(p => ({

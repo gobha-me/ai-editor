@@ -396,11 +396,13 @@ export function defaultComposeFiltersResolver(opts) {
  *   Production `EmbeddingsClient` (or a node-test fake exposing the same
  *   two methods). Threaded to `createProductionIngestWalker` and used
  *   directly by `createSemanticStrategy.embedQuery`.
- * @property {ContextManagerHandle} ContextManager
- *   Production `ContextManager` namespace (or a node-test fake). Drives
+ * @property {ContextManagerHandle|null|undefined} [ContextManager]
+ *   Optional (post-1.5.14, legacy file deleted): caller may pass a
+ *   ContextManager-shaped fake to compare against, or omit/null to skip
+ *   the legacy comparison entirely (`runLegacy` returns `[]`; recall@5
+ *   vs ground truth still measures the new pipeline). Pre-1.5.14: the
+ *   production `ContextManager` namespace was required and drove
  *   `runLegacy(query) => ContextManager.findRelevantFiles(query, topK)`.
- *   Browser-bound in production (imports `core.js`); the harness itself
- *   does not reach into it beyond `findRelevantFiles`.
  * @property {Project} project
  *   `{ owner, repo, ref }` triple closed over by the production loader.
  * @property {string} modelId
@@ -535,10 +537,15 @@ function validateOptions(options) {
             'createMeasurementHarness: EmbeddingsClient must expose init() and embed()',
         );
     }
-    if (!ContextManager || typeof ContextManager.findRelevantFiles !== 'function') {
-        throw new TypeError(
-            'createMeasurementHarness: ContextManager must expose findRelevantFiles(query, topK)',
-        );
+    // ContextManager is optional post-1.5.14 (legacy file deleted). When
+    // absent, `runLegacy` is a no-op returning []; the recall@5 vs ground
+    // truth measurement remains valid against the new pipeline alone.
+    if (ContextManager !== undefined && ContextManager !== null) {
+        if (typeof ContextManager.findRelevantFiles !== 'function') {
+            throw new TypeError(
+                'createMeasurementHarness: ContextManager, when provided, must expose findRelevantFiles(query, topK)',
+            );
+        }
     }
     if (!project || typeof project !== 'object') {
         throw new TypeError('createMeasurementHarness: project must be an object');
@@ -779,10 +786,12 @@ export async function createMeasurementHarness(options) {
      * @param {{ category?: string|null }} [_opts] Accepted for symmetry
      *   with the new `runNew(query, opts)` runner contract; the legacy
      *   `findRelevantFiles` API has no per-fixture seam, so opts is
-     *   ignored.
+     *   ignored. Post-1.5.14: returns `[]` when no ContextManager is
+     *   supplied (legacy file deleted).
      * @returns {Promise<Array<{path: string, similarity: number, summary: string}>>}
      */
     async function runLegacy(query, _opts) {
+        if (!ContextManager) return [];
         return ContextManager.findRelevantFiles(query, finalTopK);
     }
 
