@@ -628,10 +628,25 @@ SUMMARY:`;
             );
 
         if (info?.summary && history.length > this.RECENT_COUNT) {
+            // === ISSUE #17: Inject tool action memory ===
+            // When old messages are pruned by summarization, the AI loses track of
+            // what tools it called. Inject a summary of recent tool actions so the
+            // AI doesn't repeat calls or get stuck in loops.
+            let toolMemory = '';
+            if (State.toolActionLog && State.toolActionLog.length > 0) {
+                const recentActions = State.toolActionLog.slice(-20);
+                const actionLines = recentActions.map(a => {
+                    const status = a.success ? '✅' : '❌';
+                    const argsStr = a.args ? ` with ${JSON.stringify(a.args).slice(0, 80)}` : '';
+                    return `${status} Called **${a.tool}**${argsStr} → ${a.resultSummary}`;
+                });
+                toolMemory = `\n\nRECENT TOOL ACTIONS (you already performed these — do NOT repeat them unless the data has changed):\n${actionLines.join('\n')}`;
+            }
+
             return [
                 {
                     role: 'system',
-                    content: `CONVERSATION SUMMARY (earlier messages):\n\n${info.summary}\n\n---\nRecent messages follow.`,
+                    content: `CONVERSATION SUMMARY (earlier messages):\n\n${info.summary}\n\n---\nRecent messages follow.${toolMemory}`,
                     isSummary: true
                 },
                 ...recent

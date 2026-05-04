@@ -171,12 +171,13 @@ const ConversationManager = {
         // Save payload
         const summaryInfo = Storage.get('chatSummaryInfo', null);
         const pruneStash = Storage.get('chatPruneStash', null);
+        const toolActionLog = State.toolActionLog || [];
         Storage.set(`conv-${id}`, {
             messages: messages.slice(-100),
             summaryInfo,
-            pruneStash
+            pruneStash,
+            toolActionLog: toolActionLog.slice(-50)
         });
-
         // Update index
         const index = _getIndex();
         const entry = index.find(c => c.id === id);
@@ -250,9 +251,11 @@ const ConversationManager = {
             Storage.remove('chatPruneStash');
         }
 
+        // Restore tool action log
+        State.toolActionLog = payload.toolActionLog || [];
+
         EventBus.emit('conversation:loaded', { id });
         console.log(`[conversations] Loaded conversation ${id}`);
-        return true;
     },
 
     /**
@@ -272,6 +275,7 @@ const ConversationManager = {
         // Clear in-memory state
         State.chatHistory = [];
         State.scratchpad = {};
+        State.toolActionLog = [];
         Storage.set('chatHistory', []);
         Storage.set('activeConversation', id);
         Storage.remove('chatSummaryInfo');

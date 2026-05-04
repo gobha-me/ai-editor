@@ -342,6 +342,10 @@ const State = {
     // Scratchpad — LLM-managed persistent notes (survives summarization, cleared on new chat)
     scratchpad: {},            // { key: value } — max 10 keys, 500 chars each
 
+    // Tool action log — survives summarization so AI remembers what it did
+    // even after tool results are evicted from context (Issue #17)
+    toolActionLog: [],         // [{ toolName, args, resultSummary, timestamp, success }]
+
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]
     pullRequests: [],          // [{ number, title, head, base, state, ciState }]

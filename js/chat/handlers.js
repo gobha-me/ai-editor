@@ -142,6 +142,7 @@ export async function handleUserInputDirect(input) {
     }
 }
 
+
 /**
  * Shorten an error message for user-facing display.
  * Strips JSON noise from provider error payloads.
@@ -153,6 +154,45 @@ export function _briefError(err) {
     if (match) return match[1];
     // Truncate long messages
     return msg.length > 120 ? msg.slice(0, 117) + '…' : msg;
+}
+
+/**
+ * Summarize a tool result into a short description for the persistent action log.
+ * Used so the AI remembers what it did even after tool results are evicted (Issue #17).
+ */
+function _summarizeToolResult(toolName, result) {
+    if (!result) return 'no result';
+    if (result.error) return `Error: ${result.error}`;
+    if (result.message) return result.message;
+    if (result.status) return `Status: ${result.status}`;
+    if (result.content) {
+        const c = result.content;
+        return typeof c === 'string'
+            ? (c.length > 200 ? c.slice(0, 200) + '…' : c)
+            : JSON.stringify(c).slice(0, 200);
+    }
+    if (result.files) return `${result.files.length} file(s)`;
+    if (result.matches) return `${result.matches.length} match(es)`;
+    const str = JSON.stringify(result);
+    return str.length > 200 ? str.slice(0, 200) + '…' : str;
+}
+
+/**
+ * Summarize tool args into a compact form for the persistent action log.
+ */
+function _summarizeArgs(args) {
+    if (!args) return {};
+    const summary = {};
+    for (const [key, value] of Object.entries(args)) {
+        if (key === 'content' || key === 'body' || key === 'text') {
+            // Truncate large content fields
+            const s = String(value);
+            summary[key] = s.length > 100 ? s.slice(0, 100) + '…' : s;
+        } else {
+            summary[key] = value;
+        }
+    }
+    return summary;
 }
 
 /**
@@ -464,12 +504,8 @@ export async function handleGeneralRequest(input) {
             // === LAYER 1: Structured tool_calls from API (primary path) ===
             let toolCalls = result.toolCalls ? [...result.toolCalls] : [];
             // Streaming layer (1.3.1) splits <think>/<thinking> off into result.reasoning,
-            // so content/result.content are already reasoning-free. The stripThinkBlocks
-            // call below is a defensive no-op for non-streaming providers that emit think
-            // blocks intact in the final response.
-            let cleanContent = stripThinkBlocks(content || result.content || '');
-            let toolCallSource = toolCalls.length > 0 ? 'structured' : null;
-            lastRoundReasoning = result.reasoning || null;
+            let cleanContent = result.content || '';
+            let toolCallSource = toolCalls.length > 0 ? 'structured' : 'none';
 
             // === LAYER 2: Text-format fallback ===
             if (toolCalls.length === 0 && cleanContent) {
@@ -510,10 +546,38 @@ export async function handleGeneralRequest(input) {
                     const cacheKey = toolName + '|' + JSON.stringify(args, Object.keys(args).sort());
                     const cachedResult = toolCallCache.get(cacheKey);
                     
-                    let toolResult;
-                    if (cachedResult && !['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
+                    // === CROSS-REQUEST DUPLICATE DETECTION (Issue #17) ===
+                    // Check if this exact tool+args was already executed in a previous request
+                    // (before summarization evicted the results from context)
+                    const WRITE_TOOLS = ['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
                                           'edit_file', 'write_file', 'delete_file',
-                                          'update_issue', 'add_issue_comment'].includes(toolName)) {
+                                          'update_issue', 'add_issue_comment'];
+                    let crossRequestDuplicate = false;
+                    if (!WRITE_TOOLS.includes(toolName) && State.toolActionLog && State.toolActionLog.length > 0) {
+                        const recentLog = State.toolActionLog.slice(-30);
+                        const argsStr = JSON.stringify(args, Object.keys(args).sort());
+                        for (const entry of recentLog) {
+                            if (entry.tool === toolName && entry.success) {
+                                const loggedArgsStr = JSON.stringify(entry.args, Object.keys(entry.args || {}).sort());
+                                if (argsStr === loggedArgsStr) {
+                                    crossRequestDuplicate = true;
+                                    console.log(`[TOOL-LOOP] Cross-request duplicate detected: ${toolName}`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    let toolResult;
+                    if (crossRequestDuplicate) {
+                        // Return a synthetic result telling the AI it already did this
+                        const lastEntry = State.toolActionLog.slice(-30).reverse().find(e => e.tool === toolName && e.success);
+                        toolResult = {
+                            _cached: true,
+                            _cache_note: `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${lastEntry?.resultSummary || 'unknown'}. Do NOT call this tool again with the same args.]`,
+                            error: null
+                        };
+                    } else if (cachedResult && !WRITE_TOOLS.includes(toolName)) {
                         // Return cached result for read-only tools with a note
                         toolResult = {
                             ...cachedResult,
@@ -630,6 +694,22 @@ export async function handleGeneralRequest(input) {
                         result: toolResult,
                         error: !!toolResult?.error
                     });
+
+                    // === PERSISTENT TOOL ACTION LOG (Issue #17) ===
+                    // Log to State.toolActionLog so AI remembers actions even after
+                    // tool results are evicted from context by summarization.
+                    const resultSummary = _summarizeToolResult(toolName, toolResult);
+                    State.toolActionLog.push({
+                        tool: toolName,
+                        args: _summarizeArgs(args),
+                        resultSummary,
+                        timestamp: Date.now(),
+                        success: !toolResult?.error
+                    });
+                    // Keep log bounded — retain last 50 entries
+                    if (State.toolActionLog.length > 50) {
+                        State.toolActionLog = State.toolActionLog.slice(-50);
+                    }
 
                     if (toolCallSource === 'structured') {
                         // Truncate large tool results BEFORE sending to API.
