@@ -3,6 +3,6 @@
  * Single source of truth for version numbering
  */
 
-export const VERSION = '1.5.12';
+export const VERSION = '1.5.13';
 export const APP_NAME = 'AI Editor';
 export const VERSION_DISPLAY = `${APP_NAME} v${VERSION}`;
