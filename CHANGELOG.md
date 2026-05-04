@@ -8,6 +8,145 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.11] - 2026-05-04
+
+**Retrieval BM25 index construction (PR 25 of the 1.5.0 stream).** Fills the
+`getBM25Index` injection seam shipped at 1.4.15 in
+`js/intelligence/retrieval/strategies/semantic.js`. The hybrid path
+(`score_kind: "hybrid"` — k-NN cosine + BM25 + RRF fusion) and the
+pure-BM25 fallback (`score_kind: "bm25"`) have been wired since 1.4.15;
+they fell back to pure cosine because every call site null-injected
+`getBM25Index`. This PR ships the producer that fills that slot and wires
+it into the measurement harness so the §1.5.0 recall@5 gate can be measured
+against the strategy's actual hybrid path.
+
+**Public surface.** `buildBM25Index(chunks: ChunkRef[], opts?: { k1?, b? })
+→ BM25Index` from `js/intelligence/retrieval/bm25-indexer.js`, re-exported
+from the retrieval barrel. Pure transform — no I/O, no async, no input
+mutation. Reuses `tokenizeBM25` exported from `strategies/semantic.js`
+rather than re-implementing (a tokenizer drift between index build and
+query path would silently zero out scores against an indexed corpus).
+
+**Algorithm** (matches what `scoreBM25Doc` consumes per the typedef pinned
+at `semantic.js:78-84`):
+
+1. Tokenize each chunk's `content` with `tokenizeBM25`.
+2. Compute document frequency `df[term] = count of distinct chunks
+   containing term`.
+3. `avgdl = Σ(token count per chunk) / chunks.length`. Empty corpus →
+   `avgdl = 0` (the strategy collapses BM25 contribution to 0).
+4. `idf[term] = ln(((N - df + 0.5) / (df + 0.5)) + 1)` — the BM25 IDF with
+   +1 inside the log to keep IDF non-negative. Same formula used by the
+   test fixture at `tests/test-retrieval-semantic-strategy.mjs:80-98`
+   since 1.4.15.
+5. Return `{ idfMap, avgdl, chunks, k1, b }`. `k1`/`b` carry through from
+   `opts` if supplied; otherwise omitted, and the strategy applies its
+   textbook defaults (1.5 / 0.75).
+
+**Phase-1 scope decisions.** **Pure function, no async** — same posture
+every other retrieval module took. **Reuses `tokenizeBM25`** rather than
+duplicating, pinning the contract. **Treats non-string `content` as
+empty content** — `tokenizeBM25('')` returns `[]`, so missing-content
+chunks contribute 0 to DF and `totalLen`, matching what `scoreBM25Doc`
+would compute over the same corpus. **Counts every chunk in N** — matches
+the test-fixture convention so `avgdl` stays consistent. **No persistence;
+no incremental rebuild** — the measurement harness is the only consumer
+in this PR; corpus is static during a measurement run. **No RRF tuning
+surface** — strategy hardcodes `RRF_K = 60`; if T7 measurement shows BM25
+helping, RRF tuning is a same-branch follow-up.
+
+**Measurement-harness wiring** at
+`js/intelligence/retrieval/measurement.js`. `createSemanticStrategy` is
+now constructed with `getBM25Index: (coll) => coll === finalCollection ?
+bm25Index : null` where `bm25Index` is a `let`-declared closure
+filled lazily by `ingest()` after `walker.walk(...)` resolves
+(non-aborted): `const allChunks = await store.getAllChunksForCollection
+(finalCollection); bm25Index = buildBM25Index(allChunks);`. Lazy fill
+matters because `createSemanticStrategy` runs before ingestion and
+snapshots dep references at construction; a constant null injection
+would freeze the cosine path even after ingest. Skipped on aborted
+walks (corpus partial → strategy stays on pure cosine).
+
+**Out of scope.** Production wire-up to `find_relevant_files` (still
+running through legacy `js/context-manager.js`; legacy retirement is a
+separate scoping decision against the corrected 0.539 baseline).
+Persistent / IDB-backed BM25 storage. Incremental index updates as
+chunks `upsert` / `markStale`. Settings UI for `k1` / `b` tuning.
+
+**Removability check.** Delete `bm25-indexer.js`, drop the barrel export,
+drop the seven-line wire-up in `measurement.js`. The `getBM25Index` slot
+returns to null-injected, the strategy falls back to pure cosine,
+recall@5 returns to the 1.5.10 baseline of 0.5807. No production code
+path runs through any of this. Removability holds (Decision §7).
+
+**Tests.** 20 unit cases in `tests/test-retrieval-bm25-indexer.mjs`
+covering shape contract (returns `BM25Index`-shaped object; chunks pass
+through verbatim; input not mutated), IDF formula (matches the BM25 IDF
+formula against a hand-computed expected; rare terms outrank common;
+DF-not-TF — repetition within a chunk doesn't inflate document
+frequency), `avgdl` convention (total tokens / N; empty docs counted in
+N), edge cases (empty corpus → empty `idfMap` + `avgdl=0`; single chunk;
+identical chunks; non-string content coerced to empty; non-ASCII content
+tokenizes to empty), `k1`/`b` passthrough, and strategy interop (the
+load-bearing claim — a real index returned from `buildBM25Index`
+activates the strategy's hybrid path; `score_kind: 'hybrid'` appears in
+results when the index is supplied via `getBM25Index`).
+
+**T7 canonical re-measurement (2026-05-04 19:50).** Same in-cluster
+`jinaai/jina-embeddings-v2-base-code`, `topK=5`, `concurrency=4`, 436
+sources, 4666 chunks, 0 ingest failures, 0 runner failures, ~13.5 min
+walk. **Headline: `newGroundTruth.meanRecallAt5 = 0.6382`** vs the
+1.5.10 T6 baseline of 0.5807 — **+0.0574, real lift; zero regressions
+on any per-category bucket.** `meanHitAt5 = 1.000` (every query has
+at least one expected file in top-5, up from 0.976 at 1.5.10);
+`meanMRR = 0.817` (up from 0.751). Raw report at
+[`docs/measurements/2026-05-04-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-04-retrieval-recall-ground-truth.json)
+(overwrites the 1.5.10 T6 file — same canonical purpose, same date).
+
+**Per-category recall@5 (1.5.10 T6 → 1.5.11 T7):**
+
+| Category | 1.5.10 T6 | 1.5.11 T7 | Δ |
+|---|---:|---:|---:|
+| function-discovery | 0.900 | 0.900 | 0.000 |
+| **file-discovery** | 0.700 | **0.788** | **+0.088** ✓ |
+| onboarding | 0.667 | 0.667 | 0.000 |
+| topic | 0.455 | 0.472 | +0.017 |
+| **bug-investigation** | 0.331 | **0.436** | **+0.105** ✓✓ |
+| **task-related** | 0.386 | **0.531** | **+0.144** ✓✓✓ |
+
+**Diagnosis matches the BM25 hypothesis.** Biggest lifts in exactly
+the lexical-signal-heavy buckets predicted in the PR rationale:
+`task-related +0.144` (queries like "files I would touch to wire a
+new tool category" — strong overlap with file/function names),
+`bug-investigation +0.105` (queries like "what handles tool
+invocation timeouts?" — keyword recall), `file-discovery +0.088`.
+The two flat buckets are at their respective ceilings within the
+current curation density: `function-discovery` already cleared the
+80% gate at 1.5.10; `onboarding` is curation-bound (the prose
+canonicals like `docs/PLUGIN.md` admit at 0.5×0.5 effective weight
+under T5 score weighting and can't out-rank code chunks even with
+BM25 lexical boost). Per-query wins worth flagging: `"find the
+function that emits events on the eventbus"` went from 0% recall on
+both pipelines (1.5.10) to 1.0 recall on new (BM25 caught the
+"emit"/"eventbus" lexical match); `"what handles tool invocation
+timeouts?"` went from 0% legacy → 0.25 new (was 0% on new at
+1.5.10).
+
+**Gap to the §1.5.0 ≥0.80 gate.** Now **−0.162** (down from −0.219
+at 1.5.10). T7 closed ~26% of the remaining gap. **Zero per-category
+bucket regressions > −0.05** — clean pass under the T4 baseline-gate
+rule; first cut is final, no same-branch follow-up needed.
+
+**Legacy baseline stable.** `legacyGroundTruth.meanRecallAt5 = 0.539`
+matches the 1.5.7 T4 corrected reading (0.539). No transient
+ContextManager indexing failure this run; `runLegacyFailures: 0`.
+The new pipeline now leads legacy by **+0.099 overall** (0.638 vs
+0.539) and on five of six buckets (function-discovery +0.190,
+file-discovery +0.113, topic +0.057, onboarding +0.048,
+bug-investigation +0.064, task-related +0.122). The "legacy is
+competitive" framing from 1.5.7 T4 is fully retired — new pipeline
+now wins every bucket.
+
 ## [1.5.10] - 2026-05-04
 
 **Thematic retrieval strategy — k-means over filtered vectors (PR 24

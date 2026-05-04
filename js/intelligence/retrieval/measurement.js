@@ -159,6 +159,7 @@ import { createThematicStrategy } from './strategies/thematic.js';
 import { compose } from './composer.js';
 import { createComparisonHarness } from './comparison.js';
 import { QUERY_CORPUS, QUERY_FIXTURES, QUERY_CATEGORIES } from './test-corpus.js';
+import { buildBM25Index } from './bm25-indexer.js';
 
 /**
  * Default batch input for `harness.run()` — the richer
@@ -697,9 +698,21 @@ export async function createMeasurementHarness(options) {
         contentTypeOverride,
     });
 
+    // 1.5.11 — BM25 index slot. Lazily filled by `ingest()` once the walker
+    // populates the chunk store; the strategy looks it up per-query via the
+    // closure below. Until ingest runs (or if it aborts before finishing),
+    // `bm25Index` is null → `getBM25Index` returns null → the Semantic
+    // strategy falls back to its pre-1.5.11 pure-cosine path. Lazy fill
+    // matters because `createSemanticStrategy` runs before `walker.walk()`,
+    // and the strategy snapshots dep references at construction (a constant
+    // null injection here would freeze the cosine path even after ingest).
+    /** @type {import('./strategies/semantic.js').BM25Index|null} */
+    let bm25Index = null;
+
     const semantic = createSemanticStrategy({
         embedQuery: (text) => EmbeddingsClient.embed(text),
         chunkVectorSearch: store.chunkVectorSearch,
+        getBM25Index: (coll) => coll === finalCollection ? bm25Index : null,
     });
     const structural = createStructuralStrategy({
         runSemanticRetrieve: (req, k) => semantic.retrieve(req, k),
@@ -759,7 +772,20 @@ export async function createMeasurementHarness(options) {
     const handle = {
         async ingest(opts) {
             const signal = opts && opts.signal;
-            return walker.walk(sourceUris, signal ? { signal } : undefined);
+            const walkResult = await walker.walk(sourceUris, signal ? { signal } : undefined);
+            // 1.5.11 — build the BM25 index over the populated corpus once
+            // ingest finishes. Skipped on aborted walks (the corpus is
+            // partial; the strategy stays on pure-cosine via the null
+            // closure). Built once per harness lifetime; subsequent
+            // `ingest()` calls would rebuild against the latest store
+            // contents (the controller's `noop` short-circuit makes
+            // re-ingest cheap, and a re-built index reflects any new
+            // chunks that did upsert).
+            if (!walkResult.aborted) {
+                const allChunks = await store.getAllChunksForCollection(finalCollection);
+                bm25Index = buildBM25Index(allChunks);
+            }
+            return walkResult;
         },
         async run(opts) {
             const queries = opts && opts.queries !== undefined ? opts.queries : DEFAULT_BATCH_FIXTURES;

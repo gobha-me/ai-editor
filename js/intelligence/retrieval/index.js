@@ -206,3 +206,4 @@ export {
     getQueriesByCategory,
 } from './test-corpus.js';
 export { createMeasurementHarness } from './measurement.js';
+export { buildBM25Index } from './bm25-indexer.js';
