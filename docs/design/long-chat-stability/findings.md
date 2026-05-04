@@ -502,6 +502,16 @@ window.
 **Open question for Jeff.** Pick the slot. The diagnosis stands either
 way.
 
+### Decision (2026-05-04)
+
+**Recommended option chosen: 1.6.0 — Chat Stability minor.** Reasoning crystallized after the 1.5.14 PR (legacy `context-manager.js` retirement) was opened: shipping internally-correct retrieval improvements on top of an unusable chat surface delivers no user-visible value, and the pattern of doing so across 1.5.5–1.5.13 ("seven minors with no end-to-end usability") is itself the bug. Three concrete moves recorded in [`docs/ROADMAP.md`](../../ROADMAP.md):
+
+1. **1.5.14 PR #266 merges to main but is not tagged on its own.** The code (832/832 retrieval tests pass) lands as the version-bumped 1.5.14 entry. The next release tag is `v1.6.0`, which deploys the four chat-stability fixes (1.6.0–1.6.4) together with the 1.5.14 retrieval cutover as a single user-visible release event. No held PR; no rebase + renumber dance. The version constants in main read 1.5.14, 1.6.0, 1.6.1, … as each PR merges; the tag push is the release event, not the merge.
+2. **1.6.0 — Chat Stability** inserted as the next track. Five PRs (PR 0, PR 1, PR 2, PR 3, PR 5) sized in this doc become 1.6.0–1.6.4 in order. PR 4 (measurement harness) stays deferred per the original §"Recommended fix scope".
+3. **Release-readiness dogfooding gate** added to ROADMAP §"Cadence and versioning". Gates **release tag pushes**, not merges to main. Future minor tags (`vX.Y.0`) require a passing dogfood — drive a real ~10-turn chat session in this repo, no silent truncation, no orphaned-tool 400s, model stays anchored on task framing. Patches inside an active track typically stay untagged until the next minor closes the bundle. Honor-system enforcement today; result recorded on the release tag annotation alongside the bundled-PR list.
+
+The 1.5.x retrieval follow-ups originally scheduled as 1.5.15 (cost-dashboard), 1.5.16 (caches), 1.5.17 (AST chunker) renumber to 1.6.5–1.6.7 once 1.6.0 lands. The 1.5.14 cutover does **not** renumber — it stays 1.5.14 in main, untagged.
+
 ---
 
 ## Verification (per the plan)
