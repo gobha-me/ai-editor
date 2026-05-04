@@ -465,6 +465,80 @@ function pureCosinePath(candidates, filter, quota) {
 }
 
 /**
+ * Multi-variant path (1.5.12): N per-variant cosine rankings + optional
+ * BM25 over the union, RRF-fused. The Composer populates
+ * `req.query_variants` by calling its `opts.queryParaphraser` and
+ * prepending `req.query`; this function consumes that list, computes one
+ * cosine ranking per variant via the existing `chunkVectorSearch` seam,
+ * and feeds them all into the same `reciprocalRankFusion` the
+ * single-variant hybrid path uses (so the math is one tested codepath
+ * with more inputs).
+ *
+ * BM25 scores against the **original query tokens only** — paraphrasing
+ * is a vocabulary-expansion lever for the dense (cosine) side; the
+ * lexical (BM25) side already wins on exact-term matches and would risk
+ * over-weighting if scored against every variant. Empirical T8b
+ * measurement validates the choice; if it doesn't, a future patch can
+ * promote BM25 to per-variant scoring.
+ *
+ * Score-kind labeling distinguishes multi-variant from single-variant
+ * retrieval at the diagnostics level (`multi_variant_cosine` /
+ * `multi_variant_hybrid`) so cross-run comparisons treat them as
+ * different rankings.
+ *
+ * @param {Array<Array<{chunk: ChunkRef, similarity: number}>>} variantCandidates  One pre-sorted candidate list per viable variant.
+ * @param {string[]}                originalQueryTokens                            BM25 query tokens (from `req.query`, not paraphrases).
+ * @param {BM25Index|null}          index
+ * @param {MetadataFilter|null|undefined} filter
+ * @param {number}                  quota
+ * @returns {ChunkRef[]}
+ */
+function multiVariantPath(variantCandidates, originalQueryTokens, index, filter, quota) {
+    /** @type {Map<ChunkID, ChunkRef>} */
+    const unionById = new Map();
+    for (const candidates of variantCandidates) {
+        for (const c of candidates) {
+            if (!unionById.has(c.chunk.id)) unionById.set(c.chunk.id, c.chunk);
+        }
+    }
+    if (unionById.size === 0) return [];
+    const filtered = applyMetadataFilter([...unionById.values()], filter);
+    if (filtered.length === 0) return [];
+    const allowedIds = new Set(filtered.map(c => c.id));
+
+    /** @type {ChunkID[][]} */
+    const rankings = variantCandidates.map(cands =>
+        cands.filter(c => allowedIds.has(c.chunk.id)).map(c => c.chunk.id),
+    );
+
+    const useBm25 = !!index && originalQueryTokens.length > 0;
+    if (useBm25) {
+        const bm25Scored = filtered.map(chunk => ({
+            id: chunk.id,
+            score: scoreBM25Doc(originalQueryTokens, chunk.content, /** @type {BM25Index} */ (index)),
+        }));
+        bm25Scored.sort((a, b) => b.score - a.score);
+        const bm25Ranking = bm25Scored.filter(s => s.score > 0).map(s => s.id);
+        rankings.push(bm25Ranking);
+    }
+
+    const fused = reciprocalRankFusion(rankings);
+    /** @type {Map<ChunkID, ChunkRef>} */
+    const filteredById = new Map();
+    for (const c of filtered) filteredById.set(c.id, c);
+    const fusedScored = [...fused.entries()]
+        .filter(([id]) => filteredById.has(id))
+        .map(([id, score]) => ({
+            chunk: /** @type {ChunkRef} */ (filteredById.get(id)),
+            score,
+        }));
+    const weighted = applyScoreWeights(fusedScored, scoreWeightsFromFilter(filter));
+    const scoreKind = useBm25 ? 'multi_variant_hybrid' : 'multi_variant_cosine';
+    return weighted.slice(0, quota).map(({ chunk, score }) =>
+        withSemanticProvenance(chunk, score, /** @type {ScoreKind} */ (scoreKind)));
+}
+
+/**
  * Build a Semantic strategy bound to caller-supplied embedder, vector
  * store, and (optional) BM25 index. The returned object satisfies the
  * `Strategy` typedef pinned by [contracts.js](../contracts.js).
@@ -543,6 +617,43 @@ export function createSemanticStrategy({ embedQuery, chunkVectorSearch, getBM25I
                 return pureBM25Path(queryTokens, bm25Index, req.filters, quota);
             }
             return [];
+        }
+
+        // Multi-variant path (1.5.12): the Composer threaded paraphrases
+        // through `req.query_variants` (length > 1 = original + paraphrases).
+        // Each viable variant contributes one cosine ranking; RRF fuses
+        // them inside `multiVariantPath`. Variants that fail to embed or
+        // return empty k-NN are silently skipped (graceful degrade per
+        // the strategy's existing posture). If no variant yields cosine
+        // candidates we fall through to the BM25 fallback / single-
+        // variant logic below.
+        const variants = Array.isArray(req.query_variants) ? req.query_variants : null;
+        if (variants && variants.length > 1) {
+            const k = Math.max(1, quota * 3);
+            /** @type {Array<Array<{chunk: ChunkRef, similarity: number}>>} */
+            const variantCandidates = [];
+            for (const variant of variants) {
+                const v = typeof variant === 'string' ? variant.trim() : '';
+                if (v.length === 0) continue;
+                if (tokenizeBM25(v).length < MIN_TOKENS_FOR_SEMANTIC) continue;
+                const vVec = await embedQuery(v);
+                if (!vVec) continue;
+                const cand = await chunkVectorSearch(vVec, collection, k);
+                if (Array.isArray(cand) && cand.length > 0) {
+                    variantCandidates.push(cand);
+                }
+            }
+            if (variantCandidates.length > 0) {
+                return multiVariantPath(
+                    variantCandidates,
+                    queryTokens,
+                    bm25Index,
+                    req.filters,
+                    quota,
+                );
+            }
+            // Every variant degraded — fall through to single-variant
+            // logic below (BM25 fallback or empty + degraded).
         }
 
         const queryVec = await embedQuery(query);

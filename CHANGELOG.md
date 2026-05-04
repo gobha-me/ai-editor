@@ -8,6 +8,205 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.12] - 2026-05-04
+
+**Retrieval query paraphrasing (PR 26 of the 1.5.0 stream).** Implements
+lever (b) from `docs/ROADMAP.md` §"Open question" — query rewriting at the
+Composer entry. Pre-Composer pass that expands the user's query into N
+alternative phrasings via an LLM; the Semantic strategy embeds each
+variant, runs cosine k-NN per variant, and **RRF-fuses the per-variant
+rankings** (reusing the `reciprocalRankFusion` already exported from the
+strategy — no new fusion math). Targets the four buckets still under
+0.50 recall@5 (`bug-investigation 0.436`, `topic 0.472`, etc.). Lives in
+production code, not the test harness, so the same code path runs in
+benchmark and any future `find_relevant_files` call.
+
+**User-controlled three-way mode.** Settings → Retrieval ships in this PR;
+production wire-up is deferred to the legacy `context-manager.js`
+retirement at 1.5.13. `State.settings.retrieval.paraphraseMode`
+(`'off' | 'primary' | 'utility'`) is the user's gate:
+
+- **`'off'` (default)** — no LLM call; Composer single-variant path; T7-
+  equivalent behavior. Zero LLM cost. **The safe default for every user
+  upgrading to 1.5.12** — no surprise spend, no surprise latency.
+- **`'primary'`** — paraphrase via the configured chat model
+  (`State.settings.llmModel`).
+- **`'utility'`** — paraphrase via a separate, typically smaller/cheaper
+  model id in `State.settings.retrieval.paraphraseModelId`. Same
+  provider/endpoint/key as the primary chat model (only `modelId`
+  differs); multi-provider paraphrase is post-2.0.
+
+The Settings → Retrieval tab also exposes `paraphraseRounds` (1–3,
+default 2) and `paraphraseTemperature` (0–1, default 0). Temperature 0
+is the deterministic default required for reproducible measurement runs.
+
+**Public surface.** Two new exports from
+`js/intelligence/retrieval/query-paraphraser.js`, re-exported from the
+retrieval barrel:
+
+- `createQueryParaphraser({ chatFn, modelId, rounds?, temperature?, prompt?, cache? })
+  → QueryParaphraser`. Pure DI — `chatFn(messages, options) → Promise<string>`
+  is caller-supplied (production wires `LLM.chat`; tests inject deterministic
+  fakes). Returns a handle exposing `.paraphrase(query) → Promise<string[]>`
+  (paraphrases only, NOT including the original) and `.stats() → { hits,
+  misses, failures }`. Optional cache mirrors the
+  `js/intelligence/retrieval/embedder.js` `EmbedderCache` shape; default
+  is an in-memory `Map` scoped to the instance. Failure mode: any
+  `chatFn` throw / non-string / empty-string / parse-zero-paraphrases
+  returns `[]` and never throws — the Composer treats `[]` as
+  single-variant.
+- `buildParaphraserFromSettings(settings, { chatFn, cache? })
+  → QueryParaphraser | null`. Resolves the three-way mode against
+  `settings.retrieval.paraphraseMode`. Returns `null` for `'off'` /
+  unknown mode / `'utility'` with empty `paraphraseModelId` (defensive
+  fallback).
+- `DEFAULT_PARAPHRASE_PROMPT` / `DEFAULT_PARAPHRASE_ROUNDS = 2` /
+  `DEFAULT_PARAPHRASE_TEMPERATURE = 0` exposed as named exports.
+
+**The locked default prompt** (recorded verbatim per the corpus-agnostic
+constraint — changing this string in any downstream patch must be paired
+with a same-branch T8 re-measurement):
+
+> *"You are a search-query reformulator. Given a user's code-search
+> query, produce N alternative phrasings that preserve the original
+> intent but use different vocabulary. Output one paraphrase per line,
+> no numbering, no commentary. Do not invent specifics not implied by
+> the query."*
+
+**Composer integration (Step 0).** New optional
+`opts.queryParaphraser` on `compose(req, deps, opts)`. When present and
+`req.query` is non-empty, the Composer calls
+`opts.queryParaphraser.paraphrase(req.query)` before the strategy
+router; on a non-empty array, `req` is shallow-copied and
+`req.query_variants = [req.query, ...paraphrases]` is threaded through
+to strategies. Original `req` is never mutated. On paraphrase throw, a
+`PARAPHRASE_FAILED` info-warning is appended to `Diagnostics.warnings`
+and the Composer degrades to single-variant. New
+`Diagnostics.paraphrase_count` field surfaces the variant count (0 in
+single-variant mode).
+
+**Semantic strategy multi-variant path.** New
+`multiVariantPath(variantCandidates, originalQueryTokens, index, filter, quota)`
+in `js/intelligence/retrieval/strategies/semantic.js`: per-variant
+cosine k-NN + optional BM25 over the candidate union, RRF-merged.
+**BM25 scores against the original query tokens only** — paraphrasing
+is a vocabulary-expansion lever for the dense (cosine) side; the
+lexical (BM25) side wins on exact-term matches and would risk
+over-weighting if scored against every variant. Two new `ScoreKind`
+labels: `'multi_variant_cosine'` (no BM25) and `'multi_variant_hybrid'`
+(with BM25). Single-variant retrieve path is unchanged when
+`req.query_variants` is absent or length ≤ 1 — back-compat preserved
+for every existing caller. Per-variant attrition (variant fails to
+embed, returns empty k-NN, or is shorter than `MIN_TOKENS_FOR_SEMANTIC`)
+silently skips that variant; if every variant degrades, falls through
+to the single-variant BM25-fallback / empty path.
+
+**Measurement harness extension.** `MeasurementHarnessOptions` gains an
+optional `queryParaphraser` field — a pre-built `QueryParaphraser`
+handle (or `null`). When supplied, threaded into
+`compose(req, deps, { queryParaphraser })` on every new-pipeline call.
+The harness deliberately does NOT import the paraphraser factory — same
+DI posture every retrieval module took since 1.4.9. Browser runner at
+`tests/retrieval-measurement.html` adds four mirror controls (mode /
+utility model id / rounds / temperature) plus boot-time seeding from
+`State.settings.retrieval.*`; on Run the runner builds the paraphraser
+via `buildParaphraserFromSettings` with `chatFn` wrapping `LLM.chat`.
+
+**Settings + UI.** New `State.settings.retrieval` subtree with four keys
+(`paraphraseMode`, `paraphraseModelId`, `paraphraseRounds`,
+`paraphraseTemperature`). Added to the deep-merge `nestedKeys` list in
+`loadSettings` so existing users get the new defaults on first 1.5.12
+load. New `js/settings/retrieval-tab.js` (mirrors `tools-tab.js`
+precedent at 1.4.8): three-way radio for `paraphraseMode` with
+mode-conditional reveal of the utility model id input, rounds +
+temperature inputs, validation 1–3 / 0–1 ranges. New Settings →
+Retrieval tab wired in `html/modals.html` + `html/settings-tabs.html`.
+
+**T8b canonical measurement (2026-05-04, primary chat model, rounds=2,
+temperature=0).** Embedder: in-cluster `jinaai/jina-embeddings-v2-base-code`,
+`topK=5`, `concurrency=4`, 438 sources, 4681 chunks, 0 failures, ~13.7
+min walk + ~3.2 min comparison (the comparison-pass overhead is the
+extra LLM round-trips). Raw report at
+[`docs/measurements/2026-05-04-retrieval-recall-paraphrase-primary.json`](docs/measurements/2026-05-04-retrieval-recall-paraphrase-primary.json).
+
+**Headline: `newGroundTruth.meanRecallAt5 = 0.6130`** vs the 1.5.11 T7
+baseline of 0.6382 — **−0.025, net regression**. `meanHitAt5 = 0.976`
+(vs 1.000), `meanMRR = 0.794` (vs 0.817).
+
+**Per-category recall@5 (1.5.11 T7 → 1.5.12 T8b):**
+
+| Category | T7 | T8b | Δ |
+|---|---:|---:|---:|
+| file-discovery | 0.788 | 0.731 | **−0.057** ✗ |
+| function-discovery | 0.900 | 0.929 | +0.029 |
+| topic | 0.472 | 0.521 | +0.049 |
+| **bug-investigation** | 0.436 | **0.331** | **−0.105** ✗✗ |
+| onboarding | 0.667 | 0.702 | +0.035 |
+| **task-related** | 0.531 | **0.419** | **−0.112** ✗✗ |
+
+**T4 baseline-gate violated on three buckets** (`file-discovery`,
+`bug-investigation`, `task-related` all regress > 0.05). The
+intervention is a net loss on this corpus with this model.
+
+**Diagnosis.** The regression clusters on queries where the original is
+already specific — paraphrasing introduces semantic drift. Concrete
+examples from the T8b raw report:
+- *what handles a 429 response from Venice?* → recall 0.667 → 0.333.
+  Paraphrases broadened to generic rate-limiting; pipeline lost
+  `js/llm/api.js` + `js/providers/venice.js`.
+- *where does the embeddings client live?* → recall 1.000 → 0.500.
+  Lost `js/intelligence/retrieval/embedder.js` from top-5.
+
+The wins (`function-discovery`, `topic`, `onboarding`) are vague-query
+buckets where paraphrase contributes vocabulary the original lacked.
+Verdict: **paraphrasing helps where the original query is vague, hurts
+where it's specific**. Net is negative on this corpus.
+
+**Disposition: shipping disabled by default; recommended off.** The
+default `paraphraseMode = 'off'` reproduces T7's 0.6382 (Composer
+single-variant path is byte-for-byte the 1.5.11 code path; `'off'`
+returns `null` from `buildParaphraserFromSettings` and the harness
+threads no `queryParaphraser`). The infrastructure is shipped for
+users who want to opt in on a different corpus; the canonical
+recommendation against this codebase is `mode = 'off'`. CHANGELOG
+records the negative result so future readers don't try the same lever
+again without new context. T8a (off baseline) is not separately
+required — the off path is logically identical to 1.5.11 and unit-test
+proven (every existing 1.5.11 test runs against `mode = 'off'` by
+default).
+
+**§1.5.0 gate status.** **Not met.** Live default behavior post-1.5.12
+(mode='off') is **0.6382 recall@5**; the §1.5.0 gate is `≥ 0.80`; gap
+is **−0.162**. The "obvious things" lever menu (T1–T5, BM25, paraphrase,
+Thematic) is exhausted. `meanHitAt5 = 1.000` post-BM25 — the right
+files are in top-5 for every query; the residual gap is *ranking
+precision* and *curation density* (queries with `expectedPaths.length
+> 5` have a structural ceiling at `5 / n`). 1.5.13 scoping decides
+between (a) reframing the gate to 0.65–0.70 against the corrected
+0.539 legacy baseline (the realistic ceiling for pure
+semantic+structural+BM25 against this corpus density), (b) adding an
+LLM reranker pass over top-K (different lever class), or (c)
+re-curating `expectedPaths` to ≤5 per fixture (removes the structural
+ceiling).
+
+**Out of scope** (deferred per the plan's §"Out of scope"): production
+wire-up to `find_relevant_files` (still on legacy
+`js/context-manager.js` until 1.5.13 retirement); separate
+provider/endpoint/key for the utility model; multi-paraphrase BM25;
+embedding-averaging fusion variant; settings UI for the paraphrase
+prompt (locked in this PR).
+
+**Removability** holds (Decision §7). With
+`js/intelligence/retrieval/query-paraphraser.js` deleted, the barrel
+five exports removed, the Composer step-0 reverted, the Semantic
+multi-variant branch removed, the harness `queryParaphraser` option
+removed, the Settings → Retrieval tab files removed, and the four
+`State.settings.retrieval.*` defaults reverted, no production behavior
+degrades — `find_relevant_files` keeps running through legacy
+`js/context-manager.js` exactly as before. 811 retrieval tests pass;
+41 new paraphraser cases + 11 new multi-variant Semantic cases + 7 new
+Composer paraphrase cases.
+
 ## [1.5.11] - 2026-05-04
 
 **Retrieval BM25 index construction (PR 25 of the 1.5.0 stream).** Fills the

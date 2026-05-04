@@ -1,0 +1,67 @@
+{
+  "version": "1.5.5",
+  "_note": "1.5.12 T8b — query paraphrase intervention with mode='primary' (chat model). Compare against 2026-05-04-retrieval-recall-ground-truth.json (1.5.11 T7 baseline = 0.6382 recall@5). T8b regressed −0.025 headline + three buckets > 0.05 (file-discovery −0.057, bug-investigation −0.105, task-related −0.112). Lever shipped disabled by default; see CHANGELOG §1.5.12.",
+  "run_meta": {
+    "project": {
+      "owner": "xcaliber",
+      "repo": "ai-editor",
+      "ref": "main"
+    },
+    "modelId": "jinaai/jina-embeddings-v2-base-code",
+    "topK": 5,
+    "concurrency": 4,
+    "sourceUriCount": 438,
+    "walked": {
+      "ingested": 438,
+      "failed": 0,
+      "chunksAdded": 4681,
+      "embedFailures": 0,
+      "durationMs": 819686
+    },
+    "ranAt": "2026-05-04T21:01:22.030Z"
+  },
+  "report": {
+    "total": 42,
+    "meanAgreement": 0.285515873015873,
+    "histogram": {
+      "0.0-0.2": 12,
+      "0.2-0.4": 17,
+      "0.4-0.6": 10,
+      "0.6-0.8": 3,
+      "0.8-1.0": 0
+    },
+    "legacyFailures": 0,
+    "newFailures": 0,
+    "durationMs": 191237,
+    "legacyGroundTruth": {
+      "meanPrecisionAt5": 0.3238095238095239,
+      "meanRecallAt5": 0.539342403628118,
+      "meanHitAt5": 0.9285714285714286,
+      "meanMRR": 0.6912698412698413,
+      "sampleCount": 42
+    },
+    "newGroundTruth": {
+      "meanPrecisionAt5": 0.3809523809523808,
+      "meanRecallAt5": 0.6129818594104307,
+      "meanHitAt5": 0.9761904761904762,
+      "meanMRR": 0.7944444444444443,
+      "sampleCount": 42
+    },
+    "legacyByCategory": {
+      "file-discovery": { "meanPrecisionAt5": 0.3, "meanRecallAt5": 0.675, "meanHitAt5": 1, "meanMRR": 0.84375, "sampleCount": 8 },
+      "function-discovery": { "meanPrecisionAt5": 0.31428571428571433, "meanRecallAt5": 0.7095238095238096, "meanHitAt5": 0.8571428571428571, "meanMRR": 0.6714285714285715, "sampleCount": 7 },
+      "topic": { "meanPrecisionAt5": 0.3428571428571429, "meanRecallAt5": 0.41462585034013605, "meanHitAt5": 1, "meanMRR": 0.738095238095238, "sampleCount": 7 },
+      "bug-investigation": { "meanPrecisionAt5": 0.2571428571428571, "meanRecallAt5": 0.37142857142857144, "meanHitAt5": 0.8571428571428571, "meanMRR": 0.619047619047619, "sampleCount": 7 },
+      "onboarding": { "meanPrecisionAt5": 0.45714285714285713, "meanRecallAt5": 0.619047619047619, "meanHitAt5": 1, "meanMRR": 0.6904761904761906, "sampleCount": 7 },
+      "task-related": { "meanPrecisionAt5": 0.26666666666666666, "meanRecallAt5": 0.40833333333333327, "meanHitAt5": 0.8333333333333334, "meanMRR": 0.5416666666666666, "sampleCount": 6 }
+    },
+    "newByCategory": {
+      "file-discovery": { "meanPrecisionAt5": 0.375, "meanRecallAt5": 0.73125, "meanHitAt5": 1, "meanMRR": 0.9166666666666666, "sampleCount": 8 },
+      "function-discovery": { "meanPrecisionAt5": 0.4, "meanRecallAt5": 0.9285714285714286, "meanHitAt5": 1, "meanMRR": 0.8142857142857143, "sampleCount": 7 },
+      "topic": { "meanPrecisionAt5": 0.4571428571428572, "meanRecallAt5": 0.5207482993197279, "meanHitAt5": 1, "meanMRR": 0.738095238095238, "sampleCount": 7 },
+      "bug-investigation": { "meanPrecisionAt5": 0.2285714285714286, "meanRecallAt5": 0.330952380952381, "meanHitAt5": 0.8571428571428571, "meanMRR": 0.6904761904761905, "sampleCount": 7 },
+      "onboarding": { "meanPrecisionAt5": 0.5142857142857143, "meanRecallAt5": 0.7023809523809523, "meanHitAt5": 1, "meanMRR": 0.9285714285714286, "sampleCount": 7 },
+      "task-related": { "meanPrecisionAt5": 0.3, "meanRecallAt5": 0.41944444444444445, "meanHitAt5": 1, "meanMRR": 0.638888888888889, "sampleCount": 6 }
+    }
+  }
+}

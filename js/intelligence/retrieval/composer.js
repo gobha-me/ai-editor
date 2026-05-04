@@ -361,9 +361,10 @@ function assembleBlocks(retrievedChunks, historyTurns, task) {
  * @param {Array<{level:string, code:string, detail:string}>} warnings
  * @param {HistoryTurn[]} historyTurns
  * @param {Object<StrategyName, string>} skippedReasons
+ * @param {number} [paraphraseCount]
  * @returns {RetrievalResult}
  */
-function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReasons) {
+function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReasons, paraphraseCount = 0) {
     const blocks = assembleBlocks([], historyTurns, req && typeof req.task === 'string' ? req.task : '');
     const usedTokens = historyTurns.reduce((acc, t) => acc + estimateTurnTokens(t), 0);
     return {
@@ -384,6 +385,7 @@ function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReason
             degraded_strategies: [],
             warnings,
             chunker_versions: { ...CHUNKER_VERSION },
+            paraphrase_count: paraphraseCount,
         },
     };
 }
@@ -403,6 +405,14 @@ function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReason
  * @param {number[]} [opts.queryEmbedding]     Optional current-query embedding; the ledger consumer (step 6.5) uses it for cosine novelty scoring when both this and the prior admission's `query_embedding` are present. The Composer never embeds on its own.
  * @param {number} [opts.noveltyThreshold]     Override the ledger consumer's default `0.4` re-admission threshold.
  * @param {number} [opts.timeDecayMs]          Override the ledger consumer's default 30-minute time-elapsed decay window.
+ * @param {{ paraphrase: (query: string) => Promise<string[]> }} [opts.queryParaphraser]
+ *   1.5.12 — Optional pre-pass that expands `req.query` into N alternative
+ *   phrasings; the Composer threads `[req.query, ...paraphrases]` into
+ *   `req.query_variants` so the Semantic strategy can RRF-fuse per-variant
+ *   k-NN rankings. Failures (paraphraser throws or returns empty) degrade
+ *   silently to single-variant behavior and emit a `PARAPHRASE_FAILED`
+ *   warning. Absent option ⇒ no paraphrase pass; `paraphrase_count = 0`
+ *   in diagnostics. See `js/intelligence/retrieval/query-paraphraser.js`.
  * @returns {Promise<RetrievalResult>}
  */
 export async function compose(req, deps, opts = {}) {
@@ -435,10 +445,39 @@ export async function compose(req, deps, opts = {}) {
             code: 'NO_BUDGET',
             detail: `retrieval_budget=${retrievalBudget} after reserves; no chunks admitted`,
         });
-        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, {});
+        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, {}, 0);
     }
 
-    const routed = selectStrategies(deps.strategies, req, opts);
+    // Step 0 (1.5.12) — Optional query paraphrase pre-pass. When the caller
+    // supplies a paraphraser, expand `req.query` into N alternative phrasings
+    // and surface them as `req.query_variants` so the Semantic strategy can
+    // fuse per-variant rankings via RRF. The original `req.query` is never
+    // mutated — kept for diagnostics. Failures degrade silently.
+    let paraphraseCount = 0;
+    let composeReq = req;
+    const rawQuery = typeof req.query === 'string' ? req.query.trim() : '';
+    if (opts.queryParaphraser
+        && typeof opts.queryParaphraser.paraphrase === 'function'
+        && rawQuery.length > 0
+    ) {
+        let variants = /** @type {string[]} */ ([]);
+        try {
+            variants = await opts.queryParaphraser.paraphrase(req.query);
+        } catch (_err) {
+            warnings.push({
+                level: 'info',
+                code: 'PARAPHRASE_FAILED',
+                detail: 'queryParaphraser threw; degrading to single-variant retrieval',
+            });
+            variants = [];
+        }
+        if (Array.isArray(variants) && variants.length > 0) {
+            composeReq = { ...req, query_variants: [req.query, ...variants] };
+            paraphraseCount = variants.length;
+        }
+    }
+
+    const routed = selectStrategies(deps.strategies, composeReq, opts);
     /** @type {Object<StrategyName, string>} */
     const strategiesSkipped = {};
     for (const s of routed.skipped) {
@@ -447,7 +486,7 @@ export async function compose(req, deps, opts = {}) {
 
     if (routed.viable.length === 0) {
         // No viable + no Semantic fallback: still package history + task.
-        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, strategiesSkipped);
+        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, strategiesSkipped, paraphraseCount);
     }
 
     /** @type {Object<StrategyName, number>} */
@@ -458,11 +497,11 @@ export async function compose(req, deps, opts = {}) {
     const degraded = [];
     const acc = { latency, chunksPerStrategy, degraded, warnings };
 
-    const retrieved = await runStrategies(routed.viable, req, acc);
+    const retrieved = await runStrategies(routed.viable, composeReq, acc);
 
     let pinned = /** @type {ChunkRef[]} */ ([]);
     try {
-        pinned = await resolvePinnedChunks(req, deps.getChunkByID, retrievalBudget, warnings);
+        pinned = await resolvePinnedChunks(composeReq, deps.getChunkByID, retrievalBudget, warnings);
     } catch (err) {
         // OVERSIZED_PIN — caller-visible per design line 525.
         throw err;
@@ -485,13 +524,13 @@ export async function compose(req, deps, opts = {}) {
     let postLedger = interleaved;
     let ledgerConsulted = false;
     let ledgerSuppressions = 0;
-    if (req.task_ledger) {
+    if (composeReq.task_ledger) {
         const ledgerOpts = {};
         if (typeof opts.turnId === 'string') ledgerOpts.turnId = opts.turnId;
         if (Array.isArray(opts.queryEmbedding)) ledgerOpts.queryEmbedding = opts.queryEmbedding;
         if (typeof opts.noveltyThreshold === 'number') ledgerOpts.noveltyThreshold = opts.noveltyThreshold;
         if (typeof opts.timeDecayMs === 'number') ledgerOpts.timeDecayMs = opts.timeDecayMs;
-        const consult = consultLedger(interleaved, req, req.task_ledger, ledgerOpts);
+        const consult = consultLedger(interleaved, composeReq, composeReq.task_ledger, ledgerOpts);
         postLedger = consult.kept;
         ledgerConsulted = true;
         ledgerSuppressions = consult.suppressedCount;
@@ -534,6 +573,7 @@ export async function compose(req, deps, opts = {}) {
             degraded_strategies: degraded,
             warnings,
             chunker_versions: { ...CHUNKER_VERSION },
+            paraphrase_count: paraphraseCount,
         },
     };
 }

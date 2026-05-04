@@ -654,3 +654,118 @@ test('compose runs end-to-end with realistic two-strategy setup', async () => {
     assert.ok(r.diagnostics.tokens_used > 0);
     assert.ok(r.blocks.length >= 2);
 });
+
+/* ---------------- Step 0 — Query paraphrase pre-pass (1.5.12) ---------------- */
+
+/**
+ * Strategy spy that records the `req` it received on every call to
+ * `retrieve`. Used to assert the Composer threaded `query_variants`
+ * (or didn't).
+ */
+function spyStrategy(name, score, chunks) {
+    /** @type {any[]} */
+    const calls = [];
+    return {
+        name,
+        applies_to: () => ({ score, reason: `applicability=${score}` }),
+        retrieve: async (req, quota) => {
+            calls.push(req);
+            return chunks.slice(0, quota);
+        },
+        calls,
+    };
+}
+
+test('compose with no paraphraser: paraphrase_count === 0; req unchanged', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter });
+    assert.equal(r.diagnostics.paraphrase_count, 0);
+    assert.equal(sem.calls.length, 1);
+    assert.equal(sem.calls[0].query_variants, undefined);
+});
+
+test('compose threads query_variants when paraphraser returns paraphrases', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const paraphraser = {
+        paraphrase: async () => ['rephrasing a', 'rephrasing b'],
+    };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(r.diagnostics.paraphrase_count, 2);
+    assert.equal(sem.calls.length, 1);
+    assert.deepEqual(sem.calls[0].query_variants, [
+        'authentication middleware',
+        'rephrasing a',
+        'rephrasing b',
+    ]);
+    // Original req.query is preserved (the variants array starts with it).
+    assert.equal(sem.calls[0].query, 'authentication middleware');
+});
+
+test('compose: paraphraser returning [] leaves req unchanged + paraphrase_count = 0', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const paraphraser = { paraphrase: async () => [] };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(r.diagnostics.paraphrase_count, 0);
+    assert.equal(sem.calls[0].query_variants, undefined);
+});
+
+test('compose: paraphraser throwing emits PARAPHRASE_FAILED warning + degrades silently', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const paraphraser = {
+        paraphrase: async () => { throw new Error('LLM down'); },
+    };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(r.diagnostics.paraphrase_count, 0);
+    assert.equal(sem.calls[0].query_variants, undefined);
+    const warned = r.diagnostics.warnings.find((w) => w.code === 'PARAPHRASE_FAILED');
+    assert.ok(warned, 'expected PARAPHRASE_FAILED warning when paraphraser throws');
+});
+
+test('compose: empty req.query skips paraphraser entirely', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    /** @type {{paraphrase: (q: string) => Promise<string[]>, called: boolean}} */
+    const paraphraser = {
+        called: false,
+        paraphrase: async (_q) => {
+            paraphraser.called = true;
+            return ['x'];
+        },
+    };
+    await compose(baseReq({ query: '' }), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(paraphraser.called, false);
+});
+
+test('compose: original req object is not mutated (defensive copy)', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const paraphraser = { paraphrase: async () => ['p1'] };
+    const req = baseReq();
+    await compose(req, { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(req.query_variants, undefined);
+});
+
+test('compose: paraphrase_count surfaces correctly in diagnostics for length-1 paraphrases', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const paraphraser = { paraphrase: async () => ['only one'] };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(r.diagnostics.paraphrase_count, 1);
+    assert.deepEqual(sem.calls[0].query_variants, ['authentication middleware', 'only one']);
+});

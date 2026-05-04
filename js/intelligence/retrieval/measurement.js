@@ -451,6 +451,18 @@ export function defaultComposeFiltersResolver(opts) {
  *   Optional. A pre-aborted signal supplied here is honored at
  *   construction time — `ingest()` will return immediately with a
  *   pre-aborted `WalkResult`.
+ * @property {{ paraphrase: (q: string) => Promise<string[]> }|null|undefined} [queryParaphraser]
+ *   1.5.12. Optional pre-built `QueryParaphraser` handle. When supplied
+ *   (non-null), threaded into `compose(req, deps, { queryParaphraser })`
+ *   on every new-pipeline call so the Composer's step-0 expands `req.query`
+ *   into N paraphrased variants and the Semantic strategy RRF-fuses
+ *   per-variant rankings. The caller constructs the handle via
+ *   `createQueryParaphraser({ chatFn, modelId, rounds?, temperature? })` or
+ *   `buildParaphraserFromSettings(State.settings, { chatFn })`. When `null`
+ *   / `undefined` the Composer runs the existing single-variant path
+ *   unchanged. The harness deliberately does NOT import the paraphraser
+ *   factory itself — same DI posture every retrieval module took since
+ *   1.4.9, and node tests stay browser-free.
  */
 
 /**
@@ -621,6 +633,14 @@ function validateOptions(options) {
             );
         }
     }
+    const queryParaphraser = /** @type {any} */ (options).queryParaphraser;
+    if (queryParaphraser !== undefined && queryParaphraser !== null) {
+        if (typeof queryParaphraser !== 'object' || typeof queryParaphraser.paraphrase !== 'function') {
+            throw new TypeError(
+                'createMeasurementHarness: queryParaphraser must be a { paraphrase: fn } handle, null, or undefined',
+            );
+        }
+    }
 }
 
 /**
@@ -650,6 +670,7 @@ export async function createMeasurementHarness(options) {
         contentTypeOverride,
         composeFilters,
     } = options;
+    const queryParaphraser = /** @type {any} */ (options).queryParaphraser ?? null;
 
     const finalTopK = topK ?? DEFAULT_TOP_K;
     const finalCollection = collection ?? DEFAULT_COLLECTION;
@@ -747,7 +768,10 @@ export async function createMeasurementHarness(options) {
             priority_pins: null,
             task_ledger: null,
         };
-        return compose(req, { strategies, getChunkByID: store.getChunkByID });
+        /** @type {any} */
+        const composeOpts = {};
+        if (queryParaphraser) composeOpts.queryParaphraser = queryParaphraser;
+        return compose(req, { strategies, getChunkByID: store.getChunkByID }, composeOpts);
     }
 
     /**

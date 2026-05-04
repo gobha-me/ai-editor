@@ -175,6 +175,34 @@
                 <input id="maxFiles" type="number" placeholder="(unlimited)">
             </div>
         </div>
+        <h3 style="margin-top: 1.5rem;">Query paraphrasing (1.5.12)</h3>
+        <p style="font-size: 0.85em; color: #555; margin-top: -0.25rem;">
+            Mirrors Settings → Retrieval. Mode <code>off</code> reproduces the T7 baseline (no LLM call).
+            Mode <code>primary</code>/<code>utility</code> wires the LLM via <code>LLM.chat</code> and
+            threads <code>queryParaphraser</code> into the harness.
+        </p>
+        <div class="row">
+            <div class="col">
+                <label for="paraphraseMode">Paraphrase mode</label>
+                <select id="paraphraseMode">
+                    <option value="off">off (T7 baseline)</option>
+                    <option value="primary">primary (use chat model)</option>
+                    <option value="utility">utility (separate model id)</option>
+                </select>
+            </div>
+            <div class="col">
+                <label for="paraphraseModelId">Utility model id</label>
+                <input id="paraphraseModelId" type="text" value="" placeholder="(only used in 'utility' mode)">
+            </div>
+            <div class="col">
+                <label for="paraphraseRounds">Rounds</label>
+                <input id="paraphraseRounds" type="number" value="2" min="1" max="3">
+            </div>
+            <div class="col">
+                <label for="paraphraseTemperature">Temperature</label>
+                <input id="paraphraseTemperature" type="number" value="0" min="0" max="1" step="0.05">
+            </div>
+        </div>
     </div>
 
     <div class="panel hidden" id="run-panel">
@@ -217,6 +245,8 @@
         let IgnoreManager;
         let createMeasurementHarness;
         let QUERY_FIXTURES;
+        let buildParaphraserFromSettings;
+        let LLM;
 
         try {
             ({ State, EventBus, Storage, loadSettings } = await import('../js/core.js'));
@@ -224,7 +254,8 @@
             ({ EmbeddingsClient } = await import('../js/embeddings-client.js'));
             ({ ContextManager } = await import('../js/context-manager.js'));
             ({ IgnoreManager } = await import('../js/ignore.js'));
-            ({ createMeasurementHarness, QUERY_FIXTURES } = await import('../js/intelligence/retrieval/index.js'));
+            ({ createMeasurementHarness, QUERY_FIXTURES, buildParaphraserFromSettings } = await import('../js/intelligence/retrieval/index.js'));
+            ({ LLM } = await import('../js/llm/api.js'));
 
             await Storage.init();
             loadSettings();
@@ -258,6 +289,21 @@
                 }
             }
             document.getElementById('modelId').value = modelId;
+            // 1.5.12 — seed paraphrase controls from State.settings.retrieval.
+            const ret = (State.settings && State.settings.retrieval) || {};
+            const modeEl = document.getElementById('paraphraseMode');
+            if (ret.paraphraseMode === 'primary' || ret.paraphraseMode === 'utility') {
+                modeEl.value = ret.paraphraseMode;
+            }
+            if (typeof ret.paraphraseModelId === 'string') {
+                document.getElementById('paraphraseModelId').value = ret.paraphraseModelId;
+            }
+            if (Number.isFinite(ret.paraphraseRounds)) {
+                document.getElementById('paraphraseRounds').value = String(ret.paraphraseRounds);
+            }
+            if (Number.isFinite(ret.paraphraseTemperature)) {
+                document.getElementById('paraphraseTemperature').value = String(ret.paraphraseTemperature);
+            }
             document.getElementById('project-panel').classList.remove('hidden');
             document.getElementById('config-panel').classList.remove('hidden');
             document.getElementById('run-panel').classList.remove('hidden');
@@ -416,6 +462,33 @@
             const modelId = document.getElementById('modelId').value.trim() || (State.settings.embeddingModel || 'default');
             const maxFiles = parseInt(document.getElementById('maxFiles').value || '0', 10);
 
+            // 1.5.12 — read paraphrase config from the runner's UI inputs and
+            // mirror them into State.settings.retrieval so a re-run via Settings
+            // → Retrieval reflects the same values. Then build the paraphraser
+            // handle via `buildParaphraserFromSettings`. Mode 'off' → null →
+            // T7-equivalent baseline.
+            const pMode = document.getElementById('paraphraseMode').value;
+            const pUtilityModel = document.getElementById('paraphraseModelId').value.trim();
+            const pRounds = Math.max(1, Math.min(3, parseInt(document.getElementById('paraphraseRounds').value || '2', 10)));
+            const pTemperature = Math.max(0, Math.min(1, parseFloat(document.getElementById('paraphraseTemperature').value || '0')));
+            if (!State.settings.retrieval || typeof State.settings.retrieval !== 'object') {
+                State.settings.retrieval = {};
+            }
+            State.settings.retrieval.paraphraseMode = pMode;
+            State.settings.retrieval.paraphraseModelId = pUtilityModel;
+            State.settings.retrieval.paraphraseRounds = pRounds;
+            State.settings.retrieval.paraphraseTemperature = pTemperature;
+            const queryParaphraser = buildParaphraserFromSettings(State.settings, {
+                chatFn: async (messages, opts) => {
+                    const res = await LLM.chat(messages, {
+                        model: opts.model,
+                        temperature: opts.temperature,
+                        stream: false,
+                    });
+                    return (res && typeof res.content === 'string') ? res.content : '';
+                },
+            });
+
             const sourceUris = (maxFiles > 0 ? ctx.eligible.slice(0, maxFiles) : ctx.eligible).map((f) => f.path);
             if (sourceUris.length === 0) {
                 setStatus('run-status', `<small><strong>No source URIs after filter.</strong></small>`, 'warn');
@@ -468,6 +541,7 @@
                     topK,
                     concurrency,
                     contentTypeOverride: PERMISSIVE_PROSE_OVERRIDE,
+                    queryParaphraser,
                     onIngestProgress: (done, total) => {
                         const pct = total > 0 ? (done / total) * 100 : 0;
                         progress.style.width = `${pct}%`;

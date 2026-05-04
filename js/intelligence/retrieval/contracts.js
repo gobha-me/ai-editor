@@ -74,7 +74,13 @@
  * strategies are not comparable — labeling forces consumers to keep them
  * separate rather than averaging cosine with BM25.
  *
- * @typedef {"cosine"|"bm25"|"hybrid"|"structural_expanded"|"cluster_distance"} ScoreKind
+ * 1.5.12 adds two multi-variant labels — `multi_variant_cosine` (the
+ * pure-cosine path with N variant rankings RRF-fused) and
+ * `multi_variant_hybrid` (the same fusion with BM25 over the candidate
+ * union). Diagnostics consumers should treat them as variants of the
+ * single-variant `cosine` / `hybrid` kinds for cross-kind comparisons.
+ *
+ * @typedef {"cosine"|"bm25"|"hybrid"|"structural_expanded"|"cluster_distance"|"multi_variant_cosine"|"multi_variant_hybrid"} ScoreKind
  */
 
 /**
@@ -406,6 +412,7 @@
  * @property {ChunkID[]|null}         priority_pins   Caller-supplied must-includes.
  * @property {TaskLedger|null}        task_ledger     Per-task admission record; see DESIGN-profiles.md.
  * @property {string|null|undefined} [turn_id]        Optional turn identifier; used by the ledger consumer (1.4.18) when stamping `AdmissionRecord.turn_id` / `ExclusionRecord.turn_id`. The Composer also accepts `opts.turnId` as an override; if both are absent and a `task_ledger` is supplied, the consumer synthesizes one and emits a `LEDGER_TURN_SYNTHESIZED` info-warning.
+ * @property {string[]|undefined}    [query_variants] 1.5.12 — Composer-populated when a query paraphraser is supplied via `opts.queryParaphraser`; carries `[req.query, ...paraphrases]`. Strategies that consume it (Semantic) RRF-fuse per-variant rankings; strategies that don't (Structural / Thematic) ignore. Absent or length ≤ 1 → strategies behave as before.
  */
 
 /**
@@ -439,6 +446,7 @@
  * @property {StrategyName[]}                  degraded_strategies        Ran but in degraded mode.
  * @property {Array<{level:string, code:string, detail:string}>} warnings
  * @property {Object<ContentType, string>}     chunker_versions           For reproducibility.
+ * @property {number}                          paraphrase_count           1.5.12 — Number of paraphrase variants the Composer admitted alongside the original query. `0` for the single-variant default path; `> 0` when `opts.queryParaphraser` produced a non-empty result. Total query embeddings = `paraphrase_count + 1` when non-zero.
  */
 
 /**

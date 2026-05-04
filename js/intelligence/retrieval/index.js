@@ -207,3 +207,10 @@ export {
 } from './test-corpus.js';
 export { createMeasurementHarness } from './measurement.js';
 export { buildBM25Index } from './bm25-indexer.js';
+export {
+    createQueryParaphraser,
+    buildParaphraserFromSettings,
+    DEFAULT_PARAPHRASE_PROMPT,
+    DEFAULT_PARAPHRASE_ROUNDS,
+    DEFAULT_PARAPHRASE_TEMPERATURE,
+} from './query-paraphraser.js';

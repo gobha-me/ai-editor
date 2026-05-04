@@ -665,3 +665,238 @@ test('retrieve does not mutate input chunks (provenance carry creates fresh refs
     await strat.retrieve(baseReq(), 1);
     assert.deepEqual(original.provenance, beforeProv);
 });
+
+/* ---------------- Multi-variant retrieve path (1.5.12) ---------------- */
+
+/**
+ * Per-variant k-NN fake: maps `query → number[]` lookups so every
+ * call with a different query vector returns a different ranking.
+ * The Composer will populate `req.query_variants`; the strategy
+ * embeds each variant and k-NNs separately.
+ */
+function makeVariantTracker() {
+    const queriesEmbedded = /** @type {string[]} */ ([]);
+    const knnCalls = /** @type {Array<{vec: number[], collection: string, k: number}>} */ ([]);
+    return {
+        queriesEmbedded,
+        knnCalls,
+        embedFn(text) {
+            queriesEmbedded.push(text);
+            // Hash the query into a deterministic 1-d vector for the spy.
+            let h = 0;
+            for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) | 0;
+            return Promise.resolve([h / 1e9]);
+        },
+    };
+}
+
+test('multi-variant retrieve: embeds each variant once and k-NNs each', async () => {
+    const t = makeVariantTracker();
+    const a = makeChunk('chunk a content', { content_type: 'code' });
+    const b = makeChunk('chunk b content', { content_type: 'code' });
+    const c = makeChunk('chunk c content', { content_type: 'code' });
+    const strat = createSemanticStrategy({
+        embedQuery: t.embedFn,
+        // Each variant gets a different ranking — proves per-variant k-NN ran.
+        chunkVectorSearch: async (vec, _coll, _k) => {
+            t.knnCalls.push({ vec: vec.slice(), collection: _coll, k: _k });
+            // Distinguish by the magnitude of vec[0]:
+            if (Math.abs(vec[0]) < 1e-3) return [{ chunk: a, similarity: 0.9 }];
+            if (vec[0] > 0) return [{ chunk: b, similarity: 0.8 }];
+            return [{ chunk: c, similarity: 0.7 }];
+        },
+    });
+    const req = baseReq({
+        query: 'first form of the query',
+        query_variants: [
+            'first form of the query',
+            'second alternative phrasing',
+            'third paraphrased version',
+        ],
+    });
+    const out = await strat.retrieve(req, 5);
+    assert.equal(t.queriesEmbedded.length, 3);
+    assert.equal(t.knnCalls.length, 3);
+    // Each chunk that appeared in one variant's ranking gets a multi-variant_*
+    // score_kind on its provenance.
+    for (const ch of out) {
+        assert.equal(ch.provenance.retrieved_by, 'semantic');
+        assert.match(ch.provenance.score_kind, /^multi_variant_/);
+    }
+});
+
+test('multi-variant retrieve: RRF unions per-variant rankings', async () => {
+    // Two variants. Variant 0 returns [a, b]; variant 1 returns [b, c].
+    // Expected fused order: b (top of variant 1, second of variant 0) > a > c.
+    const a = makeChunk('alpha');
+    const b = makeChunk('beta');
+    const c = makeChunk('gamma');
+    let call = 0;
+    const strat = createSemanticStrategy({
+        embedQuery: async () => [0.1],
+        chunkVectorSearch: async () => {
+            call += 1;
+            if (call === 1) return [{ chunk: a, similarity: 0.9 }, { chunk: b, similarity: 0.8 }];
+            return [{ chunk: b, similarity: 0.9 }, { chunk: c, similarity: 0.8 }];
+        },
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'first long enough query',
+        query_variants: ['first long enough query', 'second long enough query'],
+    }), 5);
+    const ids = out.map(c => c.id);
+    assert.equal(ids[0], b.id);
+    // a and c appear once each — the RRF tiebreaker is rank in the only
+    // ranking each chunk appeared in.
+    assert.ok(ids.includes(a.id));
+    assert.ok(ids.includes(c.id));
+});
+
+test('multi-variant retrieve: skips empty / whitespace variants', async () => {
+    const t = makeVariantTracker();
+    const ch = makeChunk('content');
+    const strat = createSemanticStrategy({
+        embedQuery: t.embedFn,
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    await strat.retrieve(baseReq({
+        query: 'first real long query',
+        query_variants: ['first real long query', '', '   ', 'second real long query'],
+    }), 5);
+    assert.equal(t.queriesEmbedded.length, 2);
+});
+
+test('multi-variant retrieve: skips short variants (< 3 tokens)', async () => {
+    const t = makeVariantTracker();
+    const ch = makeChunk('content');
+    const strat = createSemanticStrategy({
+        embedQuery: t.embedFn,
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    await strat.retrieve(baseReq({
+        query: 'a real query string',
+        query_variants: ['a real query string', 'short', 'another long enough variant'],
+    }), 5);
+    assert.equal(t.queriesEmbedded.length, 2);
+});
+
+test('multi-variant retrieve: variant whose embed returns null is skipped', async () => {
+    const ch = makeChunk('content');
+    let call = 0;
+    const strat = createSemanticStrategy({
+        embedQuery: async () => {
+            call += 1;
+            return call === 2 ? null : [0.1];
+        },
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'first long query string',
+        query_variants: ['first long query string', 'second long query string'],
+    }), 5);
+    // Only one variant produced cosine candidates; the strategy still
+    // returns a result via the multi-variant path with only 1 ranking.
+    assert.ok(out.length > 0);
+    assert.match(out[0].provenance.score_kind, /^multi_variant_/);
+});
+
+test('multi-variant retrieve: all variants degraded → falls back to single-variant path', async () => {
+    const ch = makeChunk('content');
+    const strat = createSemanticStrategy({
+        // All embeds return null → multi-variant path produces 0 viable rankings,
+        // falls through to single-variant path which then also gets null and
+        // returns [] (no BM25 index to fall back to).
+        embedQuery: async () => null,
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'first long query string',
+        query_variants: ['first long query string', 'second long query string'],
+    }), 5);
+    assert.deepEqual(out, []);
+});
+
+test('multi-variant retrieve: all variants degraded + BM25 index → BM25 fallback over original', async () => {
+    const ch = makeChunk('alpha alpha bravo', { content_type: 'code' });
+    const idx = buildBM25Index([ch]);
+    const strat = createSemanticStrategy({
+        embedQuery: async () => null,
+        chunkVectorSearch: async () => [],
+        getBM25Index: () => idx,
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'alpha bravo charlie delta',
+        query_variants: ['alpha bravo charlie delta', 'alpha alpha bravo charlie'],
+    }), 5);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].provenance.score_kind, 'bm25');
+});
+
+test('multi-variant retrieve with BM25 index uses multi_variant_hybrid score_kind', async () => {
+    const a = makeChunk('alpha words alpha', { content_type: 'code' });
+    const b = makeChunk('beta beta beta words', { content_type: 'code' });
+    const idx = buildBM25Index([a, b]);
+    const strat = createSemanticStrategy({
+        embedQuery: async () => [0.1],
+        chunkVectorSearch: async () => [
+            { chunk: a, similarity: 0.9 },
+            { chunk: b, similarity: 0.7 },
+        ],
+        getBM25Index: () => idx,
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'alpha bravo charlie',
+        query_variants: ['alpha bravo charlie', 'alpha second variant phrasing'],
+    }), 5);
+    assert.ok(out.length > 0);
+    for (const c of out) {
+        assert.equal(c.provenance.score_kind, 'multi_variant_hybrid');
+    }
+});
+
+test('multi-variant retrieve respects metadata filter', async () => {
+    const proseChunk = makeChunk('prose c', { content_type: 'prose' });
+    const codeChunk = makeChunk('code c', { content_type: 'code' });
+    const strat = createSemanticStrategy({
+        embedQuery: async () => [0.1],
+        chunkVectorSearch: async () => [
+            { chunk: proseChunk, similarity: 0.9 },
+            { chunk: codeChunk, similarity: 0.8 },
+        ],
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'first long query string',
+        query_variants: ['first long query string', 'second long query string'],
+        filters: { content_types: ['code'] },
+    }), 5);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].id, codeChunk.id);
+});
+
+test('multi-variant retrieve: query_variants of length 1 falls back to single-variant', async () => {
+    // Length-1 means "no paraphrases were produced"; the multi-variant
+    // gate (`length > 1`) does not engage and the single-variant path runs.
+    const ch = makeChunk('content', { content_type: 'code' });
+    const strat = createSemanticStrategy({
+        embedQuery: async () => [0.1],
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    const out = await strat.retrieve(baseReq({
+        query: 'q one phrase',
+        query_variants: ['q one phrase'],
+    }), 5);
+    assert.equal(out.length, 1);
+    // Single-variant path → cosine score_kind, NOT multi_variant_*.
+    assert.equal(out[0].provenance.score_kind, 'cosine');
+});
+
+test('multi-variant retrieve: query_variants undefined → existing single-variant path', async () => {
+    const ch = makeChunk('content', { content_type: 'code' });
+    const strat = createSemanticStrategy({
+        embedQuery: async () => [0.1],
+        chunkVectorSearch: async () => [{ chunk: ch, similarity: 0.9 }],
+    });
+    const out = await strat.retrieve(baseReq({ query: 'normal long enough query' }), 5);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].provenance.score_kind, 'cosine');
+});

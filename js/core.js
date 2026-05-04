@@ -241,6 +241,18 @@ const State = {
         embeddingCacheExpiry: 7,   // Days before re-indexing
         maxRelevantFiles: 5,       // Max files to return for context queries
         maxIndexFiles: 200,        // Hard cap on files indexed in a project (1.1.2.x will measure & re-tune)
+
+        // Retrieval (1.5.12) — query paraphrasing + future retrieval knobs.
+        // The Composer's `opts.queryParaphraser` is built from these via
+        // `buildParaphraserFromSettings` in `js/intelligence/retrieval/query-paraphraser.js`.
+        // Default mode is 'off' so users upgrading to 1.5.12 see zero
+        // behavior change until they explicitly opt in.
+        retrieval: {
+            paraphraseMode: 'off',         // 'off' | 'primary' | 'utility'
+            paraphraseModelId: '',         // Used when paraphraseMode === 'utility'; same provider as primary chat model
+            paraphraseRounds: 2,           // 1–3
+            paraphraseTemperature: 0,      // 0 = deterministic; required for reproducible measurement runs
+        },
         
         // LLM Configuration
         llmEndpoint: '',
@@ -1710,7 +1722,7 @@ function loadSettings() {
         }
         // Deep-merge known nested objects so new defaults aren't lost on upgrade.
         // Top-level keys are spread first, then nested objects are merged individually.
-        const nestedKeys = ['veniceParameters', 'openRouterParameters', 'advancedParams'];
+        const nestedKeys = ['veniceParameters', 'openRouterParameters', 'advancedParams', 'retrieval'];
         const merged = { ...State.settings, ...saved };
         for (const key of nestedKeys) {
             if (State.settings[key] && typeof State.settings[key] === 'object' && !Array.isArray(State.settings[key])) {
