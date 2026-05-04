@@ -96,17 +96,31 @@ function initChat(containerEl, inputEl) {
     // Load chat history from storage (summary-aware)
     const savedHistory = Storage.get('chatHistory', []);
     const summaryInfo = Storage.get('chatSummaryInfo', null);
-    
-    // CRITICAL FIX: Filter out tool messages from display on page load
-    // Tool messages should only be rendered in real-time as collapsible tool call widgets
-    // When loading from cache, we skip rendering tool messages to avoid showing raw JSON
-    const displayHistory = savedHistory.filter(msg => msg.role !== 'tool');
-    
-    if (summaryInfo?.summary && displayHistory.length > ChatSummarizer.RECENT_COUNT) {
-        // Keep recent messages + prepend summary reference
-        State.chatHistory = savedHistory.slice(-ChatSummarizer.RECENT_COUNT);
+    const pruneStash = Storage.get('chatPruneStash', null);
+
+    // CRITICAL FIX: Restore pruned messages on page refresh so the full
+    // conversation is available to both the UI and the LLM context.
+    // Without this, a page refresh after summarization permanently loses
+    // the pruned conversation history (stash is flushed on next message).
+    let displayHistory;
+    if (pruneStash && Array.isArray(pruneStash) && pruneStash.length > 0) {
+        State.chatHistory = [...pruneStash, ...savedHistory];
+        displayHistory = State.chatHistory.filter(msg => msg.role !== 'tool');
+        // Persist the restored full history so it survives further operations
+        Storage.set('chatHistory', State.chatHistory.slice(-100));
+        console.log(`[initChat] Restored ${pruneStash.length} pruned messages from stash`);
     } else {
-        State.chatHistory = savedHistory.slice(-50);
+        // CRITICAL FIX: Filter out tool messages from display on page load
+        // Tool messages should only be rendered in real-time as collapsible tool call widgets
+        // When loading from cache, we skip rendering tool messages to avoid showing raw JSON
+        displayHistory = savedHistory.filter(msg => msg.role !== 'tool');
+
+        if (summaryInfo?.summary && displayHistory.length > ChatSummarizer.RECENT_COUNT) {
+            // Keep recent messages + prepend summary reference
+            State.chatHistory = savedHistory.slice(-ChatSummarizer.RECENT_COUNT);
+        } else {
+            State.chatHistory = savedHistory.slice(-50);
+        }
     }
 
     if (window.__AIE_DEBUG_METADATA) {
@@ -118,7 +132,7 @@ function initChat(containerEl, inputEl) {
         console.groupEnd();
     }
 
-    renderMessages(displayHistory.slice(-50));
+    renderMessages(displayHistory.slice(-100));
     setupInputHandlers(inputEl, handleUserInputDirect);
     initConversationDrawer();
 
