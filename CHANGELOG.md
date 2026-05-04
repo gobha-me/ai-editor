@@ -8,6 +8,131 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.5.10] - 2026-05-04
+
+**Thematic retrieval strategy — k-means over filtered vectors (PR 24
+of the 1.5.0 stream).** Third strategy alongside Semantic + Structural,
+implementing `docs/DESIGN-retrieval.md` §"Thematic (Phase 2)" end-to-end.
+Enables query-free retrieval — "summarize this codebase," "what themes
+are in these documents," "give me a coverage sample of this corpus" —
+the use cases the existing strategies cannot serve (Semantic needs a
+query to embed; Structural is a cosine-fed ancestor walk over Semantic
+candidates).
+
+**Public surface.** `createThematicStrategy({ getChunksForClustering,
+kmeans?, seed? }) → Strategy` from
+`js/intelligence/retrieval/strategies/thematic.js`, plus `defaultKmeans`,
+`cosineSimilarity`, `cosineDistance`, `MAX_CLUSTER_VECTORS = 50_000`,
+and `QUERY_FREE_TASK_PATTERN` exported as named values for tests +
+tuners. Re-exported from the retrieval barrel.
+
+**Algorithm** (per DESIGN-retrieval lines 376–391):
+
+1. Pull every chunk in the collection via `getChunksForClustering`.
+2. Apply the request's `MetadataFilter` (reusing the exported
+   `applyMetadataFilter` from Semantic — single consumer, no
+   duplication).
+3. Drop chunks without embeddings.
+4. If pool size exceeds `MAX_CLUSTER_VECTORS` (50k), uniform sample
+   down to the cap (deterministic under the seed).
+5. If `pool.length <= quota`, return all chunks (k-reduced path; per
+   design "fewer vectors than k → return all").
+6. Run k-means with k = quota: k-means++ init, Lloyd's iteration up
+   to 50 steps, cosine distance throughout.
+7. For each cluster, return the member chunk nearest its centroid.
+8. Sort by ascending distance (best representative first); stamp
+   `provenance.retrieved_by = "thematic"` /
+   `score_kind = "cluster_distance"` / `score = -distance`.
+
+**`applies_to(req)`** returns 0.9 when (a) `req.query` is
+null/empty/whitespace OR (b) `req.task` matches
+`QUERY_FREE_TASK_PATTERN` (`/summari[sz]e|overview|categori[sz]e|themes?/i`);
+0 otherwise. Mirrors design line 507. The existing 42-fixture
+recall@5 corpus all carries explicit text, so Thematic shows up under
+`Diagnostics.strategies_skipped` for every query in the canonical run
+— wired but contributes nothing to the recall@5 headline until a
+query-free fixture lands. (See ROADMAP §"Next" for the residual gap
+discussion.)
+
+**Inline `defaultKmeans`** — k-means++ initialization weighted by D²,
+Lloyd's iteration with cosine distance, deterministic via Mulberry32
+seeded PRNG. ~120 LOC. Same posture as `scoreBM25Doc` living in
+`semantic.js`: promote to a shared module when a second consumer
+arrives. Cosine over Euclidean for symmetry with the rest of the
+retrieval module (chunk vectors are unit-normalized; cosine and
+Euclidean produce equivalent rankings for unit vectors anyway).
+
+**New store seam.** `getAllChunksForCollection(collection)` added to
+`createInMemoryChunkStore` — five-line addition over the existing
+`chunkIdsByCollection` index. Required because `chunkVectorSearch`
+returns top-k only; Thematic clusters over the full filtered set.
+
+**Failure modes** (all algorithmic; per design lines 388–391):
+
+- Fewer vectors than k → return all (k-reduced).
+- Cluster collapse (one cluster has ≥80% mass) → still return up to
+  quota representatives, some clusters may collapse and lose their
+  slot.
+- 50k vector cap hit → uniform sample, deterministic under the seed.
+- Malformed kmeans output (defensive against custom injections) →
+  degrade to first quota chunks rather than throw.
+
+**Diagnostic propagation deferred.** The `Strategy.retrieve` contract
+is `(req, quota) → Promise<ChunkRef[]>` — no diagnostics channel. The
+design's "flag low silhouette score in diagnostics" lands when the
+Composer grows a per-strategy diagnostic channel; for 1.5.10 the
+algorithmic behaviors are intact and tests verify them via the
+returned chunks. Same posture Semantic takes for its BM25-fallback
+"degraded" flag.
+
+**Measurement harness wiring.** `createMeasurementHarness` in
+`js/intelligence/retrieval/measurement.js` now instantiates Thematic
+alongside Semantic + Structural and threads it through to `compose`'s
+`strategies` array. No production wire-up — `find_relevant_files`
+keeps running through legacy `js/context-manager.js` until the
+renumbered legacy retirement (1.5.11). Removability holds (Decision
+§7): with `thematic.js` deleted (and the barrel re-export and
+measurement-harness lines reverted) no production behavior degrades.
+
+**Tests.** 62 unit cases under `node --test tests/test-retrieval-thematic-strategy.mjs`,
+covering `applies_to` (9 cases), retrieve empty/degenerate paths
+(6 cases), k-reduced path (2 cases), clustering (5 cases), filter
+honoring (3 cases), 50k cap (2 cases), cluster collapse (1 case),
+malformed kmeans output (3 cases), DI contract (6 cases), inline
+`defaultKmeans` (6 cases), and cosine helpers (7 cases). Full
+retrieval suite: 732 cases pass.
+
+**Roadmap renumber.** The planned 1.5.9 (Thematic) was consumed by
+the chat/tool-loop bug-fix bundle that shipped earlier today;
+Thematic lands at 1.5.10. The legacy `context-manager.js` retirement
+slot shifts to 1.5.11 (still needs re-scoping post the corrected
+legacy baseline of 0.539); cost-dashboard extension to 1.5.12; query
+cache to 1.5.13; AST chunker (gated) to 1.5.14.
+
+**T6 canonical re-measurement (2026-05-04 18:20).** Same in-cluster
+`jinaai/jina-embeddings-v2-base-code` embedder, `topK=5`,
+`concurrency=4`, 433 sources, 4635 chunks, 0 ingest failures, 0 runner
+failures, ~14.7 min walk. **Headline: `newGroundTruth.meanRecallAt5 =
+0.5807`** — identical to the 1.5.8 T5 baseline (0.5807) within
+rounding. **Per-category recall@5: identical across all six buckets**
+(function-discovery 0.900, file-discovery 0.700, onboarding 0.667,
+topic 0.455, bug-investigation 0.331, task-related 0.386). This is
+the signature of Thematic skipping every query — the prediction
+holds. Raw report at
+[`docs/measurements/2026-05-04-retrieval-recall-ground-truth.json`](docs/measurements/2026-05-04-retrieval-recall-ground-truth.json).
+
+**Side-observation:** `meanMRR` lifted +0.033 (0.751 → 0.784) and
+legacy `meanMRR` slipped -0.057 (0.760 → 0.703). Recall and hit are
+unchanged, so the same expected paths land in top-5 on the same set
+of queries — but rank order within top-5 reshuffled because the
+corpus grew from 429 → 433 sources / 4532 → 4635 chunks (the four
+new files this PR added: `thematic.js`, the test file, the new
+CHANGELOG entry, and the modified files re-ingested with new
+content_hashes). Free MRR lift on the new pipeline; not a designed
+feature. The signal would not be present if Thematic were firing
+(recall would also have moved). **§1.5.0 gate (recall@5 ≥ 0.80) is
+unchanged at -0.219 from target.**
+
 ## [1.5.9] - 2026-05-04
 
 **Four fixes for the tool-loop and chat-history bugs surfaced under

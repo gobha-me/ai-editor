@@ -162,6 +162,13 @@ export { extractStructure, NODE_KIND } from './structure-extractor.js';
 export { runChunkerPipeline } from './pipeline.js';
 export { createSemanticStrategy } from './strategies/semantic.js';
 export { createStructuralStrategy } from './strategies/structural.js';
+export {
+    createThematicStrategy,
+    defaultKmeans,
+    cosineDistance,
+    MAX_CLUSTER_VECTORS,
+    QUERY_FREE_TASK_PATTERN,
+} from './strategies/thematic.js';
 export { compose } from './composer.js';
 export {
     selectStrategies,

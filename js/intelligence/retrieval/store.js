@@ -220,6 +220,29 @@ export function createInMemoryChunkStore() {
             return Array.from(set);
         },
 
+        /**
+         * Materialize every chunk in a collection. Added at 1.5.10 for the
+         * Thematic strategy, which clusters over the full filtered set
+         * rather than a top-k slice. Unknown collection → `[]` (matches
+         * the `chunkVectorSearch` posture). Async to match the existing
+         * `await`-friendly API surface even though the in-memory impl
+         * resolves synchronously.
+         *
+         * @param {CollectionName} collection
+         * @returns {Promise<ChunkRef[]>}
+         */
+        async getAllChunksForCollection(collection) {
+            const ids = chunkIdsByCollection.get(collection);
+            if (!ids || ids.size === 0) return [];
+            /** @type {ChunkRef[]} */
+            const out = [];
+            for (const id of ids) {
+                const chunk = chunksById.get(id);
+                if (chunk) out.push(chunk);
+            }
+            return out;
+        },
+
         upsert(chunks) {
             if (!Array.isArray(chunks)) {
                 throw new TypeError('upsert: chunks must be an array');

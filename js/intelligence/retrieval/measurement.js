@@ -46,14 +46,20 @@
  *      project, modelId, concurrency, onProgress, embeddingCache,
  *      contentTypeOverride })` → `{ walker, controller, store }`.
  *   2. Build the strategies the Composer will dispatch:
- *      `createSemanticStrategy({ embedQuery, chunkVectorSearch })` and
+ *      `createSemanticStrategy({ embedQuery, chunkVectorSearch })`,
  *      `createStructuralStrategy({ runSemanticRetrieve, getChunkByID })`,
- *      delegating to (a) the production embedder via `EmbeddingsClient.embed`
- *      and (b) the in-memory store the walker populates.
+ *      and `createThematicStrategy({ getChunksForClustering })` (added at
+ *      1.5.10), delegating to (a) the production embedder via
+ *      `EmbeddingsClient.embed` and (b) the in-memory store the walker
+ *      populates. Thematic's `applies_to` returns 0 for the existing
+ *      query-bearing fixtures, so it shows up under
+ *      `Diagnostics.strategies_skipped` for every test query — the
+ *      strategy is wired but contributes nothing to the recall@5 headline
+ *      until a query-free fixture lands.
  *   3. Wire `runNew(query)` → `compose({ task: '', query, collections:
  *      [collection], budget: <derived>, history: null, filters: null,
  *      strategy_hints: null, priority_pins: null, task_ledger: null }, {
- *      strategies: [semantic, structural], getChunkByID: store.getChunkByID })`.
+ *      strategies: [semantic, structural, thematic], getChunkByID: store.getChunkByID })`.
  *   4. Wire `runLegacy(query)` → `ContextManager.findRelevantFiles(query, topK)`.
  *   5. Construct the comparison harness via `createComparisonHarness({
  *      runLegacy, runNew, topK })` (default normalizers + Jaccard metric).
@@ -149,6 +155,7 @@
 import { createProductionIngestWalker } from './wiring.js';
 import { createSemanticStrategy } from './strategies/semantic.js';
 import { createStructuralStrategy } from './strategies/structural.js';
+import { createThematicStrategy } from './strategies/thematic.js';
 import { compose } from './composer.js';
 import { createComparisonHarness } from './comparison.js';
 import { QUERY_CORPUS, QUERY_FIXTURES, QUERY_CATEGORIES } from './test-corpus.js';
@@ -698,8 +705,11 @@ export async function createMeasurementHarness(options) {
         runSemanticRetrieve: (req, k) => semantic.retrieve(req, k),
         getChunkByID: store.getChunkByID,
     });
+    const thematic = createThematicStrategy({
+        getChunksForClustering: (collection) => store.getAllChunksForCollection(collection),
+    });
     /** @type {Strategy[]} */
-    const strategies = [semantic, structural];
+    const strategies = [semantic, structural, thematic];
 
     /**
      * @param {string} query
