@@ -102,9 +102,8 @@ function initChat(containerEl, inputEl) {
     // LLM context loses messages on refresh. Storage is IndexedDB-backed
     // (GB-level quota); the previous slice(-50) / slice(-RECENT_COUNT)
     // truncations were the root cause of the "refresh trims chat" bug.
-    // Tool messages are filtered out of the rendered DOM (they show as
-    // collapsible widgets in the live tool loop, not raw JSON on reload),
-    // but they STAY in State.chatHistory so the LLM sees the full thread.
+    // Tool messages are rendered as tool-call cards via addToolCallMessage
+    // (skipped for assistant-only tool_calls with no text content).
     let displayHistory;
     if (pruneStash && Array.isArray(pruneStash) && pruneStash.length > 0) {
         State.chatHistory = [...pruneStash, ...savedHistory];
@@ -113,7 +112,7 @@ function initChat(containerEl, inputEl) {
     } else {
         State.chatHistory = savedHistory;
     }
-    displayHistory = State.chatHistory.filter(msg => msg.role !== 'tool');
+    displayHistory = State.chatHistory;
 
     if (window.__AIE_DEBUG_METADATA) {
         const report = probeMetadataCoverage(State.chatHistory);
