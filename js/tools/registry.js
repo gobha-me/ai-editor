@@ -88,9 +88,15 @@ export const ToolRegistry = {
         };
         
         this.handlers.set(name, handler);
-        this.definitions.push(enrichedDefinition);
 
-        console.log(`[ToolRegistry] ✅ Registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
+        const existingIdx = this.definitions.findIndex(d => d.function?.name === name);
+        if (existingIdx !== -1) {
+            this.definitions.splice(existingIdx, 1);
+            console.log(`[ToolRegistry] ♻️ Re-registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
+        } else {
+            console.log(`[ToolRegistry] ✅ Registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
+        }
+        this.definitions.push(enrichedDefinition);
     },
 
     /**

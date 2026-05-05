@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-05 · Current released (tagged) version: **1.6.5** · `main` HEAD: 1.6.8 (untagged — sits in main alongside the also-untagged 1.6.6 cost-export, 1.6.7 cost-store race-safety, and 1.6.8 cost-dashboard retrieval-extension patches).
+> Last updated: 2026-05-05 · Current released (tagged) version: **1.6.5** · `main` HEAD: 1.6.8 (untagged — sits in main alongside the also-untagged 1.6.6 cost-export, 1.6.7 cost-store race-safety, 1.6.8 cost-dashboard retrieval-extension, buffer-aware read tools, and long-running tool timeout patches).
 
 ## How to read this doc
 
@@ -79,8 +79,8 @@ Once `v1.6.0` is tagged, the open GitHub issues below run as ai-editor sessions 
 
 | Order | Issue | What it exercises | Pass criteria |
 |---|---|---|---|
-| 1 | **github#20** — `git_log` tool missing | Tool registry, doc updates, **memory recall** (does ai-editor find the parked git-tool-wrappers wishlist and propose a bundle, or ship `git_log` alone in violation of it?) | Reaches the "bundle with the wishlist" conclusion if the wishlist is still parked, or ships the bundle if not. Trace shows the memory hit. |
-| 2 | **github#15** — Conflicting timeouts (test-driven loop) | Tool execution path in [`js/chat/handlers.js`](../js/chat/handlers.js) + settings; bounded two-file fix with three solution options on the issue | Bounded fix lands; `wait_for_ci` no longer killed by tool timeout. Existing tools keep their 30 s default. |
+| 1 | ~~**github#20**~~ — `git_log` tool missing *(✅ shipped PR #278)* | Tool registry, doc updates, **memory recall** (does ai-editor find the parked git-tool-wrappers wishlist and propose a bundle, or ship `git_log` alone in violation of it?) | Reached the "bundle with the wishlist" conclusion. `git_log` ships bundled. Trace showed memory hit. |
+| 2 | ~~**github#15**~~ — Conflicting timeouts (test-driven loop) *(✅ shipped PR #282)* | Tool execution path in [`js/chat/handlers.js`](../js/chat/handlers.js) + settings; bounded two-file fix with three solution options on the issue | `LONG_RUNNING_TOOLS` set routes `wait_for_ci` to `longRunningToolTimeout` (300 s). Standard tools keep their 30 s default. |
 | 3 | **github#23** — MCP plugin disable doesn't purge tools | Cross-layer: MCP bridge + plugin layer + chat handlers + tool registry; multi-file edit + system-message injection into chat | All acceptance criteria from the issue body pass. |
 | 4 | **github#21** — MCP role-based tool access | MCP bridge + role system + Settings → MCP Servers UI; new UI plus core change | Three-part proposed solution lands; backward-compatible default (no roles set ⇒ `'all'`). |
 
@@ -208,7 +208,10 @@ User-facing gaps tracked as filed issues but not yet slotted into a track. Liste
 
 - ~~**gitea#188 — `[storage] cost-daily graph data lost after refresh`**~~ *(✅ closed at 1.6.7)*. `KeyMutex` adoption in [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js) — `recordTurn` now serializes its read-modify-write per storage key. See [CHANGELOG.md](../CHANGELOG.md) §1.6.7.
 - **github#23 — `Bug: Disabling an MCP plugin should remove its tools from listings and notify the LLM`** *(open)*. When an MCP server is disabled (Settings → MCP Servers toggle), tools may still surface in `list_tools_by_category` / `find_tool` discovery, and the LLM gets a generic "server not enabled" error after attempting a call rather than a proactive "server disabled, N tools removed" state message. Touches `js/mcp/bridge.js`, `plugins/mcp-bridge.js`, `js/chat/handlers.js`, `js/tools/registry.js`. Has full proposed solution + acceptance criteria on the issue. Not in 1.6.x scope (chat-stability bundle).
-- **github#20 — `Feature: Add git log tool — LLMs attempt to call it but it doesn't exist`** *(open)*. Code-focused models call `git log` and get an unknown-tool error; the registry has 5 git-related categories but no `code.git.log`. Shares scope with the parked git-tool-wrappers wishlist (`git_blame` is the same shape — provider + Git module support exists, only the tool wrapper is missing). Bundle if/when the wishlist lands; do not ship `git_log` alone.
+- ~~**github#20 — `Feature: Add git log tool`**~~ *(✅ closed — shipped PR #278)*. `git_log` bundled with the git-tool-wrappers wishlist items.
+- ~~**github#30 — `[storage] cost-daily graph data lost after refresh`**~~ *(✅ closed — fixed in 1.6.7 / PR #280)*. Same `KeyMutex` cure as gitea#188.
+- ~~**github#31 — `Duplicate tool definitions in role settings`**~~ *(✅ closed — shipped 1.6.8)*. `register()` now splices the old entry before pushing; dedup mirrors `unregister()`.
+- ~~**github#32 — `Should git_log be available to all roles?`**~~ *(✅ closed — shipped 1.6.8)*. Changed to `roles: 'all'`; read-only, no side effects.
 - **github#29 — `Retrieval discoverability + edit_file fragility (post-mortem of PR #278)`** *(open)*. Post-mortem of the qwen-3-6-plus dogfood session on github#20 surfaced two compounding levers that explain the partial-implementation pattern (only `gitea.js` patched; `github.js` / `gitlab.js` / `local.js` / `base.js` left untouched): (1) `find_relevant_files` was never invoked AND the indexer reported `indexed: 6` of ~505 files — the tool would have returned thin results silently; (2) line-range `edit_file` ate a closing brace on a replace, the recovery edit stitched the surrounding lines but left the truncated body in place, producing the duplicate `getCommitStatus` that broke `.statuses` on the success path. Three sized levers on the issue: indexer-readiness gate on `find_relevant_files`, `edit_file` post-edit context echo, and a CLAUDE.md provider-symmetry note. Couples to the §1.5.x retrieval track when the §1.5.0 baseline conversation reopens.
 
 ---

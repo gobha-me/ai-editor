@@ -238,3 +238,51 @@ test('static names that do not exist in the registry return null (skip-not-throw
     assert.equal(Catalog.getByName('list_tool_categories'), null);
     assert.equal(Catalog.getByName('find_tool'), null);
 });
+
+// ============================================
+// ToolRegistry.register — duplicate handling (github#31)
+// ============================================
+
+test('re-registering a tool replaces its definition, not appends', () => {
+    ToolRegistry.clear();
+    const def = {
+        function: { name: 'read_file', description: 'v1', parameters: { type: 'object', properties: {}, required: [] } },
+        roles: 'all',
+    };
+    ToolRegistry.register('read_file', async () => ({}), def);
+    assert.equal(ToolRegistry.getDefinitions().filter(d => d.function?.name === 'read_file').length, 1);
+
+    const defV2 = { ...def, function: { ...def.function, description: 'v2' } };
+    ToolRegistry.register('read_file', async () => ({}), defV2);
+
+    const matches = ToolRegistry.getDefinitions().filter(d => d.function?.name === 'read_file');
+    assert.equal(matches.length, 1, 'definition count must be 1 after re-register');
+    assert.equal(matches[0].function.description, 'v2', 'latest description should win');
+});
+
+test('re-registering does not affect other tools', () => {
+    ToolRegistry.clear();
+    const mk = (name) => ({
+        function: { name, description: name, parameters: { type: 'object', properties: {}, required: [] } },
+        roles: 'all',
+    });
+    ToolRegistry.register('tool_a', async () => ({}), mk('tool_a'));
+    ToolRegistry.register('tool_b', async () => ({}), mk('tool_b'));
+    ToolRegistry.register('tool_a', async () => ({}), mk('tool_a'));  // re-register
+    assert.equal(ToolRegistry.getDefinitions().length, 2);
+});
+
+// ============================================
+// git_log role access (github#32)
+// ============================================
+
+test('git_log is registered with roles: all', async () => {
+    // Import the real git-log registration so the live roles value is tested.
+    // We need a fresh registry state; reload by clearing and re-importing.
+    ToolRegistry.clear();
+    await import('../js/tools/git-log-tools.js');
+    const defs = ToolRegistry.getDefinitions();
+    const gitLogDef = defs.find(d => d.function?.name === 'git_log');
+    assert.ok(gitLogDef, 'git_log should be registered');
+    assert.deepEqual(gitLogDef._registeredRoles, ['all'], 'git_log must be available to all roles');
+});

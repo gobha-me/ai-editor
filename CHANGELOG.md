@@ -10,11 +10,70 @@ All notable changes to AI Editor are documented here.
 
 ## [1.6.8] - 2026-05-05
 
-Two changes shipping under the in-flight 1.6.8 heading: (a) the
-cost-dashboard retrieval extension (original scope) and (b) a
+Five changes shipping under the in-flight 1.6.8 heading: (a) the
+cost-dashboard retrieval extension (original scope), (b) a
 buffer-aware fix to the read tools surfaced by the github#15 dogfood
-session. Per the in-track-patches rule (`feedback_version_bump.md`)
-these stay on `1.6.8` until Jeff tags.
+session, (c) the timeout fix for long-running tools that was github#15
+itself (PR #282), (d) duplicate-definition guard in `ToolRegistry`
+(github#31), and (e) `git_log` opened to all roles (github#32). Per
+the in-track-patches rule (`feedback_version_bump.md`) these stay on
+`1.6.8` until Jeff tags.
+
+### Separate timeout for long-running tools — closes github#15 (PR #282)
+
+**The bug.** `wait_for_ci` was being killed by the standard 30 s tool
+timeout during test-driven-loop runs. The `Promise.race` in
+[`js/chat/handlers.js`](js/chat/handlers.js) applied a single
+`State.settings.toolTimeout` (default 30 000 ms) to every tool call,
+including `wait_for_ci`, which polls CI with a backoff schedule that
+reaches a 30 s steady-state interval — so one polling cycle could
+exhaust the entire timeout budget.
+
+**What ships.**
+
+- **`LONG_RUNNING_TOOLS` set** in
+  [`js/chat/handlers.js`](js/chat/handlers.js) — currently contains
+  `'wait_for_ci'`. Tools in the set use
+  `State.settings.longRunningToolTimeout` (default 300 000 ms / 5 min);
+  all others keep the existing `State.settings.toolTimeout` (30 s).
+- **`longRunningToolTimeout: 300000`** default added to `State.settings`
+  in [`js/core.js`](js/core.js).
+- **Settings → AI → Long-Running Tool Timeout slider** (60–600 s,
+  default 300 s) added to [`html/settings-tabs.html`](html/settings-tabs.html),
+  wired in [`js/settings-manager.js`](js/settings-manager.js) and
+  [`js/settings/persistence.js`](js/settings/persistence.js).
+
+**Removability.** Reverting the `LONG_RUNNING_TOOLS` branch in
+`handlers.js` and removing `longRunningToolTimeout` from `core.js` and
+the settings files restores prior single-timeout behavior.
+
+### `ToolRegistry.register` — duplicate-definition guard (github#31)
+
+**The bug.** `register()` pushed to `this.definitions` unconditionally.
+If a tool file was imported more than once (hot-reload, circular
+dependency, or re-import after `ToolRegistry.clear()` in tests), the
+`handlers` Map overwrote correctly but `definitions` accumulated a
+duplicate entry for every extra import. The duplicates surfaced in
+Settings → Roles as repeated rows for the same tool.
+
+**Fix.** Before pushing, scan `definitions` for an entry whose
+`function.name` matches. If found, splice it out first — same pattern
+already used by `unregister()`. A re-register logs `♻️ Re-registered`
+instead of `✅ Registered` to distinguish the two paths.
+
+**Files.** [`js/tools/registry.js`](js/tools/registry.js). Two
+regression tests added to
+[`tests/test-tools-foundation.mjs`](tests/test-tools-foundation.mjs).
+
+### `git_log` opened to all roles (github#32)
+
+`git_log` was restricted to `roles: ['coder']` matching the other git
+tools. Unlike `commit_files`, `pr_tools`, and `ci_tools`, `git_log` is
+purely read-only — no writes, no side effects. PM, reviewer, and
+plugin-dev roles benefit from commit history access without any
+additional risk. Changed to `roles: 'all'` in
+[`js/tools/git-log-tools.js`](js/tools/git-log-tools.js). One
+regression test added confirming `_registeredRoles === ['all']`.
 
 ### Buffer-aware read tools — `read_file` / `read_lines` / `scan_file`
 

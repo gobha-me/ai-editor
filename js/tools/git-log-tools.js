@@ -115,7 +115,7 @@ ToolRegistry.register('git_log', gitLog, {
             required: []
         }
     },
-    roles: ['coder']  // Same access level as other git tools
+    roles: 'all'  // Read-only — safe for every role
 });
 
 export { gitLog };
