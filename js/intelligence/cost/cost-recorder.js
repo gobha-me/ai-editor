@@ -38,6 +38,26 @@ let _initialized = false;
 let _inFlightConvId = null;
 
 /**
+ * 1.6.8 — pending per-strategy stats keyed by `conversationId`. Populated
+ * by `retrieval:turn-stats` events emitted from
+ * [`js/intelligence/retrieval/manager.js`](../retrieval/manager.js); drained
+ * into the next `cost:updated`'s `recordTurn` payload so retrieval and LLM
+ * usage land as a single per-turn write (one mutex acquisition, no double-
+ * counted `requests`).
+ *
+ * Last-write-wins per conv: a second retrieval call before the matching
+ * `cost:updated` fires (rare — would need a tool to call `find_relevant_files`
+ * twice in the same turn) overwrites the prior pending entry. TTL drops
+ * stale entries when the LLM call fails and `cost:updated` never lands.
+ *
+ * @type {Map<string, {byStrategy: Object<string, {hits: number, tokens: number}>, ts: number}>}
+ */
+const _pendingByStrategy = new Map();
+
+/** Pending-buffer TTL in milliseconds. Beyond this, an unmatched entry is dropped. */
+const PENDING_TTL_MS = 60_000;
+
+/**
  * Attach event listeners. Idempotent.
  */
 export function init() {
@@ -51,6 +71,26 @@ export function init() {
     });
 
     EventBus.on('cost:updated', _onCostUpdated);
+    EventBus.on('retrieval:turn-stats', _onRetrievalTurnStats);
+}
+
+/**
+ * Stash a retrieval call's per-strategy stats for the next `cost:updated`
+ * landing on the same conversation. The conv id is supplied by the
+ * retrieval manager (read from the active conversation when the call
+ * fires); we don't infer it here so we don't have to coordinate with
+ * `_inFlightConvId`.
+ *
+ * @param {{conversationId: string|null, strategyStats: Object<string, {hits: number, tokens: number}>}} payload
+ */
+function _onRetrievalTurnStats(payload) {
+    if (!payload || !payload.conversationId || !payload.strategyStats) return;
+    const stats = payload.strategyStats;
+    if (typeof stats !== 'object' || Object.keys(stats).length === 0) return;
+    _pendingByStrategy.set(payload.conversationId, {
+        byStrategy: stats,
+        ts: Date.now(),
+    });
 }
 
 /**
@@ -89,6 +129,11 @@ function _onCostUpdated(payload) {
 
     const byTool = _attributeTools(payload.messages || [], inputTokens);
 
+    // 1.6.8 — drain any pending retrieval stats for this conversation so
+    // strategy hits/tokens land on the same `recordTurn` write as the LLM
+    // usage. Stale entries (TTL exceeded) are dropped without merging.
+    const byStrategy = _drainPendingStrategy(convId);
+
     const turnPromise = recordTurn({
         conversationId: convId,
         modelId,
@@ -100,6 +145,7 @@ function _onCostUpdated(payload) {
         cost,
         cacheSavings,
         byTool,
+        byStrategy,
         // 1.3.18 — tool-definition token metrics from the Composer.
         // `admitted == baseline` (and 0% reduction) when the kill-switch is
         // engaged or no profile static-set is configured.
@@ -247,5 +293,27 @@ function _emitBudgetWarningIfNeeded() {
     }
 }
 
+/**
+ * Drain (and remove) the pending retrieval stats for `convId`. Returns
+ * an empty object when nothing pending or the entry has aged out.
+ *
+ * @param {string|null} convId
+ * @returns {Object<string, {hits: number, tokens: number}>}
+ */
+function _drainPendingStrategy(convId) {
+    if (!convId) return {};
+    const entry = _pendingByStrategy.get(convId);
+    if (!entry) return {};
+    _pendingByStrategy.delete(convId);
+    if (Date.now() - entry.ts > PENDING_TTL_MS) return {};
+    return entry.byStrategy;
+}
+
 // Expose for tests.
-export const __test = { _attributeTools, _onCostUpdated };
+export const __test = {
+    _attributeTools,
+    _onCostUpdated,
+    _onRetrievalTurnStats,
+    _drainPendingStrategy,
+    _pendingByStrategy,
+};

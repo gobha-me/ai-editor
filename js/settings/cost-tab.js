@@ -33,6 +33,7 @@ const SEL = {
     convList: 'costConversationsList',
     convCount: 'costConversationsCount',
     toolsList: 'costToolsList',
+    strategyList: 'costStrategyList',
     budgetDaily: 'settingCostBudgetDaily',
     budgetMonthly: 'settingCostBudgetMonthly',
     budgetDailyHint: 'costBudgetDailyHint',
@@ -72,6 +73,7 @@ export function populateCostTab() {
     _renderChart();
     _renderConversationsList();
     _renderToolsList();
+    _renderStrategyList();
     _renderBudget();
     _renderProviderNote();
 }
@@ -273,6 +275,54 @@ function _renderToolsList() {
                         <td style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;">${escapeHtml(_fmtTokens(spend.estTokens))}</td>
                     </tr>
                 `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// ============================================
+// Per-strategy retrieval list (1.6.8 — active conversation)
+// ============================================
+
+function _renderStrategyList() {
+    const list = document.getElementById(SEL.strategyList);
+    if (!list) return;
+
+    const activeId = ConversationManager.getActiveId();
+    const cc = activeId ? getConvCost(activeId) : null;
+    const strategies = (cc && cc.byStrategy) || {};
+    const requests = (cc && cc.requests) || 0;
+    const entries = Object.entries(strategies).sort((a, b) => b[1].hits - a[1].hits);
+
+    if (entries.length === 0) {
+        list.innerHTML = `<div style="padding: 0.5rem; color: var(--text-muted); font-size: var(--font-sm);">No retrieval calls recorded for the active conversation.</div>`;
+        return;
+    }
+
+    list.innerHTML = `
+        <table style="width: 100%; border-collapse: collapse; font-size: var(--font-md);">
+            <thead>
+                <tr>
+                    <th style="padding: 0.3rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); font-size: var(--font-sm); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Strategy</th>
+                    <th style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-size: var(--font-sm); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Chunks</th>
+                    <th style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-size: var(--font-sm); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Avg/turn</th>
+                    <th style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-size: var(--font-sm); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Tokens</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${entries.map(([name, spend]) => {
+                    const hits = spend.hits || 0;
+                    const tokens = spend.tokens || 0;
+                    const avg = requests > 0 ? (hits / requests).toFixed(1) : '—';
+                    const tokenCell = tokens > 0 ? escapeHtml(_fmtTokens(tokens)) : '—';
+                    return `
+                    <tr>
+                        <td style="padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: var(--font-sm);">${escapeHtml(name)}</td>
+                        <td style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;">${hits}</td>
+                        <td style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; color: var(--text-muted);">${avg}</td>
+                        <td style="padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;">${tokenCell}</td>
+                    </tr>`;
+                }).join('')}
             </tbody>
         </table>
     `;

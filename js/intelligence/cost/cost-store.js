@@ -88,6 +88,12 @@ export function daysBetween(a, b) {
  */
 
 /**
+ * @typedef {Object} StrategySpend
+ * @property {number} hits      Σ chunks contributed by this strategy across retrieval calls in the conversation.
+ * @property {number} tokens    Σ LLM tokens this strategy spent (paraphrase chatFn so far; embed-token plumbing deferred).
+ */
+
+/**
  * @typedef {Object} ConvCost
  * @property {string}  id
  * @property {number}  inputTokens
@@ -99,6 +105,7 @@ export function daysBetween(a, b) {
  * @property {number}  requests
  * @property {Object<string, ToolSpend>}  byTool
  * @property {Object<string, ModelSpend>} byModel
+ * @property {Object<string, StrategySpend>} byStrategy   1.6.8 — Σ retrieval hits + tokens per strategy. Mirrors the byTool shape; absent on legacy on-disk records.
  * @property {number}  firstAt
  * @property {number}  lastAt
  * @property {number}  toolDefTokens     1.3.18 — Σ admitted tool-definition tokens across requests.
@@ -119,6 +126,7 @@ function emptyConvCost(id) {
         requests: 0,
         byTool: {},
         byModel: {},
+        byStrategy: {},
         firstAt: 0,
         lastAt: 0,
         toolDefTokens: 0,
@@ -271,6 +279,7 @@ export function setBudget(budget) {
  * @property {number}      cost
  * @property {number}      cacheSavings
  * @property {Object<string, ToolSpend>} byTool
+ * @property {Object<string, StrategySpend>} [byStrategy]   1.6.8 — retrieval-strategy hits + tokens collected during this turn (drained from cost-recorder's pending buffer).
  * @property {number}      [toolDefTokens]     1.3.18 — admitted tool-definition tokens this turn.
  * @property {number}      [toolDefBaseline]   1.3.18 — role-filtered legacy baseline this turn.
  * @property {number}      [toolDefUnfiltered] 1.3.18 — ungated registry baseline this turn.
@@ -323,6 +332,20 @@ export async function recordTurn(rec) {
                     slot.calls     += spend.calls || 0;
                     slot.estTokens += spend.estTokens || 0;
                     prev.byTool[name] = slot;
+                }
+            }
+
+            // 1.6.8 — `|| {}` defensive read so legacy ConvCost records
+            // (written before byStrategy existed) don't crash when a turn
+            // arrives with strategy stats. Mirrors the same pattern used
+            // for byTool/byModel.
+            if (rec.byStrategy) {
+                if (!prev.byStrategy) prev.byStrategy = {};
+                for (const [name, spend] of Object.entries(rec.byStrategy)) {
+                    const slot = prev.byStrategy[name] || { hits: 0, tokens: 0 };
+                    slot.hits   += spend.hits   || 0;
+                    slot.tokens += spend.tokens || 0;
+                    prev.byStrategy[name] = slot;
                 }
             }
 

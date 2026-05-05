@@ -496,3 +496,99 @@ test('recordTurn — different conversation ids do NOT serialize against each ot
     assert.ok(Math.abs(a.cost - N * 0.01) < 1e-9, `cA cost=${a.cost}`);
     assert.ok(Math.abs(b.cost - N * 0.05) < 1e-9, `cB cost=${b.cost}`);
 });
+
+// ============================================
+// 1.6.8 — per-strategy aggregation
+// ============================================
+
+test('recordTurn aggregates byStrategy hits and tokens across turns', async () => {
+    clearStorage();
+    await recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'p',
+        inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.01, cacheSavings: 0, byTool: {},
+        byStrategy: {
+            semantic: { hits: 5, tokens: 0 },
+            paraphrase: { hits: 0, tokens: 120 },
+            structural: { hits: 2, tokens: 0 },
+        },
+    });
+    await recordTurn({
+        conversationId: 'c1', modelId: 'm', provider: 'p',
+        inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.01, cacheSavings: 0, byTool: {},
+        byStrategy: {
+            semantic: { hits: 3, tokens: 0 },
+            paraphrase: { hits: 0, tokens: 90 },
+            thematic: { hits: 4, tokens: 0 },
+        },
+    });
+
+    const cc = getConvCost('c1');
+    assert.equal(cc.byStrategy.semantic.hits, 8);
+    assert.equal(cc.byStrategy.semantic.tokens, 0);
+    assert.equal(cc.byStrategy.paraphrase.hits, 0);
+    assert.equal(cc.byStrategy.paraphrase.tokens, 210);
+    assert.equal(cc.byStrategy.structural.hits, 2);
+    assert.equal(cc.byStrategy.thematic.hits, 4);
+});
+
+test('recordTurn — concurrent byStrategy updates on same conversation converge under KeyMutex', async () => {
+    clearStorage();
+    const N = 50;
+    const promises = [];
+    for (let i = 0; i < N; i++) {
+        promises.push(recordTurn({
+            conversationId: 'c1', modelId: 'm', provider: 'p',
+            inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
+            cost: 0.001, cacheSavings: 0, byTool: {},
+            byStrategy: {
+                semantic: { hits: 2, tokens: 0 },
+                paraphrase: { hits: 0, tokens: 50 },
+            },
+        }));
+    }
+    await Promise.all(promises);
+
+    const cc = getConvCost('c1');
+    assert.equal(cc.byStrategy.semantic.hits, N * 2, `semantic hits must be ${N * 2} (got ${cc.byStrategy.semantic.hits})`);
+    assert.equal(cc.byStrategy.paraphrase.tokens, N * 50, `paraphrase tokens must be ${N * 50} (got ${cc.byStrategy.paraphrase.tokens})`);
+});
+
+test('recordTurn merges byStrategy onto legacy ConvCost without byStrategy field', async () => {
+    clearStorage();
+    // Seed a "legacy" record directly into Storage with no byStrategy field —
+    // simulates an on-disk record from before 1.6.8 landed.
+    Storage.set('cost-by-conv-cLegacy', {
+        id: 'cLegacy',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cachedTokens: 0,
+        reasoningTokens: 0,
+        cost: 0.10,
+        cacheSavings: 0,
+        requests: 1,
+        byTool: { read_file: { calls: 1, estTokens: 100 } },
+        byModel: { m: { tokens: 1500, cost: 0.10 } },
+        firstAt: Date.now(),
+        lastAt: Date.now(),
+        toolDefTokens: 0,
+        toolDefBaseline: 0,
+        toolDefUnfiltered: 0,
+        // no byStrategy — pre-1.6.8 record
+    });
+
+    await recordTurn({
+        conversationId: 'cLegacy', modelId: 'm', provider: 'p',
+        inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+        cost: 0.01, cacheSavings: 0, byTool: {},
+        byStrategy: { semantic: { hits: 7, tokens: 0 } },
+    });
+
+    const cc = getConvCost('cLegacy');
+    assert.ok(cc.byStrategy, 'byStrategy populated on legacy record');
+    assert.equal(cc.byStrategy.semantic.hits, 7);
+    // Existing fields preserved.
+    assert.equal(cc.requests, 2);
+    assert.equal(cc.byTool.read_file.calls, 1);
+});

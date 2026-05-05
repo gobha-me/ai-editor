@@ -14,7 +14,7 @@ import { Storage } from '../js/core.js';
 import { getConvCost } from '../js/intelligence/cost/cost-store.js';
 import { __test } from '../js/intelligence/cost/cost-recorder.js';
 
-const { _attributeTools, _onCostUpdated } = __test;
+const { _attributeTools, _onCostUpdated, _onRetrievalTurnStats, _drainPendingStrategy, _pendingByStrategy } = __test;
 
 function clearCostStorage() {
     if (typeof globalThis.localStorage?.clear === 'function') {
@@ -180,4 +180,94 @@ test('_onCostUpdated ignores payloads without usage', async () => {
     Storage.set('activeConversation', 'cR');
     await _onCostUpdated({ usage: null });
     assert.equal(getConvCost('cR'), null);
+});
+
+// ============================================
+// 1.6.8 — retrieval:turn-stats buffer + drain
+// ============================================
+
+test('_onRetrievalTurnStats buffers stats; next _onCostUpdated drains them into byStrategy', async () => {
+    clearCostStorage();
+    _pendingByStrategy.clear();
+    Storage.set('activeConversation', 'cR');
+
+    _onRetrievalTurnStats({
+        conversationId: 'cR',
+        strategyStats: {
+            semantic:   { hits: 4, tokens: 0 },
+            paraphrase: { hits: 0, tokens: 250 },
+            structural: { hits: 1, tokens: 0 },
+        },
+    });
+
+    await _onCostUpdated({
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+    });
+
+    const cc = getConvCost('cR');
+    assert.ok(cc, 'record exists');
+    assert.equal(cc.byStrategy.semantic.hits, 4);
+    assert.equal(cc.byStrategy.paraphrase.tokens, 250);
+    assert.equal(cc.byStrategy.structural.hits, 1);
+    // Buffer must be drained — a second cost:updated should not double-count.
+    await _onCostUpdated({
+        usage: { prompt_tokens: 50, completion_tokens: 25 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+    });
+    const cc2 = getConvCost('cR');
+    assert.equal(cc2.byStrategy.semantic.hits, 4, 'drain — no double-count');
+});
+
+test('_onRetrievalTurnStats ignores empty / null payloads', () => {
+    _pendingByStrategy.clear();
+    _onRetrievalTurnStats(null);
+    _onRetrievalTurnStats({});
+    _onRetrievalTurnStats({ conversationId: 'cR', strategyStats: {} });
+    _onRetrievalTurnStats({ conversationId: null, strategyStats: { semantic: { hits: 1, tokens: 0 } } });
+    assert.equal(_pendingByStrategy.size, 0, 'no pending entries created');
+});
+
+test('_drainPendingStrategy drops entries whose TTL has elapsed', () => {
+    _pendingByStrategy.clear();
+    // Stash with an old timestamp so the next drain ages out.
+    _pendingByStrategy.set('cR', {
+        byStrategy: { semantic: { hits: 9, tokens: 0 } },
+        ts: Date.now() - 70_000, // 70s ago — past the 60s TTL
+    });
+    const drained = _drainPendingStrategy('cR');
+    assert.deepEqual(drained, {}, 'stale entry returns empty');
+    assert.equal(_pendingByStrategy.has('cR'), false, 'stale entry removed');
+});
+
+test('_onRetrievalTurnStats — last-write-wins per conv when fired twice before drain', async () => {
+    clearCostStorage();
+    _pendingByStrategy.clear();
+    Storage.set('activeConversation', 'cR');
+
+    _onRetrievalTurnStats({
+        conversationId: 'cR',
+        strategyStats: { semantic: { hits: 2, tokens: 0 } },
+    });
+    _onRetrievalTurnStats({
+        conversationId: 'cR',
+        strategyStats: { semantic: { hits: 7, tokens: 0 } },
+    });
+
+    await _onCostUpdated({
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        sessionCost: {},
+        modelId: 'm-test',
+        messages: [],
+        toolCalls: null,
+    });
+
+    const cc = getConvCost('cR');
+    assert.equal(cc.byStrategy.semantic.hits, 7, 'second emit overwrites first');
 });

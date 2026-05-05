@@ -24,6 +24,7 @@ import { EmbeddingsClient } from '../../embeddings-client.js';
 import { Git } from '../../git.js';
 import { IgnoreManager } from '../../ignore.js';
 import { LLM } from '../../llm/api.js';
+import { ConversationManager } from '../../chat/conversations.js';
 
 import { createInMemoryChunkStore } from './store.js';
 import { createProductionIngestWalker } from './wiring.js';
@@ -547,9 +548,19 @@ async function findRelevantFiles(query, topK = 5) {
         const composeOpts = {};
         if (paraphraser) composeOpts.queryParaphraser = paraphraser;
 
+        // 1.6.8 — snapshot session totals before compose() so a delta
+        // captures any LLM tokens spent inside retrieval (paraphrase chatFn
+        // today; future LLM-spending strategies like a reranker would land
+        // here too). Embedding-token plumbing is deferred — semantic's
+        // EmbeddingsClient calls don't currently route through LLM._trackUsage.
+        const sc = State.sessionCost || {};
+        const tokensBefore = (sc.totalInputTokens || 0) + (sc.totalOutputTokens || 0);
+
         const result = await compose(req, { strategies, getChunkByID: store.getChunkByID }, composeOpts);
 
         const files = rollupToFiles(result, topK);
+
+        _emitRetrievalTurnStats(result, tokensBefore, !!paraphraser);
 
         _trackQuery();
 
@@ -563,6 +574,56 @@ async function findRelevantFiles(query, topK = 5) {
         console.error('[Retrieval] Failed to find relevant files:', err);
         return [];
     }
+}
+
+/**
+ * 1.6.8 — translate Composer diagnostics + the session-cost delta into a
+ * `retrieval:turn-stats` event so the cost-recorder can attribute hits and
+ * paraphrase tokens to the active conversation. No-op when no conversation
+ * is active or the diagnostics block is missing (defensive — Composer
+ * always populates `chunks_returned_per_strategy` today).
+ *
+ * @param {any} composeResult        Return value of `compose()`.
+ * @param {number} tokensBefore      `State.sessionCost.totalInputTokens + totalOutputTokens` snapshot taken before `compose()`.
+ * @param {boolean} hasParaphraser   True when the paraphraser wired in this call. Used to decide whether to record a `paraphrase` row.
+ */
+function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser) {
+    const convId = ConversationManager.getActiveId();
+    if (!convId) return;
+
+    const diag = composeResult && composeResult.diagnostics;
+    const perStrategy = (diag && diag.chunks_returned_per_strategy) || {};
+
+    /** @type {Object<string, {hits: number, tokens: number}>} */
+    const strategyStats = {};
+    for (const [name, hits] of Object.entries(perStrategy)) {
+        strategyStats[name] = { hits: Number(hits) || 0, tokens: 0 };
+    }
+
+    const sc = State.sessionCost || {};
+    const tokensAfter = (sc.totalInputTokens || 0) + (sc.totalOutputTokens || 0);
+    const paraphraseTokens = Math.max(tokensAfter - tokensBefore, 0);
+
+    if (hasParaphraser) {
+        // Always emit a `paraphrase` row when the paraphraser was wired —
+        // even when tokens are 0 (cache hit) — so the dashboard reflects
+        // that paraphrasing was active for this turn.
+        const slot = strategyStats.paraphrase || { hits: 0, tokens: 0 };
+        slot.tokens = paraphraseTokens;
+        strategyStats.paraphrase = slot;
+    } else if (paraphraseTokens > 0) {
+        // Defensive: if a future code path spends tokens during retrieval
+        // without a paraphraser instance, attribute them under `retrieval`
+        // so they don't vanish silently.
+        strategyStats.retrieval = { hits: 0, tokens: paraphraseTokens };
+    }
+
+    if (Object.keys(strategyStats).length === 0) return;
+
+    EventBus.emit('retrieval:turn-stats', {
+        conversationId: convId,
+        strategyStats,
+    });
 }
 
 function _trackQuery() {

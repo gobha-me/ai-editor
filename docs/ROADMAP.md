@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-05 · Current released (tagged) version: **1.6.5** · `main` HEAD: 1.6.7 (untagged — sits in main alongside the also-untagged 1.6.6 cost-export and 1.6.7 cost-store race-safety patches).
+> Last updated: 2026-05-05 · Current released (tagged) version: **1.6.5** · `main` HEAD: 1.6.8 (untagged — sits in main alongside the also-untagged 1.6.6 cost-export, 1.6.7 cost-store race-safety, and 1.6.8 cost-dashboard retrieval-extension patches).
 
 ## How to read this doc
 
@@ -16,7 +16,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 | Phase | Track |
 |---|---|
 | **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md). Status: 1.6.0–1.6.5 all shipped to main and individually tagged (`v1.6.0` through `v1.6.5`); the bundled-release framing in older revisions of this doc was abandoned in favor of per-patch tags. |
-| **Next** | **1.6.6** Cost-dashboard export *(✅ shipped)* · **1.6.7** Cost-store race-safety / `KeyMutex` (gitea#188) *(✅ shipped)* · **1.6.8** Cost-dashboard retrieval extension · **1.6.9** Query / structural expansion cache · **1.6.10 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
+| **Next** | **1.6.6** Cost-dashboard export *(✅ shipped)* · **1.6.7** Cost-store race-safety / `KeyMutex` (gitea#188) *(✅ shipped)* · **1.6.8** Cost-dashboard retrieval extension *(✅ shipped)* · **1.6.9** Query / structural expansion cache · **1.6.10 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
 | **Later** | **2.0 Profiles.** Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled*. |
 
@@ -111,7 +111,7 @@ Bumped past the chat-stability minor.
 
 - **1.6.6 ✅ shipped:** Cost-dashboard export — JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) (`buildCostExport()` + Export button). Unblocks the compression-track measurement loop and the 1.6.8 retrieval extension. See [CHANGELOG.md](../CHANGELOG.md) §1.6.6.
 - **1.6.7 ✅ shipped:** Cost-store race-safety — `KeyMutex` around `recordTurn`'s read-modify-write paths in [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js). Closes gitea#188 (cost-daily graph data lost after refresh). Same disposition as the memory subsystem's `KeyMutex` adoption. See [CHANGELOG.md](../CHANGELOG.md) §1.6.7.
-- **1.6.8:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) added to the existing [`js/settings/cost-tab.js`](../js/settings/cost-tab.js).
+- **1.6.8 ✅ shipped:** Cost-dashboard retrieval extension — `ConvCost.byStrategy: { [name]: { hits, tokens } }` added to [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js); `retrieval:turn-stats` event emitted from [`js/intelligence/retrieval/manager.js`](../js/intelligence/retrieval/manager.js) after each `compose()`; cost-recorder buffers per-conv stats and merges into the next `cost:updated` write so `requests` is not double-counted; new "Retrieval (per strategy)" table in [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) shows Strategy / Chunks (Σ) / Avg/turn / Tokens (paraphrase chatFn captured via `State.sessionCost` delta — embedding-token attribution deferred). See [CHANGELOG.md](../CHANGELOG.md) §1.6.8.
 - **1.6.9:** Query cache, structural expansion cache.
 - **1.6.10 (gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
 

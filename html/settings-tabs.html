@@ -828,6 +828,20 @@
         </div>
     </div>
 
+    <!-- Per-strategy retrieval breakdown (1.6.8) -->
+    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">
+                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Retrieval (per strategy)</span>
+            </h4>
+            <span style="font-size: var(--font-sm); color: var(--text-muted);" title="Hits = chunks contributed by the strategy across find_relevant_files calls. Tokens currently capture paraphrase chatFn spend; embedding tokens are not yet attributed.">Per active conversation&nbsp;ⓘ</span>
+        </div>
+        <div id="costStrategyList">
+            <!-- Populated dynamically -->
+        </div>
+    </div>
+
     <!-- Budget alerts -->
     <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
         <h4 style="margin: 0 0 0.5rem 0; font-size: var(--font-base); font-weight: 600; display: flex; align-items: center; gap: 0.4em;">

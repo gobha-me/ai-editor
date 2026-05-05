@@ -8,6 +8,107 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.8] - 2026-05-05
+
+**Cost-dashboard retrieval extension** — the next storage / retrieval
+follow-up after 1.6.6 (cost-export) and 1.6.7 (cost-store race-safety).
+Surfaces per-strategy hit rates and paraphrase token spend in the cost
+dashboard so the §1.5 retrieval track's measurement loop is visible
+inside live sessions.
+
+### What ships
+
+- **`ConvCost.byStrategy: { [name]: { hits, tokens } }`** added to the
+  per-conversation aggregate at
+  [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js).
+  Mirrors the existing `byTool` shape; the merge runs inside the same
+  `KeyMutex` region the 1.6.7 patch added, so concurrent retrieval
+  stats on the same conversation can't lose updates. Legacy on-disk
+  records without the field are tolerated via the same `|| {}` defensive
+  pattern that protects `byTool` and `byModel`.
+- **`retrieval:turn-stats` EventBus event** emitted from
+  [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+  after every `compose()` returns. Payload shape:
+  `{ conversationId, strategyStats: { [name]: { hits, tokens } } }`.
+  Hits sourced from `Diagnostics.chunks_returned_per_strategy` (already
+  populated by Composer); tokens captured via a `State.sessionCost`
+  delta around the `compose()` call so paraphrase chatFn spend is
+  attributed without changing the `ChatFn` return shape.
+- **Pending-buffer drain in cost-recorder** at
+  [`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js).
+  Strategy stats sit in a `Map<convId, …>` keyed buffer (60 s TTL,
+  last-write-wins per conv) until the next matching `cost:updated`
+  arrives — at which point they merge into the same `recordTurn`
+  payload as the LLM-usage update. One write per turn, no double-counted
+  `requests`. Stale entries are dropped silently if the LLM call fails
+  and `cost:updated` never fires.
+- **"Retrieval (per strategy)" section** in the cost dashboard at
+  [`js/settings/cost-tab.js`](js/settings/cost-tab.js) +
+  [`html/settings-tabs.html`](html/settings-tabs.html). Columns:
+  Strategy / Chunks (Σ) / Avg/turn (chunks/requests) / Tokens. Mirrors
+  the existing per-tool table; sorted by hits descending. Empty-state
+  message when no retrieval has run for the active conversation.
+
+### Scope deliberately deferred
+
+- **Embedding-token attribution.** Semantic-strategy embed calls go
+  through `EmbeddingsClient` rather than `LLM.chat`, so the
+  `State.sessionCost` delta doesn't capture them. Plumbing per-call
+  usage out of EmbeddingsClient + attributing it inside semantic.js's
+  RRF loop is a separate API change. Tracked under 1.6.x retrieval
+  follow-ups; the schema accepts a `tokens` field today so embed-tokens
+  can land later without migration.
+- **Reranker token rows.** The roadmap's scoped-not-committed reranker
+  doesn't ship in this PR; if it lands later, its `chatFn` will reuse
+  the same `State.sessionCost` delta path and surface as a separate
+  strategy row.
+
+### Hit-counting semantics
+
+`hits` is the sum of chunks contributed by the strategy across
+`find_relevant_files` calls in the conversation — same shape as
+`byTool.calls` (count, not rate). The dashboard renders rate at
+view time as `hits / requests`. This avoids storing a derived metric
+and keeps the storage shape forward-compatible with the per-tool
+conventions Decision §11 encodes.
+
+### Files
+
+- [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js) —
+  `ConvCost`/`TurnRecord` typedef + `emptyConvCost()` + `recordTurn()`
+  merge for `byStrategy`.
+- [`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js) —
+  `_pendingByStrategy` Map, `_onRetrievalTurnStats` listener,
+  `_drainPendingStrategy` helper, payload merge in `_onCostUpdated`.
+- [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) —
+  `ConversationManager` import; `tokensBefore` snapshot;
+  `_emitRetrievalTurnStats()` after `compose()`.
+- [`js/settings/cost-tab.js`](js/settings/cost-tab.js) — `SEL.strategyList`
+  selector + `_renderStrategyList()` + call from `populateCostTab()`.
+- [`html/settings-tabs.html`](html/settings-tabs.html) — new section
+  container after the per-tool block.
+- [`tests/test-cost-store.mjs`](tests/test-cost-store.mjs) — three
+  new tests under "1.6.8 — per-strategy aggregation": basic merge,
+  50× concurrent-merge race-safety, legacy-record forward-compat.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — mark 1.6.8 ✅ shipped under
+  "1.6.6–1.6.10 Storage / retrieval follow-ups"; 1.6.9
+  query/structural cache, 1.6.10 AST chunker unchanged.
+
+### Removability
+
+Each piece reverts independently:
+- Drop the new section in cost-tab.js → table disappears.
+- Drop the listener + buffer in cost-recorder.js → merge stops; no
+  schema break (the `byStrategy` field on persisted records becomes
+  cosmetic dead weight).
+- Drop the emit in manager.js → no events fire; cost-recorder's
+  listener becomes a no-op.
+- Drop the schema field in cost-store.js → reads as `undefined`, the
+  `|| {}` defensive pattern handles it.
+
+Already-stored records that *do* contain `byStrategy` deserialize
+cleanly under the prior code (extra fields on read are ignored).
+
 ## [1.6.7] - 2026-05-05
 
 **Two bug-shape fixes** landing between the chat-stability minor and
