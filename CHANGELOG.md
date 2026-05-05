@@ -8,6 +8,68 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.1] - 2026-05-05
+
+**Boundary-aware prune in `ChatSummarizer._pruneHistory()` (PR 1 of the 1.6.0 chat-stability track).**
+
+Second of the six chat-stability PRs sized in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+(PR 1, §372-399). Closes Hypothesis #1 — the confirmed static root
+cause where a count-based splice in
+[`js/chat/summarizer.js`](js/chat/summarizer.js) `_pruneHistory()`
+could split an `assistant(tool_calls)` message from its matching
+`tool` replies, leaving the recent window starting on orphan `tool`
+messages. The next request to `LLM.chat` then shipped that broken
+shape — strict providers 400 with `"messages with role 'tool' must
+follow a preceding message with 'tool_calls'"`; lax providers
+confused the model.
+
+**What ships.**
+
+- **New helper `ChatSummarizer._alignPruneBoundary(history, pruneCount)`.**
+  Walks backward from `pruneCount` to the largest `k > 0` such that
+  the cut at `k` is "safe": `history[k]?.role !== 'tool'` AND
+  `history[k-1]` is NOT an `assistant` with a non-empty `tool_calls`
+  array. Returns `0` (decline to prune) when no safe boundary exists
+  in the older slice.
+- **`_pruneHistory(pruneCount)` now returns `boolean`** — `true` if
+  it spliced, `false` if it declined. On adjustment it logs
+  `[ChatSummarizer] Adjusted prune count from N to M to preserve
+  tool-call boundary`; on decline it logs
+  `[ChatSummarizer] Declined to prune N messages — no safe tool-call
+  boundary in older slice`.
+- **`generateAndStore()` caller fix.** When prune declines, the
+  `info.coveredCount = State.chatHistory.length` re-update is
+  skipped so `shouldSummarize()` retries on the next message rather
+  than waiting another `SUMMARY_INTERVAL`. Otherwise a declined
+  attempt would silently postpone the next summarization by an
+  interval.
+
+**Regression coverage.** Six new cases in
+[`tests/test-summarizer.js`](tests/test-summarizer.js) under
+`ChatSummarizer — boundary-aware prune (1.6.1 PR 1)`: cut between
+assistant(tool_calls) and its tool messages aligns backward; cut in
+middle of a 3-tool group walks past all three; clean boundary is a
+no-op; no safe boundary in older slice declines and leaves history
+untouched; pure user/assistant history prunes identically to the
+pre-fix behavior; end-to-end smoke via `getContextMessages()`
+confirms no orphan tool message appears in the returned context.
+
+**Release-readiness gate.** Per the gate added to
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning",
+1.6.1 lands in `main` at this version but **does not get its own
+tag**. The `v1.6.0` release tag is pushed only after PRs 1.6.2–1.6.5
+land and a 10-turn dogfood session in this repo passes (no silent
+truncation, no orphaned-tool 400s, no stale-state regressions). The
+tag deploys the six chat-stability fixes together with the
+already-merged 1.5.14 retrieval cutover as a single user-visible
+release event.
+
+**Removability.** Reverting this PR returns `_pruneHistory` to the
+blind-splice behavior; the helper is additive and the caller change
+in `generateAndStore` reverts cleanly with `git revert`. No callers
+outside `generateAndStore` exist; no schema changed.
+
 ## [1.6.0] - 2026-05-04
 
 **Truncation marker + pinned task framing in `getContextMessages()` (PR 0 of the 1.6.0 chat-stability track).**

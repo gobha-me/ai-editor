@@ -356,5 +356,188 @@ State.chatHistory = originalChatHistory;
 if (originalSummaryInfo) Storage.set('chatSummaryInfo', originalSummaryInfo);
 else Storage.remove('chatSummaryInfo');
 
+// ============================================
+// BOUNDARY-AWARE PRUNE (1.6.1 PR 1)
+// ============================================
+
+T.suite('ChatSummarizer — boundary-aware prune (1.6.1 PR 1)');
+
+const _origChatHistory_161 = State.chatHistory;
+const _origSummaryInfo_161 = Storage.get('chatSummaryInfo', null);
+const _origPruneStash_161 = Storage.get('chatPruneStash', null);
+
+function _restore_161() {
+    State.chatHistory = _origChatHistory_161;
+    if (_origSummaryInfo_161) Storage.set('chatSummaryInfo', _origSummaryInfo_161);
+    else Storage.remove('chatSummaryInfo');
+    if (_origPruneStash_161) Storage.set('chatPruneStash', _origPruneStash_161);
+    else Storage.remove('chatPruneStash');
+}
+
+// Case 1: cut between assistant(tool_calls) and its tool messages → backward-aligns
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    // [user, asst, user, asst(tool_calls), tool, tool, user, asst]
+    State.chatHistory = [
+        { role: 'user', content: 'u0' },
+        { role: 'assistant', content: 'a0' },
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 't1', content: 'r1a' },
+        { role: 'tool', tool_call_id: 't1', content: 'r1b' },
+        { role: 'user', content: 'u2' },
+        { role: 'assistant', content: 'a2' }
+    ];
+    // Naive prune of 4 would land between asst(tool_calls) at index 3 and tool at index 4 — unsafe.
+    const adjusted = ChatSummarizer._alignPruneBoundary(State.chatHistory, 4);
+    T.assert(adjusted < 4, `alignment shortened prune (got ${adjusted}, expected < 4)`);
+    T.eq(adjusted, 3, 'aligned to k=3 (before the assistant(tool_calls))');
+
+    const before = State.chatHistory.length;
+    const ok = ChatSummarizer._pruneHistory(4);
+    T.eq(ok, true, '_pruneHistory returns true after successful aligned prune');
+    T.assert(State.chatHistory[0]?.role !== 'tool', 'post-prune chatHistory does not start with orphan tool');
+    T.eq(State.chatHistory.length, before - 3, 'pruned 3 messages (aligned), not 4');
+    T.eq(State.chatHistory[0]?.role, 'assistant', 'post-prune begins on assistant(tool_calls) — kept with its tool replies');
+    T.assert(Array.isArray(State.chatHistory[0]?.tool_calls), 'tool_calls preserved on assistant');
+}
+
+// Case 2: cut in middle of a 3-tool group — backward walks past all three
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    // [user, asst(tool_calls), tool, tool, tool, user, asst]
+    State.chatHistory = [
+        { role: 'user', content: 'u0' },
+        { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'scan_file', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 't1', content: 'r1' },
+        { role: 'tool', tool_call_id: 't1', content: 'r2' },
+        { role: 'tool', tool_call_id: 't1', content: 'r3' },
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' }
+    ];
+    // Naive prune of 3 would land mid-tool-group (between tool[1] and tool[2]).
+    const adjusted = ChatSummarizer._alignPruneBoundary(State.chatHistory, 3);
+    T.eq(adjusted, 1, 'aligned to k=1 (before assistant(tool_calls)) — backward walk traversed three tool rows');
+
+    const ok = ChatSummarizer._pruneHistory(3);
+    T.eq(ok, true, 'prune succeeded on aligned boundary');
+    T.assert(State.chatHistory[0]?.role !== 'tool', 'post-prune does not begin on tool');
+    T.eq(State.chatHistory[0]?.role, 'assistant', 'post-prune begins on assistant(tool_calls)');
+}
+
+// Case 3: cut already on a clean boundary → alignment is a no-op
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    State.chatHistory = [
+        { role: 'user', content: 'u0' },
+        { role: 'assistant', content: 'a0' },
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' }
+    ];
+    const adjusted = ChatSummarizer._alignPruneBoundary(State.chatHistory, 2);
+    T.eq(adjusted, 2, 'clean boundary returns input unchanged');
+}
+
+// Case 4: no safe boundary in older slice → decline
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    // [asst(tool_calls), tool, tool, user, asst]  pruneCount=2
+    // For every k in [1..2]: k=2 starts on a tool (orphan), k=1 splits
+    // asst(tool_calls) from its first tool. No safe k > 0 → decline.
+    State.chatHistory = [
+        { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 't1', content: 'r1' },
+        { role: 'tool', tool_call_id: 't1', content: 'r2' },
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' }
+    ];
+    const snapshotLen = State.chatHistory.length;
+    const adjusted = ChatSummarizer._alignPruneBoundary(State.chatHistory, 2);
+    T.eq(adjusted, 0, 'no safe boundary → returns 0 (decline)');
+
+    const ok = ChatSummarizer._pruneHistory(2);
+    T.eq(ok, false, '_pruneHistory returns false on decline');
+    T.eq(State.chatHistory.length, snapshotLen, 'chatHistory length unchanged on decline');
+    T.eq(State.chatHistory[0]?.role, 'assistant', 'chatHistory[0] still asst(tool_calls) on decline');
+}
+
+// Case 5: pure user/assistant history (no tool calls) → prune behaves identically to pre-fix
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    State.chatHistory = [
+        { role: 'user', content: 'u0' },
+        { role: 'assistant', content: 'a0' },
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' },
+        { role: 'assistant', content: 'a2' },
+        { role: 'user', content: 'u3' }
+    ];
+    const adjusted = ChatSummarizer._alignPruneBoundary(State.chatHistory, 4);
+    T.eq(adjusted, 4, 'no tool calls → alignment is no-op');
+
+    const ok = ChatSummarizer._pruneHistory(4);
+    T.eq(ok, true, 'prune succeeded');
+    T.eq(State.chatHistory.length, 3, 'pruned 4 messages from front');
+    T.eq(State.chatHistory[0]?.content, 'u2', 'recent window starts at index-4 message u2');
+}
+
+// Case 6: end-to-end smoke via getContextMessages() — no orphan tool at front of context
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    Storage.remove('chatPruneStash');
+    // Synthesize a "poisoned" history where naive prune would orphan tools.
+    // Build > RECENT_COUNT_BASE so getContextMessages() actually slices.
+    const recentCount = ChatSummarizer.RECENT_COUNT_BASE; // 28 for 128K balanced
+    const head = [
+        { role: 'user', content: 'TASK_FRAMING' },
+        { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 't1', content: 'r1' },
+        { role: 'tool', tool_call_id: 't1', content: 'r2' }
+    ];
+    const tail = Array.from({ length: recentCount + 5 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `m${i}`
+    }));
+    State.chatHistory = [...head, ...tail];
+
+    // Drive a prune that would naively land mid-tool-group
+    ChatSummarizer._pruneHistory(3); // index 3 = second tool of t1 group → unsafe → backward-aligns
+
+    // Build the context the LLM would see and assert it has no orphan tool at the front
+    const ctx = ChatSummarizer.getContextMessages();
+    // First non-system / non-summary message must NOT be a tool with no preceding assistant(tool_calls).
+    let sawAsstWithToolCalls = false;
+    for (const m of ctx) {
+        if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+            sawAsstWithToolCalls = true;
+            continue;
+        }
+        if (m.role === 'tool') {
+            T.assert(sawAsstWithToolCalls, 'tool message has a preceding assistant(tool_calls) in returned context');
+        }
+    }
+}
+
+_restore_161();
+
 // Restore
 resetMocks();

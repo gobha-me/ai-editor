@@ -497,17 +497,53 @@ SUMMARY:`;
         };
         Storage.set('chatSummaryInfo', info);
 
-        // Prune old messages — stash them for one-turn undo
-        this._pruneHistory(older.length);
+        // Prune old messages — stash them for one-turn undo. May decline
+        // (return false) if no tool-call-safe boundary exists in the
+        // older slice (1.6.1 PR 1).
+        const didPrune = this._pruneHistory(older.length);
 
-        // Update coveredCount to reflect post-prune state so next
-        // summary triggers after SUMMARY_INTERVAL new messages, not
-        // SUMMARY_INTERVAL + pruned_count.
-        info.coveredCount = State.chatHistory.length;
-        Storage.set('chatSummaryInfo', info);
+        if (didPrune) {
+            // Update coveredCount to reflect post-prune state so next
+            // summary triggers after SUMMARY_INTERVAL new messages, not
+            // SUMMARY_INTERVAL + pruned_count. Skipped on decline so
+            // shouldSummarize() retries on the next message rather than
+            // waiting another SUMMARY_INTERVAL.
+            info.coveredCount = State.chatHistory.length;
+            Storage.set('chatSummaryInfo', info);
+        }
 
         EventBus.emit('chat:pruned', info);
         return info;
+    },
+
+    /**
+     * Find the largest k ≤ pruneCount such that splice(0, k) leaves
+     * State.chatHistory starting on a "safe" boundary — i.e. the cut
+     * does NOT split an assistant(tool_calls) from its tool messages,
+     * and the post-prune array does NOT begin with an orphan tool message.
+     *
+     * Returns 0 (decline to prune) when no safe k > 0 exists in the
+     * older slice (1.6.1 PR 1 of the chat-stability track).
+     *
+     * @param {ChatMessage[]} history
+     * @param {number} pruneCount
+     * @returns {number}
+     */
+    _alignPruneBoundary(history, pruneCount) {
+        if (pruneCount <= 0) return 0;
+        const upper = Math.min(pruneCount, history.length);
+        for (let k = upper; k > 0; k--) {
+            const here = history[k];           // may be undefined when k === history.length
+            const prev = history[k - 1];
+            const prevIsAsstWithTools =
+                prev?.role === 'assistant'
+                && Array.isArray(prev.tool_calls)
+                && prev.tool_calls.length > 0;
+            const cutsToolFromAssistant = prevIsAsstWithTools && here?.role === 'tool';
+            const startsOnOrphanTool = here?.role === 'tool';
+            if (!cutsToolFromAssistant && !startsOnOrphanTool) return k;
+        }
+        return 0;
     },
 
     /**
@@ -520,12 +556,23 @@ SUMMARY:`;
      *   3. THEN attempt to save the stash (now there may be room)
      *
      * @param {number} pruneCount - Number of messages to remove from the front
+     * @returns {boolean} true if a prune occurred; false if declined (no safe boundary)
      */
     _pruneHistory(pruneCount) {
-        if (pruneCount <= 0) return;
+        if (pruneCount <= 0) return false;
+
+        // Align cut to a tool-call-safe boundary (1.6.1 PR 1).
+        const adjusted = this._alignPruneBoundary(State.chatHistory, pruneCount);
+        if (adjusted <= 0) {
+            console.warn(`[ChatSummarizer] Declined to prune ${pruneCount} messages — no safe tool-call boundary in older slice`);
+            return false;
+        }
+        if (adjusted !== pruneCount) {
+            console.log(`[ChatSummarizer] Adjusted prune count from ${pruneCount} to ${adjusted} to preserve tool-call boundary`);
+        }
 
         // 1. Splice old messages out of in-memory array
-        const pruned = State.chatHistory.splice(0, pruneCount);
+        const pruned = State.chatHistory.splice(0, adjusted);
 
         // 2. Persist the now-smaller chatHistory FIRST to free localStorage space
         //    Remove before set — if localStorage is already full, set() would fail
@@ -541,6 +588,7 @@ SUMMARY:`;
             // Stash didn't persist — prune still happened, just no undo
             console.warn(`[ChatSummarizer] Pruned ${pruned.length} messages (stash failed — no undo)`);
         }
+        return true;
     },
 
     /**
