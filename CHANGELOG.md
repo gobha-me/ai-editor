@@ -10,13 +10,15 @@ All notable changes to AI Editor are documented here.
 
 ## [1.6.8] - 2026-05-05
 
-Five changes shipping under the in-flight 1.6.8 heading: (a) the
+Six changes shipping under the in-flight 1.6.8 heading: (a) the
 cost-dashboard retrieval extension (original scope), (b) a
 buffer-aware fix to the read tools surfaced by the github#15 dogfood
 session, (c) the timeout fix for long-running tools that was github#15
 itself (PR #282), (d) duplicate-definition guard in `ToolRegistry`
-(github#31), and (e) `git_log` opened to all roles (github#32). Per
-the in-track-patches rule (`feedback_version_bump.md`) these stay on
+(github#31), (e) `git_log` opened to all roles (github#32), and (f) a
+test-only `await` fix to the cost-export browser test that started
+failing after 1.6.7's `KeyMutex` made `recordTurn` async. Per the
+in-track-patches rule (`feedback_version_bump.md`) these stay on
 `1.6.8` until Jeff tags.
 
 ### Separate timeout for long-running tools — closes github#15 (PR #282)
@@ -238,6 +240,16 @@ Each piece reverts independently:
 
 Already-stored records that *do* contain `byStrategy` deserialize
 cleanly under the prior code (extra fields on read are ignored).
+
+### Cost-export test — `await recordTurn` after 1.6.7 KeyMutex
+
+Browser-suite regressions surfaced in `tests/test-cost-export.js`: the
+seed calls did not `await` `recordTurn(...)`, so when 1.6.7 wrapped the
+read-modify-write in a `KeyMutex` (`recordTurn` became async), the
+seeds returned before the IDB writes had committed and the immediate
+`buildCostExport()` read saw `null` for `aRow.cost`. Adding `await` on
+both seed calls restores green; the test-cost-store suite was already
+authored against the async API.
 
 ## [1.6.7] - 2026-05-05
 

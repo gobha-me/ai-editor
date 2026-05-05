@@ -34,7 +34,10 @@ const savedBudget = Storage.get('cost-budget', null);
 setBudget({ daily: 5, monthly: 50 });
 
 // Record a couple of turns to populate per-conv + daily map.
-recordTurn({
+// 1.6.7 — `recordTurn` serializes its read-modify-write through a
+// `KeyMutex` and is now async; tests must `await` so the post-write
+// reads (via `buildCostExport()` below) observe the effect.
+await recordTurn({
     conversationId: convA,
     provider: 'venice',
     modelId: 'qwen-3-6-plus',
@@ -45,7 +48,7 @@ recordTurn({
     cost: 0.12,
     cacheSavings: 0,
 });
-recordTurn({
+await recordTurn({
     conversationId: convB,
     provider: 'openrouter',
     modelId: 'gpt-4o',
