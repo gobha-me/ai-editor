@@ -97,15 +97,32 @@ async function _seed() {
     });
 }
 
+// Resolve when the fixture contains exactly `count` `.mem-row` elements.
+// Uses MutationObserver instead of setTimeout polling — Preact's useEffect
+// schedules via requestAnimationFrame, and rAF + setTimeout are both
+// heavily throttled when the page is backgrounded (Chrome's "intensive
+// throttling" pushes setTimeout(10) chains out to ~1Hz). Polling with a
+// 1500ms deadline can therefore allow only one or two samples and miss
+// the render entirely. MutationObserver fires as a microtask on every
+// DOM change and is not subject to that throttling.
 async function _waitForRows(fixture, count, label) {
-    const deadline = Date.now() + 1500;
-    while (Date.now() < deadline) {
-        const rows = fixture.querySelectorAll('.mem-row').length;
-        if (rows === count) return true;
-        await new Promise((r) => setTimeout(r, 10));
-    }
-    T.eq(fixture.querySelectorAll('.mem-row').length, count, label);
-    return false;
+    if (fixture.querySelectorAll('.mem-row').length === count) return true;
+    return new Promise((resolve) => {
+        let timer = null;
+        const observer = new MutationObserver(() => {
+            if (fixture.querySelectorAll('.mem-row').length === count) {
+                clearTimeout(timer);
+                observer.disconnect();
+                resolve(true);
+            }
+        });
+        observer.observe(fixture, { childList: true, subtree: true });
+        timer = setTimeout(() => {
+            observer.disconnect();
+            T.eq(fixture.querySelectorAll('.mem-row').length, count, label);
+            resolve(false);
+        }, 5000);
+    });
 }
 
 let cleanup = null;

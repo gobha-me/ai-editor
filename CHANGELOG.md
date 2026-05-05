@@ -4,9 +4,25 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Notes
+### `tests/test-memory-tab.js` — MutationObserver-based row wait
 
-- (placeholder for next track work)
+`_waitForRows()` polled the fixture with `setTimeout(10)` against a
+1500 ms deadline. When the test page is backgrounded, Chrome's
+intensive throttling stretches `setTimeout` chains to ~1 Hz and
+delays Preact's `useEffect` (scheduled via `requestAnimationFrame`),
+so the loop took only one or two samples before the deadline expired
+and the rows weren't visible yet. The "Initial render shows 3 rows"
+inline assert still passed because it ran *after* the deadline, by
+which time the rows had finally materialized — the failing
+assertion was the trailing `Initial render reached 3 rows within
+deadline`.
+
+Replaced the timer-poll loop with a `MutationObserver` keyed on the
+fixture subtree. The observer fires as a microtask on every DOM
+mutation regardless of throttling, so rows are detected the moment
+Preact commits the render. A 5 s `setTimeout` is kept as a
+true-failure backstop. Production code is untouched — this is a
+test-infrastructure fix only.
 
 ## [1.6.8] - 2026-05-05
 
