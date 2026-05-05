@@ -8,6 +8,7 @@ import { State } from '../core.js';
 import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
 import { IgnoreManager } from '../ignore.js';
+import { resolveFileContent } from './_file-content.js';
 
 /**
  * Find the end of a function by matching braces
@@ -86,13 +87,12 @@ export function registerScanTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
-        
-        const { owner, repo } = State.currentProject;
+
         const branch = State.currentBranch || 'main';
-        
+
         try {
-            const file = await Git.getFile(owner, repo, path, branch);
-            const content = file.content;
+            // 1.6.8 follow-up — buffer-aware read; see _file-content.js docstring.
+            const { content } = await resolveFileContent(path);
             const lines = content.split('\n');
             
             const outline = [];
@@ -510,23 +510,12 @@ export function registerScanTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
-        
-        const { owner, repo } = State.currentProject;
+
         const branch = State.currentBranch || 'main';
-        
+
         try {
-            // FIX: Check if reading from currently open file in editor
-            let content;
-            let source = 'remote';
-            if (State.currentFile && State.currentFile.path === path) {
-                // Read from editor buffer (includes unsaved changes)
-                content = State.editorContent || '';
-                source = 'editor';
-            } else {
-                // Read from remote (original/committed version)
-                const file = await Git.getFile(owner, repo, path, branch);
-                content = file.content;
-            }
+            // 1.6.8 follow-up — buffer-aware read; see _file-content.js docstring.
+            const { content, source } = await resolveFileContent(path);
             
             const lines = content.split('\n');
             
@@ -558,7 +547,7 @@ export function registerScanTools(registry) {
                 context_lines,
                 line_count: lines.length,
                 content: resultContent,
-                source  // 'editor' or 'remote' - helps debug state issues
+                source  // 'editor' | 'tab' | 'remote' — helps debug state issues
             };
         } catch (error) {
             if (error.status === 404) {
@@ -570,7 +559,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'read_lines',
-            description: 'Read specific line range from a file. If the file is currently open in the editor, reads from the editor buffer (including unsaved changes). Otherwise reads from the remote repository. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
+            description: 'Read specific line range from a file. Buffer-aware: prefers the active editor buffer, then any open tab\'s saved content (so dirty edits made via prior edit_file calls on other tabs are visible), then falls back to the remote repository. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
             parameters: {
                 type: 'object',
                 properties: {

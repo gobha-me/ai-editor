@@ -6,6 +6,7 @@
 import { State } from '../core.js';
 import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
+import { resolveFileContent } from './_file-content.js';
 
 /**
  * Register all file-related tools.
@@ -84,11 +85,12 @@ export function registerFileTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
-        
-        // Note: read_file doesn't track for editing since it doesn't open in editor
-        const { owner, repo } = State.currentProject;
+
         try {
-            const file = await Git.getFile(owner, repo, path, State.currentBranch);
+            // 1.6.8 follow-up — buffer-aware read; see _file-content.js docstring.
+            const { content, source } = await resolveFileContent(path);
+            const file = { path, content };
+
             const lines = file.content.split('\n');
             const lineCount = lines.length;
             const MAX_LINES = 200;
@@ -106,7 +108,8 @@ export function registerFileTools(registry) {
                     content: head + `\n\n... (${lineCount - headCount - tailCount} lines omitted — use read_lines for ranges OR read_file with full=true) ...\n\n` + tail,
                     line_count: lineCount,
                     truncated: true,
-                    language: path.split('.').pop()
+                    language: path.split('.').pop(),
+                    source
                 };
             }
 
@@ -117,7 +120,8 @@ export function registerFileTools(registry) {
                 content: numbered,
                 line_count: lineCount,
                 truncated: false,
-                language: path.split('.').pop()
+                language: path.split('.').pop(),
+                source: resolvedSource
             };
         } catch (error) {
             if (error.status === 404) {

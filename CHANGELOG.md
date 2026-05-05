@@ -10,6 +10,77 @@ All notable changes to AI Editor are documented here.
 
 ## [1.6.8] - 2026-05-05
 
+Two changes shipping under the in-flight 1.6.8 heading: (a) the
+cost-dashboard retrieval extension (original scope) and (b) a
+buffer-aware fix to the read tools surfaced by the github#15 dogfood
+session. Per the in-track-patches rule (`feedback_version_bump.md`)
+these stay on `1.6.8` until Jeff tags.
+
+### Buffer-aware read tools — `read_file` / `read_lines` / `scan_file`
+
+**The bug.** During the github#15 dogfood session the model called
+`edit_file js/core.js`, then `edit_file js/chat/handlers.js`, then
+`read_lines js/core.js` — and the read returned the *pre-edit*
+committed content even though the prior edit had succeeded. The model
+interpreted that as "the edit didn't take" and retried, producing
+duplicate `summaryTimeout: 60000` lines. The dirty-files tracker
+agreed with the read-back (`lines_changed: 0` for `js/core.js`) while
+the four other edited files all reported their real deltas — so the
+edit was preserved in tab state, but the read tools weren't seeing it.
+
+**Root cause.** `read_lines` (`js/tools/scan-tools.js:521`) only
+checked `State.currentFile` before falling through to `Git.getFile()`,
+and `read_file` / `scan_file` went straight to remote without checking
+any buffer. After `ensureFileActive('js/chat/handlers.js')` switched
+tabs, `State.currentFile.path !== 'js/core.js'`, so the read missed
+the dirty content sitting in `State.openTabs[i].content` and fetched
+the committed version instead.
+
+**What ships.**
+
+- **New `js/tools/_file-content.js`** — `resolveFileContent(path)`
+  helper exposing the three-layer read order: active editor buffer →
+  open-tab buffer → remote. Returns `{ content, source }` where
+  `source ∈ {'editor', 'tab', 'remote'}` so the model can tell where
+  the content came from.
+- **`read_file` ([`js/tools/file-tools.js`](js/tools/file-tools.js))**
+  now consults the helper and includes `source` in its return shape
+  (parity with `read_lines`).
+- **`read_lines` ([`js/tools/scan-tools.js`](js/tools/scan-tools.js))**
+  routes through the same helper; `source` now reports `'tab'` when
+  the dirty-but-not-active branch fires.
+- **`scan_file`** routes through the same helper so file outlines
+  reflect dirty edits too.
+- **Tool description** for `read_lines` updated to call out the
+  three-layer order so the model's planning reflects it.
+
+**Regression coverage.** Eight Node tests in
+[`tests/test-tools-file-content.mjs`](tests/test-tools-file-content.mjs)
+including the exact dogfood pattern: "edit_file A → edit_file B
+(switches tabs) → read of A must see A's dirty buffer, not the
+committed version." Defensive cases (missing `State.openTabs`, null
+tab entries, no project loaded) included.
+
+**Why ship as 1.6.8 and not bump.** `feedback_version_bump.md`:
+"Don't skip patch numbers between commits inside the same in-flight
+release. Once a release work-stream is open, follow-on commits stay
+on that version until Jeff tags." 1.6.8 hasn't been tagged yet, so
+this rolls into the same release event.
+
+**Removability.** The helper is the only new module. Reverting:
+delete `_file-content.js`, restore the inline `currentFile`-only
+checks in `read_lines` (the prior fallback to `Git.getFile()`
+was the original behavior). No schema changes; no on-disk effects.
+
+**Deferred.** `find_references` (`scan-tools.js:282/418`),
+`grep_files` (`search-tools.js:47`), and the per-file path inside
+`get_project_tree` still read straight from `Git.getFile()`. They
+have the same shape and likely the same bug, but didn't fire in the
+github#15 trace — slot for a follow-up if a future dogfood session
+hits them.
+
+### Cost-dashboard retrieval extension
+
 **Cost-dashboard retrieval extension** — the next storage / retrieval
 follow-up after 1.6.6 (cost-export) and 1.6.7 (cost-store race-safety).
 Surfaces per-strategy hit rates and paraphrase token spend in the cost
