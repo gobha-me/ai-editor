@@ -1,0 +1,6 @@
+{
+  "role": "coder",
+  "testLoop": {
+    "enabled": false
+  }
+}

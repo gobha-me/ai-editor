@@ -391,6 +391,39 @@ const gitlabProvider = {
         }));
     },
 
+    async getCommits(connection, owner, repo, opts = {}) {
+        const { path, max_count = 20, since, author, sha } = opts;
+        try {
+            const params = new URLSearchParams();
+            if (sha) params.set('ref_name', sha);
+            if (path) params.set('path', path);
+            if (since) params.set('since', since);
+            if (author) params.set('author', author);
+            params.set('per_page', String(Math.min(max_count, 100)));
+
+            const commits = await this.request(connection, 'GET',
+                `/projects/${projectId(owner, repo)}/repository/commits?${params.toString()}`
+            );
+
+            if (!Array.isArray(commits) || commits.length === 0) {
+                return [];
+            }
+
+            return commits.map(c => ({
+                sha: c.id,
+                shortSha: c.short_id || (c.id || '').slice(0, 7),
+                message: c.message || '',
+                subject: (c.message || '').split('\n')[0],
+                author: c.author_name || '',
+                authorEmail: c.author_email || '',
+                date: c.authored_date || '',
+                url: `${connection.url}/${owner}/${repo}/-/commit/${c.id}`
+            }));
+        } catch (e) {
+            console.warn(`[GitLab] Could not fetch commits for ${owner}/${repo}:`, e.message);
+            return [];
+        }
+    },
     // ========================================
     // FILE CRUD
     // ========================================

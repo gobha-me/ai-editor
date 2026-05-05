@@ -1,8 +1,8 @@
 # AI Editor — LLM Tool Reference
 
-Reference for all 52 LLM tools. Roles control which tools are available; see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for role definitions and access matrix.
+Reference for all 53 LLM tools. Roles control which tools are available; see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for role definitions and access matrix.
 
-> **Counts at a glance** — 52 tools across 16 modules (`js/tools/*.js`). Tool definitions live with their handler in the same module and self-register at app startup via `js/app.js`.
+> **Counts at a glance** — 53 tools across 17 modules (`js/tools/*.js`). Tool definitions live with their handler in the same module and self-register at app startup via `js/app.js`.
 
 ---
 
@@ -17,10 +17,11 @@ Reference for all 52 LLM tools. Roles control which tools are available; see [RO
 | `cursor-tools` | 4 | Cursor-relative navigate / select / replace / insert |
 | `multifile-tools` | 2 | Edit/write any file by path (auto-opens) |
 | `project-tools` | 5 | Project list / switch / tree; create/delete files |
-| `xref-tools` | 3 | Read-only `peek_*` access to OTHER projects |
-| `issue-tools` | 5 | List, read, create, update, comment on issues |
-| `pr-tools` | 7 | PR/MR lifecycle + CI status & logs |
+| `xref-tools` | 3 | Cross-project peeks (tree + file reads) |
+| `issue-tools` | 5 | Issue tracker CRUD (list, create, update, comment) |
+| `pr-tools` | 7 | PR lifecycle (create, list, read, review, merge) + CI status/logs |
 | `commit-tools` | 2 | Commit dirty editor tabs from chat |
+| `git-log-tools` | 1 | Inspect commit history (`git_log`) |
 | `context-tools` | 3 | Embeddings-based file relevance + index control |
 | `scratchpad-tools` | 3 | Persistent notes that survive chat summarization |
 | `plugin-tools` | 4 | Plugin editor read/write/run + listing |
@@ -300,6 +301,21 @@ commit_files({ paths: ["js/a.js"], message: "..." })  // both optional
 
 ### `list_dirty_files`
 Preview what `commit_files` would touch.
+
+---
+
+## Git log (`git-log-tools`)
+
+### `git_log`
+View the commit history of the current repository. Returns compact commit entries with hash, author, date, and subject line.
+```js
+git_log()                                    // last 20 commits
+git_log({ max_count: 50 })                   // last 50 commits
+git_log({ path: "js/chat/index.js" })        // commits touching a specific file
+git_log({ author: "alice" })                 // commits by a specific author
+git_log({ since: "2024-01-15T00:00:00Z" })   // commits after a date
+git_log({ sha: "feature-branch" })           // commits on a specific branch
+```
 
 ---
 

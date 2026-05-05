@@ -134,6 +134,7 @@ import './tools/scan-tools.js';     // Issue #32: Efficient code navigation tool
 import './tools/context-tools.js';  // Issue #40: Embeddings-based context management
 import './tools/commit-tools.js';   // LLM-driven commit from chat
 import './tools/ci-tools.js';       // get_ci_status / wait_for_ci / get_ci_logs (1.4.5)
+import './tools/git-log-tools.js';  // git_log — commit history inspection
 
 // --- Plugins ---
 import '../plugins/venice-ai.js';

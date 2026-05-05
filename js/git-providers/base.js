@@ -289,6 +289,17 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'getFileCommits');
     },
 
+    /**
+     * Get commit history for a repository.
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {Object} [opts]
+     * @returns {Promise<CommitEntry[]>}
+     */
+    async getCommits(connection, owner, repo, opts = {}) {
+        notSupported(this.name, 'getCommits');
+    },
     // ========================================
     // FILE CRUD
     // ========================================

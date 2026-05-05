@@ -1,6 +1,6 @@
 # Roles and Tools
 
-Role-based access control for the 52 LLM tools. Tools declare their allowed roles at registration time; the registry filters tools per active role and enforces access at execution time.
+Role-based access control for the 53 LLM tools. Tools declare their allowed roles at registration time; the registry filters tools per active role and enforces access at execution time.
 
 For tool descriptions and examples, see [TOOLS.md](TOOLS.md).
 
@@ -57,8 +57,11 @@ The matrix below reflects the actual `roles` field on every `registry.register()
 ### Code editing — `coder`
 `replace_lines`, `insert_lines`, `delete_lines`, `replace_selection`, `insert_at_cursor`, `edit_file`, `write_file`, `create_file`, `delete_file`, `commit_files`, `list_dirty_files`, `run_code`
 
+### Git log — `coder`
+`git_log`
+
 ### Issue management — `pm` (+ `reviewer` for comment)
-- `create_issue`, `update_issue` — `pm`
+- `create_issue, update_issue` — `pm`
 - `add_issue_comment` — `pm`, `reviewer`
 
 ### PR management
@@ -80,8 +83,8 @@ Approximate effective tool count when a role is active:
 
 | Role | Effective tools | Versus Full |
 |---|---|---|
-| **Full** | 52 (all) | baseline |
-| **Coder** | 36 | ~30% fewer |
+| **Full** | 53 (all) | baseline |
+| **Coder** | 37 | ~30% fewer |
 | **PM** | 28 | ~45% fewer |
 | **Reviewer** | 27 | ~48% fewer |
 | **Plugin Developer** | ~22 | ~58% fewer (specialized scope) |

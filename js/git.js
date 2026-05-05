@@ -424,6 +424,27 @@ const Git = {
     },
 
     // ========================================
+    // COMMIT LOG
+    // ========================================
+
+    /**
+     * Fetch commit history for the current repository.
+     * @param {string} owner - Repo owner
+     * @param {string} repo - Repo name
+     * @param {Object} [opts] - Optional filters
+     * @param {string} [opts.path] - Filter commits touching this file
+     * @param {number} [opts.max_count=20] - Max commits to return (capped at 100)
+     * @param {string} [opts.since] - ISO date string to filter commits after
+     * @param {string} [opts.author] - Filter by author name/email
+     * @param {string} [opts.sha] - Branch/tag/commit SHA to start from
+     * @returns {Array<{sha, shortSha, message, subject, author, authorEmail, date, url}>}
+     */
+    async getCommits(owner, repo, opts = {}) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getCommits(connection, owner, repo, opts);
+    },
+
+    // ========================================
     // CI/CD
     // ========================================
 

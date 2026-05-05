@@ -252,6 +252,10 @@ const LOCAL_PROVIDER = {
         return [];
     },
 
+    async getCommits() {
+        return [];
+    },
+
     // ========================================
     // ISSUES / PRs — not supported
     // ========================================

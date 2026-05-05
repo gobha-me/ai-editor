@@ -375,6 +375,39 @@ const githubProvider = {
         }));
     },
 
+    async getCommits(connection, owner, repo, opts = {}) {
+        const { path, max_count = 20, since, author, sha } = opts;
+        try {
+            const params = new URLSearchParams();
+            if (sha) params.set('sha', sha);
+            if (path) params.set('path', path);
+            if (since) params.set('since', since);
+            if (author) params.set('author', author);
+            params.set('per_page', String(Math.min(max_count, 100)));
+
+            const commits = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/commits?${params.toString()}`
+            );
+
+            if (!Array.isArray(commits) || commits.length === 0) {
+                return [];
+            }
+
+            return commits.map(c => ({
+                sha: c.sha,
+                shortSha: c.sha.slice(0, 7),
+                message: c.commit?.message || '',
+                subject: (c.commit?.message || '').split('\n')[0],
+                author: c.commit?.author?.name || c.author?.login || '',
+                authorEmail: c.commit?.author?.email || '',
+                date: c.commit?.author?.date || '',
+                url: c.html_url || `https://github.com/${owner}/${repo}/commit/${c.sha}`
+            }));
+        } catch (e) {
+            console.warn(`[GitHub] Could not fetch commits for ${owner}/${repo}:`, e.message);
+            return [];
+        }
+    },
     // ========================================
     // FILE CRUD
     // ========================================
