@@ -107,6 +107,28 @@ regardless of throttling, so rows are detected the moment Preact commits
 the render. A 5 s `setTimeout` is kept as a true-failure backstop.
 Production code is untouched — this is a test-infrastructure fix only.
 
+### MCP servers support role-based tool access restriction
+
+Until 1.6.10 every MCP-bridged tool registered with `roles: 'all'`, so a
+sensitive server (e.g. k8s write access) was visible to every role the
+moment its tools landed in the catalog — the role system that gates
+native tools simply didn't apply. The MCP server record at
+[`js/mcp/registry.js`](js/mcp/registry.js) now carries an optional
+`roles` field, normalised through a small `normaliseRoles()` helper that
+coerces `'all'`, single strings, and arrays into the canonical shape.
+[`js/mcp/bridge.js`](js/mcp/bridge.js) `makeRegistration()` reads
+`server.roles` instead of the hardcoded `'all'`, so the existing
+`ToolRegistry.checkRoleAccess()` machinery enforces the restriction at
+both discovery (`find_tool` / `list_tools_by_category`) and execution.
+The Settings UI gains an "Allowed Roles" checkbox group in the MCP
+server editor ([`html/settings-tabs.html`](html/settings-tabs.html) +
+[`js/settings/mcp-servers-tab.js`](js/settings/mcp-servers-tab.js));
+leaving every box unchecked means unrestricted access, so existing
+servers without a `roles` field keep working unchanged. Behavior and
+shape are documented in
+[`docs/ROLES_AND_TOOLS.md`](docs/ROLES_AND_TOOLS.md). Closes
+[gitea#21](https://git.gobha.me/xcaliber/ai-editor/issues/21).
+
 ## [1.6.9] - 2026-05-05
 
 The "Storage / retrieval follow-ups" sequence (1.6.6 → 1.6.7 → 1.6.8)

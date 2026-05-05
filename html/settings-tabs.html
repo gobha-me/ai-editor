@@ -714,6 +714,28 @@
             </label>
         </div>
 
+        <div class="form-group">
+            <label>Allowed Roles:</label>
+            <div id="mcpEditRoles" style="display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.25rem;">
+                <label style="display: flex; align-items: center; gap: 0.25rem;">
+                    <input type="checkbox" value="full"> Full Access
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.25rem;">
+                    <input type="checkbox" value="coder"> Coder
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.25rem;">
+                    <input type="checkbox" value="pm"> Project Manager
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.25rem;">
+                    <input type="checkbox" value="reviewer"> Reviewer
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.25rem;">
+                    <input type="checkbox" value="plugin-dev"> Plugin Dev
+                </label>
+            </div>
+            <small style="color: var(--text-secondary); font-size: var(--font-sm);">Leave all unchecked for unrestricted access (all roles). Check specific roles to restrict which roles can use this server's tools.</small>
+        </div>
+
         <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
             <button type="button" class="btn btn-secondary" id="btnTestMCPServer">
                 <span>🧪 Test</span>

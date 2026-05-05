@@ -9,7 +9,7 @@
  * skeleton without inventing a new vocabulary.
  *
  * Per-server record:
- *   { id, label, url, token, transport, enabled, _toolCount, _lastSync, _unreachable }
+ *   { id, label, url, token, transport, enabled, roles, _toolCount, _lastSync, _unreachable }
  *
  * Persistence: `State.settings.mcpServers[]`. Loaded by
  * `plugins/mcp-bridge.js` at init via `loadServers(...)`.
@@ -23,6 +23,23 @@ import * as protocol from './protocol.js';
 let _servers = [];
 
 const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
+const BUILTIN_ROLES = ['full', 'coder', 'pm', 'reviewer', 'plugin-dev'];
+
+/**
+ * Normalise a roles value into a canonical array.
+ * Accepts: 'all' (string), ['all'], ['full','coder',...], or undefined/null → 'all'.
+ * @param {string|string[]|null|undefined} roles
+ * @returns {string|string[]}
+ */
+function normaliseRoles(roles) {
+    if (!roles || (Array.isArray(roles) && roles.length === 0)) return 'all';
+    if (typeof roles === 'string') return roles === 'all' ? 'all' : [roles];
+    if (Array.isArray(roles)) {
+        if (roles.includes('all')) return 'all';
+        return roles.filter(r => BUILTIN_ROLES.includes(r));
+    }
+    return 'all';
+}
 
 const MCPServerRegistry = {
     /**
@@ -42,6 +59,7 @@ const MCPServerRegistry = {
                 token: String(s.token || ''),
                 transport: VALID_TRANSPORTS.has(s.transport) ? s.transport : 'streamable-http',
                 enabled: s.enabled !== false,
+                roles: normaliseRoles(s.roles),
                 _toolCount: Number.isFinite(s._toolCount) ? s._toolCount : 0,
                 _lastSync: s._lastSync || null,
                 _unreachable: !!s._unreachable,
@@ -70,6 +88,7 @@ const MCPServerRegistry = {
             token: config.token || '',
             transport,
             enabled: config.enabled !== false,
+            roles: normaliseRoles(config.roles),
             _toolCount: 0,
             _lastSync: null,
             _unreachable: false,
@@ -90,6 +109,9 @@ const MCPServerRegistry = {
         const next = { ..._servers[idx], ...updates };
         if (updates.transport && !VALID_TRANSPORTS.has(updates.transport)) {
             next.transport = _servers[idx].transport;
+        }
+        if ('roles' in updates) {
+            next.roles = normaliseRoles(updates.roles);
         }
         _servers[idx] = next;
         return next;
@@ -166,6 +188,7 @@ const MCPServerRegistry = {
             token: s.token,
             transport: s.transport,
             enabled: s.enabled,
+            roles: s.roles,
         }));
     },
 
@@ -175,4 +198,4 @@ const MCPServerRegistry = {
     },
 };
 
-export { MCPServerRegistry };
+export { MCPServerRegistry, BUILTIN_ROLES };

@@ -22,6 +22,25 @@ function statusFor(server) {
     return { kind: 'ok', label: 'ready' };
 }
 
+/**
+ * Format roles for display in the server list row.
+ * @param {string|string[]} roles
+ * @returns {string}
+ */
+function formatRoles(roles) {
+    if (!roles || roles === 'all') return '🔓 all roles';
+    if (Array.isArray(roles)) {
+        if (roles.length === 0) return '🔓 all roles';
+        if (roles.includes('all')) return '🔓 all roles';
+        const shortNames = roles.map(r => {
+            const map = { full: 'Full', coder: 'Coder', pm: 'PM', reviewer: 'Reviewer', 'plugin-dev': 'Plugin' };
+            return map[r] || r;
+        });
+        return `🔒 ${shortNames.join(', ')}`;
+    }
+    return `🔒 ${roles}`;
+}
+
 export function initMCPServersTab() {
     renderMCPServersList();
 
@@ -72,6 +91,7 @@ function renderRow(server) {
     const toolCount = server._toolCount || 0;
     const toolWord = toolCount === 1 ? 'tool' : 'tools';
     const toolMeta = server.enabled ? `${toolCount} ${toolWord} loaded` : 'disabled';
+    const rolesMeta = formatRoles(server.roles);
 
     return `
         <div class="conn__row${disabledClass}" data-mcp-id="${idAttr}">
@@ -85,6 +105,8 @@ function renderRow(server) {
                     <span>${escapeHtml(server.transport || 'streamable-http')}</span>
                     <span class="conn__sep">·</span>
                     <span>${escapeHtml(toolMeta)}</span>
+                    <span class="conn__sep">·</span>
+                    <span class="conn__roles">${rolesMeta}</span>
                 </div>
             </div>
             <div class="conn__row-right">
@@ -115,6 +137,7 @@ function showServerEditor(serverId) {
         document.getElementById('mcpEditToken').value = server.token || '';
         document.getElementById('mcpEditTransport').value = server.transport || 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = server.enabled !== false;
+        setRolesCheckboxes(server.roles);
     } else {
         if (title) title.textContent = 'New MCP Server';
         document.getElementById('mcpEditLabel').value = '';
@@ -122,6 +145,7 @@ function showServerEditor(serverId) {
         document.getElementById('mcpEditToken').value = '';
         document.getElementById('mcpEditTransport').value = 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = true;
+        setRolesCheckboxes('all');
     }
     if (result) result.style.display = 'none';
     editor.style.display = 'block';
@@ -131,6 +155,33 @@ function hideServerEditor() {
     const editor = document.getElementById('mcpServerEditor');
     if (editor) editor.style.display = 'none';
     _editingServerId = null;
+}
+
+/**
+ * Set the role checkboxes based on the server's roles value.
+ * @param {string|string[]} roles
+ */
+function setRolesCheckboxes(roles) {
+    const container = document.getElementById('mcpEditRoles');
+    if (!container) return;
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    const isAll = !roles || roles === 'all' || (Array.isArray(roles) && roles.includes('all'));
+    checkboxes.forEach(cb => {
+        cb.checked = isAll || (Array.isArray(roles) && roles.includes(cb.value));
+    });
+}
+
+/**
+ * Read the current state of the role checkboxes.
+ * @returns {string|string[]}
+ */
+function getRolesFromCheckboxes() {
+    const container = document.getElementById('mcpEditRoles');
+    if (!container) return 'all';
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    const checked = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+    if (checked.length === 0 || checked.length === checkboxes.length) return 'all';
+    return checked;
 }
 
 function slugifyLabel(label) {
@@ -143,6 +194,7 @@ function saveServerFromEditor() {
     const token = document.getElementById('mcpEditToken').value.trim();
     const transport = document.getElementById('mcpEditTransport').value;
     const enabled = document.getElementById('mcpEditEnabled').checked;
+    const roles = getRolesFromCheckboxes();
 
     if (!label) {
         window.showToast('Server label is required', 'warning');
@@ -154,13 +206,13 @@ function saveServerFromEditor() {
     }
 
     if (_editingServerId) {
-        MCPServerRegistry.updateServer(_editingServerId, { label, url, token, transport, enabled });
+        MCPServerRegistry.updateServer(_editingServerId, { label, url, token, transport, enabled, roles });
         window.showToast('MCP server updated', 'success');
     } else {
         let id = slugifyLabel(label) || `mcp-${Date.now()}`;
         if (MCPServerRegistry.getServer(id)) id += `-${Date.now()}`;
         try {
-            MCPServerRegistry.addServer({ id, label, url, token, transport, enabled });
+            MCPServerRegistry.addServer({ id, label, url, token, transport, enabled, roles });
             window.showToast('MCP server added', 'success');
         } catch (err) {
             window.showToast(err.message || 'Failed to add server', 'error');

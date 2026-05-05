@@ -21,6 +21,7 @@ import { ToolRegistry } from '../js/tools/registry.js';
 import { Catalog } from '../js/intelligence/tools/catalog.js';
 import { MCPServerRegistry } from '../js/mcp/registry.js';
 import * as bridge from '../js/mcp/bridge.js';
+import { State } from '../js/core.js';
 import {
     getOrCreateLedger,
     sweepLedgersByToolId,
@@ -236,6 +237,89 @@ test('makeRegistration: short-circuits when server is disabled at call time', as
     // 1.6.10: error string widened to point the LLM at the recovery action.
     assert.match(result.error, /disabled/);
     assert.match(result.error, /Settings → MCP Servers/);
+
+    globalThis.fetch = ORIG_FETCH;
+});
+
+// gitea#21: MCP server `roles` field gates tool visibility/execution.
+// The bridge passes `server.roles` straight to ToolRegistry.register(),
+// so the existing checkRoleAccess() machinery enforces it. These tests
+// guard the wire-up so a future refactor can't quietly regress to the
+// pre-1.6.10 hardcoded `roles: 'all'`.
+test('makeRegistration: server without roles → tool registered with roles "all"', async () => {
+    resetAll();
+    globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
+    MCPServerRegistry.addServer({ id: 'demo', label: 'Demo', url: 'https://mcp.example/mcp' });
+    await bridge.connect('demo');
+
+    const def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
+    assert.ok(def, 'tool should be registered');
+    // Internal field set by ToolRegistry.register() at line ~87 — the canonical
+    // place to check the resolved role set.
+    assert.deepEqual(def._registeredRoles, ['all']);
+
+    globalThis.fetch = ORIG_FETCH;
+});
+
+test('makeRegistration: server.roles array survives bridge → registry → checkRoleAccess', async () => {
+    resetAll();
+    globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
+    MCPServerRegistry.addServer({
+        id: 'demo',
+        label: 'Demo',
+        url: 'https://mcp.example/mcp',
+        roles: ['coder'],
+    });
+    await bridge.connect('demo');
+
+    const def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
+    assert.ok(def);
+    assert.deepEqual(def._registeredRoles, ['coder']);
+
+    // Save/restore the active role so we don't leak into later tests.
+    const priorRole = State.settings.role;
+    try {
+        State.settings.role = 'coder';
+        assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
+
+        State.settings.role = 'pm';
+        const blocked = ToolRegistry.checkRoleAccess('mcp__demo__echo');
+        assert.equal(blocked.allowed, false);
+        assert.match(blocked.reason, /pm.*not permitted/);
+
+        // 'full' bypasses everything — sanity check.
+        State.settings.role = 'full';
+        assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
+    } finally {
+        State.settings.role = priorRole;
+    }
+
+    globalThis.fetch = ORIG_FETCH;
+});
+
+test('reconnect: server.roles change re-registers tools with the new roles', async () => {
+    resetAll();
+    globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
+    MCPServerRegistry.addServer({
+        id: 'demo',
+        label: 'Demo',
+        url: 'https://mcp.example/mcp',
+        roles: ['coder'],
+    });
+    await bridge.connect('demo');
+
+    let def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
+    assert.deepEqual(def._registeredRoles, ['coder']);
+
+    // The Settings tab fires `mcp:serversChanged` after editing roles; the
+    // bridge handles that with disconnectAll → bootstrapAllServers, but the
+    // primitive being exercised is the same: a fresh connect after the
+    // record's roles change.
+    MCPServerRegistry.updateServer('demo', { roles: ['pm', 'reviewer'] });
+    await bridge.connect('demo');
+
+    def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
+    assert.deepEqual(def._registeredRoles.sort(), ['pm', 'reviewer']);
 
     globalThis.fetch = ORIG_FETCH;
 });

@@ -163,3 +163,25 @@ Carried over from PLAN.md — not committed, captured for reference.
 - Per-project role overrides
 - Audit log of role-based tool access
 - Per-tool enable/disable UI in settings
+
+---
+
+## MCP Server Role Restrictions
+
+MCP servers can restrict which roles have access to their tools. Each server record has a `roles` field that controls access:
+
+- **`'all'`** (default): All roles can use the server's tools.
+- **`['coder', 'pm']`**: Only the specified roles can use the server's tools.
+
+When an MCP server connects, all its tools inherit the server's `roles` field. The tool registry enforces this at both discovery time (filtered from `list_tools` and `find_tool`) and execution time (blocked in `execute`).
+
+### Configuration
+
+In **Settings → MCP Servers**, each server has an "Allowed Roles" section with checkboxes for each built-in role. Leave all unchecked for unrestricted access, or check specific roles to restrict access.
+
+### Example
+
+A server with `roles: ['coder']` will:
+- Show its tools only when the active role is `coder` (or `full`)
+- Hide its tools from `pm`, `reviewer`, and `plugin-dev` roles
+- Return an access-denied error if a non-allowed role somehow invokes a tool
