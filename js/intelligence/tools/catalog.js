@@ -476,6 +476,19 @@ function defToToolSummary(td) {
     };
 }
 
+/**
+ * Resolve a tool's deterministic ID from its canonical registry name.
+ * Pure function — does not consult the live registry — so it works for
+ * tools that were already unregistered (the listener path that drops
+ * stale embeddings on `tools:unregistered`).
+ *
+ * @param {string} name
+ * @returns {ToolID}
+ */
+function toolNameToID(name) {
+    return computeToolID(PROFILE_NAMESPACE, name, TOOL_VERSION);
+}
+
 export const Catalog = {
     getById,
     getByName,
@@ -483,6 +496,7 @@ export const Catalog = {
     listAll,
     listCategories,
     defToToolSummary,
+    toolNameToID,
 };
 
 // Test seams — unit tests assert on derivation in isolation from the

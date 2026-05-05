@@ -27,7 +27,7 @@
  * @returns {Promise<Object>} Tool result object
  */
 
-import { Roles, State } from '../core.js';
+import { Roles, State, EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 
 export const ToolRegistry = {
@@ -115,6 +115,11 @@ export const ToolRegistry = {
         const removed = hadHandler || idx !== -1;
         if (removed) {
             console.log(`[ToolRegistry] 🗑 Unregistered tool: ${name}`);
+            // Downstream caches keyed on the tool (e.g. the find_tool
+            // embeddings side-table) listen for this to drop their entries.
+            // The registry itself stays ID-naive — listeners that need the
+            // ToolID resolve it via the catalog's deterministic mapping.
+            try { EventBus.emit('tools:unregistered', { name }); } catch { /* swallow */ }
         }
         return removed;
     },

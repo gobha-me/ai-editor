@@ -103,7 +103,7 @@ function makeRegistration(server, mcpTool) {
     const handler = async (args) => {
         const live = MCPServerRegistry.getServer(server.id);
         if (!live || !live.enabled) {
-            return { error: `MCP server "${server.id}" is not enabled` };
+            return { error: `MCP server "${server.id}" is disabled. Re-enable it in Settings → MCP Servers, or use a different tool.` };
         }
         try {
             const envelope = await protocol.toolsCall(live, mcpTool.name, args || {});

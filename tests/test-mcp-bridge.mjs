@@ -233,7 +233,111 @@ test('makeRegistration: short-circuits when server is disabled at call time', as
     MCPServerRegistry.updateServer('demo', { enabled: false });
 
     const result = await ToolRegistry.execute('mcp__demo__echo', {});
-    assert.match(result.error, /not enabled/);
+    // 1.6.10: error string widened to point the LLM at the recovery action.
+    assert.match(result.error, /disabled/);
+    assert.match(result.error, /Settings → MCP Servers/);
 
     globalThis.fetch = ORIG_FETCH;
+});
+
+test('disconnect: emits tools:unregistered event per tool', async () => {
+    resetAll();
+    globalThis.fetch = makeFetchStub([
+        { name: 'echo', description: 'Echo' },
+        { name: 'reverse', description: 'Reverse' },
+    ]);
+    MCPServerRegistry.addServer({ id: 'demo', label: 'Demo', url: 'https://mcp.example/mcp' });
+    await bridge.connect('demo');
+
+    const { EventBus } = await import('../js/core.js');
+    const seen = [];
+    const off = EventBus.on('tools:unregistered', (payload) => seen.push(payload));
+
+    await bridge.disconnect('demo');
+    off();
+
+    const names = seen.map(p => p.name).sort();
+    assert.deepEqual(names, ['mcp__demo__echo', 'mcp__demo__reverse']);
+
+    globalThis.fetch = ORIG_FETCH;
+});
+
+test('tool embeddings cache drops entry on tools:unregistered', async () => {
+    resetAll();
+    const { _testing } = await import('../js/intelligence/tools/embeddings.js');
+    const { Catalog } = await import('../js/intelligence/tools/catalog.js');
+
+    // Register a fake native tool, populate the cache via the test seam,
+    // then unregister and assert the cache shrinks.
+    const fakeName = 'unit_test_unregister_target';
+    ToolRegistry.register(fakeName, async () => ({ result: 'ok' }), {
+        type: 'function',
+        function: { name: fakeName, description: 'fixture', parameters: { type: 'object', properties: {} } },
+        roles: 'all',
+        category: 'misc',
+    });
+
+    // Stub the embedder so we don't load Transformers.js in a node test.
+    _testing._setEmbedderForTests({
+        embed: async () => [0.1, 0.2, 0.3],
+        isEnabled: () => true,
+        cosineSimilarity: () => 0.5,
+    });
+    _testing._clearCacheForTests();
+
+    const td = Catalog.getByName(fakeName);
+    assert.ok(td, 'fixture tool should resolve via Catalog');
+    const { getToolEmbedding } = await import('../js/intelligence/tools/embeddings.js');
+    const vec = await getToolEmbedding(td);
+    assert.ok(Array.isArray(vec));
+    assert.equal(_testing._getCacheSize(), 1);
+
+    ToolRegistry.unregister(fakeName);
+
+    // Microtask drain — EventBus.emit is sync, but be defensive.
+    await Promise.resolve();
+    assert.equal(_testing._getCacheSize(), 0, 'tool embedding should be evicted on unregister');
+
+    _testing._setEmbedderForTests(null);
+});
+
+test('mcp-bridge __test.emitDiffMessages: classifies disable / enable / reconnect / no-op', async () => {
+    const { __test } = await import('../plugins/mcp-bridge.js');
+    const messages = [];
+    const fakeAdd = (role, content) => messages.push({ role, content });
+
+    const pre = new Map([
+        ['srv-disabled', { label: 'DisabledOne', names: new Set(['mcp__srv-disabled__a', 'mcp__srv-disabled__b']) }],
+        ['srv-rotate',   { label: 'Rotate',      names: new Set(['mcp__srv-rotate__old']) }],
+        ['srv-stable',   { label: 'Stable',      names: new Set(['mcp__srv-stable__x']) }],
+    ]);
+    const post = new Map([
+        ['srv-rotate',   { label: 'Rotate', names: new Set(['mcp__srv-rotate__new', 'mcp__srv-rotate__extra']) }],
+        ['srv-stable',   { label: 'Stable', names: new Set(['mcp__srv-stable__x']) }],
+        ['srv-enabled',  { label: 'NewServer', names: new Set(['mcp__srv-enabled__only']) }],
+    ]);
+
+    __test.emitDiffMessages(pre, post, fakeAdd);
+
+    const contents = messages.map(m => m.content).sort();
+    assert.equal(messages.length, 3, 'expected exactly 3 transitions (disable, reconnect, enable); no-op stable server stays silent');
+    assert.ok(messages.every(m => m.role === 'system'));
+    assert.ok(contents.some(c => c.includes('"DisabledOne"') && c.includes('disabled') && c.includes('2 tools removed')));
+    assert.ok(contents.some(c => c.includes('"Rotate"') && c.includes('reconnected') && c.includes('2 tools available')));
+    assert.ok(contents.some(c => c.includes('"NewServer"') && c.includes('enabled') && c.includes('1 tool available')));
+});
+
+test('mcp-bridge __test.emitDiffMessages: pluralizes tool counts correctly', async () => {
+    const { __test } = await import('../plugins/mcp-bridge.js');
+    const messages = [];
+    const fakeAdd = (role, content) => messages.push({ role, content });
+
+    __test.emitDiffMessages(
+        new Map([['srv', { label: 'Solo', names: new Set(['mcp__srv__one']) }]]),
+        new Map(),
+        fakeAdd,
+    );
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].content, /1 tool removed/);
+    assert.doesNotMatch(messages[0].content, /1 tools/);
 });

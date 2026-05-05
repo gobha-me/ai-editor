@@ -4,25 +4,108 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.6.10] - 2026-05-05
+
+The third dogfood-battery item ([github#23](https://github.com/gobha-me/ai-editor/issues/23))
+runs as the next post-`v1.6.0` release event. Investigation showed the
+underlying registry cleanup was already correct — `disconnect()` purges
+both `ToolRegistry.handlers` and `ToolRegistry.definitions`, and the
+discovery tools (`list_tools_by_category`, `find_tool`) read live from the
+registry on every call. The real gaps were three: silent enable/disable
+transitions left the LLM's prior-turn tool list stale, the tool-embeddings
+side-table held vectors for tools no longer registered, and the
+"server not enabled" error gave the model no recovery path.
+
+### State message diff on `mcp:serversChanged`
+
+The plugin handler at [`plugins/mcp-bridge.js`](plugins/mcp-bridge.js) used
+to silently `disconnectAll()` → `bootstrapAllServers()` whenever the
+Settings tab fired `mcp:serversChanged`. Now it snapshots the registered
+tool-name set per server before and after the cycle and emits one
+`addMessage('system', …)` per meaningful transition:
+
+- `[MCP] Server "<label>" disabled — N tools removed.`
+- `[MCP] Server "<label>" enabled — N tools available.`
+- `[MCP] Server "<label>" reconnected — N tools available.` (schema rotated)
+
+Identical pre/post sets stay silent so cosmetic edits (relabel, URL change
+that didn't shift the tool list) don't pollute the chat. The handler is
+attached only after the first-load `bootstrapAllServers()`, so the initial
+page load doesn't fire a barrage of "enabled" messages.
+
+The diff helpers (`snapshotRegistrations`, `emitDiffMessages`) are exported
+through a `__test` seam for unit coverage in
+[`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs).
+
+### `tools:unregistered` event + tool-embeddings cache eviction
+
+[`js/tools/registry.js`](js/tools/registry.js) `unregister(name)` now emits
+a `tools:unregistered` event with `{ name }`. The
+[tool-embeddings side-table](js/intelligence/tools/embeddings.js) at
+`_cache: Map<ToolID, number[]>` subscribes lazily on first
+`getToolEmbedding` / `findToolsBySemantic` call and drops the matching
+entry when an unregister fires. Resolution from name → ID goes through a
+new public helper `Catalog.toolNameToID(name)` that wraps the catalog's
+existing `computeToolID(PROFILE_NAMESPACE, name, TOOL_VERSION)` policy.
+
+Before 1.6.10 the cache was cleared only by the heavyweight
+`embeddings:cacheCleared` event (model swap, manual wipe). Disabled
+servers' tool vectors persisted as dead memory until the user changed
+embedding models. The event is generic — native plugin disable paths that
+unregister tools benefit too, not just MCP.
+
+### Actionable error string when a disabled MCP tool is invoked
+
+Pre-1.6.10 the closure at
+[`js/mcp/bridge.js`](js/mcp/bridge.js)`makeRegistration` returned
+`MCP server "<id>" is not enabled` when an outlived handler was called
+against a disabled server. The new string is
+`MCP server "<id>" is disabled. Re-enable it in Settings → MCP Servers,
+or use a different tool.` — the LLM now has a recovery path. After the
+state-message change above, this race is rare, but cheap insurance.
+
+### Tests
+
+[`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs) gains four cases:
+
+- `disconnect` emits one `tools:unregistered` event per registered tool.
+- The embeddings cache shrinks by exactly one entry on `unregister`.
+- `emitDiffMessages` classifies the four transitions (disable, enable,
+  reconnect, no-op) and emits exactly one `system` message per non-no-op.
+- Tool-count pluralization (`1 tool` vs `2 tools`).
+
+The pre-existing `makeRegistration: short-circuits when server is
+disabled at call time` test was tightened to assert the new
+`Settings → MCP Servers` hint is present.
+
+### Removability
+
+Every change reverts independently:
+- Restoring the pre-1.6.10 handler at `plugins/mcp-bridge.js` returns to
+  silent toggles.
+- Removing the `EventBus.emit('tools:unregistered', { name })` line in
+  `js/tools/registry.js` returns to dead-vector accumulation.
+- Reverting the error string in `js/mcp/bridge.js` returns to the
+  generic message.
+
 ### `tests/test-memory-tab.js` — MutationObserver-based row wait
 
-`_waitForRows()` polled the fixture with `setTimeout(10)` against a
-1500 ms deadline. When the test page is backgrounded, Chrome's
-intensive throttling stretches `setTimeout` chains to ~1 Hz and
-delays Preact's `useEffect` (scheduled via `requestAnimationFrame`),
-so the loop took only one or two samples before the deadline expired
-and the rows weren't visible yet. The "Initial render shows 3 rows"
-inline assert still passed because it ran *after* the deadline, by
-which time the rows had finally materialized — the failing
-assertion was the trailing `Initial render reached 3 rows within
+(Promoted from `[Unreleased]`.) `_waitForRows()` polled the fixture with
+`setTimeout(10)` against a 1500 ms deadline. When the test page is
+backgrounded, Chrome's intensive throttling stretches `setTimeout` chains
+to ~1 Hz and delays Preact's `useEffect` (scheduled via
+`requestAnimationFrame`), so the loop took only one or two samples before
+the deadline expired and the rows weren't visible yet. The "Initial
+render shows 3 rows" inline assert still passed because it ran *after*
+the deadline, by which time the rows had finally materialized — the
+failing assertion was the trailing `Initial render reached 3 rows within
 deadline`.
 
 Replaced the timer-poll loop with a `MutationObserver` keyed on the
-fixture subtree. The observer fires as a microtask on every DOM
-mutation regardless of throttling, so rows are detected the moment
-Preact commits the render. A 5 s `setTimeout` is kept as a
-true-failure backstop. Production code is untouched — this is a
-test-infrastructure fix only.
+fixture subtree. The observer fires as a microtask on every DOM mutation
+regardless of throttling, so rows are detected the moment Preact commits
+the render. A 5 s `setTimeout` is kept as a true-failure backstop.
+Production code is untouched — this is a test-infrastructure fix only.
 
 ## [1.6.9] - 2026-05-05
 

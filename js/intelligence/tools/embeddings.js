@@ -26,6 +26,7 @@
  */
 
 import { EventBus, State } from '../../core.js';
+import { Catalog } from './catalog.js';
 // EmbeddingsClient is imported lazily inside the helper so node test
 // environments that don't load the embedder module can stub it via
 // dependency injection without pulling in Transformers.js eval-time setup.
@@ -42,6 +43,9 @@ const _cache = new Map();
 
 /** @type {(() => void) | null} */
 let _unsubscribeCacheCleared = null;
+
+/** @type {(() => void) | null} */
+let _unsubscribeToolsUnregistered = null;
 
 /**
  * Default embedder accessor. Resolved lazily per call so test code can
@@ -64,6 +68,26 @@ function _ensureCacheClearedSubscription() {
 }
 
 /**
+ * Drop a single tool's cached embedding when the registry unregisters it
+ * (MCP server toggled off, plugin disabled, etc). Without this the vectors
+ * pile up indefinitely until a model swap clears the whole table.
+ *
+ * Subscribed lazily — first `findToolsBySemantic` or `getToolEmbedding`
+ * call wires it. Cheap once attached.
+ */
+function _ensureToolsUnregisteredSubscription() {
+    if (_unsubscribeToolsUnregistered) return;
+    _unsubscribeToolsUnregistered = EventBus.on('tools:unregistered', (payload) => {
+        const name = payload && typeof payload.name === 'string' ? payload.name : null;
+        if (!name) return;
+        try {
+            const id = Catalog.toolNameToID(name);
+            _cache.delete(id);
+        } catch { /* swallow — never throw from a cache-invalidation listener */ }
+    });
+}
+
+/**
  * Text canonicalization for tool embeddings — name + description + category.
  * Mirrors the `embedding` field doc in `contracts.js`.
  *
@@ -82,6 +106,7 @@ function _toolEmbedText(td) {
  * @returns {Promise<number[]|null>}
  */
 export async function getToolEmbedding(td) {
+    _ensureToolsUnregisteredSubscription();
     if (!td || typeof td.id !== 'string') return null;
     const cached = _cache.get(td.id);
     if (cached) return cached;
@@ -159,6 +184,7 @@ export function _readDiscoveryCap() {
  */
 export async function findToolsBySemantic(query, defs, opts) {
     _ensureCacheClearedSubscription();
+    _ensureToolsUnregisteredSubscription();
 
     if (typeof query !== 'string' || query.trim().length === 0 || !Array.isArray(defs) || defs.length === 0) {
         return { ranked: [], mode: 'unavailable' };
