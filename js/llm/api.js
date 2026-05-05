@@ -788,7 +788,7 @@ export const LLM = {
                                     toolCalls[tc.index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
                                 }
                                 if (tc.id) toolCalls[tc.index].id = tc.id;
-                                if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                                if (tc.function?.name && !toolCalls[tc.index].function.name) toolCalls[tc.index].function.name = tc.function.name;
                                 if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
                             }
                         }

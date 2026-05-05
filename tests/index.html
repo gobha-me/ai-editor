@@ -124,6 +124,10 @@
             } catch (e) { errors.push(['HistoryValidator', e]); }
 
             try {
+                await import('./test-llm-api-stream.js');
+            } catch (e) { errors.push(['LLMApiStream', e]); }
+
+            try {
                 await import('./test-blame-normalize.js');
             } catch (e) { errors.push(['Blame', e]); }
 

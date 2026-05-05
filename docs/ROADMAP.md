@@ -16,7 +16,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 | Phase | Track |
 |---|---|
 | **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md); the next release tag (`v1.6.0`) bundles these six fixes with the already-merged 1.5.14 retrieval cutover. Status: 1.6.0, 1.6.1, 1.6.2 shipped to main; 1.6.3–1.6.5 pending. |
-| **Next** | **1.6.6** Cost-dashboard retrieval extension *(gated on cost dashboard shipping)* · **1.6.7** Query / structural expansion cache · **1.6.8 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
+| **Next** | **1.6.6** Cost-dashboard retrieval extension *(gated on cost-dashboard export landing)* · **1.6.7** Query / structural expansion cache · **1.6.8 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
 | **Later** | **2.0 Profiles.** Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled*. |
 
@@ -73,6 +73,34 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 **Removability.** Each of the six PRs reverts independently; the chat loop returns to its pre-1.6.x state.
 
+### Post-tag dogfood battery
+
+Once `v1.6.0` is tagged, the open GitHub issues below run as ai-editor sessions against `main` — real work that doubles as the chat-stability dogfood. **Goal: not just a passing PR, but a captured trace showing *how* ai-editor got there.** Each session is its own discrete test.
+
+| Order | Issue | What it exercises | Pass criteria |
+|---|---|---|---|
+| 1 | **github#20** — `git_log` tool missing | Tool registry, doc updates, **memory recall** (does ai-editor find the parked git-tool-wrappers wishlist and propose a bundle, or ship `git_log` alone in violation of it?) | Reaches the "bundle with the wishlist" conclusion if the wishlist is still parked, or ships the bundle if not. Trace shows the memory hit. |
+| 2 | **github#15** — Conflicting timeouts (test-driven loop) | Tool execution path in [`js/chat/handlers.js`](../js/chat/handlers.js) + settings; bounded two-file fix with three solution options on the issue | Bounded fix lands; `wait_for_ci` no longer killed by tool timeout. Existing tools keep their 30 s default. |
+| 3 | **github#23** — MCP plugin disable doesn't purge tools | Cross-layer: MCP bridge + plugin layer + chat handlers + tool registry; multi-file edit + system-message injection into chat | All acceptance criteria from the issue body pass. |
+| 4 | **github#21** — MCP role-based tool access | MCP bridge + role system + Settings → MCP Servers UI; new UI plus core change | Three-part proposed solution lands; backward-compatible default (no roles set ⇒ `'all'`). |
+
+**What to capture per session.**
+
+- `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` set before starting. Each context rebuild logs `RECENT_COUNT`, `startIndex`, `info?.summary` presence, dropped count.
+- Full LLM-debug-modal export at session end: chat trace, tool calls, latency, `prompt_tokens`, `cached_tokens`.
+- **Chat-stability invariants:**
+  - Did the **truncation marker** (1.6.0) appear when context was windowed?
+  - Did the **request-shape validator** (1.6.2) drop any orphans? *(it firing once is fine; firing repeatedly means an upstream regression.)*
+  - Did the **token-based summarization** (1.6.4) trigger when load warranted, and not before?
+- Retrieval hit-set per `find_relevant_files` call (which files came back, were they the right ones?).
+- Cost-dashboard reading at session end (eyeballed in [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) until the export item lands).
+
+**Grading.** Each session passes if *both*:
+1. **Output quality** — the produced PR meets the issue's acceptance criteria, builds clean, and existing tests pass.
+2. **Trace quality** — no regressions in the chat-stability invariants. Failure of (2) but passing (1) means the chat surface is fragile under that workload — file as a follow-up issue and continue the battery.
+
+**Out of scope for the battery:** github#18 (cross-device settings sync via QR/P2P) — unbounded scope; tests product-design instincts more than repo-fluency. Reconsider once the four-issue battery completes and we have a baseline.
+
 ---
 
 ## Later (sequenced)
@@ -81,7 +109,7 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 Bumped past the chat-stability minor.
 
-- **1.6.6:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) — *gated on cost dashboard shipping*.
+- **1.6.6:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) added to the existing [`js/settings/cost-tab.js`](../js/settings/cost-tab.js). Pairs naturally with the **cost-dashboard export** item (still missing) — bundle if both surfaces are touched.
 - **1.6.7:** Query cache, structural expansion cache.
 - **1.6.8 (gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
 
@@ -129,7 +157,9 @@ All three get scoped post-2.0 against measured signal, not speculation.
 
 ## Deferred / unscheduled (needs triage)
 
-> **Why this section exists.** Foundations (1.1.x) and Compression (1.2.x) were sequenced before Memory + Tools jumped ahead. Some items are gated on metrics from the cost dashboard (which itself is deferred). Some may be obsolete now that Tools shipped its own equivalents (e.g. the `TaskLedger` landed in 1.3.17). Sorting paused-vs-abandoned is owed.
+> **Why this section exists.** Foundations (1.1.x) and Compression (1.2.x) were sequenced before Memory + Tools jumped ahead. Some items are gated on metrics from the cost dashboard (which has shipped — but its export affordance has not; see the Compression bucket). Some may be obsolete now that Tools shipped its own equivalents (e.g. the `TaskLedger` landed in 1.3.17). Sorting paused-vs-abandoned is owed.
+>
+> **Triage policy (2026-05-05).** Each item below gets one of two scheduled actions: a **code audit** (read the relevant module + branch, decide whether the work is still needed in light of what shipped since) or a **formal test** (when an audit can't determine relevance — e.g. compression Rules 1+2 effectiveness only shows up under measured load). Items determined to be **OBE** ("Overcome By Events" — superseded by later work) get removed from this doc; items determined to be still needed get re-slotted with a track. Audits/tests run as their own small PRs; the disposition note lands in this section's row before removal or re-slotting.
 
 ### Foundations (was 1.1.x)
 
@@ -146,13 +176,14 @@ All three get scoped post-2.0 against measured signal, not speculation.
 
 ### Compression (was 1.2.x)
 
-> **The whole track is gated on the cost dashboard.** Without it, "did Rules 1+2 actually save the projected 40%?" is unanswerable. Each follow-up gates on the previous one's measured value showing up in the dashboard.
+> **The whole track is gated on cost-dashboard export.** The dashboard itself shipped at 1.2.1 ([`js/settings/cost-tab.js`](../js/settings/cost-tab.js)) — cross-provider, per-conversation, per-tool, 30-day chart, budget tracking. It is currently *read-only*: the data lives in [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js) but cannot leave the browser. Without an export affordance (Copy / JSON / CSV), the question "did Rules 1+2 actually save the projected 40%?" can be eyeballed in the chart but not analyzed offline. Each compression follow-up gates on the previous one's measured value showing up in the dashboard *and* being capturable for comparison.
 
 | Item | Branch | Rationale |
 |---|---|---|
 | Rules 1+2 (Subsumption, Invalidation) | `feat/1.2.0-compression-phase-1`, `feat/1.2.x-compression-off-flag`, `feat/1.2.x-synthetic-savings` | New `js/intelligence/compression/` module tree. `preserve_recent` invariant. Diagnostics in LLM debug modal. Existing `chat/summarizer.js` stays as Rule 5 fallback. |
-| Cost dashboard | (none) | **Gating item.** Cross-provider, per-conversation, per-tool token + cost breakdown. Promoted because measurement infrastructure ships first, not last. Today the editor has Venice-specific billing in `plugins/venice-billing.js`; this generalizes it. |
-| Rule 3 (Consumption) | (none) | Gated on dashboard + ≥95% `tool_result_for` coverage on production sessions. |
+| Cost dashboard *(shipped 1.2.1)* | (n/a) | Cross-provider, per-conversation, per-tool token + cost breakdown lives at [`js/settings/cost-tab.js`](../js/settings/cost-tab.js); store at [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js). Venice + OpenRouter remote dashboards in `plugins/`. **Status:** ✅ shipped; the listed-here legacy line said "(none)" — that was stale. |
+| **Cost-dashboard export** | (none) | **New gating item.** Add Copy / JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) so post-session analysis can leave the browser. Cheap (one button + `JSON.stringify` over the existing store). Unblocks the compression-track measurement loop and is a prerequisite for the 1.6.6 retrieval extension. Could ship as a small 1.6.x patch after 1.6.x dogfood. |
+| Rule 3 (Consumption) | (none) | Gated on export + ≥95% `tool_result_for` coverage on production sessions. |
 | Rule 4 (Resolution) | (none) | Templated marker generation for "debugging spans that ended successfully." Gated on Rule 3 numbers matching the design. |
 | Rule 5 tuning | (none) | Plug existing summarizer into the pipeline cleanly; measure compression latency and summarizer call rate. |
 | Settings → Compression panel refresh | (none) | Replaces Settings → Chat Summarizer. Establishes the **preset / advanced toggle pattern** (Decision §11) that subsequent panels inherit. Gated on Rules 1–5 live. |
@@ -160,7 +191,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 
 ### Other deferred
 
-- **`ChatHistoryStore` encapsulation** — `State.chatHistory` is mutated directly by 14 call sites across 5 files (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`, `conversations.js`), and each one is independently responsible for calling `Storage.set('chatHistory', …)` afterward. Three issue #16 patches in a row had to walk every site to change persistence policy; missing one keeps the bug alive. Scope: introduce a single module exposing `append(msg)`, `splice(from)`, `replace(arr)`, `clear()`, route every consumer through it, drop `Storage.set('chatHistory', …)` from everywhere else. Unblocks the quota-aware eviction strategy Jeff described (embeddings-first → old chats → never active). Lo-medium pri — current code works, but the *next* policy change pays the same 5-file walk.
+- **`ChatHistoryStore` encapsulation** — `State.chatHistory` is mutated directly by 14 call sites across 5 files (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`, `conversations.js`), and each one is independently responsible for calling `Storage.set('chatHistory', …)` afterward. Three issue #16 patches in a row had to walk every site to change persistence policy; missing one keeps the bug alive (1.5.9 #16 missed it; 1.6.5 had to revisit). Scope: introduce a single module exposing `append(msg)`, `splice(from)`, `replace(arr)`, `clear()`, route every consumer through it, drop `Storage.set('chatHistory', …)` from everywhere else. Unblocks the quota-aware eviction strategy Jeff described (embeddings-first → old chats → never active). **Structural risk, not lo-pri** — the current code works until the next persistence-policy change pays the same 5-file walk and one site gets missed again. Slot before the next change that touches chat persistence.
 - **Chat panel facelift** — three Touch 2 variants (Polish, Restructure, Reskin); direction not locked. Will get a slot once a direction is picked or roll into 2.0 with the profile picker.
 - **Persona memory scope** — deferred indefinitely. Workspace + user scopes cover the demand seen so far.
 - **Plugin SlotManager** — designed but not built; on PLAN.md.
@@ -168,6 +199,14 @@ All three get scoped post-2.0 against measured signal, not speculation.
 - **Mobile secondary pane rework** — current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over.
 - **Issue/PR tab visual hierarchy** — long tabs feel busy; lo-pri.
 - **Plugin marketplace** — defer to 2.x once the architecture stabilizes.
+
+### Known open issues — not yet scheduled
+
+User-facing gaps tracked as filed issues but not yet slotted into a track. Listed here so a roadmap reader can see them without diff'ing against the issue tracker. **Issue trackers split by audience:** internal/dogfood-only on Gitea (`git.gobha.me/xcaliber/ai-editor`); public-facing on the GitHub mirror (`github.com/gobha-me/ai-editor`).
+
+- **gitea#188 — `[storage] cost-daily graph data lost after refresh`** *(open)*. The cost-daily map is written via bare `Storage.set('cost-daily', …)` in [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js) without the `KeyMutex` serialization the memory subsystem uses, so concurrent turns can interleave read-modify-write. Storage-track adjacent to 1.6.5 (localStorage quota-recovery cleanup) — both touch the IDB-vs-localStorage authority boundary, but the fix shape is different (mutex-around-RMW, not policy).
+- **github#23 — `Bug: Disabling an MCP plugin should remove its tools from listings and notify the LLM`** *(open)*. When an MCP server is disabled (Settings → MCP Servers toggle), tools may still surface in `list_tools_by_category` / `find_tool` discovery, and the LLM gets a generic "server not enabled" error after attempting a call rather than a proactive "server disabled, N tools removed" state message. Touches `js/mcp/bridge.js`, `plugins/mcp-bridge.js`, `js/chat/handlers.js`, `js/tools/registry.js`. Has full proposed solution + acceptance criteria on the issue. Not in 1.6.x scope (chat-stability bundle).
+- **github#20 — `Feature: Add git log tool — LLMs attempt to call it but it doesn't exist`** *(open)*. Code-focused models call `git log` and get an unknown-tool error; the registry has 5 git-related categories but no `code.git.log`. Shares scope with the parked git-tool-wrappers wishlist (`git_blame` is the same shape — provider + Git module support exists, only the tool wrapper is missing). Bundle if/when the wishlist lands; do not ship `git_log` alone.
 
 ---
 
@@ -182,7 +221,7 @@ Resolved from discussion. Load-bearing — implementations honor them.
 5. **Tool budget defaults to 5000 tokens** (per design), exposed as a tunable in Settings → Tools.
 6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches.
 7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the next minor is gated on closing that gap.
-8. **Measurement before scale.** Cost dashboard ships with the first eviction subsystem, not at the end. *(Currently deferred — see Compression bucket.)*
+8. **Measurement before scale.** Cost dashboard shipped at 1.2.1 with cross-provider, per-conversation, and per-tool breakdowns ([`js/settings/cost-tab.js`](../js/settings/cost-tab.js)); the export affordance to make it useful for offline analysis is the open gap (see Compression bucket).
 9. **Preact + `htm` allowed for new state-heavy surfaces from 1.3.0; vanilla everywhere else through 2.0.** Existing tabs / sidebar / file tree / editor frame / chat stay vanilla forever; no migration. Bigger uniform-UI consolidation is a 2.0 → 3.0 arc.
 10. **claude.ai/design engages on a two-touch model.** Touch 1 (Memory UX, 2026-04-29) → 1.3.0 Memory flows; deliverable at `docs/design/touch-1-memory-ux/`. Touch 2 (whole-app facelift, 2026-04-30) → top-bar Restructure + Settings sidebar + Connections / Debug / Help panels; deliverable at `docs/design/touch-2-facelift/`.
 11. **Two-view configuration for every settings panel.** Preset view (intent) + advanced view (parameters), reachable via the same toggle name and position in every panel. Editing in advanced flips the preset selector to "Custom"; switching back to a named preset snaps every knob to that preset's defaults. **No separate "Developer mode" sections.** Full contract in `docs/DESIGN-profiles.md` §"Two-View Configuration."

@@ -8,6 +8,67 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.3] - 2026-05-05
+
+**`function.name` overwrite-if-empty in SSE accumulator (PR 3 of the 1.6.0 chat-stability track).**
+
+Fourth of the six chat-stability PRs sized in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+(PR 3, §420-430). Closes Hypothesis #2 latently: the SSE
+tool-call-delta accumulator at
+[`js/llm/api.js`](js/llm/api.js) used `+=` on `function.name` when
+collecting chunks for a given `tc.index`. OpenAI and Venice send
+`name` only on the first chunk of a given index, so production
+sessions never tripped the bug — but a chunk-repeating provider that
+re-emits `name` on later chunks would yield `get_weatherget_weather`
+and break the tool-name lookup at dispatch.
+
+**What ships.**
+
+- **One-line guard at
+  [`js/llm/api.js:791`](js/llm/api.js).** Replaced
+  `if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;`
+  with
+  `if (tc.function?.name && !toolCalls[tc.index].function.name) toolCalls[tc.index].function.name = tc.function.name;`.
+  First-chunk behavior is byte-identical to before (the slot is
+  initialized with `name: ''`, so the new condition is true on the
+  first arrival); subsequent re-emissions of `name` for the same
+  index are now ignored instead of concatenated. Compliant providers
+  see no change.
+- **`function.arguments` left alone (line 792).** JSON arguments
+  legitimately stream across chunks (`{"p` + `ath":"/x"}` ⇒
+  `{"path":"/x"}`); `+=` is correct accumulation there. Findings
+  doc PR 3 scopes the fix to `name` only for this reason.
+
+**Regression coverage.** Five new cases in
+[`tests/test-llm-api-stream.js`](tests/test-llm-api-stream.js) under
+`function.name overwrite-if-empty (1.6.3 PR 3)`: single-chunk full
+name; **two chunks with repeated name (the bug fixture) — name stays
+single**; first chunk has name then later chunks stream `arguments`
+fragments only (proves the args `+=` is intact); parallel tool calls
+where repeated name on `index=0` doesn't bleed to `index=1`;
+empty/missing `function` field is a no-op without throwing. The test
+file mirrors the production accumulator body inline (the loop is not
+exported from `js/llm/api.js`); a comment in the test points back at
+the source line range.
+
+Registered in [`tests/index.html`](tests/index.html) next to the
+existing 1.6.2 history-validator suite.
+
+**Release-readiness gate.** Per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning",
+1.6.3 lands in `main` at this version but **does not get its own
+tag**. The `v1.6.0` release tag is pushed only after PRs 1.6.4–1.6.5
+land and a 10-turn dogfood session in this repo passes. The tag
+deploys the six chat-stability fixes together with the already-merged
+1.5.14 retrieval cutover as a single user-visible release event.
+
+**Removability.** Reverting this PR restores one line in
+[`js/llm/api.js`](js/llm/api.js), removes the new test file + its
+`tests/index.html` registration, and rolls `js/version.js` +
+`CHANGELOG.md`. No schema change; no behavior change for compliant
+providers.
+
 ## [1.6.2] - 2026-05-05
 
 **Request-shape validator before `LLM.chat` (PR 2 of the 1.6.0 chat-stability track).**
