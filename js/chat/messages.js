@@ -10,6 +10,11 @@ import { ChatSummarizer } from './summarizer.js';
 import { escapeHtml } from '../utils/html.js';
 import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consent-card.js';
 import { consentList } from '../intelligence/memory/index.js';
+import {
+    mountVirtualizer,
+    teardownVirtualizer,
+    notifyAppended as virtNotifyAppended,
+} from './message-virtualizer.js';
 
 /**
  * Add a message to chat history and render it.
@@ -76,16 +81,39 @@ export function addMessage(role, content, meta = {}) {
         }, 1500);
     }
 
-    // Clear welcome screen on first message
+    // Clear welcome screen on first message — when present, mount the
+    // virtualizer fresh so the just-pushed message anchors the rendered
+    // window. Otherwise append + notify so the existing window grows.
     const chatContainer = getChatContainer();
     const welcome = chatContainer?.querySelector('.chat-welcome');
-    if (welcome) welcome.remove();
-
-    renderMessage(message);
+    if (welcome) {
+        welcome.remove();
+        chatContainer.innerHTML = '';
+        const lastUserIdx = _findLastUserIndex(State.chatHistory);
+        mountVirtualizer(State.chatHistory, renderMessage, lastUserIdx);
+    } else {
+        renderMessage(message);
+        // Tag the freshly-rendered node so the virtualizer's prune logic
+        // counts it. Without the tag, live-appended turns would bloat past
+        // MAX_WINDOW indefinitely.
+        const node = chatContainer?.lastElementChild;
+        if (node && !node.hasAttribute('data-virt-idx')) {
+            node.setAttribute('data-virt-idx', String(State.chatHistory.length - 1));
+        }
+        virtNotifyAppended();
+    }
     scrollToBottom();
 
     EventBus.emit('chat:message', message);
     return message;
+}
+
+/** Find the index of the last 'user' message in `history`, or -1. */
+function _findLastUserIndex(history) {
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'user') return i;
+    }
+    return -1;
 }
 
 /**
@@ -286,6 +314,14 @@ export function finalizeStreamingMessage(content, meta = {}) {
         ...meta
     });
     Storage.set('chatHistory', State.chatHistory);
+
+    // Tag the finalized streaming node so the virtualizer prune treats it
+    // like any other rendered turn (the streaming placeholder pre-dates the
+    // virtualizer's tag pass), then count it toward the rendered window.
+    if (messageEl) {
+        messageEl.setAttribute('data-virt-idx', String(State.chatHistory.length - 1));
+    }
+    virtNotifyAppended();
 }
 
 /**
@@ -476,6 +512,7 @@ export function addToolCallMessage(toolName, args, result) {
         </details>
     `;
     chatContainer.appendChild(messageEl);
+    virtNotifyAppended();
     scrollToBottom();
 }
 
@@ -606,19 +643,25 @@ function summarizeToolResult(toolName, result) {
 }
 
 /**
- * Render all messages in chat history
+ * Render all messages in chat history.
+ *
+ * Delegates to the message virtualizer (1.6.x dogfood fix): only the
+ * trailing window is mounted; older messages page in via a top sentinel +
+ * IntersectionObserver. See `js/chat/message-virtualizer.js`.
  */
 export function renderMessages(historyOverride = null) {
     const chatContainer = getChatContainer();
     if (!chatContainer) return;
 
-    // Drain Preact consent-card mounts before nuking the DOM. Without this,
-    // listeners subscribed in the component would leak across re-renders.
+    // Drain Preact consent-card mounts and tear down any prior virtualizer
+    // before nuking the DOM. Without the consent drain, listeners
+    // subscribed in the component would leak across re-renders.
     unmountAllConsentCards();
+    teardownVirtualizer();
     chatContainer.innerHTML = '';
 
     const history = historyOverride || State.chatHistory;
-    
+
     if (history.length === 0) {
         chatContainer.innerHTML = `
             <div class="chat-welcome">
@@ -639,21 +682,13 @@ export function renderMessages(historyOverride = null) {
         return;
     }
 
-    // Find the last user message index for retry button placement
-    let lastUserMessageIndex = -1;
-    for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].role === 'user') {
-            lastUserMessageIndex = i;
-            break;
-        }
-    }
+    const lastUserMessageIndex = _findLastUserIndex(history);
+    mountVirtualizer(history, renderMessage, lastUserMessageIndex);
 
-    history.forEach((msg, idx) => {
-        const isLastUserMessage = msg.role === 'user' && idx === lastUserMessageIndex;
-        renderMessage(msg, isLastUserMessage);
-    });
-
-    // Show summary badge at top if a summary exists
+    // Show summary badge at top if a summary exists. `renderSummaryNotification`
+    // inserts before chatContainer.firstChild — that becomes the sentinel,
+    // so the badge ends up above the sentinel, which is fine visually and
+    // doesn't affect the observer (it tracks viewport intersection).
     const summaryInfo = Storage.get('chatSummaryInfo', null);
     if (summaryInfo?.summary) {
         renderSummaryNotification(summaryInfo, ChatSummarizer.hasStash());

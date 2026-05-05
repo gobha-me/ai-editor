@@ -124,7 +124,11 @@ function initChat(containerEl, inputEl) {
         console.groupEnd();
     }
 
-    renderMessages(displayHistory.slice(-100));
+    // The trailing-100 slice was a DOM-bloat workaround for eager rendering
+    // of the full history. The 1.6.x message virtualizer takes over that
+    // job, so render `displayHistory` whole — only the trailing window
+    // mounts, and older messages page in on scroll-up.
+    renderMessages(displayHistory);
     setupInputHandlers(inputEl, handleUserInputDirect);
     initConversationDrawer();
 

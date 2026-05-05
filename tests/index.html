@@ -177,6 +177,10 @@
             } catch (e) { errors.push(['Chat History Persistence', e]); }
 
             try {
+                await import('./test-message-virtualizer.js');
+            } catch (e) { errors.push(['Message Virtualizer', e]); }
+
+            try {
                 await import('./test-keybindings.js');
             } catch (e) { errors.push(['Keybindings', e]); }
 

@@ -4,6 +4,35 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Performance
+
+- **Chat message virtualizer.** `renderMessages()` no longer eagerly walks
+  every entry in `State.chatHistory`; only the trailing 50-message window
+  mounts on render, with older messages paging in via a top sentinel +
+  `IntersectionObserver`
+  ([`js/chat/message-virtualizer.js`](js/chat/message-virtualizer.js),
+  [`js/chat/messages.js`](js/chat/messages.js)). When the user is scrolled
+  up reading older context and a new turn arrives, a "↓ N new" pill
+  appears at the bottom instead of auto-scrolling. The window is capped at
+  150 mounted nodes; once the user returns to the bottom, the oldest
+  in-window messages are pruned and the sentinel re-engages.
+
+  **Why.** A 138-message dogfood session against `qwen-3-6-plus`
+  (2026-05-05) pinned the deployed editor's browser tab at 100% CPU on
+  layout/paint. Each tool call attaches an expandable `<details>` with the
+  full args + result JSON inline ([`js/chat/messages.js`](js/chat/messages.js)
+  `addToolCallMessage`); at ~5 tool blocks per assistant turn × 138
+  messages, the eager render produced thousands of nodes plus
+  syntax-highlighted JSON. The chat surface itself was stable through 49
+  exchanges — pure DOM rendering issue, not a context-management one.
+
+  **Removability.** Reverting `messages.js` to the prior eager
+  `renderMessages` walk and deleting `message-virtualizer.js` restores
+  pre-fix behavior; the chat surface, `State.chatHistory` shape, and
+  Storage semantics are unchanged. The init-time `displayHistory.slice(-100)`
+  workaround at [`js/chat/index.js`](js/chat/index.js) is also removed since
+  the virtualizer subsumes it.
+
 ### Notes
 
 - (placeholder for next track work)
