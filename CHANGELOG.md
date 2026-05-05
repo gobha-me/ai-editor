@@ -24,6 +24,113 @@ Preact commits the render. A 5 s `setTimeout` is kept as a
 true-failure backstop. Production code is untouched — this is a
 test-infrastructure fix only.
 
+## [1.6.9] - 2026-05-05
+
+The "Storage / retrieval follow-ups" sequence (1.6.6 → 1.6.7 → 1.6.8)
+continues into 1.6.9 with the cache work named under §"Now / Next /
+Later" → Next. Three caches land in one patch, plus a read-only role
+widening for `find_relevant_files` carried alongside.
+
+### Query result LRU short-circuits repeat `find_relevant_files` calls
+
+**The win.** Before 1.6.9, every `find_relevant_files(query, topK)`
+call ran the full pipeline — semantic k-NN, BM25 fusion, structural
+ancestor walks, paraphrase LLM call (when enabled), block assembly,
+rollup. A user who issues the same query twice in a session paid the
+full cost twice. Same applied to the agent issuing the same query in
+a long loop.
+
+**What ships.** A 64-entry LRU at
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+keyed on the normalized query (lowercase + collapsed whitespace) plus
+`topK`. Cached values carry the manager's `_indexFingerprint` and
+match against the live fingerprint on lookup; any mutation that
+changes the corpus (full re-ingest, single-file ingest, deletion,
+branch switch, clear) bumps the fingerprint and orphaned entries age
+out via LRU. Hits emit a `retrieval:turn-stats` event with `cache_hit:
+true` so the cost-dashboard's per-strategy table reflects that
+retrieval ran (zero tokens) for that turn rather than going dark.
+Empty results are cached too — avoids re-walking a corpus that
+genuinely matches nothing.
+
+**Files.** [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js),
+new [`js/intelligence/retrieval/lru.js`](js/intelligence/retrieval/lru.js)
+(minimal Map-backed LRU; ~30 lines).
+
+**Removability.** Reverting the cache short-circuit in
+`findRelevantFiles()` and the fingerprint bumps restores 1.6.8
+behavior. The LRU module ships dormant.
+
+### Structural strategy memoizes ancestor walks
+
+The Structural strategy
+([`js/intelligence/retrieval/strategies/structural.js`](js/intelligence/retrieval/strategies/structural.js))
+walked `parent_id` for every candidate on every `compose()` call. With
+the query cache landing, a memo at the next layer down preserves
+savings even on near-miss queries that share candidates with prior
+queries (different paraphrase variants, slightly different topK).
+
+**What ships.** An in-strategy `Map`-backed memo keyed by
+`${candidate.id}::${perChunkBudget}`, capped at 1024 entries. A new
+`clearMemo()` method on the strategy is called from the manager
+whenever `_indexFingerprint` bumps. The strategy also exposes
+`memoStats()` ({hits, misses, size}) for the LLM debug modal.
+
+**Files.** [`js/intelligence/retrieval/strategies/structural.js`](js/intelligence/retrieval/strategies/structural.js).
+Strategy contract is additive — pre-1.6.9 callers ignore the new
+methods.
+
+### Paraphrase cache persistence — IDB-backed
+
+Before 1.6.9, the paraphrase cache in
+[`js/intelligence/retrieval/query-paraphraser.js`](js/intelligence/retrieval/query-paraphraser.js)
+was an in-memory `Map` per `QueryParaphraser` instance — flushed on
+every page reload. Users running paraphrase mode `'primary'` or
+`'utility'` paid LLM tokens for every fresh session even when their
+query history overlapped with the previous session.
+
+**What ships.** A new
+[`js/intelligence/retrieval/paraphrase-cache-idb.js`](js/intelligence/retrieval/paraphrase-cache-idb.js)
+module wraps the existing `kv` IDB store from
+[`js/storage/idb.js`](js/storage/idb.js) under prefix
+`retrieval-paraphrase-cache::`. Values carry an `expiresAt` timestamp
+(7 days, matching the retrieval-index expiry pattern); expired
+entries drop lazily on get. Failures (open errors, transaction
+aborts, structured-clone rejects) degrade silently to cache misses —
+the live LLM path runs and behavior matches pre-1.6.9.
+
+**Wiring.** The paraphraser's cache contract widens to accept either
+sync or async `get` / `set` / `size`; the production caller
+([`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js))
+passes the IDB-backed cache through `buildParaphraserFromSettings`'s
+existing `deps.cache` slot. Tests that don't pass a cache continue to
+get the in-memory `Map` default — no behavior change for the test
+suite.
+
+**Removability.** Reverting the IDB-cache wiring in
+`findRelevantFiles()` and dropping the new module restores 1.6.8
+in-memory-only paraphrase caching.
+
+### `find_relevant_files` opened to all roles
+
+`find_relevant_files` was registered with `roles: ['full', 'coder',
+'reviewer']` at [`js/tools/context-tools.js`](js/tools/context-tools.js).
+PM and plugin-dev roles got denied even though the tool is purely
+read-only — same disposition as 1.6.8's `git_log` change for
+github#32. Changed to `roles: 'all'`. One regression test at
+[`tests/test-tools-foundation.mjs`](tests/test-tools-foundation.mjs)
+mirrors the `git_log` test pattern, asserting `_registeredRoles ===
+['all']`.
+
+### Tests
+
+New [`tests/test-retrieval-cache.mjs`](tests/test-retrieval-cache.mjs)
+covers: LRU bounded-insertion behavior + promotion + clear; structural
+memo hit / miss / clear / per-budget keying / cap enforcement;
+paraphraser async cache contract + sync regression. Existing 800+
+retrieval tests pass unchanged; the paraphraser's cache-await change
+is backwards-compatible because `await syncValue === syncValue`.
+
 ## [1.6.8] - 2026-05-05
 
 Six changes shipping under the in-flight 1.6.8 heading: (a) the

@@ -286,3 +286,21 @@ test('git_log is registered with roles: all', async () => {
     assert.ok(gitLogDef, 'git_log should be registered');
     assert.deepEqual(gitLogDef._registeredRoles, ['all'], 'git_log must be available to all roles');
 });
+
+// ============================================
+// find_relevant_files role access (1.6.9 — bundled with retrieval caches)
+// ============================================
+
+test('find_relevant_files is registered with roles: all', async () => {
+    // 1.6.9: read-only retrieval discovery; opened to PM and plugin-dev so
+    // they don't get denied for invoking a side-effect-free tool. Mirrors
+    // the git_log change shipped at 1.6.8 (github#32).
+    ToolRegistry.clear();
+    // Cache-bust the import so a re-run picks up a fresh module instance
+    // after the registry was cleared in the previous test.
+    await import('../js/tools/context-tools.js?find_relevant_files_test');
+    const defs = ToolRegistry.getDefinitions();
+    const def = defs.find(d => d.function?.name === 'find_relevant_files');
+    assert.ok(def, 'find_relevant_files should be registered');
+    assert.deepEqual(def._registeredRoles, ['all'], 'find_relevant_files must be available to all roles');
+});

@@ -196,6 +196,18 @@ export function createStructuralStrategy({ runSemanticRetrieve, getChunkByID }) 
         throw new TypeError('createStructuralStrategy: getChunkByID must be a function');
     }
 
+    // 1.6.9 — ancestor-walk memo. Keyed by `${candidate.id}::${perChunkBudget}`
+    // since the same candidate at a different budget may resolve to a different
+    // ancestor (oversized parent at a tight budget passes the candidate
+    // through unchanged). The chunk store is mutable across re-ingests, so the
+    // manager calls `clearMemo()` on every index-fingerprint bump.
+    /** @type {Map<string, ChunkRef>} */
+    const expandMemo = new Map();
+    /** Loose cap to bound memory across long sessions; cleared by `clearMemo()` on real invalidation. */
+    const MEMO_CAP = 1024;
+    let memoHits = 0;
+    let memoMisses = 0;
+
     /**
      * @param {RetrievalRequest} req
      * @returns {Applicability}
@@ -254,20 +266,68 @@ export function createStructuralStrategy({ runSemanticRetrieve, getChunkByID }) 
      * @returns {Promise<ChunkRef>}
      */
     async function expandOne(candidate, perChunkBudget) {
+        const memoKey = `${candidate.id}::${perChunkBudget}`;
+        const cached = expandMemo.get(memoKey);
+        if (cached !== undefined) {
+            memoHits += 1;
+            return cached;
+        }
+        memoMisses += 1;
+
         const structural = candidate.metadata && candidate.metadata.structural;
-        if (!structural) return candidate;
-        const parentId = structural.parent_id;
-        if (!parentId) return candidate;
-        const parent = await getChunkByID(parentId);
-        if (!parent) return candidate;
-        if (perChunkBudget <= 0) return candidate;
-        if (parent.tokens > perChunkBudget) return candidate;
-        return withStructuralProvenance(parent, candidate);
+        let result;
+        if (!structural) {
+            result = candidate;
+        } else {
+            const parentId = structural.parent_id;
+            if (!parentId) {
+                result = candidate;
+            } else {
+                const parent = await getChunkByID(parentId);
+                if (!parent) {
+                    result = candidate;
+                } else if (perChunkBudget <= 0) {
+                    result = candidate;
+                } else if (parent.tokens > perChunkBudget) {
+                    result = candidate;
+                } else {
+                    result = withStructuralProvenance(parent, candidate);
+                }
+            }
+        }
+
+        if (expandMemo.size >= MEMO_CAP) {
+            // Drop the oldest entry — Map iteration is insertion order.
+            const oldest = expandMemo.keys().next().value;
+            if (oldest !== undefined) expandMemo.delete(oldest);
+        }
+        expandMemo.set(memoKey, result);
+        return result;
+    }
+
+    /**
+     * Drop the ancestor-walk memo. Called by the manager whenever the
+     * chunk store mutates (full re-ingest, single-file ingest, file
+     * deletion, branch switch, index clear).
+     */
+    function clearMemo() {
+        expandMemo.clear();
+    }
+
+    /**
+     * Diagnostics seam — memo hit / miss / size for the LLM debug
+     * modal. Stable across calls; counters reset only when the strategy
+     * is rebuilt.
+     */
+    function memoStats() {
+        return { hits: memoHits, misses: memoMisses, size: expandMemo.size };
     }
 
     return {
         name: 'structural',
         applies_to,
         retrieve,
+        clearMemo,
+        memoStats,
     };
 }

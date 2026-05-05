@@ -34,7 +34,9 @@ import { createThematicStrategy } from './strategies/thematic.js';
 import { compose } from './composer.js';
 import { buildBM25Index } from './bm25-indexer.js';
 import { buildParaphraserFromSettings } from './query-paraphraser.js';
+import { createParaphraseIdbCache } from './paraphrase-cache-idb.js';
 import { defaultComposeFiltersResolver } from './measurement.js';
+import { LRU } from './lru.js';
 import {
     rollupToFiles,
     projectKeyFromString,
@@ -120,6 +122,73 @@ let _bm25Index = /** @type {any} */ (null);
 
 /** Strategy bundle — built lazily once `EmbeddingsClient.init()` resolves. */
 let _strategies = /** @type {any[]|null} */ (null);
+
+/**
+ * 1.6.9 — query result LRU + index fingerprint.
+ *
+ * `_queryCache` short-circuits the whole `compose()` pipeline for repeat
+ * `findRelevantFiles(query, topK)` calls within a session. Keys carry
+ * the current `_indexFingerprint` so any chunk-store mutation
+ * (re-ingest, file create/update/delete, branch switch, clear) bumps
+ * the fingerprint and orphans the cached entries — they age out via
+ * LRU rather than being swept on every mutation.
+ *
+ * The LRU also caches `[]` results so empty-corpus queries don't re-
+ * walk the store; absent caching this would re-trigger `indexProject()`
+ * on every miss for a corpus that genuinely has no matches.
+ */
+const QUERY_CACHE_DEFAULT_CAPACITY = 64;
+/** @type {LRU<{files: Array<{path: string, similarity: number, summary: string}>, fingerprint: number}>} */
+let _queryCache = new LRU(QUERY_CACHE_DEFAULT_CAPACITY);
+let _indexFingerprint = 0;
+let _queryCacheHits = 0;
+let _queryCacheMisses = 0;
+
+function _bumpIndexFingerprint() {
+    _indexFingerprint += 1;
+    if (_strategies) {
+        for (const s of _strategies) {
+            if (s && typeof s.clearMemo === 'function') {
+                try { s.clearMemo(); } catch { /* ignore */ }
+            }
+        }
+    }
+}
+
+/**
+ * Compose a query-cache key. Query is normalized (lowercase + collapse
+ * whitespace) so trivial variations land on the same entry; topK is
+ * appended verbatim. The index fingerprint is NOT in the key — it's
+ * stored alongside the cached value and compared on lookup, so an
+ * entry written under fingerprint=2 stays addressable after a bump
+ * but only returns on a fingerprint match. Avoids stranding entries
+ * under a key that nothing will look up again.
+ *
+ * @param {string} query
+ * @param {number} topK
+ * @returns {string}
+ */
+function _queryCacheKey(query, topK) {
+    const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
+    return `${normalized}::${topK}`;
+}
+
+/**
+ * Singleton paraphrase cache backed by IDB. Built once on demand;
+ * `null` in environments without IndexedDB (Node tests). The
+ * paraphraser's existing in-memory `Map` default takes over when this
+ * returns `null`.
+ *
+ * @type {ReturnType<typeof createParaphraseIdbCache>|undefined}
+ */
+let _paraphraseIdbCache;
+
+function _getParaphraseIdbCache() {
+    if (_paraphraseIdbCache === undefined) {
+        _paraphraseIdbCache = createParaphraseIdbCache();
+    }
+    return _paraphraseIdbCache;
+}
 
 // ============================================
 // Strategy bundle
@@ -277,6 +346,7 @@ function _setProject(owner, repo, branch) {
     _collection = projectKey;
     _bm25Index = null;
     _resumeRemaining = null;
+    _bumpIndexFingerprint();
 }
 
 // ============================================
@@ -408,6 +478,7 @@ async function indexProject(force = false, resume = false) {
             const allChunks = await store.getAllChunksForCollection(projectKey);
             _bm25Index = buildBM25Index(allChunks);
             chunksAdded = allChunks.length;
+            _bumpIndexFingerprint();
         }
 
         _indexedProject = projectKey;
@@ -469,6 +540,7 @@ async function _ingestSingle(uri) {
             // @ts-ignore
             const allChunks = await store.getAllChunksForCollection(_collection);
             _bm25Index = buildBM25Index(allChunks);
+            _bumpIndexFingerprint();
             await saveIndexToStorage();
         }
     } catch (err) {
@@ -486,6 +558,7 @@ function removeFileIndex(uri) {
     const ids = store.chunkIdsForSource(uri);
     if (ids.length === 0) return;
     store.markStale(ids);
+    _bumpIndexFingerprint();
     EventBus.emit('context:fileRemoved', { path: uri });
     saveIndexToStorage();
 }
@@ -510,6 +583,24 @@ function isEnabled() {
 async function findRelevantFiles(query, topK = 5) {
     if (!isEnabled()) return [];
     if (typeof query !== 'string' || query.trim().length === 0) return [];
+
+    // 1.6.9 — query cache short-circuit. Identical (query, topK) within the
+    // current index generation returns immediately, bypassing semantic k-NN,
+    // BM25, structural walks, paraphrase LLM call, and rollup. The
+    // `retrieval:turn-stats` event still fires (with all-zero strategy stats
+    // and `cache_hit: true`) so the cost dashboard reflects that retrieval
+    // ran for this turn — the win is the absence of token spend, not
+    // absence of attribution.
+    const cacheKey = _queryCacheKey(query, topK);
+    const cached = _queryCache.get(cacheKey);
+    if (cached && cached.fingerprint === _indexFingerprint) {
+        _queryCacheHits += 1;
+        _trackQuery();
+        _emitRetrievalCacheHit();
+        console.log(`[Retrieval] Query cache HIT for: "${query}"`);
+        return cached.files.map(f => ({ ...f }));
+    }
+    _queryCacheMisses += 1;
 
     // @ts-ignore
     const corpusChunks = await store.getAllChunksForCollection(_collection);
@@ -542,6 +633,10 @@ async function findRelevantFiles(query, topK = 5) {
 
         const paraphraser = buildParaphraserFromSettings(State.settings, {
             chatFn: (args) => LLM.chat(args),
+            // 1.6.9 — back the per-instance cache with IDB so paraphrases
+            // survive page reload. Falls back to the in-memory default
+            // when IndexedDB isn't available (Node tests).
+            cache: _getParaphraseIdbCache() ?? undefined,
         });
 
         /** @type {any} */
@@ -559,6 +654,15 @@ async function findRelevantFiles(query, topK = 5) {
         const result = await compose(req, { strategies, getChunkByID: store.getChunkByID }, composeOpts);
 
         const files = rollupToFiles(result, topK);
+
+        // 1.6.9 — store the rolled-up file list under the current fingerprint
+        // so a repeat call within this index generation hits the cache. Empty
+        // results are cached too (avoids re-walking a corpus that genuinely
+        // matches nothing).
+        _queryCache.set(cacheKey, {
+            files: files.map(f => ({ ...f })),
+            fingerprint: _indexFingerprint,
+        });
 
         _emitRetrievalTurnStats(result, tokensBefore, !!paraphraser);
 
@@ -626,6 +730,24 @@ function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser) {
     });
 }
 
+/**
+ * 1.6.9 — emit a `retrieval:turn-stats` event for a query-cache hit so
+ * the cost-recorder still attributes the turn (zero tokens, hits-from-
+ * cache marker). Mirrors the event shape from `_emitRetrievalTurnStats`
+ * but populates `cache_hit: true` and a synthetic `cache` strategy slot.
+ */
+function _emitRetrievalCacheHit() {
+    const convId = ConversationManager.getActiveId();
+    if (!convId) return;
+    EventBus.emit('retrieval:turn-stats', {
+        conversationId: convId,
+        cache_hit: true,
+        strategyStats: {
+            cache: { hits: 1, tokens: 0 },
+        },
+    });
+}
+
 function _trackQuery() {
     _queryCount += 1;
     _lastQueried = Date.now();
@@ -651,6 +773,7 @@ function clearIndex() {
         if (ids.length > 0) store.markStale(ids);
         _bm25Index = null;
         _indexedProject = null;
+        _bumpIndexFingerprint();
         EventBus.emit('context:indexCleared');
     }).catch(() => {});
 }
@@ -667,6 +790,7 @@ function removeIndexForBranch(branchName) {
             if (ids.length > 0) store.markStale(ids);
             _indexedProject = null;
             _bm25Index = null;
+            _bumpIndexFingerprint();
         }).catch(() => {});
     }
     console.log(`[Retrieval] Removed index for branch: ${branchName}`);
@@ -809,6 +933,13 @@ function getStats() {
         enabled: isEnabled(),
         queryCount: _queryCount,
         lastQueried: _lastQueried,
+        // 1.6.9 — cache observability for the LLM debug modal.
+        cache: {
+            queryCacheHits: _queryCacheHits,
+            queryCacheMisses: _queryCacheMisses,
+            queryCacheSize: _queryCache.size,
+            indexFingerprint: _indexFingerprint,
+        },
     };
 }
 
@@ -864,6 +995,12 @@ export const RetrievalManager = {
         _bm25Index = null;
         _strategies = null;
         _collection = DEFAULT_COLLECTION;
+        // 1.6.9 — reset cache state for tests.
+        _queryCache = new LRU(QUERY_CACHE_DEFAULT_CAPACITY);
+        _indexFingerprint = 0;
+        _queryCacheHits = 0;
+        _queryCacheMisses = 0;
+        _paraphraseIdbCache = undefined;
     },
 };
 

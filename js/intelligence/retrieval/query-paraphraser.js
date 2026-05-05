@@ -66,10 +66,15 @@
  * strings the paraphraser computes from `(modelId, query, prompt)` —
  * callers should not interpret them.
  *
+ * `get` / `set` / `size` may be sync (returning the value directly) or
+ * async (returning a Promise). The paraphraser awaits them either way,
+ * so an in-memory `Map`-backed cache and an IDB-backed cache can both
+ * satisfy this contract.
+ *
  * @typedef {Object} ParaphraseCache
- * @property {(key: string) => string[]|null} get
- * @property {(key: string, value: string[]) => void} set
- * @property {() => number} size
+ * @property {(key: string) => (string[]|null) | Promise<string[]|null>} get
+ * @property {(key: string, value: string[]) => void | Promise<void>} set
+ * @property {() => number | Promise<number>} size
  */
 
 /**
@@ -298,7 +303,7 @@ export function createQueryParaphraser(options) {
         }
         const trimmed = query.trim();
         const key = cacheKey(modelId, trimmed, promptResolved);
-        const cached = resolvedCache.get(key);
+        const cached = await resolvedCache.get(key);
         if (cached) {
             hits += 1;
             return cached.slice();
@@ -319,7 +324,7 @@ export function createQueryParaphraser(options) {
             failures += 1;
             return [];
         }
-        resolvedCache.set(key, parsed);
+        await resolvedCache.set(key, parsed);
         return parsed.slice();
     }
 

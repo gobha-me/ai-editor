@@ -96,7 +96,7 @@ async function indexProject({ force }) {
 // Register tools
 ToolRegistry.register('find_relevant_files', findRelevantFiles, {
     type: 'function',
-    roles: ['full', 'coder', 'reviewer'], // All roles that read code
+    roles: 'all', // 1.6.9 — read-only retrieval; opened to PM and plugin-dev (mirrors git_log at 1.6.8 / github#32)
     function: {
         name: 'find_relevant_files',
         description: 'Find semantically relevant files for a query using embeddings. Use this BEFORE reading files to dramatically reduce token usage. Returns the top N most relevant files based on their content and purpose.',
