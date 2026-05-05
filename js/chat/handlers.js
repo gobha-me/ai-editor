@@ -31,6 +31,7 @@ import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
 import { enrichToolResultTurn } from './turn-enrich.js';
 import { getCompressedContextMessages } from './compactor-integration.js';
+import { validateAndCleanHistory } from './history-validator.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
@@ -432,7 +433,11 @@ export async function handleGeneralRequest(input) {
                     updateStreamingMessage('*(processing tool results…)*');
                 }
 
-                result = await LLM.chat(messages, chatOptions);
+                // Defense-in-depth (1.6.2 PR 2): drop any orphan `tool` messages
+                // before the request leaves the boundary. Same reference returned
+                // when nothing is dropped (clean histories pay no copy cost).
+                const _validated = validateAndCleanHistory(messages);
+                result = await LLM.chat(_validated.messages, chatOptions);
 
                 content = content || result.content || '';
 

@@ -120,6 +120,10 @@
             } catch (e) { errors.push(['Summarizer', e]); }
 
             try {
+                await import('./test-history-validator.js');
+            } catch (e) { errors.push(['HistoryValidator', e]); }
+
+            try {
                 await import('./test-blame-normalize.js');
             } catch (e) { errors.push(['Blame', e]); }
 

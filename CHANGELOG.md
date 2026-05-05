@@ -8,6 +8,91 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.2] - 2026-05-05
+
+**Request-shape validator before `LLM.chat` (PR 2 of the 1.6.0 chat-stability track).**
+
+Third of the six chat-stability PRs sized in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+(PR 2, §401-418). Defense-in-depth at the LLM boundary: 1.6.0 closed
+the silent-windowing producer of orphan `tool` messages and 1.6.1
+closed the boundary-cutting `_pruneHistory()` producer; 1.6.2 asserts
+the resulting invariant — every `role: 'tool'` message must follow an
+`assistant` whose `tool_calls[].id` matches its `tool_call_id` —
+immediately before the request leaves
+[`js/chat/handlers.js`](js/chat/handlers.js). Strict providers reject
+the request with `"messages with role 'tool' must follow a preceding
+message with 'tool_calls'"`; lax ones confuse the model. Either way,
+any future regression in upstream context construction now gets caught
+and cleaned at the boundary rather than 400-ing the provider.
+
+**What ships.**
+
+- **New module
+  [`js/chat/history-validator.js`](js/chat/history-validator.js).**
+  Single export `validateAndCleanHistory(messages)`. Walks the array
+  left-to-right, building a running set of `tool_call_id`s from the
+  most recent `assistant.tool_calls[]` (each new assistant turn closes
+  the prior set — once a new assistant arrives, any unanswered prior
+  ids are stale and a `tool` carrying one is orphan). Drops any `tool`
+  message whose `tool_call_id` is missing or not in the live set.
+  Returns `{ messages, droppedCount, droppedIds }`. On a clean history
+  the input array reference is returned unchanged (no copy on the hot
+  path). On drops it logs once: `[history-validator] Dropped N orphan
+  tool message(s) with no preceding assistant.tool_calls match: [ids…]`.
+- **`handleGeneralRequest()` wrap.** The
+  [`js/chat/handlers.js`](js/chat/handlers.js) tool-loop call to
+  `LLM.chat(messages, chatOptions)` (line 435) now passes
+  `validateAndCleanHistory(messages).messages` instead. Runs every
+  round, since `messages` is mutated across rounds (assistant +
+  tool-result pushes for the next iteration), so this catches both
+  initial poisoned context and any mid-loop corruption. Per-call cost
+  is O(n) over a small array.
+
+**Choice of "drop + warn" vs "rebuild context."** The findings doc
+offered both options. Drop-with-warn was chosen: rebuild would require
+re-running summarizer/compactor at the boundary (heavier path, harder
+to reason about); drop surfaces upstream bugs loudly via the warn line
++ `droppedCount`, while keeping the request flying. Same disposition
+as the 1.6.1 boundary-aware prune (decline rather than aggressive
+recovery).
+
+**Other `LLM.chat` call sites.** Audited
+[`js/chat/summarizer.js`](js/chat/summarizer.js) (single user message,
+no tool messages possible — no wrap needed) and other call sites
+outside `js/chat/` (single-shot title/release/PR generation —
+similarly inapplicable). Only
+[`js/chat/handlers.js`](js/chat/handlers.js) takes user-history
+through the boundary.
+
+**Regression coverage.** Nine new cases in
+[`tests/test-history-validator.js`](tests/test-history-validator.js)
+under `Request-shape validator (1.6.2 PR 2)`: clean history returns
+same reference + no warn; matched assistant(tool_calls)+tool unchanged;
+orphan tool at start dropped; tool with stale `tool_call_id` dropped;
+3 tools after `tool_calls=[t1,t2]` drops only the third; multi-turn
+where the second assistant closes the prior set drops the trailing
+echo; missing `tool_call_id` field dropped (logged as `<missing>`);
+empty `tool_calls: []` registers no ids (subsequent tool is orphan);
+degenerate inputs (empty array, null) pass through silently.
+Registered in [`tests/index.html`](tests/index.html) next to the
+existing summarizer suite.
+
+**Release-readiness gate.** Per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning",
+1.6.2 lands in `main` at this version but **does not get its own
+tag**. The `v1.6.0` release tag is pushed only after PRs 1.6.3–1.6.5
+land and a 10-turn dogfood session in this repo passes. The tag
+deploys the six chat-stability fixes together with the already-merged
+1.5.14 retrieval cutover as a single user-visible release event.
+
+**Removability.** Reverting this PR removes one new module file, one
+import, one wrap line in `handleGeneralRequest`, and the test file +
+its `tests/index.html` registration. No schema change; clean histories
+return the same reference and pay no copy cost — behavior is
+indistinguishable from pre-1.6.2 except when an orphan slips through
+upstream.
+
 ## [1.6.1] - 2026-05-05
 
 **Boundary-aware prune in `ChatSummarizer._pruneHistory()` (PR 1 of the 1.6.0 chat-stability track).**
