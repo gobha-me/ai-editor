@@ -25,6 +25,7 @@ import {
     summaryForChunk,
     rollupToFiles,
     projectKeyFromString,
+    resolveLiveBranches,
 } from '../js/intelligence/retrieval/manager-helpers.js';
 
 /* ---------------- summaryForChunk ---------------- */
@@ -264,4 +265,57 @@ test('projectKeyFromString: repo without owner', () => {
         projectKeyFromString('ai-editor@main'),
         { owner: '', repo: 'ai-editor', ref: 'main' },
     );
+});
+
+/* ---------------- resolveLiveBranches (1.6.4 bundled fix) ---------------- */
+
+test('resolveLiveBranches: missing payload + empty State.branches → null (skip cleanup)', () => {
+    // The crash repro: btnRefreshFiles emits with no payload and the user
+    // hasn't loaded a project yet. Returning null lets the handler skip
+    // cleanup instead of throwing on destructure or wiping all indexes.
+    assert.strictEqual(resolveLiveBranches(undefined, undefined), null);
+    assert.strictEqual(resolveLiveBranches(undefined, null), null);
+    assert.strictEqual(resolveLiveBranches(undefined, []), null);
+    assert.strictEqual(resolveLiveBranches(null, []), null);
+    assert.strictEqual(resolveLiveBranches({}, []), null);
+});
+
+test('resolveLiveBranches: missing payload → falls back to State.branches names', () => {
+    // The common case: btnRefreshFiles / pr-tools emit with no payload,
+    // project-manager re-runs refreshBranches() to populate State.branches,
+    // and we read from there 500ms later.
+    const stateBranches = [
+        { name: 'main', protected: true, sha: 'abc' },
+        { name: 'feat/x', protected: false, sha: 'def' },
+    ];
+    assert.deepStrictEqual(resolveLiveBranches(undefined, stateBranches), ['main', 'feat/x']);
+    assert.deepStrictEqual(resolveLiveBranches({}, stateBranches), ['main', 'feat/x']);
+});
+
+test('resolveLiveBranches: explicit payload.liveBranches wins over State', () => {
+    const stateBranches = [{ name: 'main', sha: 'abc' }];
+    assert.deepStrictEqual(
+        resolveLiveBranches({ liveBranches: ['feat/y', 'feat/z'] }, stateBranches),
+        ['feat/y', 'feat/z'],
+    );
+});
+
+test('resolveLiveBranches: filters non-string / empty entries', () => {
+    const stateBranches = [
+        { name: 'main' },
+        { name: '' },
+        { /* no name */ },
+        { name: 42 },
+        { name: 'feat/ok' },
+    ];
+    assert.deepStrictEqual(resolveLiveBranches(undefined, stateBranches), ['main', 'feat/ok']);
+    assert.deepStrictEqual(
+        resolveLiveBranches({ liveBranches: ['a', '', null, 7, 'b'] }, undefined),
+        ['a', 'b'],
+    );
+});
+
+test('resolveLiveBranches: empty payload.liveBranches falls through to State', () => {
+    const stateBranches = [{ name: 'main' }];
+    assert.deepStrictEqual(resolveLiveBranches({ liveBranches: [] }, stateBranches), ['main']);
 });

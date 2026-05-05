@@ -680,6 +680,7 @@ export function renderMessages(historyOverride = null) {
  */
 export function clearChat() {
     State.chatHistory = [];
+    State.lastExchangeTokens = null;
     Storage.set('chatHistory', []);
     ChatSummarizer.clear();
     // Drain consent-card mounts before renderMessages rebuilds the DOM.

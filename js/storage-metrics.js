@@ -366,6 +366,7 @@ function _renderCleanupActions(totals, items) {
             // Post-cleanup side effects
             if (action.category === 'chat') {
                 State.chatHistory = [];
+                State.lastExchangeTokens = null;
                 EventBus.emit('chat:cleared');
             }
 

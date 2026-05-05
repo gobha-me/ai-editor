@@ -124,3 +124,31 @@ export function projectKeyFromString(key) {
         ref,
     };
 }
+
+/**
+ * Resolve the `liveBranches` argument for `cleanupOrphanedIndexes` from
+ * a (possibly empty) `branches:refresh` event payload, falling back to
+ * `State.branches`. Returns `null` when no source yields a non-empty
+ * branch list — caller MUST skip cleanup in that case, because passing
+ * `[]` to `cleanupOrphanedIndexes` would treat every persisted index as
+ * orphaned and wipe the project.
+ *
+ * @param {object|null|undefined} payload Event payload (may have `liveBranches`).
+ * @param {Array<{name?: string}>|null|undefined} stateBranches Fallback from `State.branches`.
+ * @returns {string[]|null}
+ */
+export function resolveLiveBranches(payload, stateBranches) {
+    const explicit = payload && Array.isArray(/** @type {any} */ (payload).liveBranches)
+        ? /** @type {any} */ (payload).liveBranches
+        : null;
+    if (explicit && explicit.length > 0) {
+        return explicit.filter(/** @param {unknown} n */ n => typeof n === 'string' && n.length > 0);
+    }
+    if (Array.isArray(stateBranches) && stateBranches.length > 0) {
+        const names = stateBranches
+            .map(b => b?.name)
+            .filter(/** @param {unknown} n */ n => typeof n === 'string' && n.length > 0);
+        return names.length > 0 ? /** @type {string[]} */ (names) : null;
+    }
+    return null;
+}

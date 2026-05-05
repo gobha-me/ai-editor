@@ -525,6 +525,14 @@ export const LLM = {
         const cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
         const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
 
+        // 1.6.4 — stash the wire-level prompt size so ChatSummarizer.shouldSummarize()
+        // can gate on real token count rather than estimated message count.
+        State.lastExchangeTokens = {
+            prompt: inputTokens,
+            cached: cachedTokens,
+            ts: Date.now(),
+        };
+
         State.sessionCost.totalInputTokens += inputTokens;
         State.sessionCost.totalOutputTokens += outputTokens;
         State.sessionCost.cachedInputTokens += cachedTokens;

@@ -236,6 +236,7 @@ const ConversationManager = {
 
         // Load into State
         State.chatHistory = payload.messages || [];
+        State.lastExchangeTokens = null;
         Storage.set('chatHistory', State.chatHistory);
         Storage.set('activeConversation', id);
 
@@ -274,6 +275,7 @@ const ConversationManager = {
 
         // Clear in-memory state
         State.chatHistory = [];
+        State.lastExchangeTokens = null;
         State.scratchpad = {};
         State.toolActionLog = [];
         Storage.set('chatHistory', []);
@@ -325,6 +327,7 @@ const ConversationManager = {
             } else {
                 // No conversations left — create a blank one
                 State.chatHistory = [];
+                State.lastExchangeTokens = null;
                 State.scratchpad = {};
                 Storage.set('chatHistory', []);
                 Storage.remove('activeConversation');

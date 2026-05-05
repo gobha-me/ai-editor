@@ -539,5 +539,236 @@ function _restore_161() {
 
 _restore_161();
 
+// ============================================
+// 1.6.4 — Token-based summarization trigger
+// ============================================
+
+T.suite('ChatSummarizer — token-based trigger (1.6.4)');
+
+const _origLastTokens_164 = State.lastExchangeTokens;
+const _origSummaryInfo_164 = Storage.get('chatSummaryInfo', null);
+const _origChatHistory_164 = State.chatHistory;
+function _restore_164() {
+    State.lastExchangeTokens = _origLastTokens_164;
+    State.chatHistory = _origChatHistory_164;
+    if (_origSummaryInfo_164) Storage.set('chatSummaryInfo', _origSummaryInfo_164);
+    else Storage.remove('chatSummaryInfo');
+}
+
+// Case 1: token gate fires when last prompt_tokens crosses ctx × fillPct
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';   // 50% → gate at 64K
+    Storage.remove('chatSummaryInfo');
+    State.chatHistory = Array.from({ length: 30 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant', content: `m${i}`
+    }));
+    State.lastExchangeTokens = { prompt: 70000, cached: 0, ts: Date.now() };
+    T.eq(ChatSummarizer.shouldSummarize(), true,
+        'token-gate fires when last prompt_tokens ≥ ctx × fillPct');
+}
+
+// Case 2: token gate suppresses even when message-count would say yes
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    State.chatHistory = Array.from({ length: 250 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant', content: `m${i}`
+    }));
+    State.lastExchangeTokens = { prompt: 25000, cached: 0, ts: Date.now() };
+    T.eq(ChatSummarizer.shouldSummarize(), false,
+        'token-aware path dominates when populated (suppresses message-count fallback)');
+}
+
+// Case 3: lastExchangeTokens=null → fall back to message-count gate
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    State.chatHistory = Array.from({ length: 100 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant', content: `m${i}`
+    }));
+    State.lastExchangeTokens = null;
+    T.eq(ChatSummarizer.shouldSummarize(), true,
+        'message-count fallback preserves pre-1.6.4 behaviour');
+}
+
+// Case 4: token gate respects SUMMARY_INTERVAL backstop
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    State.chatHistory = Array.from({ length: 100 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant', content: `m${i}`
+    }));
+    State.lastExchangeTokens = { prompt: 80000, cached: 0, ts: Date.now() };
+    Storage.set('chatSummaryInfo', { summary: 'prior', coveredCount: 95 });
+    T.eq(ChatSummarizer.shouldSummarize(), false,
+        'interval backstop suppresses second summary');
+}
+
+_restore_164();
+
+// ============================================
+// 1.6.4 — Map-reduce / multi-pass summarization
+// ============================================
+
+T.suite('ChatSummarizer — map-reduce summarization (1.6.4)');
+
+const _origCallSummaryLLM = ChatSummarizer._callSummaryLLM;
+function _restoreLeafMock() { ChatSummarizer._callSummaryLLM = _origCallSummaryLLM; }
+
+function _msgs(n, sizePerMsg) {
+    return Array.from({ length: n }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: 'x'.repeat(sizePerMsg) + ' m' + i,
+    }));
+}
+
+await (async () => {
+    // Case 1: small input + large budget → exactly one LLM call
+    {
+        let calls = 0;
+        ChatSummarizer._callSummaryLLM = async () => { calls++; return 'leaf'; };
+        const out = await ChatSummarizer._summarizeRecursive(_msgs(8, 20), 'm', 1_000_000, 0);
+        T.eq(calls, 1, 'multi-pass: small input + huge budget → 1 leaf call');
+        T.eq(out, 'leaf', 'multi-pass: returns leaf string in base case');
+        _restoreLeafMock();
+    }
+
+    // Case 2: small budget → fan-out leaves + reduce
+    {
+        const calls = [];
+        ChatSummarizer._callSummaryLLM = async (prompt) => {
+            calls.push(prompt.length);
+            return 'summary-' + calls.length;
+        };
+        await ChatSummarizer._summarizeRecursive(_msgs(40, 120), 'm', 800, 0);
+        T.assert(calls.length >= 3,
+            `multi-pass: small budget yields ≥3 calls (≥2 leaves + 1 reduce), got ${calls.length}`);
+        _restoreLeafMock();
+    }
+
+    // Case 3: very small budget → recursion goes ≥2 levels deep
+    {
+        const depthsSeen = [];
+        const _origRecursive = ChatSummarizer._summarizeRecursive;
+        ChatSummarizer._summarizeRecursive = async function(msgs, model, budget, depth) {
+            depthsSeen.push(depth);
+            return _origRecursive.call(this, msgs, model, budget, depth);
+        };
+        ChatSummarizer._callSummaryLLM = async () => 'leaf';
+        await ChatSummarizer._summarizeRecursive(_msgs(60, 200), 'm', 400, 0);
+        T.assert(Math.max(...depthsSeen) >= 2,
+            `multi-pass: recursion reached depth ≥2 (saw ${depthsSeen.join(',')})`);
+        ChatSummarizer._summarizeRecursive = _origRecursive;
+        _restoreLeafMock();
+    }
+
+    // Case 4: pathological depth cap → falls back to _basicSummary
+    {
+        let basicCalled = 0;
+        const _origBasic = ChatSummarizer._basicSummary;
+        ChatSummarizer._basicSummary = function(messages) {
+            basicCalled++;
+            return _origBasic.call(this, messages);
+        };
+        ChatSummarizer._callSummaryLLM = async () => 'leaf';
+        const out = await ChatSummarizer._summarizeRecursive(_msgs(50, 200), 'm', 10, 0);
+        T.assert(basicCalled > 0, 'multi-pass: depth cap fell back to _basicSummary');
+        T.assert(typeof out === 'string' && out.length > 0,
+            'multi-pass: returned a non-empty string from basicSummary');
+        ChatSummarizer._basicSummary = _origBasic;
+        _restoreLeafMock();
+    }
+
+    // Case 5b: heavy-tool session — token gate fires, recent scales to half-history
+    // Regression for the 1.6.4 dogfood symptom (2026-05-05): minimax-m27 (196K),
+    // 37 messages of mostly large tool results pushed prompt_tokens to 105K (over
+    // the 98K balanced gate). shouldSummarize() returned true, but generateAndStore()
+    // silently bailed at `older.length < 5` because RECENT_COUNT_TOOLS was ~73.
+    {
+        setMockModel(196000);
+        State.settings.summarizerMode = 'balanced';
+        Storage.remove('chatSummaryInfo');
+        State.settings.commitModel = undefined;
+        State.chatHistory = Array.from({ length: 30 }, (_, i) => {
+            if (i % 2 === 0) {
+                return {
+                    role: 'assistant',
+                    content: '',
+                    tool_calls: [{
+                        id: 'call_' + i,
+                        type: 'function',
+                        function: { name: 'read_file', arguments: '{"path":"big.js"}' },
+                    }],
+                };
+            }
+            return {
+                role: 'tool',
+                tool_call_id: 'call_' + (i - 1),
+                content: 'x'.repeat(7000),
+            };
+        });
+        State.lastExchangeTokens = { prompt: 105808, cached: 7936, ts: Date.now() };
+
+        let recursiveCalled = false;
+        const _origRecursive = ChatSummarizer._summarizeRecursive;
+        ChatSummarizer._summarizeRecursive = async () => { recursiveCalled = true; return 'mocked-summary'; };
+        const _origPrune = ChatSummarizer._pruneHistory;
+        ChatSummarizer._pruneHistory = () => true;
+
+        const result = await ChatSummarizer.generateAndStore();
+
+        T.eq(recursiveCalled, true,
+            'heavy-tool: generateAndStore reached _summarizeRecursive (no silent bail)');
+        T.assert(result && typeof result === 'object',
+            'heavy-tool: returned a SummaryInfo, not null');
+        T.assert(result && result.compressedMessages >= 5,
+            'heavy-tool: compressed at least 5 messages');
+        T.assert(result && result.keptMessages <= Math.floor(30 / 2) + 1,
+            'heavy-tool: keptMessages reflects the half-history cap');
+
+        ChatSummarizer._summarizeRecursive = _origRecursive;
+        ChatSummarizer._pruneHistory = _origPrune;
+        _restore_164();
+    }
+
+    // Case 6: utility model window (commitModel) drives perPassBudget, not main model window
+    {
+        State.settings.llmModel = 'big-prod';
+        State.settings.commitModel = 'tiny-utility';
+        State.models = [
+            { id: 'big-prod',     meta: { contextTokens: 1_000_000 } },
+            { id: 'tiny-utility', meta: { contextTokens: 8_000     } },
+        ];
+        State.settings.summarizerMode = 'balanced';
+        Storage.remove('chatSummaryInfo');
+
+        // Bumped to 400 so `older = history.slice(0, -RECENT_COUNT)` is non-empty
+        // (RECENT_COUNT for a 1M model in balanced mode is ~219).
+        State.chatHistory = Array.from({ length: 400 }, (_, i) => ({
+            role: i % 2 === 0 ? 'user' : 'assistant',
+            content: 'y'.repeat(400) + ' h' + i,
+        }));
+        State.lastExchangeTokens = { prompt: 700000, cached: 0, ts: Date.now() };
+
+        let observedBudget = null;
+        const _origRecursive = ChatSummarizer._summarizeRecursive;
+        ChatSummarizer._summarizeRecursive = async function(msgs, model, budget, depth) {
+            if (depth === 0) observedBudget = budget;
+            return 'mocked';
+        };
+        await ChatSummarizer.generateAndStore();
+
+        // utilityCtx=8000, fillPct=0.5, budget = max(1500, floor(8000*0.5*0.7)=2800) = 2800
+        T.eq(observedBudget, 2800,
+            'multi-pass: perPassBudget derived from utility model window');
+        ChatSummarizer._summarizeRecursive = _origRecursive;
+        State.settings.commitModel = undefined;
+        _restore_164();
+    }
+})();
+
 // Restore
 resetMocks();

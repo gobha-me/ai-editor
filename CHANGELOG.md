@@ -8,6 +8,178 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.4] - 2026-05-05
+
+**Token-based summarization trigger + map-reduce multi-pass (PR 4 of the 1.6.0 chat-stability track).**
+
+Fifth of the six chat-stability PRs sized in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+(PR 5, §442-463). Closes Hypothesis #7: the existing `shouldSummarize()`
+gate at [`js/chat/summarizer.js`](js/chat/summarizer.js:200) keyed off a
+message-count `SUMMARY_THRESHOLD` derived from
+`windowTokens × fillPct ÷ AVG_TOKENS_PER_MSG (=800)`, clamped at
+`200 × scale`. For a 198K-window model the threshold resolved to ≈198
+messages — a real session topped out around 95 messages and never
+crossed it, so the summarizer never fired and the 1.6.0 truncation
+marker had to absorb every long-chat session by itself. PR 4 replaces
+the message-count gate with the actual signal: the wire-level
+`prompt_tokens` value the LLM provider just reported back.
+
+**What ships.**
+
+- **`State.lastExchangeTokens` field at [`js/core.js`](js/core.js).**
+  `{ prompt, cached, ts } | null`. Cleared at conversation-clear /
+  conversation-switch sites alongside `State.chatHistory`
+  ([`js/chat/messages.js`](js/chat/messages.js) `clearChat`,
+  [`js/chat/conversations.js`](js/chat/conversations.js) `load` /
+  `create` / `delete-while-active`,
+  [`js/storage-metrics.js`](js/storage-metrics.js) chat-category clear).
+- **One-line hook in `LLM._trackUsage()` at
+  [`js/llm/api.js`](js/llm/api.js).** After the existing
+  `inputTokens`/`cachedTokens` extraction, populates
+  `State.lastExchangeTokens` so the summarizer can read the most recent
+  exchange's real prompt size.
+- **Token-aware `shouldSummarize()` in
+  [`js/chat/summarizer.js`](js/chat/summarizer.js).** When a context
+  window and a populated `lastExchangeTokens.prompt` are both available,
+  gate fires when `prompt_tokens ≥ contextWindow × MODE_FILL[mode]`.
+  Falls back to the message-count path when those signals are absent
+  (first exchange of a session, or a model without
+  `meta.contextTokens`). `SUMMARY_INTERVAL` remains the re-trigger
+  backstop so a near-full window doesn't summarize on every turn.
+- **`messagesUntilSummary()` parallel update.** Reports against the
+  token-aware path when populated; returns `null` (suppresses the
+  system-prompt heads-up) when under the gate, since prompt-size growth
+  is not linear in message count.
+- **Map-reduce multi-pass `generateAndStore()`.** Real spread is
+  ~1M-context prod (Qwen 3.6, Opus, Sonnet, DeepSeek) ↔ utility
+  256K best, 128K typical, **and** self-hoster long tail down to 4–8K
+  Llama variants. A single `_buildPrompt(older)` call against a
+  near-full prod conversation will overflow any utility window in that
+  range. New private helpers:
+  - **`_callSummaryLLM(promptText, model)`** — extracted from the old
+    `generateAndStore()` so both leaf calls and the reduce step share
+    one timeout (`State.settings.summaryTimeout || 60000`) + clip
+    (`SUMMARY_MAX_CHARS`) codepath.
+  - **`_summarizeRecursive(messages, model, perPassBudget, depth)`** —
+    base case calls `_callSummaryLLM`; recursive case fans out into
+    `min(MAX_FANOUT=12, ceil(estTokens/budget))` chunks summarized in
+    parallel, then reduces over the joined sub-summaries (wrapped as
+    synthetic `system` messages so `_buildPrompt`'s role-aware formatter
+    handles them unchanged). `MAX_DEPTH=4` covers the worst real case
+    (4K utility ↔ 1M prod ≈ 250×); each level shrinks ~12× via fan-out
+    so 4 levels give ~20000× headroom. Pathological inputs that don't
+    converge fall through to `_basicSummary`.
+  - **`perPassBudget`** = `max(1500, floor(utilityCtx × fillPct × 0.70))`
+    in `generateAndStore()`. Reserves ~30% of the utility window for
+    instruction + response. Floor of 1500 tokens keeps a 4K-window
+    self-hoster utility model from looping below useful chunk size.
+    Defaults to `8_000` when the utility model has no
+    `meta.contextTokens`.
+
+**Regression coverage.** Nine new cases split between
+[`tests/test-summarizer.mjs`](tests/test-summarizer.mjs) (Node) and
+[`tests/test-summarizer.js`](tests/test-summarizer.js) (browser):
+
+- *Token-gate fires when `last.prompt ≥ ctx × fillPct`.*
+- *Token-gate suppresses even when message-count ≥ `SUMMARY_THRESHOLD`*
+  (the populated path dominates).
+- *Token-gate falls back to message-count when `lastExchangeTokens` is
+  null* (first exchange of a session — pre-1.6.4 behaviour preserved).
+- *Token-gate respects `SUMMARY_INTERVAL` after a recent summary*
+  (prevents per-turn summarization at near-full windows).
+- *Multi-pass: small input + huge budget → exactly 1 leaf call*
+  (base-case fast path).
+- *Multi-pass: small budget → ≥3 calls (≥2 leaves + 1 reduce)*
+  (one-level fan-out + reduce).
+- *Multi-pass: very small budget → recursion reaches depth ≥2.*
+- *Multi-pass: pathological budget → falls back to `_basicSummary`*
+  at `MAX_DEPTH`.
+- *Multi-pass: `perPassBudget` derived from utility model window
+  (commitModel), not the main `llmModel` window.* End-to-end via
+  `generateAndStore()`.
+
+Tests stub `_callSummaryLLM` (the leaf) so recursion structure is
+verified without coordinating with `LLM.chat`'s `Promise.race` /
+timeout.
+
+**Release-readiness gate.** Per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning",
+1.6.4 lands in `main` at this version but **does not get its own
+tag**. The `v1.6.0` release tag is pushed only after 1.6.5
+(localStorage quota-recovery cleanup) lands and a 10-turn dogfood
+session in this repo passes — the gate explicitly looks for the new
+`[ChatSummarizer] Multi-pass depth=… chunks=…` log lines firing
+without timeout against minimax-m27 + a 32K-class utility model.
+
+**Removability.** Reverting this PR restores the message-count
+`shouldSummarize()`, removes the `_callSummaryLLM` /
+`_summarizeRecursive` helpers (folding their body back into
+`generateAndStore()`), drops the `State.lastExchangeTokens` field +
+its `_trackUsage()` hook + four conversation-clear sites, removes the
+new test cases + their registrations, and rolls `js/version.js` +
+`CHANGELOG.md`. No schema change; pre-1.6.4 sessions still trigger
+summarization via the preserved message-count fallback path.
+
+**Bundled fix — heavy-tool sessions silently skipped summarization.**
+Caught during the same 1.6.4 dogfood session: minimax-m27 (196K window)
+crossed the 98K balanced token gate at exchange 9 (`prompt_tokens =
+105_808`), `shouldSummarize()` correctly returned `true`, but
+`generateAndStore()` silently bailed at `older.length < 5` and **no
+`[ChatSummarizer] Pruned …` log appeared**. Root cause:
+`RECENT_COUNT` is sized in *messages*, but heavy-tool sessions carry
+huge tool results per message (a single `read_file` on `js/core.js`
+≈ 7 K tokens). With `RECENT_COUNT_TOOLS ≈ 73` for that model and a
+37-message history, `older = slice(0, -73)` was empty even though the
+prompt was already past 50 % of the window. Fix at
+[`js/chat/summarizer.js`](js/chat/summarizer.js) `generateAndStore()`:
+compute a per-pass `recentCount = min(RECENT_COUNT, max(5,
+floor(history.length / 2)))` and slice on that, so the recent window
+collapses to half-history when total < `RECENT_COUNT` and the gate
+can actually free space. The configured `RECENT_COUNT` still caps the
+upper bound (normal-density sessions are unaffected); the floor of 5
+preserves a minimal recent context. The `keptMessages` field on the
+stored `chatSummaryInfo` and the `[ChatSummarizer] Mode: …` log line
+both report the effective `recentCount` (with the configured cap in
+parentheses on the log) so post-mortem dogfood runs show what
+actually happened. One regression case in each of
+[`tests/test-summarizer.mjs`](tests/test-summarizer.mjs) and
+[`tests/test-summarizer.js`](tests/test-summarizer.js) replays the
+dogfood shape (30 alternating assistant-tool_call / tool-result
+messages, each tool result 7 KB; `lastExchangeTokens.prompt = 105_808`)
+and asserts `_summarizeRecursive` is reached and a `SummaryInfo` is
+returned (not `null`).
+
+**Bundled doc fix — 1.6.3 line citation wording.** The 1.6.3 entry
+described the `function.name` change as "Replaced `if (…) … += …`
+with `if (… && …) … = …`" while citing line 791. Both the pre- and
+post-PR statement live on line 791, so a reader following the link
+saw only the post-PR code and couldn't reconcile it with the
+"Replaced" wording. The entry now phrases the change as "the line
+that previously read … now reads …" so a `git blame` of line 791
+matches the description without ambiguity.
+
+**Bundled fix — `branches:refresh` payload tolerance.** Caught during a
+1.6.4 dogfood session: clicking the sidebar Refresh-Files button threw
+`Cannot destructure property 'liveBranches' of 'undefined' as it is
+undefined` from the retrieval manager's `branches:refresh` listener at
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js).
+Both production emitters ([`js/app.js`](js/app.js) `btnRefreshFiles`
+and [`js/tools/pr-tools.js`](js/tools/pr-tools.js) post-merge fan-out)
+fire with no payload, so the destructure crashed every time. The
+listener now resolves `liveBranches` via a new pure helper
+`resolveLiveBranches(payload, State.branches)` in
+[`js/intelligence/retrieval/manager-helpers.js`](js/intelligence/retrieval/manager-helpers.js):
+explicit `payload.liveBranches` wins, otherwise it falls back to
+`State.branches.map(b => b.name)` (the project-manager listener
+refreshes `State.branches` on the same event, so the existing 500ms
+setTimeout gives that a chance to land before cleanup runs). When
+both sources are empty the helper returns `null` and the listener
+skips cleanup entirely — passing `[]` to `cleanupOrphanedIndexes()`
+would have wiped every persisted index for the project. Five new
+cases under `resolveLiveBranches` in
+[`tests/test-retrieval-manager.mjs`](tests/test-retrieval-manager.mjs).
+
 ## [1.6.3] - 2026-05-05
 
 **`function.name` overwrite-if-empty in SSE accumulator (PR 3 of the 1.6.0 chat-stability track).**
@@ -26,10 +198,13 @@ and break the tool-name lookup at dispatch.
 **What ships.**
 
 - **One-line guard at
-  [`js/llm/api.js:791`](js/llm/api.js).** Replaced
+  [`js/llm/api.js:791`](js/llm/api.js).** The line that previously
+  read
   `if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;`
-  with
-  `if (tc.function?.name && !toolCalls[tc.index].function.name) toolCalls[tc.index].function.name = tc.function.name;`.
+  now reads
+  `if (tc.function?.name && !toolCalls[tc.index].function.name) toolCalls[tc.index].function.name = tc.function.name;`
+  — the condition + assignment are on the same line, so a
+  `git blame` of line 791 surfaces this PR.
   First-chunk behavior is byte-identical to before (the slot is
   initialized with `name: ''`, so the new condition is true on the
   first arrival); subsequent re-emissions of `name` for the same

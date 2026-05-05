@@ -37,6 +37,7 @@ import { defaultComposeFiltersResolver } from './measurement.js';
 import {
     rollupToFiles,
     projectKeyFromString,
+    resolveLiveBranches,
 } from './manager-helpers.js';
 
 // ============================================
@@ -844,9 +845,16 @@ EventBus.on('branch:created', ({ sourceBranch, targetBranch }) => {
     copyIndexForBranch(sourceBranch, targetBranch);
 });
 
-EventBus.on('branches:refresh', ({ liveBranches }) => {
-    if (!isEnabled() || !State.branches?.length) return;
-    setTimeout(() => cleanupOrphanedIndexes(liveBranches), 500);
+EventBus.on('branches:refresh', (payload) => {
+    if (!isEnabled()) return;
+    // Most call sites emit with no payload (the button at app.js:btnRefreshFiles
+    // and the post-merge fan-out at pr-tools.js); resolve from State.branches
+    // inside the timeout so refreshBranches() has a chance to land first.
+    setTimeout(() => {
+        const liveBranches = resolveLiveBranches(payload, State.branches);
+        if (!liveBranches || liveBranches.length === 0) return;
+        cleanupOrphanedIndexes(liveBranches);
+    }, 500);
 });
 
 EventBus.on('context:prMerged', async ({ deletedBranch, changedFiles }) => {

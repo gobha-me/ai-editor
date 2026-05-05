@@ -333,6 +333,11 @@ const State = {
     chatHistory: [],           // [{ role, content, timestamp }]
     isGenerating: false,
 
+    // Last LLM exchange's wire-level token usage. Populated by LLM._trackUsage()
+    // after every chat completion; read by ChatSummarizer.shouldSummarize() to
+    // gate on real prompt size instead of estimated message count (1.6.4).
+    lastExchangeTokens: null,  // { prompt, cached, ts } | null
+
     // Session cost tracking
     sessionCost: {
         totalInputTokens: 0,

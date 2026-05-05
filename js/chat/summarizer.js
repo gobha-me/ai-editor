@@ -196,30 +196,85 @@ export const ChatSummarizer = {
         return hasToolActivity ? this.RECENT_COUNT_TOOLS : this.RECENT_COUNT_BASE;
     },
 
-    /** @returns {boolean} true when enough new messages have accumulated */
+    /**
+     * True when summarization should fire next addMessage().
+     *
+     * **Token-aware path (1.6.4 PR 4 of chat-stability).** When the previous
+     * exchange's wire-level `prompt_tokens` is known and the model's context
+     * window is known, gate on `prompt_tokens ≥ contextWindow × fillPct`.
+     * This is the actual signal — the model's own count of what we sent —
+     * not an estimate based on `messages.length × AVG_TOKENS_PER_MSG`.
+     *
+     * **Message-count fallback.** Used on the very first exchange of a
+     * session (before `lastExchangeTokens` is populated) and on models
+     * with no `meta.contextTokens`. Preserves pre-1.6.4 behaviour.
+     *
+     * **Re-trigger backstop.** Once a summary exists, don't fire again
+     * until at least `SUMMARY_INTERVAL` more messages have accumulated —
+     * applies in both paths so a near-full window doesn't cause a
+     * summary on every turn.
+     *
+     * @returns {boolean}
+     */
     shouldSummarize() {
         const total = State.chatHistory.length;
-        if (total < this.SUMMARY_THRESHOLD) return false;
+        const ctx = this._getContextWindow();
+        const last = State.lastExchangeTokens;
 
+        // Token-aware path: gate on real prompt size against the model window.
+        if (ctx && last?.prompt > 0) {
+            const fillPct = MODE_FILL[this.mode] ?? MODE_FILL.balanced;
+            const tokenGate = Math.floor(ctx * fillPct);
+            if (last.prompt < tokenGate) return false;
+            const info = Storage.get('chatSummaryInfo', null);
+            if (!info) return true;
+            return (total - (info.coveredCount || 0)) >= this.SUMMARY_INTERVAL;
+        }
+
+        // Fallback: message-count gate (first exchange of session, or no model meta).
+        if (total < this.SUMMARY_THRESHOLD) return false;
         const info = Storage.get('chatSummaryInfo', null);
         if (!info) return true;
-
         return (total - (info.coveredCount || 0)) >= this.SUMMARY_INTERVAL;
     },
 
     /**
      * Estimate how many user messages until next summary triggers.
-     * Returns null if summarization is not yet relevant (below threshold).
+     * Returns null if summarization is not yet relevant.
      * Used to inject a heads-up into the system prompt.
+     *
+     * 1.6.4 — when `lastExchangeTokens` and the model window are both known,
+     * report against the token-aware path (already crossed → 0; otherwise
+     * coarse "many" until the prompt grows). The message-count math stays
+     * as the fallback so pre-summary sessions still get a useful estimate.
+     *
      * @returns {number|null}
      */
     messagesUntilSummary() {
         const total = State.chatHistory.length;
-        if (total < this.SUMMARY_THRESHOLD - this.SUMMARY_INTERVAL) return null; // too early
-
+        const ctx = this._getContextWindow();
+        const last = State.lastExchangeTokens;
         const info = Storage.get('chatSummaryInfo', null);
         const coveredCount = info?.coveredCount || 0;
         const messagesSinceLast = total - coveredCount;
+
+        // Token-aware path: report against the real signal.
+        if (ctx && last?.prompt > 0) {
+            const fillPct = MODE_FILL[this.mode] ?? MODE_FILL.balanced;
+            const tokenGate = Math.floor(ctx * fillPct);
+            if (last.prompt >= tokenGate) {
+                // Past the gate — same interval-backstop math as the fallback path
+                if (!info) return 0;
+                const remaining = this.SUMMARY_INTERVAL - messagesSinceLast;
+                return Math.max(0, Math.ceil(remaining / 2));
+            }
+            // Under the gate — no useful message-count estimate (prompt size grows non-linearly).
+            // Return null so the system-prompt heads-up suppresses rather than misleading.
+            return null;
+        }
+
+        // Fallback: message-count path.
+        if (total < this.SUMMARY_THRESHOLD - this.SUMMARY_INTERVAL) return null; // too early
 
         if (total < this.SUMMARY_THRESHOLD) {
             // Haven't hit initial threshold yet
@@ -448,41 +503,148 @@ SUMMARY:`;
     },
 
     /**
+     * Issue one summarization call against the utility model and clip the
+     * result to `SUMMARY_MAX_CHARS`. Wrapped in `Promise.race` against the
+     * configured summary timeout (default 60 s).
+     *
+     * Factored out of `generateAndStore()` (1.6.4) so both the leaf and the
+     * map-reduce path go through one timeout/clip codepath.
+     *
+     * @param {string} promptText
+     * @param {string} model
+     * @returns {Promise<string>} clipped summary text
+     */
+    async _callSummaryLLM(promptText, model) {
+        const summaryTimeout = State.settings.summaryTimeout || 60000;
+        const result = await Promise.race([
+            LLM.chat(
+                [{ role: 'user', content: promptText }],
+                { model, stream: false, temperature: 0.3, maxTokens: Math.ceil(this.SUMMARY_MAX_CHARS / 3.5) }
+            ),
+            new Promise((_, rej) =>
+                setTimeout(() => rej(new Error('summary timeout')), summaryTimeout)
+            )
+        ]);
+        let text = (result.content || '').trim();
+        if (text.length > this.SUMMARY_MAX_CHARS) {
+            text = text.slice(0, this.SUMMARY_MAX_CHARS) + '…';
+        }
+        return text;
+    },
+
+    /**
+     * Recursive map-reduce summarization (1.6.4).
+     *
+     * **Base case:** the built prompt fits in `perPassBudget` → one LLM call.
+     *
+     * **Recursive case:** estimate fan-out from `ceil(estTokens / budget)`,
+     * cap at `MAX_FANOUT`, slice `messages` evenly, summarize each chunk in
+     * parallel, then reduce by re-summarizing the joined sub-summaries
+     * (wrapped as synthetic `system` messages so `_buildPrompt()`'s
+     * role-aware formatter can pass them through unchanged).
+     *
+     * **Depth budget = 4** covers the worst real case (4 K self-hoster
+     * utility ↔ 1 M prod ≈ 250×). Each level shrinks the prompt by ~12×
+     * via fan-out, so 4 levels give ~20 000× headroom. If pathological
+     * inputs still don't converge, falls back to `_basicSummary`.
+     *
+     * @param {ChatMessage[]} messages
+     * @param {string}        model
+     * @param {number}        perPassBudget   tokens of conversation each pass can hold
+     * @param {number}        depth
+     * @returns {Promise<string>}
+     */
+    async _summarizeRecursive(messages, model, perPassBudget, depth) {
+        const MAX_DEPTH = 4;
+        const MAX_FANOUT = 12;
+
+        const promptText = this._buildPrompt(messages);
+        const estTokens = Math.ceil(promptText.length / 3.5);
+
+        // Base case: fits in one pass.
+        if (estTokens <= perPassBudget) {
+            return await this._callSummaryLLM(promptText, model);
+        }
+
+        // Recursive case.
+        if (depth >= MAX_DEPTH) {
+            console.warn(`[ChatSummarizer] Multi-pass depth ${depth} reached; using basicSummary`);
+            return this._basicSummary(messages);
+        }
+        const chunkCount = Math.min(MAX_FANOUT, Math.ceil(estTokens / perPassBudget));
+        const chunkSize = Math.ceil(messages.length / chunkCount);
+        /** @type {ChatMessage[][]} */
+        const chunks = [];
+        for (let i = 0; i < messages.length; i += chunkSize) {
+            chunks.push(messages.slice(i, i + chunkSize));
+        }
+        console.log(`[ChatSummarizer] Multi-pass depth=${depth} chunks=${chunks.length} estTokens=${estTokens} budget=${perPassBudget}`);
+
+        const subSummaries = await Promise.all(
+            chunks.map(c => this._summarizeRecursive(c, model, perPassBudget, depth + 1))
+        );
+
+        // Reduce: wrap each sub-summary as a synthetic system note so
+        // _buildPrompt's role-aware formatter handles it cleanly.
+        /** @type {ChatMessage[]} */
+        const merged = subSummaries.map((s, i) => ({
+            role: 'system',
+            content: `[Earlier conversation summary part ${i + 1}/${subSummaries.length}]\n${s}`,
+        }));
+        return await this._summarizeRecursive(merged, model, perPassBudget, depth + 1);
+    },
+
+    /**
      * Generate summary via LLM (non-blocking, fire-and-forget safe).
+     *
+     * 1.6.4 — uses recursive map-reduce when the summarization prompt
+     * itself would overflow the utility model's window. Real spread is
+     * 1M-context prod ↔ 4–256K utility, so single-pass cannot cover the
+     * range; the recursive helper chunks, summarizes in parallel, and
+     * reduces over the sub-summaries.
+     *
      * @returns {Promise<SummaryInfo|null>}
      */
     async generateAndStore() {
         if (!this.shouldSummarize()) return null;
 
         const history = State.chatHistory;
-        const older = history.slice(0, -this.RECENT_COUNT);
+        // 1.6.4 fix — RECENT_COUNT is sized in messages, but heavy-tool
+        // sessions carry huge tool results per message (e.g. 7K tokens for
+        // a single read_file on a large source). The token gate fires
+        // correctly on prompt size, but `older = slice(0, -RECENT_COUNT)`
+        // returns empty when total < RECENT_COUNT, and we silently bail
+        // at `older.length < 5`. Cap recent at half-history so the gate
+        // can actually free window space on small-but-heavy sessions.
+        // Floor at 5 so we always preserve a minimal recent context.
+        const recentCount = Math.min(
+            this.RECENT_COUNT,
+            Math.max(5, Math.floor(history.length / 2))
+        );
+        const older = history.slice(0, -recentCount);
         if (older.length < 5) return null;
 
-        console.log(`[ChatSummarizer] Mode: ${this.mode} | Recent: ${this.RECENT_COUNT} | Threshold: ${this.SUMMARY_THRESHOLD} | Compressing ${older.length} messages`);
+        console.log(`[ChatSummarizer] Mode: ${this.mode} | Recent: ${recentCount} (cap ${this.RECENT_COUNT}) | Threshold: ${this.SUMMARY_THRESHOLD} | Compressing ${older.length} messages`);
         if (this.mode !== 'custom') {
             const info = this.getAutoParams();
             console.log(`[ChatSummarizer] Fill: ${info.label} · Mode: ${this.mode}`);
         }
 
+        const model = this._pickModel();
+        // Self-hosters may wire up tiny utility models (4–8K Llama variants).
+        // Default cautiously when the model has no published context window.
+        const utilityModel = State.models?.find(m => m.id === model);
+        const utilityCtx = utilityModel?.meta?.contextTokens
+            || this._getContextWindow() || 8_000;
+        const fillPct = MODE_FILL[this.mode] ?? MODE_FILL.balanced;
+        // Reserve ~30% of the utility window for instruction + response;
+        // the rest holds conversation. Floor so a tiny utility model still
+        // leaves room for at least one meaningful chunk per pass.
+        const perPassBudget = Math.max(1500, Math.floor(utilityCtx * fillPct * 0.70));
+
         let summary;
         try {
-            const model = this._pickModel();
-            // Use configurable summary timeout (default 60s)
-            const summaryTimeout = State.settings.summaryTimeout || 60000;
-            
-            const result = await Promise.race([
-                LLM.chat(
-                    [{ role: 'user', content: this._buildPrompt(older) }],
-                    { model, stream: false, temperature: 0.3, maxTokens: Math.ceil(this.SUMMARY_MAX_CHARS / 3.5) }
-                ),
-                new Promise((_, rej) =>
-                    setTimeout(() => rej(new Error('summary timeout')), summaryTimeout)
-                )
-            ]);
-            summary = (result.content || '').trim();
-            if (summary.length > this.SUMMARY_MAX_CHARS) {
-                summary = summary.slice(0, this.SUMMARY_MAX_CHARS) + '…';
-            }
+            summary = await this._summarizeRecursive(older, model, perPassBudget, /* depth */ 0);
         } catch (err) {
             console.warn('[ChatSummarizer] LLM failed, using basic:', err.message);
             summary = this._basicSummary(older);
@@ -492,7 +654,7 @@ SUMMARY:`;
             summary,
             coveredCount: history.length,
             compressedMessages: older.length,
-            keptMessages: this.RECENT_COUNT,
+            keptMessages: recentCount,
             timestamp: Date.now()
         };
         Storage.set('chatSummaryInfo', info);

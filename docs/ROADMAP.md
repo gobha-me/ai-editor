@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-05 · Current released (tagged) version: **1.5.13** · `main` HEAD: 1.6.2 (untagged — sits in main; release tag is `v1.6.0` and bundles 1.5.14 + 1.6.0–1.6.5).
+> Last updated: 2026-05-05 · Current released (tagged) version: **1.5.13** · `main` HEAD: 1.6.4 (untagged — sits in main; release tag is `v1.6.0` and bundles 1.5.14 + 1.6.0–1.6.5).
 
 ## How to read this doc
 
@@ -15,7 +15,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md); the next release tag (`v1.6.0`) bundles these six fixes with the already-merged 1.5.14 retrieval cutover. Status: 1.6.0, 1.6.1, 1.6.2 shipped to main; 1.6.3–1.6.5 pending. |
+| **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md); the next release tag (`v1.6.0`) bundles these six fixes with the already-merged 1.5.14 retrieval cutover. Status: 1.6.0, 1.6.1, 1.6.2, 1.6.3, 1.6.4 shipped to main; 1.6.5 pending. |
 | **Next** | **1.6.6** Cost-dashboard retrieval extension *(gated on cost-dashboard export landing)* · **1.6.7** Query / structural expansion cache · **1.6.8 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
 | **Later** | **2.0 Profiles.** Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled*. |
@@ -64,7 +64,7 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 | 1.6.1 | ✅ shipped (#269) | Boundary-aware prune in [`ChatSummarizer._pruneHistory()`](../js/chat/summarizer.js). | Hypothesis #1 (pruning algorithm cuts mid-pair) |
 | 1.6.2 | ✅ shipped (#271) | Request-shape validator before [`LLM.chat`](../js/chat/handlers.js): asserts every `tool` message has a matching preceding `assistant.tool_calls[].id`; drops orphans with a warning rather than 400-ing the request. | defense-in-depth |
 | 1.6.3 | pending | `function.name` overwrite-if-empty at [`js/llm/api.js`](../js/llm/api.js). One-line fix + regression test. Latent. | Hypothesis #2 |
-| 1.6.4 | pending | Token-based summarization trigger replacing the message-count `SUMMARY_THRESHOLD` at [`js/chat/summarizer.js`](../js/chat/summarizer.js). Lower urgency once 1.6.0 lands; fixes the long-term gating math. | Hypothesis #7 |
+| 1.6.4 | ✅ shipped | Token-based summarization trigger + map-reduce multi-pass at [`js/chat/summarizer.js`](../js/chat/summarizer.js). Replaces the message-count `SUMMARY_THRESHOLD` with a real-prompt-size gate keyed on `State.lastExchangeTokens.prompt`; bundled multi-pass safely chunks the summarization input itself when the utility model's window is small (1M prod ↔ 4–256K utility). | Hypothesis #7 |
 | 1.6.5 | pending | localStorage quota-recovery cleanup at [`js/core.js`](../js/core.js). Remove the chat-history-prune branch — IDB is authoritative; localStorage is best-effort; the destructive-sounding `[Storage] Quota exceeded — pruned chat history` warning is misleading because the in-memory `_cache` and IDB still hold the full history. Surfaced during the 1.6.0 PR 0 dogfood. | Hypothesis #8 |
 
 **Verification artifacts to capture** (per findings.md). Before any PR lands, drive one long session on the prior HEAD to confirm the symptom is unchanged. Set `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` so each rebuild's `RECENT_COUNT`, `startIndex`, `info?.summary` presence, and dropped count are logged.
