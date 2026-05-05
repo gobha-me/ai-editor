@@ -8,6 +8,55 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.6] - 2026-05-05
+
+**Cost-dashboard export.** First gating item for the Compression bucket
+([docs/ROADMAP.md](docs/ROADMAP.md) §"Compression"); also a prerequisite
+for the **1.6.7 Cost-dashboard retrieval extension** (per-strategy hit
+rates / token spend). Lands chat-surface-orthogonal to the v1.6.0
+release-readiness gate, so the bundled `v1.6.0` tag still places at the
+1.6.5 head.
+
+### Settings
+
+- **Cost tab → Export JSON button** at
+  [`js/settings/cost-tab.js`](js/settings/cost-tab.js) /
+  [`html/settings-tabs.html`](html/settings-tabs.html). Downloads a
+  durable artifact (`ai-editor-cost-YYYY-MM-DD.json`) with the live
+  session summary, today/month spend, budget caps, the raw 30-day
+  rolling map (`cost-daily`), and per-conversation cost records. Mirrors
+  the Memory tab's existing JSON-download pattern
+  ([`js/settings/memory-tab/MemoryTab.js`](js/settings/memory-tab/MemoryTab.js)
+  `onExport`) — `Blob + URL.createObjectURL + <a download>`, no
+  clipboard fallback, no server round-trip.
+
+  **Why.** The dashboard itself shipped at 1.2.1 cross-provider /
+  per-conversation / per-tool, but the data lives in
+  [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js)
+  with no way out of the browser. The compression-track measurement
+  loop — *"did Rule X save the projected N%?"* — needs durable
+  artifacts for offline diff. This is the cheap unblock: one button,
+  one `JSON.stringify` over the existing store, no schema changes.
+
+  **Files.**
+  - [`js/settings/cost-tab.js`](js/settings/cost-tab.js) — exported
+    `buildCostExport()` builder + `_onExport` click handler; `getDailyMap`
+    added to the cost-store import; new `btnExport` selector entry.
+  - [`html/settings-tabs.html`](html/settings-tabs.html) — `<button
+    id="btnExportCost">` next to `btnSaveCostBudget`.
+  - [`tests/test-cost-export.js`](tests/test-cost-export.js) **(new)** —
+    seeds two conversations + budget + recorded turns, asserts the JSON
+    payload's top-level keys, summary/budget passthrough, dailyMap
+    today-row presence, conversation list shape, and JSON-serializable
+    round-trip. Registered in [`tests/index.html`](tests/index.html).
+  - [`docs/ROADMAP.md`](docs/ROADMAP.md) — Now/Next table updated:
+    cost-dashboard export marked shipped at 1.6.6; the Cost-dashboard
+    retrieval extension shifts to 1.6.7. Compression bucket row updated
+    to "✅ shipped 1.6.6."
+
+  **Removability.** Reverting these files restores pre-fix state. No
+  store changes, no Storage schema migration, no chat-surface impact.
+
 ## [1.6.5] - 2026-05-05
 
 **Last patch before the `v1.6.0` release tag.** Bundles two changes that

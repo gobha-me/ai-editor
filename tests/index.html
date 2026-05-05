@@ -198,6 +198,10 @@
             } catch (e) { errors.push(['Memory Tab', e]); }
 
             try {
+                await import('./test-cost-export.js');
+            } catch (e) { errors.push(['Cost Export', e]); }
+
+            try {
                 await import('./test-settings-sidebar.js');
             } catch (e) { errors.push(['Settings Sidebar', e]); }
 

@@ -14,12 +14,14 @@ import { State, EventBus } from '../core.js';
 import { ConversationManager } from '../chat/conversations.js';
 import {
     getConvCost,
+    getDailyMap,
     getDailySeries,
     getBudget,
     setBudget,
     getTodaySpend,
     getMonthSpend,
 } from '../intelligence/cost/index.js';
+import { VERSION } from '../version.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 /** Selectors used in multiple places — kept in one spot for grep. */
@@ -36,6 +38,7 @@ const SEL = {
     budgetDailyHint: 'costBudgetDailyHint',
     budgetMonthlyHint: 'costBudgetMonthlyHint',
     btnSaveBudget: 'btnSaveCostBudget',
+    btnExport: 'btnExportCost',
     providerNote: 'costProviderNote',
 };
 
@@ -53,6 +56,9 @@ export function initCostTab() {
 
     const btn = document.getElementById(SEL.btnSaveBudget);
     if (btn) btn.addEventListener('click', _onSaveBudget);
+
+    const btnExport = document.getElementById(SEL.btnExport);
+    if (btnExport) btnExport.addEventListener('click', _onExport);
 
     EventBus.on('cost:updated', _onCostUpdated);
     EventBus.on('conversation:loaded', populateCostTab);
@@ -313,6 +319,67 @@ function _onSaveBudget() {
     _renderBudget();
     if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
         window.showToast('Budget saved', 'success');
+    }
+}
+
+// ============================================
+// Export (1.6.6)
+// ============================================
+
+/**
+ * Build a JSON-serializable snapshot of the cost dashboard. Pure read —
+ * no Storage writes. Pulled out as a named export so the regression test
+ * can assert the shape without DOM.
+ *
+ * @returns {{
+ *   version: string,
+ *   exportedAt: string,
+ *   summary: { todaySpend: number, monthSpend: number, budget: { daily: number|null, monthly: number|null } },
+ *   dailyMap: Object,
+ *   conversations: Array<{ id: string, title: string, updatedAt: number, cost: object|null }>
+ * }}
+ */
+export function buildCostExport() {
+    const conversations = ConversationManager.list().map((c) => ({
+        id: c.id,
+        title: c.title || 'New Chat',
+        updatedAt: c.updatedAt,
+        cost: getConvCost(c.id),
+    }));
+
+    return {
+        version: VERSION,
+        exportedAt: new Date().toISOString(),
+        summary: {
+            todaySpend: getTodaySpend(),
+            monthSpend: getMonthSpend(),
+            budget: getBudget(),
+        },
+        dailyMap: getDailyMap(),
+        conversations,
+    };
+}
+
+function _onExport() {
+    try {
+        const payload = buildCostExport();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ai-editor-cost-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+            window.showToast('Cost data exported', 'success');
+        }
+    } catch (err) {
+        console.error('[cost-tab] export failed:', err);
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+            window.showToast(`Export failed: ${err && err.message ? err.message : err}`, 'error');
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-05 · Current released (tagged) version: **1.5.13** · `main` HEAD: 1.6.4 (untagged — sits in main; release tag is `v1.6.0` and bundles 1.5.14 + 1.6.0–1.6.5).
+> Last updated: 2026-05-05 · Current released (tagged) version: **1.5.13** · `main` HEAD: 1.6.6 (untagged — sits in main; release tag `v1.6.0` is pending the 10-turn dogfood gate and will bundle 1.5.14 + 1.6.0–1.6.5; 1.6.6 lands ahead of the tag as a chat-surface-orthogonal export item).
 
 ## How to read this doc
 
@@ -15,8 +15,8 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md); the next release tag (`v1.6.0`) bundles these six fixes with the already-merged 1.5.14 retrieval cutover. Status: 1.6.0, 1.6.1, 1.6.2, 1.6.3, 1.6.4 shipped to main; 1.6.5 pending. |
-| **Next** | **1.6.6** Cost-dashboard retrieval extension *(gated on cost-dashboard export landing)* · **1.6.7** Query / structural expansion cache · **1.6.8 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
+| **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md); the next release tag (`v1.6.0`) bundles these six fixes with the already-merged 1.5.14 retrieval cutover. Status: 1.6.0, 1.6.1, 1.6.2, 1.6.3, 1.6.4, 1.6.5 all shipped to main; `v1.6.0` tag pending the 10-turn dogfood gate. |
+| **Next** | **1.6.6** Cost-dashboard export *(✅ shipped — chat-surface-orthogonal so lands ahead of the v1.6.0 tag)* · **1.6.7** Cost-dashboard retrieval extension · **1.6.8** Query / structural expansion cache · **1.6.9 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
 | **Later** | **2.0 Profiles.** Designed; not started. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled*. |
 
@@ -65,7 +65,7 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 | 1.6.2 | ✅ shipped (#271) | Request-shape validator before [`LLM.chat`](../js/chat/handlers.js): asserts every `tool` message has a matching preceding `assistant.tool_calls[].id`; drops orphans with a warning rather than 400-ing the request. | defense-in-depth |
 | 1.6.3 | pending | `function.name` overwrite-if-empty at [`js/llm/api.js`](../js/llm/api.js). One-line fix + regression test. Latent. | Hypothesis #2 |
 | 1.6.4 | ✅ shipped | Token-based summarization trigger + map-reduce multi-pass at [`js/chat/summarizer.js`](../js/chat/summarizer.js). Replaces the message-count `SUMMARY_THRESHOLD` with a real-prompt-size gate keyed on `State.lastExchangeTokens.prompt`; bundled multi-pass safely chunks the summarization input itself when the utility model's window is small (1M prod ↔ 4–256K utility). | Hypothesis #7 |
-| 1.6.5 | pending | localStorage quota-recovery cleanup at [`js/core.js`](../js/core.js). Remove the chat-history-prune branch — IDB is authoritative; localStorage is best-effort; the destructive-sounding `[Storage] Quota exceeded — pruned chat history` warning is misleading because the in-memory `_cache` and IDB still hold the full history. Surfaced during the 1.6.0 PR 0 dogfood. | Hypothesis #8 |
+| 1.6.5 | ✅ shipped (#275) | localStorage quota-recovery cleanup at [`js/core.js`](../js/core.js). Remove the chat-history-prune branch — IDB is authoritative; localStorage is best-effort; the destructive-sounding `[Storage] Quota exceeded — pruned chat history` warning is misleading because the in-memory `_cache` and IDB still hold the full history. Surfaced during the 1.6.0 PR 0 dogfood. | Hypothesis #8 |
 
 **Verification artifacts to capture** (per findings.md). Before any PR lands, drive one long session on the prior HEAD to confirm the symptom is unchanged. Set `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` so each rebuild's `RECENT_COUNT`, `startIndex`, `info?.summary` presence, and dropped count are logged.
 
@@ -105,13 +105,14 @@ Once `v1.6.0` is tagged, the open GitHub issues below run as ai-editor sessions 
 
 ## Later (sequenced)
 
-### 1.6.6–1.6.8 — Retrieval follow-ups
+### 1.6.6–1.6.9 — Retrieval follow-ups
 
 Bumped past the chat-stability minor.
 
-- **1.6.6:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) added to the existing [`js/settings/cost-tab.js`](../js/settings/cost-tab.js). Pairs naturally with the **cost-dashboard export** item (still missing) — bundle if both surfaces are touched.
-- **1.6.7:** Query cache, structural expansion cache.
-- **1.6.8 (gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
+- **1.6.6 ✅ shipped:** Cost-dashboard export — JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) (`buildCostExport()` + Export button). Unblocks the compression-track measurement loop and the 1.6.7 retrieval extension. See [CHANGELOG.md](../CHANGELOG.md) §1.6.6.
+- **1.6.7:** Cost-dashboard retrieval extension (per-strategy hit rates, per-strategy token spend) added to the existing [`js/settings/cost-tab.js`](../js/settings/cost-tab.js).
+- **1.6.8:** Query cache, structural expansion cache.
+- **1.6.9 (gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
 
 ### LLM reranker (scoped, not committed)
 
@@ -182,7 +183,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 |---|---|---|
 | Rules 1+2 (Subsumption, Invalidation) | `feat/1.2.0-compression-phase-1`, `feat/1.2.x-compression-off-flag`, `feat/1.2.x-synthetic-savings` | New `js/intelligence/compression/` module tree. `preserve_recent` invariant. Diagnostics in LLM debug modal. Existing `chat/summarizer.js` stays as Rule 5 fallback. |
 | Cost dashboard *(shipped 1.2.1)* | (n/a) | Cross-provider, per-conversation, per-tool token + cost breakdown lives at [`js/settings/cost-tab.js`](../js/settings/cost-tab.js); store at [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js). Venice + OpenRouter remote dashboards in `plugins/`. **Status:** ✅ shipped; the listed-here legacy line said "(none)" — that was stale. |
-| **Cost-dashboard export** | (none) | **New gating item.** Add Copy / JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) so post-session analysis can leave the browser. Cheap (one button + `JSON.stringify` over the existing store). Unblocks the compression-track measurement loop and is a prerequisite for the 1.6.6 retrieval extension. Could ship as a small 1.6.x patch after 1.6.x dogfood. |
+| **Cost-dashboard export** *(✅ shipped 1.6.6)* | (n/a) | JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) via `buildCostExport()` + Export button. Lives at [CHANGELOG.md](../CHANGELOG.md) §1.6.6. Unblocks the compression-track measurement loop and the 1.6.7 retrieval extension. |
 | Rule 3 (Consumption) | (none) | Gated on export + ≥95% `tool_result_for` coverage on production sessions. |
 | Rule 4 (Resolution) | (none) | Templated marker generation for "debugging spans that ended successfully." Gated on Rule 3 numbers matching the design. |
 | Rule 5 tuning | (none) | Plug existing summarizer into the pipeline cleanly; measure compression latency and summarizer call rate. |
