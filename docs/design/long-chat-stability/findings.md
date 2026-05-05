@@ -108,6 +108,7 @@ Key log signals:
 | 5 | `delta.reasoning_content` channel ignored | ? scope-dependent | Only relevant for R1/QwQ |
 | 6 | Multi-store coupling drift | ? pending | Correlate with pruning events |
 | 7 | **Threshold scales with window**, so summarization waits ~half the window before firing | ✓ confirmed (runtime + static) | Computed `SUMMARY_THRESHOLD` ≈ 198 for a 198K-window model; session topped out at ~95 messages and never crossed it |
+| 8 | **localStorage quota-recovery falsely reports chat truncation** — emergency prune at [`js/core.js:619-639`](../../../js/core.js) mutates the localStorage *backup copy* of `chatHistory` (`slice(-20)`) and emits `[Storage] Quota exceeded — pruned chat history from N to 20 messages`, but the in-memory `_cache` and IndexedDB still hold the full history. Misleading warning, no actual data loss when IDB is available — same disposition as the 1.5.9 issue #16 fix that removed the `slice(-100)` clamps at twelve message-write sites. | ✓ confirmed (runtime + static) | 2026-05-04 1.6.0 PR 0 dogfood: warning fired at `chatHistory.length=59` with IDB available; subsequent `[handleGeneralRequest] Context messages count: 50` (and later 52, 49, 51, 49) proves the in-memory history was untouched. Code at [`js/core.js:660-662`](../../../js/core.js) already documents the policy: "localStorage full but that's OK — IDB has the data" |
 
 ### Hypothesis #0 — confirmed runtime root cause (silent windowing)
 
@@ -460,6 +461,45 @@ the window in token count but stays under 30 messages,
 **Roadmap slot.** After PR 0/1/2 land. Lower urgency once the
 truncation marker is in place, but this is the long-term fix for
 the gating math.
+
+### PR 6 — localStorage quota-recovery cleanup (closes #8)
+
+**Files.** [`js/core.js`](../../../js/core.js) `_writeLocalStorage()`
+lines 614-670.
+
+**Change.** Remove the chat-history-prune branch (lines 619-639) and
+the misleading warning at line 628. When `localStorage.setItem` throws
+`QuotaExceededError` and `_idbReady` is true, fall straight through to
+the existing log-and-ignore path at lines 660-662
+(`localStorage full for "${key}" — data safe in IndexedDB`). The
+draft-eviction branch at lines 641-658 stays — drafts are
+localStorage-only and reasonable to evict on quota pressure. Only the
+*chat-history* prune is wrong-headed: the chat is replicated in IDB
+and `_cache`, so destroying the localStorage copy frees ~50KB while
+generating a warning that reads like data loss.
+
+Same disposition as the 1.5.9 issue #16 fix
+([CHANGELOG.md:786-799](../../CHANGELOG.md)) that removed the
+`slice(-100)` clamps at twelve message-write sites: IDB is GB-level
+and authoritative; localStorage is best-effort write-through. The
+quota-recovery codepath was the one site the 1.5.9 sweep missed.
+
+**Regression test.** New case in
+[`tests/test-storage.js`](../../../tests/test-storage.js): mock
+`localStorage.setItem` to throw `QuotaExceededError` once, call
+`Storage.set('chatHistory', [...59 messages])` with IDB available,
+assert (a) the in-memory `_cache.get('chatHistory')` is the full 59,
+(b) the IDB-write path was invoked with the full 59, (c) no
+`pruned chat history from N` warning was emitted.
+
+**Roadmap slot.** **1.6.5**, before the v1.6.0 release tag.
+Doesn't affect chat correctness — data isn't actually lost — but the
+misleading warning emitted during dogfood sessions is exactly the
+kind of "internally-correct, externally-confusing" surface the
+release-readiness gate exists to catch. Bundles into the v1.6.0
+release alongside PRs 1.6.0–1.6.4. Renumbers the previously-planned
+1.6.5/1.6.6/1.6.7 retrieval follow-ups (cost-dashboard / caches /
+AST chunker) up by one to 1.6.6/1.6.7/1.6.8.
 
 ### Out of scope (deferred per plan)
 

@@ -4,7 +4,7 @@
  * Imports the full module graph (core.js → providers → etc.) which is fine in the browser.
  */
 import { ChatSummarizer } from '../js/chat/summarizer.js';
-import { State } from '../js/core.js';
+import { State, Storage } from '../js/core.js';
 
 const { T } = window;
 
@@ -268,6 +268,93 @@ T.assert(searchSummary.includes('2 files'), 'Search summary includes file count'
 // Null content
 const nullResult = { role: 'tool', content: null };
 T.eq(ChatSummarizer._summarizeToolResult(nullResult), null, 'Null content returns null');
+
+// ============================================
+// TRUNCATION MARKER + PIN FIRST USER TURN (1.6.0 PR 0)
+// ============================================
+
+T.suite('ChatSummarizer — truncation marker + pin first user turn (1.6.0 PR 0)');
+
+const originalChatHistory = State.chatHistory;
+const originalSummaryInfo = Storage.get('chatSummaryInfo', null);
+
+// Case 1: marker present when history > RECENT_COUNT and no summary exists
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    const recentCount = ChatSummarizer.RECENT_COUNT_BASE; // 28 for 128K balanced
+    const n = recentCount + 20;
+    State.chatHistory = Array.from({ length: n }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `m${i}`
+    }));
+
+    const ctx = ChatSummarizer.getContextMessages();
+    T.eq(ctx[0].role, 'system', 'first ctx msg is system (marker)');
+    T.assert(ctx[0].isSummary === true, 'marker carries isSummary: true');
+    T.assert(/truncated/i.test(ctx[0].content), 'marker mentions "truncated"');
+    T.assert(/\d+ earlier message/i.test(ctx[0].content), 'marker reports a numeric drop count');
+}
+
+// Case 2: first user turn is pinned when sliced off
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    const recentCount = ChatSummarizer.RECENT_COUNT_BASE;
+    const n = recentCount + 20;
+    State.chatHistory = [
+        { role: 'user', content: 'ORIGINAL_TASK_FRAMING' },
+        ...Array.from({ length: n - 1 }, (_, i) => ({
+            role: i % 2 === 0 ? 'assistant' : 'user',
+            content: `m${i}`
+        }))
+    ];
+
+    const ctx = ChatSummarizer.getContextMessages();
+    const pinned = ctx.find(m => m.content === 'ORIGINAL_TASK_FRAMING');
+    T.assert(!!pinned, 'first user turn was pinned into context');
+    T.eq(pinned?.role, 'user', 'pinned message kept user role');
+    T.assert(pinned?.isSummary === true, 'pinned message tagged isSummary: true');
+}
+
+// Case 3: no marker when history fits within RECENT_COUNT
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.remove('chatSummaryInfo');
+    State.chatHistory = Array.from({ length: 5 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `m${i}`
+    }));
+
+    const ctx = ChatSummarizer.getContextMessages();
+    T.assert(!ctx.some(m => m.isSummary), 'no marker injected when nothing was sliced');
+    T.eq(ctx.length, 5, 'all messages preserved when within window');
+}
+
+// Case 4: existing summary path still wins (no double-marker)
+{
+    setMockModel(128000);
+    State.settings.summarizerMode = 'balanced';
+    Storage.set('chatSummaryInfo', { summary: 'prior summary text', lastIndex: 5 });
+    const recentCount = ChatSummarizer.RECENT_COUNT_BASE;
+    const n = recentCount + 20;
+    State.chatHistory = Array.from({ length: n }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `m${i}`
+    }));
+
+    const ctx = ChatSummarizer.getContextMessages();
+    T.assert(/CONVERSATION SUMMARY/.test(ctx[0].content), 'summary path takes precedence over marker');
+    T.assert(!/Context note:/.test(ctx[0].content), 'truncation marker is not injected when summary present');
+}
+
+// Restore
+State.chatHistory = originalChatHistory;
+if (originalSummaryInfo) Storage.set('chatSummaryInfo', originalSummaryInfo);
+else Storage.remove('chatSummaryInfo');
 
 // Restore
 resetMocks();

@@ -622,10 +622,29 @@ SUMMARY:`;
         // (which is UI-only and not a valid API role) to prevent 400 errors.
         recent = recent
             .filter(m => !m.isSummary && m.role !== 'system')
-            .map(m => m.role === 'error' 
+            .map(m => m.role === 'error'
                 ? { ...m, role: 'user', content: `[Error from editor]: ${m.content}` }
                 : m
             );
+
+        // 1.6.0 PR 0: when history was windowed but no summary exists yet,
+        // tell the model context was dropped and pin the original task framing
+        // (history[0] when it's a user turn) so it survives the slice.
+        if (startIndex > 0 && !info?.summary) {
+            const prefix = [{
+                role: 'system',
+                content: `[Context note: ${startIndex} earlier message(s) were truncated to fit the window. Ask the user to repeat any task framing if you've lost the thread.]`,
+                isSummary: true
+            }];
+            if (history[0]?.role === 'user') {
+                prefix.push({
+                    role: 'user',
+                    content: history[0].content,
+                    isSummary: true
+                });
+            }
+            return [...prefix, ...recent];
+        }
 
         if (info?.summary && history.length > this.RECENT_COUNT) {
             // === ISSUE #17: Inject tool action memory ===

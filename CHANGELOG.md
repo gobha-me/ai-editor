@@ -8,6 +8,97 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.0] - 2026-05-04
+
+**Truncation marker + pinned task framing in `getContextMessages()` (PR 0 of the 1.6.0 chat-stability track).**
+
+First of the five chat-stability PRs sized in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+(PR 0, §330-369). Closes the silent-windowing failure mode demonstrated
+in the 2026-05-04 long-session export, where
+[`js/chat/summarizer.js`](js/chat/summarizer.js) `getContextMessages()`
+sliced earlier history without telling the model anything had been
+dropped, causing the model to lose its original task framing, re-read
+files it had already inspected, and ultimately 400 the LLM provider with
+stale tool state.
+
+**What ships.**
+
+- **Truncation marker.** When `startIndex > 0` (history was windowed)
+  AND no `chatSummaryInfo` summary exists yet, `getContextMessages()`
+  now prepends a synthetic system message:
+  `[Context note: N earlier message(s) were truncated to fit the window.
+  Ask the user to repeat any task framing if you've lost the thread.]`.
+  The marker carries `isSummary: true` so the existing filter at the
+  same function strips it out on the next rebuild.
+- **Pinned task framing.** When the truncation branch fires AND
+  `history[0]?.role === 'user'`, that first user turn is shallow-copied
+  (with `isSummary: true`) immediately after the marker, so the
+  original instructions survive the slice. Cheaper than a real summary;
+  directly addresses the failure mode where the model loses framing.
+- **Mutually exclusive with the summary path.** The existing
+  `if (info?.summary && history.length > this.RECENT_COUNT)` block
+  still wins when a real summary exists — the summary subsumes both
+  the marker and the pinned framing.
+
+**Regression coverage.** Four new cases in
+[`tests/test-summarizer.js`](tests/test-summarizer.js) under
+`ChatSummarizer — truncation marker + pin first user turn (1.6.0 PR 0)`:
+marker present + numeric drop count; pinned first user turn; no marker
+when history fits in the window; summary path takes precedence (no
+double-marker). `tests/test-summarizer.js` now also imports `Storage`
+from `js/core.js` so cases can clear and restore `chatSummaryInfo`
+between runs.
+
+**Release-readiness gate.** Per the gate added to
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning",
+1.6.0 lands in `main` at this version but **does not get its own tag**.
+The `v1.6.0` release tag is pushed only after PRs 1.6.1–1.6.4 land and
+a 10-turn dogfood session in this repo passes (no silent truncation,
+no orphaned-tool 400s, no stale-state regressions). The tag deploys the
+four chat-stability fixes together with the already-merged 1.5.14
+retrieval cutover as a single user-visible release event.
+
+**Removability.** Reverting the `getContextMessages()` block returns
+the chat loop to its 1.5.14 silent-windowing behavior. No callers
+changed; no schema changed.
+
+**Docs (also in this PR).** The 1.6.0 PR 0 dogfood (Minimax 2.7,
+198K window) surfaced a misleading
+`[Storage] Quota exceeded — pruned chat history from 59 to 20 messages`
+warning emitted from `js/core.js:619-639` `_writeLocalStorage()`
+quota-recovery path. The text reads like data loss, but the prune is
+limited to the localStorage *backup copy* of `chatHistory` — the
+in-memory `_cache` and IDB still hold the full history (the existing
+fall-through at `js/core.js:660-662` already documents this:
+"localStorage full but that's OK — IDB has the data"). Same
+disposition as the 1.5.9 issue #16 sweep
+(`CHANGELOG.md:786-799`) that removed the `slice(-100)` clamps at
+twelve message-write sites; the quota-recovery codepath was the one
+site that sweep missed. **No code change in this PR**, only docs:
+
+- `docs/design/long-chat-stability/findings.md` — added
+  **Hypothesis #8** to the table (with evidence pointers from the
+  2026-05-04 dogfood) and a new **PR 6 — localStorage quota-recovery
+  cleanup (closes #8)** section sized for the storage cleanup.
+- `docs/ROADMAP.md` — slotted **1.6.5 — localStorage quota-recovery
+  cleanup** into the chat-stability `Sequenced PRs` table (Phase 4),
+  bringing the bundle to six PRs (1.6.0–1.6.5). Updated the exit
+  criterion to require no misleading `[Storage] Quota exceeded —
+  pruned chat history` warnings during dogfood. Renumbered the
+  post-tag retrieval follow-ups (cost-dashboard / caches / AST
+  chunker) from 1.6.5/1.6.6/1.6.7 → 1.6.6/1.6.7/1.6.8.
+
+**Test plan.**
+
+- `tests/index.html` runs all four new cases green; existing
+  ChatSummarizer suites unchanged.
+- Smoke (optional, not required to merge): set
+  `localStorage.setItem('debug.dump.summarizerSnapshots', '1')`,
+  drive a chat past `RECENT_COUNT_BASE` messages with no summary, and
+  confirm the next request payload's first message is the truncation
+  marker followed by the original first user turn.
+
 ## [1.5.14] - 2026-05-04
 
 **Legacy `js/context-manager.js` retirement (PR 28 of the 1.5.0 stream).**
