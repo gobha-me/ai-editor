@@ -51,6 +51,7 @@ export function collectAndSave() {
     // Timeouts (convert seconds to milliseconds)
     State.settings.llmIdleTimeout = parseInt(document.getElementById('settingLlmIdleTimeout').value) * 1000 || 90000;
     State.settings.toolTimeout = parseInt(document.getElementById('settingToolTimeout').value) * 1000 || 30000;
+    State.settings.longRunningToolTimeout = parseInt(document.getElementById('settingLongRunningToolTimeout').value) * 1000 || 300000;
     State.settings.summaryTimeout = parseInt(document.getElementById('settingSummaryTimeout').value) * 1000 || 60000;
 
     // Appearance - with null checks

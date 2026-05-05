@@ -123,6 +123,15 @@
         <span id="toolTimeoutValue">30s</span>
     </div>
 
+    <div class="form-group" data-setting-key="longRunningToolTimeout">
+        <label for="settingLongRunningToolTimeout">Long-Running Tool Timeout:</label>
+        <input type="range" id="settingLongRunningToolTimeout" min="60" max="600" step="30">
+        <span id="longRunningToolTimeoutValue">300s</span>
+        <small style="display: block; margin-top: 0.25rem; color: var(--text-muted);">
+            Default 300s (5 min). Applied to tools like <code>wait_for_ci</code> that may take longer than standard operations.
+        </small>
+    </div>
+
     <div class="form-group" data-setting-key="summaryTimeout">
         <label for="settingSummaryTimeout">Summary Timeout:</label>
         <input type="range" id="settingSummaryTimeout" min="10" max="180" step="10">

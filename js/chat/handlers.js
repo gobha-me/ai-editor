@@ -627,8 +627,13 @@ export async function handleGeneralRequest(input) {
                         // even if the tool errors. The model gets new info to
                         // react to either way.
                         madeProgressThisRound = true;
-                        // Execute with configurable timeout (default 30s)
-                        const toolTimeout = State.settings.toolTimeout || 30000;
+                        // Execute with configurable timeout — long-running tools (wait_for_ci, etc.)
+                        // get a separate timeout to avoid being killed by the standard tool timeout.
+                        const LONG_RUNNING_TOOLS = new Set(['wait_for_ci']);
+                        const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
+                        const toolTimeout = isLongRunning
+                            ? (State.settings.longRunningToolTimeout || 300000)
+                            : (State.settings.toolTimeout || 30000);
                         try {
                             toolResult = await Promise.race([
                                 executeToolCall(toolCall),

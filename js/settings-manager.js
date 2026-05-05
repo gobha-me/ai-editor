@@ -155,14 +155,17 @@ function populateSettingsForm() {
     // Timeout sliders
     const llmIdleTimeoutSlider = document.getElementById('settingLlmIdleTimeout');
     const toolTimeoutSlider = document.getElementById('settingToolTimeout');
+    const longRunningToolTimeoutSlider = document.getElementById('settingLongRunningToolTimeout');
     const summaryTimeoutSlider = document.getElementById('settingSummaryTimeout');
 
     llmIdleTimeoutSlider.value = (State.settings.llmIdleTimeout || 90000) / 1000;
     toolTimeoutSlider.value = (State.settings.toolTimeout || 30000) / 1000;
+    longRunningToolTimeoutSlider.value = (State.settings.longRunningToolTimeout || 300000) / 1000;
     summaryTimeoutSlider.value = (State.settings.summaryTimeout || 60000) / 1000;
 
     document.getElementById('llmIdleTimeoutValue').textContent = llmIdleTimeoutSlider.value + 's';
     document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';
+    document.getElementById('longRunningToolTimeoutValue').textContent = longRunningToolTimeoutSlider.value + 's';
     document.getElementById('summaryTimeoutValue').textContent = summaryTimeoutSlider.value + 's';
 
     llmIdleTimeoutSlider.oninput = () => {
@@ -170,6 +173,9 @@ function populateSettingsForm() {
     };
     toolTimeoutSlider.oninput = () => {
         document.getElementById('toolTimeoutValue').textContent = toolTimeoutSlider.value + 's';
+    };
+    longRunningToolTimeoutSlider.oninput = () => {
+        document.getElementById('longRunningToolTimeoutValue').textContent = longRunningToolTimeoutSlider.value + 's';
     };
     summaryTimeoutSlider.oninput = () => {
         document.getElementById('summaryTimeoutValue').textContent = summaryTimeoutSlider.value + 's';

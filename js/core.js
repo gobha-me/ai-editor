@@ -287,7 +287,8 @@ const State = {
         
         // Timeout Configuration (in milliseconds)
         llmIdleTimeout: 90000,     // 90 seconds - Resets on every streamed chunk; aborts when no token arrives within this window
-        toolTimeout: 30000,        // 30 seconds - Individual tool execution timeout
+        toolTimeout: 30000,        // 30 seconds - Individual tool execution timeout (standard tools)
+        longRunningToolTimeout: 300000, // 5 minutes - Timeout for long-running tools (wait_for_ci, etc.)
         summaryTimeout: 60000,     // 1 minute - Chat summary generation timeout
         
         // UI Configuration
