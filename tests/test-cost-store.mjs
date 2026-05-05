@@ -4,10 +4,14 @@
  * Pure-function aggregation logic over the in-memory localStorage stub
  * from `_node-shim.mjs`. Browser IDB path is exercised in the manual
  * verification per ROADMAP §1.2.1; here we validate the math.
+ *
+ * 1.6.7 — `recordTurn` is now async and serializes its read-modify-write
+ * regions through a `KeyMutex` (gitea#188). All `recordTurn(...)`
+ * callsites below are awaited so the post-write reads see the effect.
  */
 
 import './_node-shim.mjs';
-import { test } from 'node:test';
+import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Storage } from '../js/core.js';
@@ -25,6 +29,7 @@ import {
     daysBetween,
     DAILY_RETENTION_DAYS,
     _resetDaily,
+    _resetMutexForTests,
 } from '../js/intelligence/cost/cost-store.js';
 
 // ============================================
@@ -44,6 +49,12 @@ function clearStorage() {
     Storage.remove('cost-budget');
     for (let i = 0; i < 100; i++) Storage.remove(`cost-by-conv-c${i}`);
 }
+
+beforeEach(() => {
+    // 1.6.7 — wipe any chain promises left over from the previous test
+    // so a slow-resolving lock doesn't bleed into the next case.
+    _resetMutexForTests();
+});
 
 // Storage.init() is not called — Storage.{get,set,remove} hit the
 // in-memory `_cache` Map regardless of whether IDB has been opened, so
@@ -68,9 +79,9 @@ test('localDateKey is YYYY-MM-DD', () => {
 // recordTurn — per-conv aggregation
 // ============================================
 
-test('recordTurn aggregates input/output/cost on a conversation', () => {
+test('recordTurn aggregates input/output/cost on a conversation', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1',
         modelId: 'm1',
         provider: 'venice',
@@ -83,7 +94,7 @@ test('recordTurn aggregates input/output/cost on a conversation', () => {
         byTool: { read_file: { calls: 1, estTokens: 100 } },
         timestamp: Date.now(),
     });
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1',
         modelId: 'm1',
         provider: 'venice',
@@ -111,14 +122,14 @@ test('recordTurn aggregates input/output/cost on a conversation', () => {
     assert.equal(cc.byModel.m1.tokens, 3000 + 1300);
 });
 
-test('recordTurn isolates conversations', () => {
+test('recordTurn isolates conversations', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'p',
         inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.01, cacheSavings: 0, byTool: {},
     });
-    recordTurn({
+    await recordTurn({
         conversationId: 'c2', modelId: 'm', provider: 'p',
         inputTokens: 200, outputTokens: 100, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.02, cacheSavings: 0, byTool: {},
@@ -131,9 +142,9 @@ test('recordTurn isolates conversations', () => {
     assert.equal(b.requests, 1);
 });
 
-test('recordTurn with no conversationId only updates daily rollup', () => {
+test('recordTurn with no conversationId only updates daily rollup', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: null, modelId: 'm', provider: 'p',
         inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.05, cacheSavings: 0, byTool: {},
@@ -144,9 +155,9 @@ test('recordTurn with no conversationId only updates daily rollup', () => {
     assert.equal(map[today].requests, 1);
 });
 
-test('removeConvCost erases the record', () => {
+test('removeConvCost erases the record', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'p',
         inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.01, cacheSavings: 0, byTool: {},
@@ -160,15 +171,15 @@ test('removeConvCost erases the record', () => {
 // Daily rollup + prune
 // ============================================
 
-test('daily rollup sums multiple turns within the day', () => {
+test('daily rollup sums multiple turns within the day', async () => {
     clearStorage();
     const ts = Date.now();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'venice',
         inputTokens: 1000, outputTokens: 500, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.10, cacheSavings: 0, byTool: {}, timestamp: ts,
     });
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'openrouter',
         inputTokens: 500, outputTokens: 200, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.05, cacheSavings: 0, byTool: {}, timestamp: ts,
@@ -181,7 +192,7 @@ test('daily rollup sums multiple turns within the day', () => {
     assert.equal(map[today].byProvider.openrouter.cost, 0.05);
 });
 
-test('daily prune drops entries older than DAILY_RETENTION_DAYS', () => {
+test('daily prune drops entries older than DAILY_RETENTION_DAYS', async () => {
     clearStorage();
     const now = Date.now();
     const oldTs = now - (DAILY_RETENTION_DAYS + 5) * 86400000;
@@ -193,7 +204,7 @@ test('daily prune drops entries older than DAILY_RETENTION_DAYS', () => {
         [localDateKey(oldTs)]: { inputTokens: 1, outputTokens: 1, cost: 0.01, requests: 1, byProvider: {} },
         [localDateKey(recentTs)]: { inputTokens: 1, outputTokens: 1, cost: 0.01, requests: 1, byProvider: {} },
     });
-    recordTurn({
+    await recordTurn({
         conversationId: null, modelId: 'm', provider: 'p',
         inputTokens: 10, outputTokens: 10, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.005, cacheSavings: 0, byTool: {}, timestamp: now,
@@ -205,10 +216,10 @@ test('daily prune drops entries older than DAILY_RETENTION_DAYS', () => {
     assert.ok(map[localDateKey(now)], 'today recorded');
 });
 
-test('getDailySeries returns a fixed-length window with zero fill', () => {
+test('getDailySeries returns a fixed-length window with zero fill', async () => {
     clearStorage();
     const now = Date.now();
-    recordTurn({
+    await recordTurn({
         conversationId: null, modelId: 'm', provider: 'p',
         inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.10, cacheSavings: 0, byTool: {}, timestamp: now,
@@ -285,9 +296,9 @@ test('setBudget accepts only-daily / only-monthly', () => {
 // _resetDaily clears just the rollup
 // ============================================
 
-test('_resetDaily clears rollup but per-conv records survive', () => {
+test('_resetDaily clears rollup but per-conv records survive', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'p',
         inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.01, cacheSavings: 0, byTool: {},
@@ -301,15 +312,15 @@ test('_resetDaily clears rollup but per-conv records survive', () => {
 // 1.3.18 — tool-definition cost recorder fields
 // ============================================
 
-test('recordTurn aggregates toolDefTokens / toolDefBaseline / toolDefUnfiltered', () => {
+test('recordTurn aggregates toolDefTokens / toolDefBaseline / toolDefUnfiltered', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'venice',
         inputTokens: 1000, outputTokens: 500, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.10, cacheSavings: 0, byTool: {},
         toolDefTokens: 1500, toolDefBaseline: 5000, toolDefUnfiltered: 10000,
     });
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'venice',
         inputTokens: 2000, outputTokens: 800, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.20, cacheSavings: 0, byTool: {},
@@ -328,9 +339,9 @@ test('recordTurn aggregates toolDefTokens / toolDefBaseline / toolDefUnfiltered'
     assert.equal(day.toolDefUnfiltered, 20000);
 });
 
-test('recordTurn defaults missing tool-def fields to 0 (legacy emitters)', () => {
+test('recordTurn defaults missing tool-def fields to 0 (legacy emitters)', async () => {
     clearStorage();
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'p',
         inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.01, cacheSavings: 0, byTool: {},
@@ -342,7 +353,7 @@ test('recordTurn defaults missing tool-def fields to 0 (legacy emitters)', () =>
     assert.equal(cc.toolDefUnfiltered, 0);
 });
 
-test('recordTurn is NaN-safe over legacy on-disk ConvCost (no toolDef fields)', () => {
+test('recordTurn is NaN-safe over legacy on-disk ConvCost (no toolDef fields)', async () => {
     clearStorage();
     // Simulate a record written by 1.3.17 or earlier: the new fields
     // are absent on disk. The next recordTurn must NOT yield NaN sums.
@@ -353,7 +364,7 @@ test('recordTurn is NaN-safe over legacy on-disk ConvCost (no toolDef fields)', 
         byTool: {}, byModel: {}, firstAt: 1, lastAt: 1,
         // toolDefTokens / toolDefBaseline / toolDefUnfiltered missing
     });
-    recordTurn({
+    await recordTurn({
         conversationId: 'c1', modelId: 'm', provider: 'p',
         inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.001, cacheSavings: 0, byTool: {},
@@ -366,14 +377,14 @@ test('recordTurn is NaN-safe over legacy on-disk ConvCost (no toolDef fields)', 
     assert.equal(Number.isFinite(cc.toolDefTokens), true);
 });
 
-test('recordTurn is NaN-safe over legacy on-disk DailyEntry (no toolDef fields)', () => {
+test('recordTurn is NaN-safe over legacy on-disk DailyEntry (no toolDef fields)', async () => {
     clearStorage();
     const today = localDateKey();
     // Simulate a daily entry from before 1.3.18.
     Storage.set('cost-daily', {
         [today]: { inputTokens: 100, outputTokens: 50, cost: 0.01, requests: 1, byProvider: {} },
     });
-    recordTurn({
+    await recordTurn({
         conversationId: null, modelId: 'm', provider: 'p',
         inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
         cost: 0.001, cacheSavings: 0, byTool: {},
@@ -394,4 +405,94 @@ test('getDailySeries zero-fills tool-def fields on missing days', () => {
         assert.equal(entry.toolDefBaseline, 0);
         assert.equal(entry.toolDefUnfiltered, 0);
     }
+});
+
+// ============================================
+// 1.6.7 — race safety (regression for gitea#188)
+// ============================================
+//
+// Two read-modify-write paths in `recordTurn` guard the per-conv
+// aggregate (`cost-by-conv-{id}`) and the daily rollup (`cost-daily`).
+// Without serialization, N concurrent turns on the same key all observe
+// the same pre-mutation snapshot, increment locally, and overwrite each
+// other's writes — last writer wins, intermediate spend is lost.
+// `KeyMutex.withLock` keyed by storage key serializes the RMW per key
+// while different keys still run concurrently.
+
+test('recordTurn — 50 concurrent turns on same conversation produce 50× cost (no lost updates)', async () => {
+    clearStorage();
+    const N = 50;
+    const promises = [];
+    for (let i = 0; i < N; i++) {
+        promises.push(recordTurn({
+            conversationId: 'c1', modelId: 'm', provider: 'p',
+            inputTokens: 100, outputTokens: 50, cachedTokens: 0, reasoningTokens: 0,
+            cost: 0.01, cacheSavings: 0, byTool: {},
+        }));
+    }
+    await Promise.all(promises);
+
+    const cc = getConvCost('c1');
+    assert.equal(cc.requests, N, `requests must be ${N} (got ${cc.requests})`);
+    assert.ok(
+        Math.abs(cc.cost - N * 0.01) < 1e-9,
+        `cost must be ${(N * 0.01).toFixed(2)} (got ${cc.cost})`,
+    );
+    assert.equal(cc.inputTokens, N * 100);
+    assert.equal(cc.outputTokens, N * 50);
+});
+
+test('recordTurn — 50 concurrent turns aggregate fully into the daily rollup (no lost updates)', async () => {
+    clearStorage();
+    const N = 50;
+    const ts = Date.now();
+    const promises = [];
+    for (let i = 0; i < N; i++) {
+        promises.push(recordTurn({
+            conversationId: null, modelId: 'm', provider: 'venice',
+            inputTokens: 10, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0,
+            cost: 0.02, cacheSavings: 0, byTool: {}, timestamp: ts,
+        }));
+    }
+    await Promise.all(promises);
+
+    const today = localDateKey(ts);
+    const day = getDailyMap()[today];
+    assert.ok(day, 'today entry exists');
+    assert.equal(day.requests, N);
+    assert.ok(
+        Math.abs(day.cost - N * 0.02) < 1e-9,
+        `daily cost must be ${(N * 0.02).toFixed(2)} (got ${day.cost})`,
+    );
+    assert.equal(day.byProvider.venice.cost.toFixed(2), (N * 0.02).toFixed(2));
+});
+
+test('recordTurn — different conversation ids do NOT serialize against each other', async () => {
+    // The mutex keys per-key, so two distinct conv ids should be able to
+    // run concurrently. We can't easily prove "concurrency" from a unit
+    // test without instrumentation, but we can at least confirm both
+    // converge to their independent expected totals when interleaved.
+    clearStorage();
+    const N = 20;
+    const promises = [];
+    for (let i = 0; i < N; i++) {
+        promises.push(recordTurn({
+            conversationId: 'cA', modelId: 'm', provider: 'p',
+            inputTokens: 1, outputTokens: 1, cachedTokens: 0, reasoningTokens: 0,
+            cost: 0.01, cacheSavings: 0, byTool: {},
+        }));
+        promises.push(recordTurn({
+            conversationId: 'cB', modelId: 'm', provider: 'p',
+            inputTokens: 1, outputTokens: 1, cachedTokens: 0, reasoningTokens: 0,
+            cost: 0.05, cacheSavings: 0, byTool: {},
+        }));
+    }
+    await Promise.all(promises);
+
+    const a = getConvCost('cA');
+    const b = getConvCost('cB');
+    assert.equal(a.requests, N, 'cA records all turns');
+    assert.equal(b.requests, N, 'cB records all turns');
+    assert.ok(Math.abs(a.cost - N * 0.01) < 1e-9, `cA cost=${a.cost}`);
+    assert.ok(Math.abs(b.cost - N * 0.05) < 1e-9, `cB cost=${b.cost}`);
 });

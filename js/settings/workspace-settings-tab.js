@@ -181,8 +181,9 @@ function render() {
         <h3>Workspace settings</h3>
         <p class="ws-help">
             <code>.aieditor/settings.json</code> overrides global settings per repo for a curated
-            subset of keys (theme, UI scale, role, summarizer, etc.). Credentials and
-            workstation-personal preferences are never stored here. The file is auto-staged
+            subset of keys (theme, UI scale, summarizer, etc.). Credentials and
+            workstation-personal preferences (including <code>role</code>, model, and provider)
+            are never stored here. The file is auto-staged
             on commit when this toggle is on and the current branch isn't protected.
         </p>
 

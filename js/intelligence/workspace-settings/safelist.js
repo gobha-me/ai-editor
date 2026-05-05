@@ -33,6 +33,13 @@
  *     preferences. Sharing them silently changes teammates' model menus.
  *   - `advancedParams` — temperature, top-p, etc. Workstation-personal
  *     experimentation; not a project-shared concern.
+ *   - `role` (1.6.7) — controls the active model + tool admission cap
+ *     for THIS dev's session. Different teammates do different work in
+ *     the same repo (writing docs, debugging plugins, reviewing tests),
+ *     so pinning a single role per workspace forces every dev to either
+ *     accept the workspace's choice or open a branch + PR every time
+ *     they want to switch. Same shape as `apiProvider` / `llmModel` —
+ *     workstation-personal, not project-shared.
  *
  * Removability: deleting this file + the workspace-settings module dir
  * reverts to 1.4.3 behavior. The hardcoded const lists never need a
@@ -68,7 +75,8 @@ export const SAFELIST = Object.freeze([
     'ghostText',
 
     // Behavior
-    'role',
+    // (`role` was here pre-1.6.7; moved to DENYLIST. See module
+    // docstring "Why each excluded key is excluded → role".)
     'summarizerMode',
     'summarizer',
     'llmIdleTimeout',
@@ -122,6 +130,7 @@ export const DENYLIST = Object.freeze([
     'disabledModels',
     'modelOverrides',
     'advancedParams',
+    'role', // 1.6.7 — see "Why each excluded key is excluded → role".
 ]);
 
 const _safeSet = new Set(SAFELIST);

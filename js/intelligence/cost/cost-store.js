@@ -16,6 +16,7 @@
  */
 
 import { Storage } from '../../core.js';
+import { KeyMutex } from '../memory/utils.js';
 
 /** @type {number} */
 export const DAILY_RETENTION_DAYS = 30;
@@ -23,6 +24,15 @@ export const DAILY_RETENTION_DAYS = 30;
 const CONV_KEY = (id) => `cost-by-conv-${id}`;
 const DAILY_KEY = 'cost-daily';
 const BUDGET_KEY = 'cost-budget';
+
+// gitea#188 — `recordTurn` does read-modify-write on `cost-daily` and
+// `cost-by-conv-{id}`. Two concurrent turns (rapid sub-rounds in a
+// tool-loop, or two browser tabs both crediting cost into the daily
+// rollup) can interleave: both read the same snapshot, both write a
+// divergent successor, second write loses the first turn's spend.
+// `KeyMutex` serializes the RMW per-key. Same disposition as the memory
+// subsystem's adoption (see `js/intelligence/memory/utils.js:5-19`).
+const _mutex = new KeyMutex();
 
 // ============================================
 // Date helpers — local YYYY-MM-DD
@@ -272,80 +282,103 @@ export function setBudget(budget) {
  * rollup. Daily entries older than `DAILY_RETENTION_DAYS` are pruned
  * from the rollup on every write.
  *
+ * Returns a promise that resolves once both writes have been issued
+ * through their respective `KeyMutex` regions. Callers in the
+ * production path (`js/intelligence/cost/cost-recorder.js`) fire-and-
+ * forget, but tests must `await` so the post-write reads observe the
+ * effect.
+ *
  * @param {TurnRecord} rec
+ * @returns {Promise<void>}
  */
-export function recordTurn(rec) {
+export async function recordTurn(rec) {
     const ts = rec.timestamp || Date.now();
 
     // ── Per-conversation aggregate ──
+    // gitea#188 — read-modify-write must run inside the lock so two
+    // concurrent turns on the same conversation can't both observe the
+    // pre-mutation snapshot.
     if (rec.conversationId) {
-        const prev = getConvCost(rec.conversationId) || emptyConvCost(rec.conversationId);
-        prev.inputTokens     += rec.inputTokens || 0;
-        prev.outputTokens    += rec.outputTokens || 0;
-        prev.cachedTokens    += rec.cachedTokens || 0;
-        prev.reasoningTokens += rec.reasoningTokens || 0;
-        prev.cost            += rec.cost || 0;
-        prev.cacheSavings    += rec.cacheSavings || 0;
-        prev.requests        += 1;
-        prev.firstAt = prev.firstAt || ts;
-        prev.lastAt  = ts;
-        // 1.3.18 — `|| 0` defensive reads protect against legacy on-disk
-        // ConvCost records that were written before these fields existed
-        // (without the fallback, `undefined + N === NaN` poisons the sum).
-        prev.toolDefTokens     = (prev.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
-        prev.toolDefBaseline   = (prev.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
-        prev.toolDefUnfiltered = (prev.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
+        await _mutex.withLock(CONV_KEY(rec.conversationId), () => {
+            const prev = getConvCost(rec.conversationId) || emptyConvCost(rec.conversationId);
+            prev.inputTokens     += rec.inputTokens || 0;
+            prev.outputTokens    += rec.outputTokens || 0;
+            prev.cachedTokens    += rec.cachedTokens || 0;
+            prev.reasoningTokens += rec.reasoningTokens || 0;
+            prev.cost            += rec.cost || 0;
+            prev.cacheSavings    += rec.cacheSavings || 0;
+            prev.requests        += 1;
+            prev.firstAt = prev.firstAt || ts;
+            prev.lastAt  = ts;
+            // 1.3.18 — `|| 0` defensive reads protect against legacy on-disk
+            // ConvCost records that were written before these fields existed
+            // (without the fallback, `undefined + N === NaN` poisons the sum).
+            prev.toolDefTokens     = (prev.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
+            prev.toolDefBaseline   = (prev.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
+            prev.toolDefUnfiltered = (prev.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
 
-        if (rec.byTool) {
-            for (const [name, spend] of Object.entries(rec.byTool)) {
-                const slot = prev.byTool[name] || { calls: 0, estTokens: 0 };
-                slot.calls     += spend.calls || 0;
-                slot.estTokens += spend.estTokens || 0;
-                prev.byTool[name] = slot;
+            if (rec.byTool) {
+                for (const [name, spend] of Object.entries(rec.byTool)) {
+                    const slot = prev.byTool[name] || { calls: 0, estTokens: 0 };
+                    slot.calls     += spend.calls || 0;
+                    slot.estTokens += spend.estTokens || 0;
+                    prev.byTool[name] = slot;
+                }
             }
-        }
 
-        if (rec.modelId) {
-            const m = prev.byModel[rec.modelId] || { tokens: 0, cost: 0 };
-            m.tokens += (rec.inputTokens || 0) + (rec.outputTokens || 0);
-            m.cost   += rec.cost || 0;
-            prev.byModel[rec.modelId] = m;
-        }
+            if (rec.modelId) {
+                const m = prev.byModel[rec.modelId] || { tokens: 0, cost: 0 };
+                m.tokens += (rec.inputTokens || 0) + (rec.outputTokens || 0);
+                m.cost   += rec.cost || 0;
+                prev.byModel[rec.modelId] = m;
+            }
 
-        Storage.set(CONV_KEY(rec.conversationId), prev);
+            Storage.set(CONV_KEY(rec.conversationId), prev);
+        });
     }
 
     // ── Daily rollup ──
-    const dailyMap = getDailyMap();
-    const today = localDateKey(ts);
-    const dayEntry = dailyMap[today] || emptyDailyEntry();
-    dayEntry.inputTokens  += rec.inputTokens || 0;
-    dayEntry.outputTokens += rec.outputTokens || 0;
-    dayEntry.cost         += rec.cost || 0;
-    dayEntry.requests     += 1;
-    // 1.3.18 — same `|| 0` defensive read pattern as the per-conv aggregate.
-    dayEntry.toolDefTokens     = (dayEntry.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
-    dayEntry.toolDefBaseline   = (dayEntry.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
-    dayEntry.toolDefUnfiltered = (dayEntry.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
+    await _mutex.withLock(DAILY_KEY, () => {
+        const dailyMap = getDailyMap();
+        const today = localDateKey(ts);
+        const dayEntry = dailyMap[today] || emptyDailyEntry();
+        dayEntry.inputTokens  += rec.inputTokens || 0;
+        dayEntry.outputTokens += rec.outputTokens || 0;
+        dayEntry.cost         += rec.cost || 0;
+        dayEntry.requests     += 1;
+        // 1.3.18 — same `|| 0` defensive read pattern as the per-conv aggregate.
+        dayEntry.toolDefTokens     = (dayEntry.toolDefTokens     || 0) + (rec.toolDefTokens     || 0);
+        dayEntry.toolDefBaseline   = (dayEntry.toolDefBaseline   || 0) + (rec.toolDefBaseline   || 0);
+        dayEntry.toolDefUnfiltered = (dayEntry.toolDefUnfiltered || 0) + (rec.toolDefUnfiltered || 0);
 
-    const provider = rec.provider || 'unknown';
-    const provSlot = dayEntry.byProvider[provider] || { tokens: 0, cost: 0 };
-    provSlot.tokens += (rec.inputTokens || 0) + (rec.outputTokens || 0);
-    provSlot.cost   += rec.cost || 0;
-    dayEntry.byProvider[provider] = provSlot;
+        const provider = rec.provider || 'unknown';
+        const provSlot = dayEntry.byProvider[provider] || { tokens: 0, cost: 0 };
+        provSlot.tokens += (rec.inputTokens || 0) + (rec.outputTokens || 0);
+        provSlot.cost   += rec.cost || 0;
+        dayEntry.byProvider[provider] = provSlot;
 
-    dailyMap[today] = dayEntry;
+        dailyMap[today] = dayEntry;
 
-    // Prune old days.
-    for (const k of Object.keys(dailyMap)) {
-        if (daysBetween(k, today) >= DAILY_RETENTION_DAYS) {
-            delete dailyMap[k];
+        // Prune old days.
+        for (const k of Object.keys(dailyMap)) {
+            if (daysBetween(k, today) >= DAILY_RETENTION_DAYS) {
+                delete dailyMap[k];
+            }
         }
-    }
-    Storage.set(DAILY_KEY, dailyMap);
+        Storage.set(DAILY_KEY, dailyMap);
+    });
 }
 
 /** Test/dev only — clears the daily rollup. Per-conv records survive. */
 export function _resetDaily() {
     Storage.remove(DAILY_KEY);
+}
+
+/**
+ * Test seam — reset the mutex's internal state between tests so a queue
+ * carried over from a prior test doesn't bleed into the next.
+ * Production code should never call this.
+ */
+export function _resetMutexForTests() {
+    _mutex._resetForTests();
 }

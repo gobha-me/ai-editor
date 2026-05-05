@@ -92,10 +92,21 @@ test('isSafelisted rejects non-string and empty input', () => {
 test('safelist contains expected user-facing knobs', () => {
     // Spot-check the keys the user is most likely to override in a
     // workspace settings file. Catches accidental removal.
-    const expected = ['theme', 'uiScale', 'editorFontSize', 'role', 'showLineNumbers'];
+    const expected = ['theme', 'uiScale', 'editorFontSize', 'showLineNumbers'];
     for (const k of expected) {
         assert.equal(SAFELIST.includes(k), true, `safelist missing expected key ${k}`);
     }
+});
+
+test('1.6.7 — role is denylisted (workstation-personal)', () => {
+    // Pre-1.6.7 `role` sat on the SAFELIST under "Behavior", which let a
+    // committed `.aieditor/settings.json` overwrite `State.settings.role`
+    // on every `project:loaded` and silently revert UI role changes on
+    // reload. Role is workstation-personal — same shape as apiProvider /
+    // llmModel — and now sits on the DENYLIST.
+    assert.equal(SAFELIST.includes('role'), false, 'role must NOT be safelisted');
+    assert.equal(isSafelisted('role'), false);
+    assert.equal(isDenylisted('role'), true);
 });
 
 /* ---------------- filterToSafelisted ---------------- */

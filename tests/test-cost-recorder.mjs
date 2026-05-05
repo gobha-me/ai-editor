@@ -110,11 +110,11 @@ test('attribute uses "unknown" when neither tool_call_id nor name resolves', () 
 // 1.3.18 — _onCostUpdated forwards tool-def metrics
 // ============================================
 
-test('_onCostUpdated forwards toolDef* fields into the per-conv ConvCost', () => {
+test('_onCostUpdated forwards toolDef* fields into the per-conv ConvCost', async () => {
     clearCostStorage();
     Storage.set('activeConversation', 'cR');
 
-    _onCostUpdated({
+    await _onCostUpdated({
         usage: { prompt_tokens: 1000, completion_tokens: 500 },
         sessionCost: {},
         modelId: 'm-test',
@@ -132,11 +132,11 @@ test('_onCostUpdated forwards toolDef* fields into the per-conv ConvCost', () =>
     assert.equal(cc.toolDefUnfiltered, 10400);
 });
 
-test('_onCostUpdated defaults absent toolDef* fields to 0 (legacy emitter)', () => {
+test('_onCostUpdated defaults absent toolDef* fields to 0 (legacy emitter)', async () => {
     clearCostStorage();
     Storage.set('activeConversation', 'cR');
 
-    _onCostUpdated({
+    await _onCostUpdated({
         usage: { prompt_tokens: 100, completion_tokens: 50 },
         sessionCost: {},
         modelId: 'm-test',
@@ -152,14 +152,14 @@ test('_onCostUpdated defaults absent toolDef* fields to 0 (legacy emitter)', () 
     assert.equal(cc.toolDefUnfiltered, 0);
 });
 
-test('_onCostUpdated kill-switch invariant: admitted == baseline ⇒ 0% reduction', () => {
+test('_onCostUpdated kill-switch invariant: admitted == baseline ⇒ 0% reduction', async () => {
     clearCostStorage();
     Storage.set('activeConversation', 'cR');
 
     // Mirrors the legacy-path emission in `getToolsForRole()` when
     // `?toolsCompose=off` flips composerActive false.
     const same = 6420;
-    _onCostUpdated({
+    await _onCostUpdated({
         usage: { prompt_tokens: 100, completion_tokens: 50 },
         sessionCost: {},
         modelId: 'm-test',
@@ -175,9 +175,9 @@ test('_onCostUpdated kill-switch invariant: admitted == baseline ⇒ 0% reductio
         'kill-switch path: admitted equals baseline so the dashboard reads 0%');
 });
 
-test('_onCostUpdated ignores payloads without usage', () => {
+test('_onCostUpdated ignores payloads without usage', async () => {
     clearCostStorage();
     Storage.set('activeConversation', 'cR');
-    _onCostUpdated({ usage: null });
+    await _onCostUpdated({ usage: null });
     assert.equal(getConvCost('cR'), null);
 });

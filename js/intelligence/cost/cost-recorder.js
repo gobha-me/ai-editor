@@ -54,7 +54,13 @@ export function init() {
 }
 
 /**
+ * Returns the `recordTurn` promise so tests can `await` the per-conv +
+ * daily writes (1.6.7 — `recordTurn` is async and serializes its
+ * read-modify-write through `KeyMutex`). Production listeners still
+ * fire-and-forget; the EventBus does not await handler return values.
+ *
  * @param {{usage: any, sessionCost: any, messages?: any[], toolCalls?: any[]|null, modelId?: string, toolDefTokens?: number, toolDefBaseline?: number, toolDefUnfiltered?: number}} payload
+ * @returns {Promise<void>|void}
  */
 function _onCostUpdated(payload) {
     if (!payload || !payload.usage) return;
@@ -83,7 +89,7 @@ function _onCostUpdated(payload) {
 
     const byTool = _attributeTools(payload.messages || [], inputTokens);
 
-    recordTurn({
+    const turnPromise = recordTurn({
         conversationId: convId,
         modelId,
         provider,
@@ -104,6 +110,7 @@ function _onCostUpdated(payload) {
     });
 
     _emitBudgetWarningIfNeeded();
+    return turnPromise;
 }
 
 /**

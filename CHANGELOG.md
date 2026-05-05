@@ -8,6 +8,155 @@ All notable changes to AI Editor are documented here.
 
 - (placeholder for next track work)
 
+## [1.6.7] - 2026-05-05
+
+**Two bug-shape fixes** landing between the chat-stability minor and
+the retrieval follow-ups, both touching the workspace-shared
+configuration boundary:
+
+1. **`KeyMutex` around the cost-store read-modify-write paths
+   (gitea#188).**
+2. **Move `role` from the workspace-settings SAFELIST to the DENYLIST**
+   so a committed `.aieditor/settings.json` no longer pins the
+   per-session role.
+
+Renumbers the planned 1.6.7 cost-dashboard retrieval extension to 1.6.8.
+
+### Storage / cost
+
+**The bug.** [`recordTurn()` in `js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js)
+did a bare read-modify-write on two storage keys — `cost-by-conv-{id}`
+(per-conversation aggregate, lines 281–316 pre-fix) and `cost-daily`
+(rolling 30-day rollup, lines 319–345 pre-fix) — with no serialization.
+Two concurrent turns landing close together can interleave: both
+`getDailyMap()` calls observe the same pre-mutation snapshot, both
+`Storage.set('cost-daily', dailyMap)` writes overwrite each other,
+last-writer-wins, the first turn's spend disappears. Symptom is the
+gitea#188 title — *cost-daily graph data lost after refresh*.
+
+**What ships.**
+
+- **Module-private `KeyMutex` instance** at [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js)
+  imported from [`js/intelligence/memory/utils.js`](js/intelligence/memory/utils.js).
+- **`recordTurn` is now `async`.** The per-conv RMW runs inside
+  `await _mutex.withLock(CONV_KEY(id), …)`; the daily RMW runs inside
+  `await _mutex.withLock(DAILY_KEY, …)`. The `getConvCost` /
+  `getDailyMap` reads were moved *into* the locked region so the
+  snapshot is taken under the lock — guarding only the write half
+  would leave the race intact.
+- **`_resetMutexForTests()` test seam** mirroring
+  [`js/intelligence/memory/store.js`](js/intelligence/memory/store.js)
+  so the race-safety suite can isolate cases.
+- **No call-site changes in production.** The cost recorder
+  ([`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js))
+  invokes `recordTurn` as fire-and-forget from an `EventBus` listener;
+  Promise return is ignored, behavior is unchanged.
+
+**Same disposition** as the memory subsystem's `KeyMutex` adoption
+([`js/intelligence/memory/utils.js:5-19`](js/intelligence/memory/utils.js)
+docstring): the cost-store has the same RMW shape and the same
+serialization cure applies. Cross-tab races (BroadcastChannel) are
+still out of scope here — same as the memory subsystem.
+
+**Regression coverage.** Three new tests in
+[`tests/test-cost-store.mjs`](tests/test-cost-store.mjs) under the
+*1.6.7 — race safety (regression for gitea#188)* heading:
+1. 50 concurrent `recordTurn` calls on the same `conversationId`
+   converge to `requests = 50` and `cost = 0.50` (no lost updates).
+2. 50 concurrent `recordTurn` calls with `conversationId: null`
+   aggregate fully into the daily rollup (`requests = 50`,
+   `byProvider.venice.cost = 1.00`).
+3. Interleaved turns across two distinct `conversationId` values land
+   on each conv's expected total — keyed serialization, not global.
+
+The 20 pre-existing tests are updated to `await recordTurn(...)` so
+their post-write reads observe the effect.
+
+**Files.**
+- [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js) —
+  KeyMutex import, instance, async `recordTurn`, `_resetMutexForTests`.
+- [`tests/test-cost-store.mjs`](tests/test-cost-store.mjs) — 3 new
+  race-safety tests; `await` added to existing `recordTurn` callsites;
+  `beforeEach` resets the mutex between cases.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — `Next` row reflows: 1.6.7 =
+  cost-store race-safety (✅ shipped); cost-dashboard retrieval
+  extension shifts to 1.6.8; query/structural cache to 1.6.9; AST
+  chunker to 1.6.10. gitea#188 removed from *Known open issues*.
+  Header staleness corrected (current released version, dogfood-gate
+  wording).
+
+**Removability.** Reverting the cost-store import + `_mutex` + the
+`async`/`withLock` wrappers restores the prior synchronous behavior;
+no schema changes, no Storage migration. Tests would need their
+`await` adjusted back.
+
+### Workspace settings — denylist `role`
+
+**The bug.** `role` was on the workspace-settings SAFELIST under
+"Behavior", so a committed `.aieditor/settings.json` containing
+`"role": "coder"` would overwrite `State.settings.role` on every
+`project:loaded` for opted-in workspaces. UI role changes via the role
+picker only landed as *pending* writes in the file layer — the file on
+disk still held the original value, so the next reload reverted the
+role. The user-visible symptom: the workspace's role became sticky
+regardless of what the dev picked locally; switching roles required
+opening a branch, editing the file, and merging a PR every time.
+
+**Why it was wrong.** `role` controls the active model and the tool
+admission cap (and, downstream, the system prompt enumeration). Two
+teammates working in the same repo do different jobs in different
+sessions — writing docs, debugging plugins, reviewing tests — so
+pinning a single role per workspace forces every dev to either accept
+the workspace's choice or cut a PR each time they change tasks. Same
+shape as `apiProvider` / `llmModel` / `advancedParams`, all of which
+already sit on the DENYLIST as workstation-personal.
+
+**What ships.**
+
+- **`role` moved from SAFELIST to DENYLIST** at
+  [`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js).
+  Defense in depth: the parser strips denylisted keys on read, so any
+  `role` value committed to a teammate's `.aieditor/settings.json`
+  surfaces as an `unsafe_key_stripped` diagnostic instead of silently
+  applying.
+- **Doc updated** at the safelist module's "Why each excluded key is
+  excluded" block with the role rationale.
+- **Workspace-Settings tab help text** at
+  [`js/settings/workspace-settings-tab.js`](js/settings/workspace-settings-tab.js)
+  drops `role` from the "curated subset" example and adds it to the
+  "workstation-personal preferences are never stored here" line.
+- **`.aieditor/settings.json`** in this repo loses the dead `role`
+  line; the file now only carries `testLoop` (the workspace's
+  test-driven-loop opt-out).
+
+**Regression coverage.**
+
+- New test in
+  [`tests/test-workspace-settings-safelist.mjs`](tests/test-workspace-settings-safelist.mjs)
+  asserting `role` is denylisted and not safelisted.
+- New test in
+  [`tests/test-workspace-settings-serializer.mjs`](tests/test-workspace-settings-serializer.mjs)
+  asserting that a parse of `{ theme, role }` strips `role` and
+  surfaces it as an `unsafe_key_stripped` warning.
+- Existing serializer round-trip tests reworked to use
+  `editorFontSize` (still safelisted) instead of `role`.
+- The "spot-check user-facing knobs" assertion drops `role`.
+
+**Removability.** Putting `'role'` back on the SAFELIST and removing it
+from DENYLIST restores the pre-1.6.7 behavior. The file-layer flow,
+the recordChanges algorithm, and the commit-modal integration are
+unchanged.
+
+### Cost-recorder consequence
+
+`_onCostUpdated` at
+[`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js)
+now returns the `recordTurn` promise. Production EventBus listeners
+ignore the return; tests can `await` so post-call reads observe the
+mutex-serialized writes. Unit tests in
+[`tests/test-cost-recorder.mjs`](tests/test-cost-recorder.mjs) updated
+to `await _onCostUpdated(...)`.
+
 ## [1.6.6] - 2026-05-05
 
 **Cost-dashboard export.** First gating item for the Compression bucket

@@ -24,8 +24,8 @@ test('serialize emits empty object + trailing newline for empty input', () => {
 });
 
 test('serialize sorts keys lexicographically', () => {
-    const out = serialize({ uiScale: 110, theme: 'editorial', role: 'coder' });
-    assert.equal(out, '{\n  "role": "coder",\n  "theme": "editorial",\n  "uiScale": 110\n}\n');
+    const out = serialize({ uiScale: 110, theme: 'editorial', editorFontSize: 14 });
+    assert.equal(out, '{\n  "editorFontSize": 14,\n  "theme": "editorial",\n  "uiScale": 110\n}\n');
 });
 
 test('serialize drops non-safelisted keys silently', () => {
@@ -98,25 +98,36 @@ test('parse preserves multiple safelisted keys', () => {
     const json = JSON.stringify({
         theme: 'editorial',
         uiScale: 125,
-        role: 'coder',
+        editorFontSize: 14,
         showLineNumbers: false,
     });
     const { overrides, warnings } = parse(json);
     assert.deepEqual(overrides, {
         theme: 'editorial',
         uiScale: 125,
-        role: 'coder',
+        editorFontSize: 14,
         showLineNumbers: false,
     });
     assert.equal(warnings.length, 0);
 });
 
 test('serialize → parse round trip reconstructs safelisted overrides', () => {
-    const input = { theme: 'editorial', uiScale: 110, role: 'coder', showLineNumbers: false };
+    const input = { theme: 'editorial', uiScale: 110, editorFontSize: 14, showLineNumbers: false };
     const text = serialize(input);
     const { overrides, warnings } = parse(text);
     assert.deepEqual(overrides, input);
     assert.equal(warnings.length, 0);
+});
+
+test('1.6.7 — parse strips role with diagnostic warning (denylisted)', () => {
+    const json = JSON.stringify({
+        theme: 'editorial',
+        role: 'coder', // pre-1.6.7 this would have applied; now it's stripped.
+    });
+    const { overrides, warnings } = parse(json);
+    assert.deepEqual(overrides, { theme: 'editorial' });
+    const stripped = warnings.filter((w) => w.type === 'unsafe_key_stripped').map((w) => w.key);
+    assert.equal(stripped.includes('role'), true, 'role must surface as unsafe_key_stripped');
 });
 
 test('FILE_PATH points at .aieditor/settings.json', () => {
