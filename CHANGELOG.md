@@ -4,12 +4,25 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Notes
+
+- (placeholder for next track work)
+
+## [1.6.5] - 2026-05-05
+
+**Last patch before the `v1.6.0` release tag.** Bundles two changes that
+landed under this version: the **chat message virtualizer** (perf, PR #274 —
+already merged when this version heading went up) and the **localStorage
+quota-recovery cleanup** (PR 6 of 6 in the 1.6.0 chat-stability track,
+closing Hypothesis #8 in
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)).
+
 ### Performance
 
-- **Chat message virtualizer.** `renderMessages()` no longer eagerly walks
-  every entry in `State.chatHistory`; only the trailing 50-message window
-  mounts on render, with older messages paging in via a top sentinel +
-  `IntersectionObserver`
+- **Chat message virtualizer** (PR #274). `renderMessages()` no longer
+  eagerly walks every entry in `State.chatHistory`; only the trailing
+  50-message window mounts on render, with older messages paging in via a
+  top sentinel + `IntersectionObserver`
   ([`js/chat/message-virtualizer.js`](js/chat/message-virtualizer.js),
   [`js/chat/messages.js`](js/chat/messages.js)). When the user is scrolled
   up reading older context and a new turn arrives, a "↓ N new" pill
@@ -33,9 +46,57 @@ All notable changes to AI Editor are documented here.
   workaround at [`js/chat/index.js`](js/chat/index.js) is also removed since
   the virtualizer subsumes it.
 
-### Notes
+### Storage
 
-- (placeholder for next track work)
+**localStorage quota-recovery cleanup (PR 6 of 6 in the 1.6.0
+chat-stability track).** Closes Hypothesis #8 from
+[`docs/design/long-chat-stability/findings.md`](docs/design/long-chat-stability/findings.md)
+§"PR 6 — localStorage quota-recovery cleanup."
+
+**The bug.** `Storage._writeLocalStorage()` at
+[`js/core.js`](js/core.js) caught `QuotaExceededError` and ran a
+"Recovery pass 1" that did `slice(-20)` on the localStorage backup of
+`chatHistory`, emitting `[Storage] Quota exceeded — pruned chat history
+from N to 20 messages`. The warning text reads like data loss, but no
+data is lost: IndexedDB is authoritative and the in-memory `_cache` Map
+still holds the full history. Surfaced during the 1.6.0 PR 0 dogfood
+(2026-05-04) — warning fired at `chatHistory.length=59` while the
+context-rebuild path was still seeing the full message set.
+
+**What ships.** Removed the chat-history-prune branch from
+`_writeLocalStorage()`. A `QuotaExceededError` now falls through the
+draft-eviction branch (drafts have no IDB shadow — eviction-on-quota is
+correct there) to the existing log-and-ignore tail
+(`localStorage full ... data safe in IndexedDB` when IDB is ready;
+`Data not saved for key:` warn otherwise). The IDB write at
+`Storage.set()` already ran before `_writeLocalStorage()` was called,
+and the in-memory `_cache.set()` runs synchronously before that — both
+hold the full payload regardless of localStorage outcome.
+
+**Same disposition as 1.5.9 issue #16** (CHANGELOG.md), which removed
+the `slice(-100)` clamps from twelve `Storage.set('chatHistory', …)`
+sites under the policy "IDB is GB-level and authoritative; localStorage
+is best-effort write-through." The quota-recovery codepath was the
+thirteenth site that sweep missed.
+
+**Regression coverage.** New `Storage — Quota Recovery (regression for
+1.6.5)` suite in [`tests/test-storage.js`](tests/test-storage.js):
+stubs `localStorage.setItem` to throw `QuotaExceededError` once for the
+resolved chatHistory key, spies `Storage._idb.set`, captures
+`console.warn`, then `Storage.set('chatHistory', [...59 messages])` and
+asserts (a) `_cache` holds the full 59, (b) IDB.set was invoked with
+the full 59, (c) no `pruned chat history` warning was emitted. Stubs
+restore before assertions.
+
+**Files.**
+- [`js/core.js`](js/core.js) — `_writeLocalStorage()` simplified.
+- [`tests/test-storage.js`](tests/test-storage.js) — quota-recovery
+  regression suite.
+
+**Bundles into the `v1.6.0` release tag** alongside the already-shipped
+1.5.14 retrieval cutover and PRs 1.6.0–1.6.4. With this in, the
+release-readiness gate's 10-turn dogfood can run without the misleading
+quota warning contaminating the trace.
 
 ## [1.6.4] - 2026-05-05
 

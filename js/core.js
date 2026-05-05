@@ -621,29 +621,9 @@ const Storage = {
             localStorage.setItem(this._prefix + key, JSON.stringify(value));
         } catch (e) {
             if (e.name === 'QuotaExceededError') {
-                // Recovery pass 1: prune chat history (largest consumer)
-                const chatKey = this._prefix + this._resolveKey('chatHistory');
-                try {
-                    const raw = localStorage.getItem(chatKey);
-                    if (raw) {
-                        const history = JSON.parse(raw);
-                        if (Array.isArray(history) && history.length > 20) {
-                            const pruned = history.slice(-20);
-                            localStorage.setItem(chatKey, JSON.stringify(pruned));
-                            console.warn(`[Storage] Quota exceeded — pruned chat history from ${history.length} to ${pruned.length} messages`);
-                            try {
-                                localStorage.setItem(this._prefix + key, JSON.stringify(value));
-                                return;
-                            } catch {
-                                // Still full — try draft eviction
-                            }
-                        }
-                    }
-                } catch {
-                    // Pruning failed — try draft eviction
-                }
-
-                // Recovery pass 2: evict oldest drafts from localStorage
+                // Do NOT prune chatHistory: IDB + _cache hold the full payload,
+                // and the misleading warning reads like data loss (see 1.6.5).
+                // Drafts have no IDB shadow — evict those instead.
                 try {
                     const drafts = this._getDraftsByAge();
                     let evicted = 0;

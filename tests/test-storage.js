@@ -105,6 +105,102 @@ const cleared = Storage.getDraft('testowner', 'testrepo', 'main', 'src/app.js');
 T.eq(cleared, null, 'clearDraft removes draft');
 
 // ============================================
+// Quota Recovery (regression for 1.6.5)
+// ============================================
+//
+// Regression: a `QuotaExceededError` on the localStorage write of
+// `chatHistory` must NOT prune/truncate the localStorage backup copy and
+// must NOT emit `[Storage] Quota exceeded — pruned chat history`. IDB and
+// the in-memory _cache are authoritative; the backup copy is best-effort.
+
+T.suite('Storage — Quota Recovery (regression for 1.6.5)');
+
+{
+    const resolvedChatKey = Storage._resolveKey('chatHistory');
+    const fullChatLsKey = Storage._prefix + resolvedChatKey;
+    const priorCacheValue = Storage._cache.get(resolvedChatKey);
+    const priorLsValue = (() => {
+        try { return localStorage.getItem(fullChatLsKey); } catch { return null; }
+    })();
+
+    const messages = Array.from({ length: 59 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `quota-recovery test message ${i}`,
+        timestamp: 1_700_000_000_000 + i,
+    }));
+
+    const originalSetItem = localStorage.setItem.bind(localStorage);
+    let threwOnce = false;
+    localStorage.setItem = function (k, v) {
+        if (!threwOnce && k === fullChatLsKey) {
+            threwOnce = true;
+            const err = new Error('synthetic quota');
+            err.name = 'QuotaExceededError';
+            throw err;
+        }
+        return originalSetItem(k, v);
+    };
+
+    const idbCalls = [];
+    const originalIdbSet = (Storage._idb && typeof Storage._idb.set === 'function')
+        ? Storage._idb.set.bind(Storage._idb)
+        : null;
+    if (originalIdbSet) {
+        Storage._idb.set = function (k, v) {
+            if (k === resolvedChatKey) idbCalls.push({ key: k, length: Array.isArray(v) ? v.length : null });
+            return originalIdbSet(k, v);
+        };
+    }
+
+    const warnCalls = [];
+    const originalWarn = console.warn;
+    console.warn = function (...args) { warnCalls.push(args); return originalWarn.apply(console, args); };
+
+    let setError = null;
+    try {
+        Storage.set('chatHistory', messages);
+    } catch (e) {
+        setError = e;
+    }
+
+    // Restore stubs/spies before assertions so a failed assertion doesn't
+    // leak into the rest of the suite.
+    localStorage.setItem = originalSetItem;
+    if (originalIdbSet) Storage._idb.set = originalIdbSet;
+    console.warn = originalWarn;
+
+    T.assert(threwOnce, 'stub fired exactly once for the chatHistory key');
+    T.eq(setError, null, 'Storage.set did not propagate the QuotaExceededError');
+
+    const cachedAfter = Storage._cache.get(resolvedChatKey);
+    T.assert(Array.isArray(cachedAfter), '_cache holds an array after quota recovery');
+    T.eq(cachedAfter.length, 59, '_cache.chatHistory has all 59 messages (a)');
+
+    if (Storage.isIDBActive) {
+        T.assert(idbCalls.length >= 1, 'IDB.set was invoked for chatHistory (b)');
+        T.eq(idbCalls[idbCalls.length - 1].length, 59, 'IDB.set received the full 59-message array (b)');
+    } else {
+        T.assert(true, 'IDB inactive — skipping IDB-write assertion (b)');
+    }
+
+    const prunedWarn = warnCalls.find(args =>
+        typeof args[0] === 'string' && args[0].startsWith('[Storage] Quota exceeded — pruned chat history')
+    );
+    T.assert(!prunedWarn, 'no "pruned chat history" warning emitted (c)');
+
+    // Cleanup: restore prior chatHistory state in cache + localStorage.
+    if (priorCacheValue === undefined) {
+        Storage._cache.delete(resolvedChatKey);
+    } else {
+        Storage._cache.set(resolvedChatKey, priorCacheValue);
+    }
+    try {
+        if (priorLsValue === null) localStorage.removeItem(fullChatLsKey);
+        else localStorage.setItem(fullChatLsKey, priorLsValue);
+    } catch { /* best-effort cleanup */ }
+}
+
+// ============================================
 // Cleanup
 // ============================================
 
