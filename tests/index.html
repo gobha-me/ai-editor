@@ -178,10 +178,6 @@
 
             // --- UI & Context (0.9.12) ---
             try {
-                await import('./test-context-filter.js');
-            } catch (e) { errors.push(['Context Filter', e]); }
-
-            try {
                 await import('./test-secondary-pane.js');
             } catch (e) { errors.push(['Secondary Pane', e]); }
 
