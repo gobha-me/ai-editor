@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.13** (fourteen in-track patches `1.6.0`–`1.6.13`; `1.6.6`–`1.6.13` sit untagged in main awaiting the next tag-push gate).
+> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.14** (fifteen in-track patches `1.6.0`–`1.6.14`; `1.6.6`–`1.6.14` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -15,7 +15,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Just shipped** | **1.6.0–1.6.11 — Chat Stability + retrieval caches + MCP polish + tool-ergonomics post-mortem.** Twelve in-track patches in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.11 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging). |
+| **Just shipped** | **1.6.0–1.6.14 — Chat Stability + retrieval caches + MCP polish + tool-ergonomics post-mortem + security/conventions/export-fix trio.** Fifteen in-track patches in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging), `<UNTRUSTED_*>` wrapper for issue/PR/comment text (gitea#295, 1.6.12), repo-root `CLAUDE.md` autoload Phase 1 (github#37, 1.6.13), chat-export reads canonical markdown source (github#36, 1.6.14). |
 | **Now** | **Doc sweep + dogfood pivot to HTML-Games** (this PR). Bug-hunting battery moves off ai-editor self-targeting onto an external substrate (`project_dogfood_test_battery.md`); ARCHITECTURE / ROADMAP / SECURITY / README refreshed to 1.6.x reality; stale PLAN.md retired. |
 | **Next** | **AST-based code chunker — gate fired, committed.** Polyglot benchmark (PR [#290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval)`, merged 2026-05-05) fired the gate decisively: Armature/Go meanRecall@5 = 0.883, **Plinth/C++ meanRecall@5 = 0.267** with 4 of 10 fixtures fully missing in top-5. Decision = ship. Ships as the first track after the 1.6.12 security patch closes. |
 | **Later** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once 1.6.x measurement closes and the AST decision resolves. |
