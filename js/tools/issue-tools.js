@@ -5,6 +5,7 @@
 
 import { State, EventBus } from '../core.js';
 import { Git } from '../git.js';
+import { wrapUntrusted, scanForInvisible, UNTRUSTED_KINDS } from '../security/untrusted-wrap.js';
 
 /**
  * Register all issue-related tools.
@@ -93,18 +94,19 @@ export function registerIssueTools(registry) {
                 console.warn(`Could not fetch comments for issue #${number}:`, e.message);
             }
 
+            const shownComments = comments.slice(0, 20);
             const result = {
                 number: issue.number,
                 title: issue.title,
-                body: issue.body,
+                body: wrapUntrusted(UNTRUSTED_KINDS.ISSUE_BODY, issue.body || ''),
                 state: issue.state,
                 labels: issue.labels || [],
                 assignee: issue.assignees?.[0] || null,
                 created: issue.createdAt,
                 total_comments: comments.length,
-                comments: comments.slice(0, 20).map(c => ({
+                comments: shownComments.map(c => ({
                     user: c.user,
-                    body: c.body,
+                    body: wrapUntrusted(UNTRUSTED_KINDS.ISSUE_COMMENT, c.body || ''),
                     created: c.createdAt
                 }))
             };
@@ -112,6 +114,21 @@ export function registerIssueTools(registry) {
                 result.comments_truncated = true;
                 result.hint = `Showing oldest 20 of ${comments.length} comments. The newest ${comments.length - 20} are omitted.`;
             }
+
+            // Scan all externally-sourced text for invisible-Unicode (glassworm /
+            // Trojan-Source / zero-width steganography). Surface findings on
+            // `_security` so the model can warn the user; non-blocking.
+            const securityWarnings = [];
+            const bodyScan = scanForInvisible(issue.body, `issue #${issue.number} body`);
+            if (bodyScan) securityWarnings.push(bodyScan);
+            for (const c of shownComments) {
+                const cScan = scanForInvisible(c.body, `comment by ${c.user || 'unknown'}`);
+                if (cScan) securityWarnings.push(cScan);
+            }
+            if (securityWarnings.length > 0) {
+                result._security = { invisibleUnicode: securityWarnings };
+            }
+
             return result;
         } catch (error) {
             if (error.status === 404) {

@@ -17,7 +17,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 |---|---|
 | **Just shipped** | **1.6.0–1.6.11 — Chat Stability + retrieval caches + MCP polish + tool-ergonomics post-mortem.** Twelve in-track patches in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.11 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging). |
 | **Now** | **Doc sweep + dogfood pivot to HTML-Games** (this PR). Bug-hunting battery moves off ai-editor self-targeting onto an external substrate (`project_dogfood_test_battery.md`); ARCHITECTURE / ROADMAP / SECURITY / README refreshed to 1.6.x reality; stale PLAN.md retired. |
-| **Next** | **Decision on AST-based code chunker (gated).** Polyglot benchmark fires the gate (PR [#290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval)`); only ships if regex heuristic shows measurable gaps on the benchmark. Originally projected as 1.6.11 — that slot was claimed by the post-mortem fixes, so this lands as the next in-track patch when/if it ships. |
+| **Next** | **AST-based code chunker — gate fired, committed.** Polyglot benchmark (PR [#290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval)`, merged 2026-05-05) fired the gate decisively: Armature/Go meanRecall@5 = 0.883, **Plinth/C++ meanRecall@5 = 0.267** with 4 of 10 fixtures fully missing in top-5. Decision = ship. Ships as the first track after the 1.6.12 security patch closes. |
 | **Later** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once 1.6.x measurement closes and the AST decision resolves. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled* below. |
 
@@ -123,9 +123,20 @@ End-of-session deliverable: per-session markdown trace at [`docs/dogfood-battery
 
 ## Later (sequenced)
 
-### Decision: AST-based code chunker (gated)
+### Decision: AST-based code chunker — gate fired (2026-05-05)
 
-Only ships if the polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval): polyglot benchmark — fires AST chunker gate`) shows the regex heuristic has measurable quality gaps. Originally projected as 1.6.11 — that slot was claimed by the tool-ergonomics post-mortem fixes ([CHANGELOG.md §1.6.11](../CHANGELOG.md)), so this lands as the next in-track patch when/if it ships. Decision waits on a measurement run.
+The polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval): polyglot benchmark — fires AST chunker gate`, merged 2026-05-05) fired the gate. Verdict from the merge commit: *"the gate criterion ('regex heuristic shows measurable gaps on the benchmark') fires."*
+
+| Repo | Files | Chunks | meanHit@5 | meanRecall@5 |
+|---|---:|---:|---:|---:|
+| armature (Go) | 746 | 1752 | 1.000 | 0.883 |
+| **plinth (C++)** | **404** | **776** | **0.600** | **0.267** |
+
+Four of ten Plinth/C++ fixtures (`capability-registry-api`, `rbac-enforcement-filter`, `realtime-pubsub-broker`, `audit-logging-write`) fully miss the expected paths in top-5. The regex chunker's degenerate "single chunk per file with 8000-char hard-cut" path on `.cpp`/`.hpp` dilutes BM25 signal across whole-file blobs while small focused test fixtures concentrate it; production header/impl pairs are out-scored by unrelated tests. Go's syntax aligns enough with the JS regex (`func` ≈ `function`, top-level only) that the regex chunker handles it gracefully.
+
+Tree-sitter-grade boundaries for C/C++/Rust/Java/etc. would emit per-declaration chunks where header signatures and impl bodies become addressable units, weighted against focused queries.
+
+**Decision: ship.** Slots in as the first active track after the 1.6.12 security patch closes (originally projected as 1.6.11 — that slot was claimed by the tool-ergonomics post-mortem fixes; 1.6.12 is the queued security-track patch). Reproducible benchmark for the implementation floor: re-run `tests/run-polyglot-benchmark.mjs` against the same `tests/fixtures/polyglot-corpus.js`; AST chunker must lift Plinth/C++ recall@5 toward Armature/Go's 0.883.
 
 ### LLM reranker (scoped, not committed)
 

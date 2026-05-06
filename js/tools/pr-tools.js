@@ -13,6 +13,7 @@
 import { State, EventBus } from '../core.js';
 import { Git } from '../git.js';
 import { getContextScale } from '../llm.js';
+import { wrapUntrusted, scanForInvisible, UNTRUSTED_KINDS } from '../security/untrusted-wrap.js';
 
 /**
  * Register all PR/MR-related tools.
@@ -181,7 +182,7 @@ export function registerPRTools(registry) {
                 pr: {
                     number: pr.number,
                     title: pr.title,
-                    body: pr.body,
+                    body: wrapUntrusted(UNTRUSTED_KINDS.PR_BODY, pr.body || ''),
                     state: pr.state,
                     merged: pr.merged,
                     head: pr.head,
@@ -204,7 +205,7 @@ export function registerPRTools(registry) {
                 files: truncatedFiles,
                 comments: comments.map(c => ({
                     user: c.user,
-                    body: c.body,
+                    body: wrapUntrusted(UNTRUSTED_KINDS.PR_COMMENT, c.body || ''),
                     type: c.type,
                     path: c.path || null,
                     line: c.line || null,
@@ -215,6 +216,21 @@ export function registerPRTools(registry) {
                 result.patches_truncated = patchesTruncated;
                 result.hint = `${patchesTruncated} file diff(s) were truncated to limit response size. Use read_file on individual files to see their full current content, or check out the PR branch to review changes.`;
             }
+
+            // Scan externally-sourced text for invisible-Unicode steganography.
+            // Note: file diffs (`patch`) are NOT scanned here — the editor's
+            // file-open invisible-unicode-decoration covers that surface.
+            const securityWarnings = [];
+            const prBodyScan = scanForInvisible(pr.body, `PR #${pr.number} body`);
+            if (prBodyScan) securityWarnings.push(prBodyScan);
+            for (const c of comments) {
+                const cScan = scanForInvisible(c.body, `${c.type || 'comment'} by ${c.user || 'unknown'}`);
+                if (cScan) securityWarnings.push(cScan);
+            }
+            if (securityWarnings.length > 0) {
+                result._security = { invisibleUnicode: securityWarnings };
+            }
+
             return result;
         } catch (error) {
             if (error.status === 404) {
