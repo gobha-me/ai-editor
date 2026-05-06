@@ -4,6 +4,49 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-05-06
+
+### Fix — `edit_file` ↔ read-cache cross-request deadlock ([gitea#301](https://git.gobha.me/xcaliber/ai-editor/issues/301))
+
+Live HTML-Games dogfood (issue #90, qwen-3-6-plus, 2026-05-06 21:39): one
+successful `edit_file` (lines 8-9, +1 drift) bricked every subsequent
+edit-then-re-read cycle. The 1.6.11 staleness guard rejected follow-up
+edits (correctly — file mutated, must re-read) and the cross-request dup
+cache then refused the re-read with `[You already called read_lines with
+these arguments earlier… Do NOT call this tool again with the same args.]`
+because the (`tool`, sorted-`args`) key matched a pre-mutation log entry.
+Loop ran 14 turns and exhausted tokens before falling back to `write_file`.
+
+**Root cause.** Two caches in [`js/chat/handlers.js`](js/chat/handlers.js):
+the local `toolCallCache` Map (same-request, already invalidated on writes
+since pre-1.6.11) and `State.toolActionLog` (cross-request, last-50 entries
+that survive summarization). Only the first was invalidated on mutation;
+the second was never invalidated, so its entries pointed at pre-mutation
+content forever.
+
+**Fix.** New [`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js)
+exporting `invalidateCachesForPath({toolName, args, currentFilePath,
+toolCallCache, toolActionLog, WRITE_TOOLS})` — pure helper that walks both
+caches in one pass. Read entries whose `args.path` (or `args.file_path`)
+match the mutated path get evicted from both; `read_current_file` entries
+are evicted whenever any file-mutating or file-switching tool runs;
+`WRITE_TOOLS` log entries stay (informational history). The log is mutated
+in place to preserve `State.toolActionLog`'s identity (held by reference
+across `handlers.js`).
+
+`handlers.js` was already invalidating same-request entries inline in this
+block; this PR replaces that inline block with the helper call so both
+walks live in one extracted-and-tested module.
+
+### Tests
+
+- New [`tests/test-handlers-cache-invalidation.mjs`](tests/test-handlers-cache-invalidation.mjs)
+  (8 cases): the gitea#301 repro path; same-edit doesn't disturb other
+  paths; `open_file` evicts `read_current_file` from both caches;
+  `WRITE_TOOLS` log entries survive; `args.file_path` (alternate field)
+  matches; non-mutating tools are a no-op; mutation with no path is a
+  no-op (defensive); `toolActionLog` array identity is preserved.
+
 ## [1.7.0] - 2026-05-06
 
 ### Added — AST-aware C-family code chunker (Phase 1) ([github#290](https://github.com/gobha-me/ai-editor/pull/290) lineage; gate fired 2026-05-05)

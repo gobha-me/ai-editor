@@ -35,6 +35,7 @@ import { validateAndCleanHistory } from './history-validator.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
+import { invalidateCachesForPath } from './cache-invalidation.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
@@ -687,20 +688,22 @@ export async function handleGeneralRequest(input) {
                         }
                         
                         // Invalidate cached reads when a write tool modifies a file
-                        // or when open_file changes the active file (stales read_current_file)
-                        if (['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 'open_file',
-                             'edit_file', 'write_file', 'delete_file'].includes(toolName)) {
-                            const affectedPath = args.path || State.currentFile?.path;
-                            if (affectedPath) {
-                                for (const [key] of toolCallCache) {
-                                    // Evict reads that reference this path OR read_current_file
-                                    // (which implicitly reads the active file without a path arg)
-                                    if (key.includes(affectedPath) || key.startsWith('read_current_file|')) {
-                                        toolCallCache.delete(key);
-                                        console.log(`[TOOL-LOOP] Cache invalidated: ${key.slice(0, 60)}…`);
-                                    }
-                                }
-                            }
+                        // or when open_file changes the active file (stales read_current_file).
+                        // Walks both the same-request `toolCallCache` AND the cross-request
+                        // `State.toolActionLog`. Pre-1.7.1 only the former was invalidated,
+                        // which caused a deadlock with the 1.6.11 staleness guard: a stale
+                        // read_lines envelope from the log would refuse the re-read the guard
+                        // demanded after a successful edit_file (gitea#301).
+                        const _inv = invalidateCachesForPath({
+                            toolName,
+                            args,
+                            currentFilePath: State.currentFile?.path || null,
+                            toolCallCache,
+                            toolActionLog: State.toolActionLog,
+                            WRITE_TOOLS,
+                        });
+                        if (_inv.evictedCache > 0 || _inv.evictedLog > 0) {
+                            console.log(`[TOOL-LOOP] Cache invalidated for ${toolName}(${args.path || args.file_path || State.currentFile?.path || '?'}) — ${_inv.evictedCache} same-req, ${_inv.evictedLog} cross-req`);
                         }
                         
                         // Cache successful read-only results (skip write tools)
