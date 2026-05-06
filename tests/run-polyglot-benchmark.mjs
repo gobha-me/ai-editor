@@ -55,7 +55,11 @@ import * as url from 'node:url';
 
 import { chunkCode } from '../js/intelligence/retrieval/chunkers/code-chunker.js';
 import { buildBM25Index } from '../js/intelligence/retrieval/bm25-indexer.js';
-import { tokenizeBM25, scoreBM25Doc } from '../js/intelligence/retrieval/strategies/semantic.js';
+import {
+    tokenizeBM25,
+    scoreBM25Doc,
+    applyScoreWeights,
+} from '../js/intelligence/retrieval/strategies/semantic.js';
 import { POLYGLOT_QUERY_FIXTURES, getFixturesByRepo } from './fixtures/polyglot-corpus.js';
 
 /* -------------------------------------------------------------------------- */
@@ -221,28 +225,44 @@ async function buildRepoIndex(repo, root) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Score every chunk against `query`, dedupe to file paths (best chunk
- * score wins per file), and return the top-K paths.
+ * Score every chunk against `query`, optionally apply path/content-type
+ * weight multipliers via `applyScoreWeights` (the same helper the
+ * Semantic strategy uses post-rank), dedupe to file paths
+ * (best-weighted-score wins per file), and return the top-K paths.
+ *
+ * Reusing `applyScoreWeights` keeps Stage-1 benchmark math identical to
+ * the Stage-2 production code path — if/when a default weight set is
+ * added to the strategy, the benchmark and production scores stay in
+ * lockstep.
  *
  * @param {RepoIndex} idx
  * @param {string} query
  * @param {number} topK
+ * @param {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null} weights
  * @returns {{ paths: string[], topScore: number }}
  */
-function topPathsForQuery(idx, query, topK) {
+function topPathsForQuery(idx, query, topK, weights) {
     const queryTokens = tokenizeBM25(query);
     if (queryTokens.length === 0) return { paths: [], topScore: 0 };
+
+    /** @type {Array<{chunk: any, score: number}>} */
+    const scored = [];
+    for (const chunk of idx.chunks) {
+        const s = scoreBM25Doc(queryTokens, chunk.content, idx.bm25);
+        if (!Number.isFinite(s) || s <= 0) continue;
+        scored.push({ chunk, score: s });
+    }
+
+    const weighted = applyScoreWeights(scored, weights || undefined);
 
     /** @type {Map<string, number>} */
     const bestPerFile = new Map();
     let topScore = 0;
-    for (const chunk of idx.chunks) {
-        const s = scoreBM25Doc(queryTokens, chunk.content, idx.bm25);
-        if (!Number.isFinite(s) || s <= 0) continue;
-        if (s > topScore) topScore = s;
+    for (const { chunk, score } of weighted) {
+        if (score > topScore) topScore = score;
         const uri = chunk.metadata.source_uri;
         const prev = bestPerFile.get(uri) || 0;
-        if (s > prev) bestPerFile.set(uri, s);
+        if (score > prev) bestPerFile.set(uri, score);
     }
 
     const ranked = Array.from(bestPerFile.entries())
@@ -273,13 +293,14 @@ function topPathsForQuery(idx, query, topK) {
 /**
  * @param {RepoIndex} idx
  * @param {ReturnType<typeof getFixturesByRepo>} fixtures
+ * @param {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null} weights
  * @returns {FixtureResult[]}
  */
-function runFixtures(idx, fixtures) {
+function runFixtures(idx, fixtures, weights) {
     /** @type {FixtureResult[]} */
     const out = [];
     for (const f of fixtures) {
-        const { paths, topScore } = topPathsForQuery(idx, f.query, TOP_K);
+        const { paths, topScore } = topPathsForQuery(idx, f.query, TOP_K, weights);
         const hits = f.expectedPaths.filter((p) => paths.includes(p));
         const recallAt5 = f.expectedPaths.length === 0 ? 0 : hits.length / f.expectedPaths.length;
         out.push({
@@ -335,17 +356,24 @@ function aggregate(results) {
 }
 
 /**
- * @param {RepoIndex[]} indexes
- * @param {FixtureResult[]} results
- * @param {ReturnType<typeof aggregate>} agg
+ * @typedef {Object} ConfigRun
+ * @property {string} name
+ * @property {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null} weights
+ * @property {FixtureResult[]} results
+ * @property {ReturnType<typeof aggregate>} aggregate
  */
-function renderMarkdown(indexes, results, agg) {
+
+/**
+ * @param {RepoIndex[]} indexes
+ * @param {ConfigRun[]} configRuns
+ */
+function renderMarkdown(indexes, configRuns) {
     const lines = [];
     lines.push('# Polyglot Retrieval Benchmark — Results');
     lines.push('');
     lines.push(`Run: ${new Date().toISOString()}`);
     lines.push('');
-    lines.push('Scorer: BM25 only (no embedder). Chunker: production regex.');
+    lines.push('Scorer: BM25 only (no embedder). Chunker: production regex / AST (1.7.0+).');
     lines.push('');
     lines.push('## Index stats');
     lines.push('');
@@ -355,32 +383,48 @@ function renderMarkdown(indexes, results, agg) {
         lines.push(`| ${idx.repo} | ${idx.stats.files} | ${idx.stats.chunks} | ${idx.stats.skippedLarge} | ${idx.stats.readErrors} | ${idx.stats.elapsedMs} ms |`);
     }
     lines.push('');
-    lines.push('## Aggregate');
+    lines.push('## Configurations compared');
     lines.push('');
-    lines.push(`- **Overall**: ${agg.overall.count} fixtures · meanHit@5 = ${agg.overall.meanHitAt5.toFixed(3)} · meanRecall@5 = ${agg.overall.meanRecallAt5.toFixed(3)}`);
-    for (const [repo, v] of Object.entries(agg.byRepo)) {
-        lines.push(`- **${repo}**: ${v.count} fixtures · meanHit@5 = ${v.meanHitAt5.toFixed(3)} · meanRecall@5 = ${v.meanRecallAt5.toFixed(3)}`);
+    lines.push('| Config | Weights |');
+    lines.push('|---|---|');
+    for (const c of configRuns) {
+        const w = c.weights ? `\`${JSON.stringify(c.weights)}\`` : '_(none — baseline)_';
+        lines.push(`| **${c.name}** | ${w} |`);
     }
     lines.push('');
-    lines.push('## By category');
+    lines.push('## Aggregate (side-by-side)');
     lines.push('');
-    lines.push('| Repo / Category | N | meanHit@5 | meanRecall@5 |');
-    lines.push('|---|---:|---:|---:|');
-    for (const [k, v] of Object.entries(agg.byCategory)) {
-        lines.push(`| ${k} | ${v.count} | ${v.meanHitAt5.toFixed(3)} | ${v.meanRecallAt5.toFixed(3)} |`);
+    const repoNames = Object.keys(configRuns[0].aggregate.byRepo);
+    const headerCells = ['Scope', ...configRuns.map(c => `${c.name} meanHit@5 / meanRecall@5`)];
+    lines.push(`| ${headerCells.join(' | ')} |`);
+    lines.push(`|${headerCells.map(() => '---').join('|')}|`);
+    const fmt = (a) => `${a.meanHitAt5.toFixed(3)} / ${a.meanRecallAt5.toFixed(3)}`;
+    lines.push(`| **Overall** | ${configRuns.map(c => fmt(c.aggregate.overall)).join(' | ')} |`);
+    for (const repo of repoNames) {
+        lines.push(`| **${repo}** | ${configRuns.map(c => fmt(c.aggregate.byRepo[repo])).join(' | ')} |`);
     }
     lines.push('');
-    lines.push('## Per-fixture detail');
-    lines.push('');
-    lines.push('| ID | Cat | Hit | R@5 | Top score | Returned (top 5) | Expected |');
-    lines.push('|---|---|:-:|---:|---:|---|---|');
-    for (const r of results) {
-        const got = r.returnedPaths.length === 0 ? '_(no results)_' : r.returnedPaths.map(p => `\`${p}\``).join('<br>');
-        const want = r.expectedPaths.map(p => `\`${p}\``).join('<br>');
-        const hit = r.hitAt5 ? '✅' : '❌';
-        lines.push(`| \`${r.id}\` | ${r.category} | ${hit} | ${r.recallAt5.toFixed(2)} | ${r.topScore.toFixed(2)} | ${got} | ${want} |`);
+    for (const c of configRuns) {
+        lines.push(`## ${c.name} — by category`);
+        lines.push('');
+        lines.push('| Repo / Category | N | meanHit@5 | meanRecall@5 |');
+        lines.push('|---|---:|---:|---:|');
+        for (const [k, v] of Object.entries(c.aggregate.byCategory)) {
+            lines.push(`| ${k} | ${v.count} | ${v.meanHitAt5.toFixed(3)} | ${v.meanRecallAt5.toFixed(3)} |`);
+        }
+        lines.push('');
+        lines.push(`### ${c.name} — per-fixture detail`);
+        lines.push('');
+        lines.push('| ID | Cat | Hit | R@5 | Top score | Returned (top 5) | Expected |');
+        lines.push('|---|---|:-:|---:|---:|---|---|');
+        for (const r of c.results) {
+            const got = r.returnedPaths.length === 0 ? '_(no results)_' : r.returnedPaths.map(p => `\`${p}\``).join('<br>');
+            const want = r.expectedPaths.map(p => `\`${p}\``).join('<br>');
+            const hit = r.hitAt5 ? '✅' : '❌';
+            lines.push(`| \`${r.id}\` | ${r.category} | ${hit} | ${r.recallAt5.toFixed(2)} | ${r.topScore.toFixed(2)} | ${got} | ${want} |`);
+        }
+        lines.push('');
     }
-    lines.push('');
     return lines.join('\n');
 }
 
@@ -401,6 +445,19 @@ function parseArgs(argv) {
     }
     return args;
 }
+
+/**
+ * Configurations the benchmark sweeps in a single run. Each entry is
+ * passed through `applyScoreWeights` post-rank, pre-truncation. The
+ * `tests/`-prefix penalties target the AST chunker Phase 2 lever C
+ * hypothesis: that integration-test files out-score source files when
+ * both contain query keywords (the Plinth/C++ stuck-zero fixtures).
+ */
+const RUN_CONFIGS = [
+    { name: 'baseline', weights: null },
+    { name: 'tests-prefix-0.5', weights: { prefixes: { 'tests/': 0.5, 'test/': 0.5, 'integration_tests/': 0.5 } } },
+    { name: 'tests-prefix-0.3', weights: { prefixes: { 'tests/': 0.3, 'test/': 0.3, 'integration_tests/': 0.3 } } },
+];
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
@@ -425,16 +482,25 @@ async function main() {
         indexes.push(idx);
     }
 
-    /** @type {FixtureResult[]} */
-    const allResults = [];
-    for (const idx of indexes) {
-        const fixtures = getFixturesByRepo(/** @type {any} */ (idx.repo));
-        const results = runFixtures(idx, fixtures);
-        allResults.push(...results);
+    /** @type {ConfigRun[]} */
+    const configRuns = [];
+    for (const cfg of RUN_CONFIGS) {
+        /** @type {FixtureResult[]} */
+        const allResults = [];
+        for (const idx of indexes) {
+            const fixtures = getFixturesByRepo(/** @type {any} */ (idx.repo));
+            const results = runFixtures(idx, fixtures, cfg.weights);
+            allResults.push(...results);
+        }
+        configRuns.push({
+            name: cfg.name,
+            weights: cfg.weights,
+            results: allResults,
+            aggregate: aggregate(allResults),
+        });
     }
 
-    const agg = aggregate(allResults);
-    const md = renderMarkdown(indexes, allResults, agg);
+    const md = renderMarkdown(indexes, configRuns);
     console.log('');
     console.log(md);
 
@@ -448,8 +514,7 @@ async function main() {
         scorer: 'bm25',
         topK: TOP_K,
         indexes: indexes.map(i => ({ repo: i.repo, root: i.root, stats: i.stats })),
-        results: allResults,
-        aggregate: agg,
+        configs: configRuns,
     }, null, 2));
     await fs.writeFile(mdPath, md);
     console.log(`\nWrote ${jsonPath}`);

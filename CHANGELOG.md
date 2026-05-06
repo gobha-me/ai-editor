@@ -4,6 +4,88 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-05-06
+
+### Measurement — AST chunker Phase 2 lever C (test/source path weighting)
+
+The 1.7.0 AST chunker lifted Plinth/C++ Hit@5 from 0.600 → 0.800 but
+`meanRecallAt5` stayed flat at 0.300 (well below the §1.5.0 0.55 floor).
+The recorded diagnosis was "integration-test files out-score source files
+when both contain the query keywords" — a *scoring* gap, not a chunker
+gap. ROADMAP listed three Phase 2 levers; this PR measures lever C
+(test/source path weighting) without committing the production change.
+
+**Why not just ship the lever.** "Measurement before scale" (ROADMAP
+Decision §8): the existing `applyScoreWeights` infrastructure
+([`js/intelligence/retrieval/strategies/semantic.js:300`](js/intelligence/retrieval/strategies/semantic.js))
+already supports prefix-keyed score multipliers post-rank — the question
+was whether the lever moves the needle enough to justify shipping a
+default. Cheap to test in the benchmark first.
+
+**What lands.** [`tests/run-polyglot-benchmark.mjs`](tests/run-polyglot-benchmark.mjs)
+now sweeps a fixed list of `RUN_CONFIGS` in one invocation, applying each
+config's weights through `applyScoreWeights` (the same helper the
+Semantic strategy uses post-rank in production). Configs measured:
+
+- `baseline` — no weights, reproduces the 1.7.0 numbers.
+- `tests-prefix-0.5` — `prefixes: { 'tests/': 0.5, 'test/': 0.5, 'integration_tests/': 0.5 }`.
+- `tests-prefix-0.3` — same shape, multiplier 0.3.
+
+Output JSON shape changed from a single `results`/`aggregate` pair to a
+`configs` array; the markdown report renders a side-by-side aggregate
+table for easy comparison.
+
+### Finding — lever C lifts overall recall but cannot clear the floor alone
+
+| Scope | baseline | tests-prefix-0.5 | tests-prefix-0.3 |
+|---|---:|---:|---:|
+| Armature meanHit@5 / meanRecall@5 | 1.000 / 0.883 | 1.000 / 0.883 | 1.000 / 0.883 |
+| Plinth meanHit@5 / meanRecall@5 | 0.800 / **0.300** | 0.800 / **0.400** | 0.800 / **0.400** |
+
+**Pass criteria (from the plan):**
+
+- Plinth `meanRecallAt5 ≥ 0.55` — ❌ missed (best 0.400).
+- Armature stays ≥ 0.85 — ✅ unchanged at 0.883.
+- At least one of the two stuck-zero fixtures
+  (`plinth-capability-registry-api`, `plinth-rbac-enforcement-filter`)
+  goes non-zero on `recallAt5` — ❌ both still zero in every weighted
+  configuration.
+
+**Why the two zero fixtures stay zero.** Demoting `tests/` files only
+helps when the *correct* `src/` files are already in the candidate pool
+and just need re-ranking. They aren't. For
+`plinth-capability-registry-api` (query: *"where do extensions register
+new capabilities?"*) the expected files —
+`src/kernel/capabilities/registration.cpp` / `.hpp` and `types.hpp` —
+do not BM25-score in the top-5 against that query because the file
+*content* doesn't surface the query keywords. Same shape for
+`plinth-rbac-enforcement-filter`: even after demoting tests, the right
+`enforcement.cpp` / `.hpp` / `rule_registrar.hpp` are not promoted into
+the top-5 by BM25 alone. Lever C is real (+33% relative on overall
+recall@5, four fixtures move from 0.33 → 0.67) but cannot bridge the
+candidate-pool gap that the two zero fixtures represent.
+
+### Decision — defer the Phase 2 production change; revisit lever A or B
+
+Per the plan's stop-criterion ("If criteria miss: stop. Document the
+result in the PR and re-evaluate"), this PR ships the benchmark
+instrumentation and the measurement only — no change to the production
+Semantic strategy. The lever-C default that would have shipped here
+(`defaultCodeScoreWeights` merging into `applyScoreWeights` for code
+chunks) is held until either lever A (vendored tree-sitter for
+parent-class-signature propagation into member chunks) or lever B
+(cross-file query expansion) closes the candidate-pool gap. Once the
+right files are in the pool, lever C re-becomes a useful re-ranker.
+
+ROADMAP "Now" row updated to reflect the finding.
+
+### Tests
+
+- Re-running [`node tests/run-polyglot-benchmark.mjs`](tests/run-polyglot-benchmark.mjs)
+  reproduces the table above. Output written to
+  [`tests/fixtures/polyglot-benchmark-results.json`](tests/fixtures/polyglot-benchmark-results.json) +
+  [`tests/fixtures/polyglot-benchmark-results.md`](tests/fixtures/polyglot-benchmark-results.md).
+
 ## [1.7.1] - 2026-05-06
 
 ### Fix — `edit_file` ↔ read-cache cross-request deadlock ([gitea#301](https://git.gobha.me/xcaliber/ai-editor/issues/301))

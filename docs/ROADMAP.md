@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.7.1** (cross-request cache invalidation on file mutation, gitea#301; `1.6.6`–`1.6.14` plus `1.7.0`–`1.7.1` sit untagged in main awaiting the next tag-push gate).
+> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.7.2** (AST chunker Phase 2 lever-C measurement: lift real but insufficient; production change deferred to lever A/B; `1.6.6`–`1.6.14` plus `1.7.0`–`1.7.2` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -15,8 +15,8 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Just shipped** | **1.6.0–1.6.14 + 1.7.0–1.7.1 — Chat Stability → retrieval caches → MCP polish → tool-ergonomics post-mortem → security/conventions/export-fix trio → AST-aware C-family chunker (Phase 1) → cross-request cache invalidation on mutation.** Seventeen in-track changes in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 + 1.7.0–1.7.1 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging), `<UNTRUSTED_*>` wrapper for issue/PR/comment text (gitea#295, 1.6.12), repo-root `CLAUDE.md` autoload Phase 1 (github#37, 1.6.13), chat-export reads canonical markdown source (github#36, 1.6.14), C-family AST chunker + `metadata.language` + `CHUNKER_VERSION.code` bump (1.7.0; PR #290 lineage), cross-request cache invalidation closing the `edit_file` ↔ read-cache deadlock surfaced in HTML-Games dogfood (gitea#301, 1.7.1). |
-| **Now** | **Phase 2 follow-up on the AST chunker — scoring lever, not chunker lever.** Phase 1 lifted Plinth/C++ Hit@5 from 0.600 → 0.800 (two zero fixtures now hit) but recall@5 stayed flat at 0.300 (well below the 0.55 floor). The chunker is doing what it should — files now split into ~10 per-decl chunks (5.7× more granular). The gap is now in BM25 ranking: integration-test files out-score source files when both contain the query keywords. Phase 2 levers (pick one, measure): **(a)** vendored web-tree-sitter for parent-class-signature propagation into member chunks, **(b)** cross-file query expansion, **(c)** test/source weighting in the scorer. |
+| **Just shipped** | **1.6.0–1.6.14 + 1.7.0–1.7.2 — Chat Stability → retrieval caches → MCP polish → tool-ergonomics post-mortem → security/conventions/export-fix trio → AST-aware C-family chunker (Phase 1) → cross-request cache invalidation on mutation → AST Phase 2 lever-C measurement.** Eighteen in-track changes in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 + 1.7.0–1.7.2 sit in main untagged, queued for the next tag-push gate. Net additions since 1.7.1: polyglot benchmark instrumentation now sweeps `score_weights` configs side-by-side via `applyScoreWeights`, and the lever-C finding is documented (CHANGELOG §1.7.2) — Plinth recall@5 0.300 → 0.400 with `tests/` prefix penalty 0.5, but the two stuck-zero fixtures stay zero. No production change in 1.7.2; the lever-C default is held until lever A or B closes the candidate-pool gap. |
+| **Now** | **Phase 2 follow-up on the AST chunker — lever A or B.** Lever **(c)** test/source weighting was measured at 1.7.2 (full table in [CHANGELOG §1.7.2](../CHANGELOG.md)) — Plinth recall@5 lifted 0.300 → 0.400 (+33% relative) with no Armature regression, but the two stuck-zero fixtures (`plinth-capability-registry-api`, `plinth-rbac-enforcement-filter`) stayed zero because the right `src/` files don't BM25-score into the top-5 candidate pool — demoting `tests/` only helps when the correct source files are *already* there to be re-ranked. The next lever has to widen the candidate pool, not re-rank within it: **(a)** vendored web-tree-sitter for parent-class-signature propagation into member chunks, or **(b)** cross-file query expansion. Lever (c) becomes a useful default *layered on top of* whichever of (a)/(b) closes the pool gap. |
 | **Next** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once Phase 2 of the AST chunker resolves (or is parked if Hit@5 lift is judged sufficient). |
 | **Later** | Open issues #34, #25, #26, #33, #27, #18 (see *Known open issues* below) — none currently on the active track. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled* below. |
@@ -144,6 +144,19 @@ The polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290
 Hit@5 lift is real: two previously-zero fixtures (`realtime-pubsub-broker`, `audit-logging-write`) now hit. Two stay zero (`capability-registry-api`, `rbac-enforcement-filter`) — those are scoring-side failures, not chunker-side: the integration-test files out-score the source files when both contain the query keywords. Phase 2 trigger.
 
 Reproducible benchmark: re-run `tests/run-polyglot-benchmark.mjs` against the same `tests/fixtures/polyglot-corpus.js`. Future Phase 2 lever (vendored tree-sitter for parent-class-signature propagation, cross-file query expansion, or test/source weighting) must move the needle on **recall@5** specifically — Hit@5 is approaching ceiling now.
+
+### Decision: AST Phase 2 lever C (test/source path weighting) — measured 1.7.2; insufficient alone
+
+Cheapest of the three Phase 2 levers — the existing `applyScoreWeights` ([js/intelligence/retrieval/strategies/semantic.js:300](../js/intelligence/retrieval/strategies/semantic.js)) already supports prefix-keyed multipliers post-rank. 1.7.2 added a multi-config sweep to the polyglot benchmark and ran with `tests/` prefix penalties 0.5 and 0.3.
+
+| Scope | baseline | tests-prefix-0.5 | tests-prefix-0.3 |
+|---|---:|---:|---:|
+| Armature meanRecall@5 | 0.883 | 0.883 | 0.883 |
+| **Plinth meanRecall@5** | **0.300** | **0.400** | **0.400** |
+
+Lift is real (+33% relative on Plinth, no Armature regression) but does not reach the 0.55 floor and does not move the two stuck-zero fixtures off zero. Why: demoting `tests/` only helps when the *correct* `src/` file is already in the top-5 candidate pool to be re-ranked. For `plinth-capability-registry-api` and `plinth-rbac-enforcement-filter` the right files (`registration.cpp/.hpp`, `enforcement.cpp/.hpp`) never enter the candidate pool — query keywords don't BM25-match the file content directly.
+
+**Next lever has to widen the pool, not re-rank within it.** Lever C becomes a useful re-ranker layered on top of whichever of A/B ships, but on its own it doesn't carry past the floor. Production change held; no `defaultCodeScoreWeights` ships in 1.7.2.
 
 ### LLM reranker (scoped, not committed)
 
