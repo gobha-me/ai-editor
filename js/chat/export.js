@@ -5,14 +5,43 @@
 
 import { State } from '../core.js';
 import { getChatContainer } from './state.js';
+import { stripThinkBlocks } from '../llm/utils.js';
+
+// Read message text from the canonical State.chatHistory entry rather than
+// DOM textContent. The DOM goes through marked.parse with gfm:true, which
+// autolinks code identifiers like `s.id` / `Date.now()` / `CHANGELOG.md`
+// into anchor tags; reading text from the rendered tree was leaking those
+// links back into the export as `[s.id](http://s.id)` (github#36).
+function _canonicalMessageText(message) {
+    if (!message) return null;
+    if (Array.isArray(message.content)) {
+        return message.content
+            .filter(c => c && c.type === 'text')
+            .map(c => c.text || '')
+            .join('\n')
+            .trim();
+    }
+    const raw = (message.content || '').toString();
+    const stripped = message.role === 'assistant' ? stripThinkBlocks(raw) : raw;
+    return (stripped || '').trim();
+}
+
+// Strip the degenerate `[X](http://X)` / `[X](https://X)` form where the
+// link target equals the link text. Belt-and-suspenders against any future
+// regression that re-introduces autolink mangling through a different path
+// (e.g. tool-result text, third-party plugin output, re-imported content).
+function _stripDegenerateAutolinks(text) {
+    return text.replace(/\[([^\]\n]+)\]\((https?:\/\/\1)\)/g, '$1');
+}
 
 /**
- * Export the current chat as markdown text and copy to clipboard.
- * Walks the DOM to capture all messages including tool call details.
+ * Build the markdown export string. Returns null when no chat container
+ * is mounted. Exported separately from {@link exportChat} so tests can
+ * assert on the produced text without stubbing the clipboard.
  */
-export function exportChat() {
+export function buildExportMarkdown() {
     const chatContainer = getChatContainer();
-    if (!chatContainer) return;
+    if (!chatContainer) return null;
 
     const lines = [];
     const modelName = State.settings.llmModel || 'unknown';
@@ -85,7 +114,23 @@ export function exportChat() {
 
         const role = roleEl?.textContent?.trim() || 'Unknown';
         const time = timeEl?.textContent?.trim() || '';
-        const content = contentEl?.textContent?.trim() || '';
+
+        // Prefer the canonical State.chatHistory entry over DOM textContent.
+        // The virtualizer tags rendered messages with data-virt-idx; tool-call
+        // and consent-slot rows skip the tag, so message rows index cleanly.
+        // Fall back to textContent if the index is missing or the lookup
+        // is out-of-sync with the DOM (e.g. mid-stream / error states).
+        const virtIdxAttr = msg.getAttribute('data-virt-idx');
+        const virtIdx = virtIdxAttr === null ? -1 : Number(virtIdxAttr);
+        const canonical = Number.isInteger(virtIdx) && virtIdx >= 0
+            ? _canonicalMessageText(State.chatHistory[virtIdx])
+            : null;
+        if (canonical === null && virtIdxAttr !== null) {
+            console.warn('[exportChat] chatHistory lookup failed for virt-idx', virtIdxAttr, '— falling back to DOM textContent');
+        }
+        const content = canonical !== null
+            ? canonical
+            : (contentEl?.textContent?.trim() || '');
 
         if (msg.classList.contains('user')) {
             lines.push(`### 👤 You (${time})`);
@@ -136,7 +181,17 @@ export function exportChat() {
         lines.push(summary);
     }
 
-    const text = lines.join('\n');
+    return _stripDegenerateAutolinks(lines.join('\n'));
+}
+
+/**
+ * Export the current chat as markdown text and copy to clipboard.
+ * Walks the DOM for tool-call cards (rendered-only state) and
+ * State.chatHistory for message text (canonical markdown source).
+ */
+export function exportChat() {
+    const text = buildExportMarkdown();
+    if (text === null) return;
 
     // Copy to clipboard
     navigator.clipboard.writeText(text).then(() => {

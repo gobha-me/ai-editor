@@ -4,6 +4,65 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.6.14] - 2026-05-06
+
+### Fix — chat-export reads canonical markdown source ([github#36](https://github.com/gobha-me/ai-editor/issues/36))
+
+Pre-fix, chat exports leaked GFM autolinks for code-shaped identifiers
+back into the markdown output: `s.id` → `[s.id](http://s.id)`,
+`Date.now()` → `[Date.now](http://Date.now)()`, `CHANGELOG.md` →
+`[CHANGELOG.md](http://CHANGELOG.md)`. Cosmetic in the immediate copy,
+but a real bug for the chat-import round trip — re-imported exports
+fed those literal autolink strings to the model's prompt, degrading
+the pattern-match the model does on bare code identifiers. Also made
+session traces harder to grade (the github#35 PR #289 post-mortem had
+to manually disclaim the autolink mangling so reviewers wouldn't chase
+nonexistent bugs).
+
+**Root cause.** [`js/chat/export.js`](js/chat/export.js)'s DOM walk
+read `.message-content` text via `textContent`, but
+[`formatMessageContent` in `js/chat/messages.js`](js/chat/messages.js)
+runs `marked.parse(content, { gfm: true, breaks: true })`. GFM autolink
+turns `<word>.<word>` shapes whose suffix matches a TLD-ish heuristic
+(`id`, `name`, `now`, `style`, `map`, `js`, `md`, …) into anchor tags
+in the rendered tree. Reading message text from the rendered DOM
+inherited that mangling.
+
+**Fix.** Export now reads message text from `State.chatHistory`
+(the canonical LLM markdown source, never touched by marked) keyed
+by the virtualizer's `data-virt-idx` attribute. Tool-call cards
+still serialize from the DOM — they're rendered-only state and
+were already `escapeHtml`-protected. Falls back to DOM `textContent`
+with a `console.warn` if the chatHistory lookup fails (mid-stream
+edge cases).
+
+**Belt-and-suspenders.** A small `_stripDegenerateAutolinks` helper
+runs over the assembled output as a safety net — strips the
+`[X](http(s)://X)` form where link target equals link text. Catches
+upstream contamination (e.g. re-imported pre-fix exports already
+poisoned with autolink markdown) and any future regression that
+re-introduces autolinks through a different path. Real markdown
+links with distinct text and href pass through unchanged.
+
+**API surface.** `exportChat()` is now a thin wrapper over a new
+exported `buildExportMarkdown()` which returns the produced text.
+Tests assert on the pure text path; the clipboard dance stays in
+`exportChat()`.
+
+**Tests.** New [`tests/test-chat-export.js`](tests/test-chat-export.js)
+— 6 cases: bare identifiers preserved with autolink-rendered DOM,
+empty history, tool-call card preserved, mixed history ordering,
+think-block stripping (assistant only), degenerate-autolink stripper
+(both directions — strips degenerate, preserves real links).
+
+### Out of scope
+
+- Changing `marked` GFM autolink behavior (would affect rendered
+  chat, not just export).
+- The chat-import path itself — verification only.
+- Disabling autolinks in the LLM's actual rendered output (per the
+  issue body, that's the model's choice, not the editor's bug).
+
 ## [1.6.13] - 2026-05-06
 
 ### Feature — repo-root `CLAUDE.md` autoloads into the system prompt (github#37 Phase 1)
