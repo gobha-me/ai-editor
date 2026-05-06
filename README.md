@@ -23,11 +23,13 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 
 **Three-panel layout** — file browser, CodeMirror 6 editor, AI chat — with everything stored in your Git host. No separate database, no cloud sync, no accounts.
 
-**The AI assistant has 52 tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; cross-project reference; code evaluation; and plugin development. It makes surgical line-based edits in your buffer — you review before committing.
+**The AI assistant has 53 tools** for reading, editing, creating, and deleting files; searching the project; managing issues and pull requests; cross-project reference; code evaluation; and plugin development. It makes surgical line-based edits in your buffer — you review before committing.
 
 **Multi-provider Git** — Gitea, GitHub, and GitLab connections, multiple active simultaneously. Your self-hosted Gitea and your GitHub repos side by side.
 
 **Multi-provider LLM** — Venice, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings. Ollama gets dedicated capability detection via `/api/show`.
+
+**Active development** — semantic retrieval, git-tracked memory, cost dashboard, and an MCP bridge ship today; see [docs/ROADMAP.md](docs/ROADMAP.md) for the 2.0 profiles track and [docs/SECURITY.md](docs/SECURITY.md) for the threat model (including the audited prompt-injection gap on untrusted issue content).
 
 **Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL. See [docs/PLUGIN.md](docs/PLUGIN.md) and [docs/SECURITY.md](docs/SECURITY.md) for the threat model.
 
@@ -56,7 +58,7 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 - Download project/branch as zip
 
 ### AI Assistant
-- 52 LLM tools organized by role
+- 53 LLM tools organized by role (plus MCP-bridged tools when an MCP server is enabled)
 - `scan_file` / `read_function` for token-efficient reads
 - Cross-project reference (`peek_project_tree`, `peek_project_file`, `peek_read_lines`)
 - Multi-file editing (`edit_file`, `write_file`) without manual open
@@ -122,7 +124,7 @@ See [REPOS.md](REPOS.md) for minimum token permissions per provider, setup walkt
 
 ### 3. Roles (Roles tab)
 
-Roles control which tools the AI can access. Five built-in roles range from Full Access (all 52 tools) to Reviewer (read-only). The Plugin Developer role auto-activates when a plugin editor tab is open. Plugins can register additional roles via `Roles.register()`.
+Roles control which tools the AI can access. Five built-in roles range from Full Access (all 53 tools) to Reviewer (read-only). The Plugin Developer role auto-activates when a plugin editor tab is open. Plugins can register additional roles via `Roles.register()`.
 
 ## Keyboard Shortcuts
 

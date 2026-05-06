@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-05 · Current released (tagged) version: **1.6.5** · `main` HEAD: 1.6.10 (untagged — sits in main alongside the also-untagged 1.6.6 cost-export, 1.6.7 cost-store race-safety, 1.6.8 cost-dashboard retrieval-extension, buffer-aware read tools, long-running tool timeout patches, 1.6.9 retrieval caches + `find_relevant_files` role widening, and 1.6.10 MCP plugin disable purge + state-message diff for github#23).
+> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.11** (twelve in-track patches `1.6.0`–`1.6.11`; `1.6.6`–`1.6.11` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -15,10 +15,11 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Now** | **1.6.0 — Chat Stability.** Six-PR series sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md). Status: 1.6.0–1.6.5 all shipped to main and individually tagged (`v1.6.0` through `v1.6.5`); the bundled-release framing in older revisions of this doc was abandoned in favor of per-patch tags. |
-| **Next** | **1.6.6** Cost-dashboard export *(✅ shipped)* · **1.6.7** Cost-store race-safety / `KeyMutex` (gitea#188) *(✅ shipped)* · **1.6.8** Cost-dashboard retrieval extension *(✅ shipped)* · **1.6.9** Query / structural expansion cache + IDB-backed paraphrase cache *(✅ shipped)* · **1.6.10** MCP plugin disable purge + state-message diff (github#23) *(✅ shipped)* · **1.6.11 (gated)** AST-based code chunker, only if regex heuristic shows measurable gaps on the benchmark. |
-| **Later** | **2.0 Profiles.** Designed; not started. |
-| **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled*. |
+| **Just shipped** | **1.6.0–1.6.11 — Chat Stability + retrieval caches + MCP polish + tool-ergonomics post-mortem.** Twelve in-track patches in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.11 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging). |
+| **Now** | **Doc sweep + dogfood pivot to HTML-Games** (this PR). Bug-hunting battery moves off ai-editor self-targeting onto an external substrate (`project_dogfood_test_battery.md`); ARCHITECTURE / ROADMAP / SECURITY / README refreshed to 1.6.x reality; stale PLAN.md retired. |
+| **Next** | **Decision on AST-based code chunker (gated).** Polyglot benchmark fires the gate (PR [#290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval)`); only ships if regex heuristic shows measurable gaps on the benchmark. Originally projected as 1.6.11 — that slot was claimed by the post-mortem fixes, so this lands as the next in-track patch when/if it ships. |
+| **Later** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once 1.6.x measurement closes and the AST decision resolves. |
+| **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled* below. |
 
 ---
 
@@ -50,71 +51,81 @@ A 2.0 ships when profiles become the load-bearing configuration surface.
 
 ---
 
-## Active track: 1.6.0 — Chat Stability
+## Track context: post-1.6.x dogfood + measurement
 
-**Why this is a minor, not a 1.5.x patch.** Five+ PRs of coherent work; treating it as a track keeps the in-track-patches rule honest and signals to anyone reading the changelog that chat stability is a coherent track, not an interleaved bug-fix bundle.
+The 1.6.0 chat-stability minor (six PRs sized in [`docs/design/long-chat-stability/findings.md`](design/long-chat-stability/findings.md)) shipped 1.6.0–1.6.5 individually tagged through `v1.6.5`. Follow-on patches 1.6.6–1.6.11 sit untagged in main, queued for the next tag-push gate. **Per-PR rationale and shipped detail live in [CHANGELOG.md](../CHANGELOG.md)** — not duplicated here.
 
-**Why the next release tag is `v1.6.0` and not `v1.5.14`.** The editor's primary surface is chat. A long session today silently truncates messages mid-loop, drops the original task framing, and occasionally 400s the LLM provider with orphaned tool messages. Internally-correct retrieval improvements ship with no user-visible benefit while this is broken. The 1.5.14 retrieval cutover (PR #266) merges to main as 1.5.14 in `version.js` but is **not tagged on its own** — its release event is the `v1.6.0` tag, which deploys both the chat-stability bundle and the retrieval cutover together.
-
-### Sequenced PRs
-
-| PR | Status | Scope | Closes (per findings.md) |
-|---|---|---|---|
-| 1.6.0 | ✅ shipped (#268) | Truncation marker in [`getContextMessages()`](../js/chat/summarizer.js) + pin first user turn (task framing). | Hypothesis #0 (silent windowing) |
-| 1.6.1 | ✅ shipped (#269) | Boundary-aware prune in [`ChatSummarizer._pruneHistory()`](../js/chat/summarizer.js). | Hypothesis #1 (pruning algorithm cuts mid-pair) |
-| 1.6.2 | ✅ shipped (#271) | Request-shape validator before [`LLM.chat`](../js/chat/handlers.js): asserts every `tool` message has a matching preceding `assistant.tool_calls[].id`; drops orphans with a warning rather than 400-ing the request. | defense-in-depth |
-| 1.6.3 | pending | `function.name` overwrite-if-empty at [`js/llm/api.js`](../js/llm/api.js). One-line fix + regression test. Latent. | Hypothesis #2 |
-| 1.6.4 | ✅ shipped | Token-based summarization trigger + map-reduce multi-pass at [`js/chat/summarizer.js`](../js/chat/summarizer.js). Replaces the message-count `SUMMARY_THRESHOLD` with a real-prompt-size gate keyed on `State.lastExchangeTokens.prompt`; bundled multi-pass safely chunks the summarization input itself when the utility model's window is small (1M prod ↔ 4–256K utility). | Hypothesis #7 |
-| 1.6.5 | ✅ shipped (#275) | localStorage quota-recovery cleanup at [`js/core.js`](../js/core.js). Remove the chat-history-prune branch — IDB is authoritative; localStorage is best-effort; the destructive-sounding `[Storage] Quota exceeded — pruned chat history` warning is misleading because the in-memory `_cache` and IDB still hold the full history. Surfaced during the 1.6.0 PR 0 dogfood. | Hypothesis #8 |
-
-**Verification artifacts to capture** (per findings.md). Before any PR lands, drive one long session on the prior HEAD to confirm the symptom is unchanged. Set `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` so each rebuild's `RECENT_COUNT`, `startIndex`, `info?.summary` presence, and dropped count are logged.
-
-**Exit criterion.** A 10-turn dogfooding session in this repo (the release-readiness gate) passes: no silent truncation; no orphaned-tool 400s; the model stays anchored on the original task framing across pruning events; no misleading `[Storage] Quota exceeded` warnings. With the gate cleared, the **`v1.6.0`** tag is pushed — that release deploys the six chat-stability fixes (1.6.0–1.6.5) **and** the 1.5.14 retrieval cutover as a single user-visible release event.
-
-**Removability.** Each of the six PRs reverts independently; the chat loop returns to its pre-1.6.x state.
+This section is the home for ongoing **dogfood + measurement** work chained off the chat-stability minor. It's not a "track" in the active-PR sense anymore, but the dogfood-battery framing was authored here and stays here for context continuity.
 
 ### Post-tag dogfood battery
 
-Once `v1.6.0` is tagged, the open GitHub issues below run as ai-editor sessions against `main` — real work that doubles as the chat-stability dogfood. **Goal: not just a passing PR, but a captured trace showing *how* ai-editor got there.** Each session is its own discrete test.
+**Original framing (historical).** The four-issue ai-editor self-test battery (github#20, #15, #23, #21) shipped through 1.6.0–1.6.11. github#21's substance landed in 1.6.11 (untagged on main); the *trace* portion exposed three concrete tool-ergonomics pathologies fixed in PRs [#289](https://github.com/gobha-me/ai-editor/pull/289)/[#293](https://github.com/gobha-me/ai-editor/pull/293): retrieval cold-start silence (`indexer_not_ready` envelope), stateful-read cache collisions (`STATEFUL_READ_TOOLS` bypass), and `edit_file` STALE LINE NUMBERS without surrounding context (`_getStaleWindow` + 5/5 success echo).
 
-| Order | Issue | What it exercises | Pass criteria |
+**Why we pivoted (2026-05-06).** The 1.6.11 post-mortem made the load-bearing pattern visible: ai-editor's tool loop runs nested inside the same indexing/caching/state system the test was meant to probe, so self-targeting amplifies fragility *into* the test rather than isolating it. Driving the battery against ai-editor itself stopped paying — the noise-to-signal ratio fell below useful, and partial fixes / fix-branches against the editor itself aren't acceptable as test outcomes.
+
+**The north star is still the self-licking ice cream cone.** ai-editor *should* be the editor we use to maintain ai-editor — that's the whole point. HTML-Games is the bridge: a clean external substrate where we can isolate logic faults from runtime fragility, fix them with confidence, and *then* reattempt self-targeting once the fragility budget is paid down. It's also more fun, which matters for sustaining the work.
+
+**New substrate: [HTML-Games](https://git.gobha.me/xcaliber/HTML-Games).** Private xcaliber repo, six standalone games (5 vanilla JS, 1 Cogfall on TS/Vite/Pixi). Modular, well-documented, varied complexity (Snake ~2.2K LOC → Cogfall ~10K LOC). External codebase whose state never feeds back into ai-editor's caches — clean isolation between target and runtime.
+
+**Test-issue archetypes.**
+
+| Archetype | Example | What it measures |
+|---|---|---|
+| Add feature to existing game | "Add pause to Space-Invaders" | Retrieval (find main.js + game.js + renderer.js), multi-file edit, stale-line behavior under sequential edits |
+| Create new minimal game | "Build a Pong (paddle/ball/score) in vanilla JS matching repo conventions" | Planning, file creation, convention recall, zero-corpus retrieval behavior |
+| Cross-game refactor | "Unify high-score `localStorage` between Snake and Forge-Defense" | Cross-file retrieval breadth, refactor proposal quality, compression preserving multi-file context |
+| Bug fix in deeper code | "Fix multiplayer collision in Snake" | Root-cause diagnosis, sequential read pattern, tool-call ordering |
+
+Cogfall is the step-up rung when needed: build-step, type errors, framework-shaped retrieval, an existing vitest suite.
+
+**What we measure (logic, not the LLM).** Re-running the same task across a cheap model (Haiku) and a strong one (Opus) is the crux: faults reproducing on **both** are logic faults; faults only on weaker models are LLM faults. Capture per session:
+
+- **Retrieval quality** — for each `find_relevant_files` call: query, returned set, hand-graded "right files?" yes/no. Track whether the indexer-readiness gate fired.
+- **Tool-call quality** — did stale-line errors fire? How many recovery turns? Did `edit_file`'s 5/5 success echo carry enough surrounding context? Did `read_*` cache misbehave?
+- **Compression behavior** — `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` before starting. Per rebuild: `RECENT_COUNT`, `startIndex`, `info?.summary` presence, dropped count. Did the 1.6.0 truncation marker appear when warranted? 1.6.2 request-shape validator drop orphans (firing once is fine; repeatedly means upstream regression)? 1.6.4 token-based summarization fire when load warranted and not before?
+- **Planning quality** — eyeball: did the model plan the work or hack? Sane edit order?
+- **Cost-quality tradeoff** — `prompt_tokens` and `cached_tokens` per turn vs. the observed quality of the four axes above. The grading axis the others gate against. Two failure modes: **under-spend** (token cheap but compression / retrieval dropped what the model needed — output is wrong) and **over-spend** (tokens expensive but quality flat above some level — money for context the model never used). Cost-dashboard export via `buildCostExport()` ([`js/settings/cost-tab.js`](../js/settings/cost-tab.js)) at session end; per-strategy retrieval cost via [`cost-store.js`](../js/intelligence/cost/cost-store.js). See the **operational constraints** below for how we probe model-vs-logic faults given the editor's branch lifecycle and Jeff's testing budget.
+
+#### Test design under operational constraints
+
+Two real constraints shape how the battery actually runs.
+
+**1. Branch lifecycle.** ai-editor auto-creates a branch when a session "starts" on an issue, with a guard against multi-start on the same issue. So we **cannot rerun the same task** against a different model the way the original cross-model probe assumed. The replacement is **sibling tasks**: pick an archetype, design 2-3 same-shape tasks against different games/features, assign a different model to each. Faults reproducing across all siblings are logic faults; faults visible on a single sibling are model-specific.
+
+| Archetype | Sibling 1 | Sibling 2 | Sibling 3 |
 |---|---|---|---|
-| 1 | ~~**github#20**~~ — `git_log` tool missing *(✅ shipped PR #278)* | Tool registry, doc updates, **memory recall** (does ai-editor find the parked git-tool-wrappers wishlist and propose a bundle, or ship `git_log` alone in violation of it?) | Reached the "bundle with the wishlist" conclusion. `git_log` ships bundled. Trace showed memory hit. |
-| 2 | ~~**github#15**~~ — Conflicting timeouts (test-driven loop) *(✅ shipped PR #282)* | Tool execution path in [`js/chat/handlers.js`](../js/chat/handlers.js) + settings; bounded two-file fix with three solution options on the issue | `LONG_RUNNING_TOOLS` set routes `wait_for_ci` to `longRunningToolTimeout` (300 s). Standard tools keep their 30 s default. |
-| 3 | ~~**github#23**~~ — MCP plugin disable doesn't purge tools *(✅ shipped 1.6.10)* | Cross-layer: MCP bridge + plugin layer + chat handlers + tool registry; multi-file edit + system-message injection into chat | Diff-based state messages on `mcp:serversChanged`; `tools:unregistered` event drops stale tool embeddings; actionable "Re-enable in Settings → MCP Servers" error. |
-| 4 | **github#21** — MCP role-based tool access | MCP bridge + role system + Settings → MCP Servers UI; new UI plus core change | Three-part proposed solution lands; backward-compatible default (no roles set ⇒ `'all'`). |
+| Add feature | "Add pause to Snake" | "Add pause to Space-Invaders" | "Add pause to Forge-Defense" |
+| Cross-game refactor | "Unify highscore Snake↔Forge" | "Unify audio Snake↔SpaceInv" | (skip unless 1+2 disagree) |
 
-**What to capture per session.**
+Variation across game adds noise vs. the lab-clean rerun, but it's also a *better* probe — a logic fault that survives codebase variation is a stronger finding.
 
-- `localStorage.setItem('debug.dump.summarizerSnapshots', '1')` set before starting. Each context rebuild logs `RECENT_COUNT`, `startIndex`, `info?.summary` presence, dropped count.
-- Full LLM-debug-modal export at session end: chat trace, tool calls, latency, `prompt_tokens`, `cached_tokens`.
-- **Chat-stability invariants:**
-  - Did the **truncation marker** (1.6.0) appear when context was windowed?
-  - Did the **request-shape validator** (1.6.2) drop any orphans? *(it firing once is fine; firing repeatedly means an upstream regression.)*
-  - Did the **token-based summarization** (1.6.4) trigger when load warranted, and not before?
-- Retrieval hit-set per `find_relevant_files` call (which files came back, were they the right ones?).
-- Cost-dashboard reading at session end (eyeballed in [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) until the export item lands).
+**2. Budget — $11/day.** The cross-model probe lives in the **cheap tier**. Opus and Sonnet stay out of the daily lineup; reserve Sonnet 4.6 for one anchor probe per week on the smallest archetype.
 
-**Grading.** Each session passes if *both*:
-1. **Output quality** — the produced PR meets the issue's acceptance criteria, builds clean, and existing tests pass.
-2. **Trace quality** — no regressions in the chat-stability invariants. Failure of (2) but passing (1) means the chat surface is fragile under that workload — file as a follow-up issue and continue the battery.
+| Tier | Models | $/M in | $/M out | Per-session est. | Role |
+|---|---|---|---|---|---|
+| Cheap (default) | DeepSeek V4 Flash, Mistral Small 4, Grok 4.1 Fast | $0.17–$0.23 | $0.35–$0.75 | ~$0.40 | Default rotation across siblings |
+| Code-aware | Qwen 3 Coder 480B Turbo | $0.35 | $1.50 | ~$0.60 | When the cheap tier flubs and we want a code-specialist comparison |
+| Mid (escalation) | GLM 5, Kimi K2.6 | $0.85–$1.00 | $3.20–$4.66 | ~$1.20 | When cheap+code-aware both fail and we want to confirm logic-vs-LLM before declaring a fault |
+| Strong-anchor (rare) | Sonnet 4.6 | $3.60 | $18.00 | ~$5.00 | One probe per week on the smallest archetype, to confirm the upper bound |
+| Skip for daily | Opus 4.x, GPT-5.x Codex, Grok 4.20 | — | — | — | Budget killers; only on explicit need |
 
-**Out of scope for the battery:** github#18 (cross-device settings sync via QR/P2P) — unbounded scope; tests product-design instincts more than repo-fluency. Reconsider once the four-issue battery completes and we have a baseline.
+**Reading the matrix:** if a logic fault shows up on Cheap-tier-A but not Cheap-tier-B against sibling tasks of equivalent shape, that's noise / model-specific. If it shows up on **both** cheap-tier siblings AND survives the code-aware run, escalate one tier and confirm. If it survives mid-tier too, file as a logic fault with high confidence and hold the strong-anchor probe in reserve for next week's verification.
+
+End-of-session deliverable: per-session markdown trace at [`docs/dogfood-battery/`](dogfood-battery/) — filename `YYYY-MM-DD-<short-task-slug>.md`. First trace establishes the template; do not pre-design it. These are the artifact, not throwaway notes.
+
+**Grading.** Pass = trace is legible cold AND surfaces at least one logic-vs-LLM distinction AND the cost-quality tradeoff lands on the right side of the knee (under-spend with quality loss or over-spend with no quality gain both fail, even if every logic axis is clean). Output PR quality (does the editor produce mergeable code) is secondary — it's a lagging proxy.
+
+**Preserved from the old plan: the release-readiness gate (§"Cadence and versioning").** Before any `vX.Y.0` tag push, drive a 10-turn ai-editor session **in this repo** with one `find_relevant_files`, one edit, one commit. Honor-system smoke test that the editor still functions on its own corpus. Unchanged.
+
+**Out of scope for the new battery:** github#18 (cross-device settings sync via QR/P2P) — unbounded; tests product-design instincts more than logic. Automation/runners — first ~3-5 sessions are manual; abstract only when a pattern repeats.
 
 ---
 
 ## Later (sequenced)
 
-### 1.6.6–1.6.10 — Storage / retrieval follow-ups
+### Decision: AST-based code chunker (gated)
 
-Bumped past the chat-stability minor.
-
-- **1.6.6 ✅ shipped:** Cost-dashboard export — JSON-download from [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) (`buildCostExport()` + Export button). Unblocks the compression-track measurement loop and the 1.6.8 retrieval extension. See [CHANGELOG.md](../CHANGELOG.md) §1.6.6.
-- **1.6.7 ✅ shipped:** Cost-store race-safety — `KeyMutex` around `recordTurn`'s read-modify-write paths in [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js). Closes gitea#188 (cost-daily graph data lost after refresh). Same disposition as the memory subsystem's `KeyMutex` adoption. See [CHANGELOG.md](../CHANGELOG.md) §1.6.7.
-- **1.6.8 ✅ shipped:** Cost-dashboard retrieval extension — `ConvCost.byStrategy: { [name]: { hits, tokens } }` added to [`js/intelligence/cost/cost-store.js`](../js/intelligence/cost/cost-store.js); `retrieval:turn-stats` event emitted from [`js/intelligence/retrieval/manager.js`](../js/intelligence/retrieval/manager.js) after each `compose()`; cost-recorder buffers per-conv stats and merges into the next `cost:updated` write so `requests` is not double-counted; new "Retrieval (per strategy)" table in [`js/settings/cost-tab.js`](../js/settings/cost-tab.js) shows Strategy / Chunks (Σ) / Avg/turn / Tokens (paraphrase chatFn captured via `State.sessionCost` delta — embedding-token attribution deferred). See [CHANGELOG.md](../CHANGELOG.md) §1.6.8.
-- **1.6.9 ✅ shipped:** Query result LRU short-circuit at [`findRelevantFiles()`](../js/intelligence/retrieval/manager.js) keyed on the normalized query + topK with an `_indexFingerprint` invalidator; structural ancestor-walk memoization in [`structures/structural.js`](../js/intelligence/retrieval/strategies/structural.js) with `clearMemo()`/`memoStats()`; IDB-backed paraphrase cache in new [`paraphrase-cache-idb.js`](../js/intelligence/retrieval/paraphrase-cache-idb.js) (7-day TTL, lazy expiry, silent-degrade on IDB faults). Bundled with `find_relevant_files` `roles: 'all'` in [`context-tools.js`](../js/tools/context-tools.js) — read-only widening, mirrors `git_log` (github#32). See [CHANGELOG.md](../CHANGELOG.md) §1.6.9.
-- **1.6.10 ✅ shipped:** MCP plugin disable purge + state-message diff (github#23) — `plugins/mcp-bridge.js` snapshots registered tool names per server before/after `mcp:serversChanged` and emits `[MCP] Server "<label>" disabled — N tools removed.` style chat messages so the model's prior-turn tool list doesn't go stale silently. New `tools:unregistered` event from [`js/tools/registry.js`](../js/tools/registry.js) `unregister()` drops the matching entry from the [tool-embeddings cache](../js/intelligence/tools/embeddings.js); resolution goes through the new public `Catalog.toolNameToID(name)` helper. Error string at [`js/mcp/bridge.js`](../js/mcp/bridge.js) widened with a "Re-enable in Settings → MCP Servers" hint. See [CHANGELOG.md](../CHANGELOG.md) §1.6.10.
-- **1.6.11 (gated):** AST-based code chunker (tree-sitter) only if the regex heuristic shows measurable quality gaps on the benchmark.
+Only ships if the polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval): polyglot benchmark — fires AST chunker gate`) shows the regex heuristic has measurable quality gaps. Originally projected as 1.6.11 — that slot was claimed by the tool-ergonomics post-mortem fixes ([CHANGELOG.md §1.6.11](../CHANGELOG.md)), so this lands as the next in-track patch when/if it ships. Decision waits on a measurement run.
 
 ### LLM reranker (scoped, not committed)
 
@@ -197,11 +208,25 @@ All three get scoped post-2.0 against measured signal, not speculation.
 - **`ChatHistoryStore` encapsulation** — `State.chatHistory` is mutated directly by 14 call sites across 5 files (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`, `conversations.js`), and each one is independently responsible for calling `Storage.set('chatHistory', …)` afterward. Three issue #16 patches in a row had to walk every site to change persistence policy; missing one keeps the bug alive (1.5.9 #16 missed it; 1.6.5 had to revisit). Scope: introduce a single module exposing `append(msg)`, `splice(from)`, `replace(arr)`, `clear()`, route every consumer through it, drop `Storage.set('chatHistory', …)` from everywhere else. Unblocks the quota-aware eviction strategy Jeff described (embeddings-first → old chats → never active). **Structural risk, not lo-pri** — the current code works until the next persistence-policy change pays the same 5-file walk and one site gets missed again. Slot before the next change that touches chat persistence.
 - **Chat panel facelift** — three Touch 2 variants (Polish, Restructure, Reskin); direction not locked. Will get a slot once a direction is picked or roll into 2.0 with the profile picker.
 - **Persona memory scope** — deferred indefinitely. Workspace + user scopes cover the demand seen so far.
-- **Plugin SlotManager** — designed but not built; on PLAN.md.
-- **In-app help renderer** — sidebar pane instead of modal; would make `read_docs`-driven content far more useful.
+- **Plugin SlotManager** — designed but not built. Contract locked in [`docs/DESIGN-git-providers-and-ui-extensions.md`](DESIGN-git-providers-and-ui-extensions.md) §4 (slot catalog, error semantics, security boundary, priority rule, `version` field). `git-providers/registry.js#getAllContributions` already collects manifests; the patch ships `js/slot-manager.js` against the locked contract. Today plugins inject UI only via `registerButton` and `registerModal`.
+- **In-app help renderer** — sidebar pane instead of modal; would make `read_docs`-driven content far more useful. (`js/help/` exists today — modal-based; the deferred work is the sidebar variant.)
 - **Mobile secondary pane rework** — current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over.
 - **Issue/PR tab visual hierarchy** — long tabs feel busy; lo-pri.
 - **Plugin marketplace** — defer to 2.x once the architecture stabilizes.
+
+**Migrated from retired `docs/PLAN.md` (2026-05-06; triage owed):**
+
+- **Dynamic provider registration in settings UI** — Plugins that call `Providers.register()` or `GitProviderRegistry.register()` don't appear in settings dropdowns. The dropdown should read from the live registry.
+- **Plugin settings panel tab** — Allow plugins to register a dedicated tab in the Settings modal for richer configuration UI beyond auto-generated `configSchema` fields.
+- **CodeMirror extension bridge** — Expose the CodeMirror `EditorView` to plugins for keybindings, decorations, and custom syntax highlighting.
+- **Tools settings page** — Dedicated tab showing all registered tools with name, description, role assignments, and enable/disable toggles.
+- **Custom role creation UI** — Create new roles with name, icon, description, and checkbox list of tools. `Roles.register()` exists but has no UI.
+- **Cross-project tools** — `peek_scan_file` (cross-repo function/class outline; requires extracting scan parsing into a shared module), `peek_search_in_files` (cross-repo grep; needs tree iteration or provider search API), `peek_read_function` (combines `peek_scan_file` + `peek_read_lines`).
+- **More languages in `scan_file`** — Today only JS/TS and Python parse into a structured outline. Add Go, Rust, Java, C/C++ patterns so `scan_file` is useful in polyglot repos.
+- **Expand `.mjs` test coverage** — The `node --test` CI step (1.0.6) runs only the ported subset (`test-smoke`, `test-retry`, `test-edit-tracker`, `test-summarizer`, `test-blame-normalize`, `test-metadata-coverage`, `test-turn-enrich`). The browser-only `.js` suites still run only under `tests/index.html`. Port them so CI exercises the full surface.
+- **Generic / custom git provider** — A "custom" option where users map endpoint URLs to the base interface for any Git API.
+- **Offline / PWA support** — Service Worker for offline editing with sync-on-reconnect.
+- **Untrusted issue/PR content delimiter wrapping (security-track patch)** — Wrap external issue/PR/comment text in `<UNTRUSTED_*>` markers in `js/prompts.js`; add a system-prompt instruction that imperatives inside markers are data not commands; extend `js/security/invisible-unicode.js` to scan tool returns. Audited 2026-05-06; see `docs/SECURITY.md` §"Untrusted issue / PR / comment content" and memory `project_untrusted_issue_content_gap.md`.
 
 ### Known open issues — not yet scheduled
 
@@ -213,7 +238,8 @@ User-facing gaps tracked as filed issues but not yet slotted into a track. Liste
 - ~~**github#30 — `[storage] cost-daily graph data lost after refresh`**~~ *(✅ closed — fixed in 1.6.7 / PR #280)*. Same `KeyMutex` cure as gitea#188.
 - ~~**github#31 — `Duplicate tool definitions in role settings`**~~ *(✅ closed — shipped 1.6.8)*. `register()` now splices the old entry before pushing; dedup mirrors `unregister()`.
 - ~~**github#32 — `Should git_log be available to all roles?`**~~ *(✅ closed — shipped 1.6.8)*. Changed to `roles: 'all'`; read-only, no side effects.
-- **github#29 — `Retrieval discoverability + edit_file fragility (post-mortem of PR #278)`** *(open)*. Post-mortem of the qwen-3-6-plus dogfood session on github#20 surfaced two compounding levers that explain the partial-implementation pattern (only `gitea.js` patched; `github.js` / `gitlab.js` / `local.js` / `base.js` left untouched): (1) `find_relevant_files` was never invoked AND the indexer reported `indexed: 6` of ~505 files — the tool would have returned thin results silently; (2) line-range `edit_file` ate a closing brace on a replace, the recovery edit stitched the surrounding lines but left the truncated body in place, producing the duplicate `getCommitStatus` that broke `.statuses` on the success path. Three sized levers on the issue: indexer-readiness gate on `find_relevant_files`, `edit_file` post-edit context echo, and a CLAUDE.md provider-symmetry note. Couples to the §1.5.x retrieval track when the §1.5.0 baseline conversation reopens.
+- ~~**github#29 — `Retrieval discoverability + edit_file fragility (post-mortem of PR #278)`**~~ *(✅ closed — shipped 1.6.11 / PR #293)*. The three sized levers landed: `find_relevant_files` indexer-readiness gate (`indexer_not_ready` envelope + soft budget), `edit_file` post-edit context widened from 3/3 to 5/5 with a `_getStaleWindow` on STALE LINE NUMBERS errors, and `MUTATING_TOOLS` cache-hit messaging. See [CHANGELOG.md](../CHANGELOG.md) §1.6.11 and [PR #293](https://github.com/gobha-me/ai-editor/pull/293).
+- ~~**github#21 — `MCP role-based tool access`**~~ *(✅ closed — shipped via PR #289)*. Three-part proposed solution landed: per-server roles in MCP settings; backward-compatible default of `'all'` when no roles set; integration through the role-based access path. Bundled into the 1.6.11 untagged main HEAD.
 
 ---
 

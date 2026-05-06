@@ -4,6 +4,94 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+Documentation-only sweep aligning the long-form docs with shipped 1.6.x
+reality, plus a security audit of untrusted issue/PR content — no code
+changes, no version bump.
+
+### `docs/ROADMAP.md` — Now/Next/Later refreshed; dogfood battery pivoted
+
+`Now` row condensed to a single line per the doc's own
+"shipped detail belongs in CHANGELOG" rule; the historical `1.6.0
+— Chat Stability` track section trimmed to a context pointer (the
+detailed Sequenced-PRs table was shipped detail duplicating CHANGELOG).
+`Later (sequenced)` collapsed: 1.6.6–1.6.10 detail removed; AST-chunker
+decision relocated as a single subsection ("originally projected as
+1.6.11; that slot was claimed by the post-mortem fixes — lands as the
+next in-track patch when/if it ships").
+
+The dogfood battery pivot lives in §"Post-tag dogfood battery": the
+ai-editor self-test framing (github#20 / #15 / #23 / #21, all shipped)
+is now historical. The new battery runs against `/config/Projects/HTML-Games`
+as an external substrate decoupled from ai-editor's own
+indexing/caching/state. Includes the sibling-task matrix (ai-editor's
+auto-branch + multi-start guard blocks reruns, so cross-model probes
+use sibling tasks within an archetype) and the $11/day cheap-tier
+model lineup (DeepSeek V4 Flash / Mistral Small 4 / Grok 4.1 Fast as
+default rotation; Qwen 3 Coder 480B Turbo for code-aware comparison;
+Sonnet 4.6 as a once-per-week strong-anchor probe; Opus / GPT-5.x Codex /
+Grok 4.20 stay out of the daily lineup). North star is unchanged —
+self-licking ice cream cone (ai-editor maintaining ai-editor) is still
+the goal; HTML-Games is the bridge while the runtime fragility is paid
+down.
+
+### `docs/ARCHITECTURE.md` — re-baselined from 1.0.4 to 1.6.11
+
+Header `Last sync: 1.0.4` → `Last sync: 1.6.11 (2026-05-06)`. Layer
+Diagram redrawn to include the Intelligence Layer (retrieval / memory /
+cost / compression / tools-catalog / test-loop / workspace-settings),
+MCP Layer, Help Layer, Profiles (data-only at 1.6.x), and the Security
+Layer (`js/security/invisible-unicode`). Two new sections: "Intelligence
+Layer" with a per-subsystem table mapped to each `js/intelligence/`
+subdirectory; "MCP Layer" describing the bridge, 1.6.10 disable-purge,
+and 1.6.11 role-based access. Tool Layer line `(52 tools)` → `(53
+native + MCP-bridged)` with `tools/git-log-tools` added. LLM Layer
+section now flags the untrusted-content gap in `prompts.js` with a
+pointer to `SECURITY.md`. File Size Map replaced wholesale — 1.0.4
+numbers (`core.js ~1655`, `context-manager.js ~1085`, etc.) → 1.6.11
+numbers (`core.js ~1812`, `intelligence/retrieval/manager.js ~1113`,
+etc.).
+
+### `docs/SECURITY.md` — new trust boundary, untrusted-issue threat, audit findings
+
+Added a fourth trust boundary ("the browser ↔ remote content surfaced
+to the LLM") covering issue/PR/comment bodies, `peek_*` tool returns,
+and MCP-tool responses. New threat section "Untrusted issue / PR /
+comment content" with the audit finding: render-side XSS is mitigated
+via DOMPurify (default config strips `<img>`/`<script>`, blocks
+`javascript:` and `data:text/html` URLs); LLM-context-side prompt
+injection at `js/prompts.js:281-292` is **unmitigated** — issue body +
+last 5 comments concatenate into the system prompt with no structural
+delimiter and no "data not commands" instruction. Highest-impact
+unmitigated threat in the editor today.
+
+`What ships (current)` gains a "Markdown render sanitization" entry
+documenting the DOMPurify path explicitly. `What does NOT ship` gains
+two entries: prompt injection (with the in-flight mitigation —
+`<UNTRUSTED_*>` delimiter wrapping in `prompts.js` plus a system-prompt
+data-not-commands instruction) and the invisible-Unicode scanner gap on
+tool returns. Security-relevant releases table extended through 1.6.11
+with the queued security-track patch flagged.
+
+### `README.md` — tool count + active-development pointer
+
+`52 tools` → `53 tools` (three call sites). One new line under
+"Multi-provider LLM" pointing at `docs/ROADMAP.md` and `docs/SECURITY.md`
+for the 2.0 profiles track and the prompt-injection audit.
+
+### `docs/PLAN.md` — retired
+
+Stale `1.0.x` / `1.1.x` completion log + uncommitted "Future Work"
+list. Per the doc's own "Roadmap = where we're going" philosophy, the
+forward-looking entries belong in ROADMAP. Useful "Future Work" items
+migrated to `ROADMAP.md` §"Other deferred → Migrated from retired
+PLAN.md (2026-05-06; triage owed)" — dynamic provider registration,
+plugin settings panel, CodeMirror extension bridge, tools settings
+page, custom role UI, cross-project peek tools, more languages in
+`scan_file`, expanded `.mjs` test coverage, generic git provider,
+offline/PWA, and the security-track patch for untrusted-content
+delimiters. The historical "1.0 Completed" / "1.1.x — Foundations"
+tables are obsoleted by CHANGELOG; not migrated.
+
 ## [1.6.11] - 2026-05-06
 
 Tool-ergonomics post-mortem fixes from two 2026-05-05 dogfood sessions
