@@ -192,8 +192,12 @@ test('CHUNKER_VERSION drives ChunkID invalidation through computeChunkID', () =>
         byte_range: [0, 100],
     };
     const idAtRegistry = computeChunkID({ ...base, chunker_version: CHUNKER_VERSION.code });
-    const idAtV2 = computeChunkID({ ...base, chunker_version: 'v2' });
-    assert.notEqual(idAtRegistry, idAtV2);
+    // Use a sentinel guaranteed different from the live `CHUNKER_VERSION.code`
+    // (which has bumped from `v1` → `v2` in 1.7.0 and may bump again).
+    const sentinel = `${CHUNKER_VERSION.code}-future`;
+    assert.notEqual(sentinel, CHUNKER_VERSION.code);
+    const idAtFuture = computeChunkID({ ...base, chunker_version: sentinel });
+    assert.notEqual(idAtRegistry, idAtFuture);
 });
 
 /* ---------------- Composer surface ---------------- */

@@ -127,6 +127,16 @@ const CONTENT_TYPE_BY_EXTENSION = Object.freeze({
     py: 'code',
     pyw: 'code',
     pyi: 'code',
+    // C-family extensions admitted in 1.7.0 alongside the brace-depth-aware
+    // chunker in `chunkers/code-chunker.js#findCFamilyBoundaries`.
+    c: 'code',
+    cc: 'code',
+    cpp: 'code',
+    cxx: 'code',
+    h: 'code',
+    hh: 'code',
+    hpp: 'code',
+    hxx: 'code',
     md: 'prose',
     markdown: 'prose',
     txt: 'prose',

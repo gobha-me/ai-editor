@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.14** (fifteen in-track patches `1.6.0`–`1.6.14`; `1.6.6`–`1.6.14` sit untagged in main awaiting the next tag-push gate).
+> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.7.0** (AST-aware C-family chunker, Phase 1; `1.6.6`–`1.6.14` plus `1.7.0` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -15,10 +15,10 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Just shipped** | **1.6.0–1.6.14 — Chat Stability + retrieval caches + MCP polish + tool-ergonomics post-mortem + security/conventions/export-fix trio.** Fifteen in-track patches in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging), `<UNTRUSTED_*>` wrapper for issue/PR/comment text (gitea#295, 1.6.12), repo-root `CLAUDE.md` autoload Phase 1 (github#37, 1.6.13), chat-export reads canonical markdown source (github#36, 1.6.14). |
-| **Now** | **Doc sweep + dogfood pivot to HTML-Games** (this PR). Bug-hunting battery moves off ai-editor self-targeting onto an external substrate (`project_dogfood_test_battery.md`); ARCHITECTURE / ROADMAP / SECURITY / README refreshed to 1.6.x reality; stale PLAN.md retired. |
-| **Next** | **AST-based code chunker — gate fired, committed.** Polyglot benchmark (PR [#290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval)`, merged 2026-05-05) fired the gate decisively: Armature/Go meanRecall@5 = 0.883, **Plinth/C++ meanRecall@5 = 0.267** with 4 of 10 fixtures fully missing in top-5. Decision = ship. Ships as the first track after the 1.6.12 security patch closes. |
-| **Later** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once 1.6.x measurement closes and the AST decision resolves. |
+| **Just shipped** | **1.6.0–1.6.14 + 1.7.0 — Chat Stability → retrieval caches → MCP polish → tool-ergonomics post-mortem → security/conventions/export-fix trio → AST-aware C-family chunker (Phase 1).** Sixteen in-track changes in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 + 1.7.0 sit in main untagged, queued for the next tag-push gate. Net additions: chat-stability invariants, cost dashboard + export + retrieval extension, retrieval caches (query / structural / paraphrase), MCP plugin disable purge (github#23), MCP role-based access (github#21), tool-ergonomics post-mortem (`indexer_not_ready` envelope, `STATEFUL_READ_TOOLS` cache bypass, `_getStaleWindow` + 5/5 success echo, `MUTATING_TOOLS` cache messaging), `<UNTRUSTED_*>` wrapper for issue/PR/comment text (gitea#295, 1.6.12), repo-root `CLAUDE.md` autoload Phase 1 (github#37, 1.6.13), chat-export reads canonical markdown source (github#36, 1.6.14), C-family AST chunker + `metadata.language` + `CHUNKER_VERSION.code` bump (1.7.0; PR #290 lineage). |
+| **Now** | **Phase 2 follow-up on the AST chunker — scoring lever, not chunker lever.** Phase 1 lifted Plinth/C++ Hit@5 from 0.600 → 0.800 (two zero fixtures now hit) but recall@5 stayed flat at 0.300 (well below the 0.55 floor). The chunker is doing what it should — files now split into ~10 per-decl chunks (5.7× more granular). The gap is now in BM25 ranking: integration-test files out-score source files when both contain the query keywords. Phase 2 levers (pick one, measure): **(a)** vendored web-tree-sitter for parent-class-signature propagation into member chunks, **(b)** cross-file query expansion, **(c)** test/source weighting in the scorer. |
+| **Next** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once Phase 2 of the AST chunker resolves (or is parked if Hit@5 lift is judged sufficient). |
+| **Later** | Open issues #34, #25, #26, #33, #27, #18 (see *Known open issues* below) — none currently on the active track. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled* below. |
 
 ---
@@ -123,20 +123,27 @@ End-of-session deliverable: per-session markdown trace at [`docs/dogfood-battery
 
 ## Later (sequenced)
 
-### Decision: AST-based code chunker — gate fired (2026-05-05)
+### Decision: AST-based code chunker Phase 1 — shipped 1.7.0 (2026-05-06)
 
-The polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval): polyglot benchmark — fires AST chunker gate`, merged 2026-05-05) fired the gate. Verdict from the merge commit: *"the gate criterion ('regex heuristic shows measurable gaps on the benchmark') fires."*
+The polyglot benchmark ([PR #290](https://github.com/gobha-me/ai-editor/pull/290) `chore(retrieval): polyglot benchmark — fires AST chunker gate`, merged 2026-05-05) fired the gate. The 1.7.0 brace-depth-aware C-family lexer is the response. Per-PR rationale and chunker shape live in [CHANGELOG §1.7.0](../CHANGELOG.md) — the table below records the decision context, not the implementation.
+
+**Pre-1.7.0 (the gate firing).**
 
 | Repo | Files | Chunks | meanHit@5 | meanRecall@5 |
 |---|---:|---:|---:|---:|
 | armature (Go) | 746 | 1752 | 1.000 | 0.883 |
 | **plinth (C++)** | **404** | **776** | **0.600** | **0.267** |
 
-Four of ten Plinth/C++ fixtures (`capability-registry-api`, `rbac-enforcement-filter`, `realtime-pubsub-broker`, `audit-logging-write`) fully miss the expected paths in top-5. The regex chunker's degenerate "single chunk per file with 8000-char hard-cut" path on `.cpp`/`.hpp` dilutes BM25 signal across whole-file blobs while small focused test fixtures concentrate it; production header/impl pairs are out-scored by unrelated tests. Go's syntax aligns enough with the JS regex (`func` ≈ `function`, top-level only) that the regex chunker handles it gracefully.
+**Post-1.7.0 (Phase 1 shipped).**
 
-Tree-sitter-grade boundaries for C/C++/Rust/Java/etc. would emit per-declaration chunks where header signatures and impl bodies become addressable units, weighted against focused queries.
+| Repo | Files | Chunks | meanHit@5 | meanRecall@5 |
+|---|---:|---:|---:|---:|
+| armature (Go) | 746 | 1752 | 1.000 | 0.883 |
+| **plinth (C++)** | **404** | **4400** | **0.800** | **0.300** |
 
-**Decision: ship.** Slots in as the first active track after the 1.6.12 security patch closes (originally projected as 1.6.11 — that slot was claimed by the tool-ergonomics post-mortem fixes; 1.6.12 is the queued security-track patch). Reproducible benchmark for the implementation floor: re-run `tests/run-polyglot-benchmark.mjs` against the same `tests/fixtures/polyglot-corpus.js`; AST chunker must lift Plinth/C++ recall@5 toward Armature/Go's 0.883.
+Hit@5 lift is real: two previously-zero fixtures (`realtime-pubsub-broker`, `audit-logging-write`) now hit. Two stay zero (`capability-registry-api`, `rbac-enforcement-filter`) — those are scoring-side failures, not chunker-side: the integration-test files out-score the source files when both contain the query keywords. Phase 2 trigger.
+
+Reproducible benchmark: re-run `tests/run-polyglot-benchmark.mjs` against the same `tests/fixtures/polyglot-corpus.js`. Future Phase 2 lever (vendored tree-sitter for parent-class-signature propagation, cross-file query expansion, or test/source weighting) must move the needle on **recall@5** specifically — Hit@5 is approaching ceiling now.
 
 ### LLM reranker (scoped, not committed)
 

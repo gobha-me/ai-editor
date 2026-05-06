@@ -50,6 +50,22 @@ test('unknown extension falls back to single-chunk degenerate path', () => {
     assert.equal(chunks[0].content, text);
     assert.equal(chunks[0].byte_range[0], 0);
     assert.equal(chunks[0].byte_range[1], new TextEncoder().encode(text).length);
+    assert.equal(chunks[0].metadata.language, 'unknown');
+});
+
+test('metadata.language tags JS/TS/Python chunks with their detected language (1.7.0)', () => {
+    const cases = [
+        { uri: 'src/a.js', expect: 'javascript' },
+        { uri: 'src/a.mjs', expect: 'javascript' },
+        { uri: 'src/a.ts', expect: 'typescript' },
+        { uri: 'src/a.tsx', expect: 'typescript' },
+        { uri: 'src/a.py', expect: 'python' },
+    ];
+    for (const { uri, expect } of cases) {
+        const chunks = chunkCode(baseInput('function alpha() {}\n', uri));
+        assert.ok(chunks.length >= 1);
+        for (const c of chunks) assert.equal(c.metadata.language, expect, `language for ${uri}`);
+    }
 });
 
 test('source with no top-level constructs returns one chunk (script body)', () => {
@@ -364,14 +380,20 @@ test('chunk ID matches canonical computeChunkID call against CHUNKER_VERSION.cod
 test('a hypothetical chunker_version bump produces different IDs at the same byte_range', () => {
     const text = 'function alpha() {}\n\nfunction beta() {}\n';
     const chunks = chunkCode(baseInput(text, 'src/v2bump.js'));
+    // Use a sentinel that is guaranteed different from the live
+    // `CHUNKER_VERSION.code` (which itself bumped from `v1` → `v2` in 1.7.0
+    // when the C-family lexer landed; further bumps will follow as the
+    // chunker evolves).
+    const sentinel = `${CHUNKER_VERSION.code}-future`;
+    assert.notEqual(sentinel, CHUNKER_VERSION.code);
     for (const c of chunks) {
-        const v2 = computeChunkID({
+        const future = computeChunkID({
             collection: 'workspace_code',
             source_uri: 'src/v2bump.js',
             byte_range: c.byte_range,
-            chunker_version: 'v2',
+            chunker_version: sentinel,
         });
-        assert.notEqual(c.id, v2);
+        assert.notEqual(c.id, future);
     }
 });
 

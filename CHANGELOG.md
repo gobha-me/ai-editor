@@ -4,6 +4,91 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-05-06
+
+### Added — AST-aware C-family code chunker (Phase 1) ([github#290](https://github.com/gobha-me/ai-editor/pull/290) lineage; gate fired 2026-05-05)
+
+The polyglot retrieval benchmark fired the AST-chunker gate decisively in PR
+[#290](https://github.com/gobha-me/ai-editor/pull/290) (merged 2026-05-05): on
+Plinth/C++, the regex chunker scored `meanRecall@5 = 0.267` vs. Armature/Go's
+`0.883`, with four of ten Plinth fixtures fully missing top-5. Root cause was
+the absence of any language entry for `.c/.cpp/.h/.hpp` — those files fell
+into a degenerate "single chunk per file with 8000-char hard-cut" path, so
+production header / impl pairs got out-scored by smaller focused test
+fixtures whose BM25 signal wasn't diluted across whole-file blobs.
+
+**What lands.** A brace-depth-aware lexer for C / C++ — `findCFamilyBoundaries`
+in [`js/intelligence/retrieval/chunkers/code-chunker.js`](js/intelligence/retrieval/chunkers/code-chunker.js).
+Single-pass tokenizer over comments / string literals / raw strings
+(`R"delim(...)delim"`) / preprocessor lines (with `\\\n` continuation),
+tracking effective brace depth where `namespace ... { ... }` and
+`extern "C" { ... }` blocks are *transparent* (their contents are top-level).
+Boundary lines walk back through doc-comments and attribute specifiers
+(`[[nodiscard]]`, `__attribute__`) so chunks include their attached preamble.
+One chunk per top-level declaration; one chunk per class/struct body
+(member-level splitting deferred to Phase 2 — matches Go's winning shape
+where one-chunk-per-top-level-decl was sufficient).
+
+**Loader admits the new extensions.** [`js/intelligence/retrieval/loader.js`](js/intelligence/retrieval/loader.js)
+now maps `c, cc, cpp, cxx, h, hh, hpp, hxx → 'code'`. Rust / Java / Go are
+out of Phase 1 scope (Go works fine via the JS-regex coincidence — `func` ≈
+`function` at top level — and the polyglot benchmark has no Rust / Java
+fixtures).
+
+**`metadata.language` populated on every code chunk.** New optional field on
+`Metadata` (typedef in [`js/intelligence/retrieval/contracts.js`](js/intelligence/retrieval/contracts.js)):
+`"javascript" | "typescript" | "python" | "cfamily" | "unknown"`. Future-proofs
+Phase 2 retrievers that want language-weighted scoring; harmless to
+strategies that don't read it.
+
+### Changed — `CHUNKER_VERSION.code` bumped `v1` → `v2`
+
+The contract bump invalidates existing IDB code chunks so they rechunk on
+next reindex (no manual migration). Two chunkers can coexist during the
+transition because the version participates in the `ChunkID` hash —
+DESIGN-retrieval §"Chunk Identity and Stability" handles this case directly.
+
+### Performance — Plinth/C++ retrieval recall@5 lift
+
+Re-running `node tests/run-polyglot-benchmark.mjs` against the same fixtures:
+
+| Metric | Pre-1.7.0 | Post-1.7.0 | Delta |
+|---|---:|---:|---:|
+| Plinth meanHit@5 | 0.600 | **0.800** | +0.200 |
+| Plinth meanRecall@5 | 0.267 | **0.300** | +0.033 |
+| Plinth chunk count | 776 | **4400** | 5.7× more granular |
+| Armature meanHit@5 | 1.000 | 1.000 | unchanged |
+| Armature meanRecall@5 | 0.883 | 0.883 | unchanged (regression guard ✓) |
+
+Two of the four previously-zero fixtures now hit:
+`plinth-realtime-pubsub-broker` (0.00 → 0.33) and `plinth-audit-logging-write`
+(0.00 → 0.33). The chunker is doing what the design said it would — files
+now split into ~10 per-declaration chunks where they used to be one blob.
+
+**Honest read on the floor.** The plan named a 0.55 recall@5 floor; we
+landed at 0.300. The gap is no longer a chunker problem — Hit@5 nearly
+doubled (more fixtures find at least one expected file). Recall@5 stayed
+flat because BM25 still ranks integration-test files above source files
+when both contain query keywords (e.g., `registration_integration_test.cpp`
+out-scoring `registration.cpp` for the `capability-registry-api` query).
+That's a *scoring* problem, not a *chunking* problem. Phase 2 levers:
+cross-file query expansion, class-name propagation into member chunks
+(needs tree-sitter for the parent-class signature), test/source weighting.
+
+### Tests
+
+- New unit floor: [`tests/test-retrieval-code-chunker-cfamily.mjs`](tests/test-retrieval-code-chunker-cfamily.mjs)
+  (19 cases — extension routing, top-level free functions, class-with-members
+  → one-chunk-per-class, namespace/extern-C transparency, nested namespaces,
+  templates, attributes, doc-comment walk-back, string / raw-string / block-comment
+  brace-perturbation guards, multi-line preprocessor, header/impl symmetry,
+  byte-range invariants, edge cases).
+- Existing [`tests/test-retrieval-code-chunker.mjs`](tests/test-retrieval-code-chunker.mjs) extended
+  with a `metadata.language` assertion across JS / TS / Python and an
+  `unknown`-extension assertion. The hypothetical-version-bump test now uses
+  a `${CHUNKER_VERSION.code}-future` sentinel so it survives future bumps
+  without churning.
+
 ## [1.6.14] - 2026-05-06
 
 ### Fix — chat-export reads canonical markdown source ([github#36](https://github.com/gobha-me/ai-editor/issues/36))

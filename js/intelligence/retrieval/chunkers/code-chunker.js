@@ -1,11 +1,13 @@
 // @ts-check
 /**
- * Code chunker — language-aware regex heuristic at top-level declaration
- * boundaries with no overlap. Implements the code row of
+ * Code chunker — language-aware boundary detection at top-level
+ * declarations with no overlap. Implements the code row of
  * [DESIGN-retrieval.md](../../../../docs/DESIGN-retrieval.md) §"Chunker"
  * and the honest commitment in §"On code chunking specifically": a Phase 1
- * heuristic for a small set of target languages (JS/TS/Python here);
- * AST-based chunking is deferred to 1.5.5 gated on a measured quality gap.
+ * heuristic for a small set of target languages (JS/TS/Python via regex
+ * boundary matchers; C/C++ via the brace-depth-aware lexer
+ * `findCFamilyBoundaries` added in 1.7.0 after the polyglot benchmark
+ * fired the AST-chunker gate — see CHANGELOG §1.7.0).
  *
  * Pure function: `(input) → Chunk[]`. No I/O, no async, no external state.
  * Mirrors the contract pinned by [prose-chunker.js](./prose-chunker.js) at
@@ -116,6 +118,11 @@ function buildUtf8Offsets(s) {
 /**
  * Extension → internal language label. The chunker only cares about the
  * matcher to use; concrete language naming is internal.
+ *
+ * The `cfamily` label fans out to a brace-depth-aware lexer
+ * ([findCFamilyBoundaries](#)) that handles C/C++ headers + impls. See the
+ * 1.7.0 entry in `CHANGELOG.md` for the recall@5 measurement that prompted
+ * its addition.
  */
 const LANG_BY_EXT = {
     js: 'javascript',
@@ -125,6 +132,14 @@ const LANG_BY_EXT = {
     ts: 'typescript',
     tsx: 'typescript',
     py: 'python',
+    c: 'cfamily',
+    cc: 'cfamily',
+    cpp: 'cfamily',
+    cxx: 'cfamily',
+    h: 'cfamily',
+    hh: 'cfamily',
+    hpp: 'cfamily',
+    hxx: 'cfamily',
 };
 
 /**
@@ -210,6 +225,279 @@ function matchPyBoundary(line) {
     if (/^(async\s+)?def\s+\w/.test(line)) return { kind: 'def' };
     if (/^class\s+\w/.test(line)) return { kind: 'class' };
     return null;
+}
+
+/**
+ * Strip line-comments and block-comments from a short prefix slice,
+ * preserving string literals verbatim. Used by `findCFamilyBoundaries`
+ * when classifying whether an opening `{` belongs to a `namespace` /
+ * `extern "C"` block (which the chunker treats as transparent) or to a
+ * real declaration body. Strings are preserved because the
+ * `extern "C"` / `extern "C++"` discriminator depends on the literal
+ * `"..."` content. Pure, single-pass; not intended for whole-file use —
+ * callers pass the chars between the most recent statement boundary and
+ * the `{`.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function stripCommentsForPrefix(s) {
+    let out = '';
+    let mode = 'NORMAL';
+    for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        const c2 = i + 1 < s.length ? s[i + 1] : '';
+        if (mode === 'NORMAL') {
+            if (c === '/' && c2 === '/') { mode = 'LINE'; i++; continue; }
+            if (c === '/' && c2 === '*') { mode = 'BLOCK'; i++; continue; }
+            if (c === '"') { mode = 'STR'; out += c; continue; }
+            if (c === "'") { mode = 'CHR'; out += c; continue; }
+            out += c;
+        } else if (mode === 'LINE') {
+            if (c === '\n') { mode = 'NORMAL'; out += c; }
+        } else if (mode === 'BLOCK') {
+            if (c === '*' && c2 === '/') { mode = 'NORMAL'; i++; }
+        } else if (mode === 'STR') {
+            out += c;
+            if (c === '\\' && i + 1 < s.length) { out += s[i + 1]; i++; continue; }
+            if (c === '"') mode = 'NORMAL';
+        } else if (mode === 'CHR') {
+            out += c;
+            if (c === '\\' && i + 1 < s.length) { out += s[i + 1]; i++; continue; }
+            if (c === "'") mode = 'NORMAL';
+        }
+    }
+    return out;
+}
+
+/**
+ * Brace-depth-aware boundary detector for C-family languages (C, C++ —
+ * Phase 1 of the AST-chunker track). Single-pass char scan over `bytes`
+ * with a state machine over comments / strings / raw strings (`R"d(...)d"`)
+ * / preprocessor lines (with `\\\n` continuation), tracking effective
+ * brace depth where `namespace ... { ... }` and `extern "..." { ... }`
+ * blocks are *transparent* (they do not bump effective depth — their
+ * contents are treated as top-level).
+ *
+ * Boundary line `L` is admitted when **all** of:
+ *   - `L`'s start mode is NORMAL (not mid-block-comment, mid-string, etc.).
+ *   - `L`'s start effective depth is 0.
+ *   - `L` is not a continuation of a `\\\n`-extended preprocessor line.
+ *   - The previous code char at depth 0 was `;`, `}`, BOF, or a transparent
+ *     `{` open (i.e. we just finished a top-level statement / declaration).
+ *   - `L`'s trimmed text is non-empty AND does not start with `//` (pure
+ *     line-comment line), `#` (preprocessor — its own non-boundary block),
+ *     or `}` (closing-brace-only line, e.g. `};`).
+ *
+ * Walk-back: for each admitted line `L`, walk preceding contiguous lines
+ * that are doc-comments (line-comments, block-comment open/continuation/close)
+ * or attribute specifiers (C++ `[[...]]`, GCC `__attribute__`); the
+ * boundary moves back to the first walked-to line so the chunk includes
+ * the attached preamble.
+ *
+ * Phase 1 limitation (deliberate): one chunk per top-level construct,
+ * including whole class/struct bodies. Splitting class members into
+ * separate chunks is Phase 2 — matches the Go corpus's winning shape
+ * (per `tests/run-polyglot-benchmark.mjs` Armature meanRecall@5 = 0.883)
+ * where one-chunk-per-top-level-decl proved sufficient for retrieval.
+ *
+ * @param {string} bytes
+ * @returns {number[]} Char-indices of line starts that begin a new chunk.
+ */
+function findCFamilyBoundaries(bytes) {
+    const lines = tokenizeLines(bytes);
+    if (lines.length === 0) return [];
+
+    const NORMAL = 0;
+    const LINE_COMMENT = 1;
+    const BLOCK_COMMENT = 2;
+    const STRING = 3;
+    const CHAR_LIT = 4;
+    const RAW_STRING = 5;
+
+    let mode = NORMAL;
+    let depth = 0;
+    /** @type {Array<'TRANSPARENT'|'OPAQUE'>} */
+    const braceStack = [];
+    /** @type {'BOF'|';'|'}'|'TRANSPARENT_OPEN'|'OTHER'} */
+    let lastTerminator = 'BOF';
+    let inPreproc = false;
+    let prevLineEndedBackslash = false;
+    let rawStringEnd = '';
+    /** Position one-past the last `;`, `}`, transparent `{`, or BOF in
+     *  NORMAL mode — used to slice the prefix when classifying a `{`. */
+    let prefixStart = 0;
+
+    /** @type {Array<{startMode:number, startDepth:number, startTerminator:string, isContinuation:boolean, inPreprocAtStart:boolean}>} */
+    const lineInfo = [];
+
+    for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        const isContinuation = prevLineEndedBackslash;
+        if (!isContinuation) inPreproc = false;
+
+        if (!isContinuation && mode === NORMAL) {
+            let p = line.start;
+            while (p < line.end && (bytes[p] === ' ' || bytes[p] === '\t')) p++;
+            if (p < line.end && bytes[p] === '#') inPreproc = true;
+        }
+
+        const lineHadPreproc = inPreproc;
+
+        lineInfo.push({
+            startMode: mode,
+            startDepth: depth,
+            startTerminator: lastTerminator,
+            isContinuation,
+            inPreprocAtStart: inPreproc,
+        });
+
+        let i = line.start;
+        const endLine = line.end;
+        while (i < endLine) {
+            const c = bytes[i];
+            const c2 = i + 1 < endLine ? bytes[i + 1] : '';
+
+            if (mode === NORMAL) {
+                if (c === '/' && c2 === '/') { mode = LINE_COMMENT; i += 2; continue; }
+                if (c === '/' && c2 === '*') { mode = BLOCK_COMMENT; i += 2; continue; }
+                if (c === '"') { mode = STRING; i++; continue; }
+                if (c === "'") { mode = CHAR_LIT; i++; continue; }
+                if (c === 'R' && c2 === '"') {
+                    let j = i + 2;
+                    let delim = '';
+                    while (j < endLine && bytes[j] !== '(' && delim.length < 16) {
+                        delim += bytes[j];
+                        j++;
+                    }
+                    if (j < endLine && bytes[j] === '(') {
+                        mode = RAW_STRING;
+                        rawStringEnd = ')' + delim + '"';
+                        i = j + 1;
+                        continue;
+                    }
+                }
+                if (c === '{') {
+                    let transparent = false;
+                    if (!inPreproc && depth === 0) {
+                        const prefix = stripCommentsForPrefix(bytes.slice(prefixStart, i));
+                        const trimmed = prefix.trim();
+                        if (/^(inline\s+)?namespace\b/.test(trimmed)) transparent = true;
+                        else if (/^extern\s+"[^"]*"\s*$/.test(trimmed)) transparent = true;
+                    }
+                    braceStack.push(transparent ? 'TRANSPARENT' : 'OPAQUE');
+                    if (!inPreproc) {
+                        if (!transparent) {
+                            depth++;
+                            if (depth === 1) lastTerminator = 'OTHER';
+                        } else {
+                            lastTerminator = 'TRANSPARENT_OPEN';
+                            prefixStart = i + 1;
+                        }
+                    }
+                    i++; continue;
+                }
+                if (c === '}') {
+                    const kind = braceStack.pop() || 'OPAQUE';
+                    if (!inPreproc) {
+                        if (kind === 'OPAQUE') {
+                            if (depth > 0) depth--;
+                            if (depth === 0) {
+                                lastTerminator = '}';
+                                prefixStart = i + 1;
+                            }
+                        } else if (depth === 0) {
+                            lastTerminator = '}';
+                            prefixStart = i + 1;
+                        }
+                    }
+                    i++; continue;
+                }
+                if (c === ';') {
+                    if (depth === 0 && !inPreproc) {
+                        lastTerminator = ';';
+                        prefixStart = i + 1;
+                    }
+                    i++; continue;
+                }
+                if (depth === 0 && !inPreproc && c !== ' ' && c !== '\t' && c !== '\r') {
+                    lastTerminator = 'OTHER';
+                }
+                i++;
+            } else if (mode === LINE_COMMENT) {
+                i++;
+            } else if (mode === BLOCK_COMMENT) {
+                if (c === '*' && c2 === '/') { mode = NORMAL; i += 2; continue; }
+                i++;
+            } else if (mode === STRING) {
+                if (c === '\\' && i + 1 < endLine) { i += 2; continue; }
+                if (c === '"') { mode = NORMAL; i++; continue; }
+                i++;
+            } else if (mode === CHAR_LIT) {
+                if (c === '\\' && i + 1 < endLine) { i += 2; continue; }
+                if (c === "'") { mode = NORMAL; i++; continue; }
+                i++;
+            } else if (mode === RAW_STRING) {
+                if (c === ')' && bytes.substring(i, i + rawStringEnd.length) === rawStringEnd) {
+                    mode = NORMAL;
+                    i += rawStringEnd.length;
+                    continue;
+                }
+                i++;
+            }
+        }
+
+        const lastChar = endLine > line.start ? bytes[endLine - 1] : '';
+        const hadBackslashContinuation = lastChar === '\\' && (mode === NORMAL || mode === LINE_COMMENT);
+        if (mode === LINE_COMMENT) mode = NORMAL;
+        prevLineEndedBackslash = hadBackslashContinuation;
+        // Skip preprocessor lines from prefix used to classify the next `{`.
+        // Without this, a `#include`/`#pragma`/etc. preceding `namespace foo {`
+        // or `extern "C" {` poisons the namespace-detection regex, marking
+        // the brace OPAQUE and dropping its contents one depth too deep.
+        if (lineHadPreproc) {
+            prefixStart = endLine + 1;
+        }
+    }
+
+    /** @type {number[]} */
+    const out = [];
+    const seen = new Set();
+    for (let li = 0; li < lines.length; li++) {
+        const info = lineInfo[li];
+        const line = lines[li];
+        if (info.startMode !== NORMAL) continue;
+        if (info.startDepth !== 0) continue;
+        if (info.isContinuation) continue;
+        if (info.inPreprocAtStart) continue;
+        const t = info.startTerminator;
+        if (t !== 'BOF' && t !== ';' && t !== '}' && t !== 'TRANSPARENT_OPEN') continue;
+
+        const trimmed = line.text.trim();
+        if (trimmed === '') continue;
+        if (trimmed.startsWith('//')) continue;
+        if (trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('}')) continue;
+
+        let target = li;
+        let probe = li - 1;
+        while (probe >= 0) {
+            const ptext = lines[probe].text.trim();
+            if (ptext === '') break;
+            if (ptext.startsWith('//')) { target = probe; probe--; continue; }
+            if (ptext.startsWith('/*') || ptext.startsWith('*') || ptext.endsWith('*/')) {
+                target = probe; probe--; continue;
+            }
+            if (ptext.startsWith('[[') || ptext.startsWith('__attribute__')) {
+                target = probe; probe--; continue;
+            }
+            break;
+        }
+        const pos = lines[target].start;
+        if (!seen.has(pos)) { seen.add(pos); out.push(pos); }
+    }
+    out.sort((a, b) => a - b);
+    return out;
 }
 
 /**
@@ -365,7 +653,9 @@ export function chunkCode(input) {
     if (bytes.trim().length === 0) return [];
 
     const language = detectLanguage(metadata.source_uri);
-    const boundaries = findBoundaries(bytes, language);
+    const boundaries = language === 'cfamily'
+        ? findCFamilyBoundaries(bytes)
+        : findBoundaries(bytes, language);
     const initialRanges = buildChunkRanges(bytes, boundaries);
     const ranges = hardCutOversized(initialRanges, bytes);
 
@@ -373,6 +663,7 @@ export function chunkCode(input) {
     const created_at = typeof metadata.created_at === 'number' ? metadata.created_at : 0;
     const updated_at = typeof metadata.updated_at === 'number' ? metadata.updated_at : created_at;
     const custom = metadata.custom == null ? {} : metadata.custom;
+    const languageTag = language == null ? 'unknown' : language;
 
     return ranges.map((range) => {
         const content = bytes.slice(range.start, range.end);
@@ -392,6 +683,7 @@ export function chunkCode(input) {
             metadata: {
                 source_uri: metadata.source_uri,
                 content_type: 'code',
+                language: languageTag,
                 created_at,
                 updated_at,
                 content_hash: fnv1aHex(content),

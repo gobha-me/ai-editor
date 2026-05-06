@@ -132,6 +132,7 @@
  * @typedef {Object} Metadata
  * @property {string}              source_uri    Canonical source identifier (URI form).
  * @property {ContentType}         content_type
+ * @property {string|undefined}    [language]    Code chunks only (1.7.0+): `"javascript"|"typescript"|"python"|"cfamily"|"unknown"`. Absent on prose / structured / conversation chunks.
  * @property {number}              created_at    Epoch milliseconds (source create time).
  * @property {number}              updated_at    Epoch milliseconds (last source edit).
  * @property {string}              content_hash  Hash of the *source region* this chunk covers — survives chunker upgrades.
@@ -706,10 +707,14 @@
  *
  * All entries start at `"v1"` for the foundation patch — concrete
  * chunker implementations will own their own bumps when shipped.
+ *
+ * `code: "v2"` (1.7.0) — C-family brace-depth lexer added; `metadata.language`
+ * now populated on every code chunk. Existing IDB chunks rechunk on next
+ * reindex (no manual migration).
  */
 export const CHUNKER_VERSION = Object.freeze({
     prose: 'v1',
-    code: 'v1',
+    code: 'v2',
     conversation: 'v1',
     structured: 'v1',
     spec: 'v1',
