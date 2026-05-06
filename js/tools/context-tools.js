@@ -7,7 +7,19 @@ import { RetrievalManager } from '../intelligence/retrieval/manager.js';
 import { State } from '../core.js';
 
 /**
- * Find semantically relevant files for a given query
+ * Below this fraction of (indexed / eligible) files, find_relevant_files
+ * refuses to run the pipeline and returns a recoverable `indexer_not_ready`
+ * envelope instead. Threshold is approximate — the goal is to reject "6/505"
+ * style cold runs (github#29) while letting partially-indexed projects past.
+ */
+const READINESS_THRESHOLD = 0.30;
+
+/**
+ * Find semantically relevant files for a given query.
+ *
+ * Failure modes covered (github#29 + github#35):
+ *  - indexer_not_ready  — coverage below READINESS_THRESHOLD, recovers via index_project
+ *  - retrieval_partial  — cold pipeline exceeded soft budget under the hard tool wall
  */
 async function findRelevantFiles({ query, max_files }) {
     if (!State.settings.useEmbeddings) {
@@ -19,10 +31,50 @@ async function findRelevantFiles({ query, max_files }) {
     }
 
     const maxFiles = max_files || State.settings.maxRelevantFiles || 5;
-    
+
+    // Readiness gate (github#29). Cold projects with thin coverage produce
+    // misleading "thin results" rather than an explicit "not ready" signal,
+    // and the model can't tell the difference. Fail fast with a recoverable
+    // envelope instead.
+    const indexed = RetrievalManager.getFilesIndexed();
+    const eligible = RetrievalManager.getEligibleFileCount();
+    if (eligible > 0 && indexed / eligible < READINESS_THRESHOLD) {
+        const coverage = indexed / eligible;
+        return {
+            success: false,
+            error: 'indexer_not_ready',
+            indexed,
+            estimated_total: eligible,
+            coverage,
+            message: `Index not ready: ${indexed} of ${eligible} eligible files indexed (${(coverage * 100).toFixed(1)}% < ${(READINESS_THRESHOLD * 100).toFixed(0)}% threshold).`,
+            hint: 'Run index_project, then retry. For navigation in the meantime, use get_project_tree + read_file.',
+            files: []
+        };
+    }
+
+    // Soft budget (github#35). The hard tool wall (default 30s) returns a
+    // silent timeout with no result. Race the manager against an internal
+    // budget 5s under the wall (floor 15s) so an over-budget pipeline
+    // produces a structured `retrieval_partial` envelope the model can act
+    // on. The in-flight pipeline keeps running in the background and tends
+    // to populate the manager's LRU by the time the model retries.
+    const hardWallMs = State.settings.toolTimeout || 30000;
+    const softBudgetMs = Math.max(15000, hardWallMs - 5000);
+    const startMs = Date.now();
+
+    let budgetTimer;
     try {
-        const results = await RetrievalManager.findRelevantFiles(query, maxFiles);
-        
+        const results = await Promise.race([
+            RetrievalManager.findRelevantFiles(query, maxFiles),
+            new Promise((_, reject) => {
+                budgetTimer = setTimeout(
+                    () => reject(new Error('SOFT_BUDGET_EXCEEDED')),
+                    softBudgetMs
+                );
+            })
+        ]);
+        if (budgetTimer) clearTimeout(budgetTimer);
+
         if (results.length === 0) {
             return {
                 success: false,
@@ -43,6 +95,19 @@ async function findRelevantFiles({ query, max_files }) {
         };
 
     } catch (error) {
+        if (budgetTimer) clearTimeout(budgetTimer);
+        if (error?.message === 'SOFT_BUDGET_EXCEEDED') {
+            return {
+                success: false,
+                error: 'retrieval_partial',
+                elapsed_ms: Date.now() - startMs,
+                soft_budget_ms: softBudgetMs,
+                hard_wall_ms: hardWallMs,
+                message: `Retrieval pipeline exceeded the soft budget (${softBudgetMs}ms, under the ${hardWallMs}ms hard tool wall). The pipeline is still running in the background.`,
+                hint: 'Retry the same query — cold pipelines typically warm on the second attempt as the in-flight run completes and populates the LRU. Or fall back to get_project_tree + read_file.',
+                files: []
+            };
+        }
         return {
             success: false,
             message: `Failed to find relevant files: ${error.message}`,

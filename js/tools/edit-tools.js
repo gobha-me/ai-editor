@@ -10,18 +10,37 @@ import { EditTracker } from './edit-tracker.js';
 /**
  * Return a few lines of surrounding context after an edit so the model
  * can verify placement and know current line numbers for subsequent edits.
- * Keeps the context small (3 lines before + edited region + 3 lines after)
- * to avoid bloating tool results.
+ * 5 before / 5 after — wide enough to span typical paragraph drift
+ * (the qwen-3-6-plus PR #289 trace overshot a 6-line gap with 3/3).
  */
 function _getEditContext(editStart, editLineCount, totalLines) {
     const content = State.editorContent;
     if (!content) return null;
     const lines = content.split('\n');
-    const CONTEXT = 3;
+    const CONTEXT = 5;
     const ctxStart = Math.max(1, editStart - CONTEXT);
     const ctxEnd = Math.min(totalLines, editStart + editLineCount + CONTEXT);
     const slice = lines.slice(ctxStart - 1, ctxEnd);
     return slice.map((l, i) => `${ctxStart + i}: ${l}`).join('\n');
+}
+
+/**
+ * Build a 5-before / 5-after window of the *current* file content around
+ * a drift-suggested target range. Inlined into STALE LINE NUMBERS errors
+ * so the model can re-anchor without a follow-up read_lines round-trip.
+ * Returns null if no editor content is available.
+ */
+function _getStaleWindow(suggestedStart, suggestedEnd) {
+    const content = State.editorContent;
+    if (!content || suggestedStart == null) return null;
+    const lines = content.split('\n');
+    const CONTEXT = 5;
+    const totalLines = lines.length;
+    const endLine = suggestedEnd || suggestedStart;
+    const winStart = Math.max(1, suggestedStart - CONTEXT);
+    const winEnd = Math.min(totalLines, endLine + CONTEXT);
+    const slice = lines.slice(winStart - 1, winEnd);
+    return slice.map((l, i) => `${winStart + i}: ${l}`).join('\n');
 }
 
 /**
@@ -41,14 +60,16 @@ export function registerEditTools(registry) {
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
         if (staleCheck.stale) {
-            return { 
+            const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedEndLine);
+            return {
                 error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
-                       (staleCheck.suggestedStartLine 
-                           ? `💡 Suggested fix: The content you want may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}. Call read_lines to verify before editing.`
-                           : '')
+                       (staleCheck.suggestedStartLine
+                           ? `💡 The content you want may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}.`
+                           : '') +
+                       (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
             };
         }
-        
+
         // Use the replaceRange function from editor.js
         const result = replaceRange(start_line, end_line, new_content);
         
@@ -114,14 +135,16 @@ export function registerEditTools(registry) {
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, after_line);
         if (staleCheck.stale) {
-            return { 
+            const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedStartLine);
+            return {
                 error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
-                       (staleCheck.suggestedStartLine 
-                           ? `💡 Suggested fix: The insertion point may now be at line ${staleCheck.suggestedStartLine}. Call read_lines to verify.`
-                           : '')
+                       (staleCheck.suggestedStartLine
+                           ? `💡 The insertion point may now be at line ${staleCheck.suggestedStartLine}.`
+                           : '') +
+                       (win ? `\n\nCurrent content at the suggested insertion point (live, no read_lines needed):\n${win}` : '')
             };
         }
-        
+
         // Use the insertAtLine function from editor.js
         const result = insertAtLine(after_line, content);
         
@@ -178,14 +201,16 @@ export function registerEditTools(registry) {
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
         if (staleCheck.stale) {
-            return { 
+            const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedEndLine);
+            return {
                 error: `🚨 STALE LINE NUMBERS DETECTED 🚨\n\n${staleCheck.reason}\n\n` +
-                       (staleCheck.suggestedStartLine 
-                           ? `💡 Suggested fix: The lines you want may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}. Call read_lines to verify.`
-                           : '')
+                       (staleCheck.suggestedStartLine
+                           ? `💡 The lines you want may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine || staleCheck.suggestedStartLine}.`
+                           : '') +
+                       (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
             };
         }
-        
+
         // Use the deleteRange function from editor.js
         const result = deleteRange(start_line, end_line);
         
@@ -231,3 +256,8 @@ export function registerEditTools(registry) {
         roles: ['coder']  // Only coders can delete code
     });
 }
+
+// Test seam — exported so tests can verify the 5/5 context width and the
+// stale-window slice behavior in isolation. Underscore prefix signals
+// "internal".
+export const _internals = { _getEditContext, _getStaleWindow };

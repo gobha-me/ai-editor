@@ -112,6 +112,10 @@
             } catch (e) { errors.push(['EditTracker', e]); }
 
             try {
+                await import('./test-tool-ergonomics-post-mortem.js');
+            } catch (e) { errors.push(['ToolErgonomicsPostMortem', e]); }
+
+            try {
                 await import('./test-retry.js');
             } catch (e) { errors.push(['Retry', e]); }
 

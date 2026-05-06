@@ -570,11 +570,46 @@ export async function handleGeneralRequest(input) {
                     // === CROSS-REQUEST DUPLICATE DETECTION (Issue #17) ===
                     // Check if this exact tool+args was already executed in a previous request
                     // (before summarization evicted the results from context)
-                    const WRITE_TOOLS = ['replace_lines', 'insert_lines', 'delete_lines', 'create_file', 
+                    const WRITE_TOOLS = ['replace_lines', 'insert_lines', 'delete_lines', 'create_file',
                                           'edit_file', 'write_file', 'delete_file',
                                           'update_issue', 'add_issue_comment'];
+
+                    // Tools whose duplicate-call cache hit means "your prior mutation
+                    // already succeeded" — not "wait, did it actually go through?".
+                    // The qwen-3-6-plus PR #289 trace showed the model panicking on a
+                    // generic don't-retry note for commit_files and entering a 3-turn
+                    // confirmation loop. These tools stay OUT of WRITE_TOOLS on purpose
+                    // (so the cache prevents accidental double-commits / double-comments),
+                    // but get reassuring "prior call succeeded" messaging instead of the
+                    // generic don't-retry warning. Keep this in sync as new mutating
+                    // tools land. github#35
+                    const MUTATING_TOOLS = new Set([
+                        'commit_files',
+                        'create_issue',
+                        'create_pull_request',
+                        'merge_pull_request',
+                        'add_pr_review',
+                        'memory_remember',
+                        'memory_revise',
+                        'scratchpad_write',
+                        'scratchpad_clear',
+                        'write_plugin_source',
+                    ]);
+
+                    // Tools whose result depends on implicit State (not on args alone).
+                    // The dup-detection key is `(toolName, sortedArgs)`, so a stateful
+                    // read like read_current_file collides across calls when the active
+                    // file changes between them — the second call gets a stale-cache
+                    // hit pointing at the previous file's content. Bypass both the
+                    // cross-request and same-request caches for these. Found while
+                    // testing PR #293 against issue #23 (qwen-3-6-plus, 2026-05-06).
+                    const STATEFUL_READ_TOOLS = new Set([
+                        'read_current_file',
+                    ]);
+                    const skipCache = STATEFUL_READ_TOOLS.has(toolName);
+
                     let crossRequestDuplicate = false;
-                    if (!WRITE_TOOLS.includes(toolName) && State.toolActionLog && State.toolActionLog.length > 0) {
+                    if (!skipCache && !WRITE_TOOLS.includes(toolName) && State.toolActionLog && State.toolActionLog.length > 0) {
                         const recentLog = State.toolActionLog.slice(-30);
                         const argsStr = JSON.stringify(args, Object.keys(args).sort());
                         for (const entry of recentLog) {
@@ -609,17 +644,23 @@ export async function handleGeneralRequest(input) {
                     } else if (crossRequestDuplicate) {
                         // Return a synthetic result telling the AI it already did this
                         const lastEntry = State.toolActionLog.slice(-30).reverse().find(e => e.tool === toolName && e.success);
+                        const summary = lastEntry?.resultSummary || 'unknown';
                         toolResult = {
                             _cached: true,
-                            _cache_note: `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${lastEntry?.resultSummary || 'unknown'}. Do NOT call this tool again with the same args.]`,
+                            _cache_note: MUTATING_TOOLS.has(toolName)
+                                ? `[Your prior ${toolName} call already SUCCEEDED earlier in this conversation. Outcome: ${summary}. The mutation has happened — treat the prior result as authoritative and continue. Do not retry to confirm; that would re-attempt the mutation or loop on this same cache.]`
+                                : `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${summary}. Do NOT call this tool again with the same args.]`,
                             error: null
                         };
-                    } else if (cachedResult && !WRITE_TOOLS.includes(toolName)) {
-                        // Return cached result for read-only tools with a note
+                    } else if (cachedResult && !skipCache && !WRITE_TOOLS.includes(toolName)) {
+                        // Return cached result for read-only tools (and same-session
+                        // mutating tools — cache prevents double-commits) with a note
                         toolResult = {
                             ...cachedResult,
                             _cached: true,
-                            _cache_note: `[Cached from earlier in this conversation — same ${toolName} call with identical arguments. Data is still current.]`
+                            _cache_note: MUTATING_TOOLS.has(toolName)
+                                ? `[Your prior ${toolName} call already SUCCEEDED — the result above is from that call. The mutation has happened; do not retry to confirm.]`
+                                : `[Cached from earlier in this conversation — same ${toolName} call with identical arguments. Data is still current.]`
                         };
                         console.log(`[TOOL-LOOP] Cache hit for ${toolName}(${JSON.stringify(args).slice(0, 80)})`);
                     } else {

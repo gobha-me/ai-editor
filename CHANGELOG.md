@@ -4,6 +4,140 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.6.11] - 2026-05-06
+
+Tool-ergonomics post-mortem fixes from two 2026-05-05 dogfood sessions
+([github#35](https://github.com/gobha-me/ai-editor/issues/35) +
+[github#29](https://github.com/gobha-me/ai-editor/issues/29)). Both issues
+described the same shape of failure: the LLM had the right tools, but the
+tools' error / cache / cold-start paths failed to surface enough information
+for the model to recover, so it burned turns on confirmation loops. One
+cycle silently deleted four lines of unrelated CHANGELOG prose. Four levers
+land here; the two issues' shared axes are bundled (edit_file error path +
+success echo are the same instrumentation; retrieval cold-start gate +
+soft budget are complementary guards on the same tool).
+
+### `edit_file` STALE LINE NUMBERS errors include a live content window
+
+Both [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) (`edit_file`)
+and [`js/tools/edit-tools.js`](js/tools/edit-tools.js) (`replace_lines`,
+`insert_lines`, `delete_lines`) gain a `_getStaleWindow(suggestedStart,
+suggestedEnd)` helper that pulls a 5-before / 5-after slice of the *current*
+editor content around the drift-suggested target range and inlines it into
+the error envelope. Before 1.6.11 the error told the model *what* (line
+numbers shifted by N) and *where* (likely now at lines X-Y) but not *what's
+there now* — costing one extra `read_lines` round-trip on every recovery
+cycle, and worse, when the model misjudged the recovery target it could land
+on lines that look right by line number but are now part of a different
+paragraph (the qwen-3-6-plus PR #289 trace ate four lines of unrelated
+MutationObserver prose this way). The window substitutes for the explicit
+`read_lines` step on the recovery path.
+
+### `edit_file` post-edit success context widened from 3/3 to 5/5
+
+`_getEditContext()` in both files bumps the surrounding-context constant
+from 3 to 5 lines. The PR #289 trace overshot a 6-line gap with 3/3; 5/5
+is wide enough to span typical paragraph drift while staying small enough
+not to bloat tool results.
+
+### Per-tool cache-hit messaging for mutating tools
+
+[`js/chat/handlers.js`](js/chat/handlers.js) gains a `MUTATING_TOOLS` set —
+side-effect-bearing tools that are intentionally NOT in `WRITE_TOOLS` (so
+the cache prevents accidental double-commits / double-comments), but whose
+generic don't-retry cache-hit message read to the model as *"your previous
+call may have failed"*. Both the cross-request duplicate path and the
+same-request LRU hit now branch on `MUTATING_TOOLS.has(toolName)` and emit
+*"Your prior {tool} call already SUCCEEDED — the mutation has happened;
+do not retry to confirm"* with the prior outcome, instead of the generic
+warning. Same-request LRU hits already returned the prior result; the
+cross-request envelope still surfaces the action-log summary so the model
+has something to act on.
+
+The set covers `commit_files`, `create_issue`, `create_pull_request`,
+`merge_pull_request`, `add_pr_review`, `memory_remember`, `memory_revise`,
+`scratchpad_write`, `scratchpad_clear`, `write_plugin_source`. The prior
+panic-loop trigger from PR #289 — three turns of `read_lines` →
+`commit_files` → `_cached` cycling to confirm a commit had landed —
+disappears.
+
+### `find_relevant_files` readiness gate + soft budget envelopes
+
+[`js/tools/context-tools.js`](js/tools/context-tools.js) `findRelevantFiles`
+gains two structured-failure paths under the 30s hard tool wall:
+
+- **Readiness gate.** Below `READINESS_THRESHOLD = 0.30` of (indexed /
+  eligible) files, return an `indexer_not_ready` envelope with `indexed`,
+  `estimated_total`, `coverage`, and a hint pointing at `index_project`.
+  The PR #278 trace showed the model running `find_relevant_files` against
+  a 6/505 cold index and getting thin results it couldn't distinguish from
+  "this query genuinely has no matches".
+- **Soft budget.** Race the manager's `findRelevantFiles` against
+  `max(15_000, State.settings.toolTimeout - 5000)` ms (default 25s under
+  the 30s wall, floor 15s, tracks the user's slider). On overrun, return
+  a `retrieval_partial` envelope with `elapsed_ms`, `soft_budget_ms`,
+  `hard_wall_ms`, and a retry hint. The in-flight pipeline keeps running
+  in the background and tends to populate the manager's LRU by the time
+  the model retries the same query — the second attempt is usually a cache
+  hit.
+
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+exposes the new `getEligibleFileCount()` getter, deriving the count live
+from `State.fileTree` via the existing `shouldIndex()` predicate so it
+stays accurate as the tree changes.
+
+### Tests
+
+[`tests/test-tool-ergonomics-post-mortem.js`](tests/test-tool-ergonomics-post-mortem.js)
+covers the three unit-testable levers: `_getEditContext` 5/5 width, the
+`_getStaleWindow` slice (with edge cases — top-of-file clamp, end-of-file
+clamp, null-suggestedStart, empty content, parity between multifile-tools
+and edit-tools), and `find_relevant_files`'s readiness-gate and
+soft-budget envelopes (with `RetrievalManager` getters and
+`State.settings.toolTimeout` stubbed to drive the paths). The
+mutating-tool cache messaging change is verified by inspection — the
+cross-request duplicate path is a single `if/else` branch and the test
+seam is the live tool loop.
+
+### Two follow-on fixes from PR #293 testing (2026-05-06)
+
+Found while running the qwen-3-6-plus dogfood replay against issue #23 on
+this branch (the L1/L2/L4 levers above never had a chance to fire because
+a prior bug crashed every `read_file` call):
+
+- **`read_file: resolvedSource is not defined`
+  ([gitea#291](https://git.gobha.me/xcaliber/ai-editor/issues/291))** —
+  [`js/tools/file-tools.js:124`](js/tools/file-tools.js) referenced an
+  undefined `resolvedSource` on the small-file / `full=true` success path
+  (the variable was destructured as `source` at line 91 and used correctly
+  as `source` in the truncated path at line 112; only the un-truncated
+  return statement still had the old name). Every read of a file ≤200
+  lines threw `ReferenceError: resolvedSource is not defined`, forcing
+  the model into an `open_file → read_current_file` workaround. One-token
+  rename.
+- **Stateful-read cache collision** — the cross-request duplicate detector
+  in [`js/chat/handlers.js`](js/chat/handlers.js) keys on
+  `(toolName, sortedArgs)`, but `read_current_file` reads implicit
+  `State.currentFile.path` not present in args. Two consecutive calls
+  with different active files but identical args (`{full: true}`)
+  collided — the second call returned the *previous* file's content as
+  a `_cached: true` response. Added `STATEFUL_READ_TOOLS` set
+  (`read_current_file` for now) that bypasses both the cross-request
+  duplicate detection and the same-request LRU cache, so stateful reads
+  always re-execute against the live State.
+
+### Out of scope
+
+Per [github#35](https://github.com/gobha-me/ai-editor/issues/35), two
+sibling findings remain filed separately: the `.aieditor/sessions/` leak
+from commit `5bec0f3` and the chat-export markdown autolink rendering
+bug. The provider-symmetry conventions note
+([github#29](https://github.com/gobha-me/ai-editor/issues/29) Lever 3)
+is tracked in a separate design issue
+([github#37](https://github.com/gobha-me/ai-editor/issues/37)) — ai-editor
+doesn't have a `CLAUDE.md` analogue today and the placement decision is
+a separate discussion.
+
 ## [1.6.10] - 2026-05-05
 
 The third dogfood-battery item ([github#23](https://github.com/gobha-me/ai-editor/issues/23))

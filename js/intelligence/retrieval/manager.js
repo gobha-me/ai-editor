@@ -949,6 +949,24 @@ function isIndexing() { return _indexing; }
 function isPaused() { return _manualPause || _autoPause; }
 function getIndexedProject() { return _indexedProject; }
 
+/**
+ * Count how many files in the current State.fileTree would be eligible for
+ * indexing. Used by find_relevant_files' readiness gate (github#29) to decide
+ * whether the index has enough coverage to return useful results, vs. failing
+ * fast with a recoverable `indexer_not_ready` envelope. Live recompute (not
+ * cached) so it stays accurate as the tree changes.
+ */
+function getEligibleFileCount() {
+    const tree = State.fileTree;
+    if (!Array.isArray(tree)) return 0;
+    let count = 0;
+    for (const f of tree) {
+        if (f?.type !== 'file') continue;
+        if (shouldIndex(f.path, f.size)) count++;
+    }
+    return count;
+}
+
 // ============================================
 // Public surface
 // ============================================
@@ -970,6 +988,7 @@ export const RetrievalManager = {
     autoResume,
     getStats,
     getFilesIndexed,
+    getEligibleFileCount,
     getIndexProgress,
     isIndexing,
     isPaused,

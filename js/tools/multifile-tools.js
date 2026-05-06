@@ -56,16 +56,37 @@ async function ensureFileActive(path) {
 
 /**
  * Return a few lines of surrounding context after an edit.
+ * 5 before / 5 after — wide enough to span typical paragraph drift
+ * (the qwen-3-6-plus PR #289 trace overshot a 6-line gap with 3/3).
  */
 function _getEditContext(editStart, editLineCount, totalLines) {
     const content = State.editorContent;
     if (!content) return null;
     const lines = content.split('\n');
-    const CONTEXT = 3;
+    const CONTEXT = 5;
     const ctxStart = Math.max(1, editStart - CONTEXT);
     const ctxEnd = Math.min(totalLines, editStart + editLineCount + CONTEXT);
     const slice = lines.slice(ctxStart - 1, ctxEnd);
     return slice.map((l, i) => `${ctxStart + i}: ${l}`).join('\n');
+}
+
+/**
+ * Build a 5-before / 5-after window of the *current* file content around
+ * a drift-suggested target range. Inlined into STALE LINE NUMBERS errors
+ * so the model can re-anchor without a follow-up read_lines round-trip.
+ * Returns null if no editor content is available.
+ */
+function _getStaleWindow(suggestedStart, suggestedEnd) {
+    const content = State.editorContent;
+    if (!content || suggestedStart == null) return null;
+    const lines = content.split('\n');
+    const CONTEXT = 5;
+    const totalLines = lines.length;
+    const endLine = suggestedEnd || suggestedStart;
+    const winStart = Math.max(1, suggestedStart - CONTEXT);
+    const winEnd = Math.min(totalLines, endLine + CONTEXT);
+    const slice = lines.slice(winStart - 1, winEnd);
+    return slice.map((l, i) => `${winStart + i}: ${l}`).join('\n');
 }
 
 // ============================================
@@ -100,11 +121,13 @@ export function registerMultiFileTools(registry) {
             // Stale check
             const staleCheck = EditTracker.checkStale(path, start_line, end_line);
             if (staleCheck.stale) {
+                const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedEndLine);
                 return {
                     error: `🚨 STALE LINE NUMBERS 🚨\n${staleCheck.reason}\n` +
                         (staleCheck.suggestedStartLine
-                            ? `💡 Content may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}. Call read_lines to verify.`
-                            : '')
+                            ? `💡 Content may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}.`
+                            : '') +
+                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
                 };
             }
 
@@ -133,11 +156,13 @@ export function registerMultiFileTools(registry) {
 
             const staleCheck = EditTracker.checkStale(path, insertAfter);
             if (staleCheck.stale) {
+                const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedStartLine);
                 return {
                     error: `🚨 STALE LINE NUMBERS 🚨\n${staleCheck.reason}\n` +
                         (staleCheck.suggestedStartLine
-                            ? `💡 Insertion point may now be at line ${staleCheck.suggestedStartLine}. Call read_lines to verify.`
-                            : '')
+                            ? `💡 Insertion point may now be at line ${staleCheck.suggestedStartLine}.`
+                            : '') +
+                        (win ? `\n\nCurrent content at the suggested insertion point (live, no read_lines needed):\n${win}` : '')
                 };
             }
 
@@ -163,11 +188,13 @@ export function registerMultiFileTools(registry) {
 
             const staleCheck = EditTracker.checkStale(path, start_line, end_line);
             if (staleCheck.stale) {
+                const win = _getStaleWindow(staleCheck.suggestedStartLine, staleCheck.suggestedEndLine);
                 return {
                     error: `🚨 STALE LINE NUMBERS 🚨\n${staleCheck.reason}\n` +
                         (staleCheck.suggestedStartLine
-                            ? `💡 Lines may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}. Call read_lines to verify.`
-                            : '')
+                            ? `💡 Lines may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}.`
+                            : '') +
+                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
                 };
             }
 
@@ -317,3 +344,8 @@ export function registerMultiFileTools(registry) {
         roles: ['coder']
     });
 }
+
+// Test seam — exported so tests can verify the 5/5 context width and the
+// stale-window slice behavior in isolation, without needing to drive
+// edit_file through a full tool loop. Underscore prefix signals "internal".
+export const _internals = { _getEditContext, _getStaleWindow };

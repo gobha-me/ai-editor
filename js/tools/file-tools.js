@@ -121,7 +121,7 @@ export function registerFileTools(registry) {
                 line_count: lineCount,
                 truncated: false,
                 language: path.split('.').pop(),
-                source: resolvedSource
+                source
             };
         } catch (error) {
             if (error.status === 404) {
