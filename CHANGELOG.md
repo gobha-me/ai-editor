@@ -4,6 +4,86 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.6.13] - 2026-05-06
+
+### Feature — repo-root `CLAUDE.md` autoloads into the system prompt (github#37 Phase 1)
+
+Ships the **existence** of a project-conventions surface so the LLM picks
+up per-repo guidance ("when adding a method to `Git.*`, add it to all
+four providers", "branch naming: `issue/N-slug`", "tests live in
+`tests/index.html`, CI doesn't run them") without the user having to
+restate it at the top of every chat. Phase 1 escape hatch from the
+[github#37](https://github.com/gobha-me/ai-editor/issues/37) issue body —
+deferred questions (role filtering, lifecycle re-read, memory-subsystem
+boundary, length cap) stay deferred until a real dogfood session
+surfaces concrete friction.
+
+This also unblocks the github#29 Lever 3 provider-symmetry note that
+the 1.6.11 post-mortem deferred — the four-sentence convention now
+has somewhere to live.
+
+**New `js/intelligence/project-conventions.js`** — single-purpose module
+exposing `initProjectConventions()`, `loadConventions(payload)`, and
+`clearConventions()`. Subscribes to the existing `git:projectLoaded`
+event (fired from `loadProject()` in `js/git.js`, mirroring the
+`js/ignore.js#_loadProjectIgnore` precedent for `.aieditorignore`).
+Reads `CLAUDE.md` at the repo root via `Git.getFile(owner, repo,
+'CLAUDE.md', branch)` — provider-agnostic, hits Gitea / GitHub / GitLab
+through the same uniform interface defined at
+[`js/git-providers/base.js:258`](js/git-providers/base.js). On 404 /
+network failure / unsupported provider the fetch is silent: `State.projectConventions`
+stays null and the system prompt skips the block. On `project:cleared`
+the slot resets.
+
+**`js/core.js`.** New `State.projectConventions` slot (initial value
+`null`) under the `Runtime state` group, alongside `currentProject` /
+`currentBranch` / `fileTree` / `branches`. Holds the fetched CLAUDE.md
+content verbatim — no transformation, no role filtering, no length
+cap. Empty-string and whitespace-only files reset the slot to null
+(treated as "absent").
+
+**`js/prompts.js`.** New `{{projectConventions}}` template placeholder
+in the editor system prompt, positioned **AFTER** the 1.6.12 🔒
+UNTRUSTED CONTENT rule and **BEFORE** the `Current context:` header.
+When `State.projectConventions` is set, substitutes a `📋 PROJECT
+CONVENTIONS — ... Follow them.` header followed by a literal
+`<PROJECT_CONVENTIONS>...</PROJECT_CONVENTIONS>` envelope; otherwise
+substitutes the empty string. Trusted content — committed by the
+project maintainer and therefore explicitly not wrapped in the
+`<UNTRUSTED_*>` markers introduced in 1.6.12. The structural marker
+still gives the model provenance (this is *project-level* guidance,
+not user-message guidance) without flipping it to data-only.
+
+**`js/app.js`.** `initProjectConventions()` called once at boot
+alongside `IgnoreManager.init()` so the event subscription is wired
+before the first `git:projectLoaded` fires.
+
+**Tests.** New `tests/test-system-prompt-project-conventions.mjs` — 5
+cases covering: absent (null) → no block / no placeholder leak; empty
+string → no block; present → sentinel content appears verbatim with
+literal tag boundaries; trusted-content path → block is **not** wrapped
+in `<UNTRUSTED_*>` markers; positioning → block sits between the
+🔒 UNTRUSTED CONTENT rule and the `Current context:` header.
+
+### Out of scope (deferred to Phase 2)
+
+The github#37 issue body lists eight design questions that Phase 1
+deliberately doesn't answer — they get scoped from a real dogfood
+session that surfaces concrete friction with one of them, not from
+speculation now:
+
+- Role filtering (every role currently sees the same blob).
+- Section markers (`## For coders`, etc.).
+- Lifecycle: re-read every turn vs. once per project. Phase 1 = once.
+- Memory-subsystem coupling. CLAUDE.md is in-repo; persistent memory
+  is out-of-repo; no merge in Phase 1.
+- Length cap / lazy reveal / compression integration.
+- Cross-project peek-tool conventions.
+- Branch-switch mid-session refresh. Project switch refreshes; mid-session
+  branch switch does not.
+- Empty-state banner / first-time setup prompt. Silent on absence per
+  Phase 1 spec.
+
 ## [1.6.12] - 2026-05-06
 
 ### Security — untrusted issue/PR/comment content delimiter wrapping (gitea#295)

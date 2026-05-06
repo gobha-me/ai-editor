@@ -13,6 +13,7 @@ import { openMarkdownModal, closeMarkdownModal } from './markdown-modal.js';
 import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry, Git } from './git.js';
 import { IgnoreManager } from './ignore.js';
+import { initProjectConventions } from './intelligence/project-conventions.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
 import { loadCodeMirror, setKeybindingMode, setInvisibleUnicodeEnabled } from './editor.js';
 import { applyVisualSettings, applyLineNumbersVisibility } from './utils/apply-visual-settings.js';
@@ -869,6 +870,7 @@ async function init() {
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
     IgnoreManager.init(); // Must run after loadSettings — reads ignorePatterns from State.settings
+    initProjectConventions(); // Subscribes to git:projectLoaded to fetch repo-root CLAUDE.md (github#37)
     applyVisualSettings();
     initPanelResize();
     

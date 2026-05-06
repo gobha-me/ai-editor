@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.11** (twelve in-track patches `1.6.0`–`1.6.11`; `1.6.6`–`1.6.11` sit untagged in main awaiting the next tag-push gate).
+> Last updated: 2026-05-06 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.6.13** (fourteen in-track patches `1.6.0`–`1.6.13`; `1.6.6`–`1.6.13` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -251,6 +251,7 @@ User-facing gaps tracked as filed issues but not yet slotted into a track. Liste
 - ~~**github#32 — `Should git_log be available to all roles?`**~~ *(✅ closed — shipped 1.6.8)*. Changed to `roles: 'all'`; read-only, no side effects.
 - ~~**github#29 — `Retrieval discoverability + edit_file fragility (post-mortem of PR #278)`**~~ *(✅ closed — shipped 1.6.11 / PR #293)*. The three sized levers landed: `find_relevant_files` indexer-readiness gate (`indexer_not_ready` envelope + soft budget), `edit_file` post-edit context widened from 3/3 to 5/5 with a `_getStaleWindow` on STALE LINE NUMBERS errors, and `MUTATING_TOOLS` cache-hit messaging. See [CHANGELOG.md](../CHANGELOG.md) §1.6.11 and [PR #293](https://github.com/gobha-me/ai-editor/pull/293).
 - ~~**github#21 — `MCP role-based tool access`**~~ *(✅ closed — shipped via PR #289)*. Three-part proposed solution landed: per-server roles in MCP settings; backward-compatible default of `'all'` when no roles set; integration through the role-based access path. Bundled into the 1.6.11 untagged main HEAD.
+- ~~**github#37 Phase 1 — `Design: project-conventions file (CLAUDE.md analogue)`**~~ *(✅ Phase 1 closed — shipped 1.6.13)*. Repo-root `CLAUDE.md` autoloads on `git:projectLoaded` into `State.projectConventions` and renders as a `<PROJECT_CONVENTIONS>` block in the editor system prompt — committed by the project maintainer and therefore trusted (NOT wrapped in `<UNTRUSTED_*>`). Eight deferred design questions (role filtering, lifecycle, memory-subsystem boundary, length cap, etc.) stay open as the natural Phase 2 entry — re-scoped from a real dogfood session, not from speculation. See [CHANGELOG.md](../CHANGELOG.md) §1.6.13.
 
 ---
 
