@@ -4,6 +4,13 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs
+
+- **docs(roadmap):** refresh `ROADMAP.md` HEAD pointer to 1.9.1 (and tagged-release pointer to 1.9.1 — the "untagged in main" backlog has cleared); fold 1.8.5, 1.9.0, 1.9.1 into the "Just shipped" row; rewrite the "Now" / "Later" rows to reflect the reopened slot and the remaining open issues (#37 Phase 2, #27, #25, #24, #18); add a new closed entry for github#33 (Phase 1 + Phase 2 both complete) and inline the eight deferred design questions under the github#37 Phase 1 closed entry. Sync `docs/ARCHITECTURE.md` "Last sync" timestamp from 1.6.11 → 1.9.1. No version bump (docs-only — see `feedback_no_bump_for_measurement_only.md`).
+- **docs(design):** archive Touch 3 design deliverable (left pane + window architecture, received 2026-05-07) at [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) — README + 2 chat transcripts + `Facelift.html` design canvas + JSX/CSS deliverables (`left-pane.jsx` / `left-pane-v2.jsx` / `window-v2.jsx` / `pr-review.jsx` / `merge-conflict.jsx` + supporting CSS). Repo dumps under `project/uploads/` and `project/app/` and the `.design-canvas.state.json` sidecar were pruned (~11MB) — bundle is 449KB on disk.
+- **docs(roadmap):** updated Decision §10 from a two-touch to a three-touch design model. Added a new "Touch 3 deliverables" subsection under §"Deferred / unscheduled" listing the four major surfaces (Window v2 / Sessions, PR Review, Merge Conflict Resolver, Rail v2 full conversion) as dominantly post-2.0, plus three small 1.x extraction candidates (A. branch switcher upgrade, B. ▶ Start prominence on issues, C. Files Now-strip) that don't depend on the larger rework. Tagged Window v2 / Sessions with its hard prerequisite: production rate-limit pacer (multiple concurrent agents saturate per-provider caps faster than single-chat). Updated the existing §"Provider rate-limit respect" line to reflect the new gating reason and point at [`evals/pacing.js`](evals/pacing.js) as the reference implementation (`RateLimiter` + per-model `RateLimiterPool`).
+- **docs(design):** added [`docs/design/OPEN-QUESTIONS.md`](docs/design/OPEN-QUESTIONS.md) — the backfeed pipeline between code sessions (Claude Code) and design sessions (claude.ai/design). Implementers append open questions when a designed surface has ambiguity the bundle doesn't resolve; Jeff routes them to claude.ai/design with screenshots; answers land in the relevant touch's `chats/` or `addendum.md`. Format spec + when-to-file gating + screenshot folder convention all included.
+
 ## [1.9.1] - 2026-05-07
 
 ### Feature — queued user input during long runs (github#33 Phase 2)

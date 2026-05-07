@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Last sync: **1.6.11** (2026-05-06). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.); this doc tracks structural shape only.
+> Last sync: **1.9.1** (2026-05-07). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.); this doc tracks structural shape only.
 
 ## Design Constraints
 
