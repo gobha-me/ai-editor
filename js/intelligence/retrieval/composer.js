@@ -362,9 +362,10 @@ function assembleBlocks(retrievedChunks, historyTurns, task) {
  * @param {HistoryTurn[]} historyTurns
  * @param {Object<StrategyName, string>} skippedReasons
  * @param {number} [paraphraseCount]
+ * @param {number} [expansionCount]
  * @returns {RetrievalResult}
  */
-function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReasons, paraphraseCount = 0) {
+function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReasons, paraphraseCount = 0, expansionCount = 0) {
     const blocks = assembleBlocks([], historyTurns, req && typeof req.task === 'string' ? req.task : '');
     const usedTokens = historyTurns.reduce((acc, t) => acc + estimateTurnTokens(t), 0);
     return {
@@ -386,6 +387,7 @@ function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReason
             warnings,
             chunker_versions: { ...CHUNKER_VERSION },
             paraphrase_count: paraphraseCount,
+            expansion_count: expansionCount,
         },
     };
 }
@@ -413,6 +415,21 @@ function emptyResult(req, retrievalBudget, warnings, historyTurns, skippedReason
  *   silently to single-variant behavior and emit a `PARAPHRASE_FAILED`
  *   warning. Absent option ⇒ no paraphrase pass; `paraphrase_count = 0`
  *   in diagnostics. See `js/intelligence/retrieval/query-paraphraser.js`.
+ * @param {{ expand: (query: string) => Promise<string[]> }} [opts.queryExpander]
+ *   1.8.1 — Optional pre-pass that emits N codebase-aware
+ *   identifier-vocabulary alternatives. Distinct from `queryParaphraser`
+ *   in two ways: the default prompt asks for *identifier* alts (not
+ *   paraphrase), and the Composer surfaces `req.query_variants =
+ *   variants` (NO `req.query` prepend). The "drop baseline from fusion"
+ *   rule from the lever-B probe — the original baseline ranking is
+ *   exactly the noisy candidate pool we're trying to escape, so it
+ *   stays out of the RRF pool. Mutually exclusive with
+ *   `queryParaphraser`: when both are supplied, the expander wins and
+ *   the paraphraser is ignored (Settings UI guards this; back-end
+ *   defends regardless). Failures degrade silently to single-variant
+ *   and emit `EXPANSION_FAILED`. Absent option ⇒ no expansion pass;
+ *   `expansion_count = 0` in diagnostics. See
+ *   `js/intelligence/retrieval/query-expander.js`.
  * @returns {Promise<RetrievalResult>}
  */
 export async function compose(req, deps, opts = {}) {
@@ -448,18 +465,52 @@ export async function compose(req, deps, opts = {}) {
         return emptyResult(req, retrievalBudget, warnings, historyPack.kept, {}, 0);
     }
 
-    // Step 0 (1.5.12) — Optional query paraphrase pre-pass. When the caller
-    // supplies a paraphraser, expand `req.query` into N alternative phrasings
-    // and surface them as `req.query_variants` so the Semantic strategy can
-    // fuse per-variant rankings via RRF. The original `req.query` is never
-    // mutated — kept for diagnostics. Failures degrade silently.
+    // Step 0 — Optional query rewrite pre-pass. Two flavors are supported:
+    //   • `opts.queryExpander` (1.8.1, lever B): emits codebase-aware
+    //     identifier-vocabulary alts. The Composer sets
+    //     `req.query_variants = variants` (NO `req.query` prepend) — the
+    //     "drop baseline from fusion" rule from the 2026-05-07 probe.
+    //   • `opts.queryParaphraser` (1.5.12): emits vocabulary-different
+    //     paraphrases. The Composer sets
+    //     `req.query_variants = [req.query, ...paraphrases]` — paraphrase
+    //     keeps the baseline in the fusion pool because paraphrases
+    //     preserve intent and the original ranking is one valid signal
+    //     among siblings.
+    //
+    // The two are mutually exclusive: when both are supplied, the expander
+    // wins (the back end is the source of truth even if a UI bug leaks
+    // both modes set). Failures in either path degrade silently to single-
+    // variant retrieval. The original `req.query` is never mutated — kept
+    // for diagnostics.
     let paraphraseCount = 0;
+    let expansionCount = 0;
     let composeReq = req;
     const rawQuery = typeof req.query === 'string' ? req.query.trim() : '';
-    if (opts.queryParaphraser
+    const useExpander = !!(opts.queryExpander
+        && typeof opts.queryExpander.expand === 'function'
+        && rawQuery.length > 0);
+    const useParaphraser = !useExpander && !!(opts.queryParaphraser
         && typeof opts.queryParaphraser.paraphrase === 'function'
-        && rawQuery.length > 0
-    ) {
+        && rawQuery.length > 0);
+
+    if (useExpander) {
+        let variants = /** @type {string[]} */ ([]);
+        try {
+            variants = await /** @type {any} */ (opts.queryExpander).expand(req.query);
+        } catch (_err) {
+            warnings.push({
+                level: 'info',
+                code: 'EXPANSION_FAILED',
+                detail: 'queryExpander threw; degrading to single-variant retrieval',
+            });
+            variants = [];
+        }
+        if (Array.isArray(variants) && variants.length > 0) {
+            // Drop baseline from fusion: variants only.
+            composeReq = { ...req, query_variants: variants.slice() };
+            expansionCount = variants.length;
+        }
+    } else if (useParaphraser) {
         let variants = /** @type {string[]} */ ([]);
         try {
             variants = await opts.queryParaphraser.paraphrase(req.query);
@@ -486,7 +537,7 @@ export async function compose(req, deps, opts = {}) {
 
     if (routed.viable.length === 0) {
         // No viable + no Semantic fallback: still package history + task.
-        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, strategiesSkipped, paraphraseCount);
+        return emptyResult(req, retrievalBudget, warnings, historyPack.kept, strategiesSkipped, paraphraseCount, expansionCount);
     }
 
     /** @type {Object<StrategyName, number>} */
@@ -574,6 +625,7 @@ export async function compose(req, deps, opts = {}) {
             warnings,
             chunker_versions: { ...CHUNKER_VERSION },
             paraphrase_count: paraphraseCount,
+            expansion_count: expansionCount,
         },
     };
 }

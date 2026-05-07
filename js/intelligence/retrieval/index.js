@@ -214,6 +214,13 @@ export {
     DEFAULT_PARAPHRASE_ROUNDS,
     DEFAULT_PARAPHRASE_TEMPERATURE,
 } from './query-paraphraser.js';
+export {
+    createQueryExpander,
+    buildExpanderFromSettings,
+    DEFAULT_EXPAND_PROMPT,
+    DEFAULT_EXPAND_ROUNDS,
+    DEFAULT_EXPAND_TEMPERATURE,
+} from './query-expander.js';
 // `RetrievalManager` is the production singleton at `./manager.js`. It
 // imports browser-bound modules (`core.js` / `git.js` /
 // `embeddings-client.js` / `llm/api.js`) and is intentionally **not**

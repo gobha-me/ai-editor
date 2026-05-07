@@ -37,6 +37,10 @@ export const RETRIEVAL_DEFAULTS = Object.freeze({
     paraphraseModelId: '',
     paraphraseRounds: 2,
     paraphraseTemperature: 0,
+    crossFileExpansionMode: 'off',
+    crossFileExpanderModelId: '',
+    crossFileExpanderRounds: 3,
+    crossFileExpanderTemperature: 0,
 });
 
 const VALID_MODES = new Set(['off', 'primary', 'utility']);
@@ -51,6 +55,14 @@ function _read() {
         : RETRIEVAL_DEFAULTS.paraphraseModelId;
     const rounds = Number(cfg.paraphraseRounds);
     const temp = Number(cfg.paraphraseTemperature);
+    const expMode = VALID_MODES.has(cfg.crossFileExpansionMode)
+        ? cfg.crossFileExpansionMode
+        : RETRIEVAL_DEFAULTS.crossFileExpansionMode;
+    const expModelId = typeof cfg.crossFileExpanderModelId === 'string'
+        ? cfg.crossFileExpanderModelId
+        : RETRIEVAL_DEFAULTS.crossFileExpanderModelId;
+    const expRounds = Number(cfg.crossFileExpanderRounds);
+    const expTemp = Number(cfg.crossFileExpanderTemperature);
     return {
         paraphraseMode: mode,
         paraphraseModelId: modelId,
@@ -60,6 +72,14 @@ function _read() {
         paraphraseTemperature: Number.isFinite(temp) && temp >= 0 && temp <= 1
             ? temp
             : RETRIEVAL_DEFAULTS.paraphraseTemperature,
+        crossFileExpansionMode: expMode,
+        crossFileExpanderModelId: expModelId,
+        crossFileExpanderRounds: Number.isInteger(expRounds) && expRounds >= 1 && expRounds <= 5
+            ? expRounds
+            : RETRIEVAL_DEFAULTS.crossFileExpanderRounds,
+        crossFileExpanderTemperature: Number.isFinite(expTemp) && expTemp >= 0 && expTemp <= 1
+            ? expTemp
+            : RETRIEVAL_DEFAULTS.crossFileExpanderTemperature,
     };
 }
 
@@ -100,29 +120,57 @@ function _onChange(ev) {
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
     const key = target.dataset.retrievalKey;
     if (!key) return;
-    let value;
+    /** @type {Object<string, any>} */
+    let patch = {};
     if (key === 'paraphraseMode') {
-        value = VALID_MODES.has(target.value)
+        const value = VALID_MODES.has(target.value)
             ? target.value
             : RETRIEVAL_DEFAULTS.paraphraseMode;
+        patch.paraphraseMode = value;
+        // 1.8.1 — paraphrase + cross-file expansion are mutually exclusive
+        // levers; UI guards by snapping the *other* mode to 'off' when this
+        // one moves off 'off'. Back-end (`composer.js`) defends regardless,
+        // but keeping the UI consistent prevents the user from leaving both
+        // visibly enabled and getting silent expander-wins behavior.
+        if (value !== 'off') patch.crossFileExpansionMode = 'off';
     } else if (key === 'paraphraseModelId') {
-        value = target.value.trim();
+        patch.paraphraseModelId = target.value.trim();
     } else if (key === 'paraphraseRounds') {
         let v = Math.floor(Number(target.value));
         if (!Number.isFinite(v) || v < 1) v = RETRIEVAL_DEFAULTS.paraphraseRounds;
         if (v > 3) v = 3;
         target.value = String(v);
-        value = v;
+        patch.paraphraseRounds = v;
     } else if (key === 'paraphraseTemperature') {
         let v = Number(target.value);
         if (!Number.isFinite(v) || v < 0) v = RETRIEVAL_DEFAULTS.paraphraseTemperature;
         if (v > 1) v = 1;
         target.value = String(v);
-        value = v;
+        patch.paraphraseTemperature = v;
+    } else if (key === 'crossFileExpansionMode') {
+        const value = VALID_MODES.has(target.value)
+            ? target.value
+            : RETRIEVAL_DEFAULTS.crossFileExpansionMode;
+        patch.crossFileExpansionMode = value;
+        if (value !== 'off') patch.paraphraseMode = 'off';
+    } else if (key === 'crossFileExpanderModelId') {
+        patch.crossFileExpanderModelId = target.value.trim();
+    } else if (key === 'crossFileExpanderRounds') {
+        let v = Math.floor(Number(target.value));
+        if (!Number.isFinite(v) || v < 1) v = RETRIEVAL_DEFAULTS.crossFileExpanderRounds;
+        if (v > 5) v = 5;
+        target.value = String(v);
+        patch.crossFileExpanderRounds = v;
+    } else if (key === 'crossFileExpanderTemperature') {
+        let v = Number(target.value);
+        if (!Number.isFinite(v) || v < 0) v = RETRIEVAL_DEFAULTS.crossFileExpanderTemperature;
+        if (v > 1) v = 1;
+        target.value = String(v);
+        patch.crossFileExpanderTemperature = v;
     } else {
         return;
     }
-    _persist({ [key]: value });
+    _persist(patch);
     render();
 }
 
@@ -136,15 +184,24 @@ export function render() {
     if (!root) return;
     const c = _read();
     const utilityHidden = c.paraphraseMode !== 'utility' ? 'hidden' : '';
+    const expansionUtilityHidden = c.crossFileExpansionMode !== 'utility' ? 'hidden' : '';
+    const paraphraseActive = c.paraphraseMode !== 'off';
+    const expansionActive = c.crossFileExpansionMode !== 'off';
     root.innerHTML = `
       <h3>Retrieval</h3>
       <p class="settings-help">
-        Configure the query-paraphrase pre-pass for the new retrieval pipeline.
-        When enabled, your search query is rephrased into a few alternative
-        wordings before embedding; the strategy fuses per-variant rankings
-        via reciprocal rank fusion (RRF) and returns a single ranked list.
-        Paraphrasing adds one chat-LLM call per <code>find_relevant_files</code>
-        invocation — cached per query within a session. Disabled by default.
+        Two query-rewrite pre-passes for <code>find_relevant_files</code>.
+        Each one adds one chat-LLM call per retrieval, cached per query.
+        Both default to <strong>off</strong>; pick at most one — they're
+        mutually exclusive levers solving the same problem.
+      </p>
+
+      <h4 style="margin-top: 1.2rem;">Query paraphrase</h4>
+      <p class="settings-help">
+        Vocabulary-different rewordings of your query that preserve intent.
+        The Composer fuses the original ranking with paraphrase rankings
+        via reciprocal rank fusion (RRF). Useful when natural-language
+        synonym variation (e.g. "auth" vs "authentication") matters.
       </p>
 
       <div class="form-group" data-setting-key="retrieval.paraphraseMode">
@@ -169,6 +226,11 @@ export function render() {
             <span><strong>Use utility model</strong> — separate, typically smaller/cheaper model.</span>
           </label>
         </div>
+        ${expansionActive ? `<small style="color: var(--accent, #888); display: block; margin-top: 0.4rem;">
+          Cross-file expansion is currently active — switching paraphrase off
+          will keep that mode. Switching paraphrase on will turn expansion off
+          (mutually exclusive).
+        </small>` : ''}
       </div>
 
       <div class="form-group" data-setting-key="retrieval.paraphraseModelId" ${utilityHidden}>
@@ -206,6 +268,80 @@ export function render() {
           <strong>${RETRIEVAL_DEFAULTS.paraphraseTemperature}</strong>
           (deterministic — required for reproducible measurement runs).
           Raise to encourage more diverse phrasings.
+        </small>
+      </div>
+
+      <h4 style="margin-top: 1.6rem;">Cross-file query expansion (lever B)</h4>
+      <p class="settings-help">
+        Codebase-aware identifier-vocabulary alternatives — the LLM emits
+        the symbol names an engineer would actually type into a code-search
+        box (<code>register_capability</code>, <code>RbacContext</code>).
+        Composer drops the baseline ranking from the fusion (the
+        "drop-baseline-from-fusion" rule from the
+        <a href="../docs/ROADMAP.md">2026-05-07 lever-B probe</a>) and RRF-fuses
+        only the alts. Best on natural-language queries that don't share
+        vocabulary with the codebase (e.g. "how does the request pipeline
+        enforce role-based access control?" vs. <code>RbacFilter</code>).
+      </p>
+
+      <div class="form-group" data-setting-key="retrieval.crossFileExpansionMode">
+        <label>Cross-file expansion mode</label>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.4rem;">
+          <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: normal;">
+            <input type="radio" name="crossFileExpansionMode" value="off"
+                   data-retrieval-key="crossFileExpansionMode"
+                   ${c.crossFileExpansionMode === 'off' ? 'checked' : ''}>
+            <span><strong>Off</strong> — no expansion; original query only (default).</span>
+          </label>
+          <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: normal;">
+            <input type="radio" name="crossFileExpansionMode" value="primary"
+                   data-retrieval-key="crossFileExpansionMode"
+                   ${c.crossFileExpansionMode === 'primary' ? 'checked' : ''}>
+            <span><strong>Use primary chat model</strong> — reuses the model in <em>LLM</em> tab.</span>
+          </label>
+          <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: normal;">
+            <input type="radio" name="crossFileExpansionMode" value="utility"
+                   data-retrieval-key="crossFileExpansionMode"
+                   ${c.crossFileExpansionMode === 'utility' ? 'checked' : ''}>
+            <span><strong>Use utility model</strong> — separate, typically smaller/cheaper model.</span>
+          </label>
+        </div>
+        ${paraphraseActive ? `<small style="color: var(--accent, #888); display: block; margin-top: 0.4rem;">
+          Paraphrase is currently active — switching expansion on will turn
+          paraphrase off (mutually exclusive).
+        </small>` : ''}
+      </div>
+
+      <div class="form-group" data-setting-key="retrieval.crossFileExpanderModelId" ${expansionUtilityHidden}>
+        <label for="retrievalExpanderModelId">Utility model id</label>
+        <input id="retrievalExpanderModelId" type="text"
+               data-retrieval-key="crossFileExpanderModelId"
+               value="${c.crossFileExpanderModelId.replace(/"/g, '&quot;')}"
+               placeholder="e.g. claude-haiku-4-5-20251001">
+        <small>
+          Provider must be the same as your primary chat model.
+        </small>
+      </div>
+
+      <div class="form-group" data-setting-key="retrieval.crossFileExpanderRounds">
+        <label for="retrievalExpanderRounds">Alts per query</label>
+        <input id="retrievalExpanderRounds" type="number" min="1" max="5" step="1"
+               data-retrieval-key="crossFileExpanderRounds" value="${c.crossFileExpanderRounds}">
+        <small>
+          How many identifier-vocabulary alternatives to request. Default
+          <strong>${RETRIEVAL_DEFAULTS.crossFileExpanderRounds}</strong>
+          (mirrors the lever-B probe). Range 1–5.
+        </small>
+      </div>
+
+      <div class="form-group" data-setting-key="retrieval.crossFileExpanderTemperature">
+        <label for="retrievalExpanderTemperature">Expansion temperature</label>
+        <input id="retrievalExpanderTemperature" type="number" min="0" max="1" step="0.05"
+               data-retrieval-key="crossFileExpanderTemperature" value="${c.crossFileExpanderTemperature}">
+        <small>
+          LLM sampling temperature for expansion alts. Default
+          <strong>${RETRIEVAL_DEFAULTS.crossFileExpanderTemperature}</strong>
+          (deterministic). Raise to encourage broader identifier coverage.
         </small>
       </div>
     `;

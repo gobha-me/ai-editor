@@ -4,6 +4,163 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-05-08
+
+### Feature — Cross-file query expansion (AST chunker Phase 2 lever B)
+
+Lever B from `docs/ROADMAP.md` ships as the production retrieval lever.
+A new pre-Composer pass takes a natural-language query and asks an LLM
+to emit N codebase-aware *identifier-vocabulary* alts (the symbol names
+an engineer would type into a code-search box). The Composer fuses the
+alt rankings via reciprocal-rank-fusion and **excludes the baseline
+ranking from the fusion pool** — the "drop-baseline-from-fusion" rule
+surfaced by the 2026-05-07 probe (originally accumulated in
+`[Unreleased]` and rolled forward into this release).
+
+**Why now.** The probe (also in this release, see below) closed the
+lever-A vs lever-B decision: a sufficiently codebase-aware query rewrite
+lifts the two stuck-zero Plinth fixtures (`plinth-capability-registry-api`,
+`plinth-rbac-enforcement-filter`) off zero where every prior lever
+(chunker, path weighting, paraphrase) failed. The remaining open
+question — *which* fusion strategy to ship — was answered by the
+`lever-B-rrf-alts-only` measurement bundled with this PR. Result:
+RRF-over-alts-only matches best-of-alts at the Plinth aggregate
+(meanHit@5 1.000 / meanRecall@5 0.467, lifting both stuck-zero fixtures
+off zero) with no Armature regression, and it's the simpler shape — no
+oracle needed, degenerates to single-alt cleanly when the rewriter only
+emits one alt.
+
+**Why not just bundle into paraphrase.** The 1.5.12 paraphraser
+preserves intent with vocabulary swaps; the expander asks for *symbol
+names*, which is a categorically different request. A combined module
+would have invited a combined setting and blurred the divergence in
+review. Two narrow modules with parallel DI shapes win.
+
+**What lands.**
+
+- New module
+  [`js/intelligence/retrieval/query-expander.js`](js/intelligence/retrieval/query-expander.js)
+  — `createQueryExpander({ chatFn, modelId, rounds?, temperature?, prompt?, cache? })`
+  + `buildExpanderFromSettings(settings, { chatFn, cache })`. Mirrors the
+  [`query-paraphraser.js`](js/intelligence/retrieval/query-paraphraser.js)
+  DI shape exactly: pure function seam, FNV-1a cache key,
+  per-instance in-memory cache by default, async-capable injected cache
+  for production. Failures (`chatFn` throws, returns non-string, returns
+  parser-rejecting content) degrade to `[]` — Composer falls back to
+  single-variant baseline.
+
+  **Locked default prompt** (CHANGELOG-recorded; downstream patches must
+  re-measure on change):
+
+  > "You are a code-search assistant. Given a user's natural-language
+  > code-search query, produce N alternative search queries that an
+  > engineer would type into a code-search box for the same goal —
+  > favoring concrete identifier vocabulary (function names, class
+  > names, type names, common API verbs) over natural language. Output
+  > one alternative per line, no numbering, no commentary. Do not
+  > invent identifiers not implied by the query."
+
+  Default rounds = 3 (mirrors the probe; range 1–5).
+  Default temperature = 0 (deterministic).
+
+- Composer integration in
+  [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js)
+  — new `opts.queryExpander` accepted alongside `opts.queryParaphraser`.
+  Mutually exclusive: when both are wired the Composer prefers the
+  expander (Settings UI guards but back-end is the source of truth).
+  Critical wiring divergence: the expander surfaces
+  `req.query_variants = variants` (NO `req.query` prepend), where the
+  paraphraser surfaces `req.query_variants = [req.query, ...paraphrases]`.
+  The Semantic strategy's existing `multiVariantPath` (1.5.12) handles
+  both shapes — BM25 still scores the original query tokens regardless
+  via `originalQueryTokens`.
+
+  Diagnostics gain `expansion_count` (parallel to `paraphrase_count`).
+  Failure path emits an `EXPANSION_FAILED` info-level warning. Six new
+  composer tests in
+  [`tests/test-retrieval-composer.mjs`](tests/test-retrieval-composer.mjs)
+  pin the drop-baseline rule, the mutual-exclusion priority, the
+  empty-query short-circuit, the silent-degrade behavior, and
+  diagnostics threading. All 48 cases pass.
+
+- Production wire-up in
+  [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+  — `buildExpanderFromSettings(State.settings, { chatFn, cache })` in
+  `findRelevantFiles`, parallel to the paraphraser. Backed by an
+  IDB cache (
+  [`js/intelligence/retrieval/expander-cache-idb.js`](js/intelligence/retrieval/expander-cache-idb.js))
+  with the same 7-day TTL and `retrieval-expansion-cache::*` keyspace
+  (separate from paraphrase to avoid cross-shape contamination). The
+  cost-tracker emits an `expansion` row (replacing `paraphrase`) on
+  turns where the expander ran, so the cost dashboard shows lever-B
+  spend distinctly from paraphrase spend.
+
+- New settings in `js/core.js`: `retrieval.crossFileExpansionMode ∈
+  {'off','primary','utility'}` (default `'off'`), `retrieval.crossFileExpanderModelId`,
+  `retrieval.crossFileExpanderRounds` (default 3, range 1–5),
+  `retrieval.crossFileExpanderTemperature` (default 0, range 0–1).
+
+- Settings → Retrieval tab
+  ([`js/settings/retrieval-tab.js`](js/settings/retrieval-tab.js))
+  gains a parallel "Cross-file query expansion (lever B)" block beneath
+  the existing paraphrase block. Mode picker, conditional utility model
+  id, rounds + temperature inputs. **Mutual-exclusion guard:** when the
+  user enables either mode (paraphrase OR expansion), the other mode
+  snaps to `'off'`. Both blocks render an inline note when the *other*
+  lever is active, so the toggle behavior is legible before the user
+  clicks.
+
+- `tests/test-retrieval-query-expander.mjs` — 42 cases mirroring the
+  paraphraser suite: factory shape, argument validation, locked-prompt
+  invariants, default values, empty/whitespace short-circuit, parsing
+  (numbering / bullets / blank lines / echo filter / truncation),
+  failure modes (`throws`, empty string, non-string, only-original
+  response), cache hit/miss/model-swap/prompt-swap/defensive-copy,
+  chatFn argument threading, and `buildExpanderFromSettings` mode
+  dispatch including all five reject-paths (`'off'` returns null,
+  `'utility'` with empty model id, `'primary'` with empty `llmModel`,
+  null/undefined settings, missing chatFn, unknown mode value). All
+  pass under `node --test`.
+
+### Measurement — `lever-B-rrf-alts-only` sweep
+
+Bundled with this release because the measurement directly determines
+the production default. Without it the option-1-vs-option-2 decision in
+the probe write-up rests on a logical argument alone, which violates
+Decision §8 ("Measurement before scale").
+
+`tests/run-polyglot-benchmark.mjs` gains a new `mode: 'rrf-alts-only'`
+branch that RRF-fuses the alt rankings only (excluding the baseline) —
+modeling the production Composer path that omits `req.query` from
+`req.query_variants` when the expander is wired. New `RUN_CONFIG`
+entry: `lever-B-rrf-alts-only`.
+
+| Scope | baseline | tests-prefix-0.5 | best-of | rrf-fused | **rrf-alts-only** |
+|---|---:|---:|---:|---:|---:|
+| Overall meanHit@5 / R@5 | 0.900 / 0.592 | 0.900 / 0.642 | 1.000 / 0.675 | 0.950 / 0.625 | **1.000 / 0.675** |
+| Armature | 1.000 / 0.883 | 1.000 / 0.883 | 1.000 / 0.883 | 1.000 / 0.883 | **1.000 / 0.883** |
+| Plinth | 0.800 / 0.300 | 0.800 / 0.400 | 1.000 / 0.467 | 0.900 / 0.367 | **1.000 / 0.467** |
+
+Stuck-zero fixture detail (Plinth):
+
+| Fixture | baseline | best-of | rrf-fused | **rrf-alts-only** |
+|---|---:|---:|---:|---:|
+| `plinth-capability-registry-api` | 0.00 ❌ | 1.00 ✅ | 0.00 ❌ | **1.00 ✅** |
+| `plinth-rbac-enforcement-filter`  | 0.00 ❌ | 0.67 ✅ | 0.67 ✅ | **0.67 ✅** |
+
+**Finding.** rrf-alts-only matches best-of at the aggregate and lifts
+*both* stuck-zero fixtures off zero — same outcome as best-of without
+needing an oracle to pick the best alt per fixture. Confirms the probe's
+logical argument: the baseline ranking *is* the noisy candidate pool
+we're trying to escape, and excluding it from the fusion is the right
+production default. Option 1 ships.
+
+**Lever A stays parked.** The candidate-pool gap is rewriteable, not
+structural. Web-tree-sitter's parent-class-signature propagation isn't
+justified by current measurement; lever A becomes a candidate only if a
+future fixture surfaces a chunk-content gap that no rewrite can paper
+over.
+
 ### Measurement — AST chunker Phase 2 lever B feasibility probe (query rewriting)
 
 The 1.7.0 AST chunker lifted Plinth/C++ Hit@5 to 0.800 but two fixtures

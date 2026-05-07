@@ -242,16 +242,33 @@ const State = {
         maxRelevantFiles: 5,       // Max files to return for context queries
         maxIndexFiles: 200,        // Hard cap on files indexed in a project (1.1.2.x will measure & re-tune)
 
-        // Retrieval (1.5.12) — query paraphrasing + future retrieval knobs.
-        // The Composer's `opts.queryParaphraser` is built from these via
-        // `buildParaphraserFromSettings` in `js/intelligence/retrieval/query-paraphraser.js`.
-        // Default mode is 'off' so users upgrading to 1.5.12 see zero
-        // behavior change until they explicitly opt in.
+        // Retrieval (1.5.12 paraphrase + 1.8.1 cross-file expansion) — query
+        // rewriting pre-passes plus future retrieval knobs.
+        //
+        // Two mutually exclusive levers:
+        //   • `paraphraseMode` (1.5.12): vocabulary-different rewordings via
+        //     `buildParaphraserFromSettings` in
+        //     `js/intelligence/retrieval/query-paraphraser.js`. Composer
+        //     fuses `[req.query, ...paraphrases]` (baseline kept).
+        //   • `crossFileExpansionMode` (1.8.1, lever B): codebase-aware
+        //     identifier-vocabulary alts via `buildExpanderFromSettings` in
+        //     `js/intelligence/retrieval/query-expander.js`. Composer fuses
+        //     `[...alts]` only (drop-baseline-from-fusion rule from the
+        //     2026-05-07 probe; baseline is the noisy ranking we're
+        //     escaping). When both modes are non-`'off'`, the expander wins
+        //     (back-end source of truth; Settings → Retrieval UI guards the
+        //     usual case).
+        //
+        // Both default to 'off' so upgrade is a no-op until explicit opt-in.
         retrieval: {
-            paraphraseMode: 'off',         // 'off' | 'primary' | 'utility'
-            paraphraseModelId: '',         // Used when paraphraseMode === 'utility'; same provider as primary chat model
-            paraphraseRounds: 2,           // 1–3
-            paraphraseTemperature: 0,      // 0 = deterministic; required for reproducible measurement runs
+            paraphraseMode: 'off',                  // 'off' | 'primary' | 'utility'
+            paraphraseModelId: '',                  // Used when paraphraseMode === 'utility'
+            paraphraseRounds: 2,                    // 1–3
+            paraphraseTemperature: 0,               // 0 = deterministic
+            crossFileExpansionMode: 'off',          // 'off' | 'primary' | 'utility'
+            crossFileExpanderModelId: '',           // Used when crossFileExpansionMode === 'utility'
+            crossFileExpanderRounds: 3,             // 1–5; default 3 mirrors the lever-B probe
+            crossFileExpanderTemperature: 0,        // 0 = deterministic
         },
         
         // LLM Configuration

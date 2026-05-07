@@ -769,3 +769,107 @@ test('compose: paraphrase_count surfaces correctly in diagnostics for length-1 p
     assert.equal(r.diagnostics.paraphrase_count, 1);
     assert.deepEqual(sem.calls[0].query_variants, ['authentication middleware', 'only one']);
 });
+
+/* ---------------- Cross-file query expansion (1.8.1, lever B) ---------------- */
+
+test('compose: expander variants replace req.query (drop-baseline-from-fusion rule)', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const expander = {
+        expand: async () => ['register_capability', 'RegisterResult', 'CapabilityError'],
+    };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryExpander: expander,
+    });
+    assert.equal(r.diagnostics.expansion_count, 3);
+    assert.equal(r.diagnostics.paraphrase_count, 0);
+    // Critical: variants are alts only, NO `req.query` prepend. This is the
+    // production option-1 rule from the lever-B probe.
+    assert.deepEqual(sem.calls[0].query_variants, [
+        'register_capability',
+        'RegisterResult',
+        'CapabilityError',
+    ]);
+    // Original `req.query` is preserved unchanged on the request object.
+    assert.equal(sem.calls[0].query, 'authentication middleware');
+});
+
+test('compose: expander returning [] leaves req unchanged + expansion_count = 0', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const expander = { expand: async () => [] };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryExpander: expander,
+    });
+    assert.equal(r.diagnostics.expansion_count, 0);
+    assert.equal(sem.calls[0].query_variants, undefined);
+});
+
+test('compose: expander throwing emits EXPANSION_FAILED warning + degrades silently', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const expander = {
+        expand: async () => { throw new Error('LLM down'); },
+    };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryExpander: expander,
+    });
+    assert.equal(r.diagnostics.expansion_count, 0);
+    assert.equal(sem.calls[0].query_variants, undefined);
+    const warned = r.diagnostics.warnings.find((w) => w.code === 'EXPANSION_FAILED');
+    assert.ok(warned, 'expected EXPANSION_FAILED warning when expander throws');
+});
+
+test('compose: empty req.query skips expander entirely', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    /** @type {{expand: (q: string) => Promise<string[]>, called: boolean}} */
+    const expander = {
+        called: false,
+        expand: async (_q) => {
+            expander.called = true;
+            return ['x'];
+        },
+    };
+    await compose(baseReq({ query: '' }), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryExpander: expander,
+    });
+    assert.equal(expander.called, false);
+});
+
+test('compose: when both expander + paraphraser supplied, expander wins', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    /** @type {{expand: (q: string) => Promise<string[]>, called: boolean}} */
+    const expander = {
+        called: false,
+        expand: async () => {
+            expander.called = true;
+            return ['expanded_alt'];
+        },
+    };
+    /** @type {{paraphrase: (q: string) => Promise<string[]>, called: boolean}} */
+    const paraphraser = {
+        called: false,
+        paraphrase: async () => {
+            paraphraser.called = true;
+            return ['paraphrased'];
+        },
+    };
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter }, {
+        queryExpander: expander,
+        queryParaphraser: paraphraser,
+    });
+    assert.equal(expander.called, true);
+    assert.equal(paraphraser.called, false, 'paraphraser must not run when expander is wired');
+    assert.equal(r.diagnostics.expansion_count, 1);
+    assert.equal(r.diagnostics.paraphrase_count, 0);
+    assert.deepEqual(sem.calls[0].query_variants, ['expanded_alt']);
+});
+
+test('compose: with no expander supplied, expansion_count is always 0', async () => {
+    const c = makeChunk('one', { tokens: 100, retrieved_by: 'semantic' });
+    const sem = spyStrategy('semantic', 0.9, [c]);
+    const r = await compose(baseReq(), { strategies: [sem], getChunkByID: noPinsGetter });
+    assert.equal(r.diagnostics.expansion_count, 0);
+});

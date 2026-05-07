@@ -10,8 +10,9 @@
  * Built on the shipped 1.4.x–1.5.x DI factories: `createInMemoryChunkStore`
  * (1.4.20), `createProductionIngestWalker` (1.5.1), `createSemanticStrategy`
  * + `createStructuralStrategy` + `createThematicStrategy`, `compose`
- * (1.4.17 + 1.5.12 paraphrase opt), `buildBM25Index` (1.5.11),
- * `buildParaphraserFromSettings` (1.5.12). Reuses the
+ * (1.4.17 + 1.5.12 paraphrase opt + 1.8.1 lever-B expansion opt),
+ * `buildBM25Index` (1.5.11), `buildParaphraserFromSettings` (1.5.12), and
+ * `buildExpanderFromSettings` (1.8.1). Reuses the
  * `defaultComposeFiltersResolver` + `DEFAULT_SCORE_WEIGHTS` from the
  * canonical 1.5.11 T7 measurement so live `find_relevant_files` calls run
  * the same recipe as the gate-clearing run.
@@ -35,6 +36,8 @@ import { compose } from './composer.js';
 import { buildBM25Index } from './bm25-indexer.js';
 import { buildParaphraserFromSettings } from './query-paraphraser.js';
 import { createParaphraseIdbCache } from './paraphrase-cache-idb.js';
+import { buildExpanderFromSettings } from './query-expander.js';
+import { createExpanderIdbCache } from './expander-cache-idb.js';
 import { defaultComposeFiltersResolver } from './measurement.js';
 import { LRU } from './lru.js';
 import {
@@ -188,6 +191,23 @@ function _getParaphraseIdbCache() {
         _paraphraseIdbCache = createParaphraseIdbCache();
     }
     return _paraphraseIdbCache;
+}
+
+/**
+ * Lazy-initialised IDB-backed expansion-cache instance (1.8.1).
+ * Constructed on first `findRelevantFiles` call so node tests / cold
+ * starts pay nothing. Cleared in the same `_resetForTests` path as the
+ * paraphrase cache.
+ *
+ * @type {ReturnType<typeof createExpanderIdbCache>|undefined}
+ */
+let _expanderIdbCache;
+
+function _getExpanderIdbCache() {
+    if (_expanderIdbCache === undefined) {
+        _expanderIdbCache = createExpanderIdbCache();
+    }
+    return _expanderIdbCache;
 }
 
 // ============================================
@@ -638,10 +658,21 @@ async function findRelevantFiles(query, topK = 5) {
             // when IndexedDB isn't available (Node tests).
             cache: _getParaphraseIdbCache() ?? undefined,
         });
+        // 1.8.1 — Cross-file query expansion (lever B). Mutually exclusive
+        // with the paraphraser at the back-end level: the Composer ignores
+        // the paraphraser when an expander is wired (so the UI guard is
+        // belt-and-braces, not load-bearing). Same chatFn as paraphrase —
+        // both pre-passes route LLM calls through `LLM.chat` so cost
+        // accounting works through the existing session-cost delta.
+        const expander = buildExpanderFromSettings(State.settings, {
+            chatFn: (args) => LLM.chat(args),
+            cache: _getExpanderIdbCache() ?? undefined,
+        });
 
         /** @type {any} */
         const composeOpts = {};
-        if (paraphraser) composeOpts.queryParaphraser = paraphraser;
+        if (expander) composeOpts.queryExpander = expander;
+        else if (paraphraser) composeOpts.queryParaphraser = paraphraser;
 
         // 1.6.8 — snapshot session totals before compose() so a delta
         // captures any LLM tokens spent inside retrieval (paraphrase chatFn
@@ -664,7 +695,7 @@ async function findRelevantFiles(query, topK = 5) {
             fingerprint: _indexFingerprint,
         });
 
-        _emitRetrievalTurnStats(result, tokensBefore, !!paraphraser);
+        _emitRetrievalTurnStats(result, tokensBefore, !!paraphraser, !!expander);
 
         _trackQuery();
 
@@ -690,8 +721,9 @@ async function findRelevantFiles(query, topK = 5) {
  * @param {any} composeResult        Return value of `compose()`.
  * @param {number} tokensBefore      `State.sessionCost.totalInputTokens + totalOutputTokens` snapshot taken before `compose()`.
  * @param {boolean} hasParaphraser   True when the paraphraser wired in this call. Used to decide whether to record a `paraphrase` row.
+ * @param {boolean} [hasExpander]    1.8.1 — True when the cross-file expander was wired in this call. When present, the paraphrase attribution slot is replaced by an `expansion` slot (the two are mutually exclusive at the back end so only one ever fires per turn).
  */
-function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser) {
+function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser, hasExpander = false) {
     const convId = ConversationManager.getActiveId();
     if (!convId) return;
 
@@ -706,20 +738,28 @@ function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser) {
 
     const sc = State.sessionCost || {};
     const tokensAfter = (sc.totalInputTokens || 0) + (sc.totalOutputTokens || 0);
-    const paraphraseTokens = Math.max(tokensAfter - tokensBefore, 0);
+    const prePassTokens = Math.max(tokensAfter - tokensBefore, 0);
 
-    if (hasParaphraser) {
+    if (hasExpander) {
+        // 1.8.1 — emit an `expansion` row when the cross-file expander was
+        // wired (mutually exclusive with paraphrase per the Composer's
+        // priority rule). Always emit even on zero tokens (cache hit) so
+        // the dashboard reflects that expansion was active for this turn.
+        const slot = strategyStats.expansion || { hits: 0, tokens: 0 };
+        slot.tokens = prePassTokens;
+        strategyStats.expansion = slot;
+    } else if (hasParaphraser) {
         // Always emit a `paraphrase` row when the paraphraser was wired —
         // even when tokens are 0 (cache hit) — so the dashboard reflects
         // that paraphrasing was active for this turn.
         const slot = strategyStats.paraphrase || { hits: 0, tokens: 0 };
-        slot.tokens = paraphraseTokens;
+        slot.tokens = prePassTokens;
         strategyStats.paraphrase = slot;
-    } else if (paraphraseTokens > 0) {
+    } else if (prePassTokens > 0) {
         // Defensive: if a future code path spends tokens during retrieval
-        // without a paraphraser instance, attribute them under `retrieval`
-        // so they don't vanish silently.
-        strategyStats.retrieval = { hits: 0, tokens: paraphraseTokens };
+        // without a paraphraser/expander instance, attribute them under
+        // `retrieval` so they don't vanish silently.
+        strategyStats.retrieval = { hits: 0, tokens: prePassTokens };
     }
 
     if (Object.keys(strategyStats).length === 0) return;
@@ -1020,6 +1060,7 @@ export const RetrievalManager = {
         _queryCacheHits = 0;
         _queryCacheMisses = 0;
         _paraphraseIdbCache = undefined;
+        _expanderIdbCache = undefined;
     },
 };
 

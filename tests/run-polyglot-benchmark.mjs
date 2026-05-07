@@ -343,7 +343,14 @@ function rrfFusePathRankings(rankings, topK) {
  */
 
 /**
- * @typedef {'baseline' | 'best-of' | 'rrf'} RunMode
+ * @typedef {'baseline' | 'best-of' | 'rrf' | 'rrf-alts-only'} RunMode
+ *
+ * `rrf-alts-only` (1.8.1): RRF over alt rankings only, baseline excluded.
+ * Models the lever-B production option-1 default — the LLM rewrites the
+ * baseline into N alts and the fusion runs over the alts; the baseline
+ * itself is treated solely as the rewriter's input. Distinct from `rrf`
+ * (which RRFs `[baseline, ...alts]` uniformly, the worst sibling per the
+ * lever-B probe).
  */
 
 /**
@@ -415,6 +422,18 @@ function runFixtures(idx, fixtures, cfg) {
                 }
                 returnedPaths = best.detail.returnedPaths;
                 topScore = best.topScore;
+            } else if (mode === 'rrf-alts-only') {
+                // 1.8.1 — production option 1: drop the baseline ranking
+                // before fusion. perQuery[0] is the baseline (queries[0] =
+                // f.query); skip it and RRF over the alt rankings only.
+                // When only one alt exists this degenerates to that alt's
+                // top-5 (a single ranking RRF'd against itself preserves
+                // order). Models the production Composer path that omits
+                // `req.query` from `req.query_variants` when the expander
+                // is wired (`composer.js` lever-B branch).
+                const altRankings = perQuery.slice(1).map((p) => p.fullPaths);
+                returnedPaths = rrfFusePathRankings(altRankings, TOP_K);
+                topScore = perQuery.slice(1).reduce((m, p) => Math.max(m, p.topScore), 0);
             } else { // 'rrf'
                 returnedPaths = rrfFusePathRankings(perQuery.map((p) => p.fullPaths), TOP_K);
                 // No native fused score; surface the max per-query topScore
@@ -564,6 +583,7 @@ function renderMarkdown(indexes, configRuns) {
     const baselineRun = configRuns.find((c) => c.name === 'baseline');
     const bestOfRun = configRuns.find((c) => c.name === 'lever-B-best-of');
     const rrfRun = configRuns.find((c) => c.name === 'lever-B-rrf-fused');
+    const rrfAltsOnlyRun = configRuns.find((c) => c.name === 'lever-B-rrf-alts-only');
     if (baselineRun && bestOfRun && rrfRun) {
         // Per-fixture results carry altQueries; identify alt-bearing ones from
         // the lever-B run (perQueryDetail is non-null only there).
@@ -598,6 +618,13 @@ function renderMarkdown(indexes, configRuns) {
                 lines.push(`| **best-of** | _(highest-recall single query)_ | ${f.recallAt5.toFixed(2)} | ${f.hitAt5 ? '✅' : '❌'} | ${bestGot} |`);
                 const rrfGot = rrf.returnedPaths.length === 0 ? '_(no results)_' : rrf.returnedPaths.map((p) => `\`${p}\``).join('<br>');
                 lines.push(`| **rrf-fused** | _(RRF of baseline + alts)_ | ${rrf.recallAt5.toFixed(2)} | ${rrf.hitAt5 ? '✅' : '❌'} | ${rrfGot} |`);
+                if (rrfAltsOnlyRun) {
+                    const altsOnly = rrfAltsOnlyRun.results.find((r) => r.id === f.id);
+                    if (altsOnly) {
+                        const altsGot = altsOnly.returnedPaths.length === 0 ? '_(no results)_' : altsOnly.returnedPaths.map((p) => `\`${p}\``).join('<br>');
+                        lines.push(`| **rrf-alts-only** | _(RRF of alts only — production option 1)_ | ${altsOnly.recallAt5.toFixed(2)} | ${altsOnly.hitAt5 ? '✅' : '❌'} | ${altsGot} |`);
+                    }
+                }
                 lines.push('');
             }
         }
@@ -650,6 +677,7 @@ const RUN_CONFIGS = [
     { name: 'tests-prefix-0.3', weights: { prefixes: { 'tests/': 0.3, 'test/': 0.3, 'integration_tests/': 0.3 } }, mode: 'baseline' },
     { name: 'lever-B-best-of', weights: null, mode: 'best-of' },
     { name: 'lever-B-rrf-fused', weights: null, mode: 'rrf' },
+    { name: 'lever-B-rrf-alts-only', weights: null, mode: 'rrf-alts-only' },
 ];
 
 async function main() {

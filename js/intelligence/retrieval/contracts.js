@@ -448,6 +448,7 @@
  * @property {Array<{level:string, code:string, detail:string}>} warnings
  * @property {Object<ContentType, string>}     chunker_versions           For reproducibility.
  * @property {number}                          paraphrase_count           1.5.12 — Number of paraphrase variants the Composer admitted alongside the original query. `0` for the single-variant default path; `> 0` when `opts.queryParaphraser` produced a non-empty result. Total query embeddings = `paraphrase_count + 1` when non-zero.
+ * @property {number}                          expansion_count            1.8.1 — Number of cross-file query-expansion alts the Composer admitted *in place of* the original query (the "drop baseline from fusion" rule from the lever-B probe). `0` for the single-variant default and for the paraphrase path; `> 0` only when `opts.queryExpander` produced a non-empty result. Total query embeddings = `expansion_count` when non-zero (no `+1` because the baseline is excluded from fusion). Mutually exclusive with `paraphrase_count` — the Composer ignores the paraphraser when an expander is wired.
  */
 
 /**

@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-07 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.8.0** + `[Unreleased]` (AST Phase 2 lever-B feasibility probe accumulating in `[Unreleased]` — no version bump for measurement-only PRs; `1.6.6`–`1.6.14`, `1.7.0`–`1.7.2`, and `1.8.0` sit untagged in main awaiting the next tag-push gate).
+> Last updated: 2026-05-08 · Current released (tagged) version: **1.6.5** · `main` HEAD: **1.8.1** (AST Phase 2 lever B shipped — production query expander + `lever-B-rrf-alts-only` sweep that picks the production default, both rolled forward from `[Unreleased]`; `1.6.6`–`1.6.14`, `1.7.0`–`1.7.2`, `1.8.0`, and `1.8.1` sit untagged in main awaiting the next tag-push gate).
 
 ## How to read this doc
 
@@ -15,9 +15,9 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Just shipped** | **1.6.0–1.6.14 + 1.7.0–1.7.2 + 1.8.0 — Chat Stability → retrieval caches → MCP polish → tool-ergonomics post-mortem → security/conventions/export-fix trio → AST-aware C-family chunker (Phase 1) → cross-request cache invalidation on mutation → AST Phase 2 lever-C measurement → TodoRead/TodoWrite tools.** Nineteen in-track changes in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 + 1.7.0–1.7.2 + 1.8.0 sit in main untagged, queued for the next tag-push gate. **Accumulating in `[Unreleased]` (no version bump):** the AST Phase 2 lever-B feasibility probe ([CHANGELOG `[Unreleased]`](../CHANGELOG.md)) — three hand-curated `altQueries` per stuck-zero fixture lifted Plinth meanHit@5 from 0.800 → **1.000** under best-of mode (both stuck-zero fixtures off zero, recall@5 0.300 → 0.467) but only 0.800 → **0.900** under naive RRF fusion (one of two off zero). Finding: **lever B is viable, but production fusion cannot uniformly RRF baseline + alts** — the baseline's noisy ranking dilutes alt-query signal. Lever A stays parked: the gap is rewriteable, not structural. |
-| **Now** | **Lever-B production implementation — drop baseline from fusion or weight by per-query confidence.** The probe accumulating in `[Unreleased]` ([CHANGELOG](../CHANGELOG.md)) closed the lever-A vs lever-B decision: lever B is the next track. Open question for the implementation PR is which of two fusion shapes ships: **(1)** RRF over alt rankings only (baseline serves solely as the LLM-rewriter input — simplest, degenerates to best-of when only one alt is emitted), or **(2)** confidence-weighted fusion that down-weights noisy rankings by top-score / top-5 score density. Architecture mirrors [`createQueryParaphraser`](../js/intelligence/retrieval/query-paraphraser.js) DI shape; opt-in via `settings.retrieval.crossFileExpansionMode ∈ {'off','primary','utility'}` (same three-way pattern paraphrase uses). Lever (c) test/source weighting becomes a useful re-ranker layered on top once lever B closes the pool gap. The implementation PR earns the next patch bump (1.8.1) and brings the lever-B probe out of `[Unreleased]` with it. |
-| **Next** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens once Phase 2 of the AST chunker resolves (or is parked if Hit@5 lift is judged sufficient). |
+| **Just shipped** | **1.6.0–1.6.14 + 1.7.0–1.7.2 + 1.8.0–1.8.1 — Chat Stability → retrieval caches → MCP polish → tool-ergonomics post-mortem → security/conventions/export-fix trio → AST-aware C-family chunker (Phase 1) → cross-request cache invalidation on mutation → AST Phase 2 lever-C measurement → TodoRead/TodoWrite tools → AST Phase 2 lever-B production (cross-file query expansion).** Twenty in-track changes in main: 1.6.0–1.6.5 individually tagged (`v1.6.0` → `v1.6.5`); 1.6.6–1.6.14 + 1.7.0–1.7.2 + 1.8.0–1.8.1 sit in main untagged, queued for the next tag-push gate. The 1.8.1 release wires `createQueryExpander` (mirror of `createQueryParaphraser` DI shape) through the Composer with the **drop-baseline-from-fusion** rule — the new `lever-B-rrf-alts-only` benchmark sweep matched best-of-alts at the Plinth aggregate (meanHit@5 1.000 / R@5 0.467, both stuck-zero fixtures off zero, no Armature regression) so option 1 ships as the production default. The 2026-05-07 lever-B probe rolled into 1.8.1 with it. |
+| **Now** | **AST Phase 2 closed.** Lever C measured insufficient (1.7.2), lever B shipped (1.8.1), lever A parked (gap is rewriteable, not structural). Slot is open. |
+| **Next** | **2.0 Profiles** — Designed in [`docs/DESIGN-profiles.md`](DESIGN-profiles.md); not started. Slot opens with Phase 2 closed; ready to schedule. |
 | **Later** | Open issues #34, #25, #33, #27, #18 (see *Known open issues* below) — none currently on the active track. |
 | **Deferred** | Foundations (was 1.1.x), Compression (was 1.2.x), various UI items — see *Deferred / unscheduled* below. |
 
@@ -158,23 +158,20 @@ Lift is real (+33% relative on Plinth, no Armature regression) but does not reac
 
 **Next lever has to widen the pool, not re-rank within it.** Lever C becomes a useful re-ranker layered on top of whichever of A/B ships, but on its own it doesn't carry past the floor. Production change held; no `defaultCodeScoreWeights` ships in 1.7.2.
 
-### Decision: AST Phase 2 lever B (cross-file query expansion) — measured 2026-05-07; viable with fusion constraint
+### Decision: AST Phase 2 lever B (cross-file query expansion) — shipped 1.8.1 (2026-05-08)
 
-The probe added hand-curated `altQueries` to the two stuck-zero Plinth fixtures and swept best-of and naive-RRF fusion alongside the existing baseline + lever-C configs. Lives in `[Unreleased]` (measurement-only, no production code path change — accumulates with the next batch of work that earns the patch bump). Full table in [CHANGELOG `[Unreleased]`](../CHANGELOG.md).
+The 2026-05-07 feasibility probe (PR #305) and the 2026-05-08 production wiring shipped together at 1.8.1; full per-PR rationale and result tables in [CHANGELOG §1.8.1](../CHANGELOG.md). The decision context — preserved here for roadmap continuity:
 
-| Scope | baseline | lever C (tests-prefix-0.5) | lever B (best-of) | lever B (rrf-fused) |
-|---|---:|---:|---:|---:|
-| Plinth meanHit@5 | 0.800 | 0.800 | **1.000** | 0.900 |
-| Plinth meanRecall@5 | 0.300 | 0.400 | **0.467** | 0.367 |
+| Scope | baseline | lever C (tests-prefix-0.5) | lever B (best-of) | lever B (rrf-fused) | **lever B (rrf-alts-only)** |
+|---|---:|---:|---:|---:|---:|
+| Plinth meanHit@5 | 0.800 | 0.800 | 1.000 | 0.900 | **1.000** |
+| Plinth meanRecall@5 | 0.300 | 0.400 | 0.467 | 0.367 | **0.467** |
 
-Per stuck-zero fixture: best-of lifts both off zero (recall@5 1.00 and 0.67); rrf-fused lifts only `plinth-rbac-enforcement-filter`. The capability-registry fixture's three correct `src/` files rank 1-3 under the best alt query but get diluted by the baseline's tests-heavy top-5 when uniform-weight RRF combines them.
-
-**Decision: lever B is the next track**, with a fusion-strategy constraint surfaced by the probe: production cannot uniformly RRF `baseline + alts` because the baseline ranking is *exactly* the noisy candidate pool we're trying to escape. Two production shapes for the follow-up:
-
-1. **RRF over alts only** — baseline serves solely as the LLM-rewriter input. Simplest; degenerates to best-of when the rewriter emits one alt. Default candidate.
-2. **Confidence-weighted fusion** — down-weight per-query RRF contribution by top-score or top-5 score density. More moving parts; defer unless option 1 leaves measurable headroom.
+The `lever-B-rrf-alts-only` sweep added in 1.8.1 closed the option-1 measurement gap: RRF over the alt rankings alone (baseline excluded from fusion) matches best-of at the aggregate and lifts both stuck-zero Plinth fixtures off zero, with no Armature regression. Production ships option 1 — simpler than confidence-weighted fusion, no oracle needed, degenerates cleanly when the rewriter emits one alt.
 
 **Lever A stays parked.** The gap closed cleanly under a smarter query — it's rewriteable, not structural. Web-tree-sitter's parent-class-signature propagation isn't justified by current measurement; it stays a candidate only if a future fixture surfaces a chunk-content gap that no rewrite can paper over.
+
+**Lever C** (test/source path weighting) remains opt-in via `MetadataFilter.score_weights` — the post-fusion re-ranker layered on top of lever B. Useful when the alts surface integration tests alongside source files; not the production default for the same reason 1.7.2 didn't ship a `defaultCodeScoreWeights` (insufficient lift on its own without lever B widening the candidate pool first).
 
 ### LLM reranker (scoped, not committed)
 
