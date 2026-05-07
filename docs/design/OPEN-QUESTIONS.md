@@ -51,4 +51,15 @@ Append entries below in this shape. Newest at the top.
 
 ## Entries
 
-_(none yet — first entry establishes the screenshot folder layout)_
+### 2026-05-07 — Upload / Download Zip — where does the existing zip flow live in Touch 3?
+
+- **Touch:** [#3](touch-3-left-pane-and-window/) (cross-cutting; also touches the [#2](touch-2-facelift/) Top bar + Settings layouts).
+- **Surface:** Upload / Download Zip — shipped today via [`js/zip-upload.js`](../../js/zip-upload.js). README §Git lines 57–58: *"Zip upload with batch commit (atomic). Download project/branch as zip."* Today, upload commits the whole zip as one atomic batch on the active branch; download exports the active project / branch as a zip.
+- **Question:** Touch 3 didn't include this surface in its brief, but the feature is **shipped, distinguishing, and the user explicitly flagged it as one of ai-editor's best — *"getting a branch in and out is not a feature you see in a lot of places."*** The implementer needs to know:
+  1. **Where does Zip Up / Zip Down live in the new chrome?** The Touch 2 top-bar Restructure is locked at 3 actions (Settings / Help / Debug); zip doesn't fit there. Touch 2 Settings has a vertical sidebar grouped Workspace / AI / App; "Workspace → Import / Export" is a candidate. Touch 3's Rail v2 "Branches" view has *Cut release* inline; zip-export-of-branch could sit there as a sibling. Or it stays where it is today (which doesn't appear on any Touch 2/3 mock at all).
+  2. **Does it evolve under Window v2 / Sessions?** A *session* in Window v2 = branch + task + chat + open files. **Session import/export as a zip** is a strong narrative fit: download a zip = snapshot the active session; upload a zip = open a session from someone else's snapshot. If yes, the upload-batch-commit semantics may need to change (commit to a *new* branch the session creates, not the active one).
+  3. **Does the atomic-batch-commit behavior persist?** Today's upload writes every file in the zip as one commit. Under sessions, that may or may not be right — same call as (2).
+- **What we read:** Touch 3 `chat2.md` (no zip mention); Touch 2 `chat1.md` (no zip mention beyond top-bar/settings/chat scoping); `Facelift.html` left-pane v2, top-bar, settings — none surface zip up/down. README §Git confirms it's shipped and named.
+- **Screenshots:** TBD — Jeff to capture the current Zip Upload modal + Download project/branch buttons under `docs/design/screenshots/2026-05-07-zip-flow-*.png` before sending to claude.ai/design (the design assistant's own audit screenshots in the Touch 3 bundle don't show this surface).
+- **Status:** `open`
+- **Code session:** preemptive — not blocking active implementation, filed because Jeff flagged the gap on 2026-05-07 after the Touch 3 archive PR ([#314](https://git.gobha.me/xcaliber/ai-editor/pulls/314)) merged. No fresh design work depends on the answer yet, but any 1.x extraction (A. branch switcher, B. ▶ Start, C. Files Now-strip) and any post-2.0 Window v2 work would.
