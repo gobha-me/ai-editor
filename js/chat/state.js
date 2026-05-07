@@ -3,12 +3,21 @@
  * Centralized state for chat module
  */
 
+import { EventBus } from '../core.js';
+
 // DOM references
 let chatContainer = null;
 let inputElement = null;
 
 // Edit state
 let pendingEdit = null;  // { code, explanation } waiting for user approval
+
+// ask_user (github#33 Phase 1) — pending question state. Holds the
+// resolve fn the tool handler is awaiting; the AskUserCard component
+// (or a cancel path) calls resolveUserResponse / cancelUserResponse to
+// settle the Promise so the chat loop's tool result is whatever the
+// user submits. Single-slot in 1.9.0; nesting would require a queue.
+let pendingUserResponse = null;  // { question, type, options, allow_custom, resolve }
 
 // Image attachments pending send
 let pendingImages = [];  // Images [{ dataUrl, name, size, type: 'image' }]let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
@@ -60,6 +69,76 @@ export function clearPendingEdit() {
     pendingEdit = null;
 }
 
+// ============================================
+// ASK_USER PENDING RESPONSE (github#33 Phase 1)
+// ============================================
+
+/**
+ * Get the currently pending ask_user request, if any.
+ * Returns the object passed to setPendingUserResponse — the AskUserCard
+ * reads `question`, `type`, `options`, `allow_custom` from it.
+ *
+ * @returns {{question: string, type: string, options?: Array, allow_custom?: boolean, resolve: Function} | null}
+ */
+export function getPendingUserResponse() {
+    return pendingUserResponse;
+}
+
+/**
+ * Set the pending ask_user state. Called by the tool handler immediately
+ * before it returns the Promise that `resolve` will eventually settle.
+ * Emits `ask_user:pending` so the card mounts itself.
+ *
+ * @param {{question: string, type: string, options?: Array, allow_custom?: boolean, resolve: Function}} pending
+ */
+export function setPendingUserResponse(pending) {
+    pendingUserResponse = pending;
+    try { EventBus.emit('ask_user:pending', pending); } catch { /* best-effort */ }
+}
+
+/**
+ * Resolve the pending ask_user Promise with the user's answer. Called by
+ * the AskUserCard's submit button. The shape of `answer` is the
+ * card-side payload (selected value(s) and/or custom text); the chat
+ * loop turns it into a tool_result verbatim.
+ *
+ * No-op when nothing is pending.
+ *
+ * @param {Object} answer
+ * @returns {boolean} True if a Promise was resolved.
+ */
+export function resolveUserResponse(answer) {
+    if (!pendingUserResponse) return false;
+    const { resolve } = pendingUserResponse;
+    pendingUserResponse = null;
+    try { EventBus.emit('ask_user:resolved', { cancelled: false }); } catch { /* best-effort */ }
+    try { resolve({ status: 'answered', answer }); } catch (err) {
+        console.error('[ask_user] resolve threw:', err);
+    }
+    return true;
+}
+
+/**
+ * Cancel the pending ask_user Promise. Called by the tool-loop cancel
+ * path (Stop button) so the awaited handler doesn't leak. The handler
+ * receives a cancellation envelope; the loop discards it as part of
+ * the cancel bookkeeping.
+ *
+ * @returns {boolean} True if a Promise was cancelled.
+ */
+export function cancelUserResponse() {
+    if (!pendingUserResponse) return false;
+    const { resolve } = pendingUserResponse;
+    pendingUserResponse = null;
+    try { EventBus.emit('ask_user:resolved', { cancelled: true }); } catch { /* best-effort */ }
+    try {
+        resolve({ status: 'cancelled', cancelled: true, error: 'User cancelled the question.' });
+    } catch (err) {
+        console.error('[ask_user] cancel resolve threw:', err);
+    }
+    return true;
+}
+
 /**
  * Check if tool loop is cancelled
  */
@@ -68,10 +147,15 @@ export function isToolLoopCancelled() {
 }
 
 /**
- * Cancel tool loop
+ * Cancel tool loop. Also releases any pending ask_user Promise so the
+ * tool handler doesn't leak — without this, cancelling mid-question
+ * would leave the awaited Promise unsettled forever.
  */
 export function cancelToolLoop() {
     _cancelToolLoop = true;
+    if (pendingUserResponse) {
+        cancelUserResponse();
+    }
 }
 
 /**

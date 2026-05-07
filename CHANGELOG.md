@@ -4,6 +4,92 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-05-07
+
+### Feature — `ask_user` structured-question tool (github#33 Phase 1)
+
+The dogfood traces show models hand-rolling A/B/C questions in free
+text and waiting for the user to type back — wasted turns, ambiguous
+answers, no structure to feed back into the model on resume.
+[github#33](https://github.com/gobha-me/ai-editor/issues/33) bundles
+two related features for the chat ↔ user interaction model; this
+release ships **Feature 1 only** — a structured `ask_user` tool that
+pauses the chat loop with an inline Preact card and resumes once the
+user submits an answer. **Feature 2 (queued user input during long
+runs) stays open on github#33** for a follow-up; the issue mirrors the
+github#37 precedent where Phase 1 closed at 1.6.13 and the issue
+remained open for Phase 2.
+
+**What lands.**
+
+- **New tool** [`js/tools/ask-user-tools.js`](js/tools/ask-user-tools.js) —
+  registers `ask_user` with three modes: `single_choice` (radio),
+  `multi_select` (checkbox), `free_text` (textarea-only). `allow_custom`
+  (default `true`) renders a free-text input alongside choices so the
+  user can answer "none of the above" without forcing an awkward
+  enum. The handler validates args, calls
+  `setPendingUserResponse({ ...args, resolve })`, and returns the
+  resolve-on-answer Promise. `roles: 'all'`.
+- **New chat surface** — [`js/chat/ask-user-card.js`](js/chat/ask-user-card.js) +
+  [`js/chat/ask-user-card/AskUserCard.js`](js/chat/ask-user-card/AskUserCard.js).
+  Self-subscribes to `EventBus('ask_user:pending')`; appends a
+  `.ask-user-slot` `chat-message` to the chat scroll and mounts the
+  Preact tree into it. On `ask_user:resolved` the slot is unmounted
+  and removed. Joins Memory tab, consent card, and scratchpad panel
+  on the Decision §9 Preact + htm allow-list.
+- **Pending state** in [`js/chat/state.js`](js/chat/state.js) — new
+  module-level `pendingUserResponse` slot mirroring the `pendingEdit`
+  pattern. Exports `getPendingUserResponse`, `setPendingUserResponse`,
+  `resolveUserResponse(answer)`, `cancelUserResponse()`. `cancelToolLoop()`
+  now cascades into `cancelUserResponse()` so the awaited handler
+  doesn't leak when the user clicks Stop mid-question.
+- **Loop wiring** in [`js/chat/handlers.js`](js/chat/handlers.js) — new
+  `USER_PAUSE_TOOLS = new Set(['ask_user'])` bypasses the standard 30s
+  tool-execution timeout (the user can sit with a question as long as
+  they want; the cancel path releases the Promise). `ask_user` joins
+  `STATEFUL_READ_TOOLS` so the cross-request cache doesn't synth a
+  "you already asked this" hit on identical args — the model may
+  legitimately re-ask after the conversation moves on.
+- **System-prompt parity** — `LEGACY_TOOL_ENUMERATION` in
+  [`js/prompts.js`](js/prompts.js) gains the `ask_user` line per
+  `feedback_prompts_js_parallel_enumeration.md`; the dynamic
+  Composer-driven enumeration picks up the description automatically
+  when the tool is admitted.
+- **Profile admission** — [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js)
+  adds `ask_user` to `tools.static` alongside scratchpad/todo. Same
+  load-bearing case: cheap-tier models won't reliably discover the tool
+  through `find_tool` / `list_tools_by_category`, and the UX value is
+  greatest when the model can reach for the tool without a discovery
+  detour.
+- **Catalog** — new `interaction` category in
+  [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)
+  ("Pause and ask the user — structured questions, choices, free-text").
+  `ask_user` classified as `read` side-effect (it pauses for input;
+  doesn't mutate project state).
+- **Styles** — `.ask-user-card` rules in
+  [`css/chat.css`](css/chat.css) routed through the existing variable
+  alias layer (no standalone hex). Visually distinct from
+  `.scratchpad-panel` — the card is the active prompt, not an audit
+  surface; accent border + slight shadow signal "respond here".
+
+**Tests** — [`tests/test-ask-user-tools.mjs`](tests/test-ask-user-tools.mjs)
+covers registration shape, arg validation (missing `question`, bad
+`type`, missing `options` for choice modes), happy path
+(`resolveUserResponse(answer)` settles the handler Promise with
+`{ status: 'answered', answer }`), and cancel path
+(`cancelUserResponse()` settles with `{ status: 'cancelled' }`).
+
+**Out of scope (deferred).**
+
+- **Feature 2 of #33** — queued user input during long runs. Different
+  shape (async buffer while the loop continues vs. pause-and-resume);
+  separate PR.
+- **Stacking / multiple concurrent questions.** Phase 1 is single-slot;
+  nesting logs a warning and the second `ask_user:pending` is ignored.
+- **Persistence across reloads.** Pending state lives in a module
+  closure; reload drops it.
+- **Plan-mode interaction (#25).** Different track.
+
 ## [1.8.5] - 2026-05-07
 
 ### Feature — accurate provider `usage` parsing for cost reporting

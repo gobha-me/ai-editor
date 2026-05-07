@@ -172,6 +172,10 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
     // js/prompts.js:233 only renders when `scratchpad_write` is admitted,
     // and cheap-tier models weren't reliably running discovery
     // meta-tools, so usage was silently regressing.
+    //
+    // 1.9.0 — `ask_user` (github#33 Phase 1) joined the structural set
+    // for the same reason: cheap-tier models won't reliably discover
+    // an interaction tool through find_tool / list_tools_by_category.
     assert.deepEqual(CODER_V1.tools.static, [
         'list_tool_categories',
         'list_tools_by_category',
@@ -182,6 +186,8 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'scratchpad_clear',
         'todo_write',
         'todo_read',
+        // 1.9.0 — interaction tool (github#33 Phase 1).
+        'ask_user',
         'read_file',
         'read_lines',
         'scan_file',

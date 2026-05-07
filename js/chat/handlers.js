@@ -607,6 +607,12 @@ export async function handleGeneralRequest(input) {
                     // testing PR #293 against issue #23 (qwen-3-6-plus, 2026-05-06).
                     const STATEFUL_READ_TOOLS = new Set([
                         'read_current_file',
+                        // ask_user — the cross-request log would otherwise
+                        // synth a "you already asked this; here was the
+                        // answer" hit on identical args. The model may
+                        // legitimately want to re-ask after the conversation
+                        // moves on.
+                        'ask_user',
                     ]);
                     const skipCache = STATEFUL_READ_TOOLS.has(toolName);
 
@@ -674,17 +680,28 @@ export async function handleGeneralRequest(input) {
                         // Execute with configurable timeout — long-running tools (wait_for_ci, etc.)
                         // get a separate timeout to avoid being killed by the standard tool timeout.
                         const LONG_RUNNING_TOOLS = new Set(['wait_for_ci']);
+                        // ask_user (github#33) blocks on the user's response via an inline
+                        // Preact card; the chat loop's `isToolLoopCancelled` cancel path
+                        // calls `cancelUserResponse()` to release the awaited Promise.
+                        // Bypassing the timer entirely is correct here — the user can
+                        // sit with a question for as long as they want.
+                        const USER_PAUSE_TOOLS = new Set(['ask_user']);
+                        const isUserPause = USER_PAUSE_TOOLS.has(toolName);
                         const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
                         const toolTimeout = isLongRunning
                             ? (State.settings.longRunningToolTimeout || 300000)
                             : (State.settings.toolTimeout || 30000);
                         try {
-                            toolResult = await Promise.race([
-                                executeToolCall(toolCall),
-                                new Promise((_, reject) =>
-                                    setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
-                                )
-                            ]);
+                            if (isUserPause) {
+                                toolResult = await executeToolCall(toolCall);
+                            } else {
+                                toolResult = await Promise.race([
+                                    executeToolCall(toolCall),
+                                    new Promise((_, reject) =>
+                                        setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
+                                    )
+                                ]);
+                            }
                         } catch (e) {
                             toolResult = { error: e.message };
                         }

@@ -49,6 +49,7 @@ const LEGACY_TOOL_ENUMERATION = `- Read the current file open in the editor (rea
 - Read a file from another project WITHOUT switching (peek_project_file) — cross-project reference
 - Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
 - Maintain a structured per-conversation todo list that survives context compression (todo_write, todo_read)
+- Ask the user a structured question with optional choices, free-text, or both — pauses the chat loop until they answer (ask_user)
 - Run JavaScript for calculations, data transforms, or logic validation (run_code) — sandboxed, no DOM access`;
 
 // Scratchpad instruction block — extracted from the systemPrompt body in

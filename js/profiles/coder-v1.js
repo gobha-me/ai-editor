@@ -157,6 +157,11 @@ export const CODER_V1 = {
             'scratchpad_clear',
             'todo_write',
             'todo_read',
+            // Interaction tool — github#33 Phase 1 (1.9.0). Lets the LLM
+            // pause and ask a structured question; same load-bearing
+            // case as scratchpad/todo (cheap-tier models won't reliably
+            // discover it through find_tool / list_tools_by_category).
+            'ask_user',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',

@@ -59,6 +59,9 @@ function registerStaticFixture() {
     reg('scratchpad_clear', 'Clear scratchpad entries.',            { type: 'object', properties: { key: { type: 'string' } } });
     reg('todo_write',       'Replace the conversation todo list.',  { type: 'object', properties: { todos: { type: 'array' } } });
     reg('todo_read',        'Read the conversation todo list.',     { type: 'object', properties: {} });
+    // 1.9.0 — `ask_user` (github#33 Phase 1) joined the static set
+    // for the same compression-survival reason as scratchpad/todo.
+    reg('ask_user',         'Ask the user a structured question.',  { type: 'object', properties: { question: { type: 'string' }, type: { type: 'string' } } });
 }
 
 // ============================================

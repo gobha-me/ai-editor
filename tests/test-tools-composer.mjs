@@ -245,14 +245,14 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 17 names → 6 admitted, 11 unresolved
-// (3 meta-tools + 3 CI tools + 5 structural-anchor tools intentionally
-//  absent from this fixture; the 1.8.4 anchor promotion expanded the
-//  unresolved set without changing what this fixture registers, so the
-//  assertion just got longer.)
+// coder.v1 fixture — 18 names → 6 admitted, 12 unresolved
+// (3 meta-tools + 3 CI tools + 5 structural-anchor tools + 1 interaction
+//  tool (ask_user, 1.9.0) intentionally absent from this fixture; the
+//  promotions expanded the unresolved set without changing what this
+//  fixture registers, so the assertion just got longer.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 11 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 12 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -270,6 +270,9 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 11 unresolve
         // fixture so the unresolved-path assertion still has signal.
         'scratchpad_write', 'scratchpad_read', 'scratchpad_clear',
         'todo_write', 'todo_read',
+        // 1.9.0 — interaction tool (github#33 Phase 1), same fixture-absent
+        // pattern as the 1.8.4 anchors.
+        'ask_user',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

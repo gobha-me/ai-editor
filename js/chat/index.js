@@ -14,6 +14,7 @@ import { registerIssueTools } from '../tools/issue-tools.js';
 import { registerPRTools } from '../tools/pr-tools.js';
 import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
 import { registerTodoTools } from '../tools/todo-tools.js';
+import { registerAskUserTools } from '../tools/ask-user-tools.js';
 import { registerXRefTools } from '../tools/xref-tools.js';
 import { registerDocTools } from '../tools/doc-tools.js';
 import { registerMultiFileTools } from '../tools/multifile-tools.js';
@@ -53,6 +54,7 @@ import {
 } from './handlers.js';
 import { executeToolCall } from './tools.js';
 import { mountScratchpadPanel } from './scratchpad-panel.js';
+import { initAskUserCard } from './ask-user-card.js';
 
 // ============================================
 // TOOL REGISTRATION
@@ -72,6 +74,7 @@ registerIssueTools(ToolRegistry);
 registerPRTools(ToolRegistry);
 registerScratchpadTools(ToolRegistry);
 registerTodoTools(ToolRegistry);
+registerAskUserTools(ToolRegistry);
 registerXRefTools(ToolRegistry);
 registerDocTools(ToolRegistry);
 registerMultiFileTools(ToolRegistry);
@@ -140,6 +143,10 @@ function initChat(containerEl, inputEl) {
     // mountScratchpadPanel renders a vanilla error banner — won't throw
     // out of initChat.
     mountScratchpadPanel();
+
+    // 1.9.0 / github#33 Phase 1 — ask_user inline card. Subscribes to
+    // ask_user:pending / ask_user:resolved on the EventBus; idempotent.
+    initAskUserCard();
 
     // Debounced conversation save — persists after message activity settles
     let _saveTimer = null;

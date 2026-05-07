@@ -125,6 +125,9 @@ const CATEGORY_BY_NAME = {
     'scratchpad_read': 'scratchpad',
     'scratchpad_clear': 'scratchpad',
 
+    // interaction (user-facing prompts)
+    'ask_user': 'interaction',
+
     // plugin
     'read_plugin_source': 'plugin',
     'write_plugin_source': 'plugin',
@@ -185,6 +188,7 @@ const SIDE_EFFECTS_BY_NAME = {
     'list_tool_categories': 'read',
     'list_tools_by_category': 'read',
     'find_tool': 'read',
+    'ask_user': 'read',
 
     'edit_file': 'write',
     'replace_lines': 'write',
@@ -242,6 +246,7 @@ const CATEGORY_DESCRIPTIONS = {
     'code.context':      'Retrieval bridge — semantic file relevance and project indexing.',
     'memory':            'Long-term curated facts (cross-session, scoped).',
     'scratchpad':        'Session-scoped key-value notes (cleared per task).',
+    'interaction':       'Pause and ask the user — structured questions, choices, free-text.',
     'plugin':            'Plugin source read/write and runtime invocation.',
     'docs':              'Read project / app documentation.',
     'eval':              'Execute code in a sandboxed runner.',
