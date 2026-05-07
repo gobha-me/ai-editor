@@ -4,6 +4,24 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — first dogfood-battery trace
+
+[`docs/dogfood-battery/2026-05-07-grok-minesweeper-ci-loop.md`](docs/dogfood-battery/2026-05-07-grok-minesweeper-ci-loop.md) —
+post-mortem of the grok-4-3 `get_ci_status` loop captured during the
+2026-05-07 HTML-Games dogfood pass. Establishes the trace template per
+[ROADMAP §"Test design under operational constraints"](docs/ROADMAP.md).
+The fault was at the model-recovery layer (refusal envelope had no
+behavioral hint); the cure shipped at 1.8.2 (`getRefusalHint(toolName)`
+in [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js)). This trace
+closes the post-mortem loop on that incident and seeds the
+`docs/dogfood-battery/` directory.
+
+### Chore — close github#26 (TodoRead/TodoWrite)
+
+[`Feature: TodoRead/TodoWrite tools for persistent task tracking`](https://github.com/gobha-me/ai-editor/issues/26) —
+shipped at 1.8.0 (PR [#304](https://github.com/gobha-me/ai-editor/pull/304));
+GitHub issue closed retroactively with a comment pointing at §1.8.0.
+
 ## [1.8.3] - 2026-05-07
 
 ### Fix — `EditTracker.checkStale` now detects target/edit range overlap
