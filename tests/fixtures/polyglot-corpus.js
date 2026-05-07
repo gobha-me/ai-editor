@@ -89,6 +89,18 @@ const C = QUERY_CATEGORIES;
  *                                        alphabetically so diffs are
  *                                        minimal when a path is added /
  *                                        removed.
+ * @property {string[]}   [altQueries]   Optional hand-curated rephrasings
+ *                                        of `query` that lean closer to the
+ *                                        identifier / file vocabulary an
+ *                                        LLM with codebase awareness would
+ *                                        emit. Consumed by the AST Phase 2
+ *                                        lever-B feasibility probe (1.7.3) —
+ *                                        the runner sweeps `query` + every
+ *                                        `altQueries[*]` and reports best-of
+ *                                        and RRF-fused recall@5 alongside
+ *                                        the baseline `query`-only run.
+ *                                        Absent on fixtures where the
+ *                                        baseline already hits.
  */
 
 /**
@@ -235,6 +247,16 @@ export const POLYGLOT_QUERY_FIXTURES = Object.freeze(/** @type {PolyglotQueryFix
             'src/kernel/capabilities/registration.hpp',
             'src/kernel/capabilities/types.hpp',
         ],
+        // 1.7.3 lever-B probe — alt phrasings lean toward identifier /
+        // header vocabulary an LLM with codebase awareness would emit.
+        // Drawn from `kernel/capabilities/registration.hpp` ("register_capability",
+        // "RegisterResult", "CapabilityError", "Registration API") and
+        // `types.hpp` (canonical "namespace:version:function" form).
+        altQueries: [
+            'capability registration api: register_capability and RegisterResult',
+            'register_capability function and CapabilityError validation',
+            'capabilities namespace registration types and signature',
+        ],
     },
     {
         id: 'plinth-capability-tier-resolution',
@@ -258,6 +280,16 @@ export const POLYGLOT_QUERY_FIXTURES = Object.freeze(/** @type {PolyglotQueryFix
             'src/kernel/rbac/enforcement.cpp',
             'src/kernel/rbac/enforcement.hpp',
             'src/kernel/rbac/rule_registrar.hpp',
+        ],
+        // 1.7.3 lever-B probe — alt phrasings lean toward the actual
+        // symbols and Drogon vocabulary in `kernel/rbac/enforcement.hpp`
+        // ("RbacFilter", "RbacContext", "register_rule_requirement",
+        // "get_required_rules", "effective_rules") and rule_registrar.hpp
+        // ("upsert_extension_rule").
+        altQueries: [
+            'RbacFilter HttpFilter enforcement and RbacContext effective_rules',
+            'register_rule_requirement and get_required_rules registry',
+            'rbac authorization filter: granting_rule and permission_granted',
         ],
     },
     {

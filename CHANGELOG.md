@@ -4,6 +4,126 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Measurement — AST chunker Phase 2 lever B feasibility probe (query rewriting)
+
+The 1.7.0 AST chunker lifted Plinth/C++ Hit@5 to 0.800 but two fixtures
+(`plinth-capability-registry-api`, `plinth-rbac-enforcement-filter`)
+stayed stuck at recall@5 = 0.0 because the right `src/` files never
+entered the BM25 top-5 candidate pool. 1.7.2's lever C (test/source path
+weighting) lifted Plinth recall@5 0.300 → 0.400 but **could not move the
+two stuck-zero fixtures off zero** — demoting `tests/` only helps when
+the correct source files are already in the pool to be re-ranked.
+
+ROADMAP §"Now" listed two remaining levers — lever A (vendored web-tree-
+sitter for parent-class-signature propagation) and lever B (cross-file
+query expansion). Lever B is architecturally lighter (mirrors
+[`createQueryParaphraser`](js/intelligence/retrieval/query-paraphraser.js)'s
+DI shape) but the chicken-egg risk was unmeasured: would a smarter query
+*alone* surface the right `src/` files into the candidate pool, or is
+the gap structural (missing terms in the chunks themselves)?
+
+This PR measures, doesn't ship.
+
+**Why not just ship lever B.** "Measurement before scale" (ROADMAP
+Decision §8): before paying lever B's full implementation cost (new
+strategy module, settings UI, RRF wiring, opt-in gate, paraphraser-shape
+DI), measure whether **better queries alone** close the candidate-pool
+gap. Same shape as 1.7.2.
+
+**What lands.**
+
+- [`tests/fixtures/polyglot-corpus.js`](tests/fixtures/polyglot-corpus.js)
+  grows an optional `altQueries: string[]` field on the
+  `PolyglotQueryFixture` typedef. The two stuck-zero Plinth fixtures get
+  three hand-curated alts each, leaning toward the identifier vocabulary
+  an LLM with codebase awareness would emit (`register_capability`,
+  `RegisterResult`, `CapabilityError`, `RbacFilter`, `RbacContext`,
+  `register_rule_requirement`, `effective_rules`, `permission_granted`).
+  Other fixtures unchanged.
+- [`tests/run-polyglot-benchmark.mjs`](tests/run-polyglot-benchmark.mjs)
+  adds two new sweep configs:
+  - `lever-B-best-of` — for each fixture with `altQueries`, score
+    `[query, ...altQueries]` independently, return the top-5 with the
+    highest recall@5 (ties broken by `topScore`, so deterministic).
+  - `lever-B-rrf-fused` — score every query at depth 50, RRF-fuse the
+    rankings (k=60, the constant the Semantic strategy uses for
+    paraphrase fusion), truncate to top-5.
+  Both configs collapse to baseline behavior on fixtures without
+  `altQueries`, so Armature numbers are unchanged.
+- A "Lever-B probe — stuck-zero fixture detail" section in the rendered
+  markdown report breaks down per-query results for the two stuck-zero
+  fixtures, making the lever-A vs lever-B decision legible without
+  scanning the prose.
+
+**Result.**
+
+| Scope | baseline | tests-prefix-0.5 (lever C) | **lever-B best-of** | **lever-B rrf-fused** |
+|---|---:|---:|---:|---:|
+| Armature meanHit@5 / R@5 | 1.000 / 0.883 | 1.000 / 0.883 | 1.000 / 0.883 | 1.000 / 0.883 |
+| **Plinth meanHit@5 / R@5** | 0.800 / 0.300 | 0.800 / 0.400 | **1.000 / 0.467** | **0.900 / 0.367** |
+
+Per-fixture detail for the stuck-zero pair:
+
+| Fixture | baseline | best alt | best-of | rrf-fused |
+|---|---:|---:|---:|---:|
+| `plinth-capability-registry-api` | 0.00 ❌ | 1.00 ✅ | 1.00 ✅ | **0.00 ❌** |
+| `plinth-rbac-enforcement-filter`  | 0.00 ❌ | 0.67 ✅ | 0.67 ✅ | 0.67 ✅ |
+
+**Finding (mixed; lever B is viable but fusion strategy matters).**
+
+- ✅ **Best-of** lifts both stuck-zero fixtures off zero. The
+  candidate-pool gap *can* be closed by a sufficiently codebase-aware
+  query rewrite — an LLM that knows to search for `register_capability`
+  / `RegisterResult` instead of "where do extensions register new
+  capabilities?" surfaces all three expected files at recall@5 = 1.00
+  for `plinth-capability-registry-api`. The hypothesis lever B rests on
+  is real.
+- ⚠️ **Naive RRF fusion** (baseline + alts, uniform weights) **lifts only
+  one of two**. For `plinth-capability-registry-api`, the baseline's
+  noisy tests-heavy ranking bleeds into the fused list and pushes the
+  three correct `src/` files out of the top-5 — the alts ranked all
+  three at positions 1-3, but the baseline's tests-only top-5 dilutes
+  them. RRF works for `plinth-rbac-enforcement-filter` because the alt
+  rankings agree with each other on the right files at high ranks; it
+  fails for the capability fixture because alt 2 disagrees with alts 1
+  and 3 on which source files are top-3.
+
+**Lever decision: lever B is the next track, with a constraint on
+fusion strategy.** A production lever-B implementation cannot just RRF
+`baseline + alts` uniformly — the baseline is *exactly* the noisy
+ranking we're trying to escape. Two viable production shapes for the
+follow-up `1.x.y`:
+
+1. **Drop baseline from fusion.** RRF over alts only; baseline serves
+   solely as the input the LLM rewrites. Best-of-alts becomes the
+   degenerate case when the rewriter only emits one alt.
+2. **Confidence-weighted fusion.** Weight each ranking's RRF
+   contribution by per-query top-score or top-5 score-density so noisy
+   rankings contribute less. More moving parts; defer unless option 1
+   measurement leaves headroom.
+
+**Lever A is not justified by this measurement.** The gap is not
+structural (missing terms in chunks) — the right `src/` files DO score
+into top-5 under good queries. Web-tree-sitter's parent-class-signature
+propagation is solving a problem that doesn't bite here. Lever A stays
+parked unless a future fixture surfaces a chunk-content gap that no
+query rewrite can paper over.
+
+**Reproduce.**
+
+```bash
+node tests/run-polyglot-benchmark.mjs --repo plinth
+```
+
+Pure Node, ~300 ms total, deterministic across runs (BM25 has no random
+state). Output written to `tests/fixtures/polyglot-benchmark-results.{md,json}`.
+
+**No version bump.** Measurement-only PR with no production code path
+change. Lands in `[Unreleased]` and accumulates with the next batch of
+production work — the lever-B implementation, the next bug fix, etc. —
+that earns the patch bump. Avoids the microscopic-release tempo where
+every measurement PR cuts its own version.
+
 ## [1.8.0] - 2026-05-07
 
 ### Feature — TodoRead/TodoWrite tools (github#26)

@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-05-06T22:55:29.530Z",
+  "ranAt": "2026-05-07T09:50:47.354Z",
   "scorer": "bm25",
   "topK": 5,
   "indexes": [
@@ -11,7 +11,7 @@
         "chunks": 1752,
         "skippedLarge": 1,
         "readErrors": 0,
-        "elapsedMs": 298
+        "elapsedMs": 303
       }
     },
     {
@@ -22,7 +22,7 @@
         "chunks": 4400,
         "skippedLarge": 0,
         "readErrors": 0,
-        "elapsedMs": 250
+        "elapsedMs": 286
       }
     }
   ],
@@ -30,11 +30,13 @@
     {
       "name": "baseline",
       "weights": null,
+      "mode": "baseline",
       "results": [
         {
           "id": "armature-oauth-session-lifecycle",
           "repo": "armature",
           "query": "how does the OAuth flow work for OIDC provider authentication?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/auth/github.go",
@@ -50,12 +52,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 25.98865339051419
+          "topScore": 25.98865339051419,
+          "perQueryDetail": null
         },
         {
           "id": "armature-user-session-cache",
           "repo": "armature",
           "query": "where is the user status cache that prevents repeated DB queries on each request?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -69,12 +73,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 23.813390569672272
+          "topScore": 23.813390569672272,
+          "perQueryDetail": null
         },
         {
           "id": "armature-websocket-auth-ticket",
           "repo": "armature",
           "query": "how does the WebSocket endpoint authenticate clients — ticket exchange vs. Bearer tokens?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -88,12 +94,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 43.975259802545565
+          "topScore": 43.975259802545565,
+          "perQueryDetail": null
         },
         {
           "id": "armature-vault-initialization",
           "repo": "armature",
           "query": "how does the password vault initialize and unlock for a user on login?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -107,12 +115,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.14901945522044
+          "topScore": 34.14901945522044,
+          "perQueryDetail": null
         },
         {
           "id": "armature-bootstrap-admin-vault",
           "repo": "armature",
           "query": "when the admin user is created at startup, how is their password vault initialized?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -126,12 +136,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.5418354239366
+          "topScore": 34.5418354239366,
+          "perQueryDetail": null
         },
         {
           "id": "armature-starlark-package-manifest",
           "repo": "armature",
           "query": "how can a Starlark extension extract and inspect a package manifest.json?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/package_validate.go",
@@ -146,12 +158,14 @@
           ],
           "recallAt5": 0.5,
           "hitAt5": 1,
-          "topScore": 29.136550017776585
+          "topScore": 29.136550017776585,
+          "perQueryDetail": null
         },
         {
           "id": "armature-package-manifest-validation",
           "repo": "armature",
           "query": "what are the rules for validating a package manifest — required fields, type constraints, allowed fields?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/package_validate.go"
@@ -165,12 +179,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.468387652824326
+          "topScore": 32.468387652824326,
+          "perQueryDetail": null
         },
         {
           "id": "armature-notification-delivery",
           "repo": "armature",
           "query": "how does the notification service route messages to users — in-app, email, or both?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/notifications/service.go"
@@ -184,12 +200,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 35.899498319122735
+          "topScore": 35.899498319122735,
+          "perQueryDetail": null
         },
         {
           "id": "armature-cluster-registry",
           "repo": "armature",
           "query": "how does the cluster registry track replicas and coordinate multi-instance state?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/cluster/registry.go"
@@ -203,12 +221,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 19.83873671227724
+          "topScore": 19.83873671227724,
+          "perQueryDetail": null
         },
         {
           "id": "armature-logging-configuration",
           "repo": "armature",
           "query": "how do I configure structured logging format and level for the server?",
+          "altQueries": [],
           "category": "onboarding",
           "expectedPaths": [
             "server/logging/logger.go"
@@ -222,12 +242,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.37943951048565
+          "topScore": 32.37943951048565,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-session-auth-routes",
           "repo": "plinth",
           "query": "how does the system handle user login and session creation?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/auth/handlers.cpp",
@@ -243,12 +265,18 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 18.602313525523506
+          "topScore": 18.602313525523506,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-registry-api",
           "repo": "plinth",
           "query": "where do extensions register new capabilities?",
+          "altQueries": [
+            "capability registration api: register_capability and RegisterResult",
+            "register_capability function and CapabilityError validation",
+            "capabilities namespace registration types and signature"
+          ],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/capabilities/registration.cpp",
@@ -264,12 +292,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 13.399321267437436
+          "topScore": 13.399321267437436,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-tier-resolution",
           "repo": "plinth",
           "query": "how does the system resolve which handler to call for a given capability signature?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "src/kernel/capabilities/resolution.cpp",
@@ -285,12 +315,18 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 25.92249388819378
+          "topScore": 25.92249388819378,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-rbac-enforcement-filter",
           "repo": "plinth",
           "query": "how does the HTTP request pipeline enforce role-based access control?",
+          "altQueries": [
+            "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+            "register_rule_requirement and get_required_rules registry",
+            "rbac authorization filter: granting_rule and permission_granted"
+          ],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/rbac/enforcement.cpp",
@@ -306,12 +342,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 13.119579443410567
+          "topScore": 13.119579443410567,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-group-bootstrap-rbac-setup",
           "repo": "plinth",
           "query": "how are the initial admin group and kernel.admin rule created at startup?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/groups/handlers.cpp",
@@ -327,12 +365,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 30.618335527819546
+          "topScore": 30.618335527819546,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-realtime-pubsub-broker",
           "repo": "plinth",
           "query": "how are WebSocket subscriptions managed and how do messages fan out?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/realtime/broker.cpp",
@@ -348,12 +388,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 19.316721023720405
+          "topScore": 19.316721023720405,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-websocket-call-dispatch",
           "repo": "plinth",
           "query": "how does a WebSocket client invoke a capability and receive the result?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/ws/call_dispatch.cpp",
@@ -369,12 +411,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 20.82679972345979
+          "topScore": 20.82679972345979,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-package-install-state-machine",
           "repo": "plinth",
           "query": "what are the stages of package installation and how is state persisted?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/packages/install_lifecycle.cpp",
@@ -390,12 +434,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 16.6364529641948
+          "topScore": 16.6364529641948,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-schema-migrations-runner",
           "repo": "plinth",
           "query": "how do extension packages apply their database schema migrations?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/packages/migration_error.hpp",
@@ -411,12 +457,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 18.94658821491964
+          "topScore": 18.94658821491964,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-audit-logging-write",
           "repo": "plinth",
           "query": "where does the system write audit events to the database?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/audit/handlers.hpp",
@@ -432,7 +480,8 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 18.044233061822585
+          "topScore": 18.044233061822585,
+          "perQueryDetail": null
         }
       ],
       "aggregate": {
@@ -506,11 +555,13 @@
           "integration_tests/": 0.5
         }
       },
+      "mode": "baseline",
       "results": [
         {
           "id": "armature-oauth-session-lifecycle",
           "repo": "armature",
           "query": "how does the OAuth flow work for OIDC provider authentication?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/auth/github.go",
@@ -526,12 +577,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 25.98865339051419
+          "topScore": 25.98865339051419,
+          "perQueryDetail": null
         },
         {
           "id": "armature-user-session-cache",
           "repo": "armature",
           "query": "where is the user status cache that prevents repeated DB queries on each request?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -545,12 +598,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 23.813390569672272
+          "topScore": 23.813390569672272,
+          "perQueryDetail": null
         },
         {
           "id": "armature-websocket-auth-ticket",
           "repo": "armature",
           "query": "how does the WebSocket endpoint authenticate clients — ticket exchange vs. Bearer tokens?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -564,12 +619,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 43.975259802545565
+          "topScore": 43.975259802545565,
+          "perQueryDetail": null
         },
         {
           "id": "armature-vault-initialization",
           "repo": "armature",
           "query": "how does the password vault initialize and unlock for a user on login?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -583,12 +640,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.14901945522044
+          "topScore": 34.14901945522044,
+          "perQueryDetail": null
         },
         {
           "id": "armature-bootstrap-admin-vault",
           "repo": "armature",
           "query": "when the admin user is created at startup, how is their password vault initialized?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -602,12 +661,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.5418354239366
+          "topScore": 34.5418354239366,
+          "perQueryDetail": null
         },
         {
           "id": "armature-starlark-package-manifest",
           "repo": "armature",
           "query": "how can a Starlark extension extract and inspect a package manifest.json?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/package_validate.go",
@@ -622,12 +683,14 @@
           ],
           "recallAt5": 0.5,
           "hitAt5": 1,
-          "topScore": 29.136550017776585
+          "topScore": 29.136550017776585,
+          "perQueryDetail": null
         },
         {
           "id": "armature-package-manifest-validation",
           "repo": "armature",
           "query": "what are the rules for validating a package manifest — required fields, type constraints, allowed fields?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/package_validate.go"
@@ -641,12 +704,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.468387652824326
+          "topScore": 32.468387652824326,
+          "perQueryDetail": null
         },
         {
           "id": "armature-notification-delivery",
           "repo": "armature",
           "query": "how does the notification service route messages to users — in-app, email, or both?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/notifications/service.go"
@@ -660,12 +725,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 35.899498319122735
+          "topScore": 35.899498319122735,
+          "perQueryDetail": null
         },
         {
           "id": "armature-cluster-registry",
           "repo": "armature",
           "query": "how does the cluster registry track replicas and coordinate multi-instance state?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/cluster/registry.go"
@@ -679,12 +746,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 19.83873671227724
+          "topScore": 19.83873671227724,
+          "perQueryDetail": null
         },
         {
           "id": "armature-logging-configuration",
           "repo": "armature",
           "query": "how do I configure structured logging format and level for the server?",
+          "altQueries": [],
           "category": "onboarding",
           "expectedPaths": [
             "server/logging/logger.go"
@@ -698,12 +767,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.37943951048565
+          "topScore": 32.37943951048565,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-session-auth-routes",
           "repo": "plinth",
           "query": "how does the system handle user login and session creation?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/auth/handlers.cpp",
@@ -719,12 +790,18 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 17.711675680936974
+          "topScore": 17.711675680936974,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-registry-api",
           "repo": "plinth",
           "query": "where do extensions register new capabilities?",
+          "altQueries": [
+            "capability registration api: register_capability and RegisterResult",
+            "register_capability function and CapabilityError validation",
+            "capabilities namespace registration types and signature"
+          ],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/capabilities/registration.cpp",
@@ -740,12 +817,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 13.399321267437436
+          "topScore": 13.399321267437436,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-tier-resolution",
           "repo": "plinth",
           "query": "how does the system resolve which handler to call for a given capability signature?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "src/kernel/capabilities/resolution.cpp",
@@ -761,12 +840,18 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 25.92249388819378
+          "topScore": 25.92249388819378,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-rbac-enforcement-filter",
           "repo": "plinth",
           "query": "how does the HTTP request pipeline enforce role-based access control?",
+          "altQueries": [
+            "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+            "register_rule_requirement and get_required_rules registry",
+            "rbac authorization filter: granting_rule and permission_granted"
+          ],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/rbac/enforcement.cpp",
@@ -782,12 +867,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 11.508913647299842
+          "topScore": 11.508913647299842,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-group-bootstrap-rbac-setup",
           "repo": "plinth",
           "query": "how are the initial admin group and kernel.admin rule created at startup?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/groups/handlers.cpp",
@@ -803,12 +890,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 27.956355906099915
+          "topScore": 27.956355906099915,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-realtime-pubsub-broker",
           "repo": "plinth",
           "query": "how are WebSocket subscriptions managed and how do messages fan out?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/realtime/broker.cpp",
@@ -824,12 +913,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 19.316721023720405
+          "topScore": 19.316721023720405,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-websocket-call-dispatch",
           "repo": "plinth",
           "query": "how does a WebSocket client invoke a capability and receive the result?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/ws/call_dispatch.cpp",
@@ -845,12 +936,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 20.82679972345979
+          "topScore": 20.82679972345979,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-package-install-state-machine",
           "repo": "plinth",
           "query": "what are the stages of package installation and how is state persisted?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/packages/install_lifecycle.cpp",
@@ -866,12 +959,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 16.6364529641948
+          "topScore": 16.6364529641948,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-schema-migrations-runner",
           "repo": "plinth",
           "query": "how do extension packages apply their database schema migrations?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/packages/migration_error.hpp",
@@ -887,12 +982,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 18.94658821491964
+          "topScore": 18.94658821491964,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-audit-logging-write",
           "repo": "plinth",
           "query": "where does the system write audit events to the database?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/audit/handlers.hpp",
@@ -908,7 +1005,8 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 18.044233061822585
+          "topScore": 18.044233061822585,
+          "perQueryDetail": null
         }
       ],
       "aggregate": {
@@ -982,11 +1080,13 @@
           "integration_tests/": 0.3
         }
       },
+      "mode": "baseline",
       "results": [
         {
           "id": "armature-oauth-session-lifecycle",
           "repo": "armature",
           "query": "how does the OAuth flow work for OIDC provider authentication?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/auth/github.go",
@@ -1002,12 +1102,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 25.98865339051419
+          "topScore": 25.98865339051419,
+          "perQueryDetail": null
         },
         {
           "id": "armature-user-session-cache",
           "repo": "armature",
           "query": "where is the user status cache that prevents repeated DB queries on each request?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -1021,12 +1123,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 23.813390569672272
+          "topScore": 23.813390569672272,
+          "perQueryDetail": null
         },
         {
           "id": "armature-websocket-auth-ticket",
           "repo": "armature",
           "query": "how does the WebSocket endpoint authenticate clients — ticket exchange vs. Bearer tokens?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "server/middleware/auth.go"
@@ -1040,12 +1144,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 43.975259802545565
+          "topScore": 43.975259802545565,
+          "perQueryDetail": null
         },
         {
           "id": "armature-vault-initialization",
           "repo": "armature",
           "query": "how does the password vault initialize and unlock for a user on login?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -1059,12 +1165,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.14901945522044
+          "topScore": 34.14901945522044,
+          "perQueryDetail": null
         },
         {
           "id": "armature-bootstrap-admin-vault",
           "repo": "armature",
           "query": "when the admin user is created at startup, how is their password vault initialized?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/auth.go"
@@ -1078,12 +1186,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 34.5418354239366
+          "topScore": 34.5418354239366,
+          "perQueryDetail": null
         },
         {
           "id": "armature-starlark-package-manifest",
           "repo": "armature",
           "query": "how can a Starlark extension extract and inspect a package manifest.json?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "server/handlers/package_validate.go",
@@ -1098,12 +1208,14 @@
           ],
           "recallAt5": 0.5,
           "hitAt5": 1,
-          "topScore": 29.136550017776585
+          "topScore": 29.136550017776585,
+          "perQueryDetail": null
         },
         {
           "id": "armature-package-manifest-validation",
           "repo": "armature",
           "query": "what are the rules for validating a package manifest — required fields, type constraints, allowed fields?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/handlers/package_validate.go"
@@ -1117,12 +1229,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.468387652824326
+          "topScore": 32.468387652824326,
+          "perQueryDetail": null
         },
         {
           "id": "armature-notification-delivery",
           "repo": "armature",
           "query": "how does the notification service route messages to users — in-app, email, or both?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "server/notifications/service.go"
@@ -1136,12 +1250,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 35.899498319122735
+          "topScore": 35.899498319122735,
+          "perQueryDetail": null
         },
         {
           "id": "armature-cluster-registry",
           "repo": "armature",
           "query": "how does the cluster registry track replicas and coordinate multi-instance state?",
+          "altQueries": [],
           "category": "file-discovery",
           "expectedPaths": [
             "server/cluster/registry.go"
@@ -1155,12 +1271,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 19.83873671227724
+          "topScore": 19.83873671227724,
+          "perQueryDetail": null
         },
         {
           "id": "armature-logging-configuration",
           "repo": "armature",
           "query": "how do I configure structured logging format and level for the server?",
+          "altQueries": [],
           "category": "onboarding",
           "expectedPaths": [
             "server/logging/logger.go"
@@ -1174,12 +1292,14 @@
           ],
           "recallAt5": 1,
           "hitAt5": 1,
-          "topScore": 32.37943951048565
+          "topScore": 32.37943951048565,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-session-auth-routes",
           "repo": "plinth",
           "query": "how does the system handle user login and session creation?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/auth/handlers.cpp",
@@ -1195,12 +1315,18 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 17.711675680936974
+          "topScore": 17.711675680936974,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-registry-api",
           "repo": "plinth",
           "query": "where do extensions register new capabilities?",
+          "altQueries": [
+            "capability registration api: register_capability and RegisterResult",
+            "register_capability function and CapabilityError validation",
+            "capabilities namespace registration types and signature"
+          ],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/capabilities/registration.cpp",
@@ -1216,12 +1342,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 13.399321267437436
+          "topScore": 13.399321267437436,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-capability-tier-resolution",
           "repo": "plinth",
           "query": "how does the system resolve which handler to call for a given capability signature?",
+          "altQueries": [],
           "category": "function-discovery",
           "expectedPaths": [
             "src/kernel/capabilities/resolution.cpp",
@@ -1237,12 +1365,18 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 25.92249388819378
+          "topScore": 25.92249388819378,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-rbac-enforcement-filter",
           "repo": "plinth",
           "query": "how does the HTTP request pipeline enforce role-based access control?",
+          "altQueries": [
+            "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+            "register_rule_requirement and get_required_rules registry",
+            "rbac authorization filter: granting_rule and permission_granted"
+          ],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/rbac/enforcement.cpp",
@@ -1258,12 +1392,14 @@
           ],
           "recallAt5": 0,
           "hitAt5": 0,
-          "topScore": 11.508913647299842
+          "topScore": 11.508913647299842,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-group-bootstrap-rbac-setup",
           "repo": "plinth",
           "query": "how are the initial admin group and kernel.admin rule created at startup?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/groups/handlers.cpp",
@@ -1279,12 +1415,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 27.956355906099915
+          "topScore": 27.956355906099915,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-realtime-pubsub-broker",
           "repo": "plinth",
           "query": "how are WebSocket subscriptions managed and how do messages fan out?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/realtime/broker.cpp",
@@ -1300,12 +1438,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 19.316721023720405
+          "topScore": 19.316721023720405,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-websocket-call-dispatch",
           "repo": "plinth",
           "query": "how does a WebSocket client invoke a capability and receive the result?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/ws/call_dispatch.cpp",
@@ -1321,12 +1461,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 20.82679972345979
+          "topScore": 20.82679972345979,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-package-install-state-machine",
           "repo": "plinth",
           "query": "what are the stages of package installation and how is state persisted?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/packages/install_lifecycle.cpp",
@@ -1342,12 +1484,14 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 16.6364529641948
+          "topScore": 16.6364529641948,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-schema-migrations-runner",
           "repo": "plinth",
           "query": "how do extension packages apply their database schema migrations?",
+          "altQueries": [],
           "category": "task-related",
           "expectedPaths": [
             "src/kernel/packages/migration_error.hpp",
@@ -1363,12 +1507,14 @@
           ],
           "recallAt5": 0.6666666666666666,
           "hitAt5": 1,
-          "topScore": 18.94658821491964
+          "topScore": 18.94658821491964,
+          "perQueryDetail": null
         },
         {
           "id": "plinth-audit-logging-write",
           "repo": "plinth",
           "query": "where does the system write audit events to the database?",
+          "altQueries": [],
           "category": "topic",
           "expectedPaths": [
             "src/kernel/audit/handlers.hpp",
@@ -1384,7 +1530,8 @@
           ],
           "recallAt5": 0.3333333333333333,
           "hitAt5": 1,
-          "topScore": 18.044233061822585
+          "topScore": 18.044233061822585,
+          "perQueryDetail": null
         }
       ],
       "aggregate": {
@@ -1440,6 +1587,1256 @@
             "count": 3,
             "meanHitAt5": 0.6666666666666666,
             "meanRecallAt5": 0.4444444444444444
+          },
+          "plinth/function-discovery": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.6666666666666666
+          }
+        }
+      }
+    },
+    {
+      "name": "lever-B-best-of",
+      "weights": null,
+      "mode": "best-of",
+      "results": [
+        {
+          "id": "armature-oauth-session-lifecycle",
+          "repo": "armature",
+          "query": "how does the OAuth flow work for OIDC provider authentication?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/auth/github.go",
+            "server/handlers/auth.go",
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "packages/intelligence-runner/js/strategy-router.js",
+            "packages/llm-core-runner/js/citation-prompt.js",
+            "server/auth/multi.go",
+            "src/js/sw/surfaces/login/sso-panel.js"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 25.98865339051419,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-user-session-cache",
+          "repo": "armature",
+          "query": "where is the user status cache that prevents repeated DB queries on each request?",
+          "altQueries": [],
+          "category": "file-discovery",
+          "expectedPaths": [
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/middleware/auth.go",
+            "server/store/sqlite/sidecar.go",
+            "server/sandbox/db_module.go",
+            "server/handlers/workflow_assignment_handlers.go",
+            "server/database/schema_freeze.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 23.813390569672272,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-websocket-auth-ticket",
+          "repo": "armature",
+          "query": "how does the WebSocket endpoint authenticate clients — ticket exchange vs. Bearer tokens?",
+          "altQueries": [],
+          "category": "function-discovery",
+          "expectedPaths": [
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/middleware/auth.go",
+            "packages/icd-test-runner/js/tier-security.js",
+            "server/auth/oidc.go",
+            "server/handlers/auth.go",
+            "packages/kb-runner/js/citations.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 43.975259802545565,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-vault-initialization",
+          "repo": "armature",
+          "query": "how does the password vault initialize and unlock for a user on login?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/handlers/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/handlers/admin.go",
+            "packages/icd-test-runner/js/crud/admin.js",
+            "server/crypto/cache.go",
+            "server/handlers/settings.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 34.14901945522044,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-bootstrap-admin-vault",
+          "repo": "armature",
+          "query": "when the admin user is created at startup, how is their password vault initialized?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "server/handlers/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/handlers/admin.go",
+            "server/notifications/email.go",
+            "packages/icd-test-runner/js/crud/admin.js",
+            "src/js/sw/surfaces/admin/users.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 34.5418354239366,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-starlark-package-manifest",
+          "repo": "armature",
+          "query": "how can a Starlark extension extract and inspect a package manifest.json?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "server/handlers/package_validate.go",
+            "server/sandbox/packages_module.go"
+          ],
+          "returnedPaths": [
+            "server/sandbox/packages_module.go",
+            "server/handlers/packages.go",
+            "server/handlers/ext_api.go",
+            "server/handlers/ext_file_upload.go",
+            "server/handlers/user_packages.go"
+          ],
+          "recallAt5": 0.5,
+          "hitAt5": 1,
+          "topScore": 29.136550017776585,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-package-manifest-validation",
+          "repo": "armature",
+          "query": "what are the rules for validating a package manifest — required fields, type constraints, allowed fields?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/handlers/package_validate.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/package_validate.go",
+            "server/forms/forms.go",
+            "server/sandbox/packages_module.go",
+            "server/handlers/connections.go",
+            "server/sandbox/files_module.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 32.468387652824326,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-notification-delivery",
+          "repo": "armature",
+          "query": "how does the notification service route messages to users — in-app, email, or both?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/notifications/service.go"
+          ],
+          "returnedPaths": [
+            "server/notifications/service.go",
+            "server/notifications/service_test.go",
+            "server/models/models_notification_pref.go",
+            "server/notifications/sources.go",
+            "server/sandbox/modules.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 35.899498319122735,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-cluster-registry",
+          "repo": "armature",
+          "query": "how does the cluster registry track replicas and coordinate multi-instance state?",
+          "altQueries": [],
+          "category": "file-discovery",
+          "expectedPaths": [
+            "server/cluster/registry.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/main.go",
+            "server/cluster/registry.go",
+            "server/handlers/package_registry.go",
+            "packages/intelligence-runner/js/digest-by-theme.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 19.83873671227724,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-logging-configuration",
+          "repo": "armature",
+          "query": "how do I configure structured logging format and level for the server?",
+          "altQueries": [],
+          "category": "onboarding",
+          "expectedPaths": [
+            "server/logging/logger.go"
+          ],
+          "returnedPaths": [
+            "server/logging/logger.go",
+            "server/middleware/logging.go",
+            "server/backup/meta.go",
+            "server/sandbox/ext_module.go",
+            "sidecars/test-sidecar/sidecar.py"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 32.37943951048565,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-session-auth-routes",
+          "repo": "plinth",
+          "query": "how does the system handle user login and session creation?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/auth/handlers.cpp",
+            "src/kernel/auth/handlers.hpp",
+            "src/kernel/auth/middleware.hpp"
+          ],
+          "returnedPaths": [
+            "tests/kernel/auth/auth_integration_test.cpp",
+            "data/extensions/shell/0.6.3/client/shell.js",
+            "client/shell/client/shell.js",
+            "src/kernel/auth/handlers.cpp",
+            "src/kernel/frontend/api_frontend.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.602313525523506,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-capability-registry-api",
+          "repo": "plinth",
+          "query": "where do extensions register new capabilities?",
+          "altQueries": [
+            "capability registration api: register_capability and RegisterResult",
+            "register_capability function and CapabilityError validation",
+            "capabilities namespace registration types and signature"
+          ],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/capabilities/registration.cpp",
+            "src/kernel/capabilities/registration.hpp",
+            "src/kernel/capabilities/types.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/capabilities/registration.cpp",
+            "src/kernel/capabilities/registration.hpp",
+            "src/kernel/capabilities/types.hpp",
+            "src/kernel/cap/api_cap.cpp",
+            "src/kernel/cap/api_cap.hpp"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 27.361318350131082,
+          "perQueryDetail": [
+            {
+              "query": "where do extensions register new capabilities?",
+              "returnedPaths": [
+                "src/kernel/packages/install_lifecycle.cpp",
+                "tests/kernel/capabilities/bootstrap_integration_test.cpp",
+                "tests/kernel/packages/lifecycle_transitions_test.cpp",
+                "tests/kernel/capabilities/registration_integration_test.cpp",
+                "tests/kernel/rbac/anonymous_identity_test.cpp"
+              ],
+              "recallAt5": 0,
+              "hitAt5": 0,
+              "topScore": 13.399321267437436
+            },
+            {
+              "query": "capability registration api: register_capability and RegisterResult",
+              "returnedPaths": [
+                "src/kernel/capabilities/registration.cpp",
+                "src/kernel/capabilities/registration.hpp",
+                "src/kernel/capabilities/types.hpp",
+                "src/kernel/cap/api_cap.cpp",
+                "src/kernel/cap/api_cap.hpp"
+              ],
+              "recallAt5": 1,
+              "hitAt5": 1,
+              "topScore": 27.361318350131082
+            },
+            {
+              "query": "register_capability function and CapabilityError validation",
+              "returnedPaths": [
+                "src/kernel/capabilities/registration.hpp",
+                "tests/kernel/capabilities/validation_test.cpp",
+                "src/kernel/capabilities/parser.hpp",
+                "src/kernel/capabilities/validation.cpp",
+                "src/kernel/js/stdlib/cap_bindings.cpp"
+              ],
+              "recallAt5": 0.3333333333333333,
+              "hitAt5": 1,
+              "topScore": 21.168728231840763
+            },
+            {
+              "query": "capabilities namespace registration types and signature",
+              "returnedPaths": [
+                "src/kernel/capabilities/types.hpp",
+                "src/kernel/capabilities/registration.hpp",
+                "tests/kernel/capabilities/parser_test.cpp",
+                "tests/kernel/capabilities/registration_integration_test.cpp",
+                "src/kernel/capabilities/registration.cpp"
+              ],
+              "recallAt5": 1,
+              "hitAt5": 1,
+              "topScore": 19.140932913841002
+            }
+          ]
+        },
+        {
+          "id": "plinth-capability-tier-resolution",
+          "repo": "plinth",
+          "query": "how does the system resolve which handler to call for a given capability signature?",
+          "altQueries": [],
+          "category": "function-discovery",
+          "expectedPaths": [
+            "src/kernel/capabilities/resolution.cpp",
+            "src/kernel/capabilities/resolution.hpp",
+            "src/kernel/extensions/runtime_registry.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/rbac/rule_validator.cpp",
+            "src/kernel/capabilities/resolution.hpp",
+            "tests/kernel/capabilities/resolution_test.cpp",
+            "src/kernel/capabilities/resolution.cpp",
+            "tests/kernel/capabilities/batch_test.cpp"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "hitAt5": 1,
+          "topScore": 25.92249388819378,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-rbac-enforcement-filter",
+          "repo": "plinth",
+          "query": "how does the HTTP request pipeline enforce role-based access control?",
+          "altQueries": [
+            "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+            "register_rule_requirement and get_required_rules registry",
+            "rbac authorization filter: granting_rule and permission_granted"
+          ],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/rbac/enforcement.cpp",
+            "src/kernel/rbac/enforcement.hpp",
+            "src/kernel/rbac/rule_registrar.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/rbac/enforcement.cpp",
+            "src/kernel/rbac/enforcement.hpp",
+            "tests/kernel/rbac/enforcement_test.cpp",
+            "tests/kernel/groups/rbac_integration_test.cpp",
+            "tests/kernel/packages/rbac_test_runner_test.cpp"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "hitAt5": 1,
+          "topScore": 31.069717486220316,
+          "perQueryDetail": [
+            {
+              "query": "how does the HTTP request pipeline enforce role-based access control?",
+              "returnedPaths": [
+                "tests/kernel/packages/lifecycle_transitions_http_test.cpp",
+                "tests/kernel/packages/asset_server_test.cpp",
+                "src/kernel/auth/middleware.hpp",
+                "tests/kernel/packages/migrations_test.cpp",
+                "src/kernel/packages/cross_file_validator.cpp"
+              ],
+              "recallAt5": 0,
+              "hitAt5": 0,
+              "topScore": 13.119579443410567
+            },
+            {
+              "query": "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+              "returnedPaths": [
+                "src/kernel/rbac/enforcement.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "src/kernel/capabilities/resolution.hpp",
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/capabilities/resolution_test.cpp"
+              ],
+              "recallAt5": 0.6666666666666666,
+              "hitAt5": 1,
+              "topScore": 26.947707136238225
+            },
+            {
+              "query": "register_rule_requirement and get_required_rules registry",
+              "returnedPaths": [
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/audit/audit_test.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "src/kernel/groups/handlers.cpp",
+                "tests/kernel/rbac/anonymous_identity_test.cpp"
+              ],
+              "recallAt5": 0.3333333333333333,
+              "hitAt5": 1,
+              "topScore": 33.87456525527936
+            },
+            {
+              "query": "rbac authorization filter: granting_rule and permission_granted",
+              "returnedPaths": [
+                "src/kernel/rbac/enforcement.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/groups/rbac_integration_test.cpp",
+                "tests/kernel/packages/rbac_test_runner_test.cpp"
+              ],
+              "recallAt5": 0.6666666666666666,
+              "hitAt5": 1,
+              "topScore": 31.069717486220316
+            }
+          ]
+        },
+        {
+          "id": "plinth-group-bootstrap-rbac-setup",
+          "repo": "plinth",
+          "query": "how are the initial admin group and kernel.admin rule created at startup?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/groups/handlers.cpp",
+            "src/kernel/groups/handlers.hpp",
+            "src/kernel/rbac/rule_registrar.hpp"
+          ],
+          "returnedPaths": [
+            "tests/kernel/ws/ws_test_fixture.cpp",
+            "src/kernel/groups/handlers.hpp",
+            "src/kernel/auth/handlers.cpp",
+            "tests/kernel/groups/rbac_integration_test.cpp",
+            "src/kernel/rbac/rbac_manifest.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 30.618335527819546,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-realtime-pubsub-broker",
+          "repo": "plinth",
+          "query": "how are WebSocket subscriptions managed and how do messages fan out?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/realtime/broker.cpp",
+            "src/kernel/realtime/broker.hpp",
+            "src/kernel/realtime/listener.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/realtime/broker.cpp",
+            "tests/kernel/capabilities/batch_test.cpp",
+            "data/extensions/shell/0.6.3/client/sdk.js",
+            "client/shell/client/sdk.js",
+            "src/kernel/ws/close_codes.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 19.316721023720405,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-websocket-call-dispatch",
+          "repo": "plinth",
+          "query": "how does a WebSocket client invoke a capability and receive the result?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/ws/call_dispatch.cpp",
+            "src/kernel/ws/call_dispatch.hpp",
+            "src/kernel/ws/connection_registry.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/ws/call_dispatch.hpp",
+            "data/extensions/shell/0.6.3/client/sdk.js",
+            "client/shell/client/sdk.js",
+            "tests/integration/events_replay_integration_test.cpp",
+            "src/kernel/packages/rbac_test_runner.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 20.82679972345979,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-package-install-state-machine",
+          "repo": "plinth",
+          "query": "what are the stages of package installation and how is state persisted?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/packages/install_lifecycle.cpp",
+            "src/kernel/packages/install_lifecycle.hpp",
+            "src/kernel/packages/manifest.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/packages/rbac_test_runner.hpp",
+            "src/kernel/packages/install_lifecycle.hpp",
+            "src/kernel/realtime/broker.cpp",
+            "src/kernel/shell/firstboot.hpp",
+            "src/kernel/js/conversion.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 16.6364529641948,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-schema-migrations-runner",
+          "repo": "plinth",
+          "query": "how do extension packages apply their database schema migrations?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/packages/migration_error.hpp",
+            "src/kernel/packages/migrations.cpp",
+            "src/kernel/packages/migrations.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/config.cpp",
+            "src/kernel/packages/migrations.hpp",
+            "tests/kernel/scheduled_tasks/cleanup_events_test.cpp",
+            "tests/kernel/realtime/cursor_store_test.cpp",
+            "tests/kernel/realtime/envelope_shape_test.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.94658821491964,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-audit-logging-write",
+          "repo": "plinth",
+          "query": "where does the system write audit events to the database?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/audit/handlers.hpp",
+            "src/kernel/logging.cpp",
+            "src/kernel/logging.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/capabilities/bootstrap.cpp",
+            "tests/kernel/scheduled_tasks/cleanup_events_test.cpp",
+            "src/kernel/logging.hpp",
+            "src/kernel/realtime/broker.hpp",
+            "src/kernel/js/stdlib/pubsub_bindings.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.044233061822585,
+          "perQueryDetail": null
+        }
+      ],
+      "aggregate": {
+        "overall": {
+          "count": 20,
+          "meanHitAt5": 1,
+          "meanRecallAt5": 0.6749999999999999
+        },
+        "byRepo": {
+          "armature": {
+            "count": 10,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.8833333333333332
+          },
+          "plinth": {
+            "count": 10,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.4666666666666666
+          }
+        },
+        "byCategory": {
+          "armature/topic": {
+            "count": 4,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.8333333333333333
+          },
+          "armature/file-discovery": {
+            "count": 2,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "armature/function-discovery": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "armature/task-related": {
+            "count": 2,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.75
+          },
+          "armature/onboarding": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "plinth/topic": {
+            "count": 6,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.38888888888888884
+          },
+          "plinth/task-related": {
+            "count": 3,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.5555555555555555
+          },
+          "plinth/function-discovery": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.6666666666666666
+          }
+        }
+      }
+    },
+    {
+      "name": "lever-B-rrf-fused",
+      "weights": null,
+      "mode": "rrf",
+      "results": [
+        {
+          "id": "armature-oauth-session-lifecycle",
+          "repo": "armature",
+          "query": "how does the OAuth flow work for OIDC provider authentication?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/auth/github.go",
+            "server/handlers/auth.go",
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "packages/intelligence-runner/js/strategy-router.js",
+            "packages/llm-core-runner/js/citation-prompt.js",
+            "server/auth/multi.go",
+            "src/js/sw/surfaces/login/sso-panel.js"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 25.98865339051419,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-user-session-cache",
+          "repo": "armature",
+          "query": "where is the user status cache that prevents repeated DB queries on each request?",
+          "altQueries": [],
+          "category": "file-discovery",
+          "expectedPaths": [
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/middleware/auth.go",
+            "server/store/sqlite/sidecar.go",
+            "server/sandbox/db_module.go",
+            "server/handlers/workflow_assignment_handlers.go",
+            "server/database/schema_freeze.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 23.813390569672272,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-websocket-auth-ticket",
+          "repo": "armature",
+          "query": "how does the WebSocket endpoint authenticate clients — ticket exchange vs. Bearer tokens?",
+          "altQueries": [],
+          "category": "function-discovery",
+          "expectedPaths": [
+            "server/middleware/auth.go"
+          ],
+          "returnedPaths": [
+            "server/middleware/auth.go",
+            "packages/icd-test-runner/js/tier-security.js",
+            "server/auth/oidc.go",
+            "server/handlers/auth.go",
+            "packages/kb-runner/js/citations.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 43.975259802545565,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-vault-initialization",
+          "repo": "armature",
+          "query": "how does the password vault initialize and unlock for a user on login?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/handlers/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/handlers/admin.go",
+            "packages/icd-test-runner/js/crud/admin.js",
+            "server/crypto/cache.go",
+            "server/handlers/settings.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 34.14901945522044,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-bootstrap-admin-vault",
+          "repo": "armature",
+          "query": "when the admin user is created at startup, how is their password vault initialized?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "server/handlers/auth.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/handlers/admin.go",
+            "server/notifications/email.go",
+            "packages/icd-test-runner/js/crud/admin.js",
+            "src/js/sw/surfaces/admin/users.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 34.5418354239366,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-starlark-package-manifest",
+          "repo": "armature",
+          "query": "how can a Starlark extension extract and inspect a package manifest.json?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "server/handlers/package_validate.go",
+            "server/sandbox/packages_module.go"
+          ],
+          "returnedPaths": [
+            "server/sandbox/packages_module.go",
+            "server/handlers/packages.go",
+            "server/handlers/ext_api.go",
+            "server/handlers/ext_file_upload.go",
+            "server/handlers/user_packages.go"
+          ],
+          "recallAt5": 0.5,
+          "hitAt5": 1,
+          "topScore": 29.136550017776585,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-package-manifest-validation",
+          "repo": "armature",
+          "query": "what are the rules for validating a package manifest — required fields, type constraints, allowed fields?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/handlers/package_validate.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/package_validate.go",
+            "server/forms/forms.go",
+            "server/sandbox/packages_module.go",
+            "server/handlers/connections.go",
+            "server/sandbox/files_module.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 32.468387652824326,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-notification-delivery",
+          "repo": "armature",
+          "query": "how does the notification service route messages to users — in-app, email, or both?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "server/notifications/service.go"
+          ],
+          "returnedPaths": [
+            "server/notifications/service.go",
+            "server/notifications/service_test.go",
+            "server/models/models_notification_pref.go",
+            "server/notifications/sources.go",
+            "server/sandbox/modules.go"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 35.899498319122735,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-cluster-registry",
+          "repo": "armature",
+          "query": "how does the cluster registry track replicas and coordinate multi-instance state?",
+          "altQueries": [],
+          "category": "file-discovery",
+          "expectedPaths": [
+            "server/cluster/registry.go"
+          ],
+          "returnedPaths": [
+            "server/handlers/auth.go",
+            "server/main.go",
+            "server/cluster/registry.go",
+            "server/handlers/package_registry.go",
+            "packages/intelligence-runner/js/digest-by-theme.js"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 19.83873671227724,
+          "perQueryDetail": null
+        },
+        {
+          "id": "armature-logging-configuration",
+          "repo": "armature",
+          "query": "how do I configure structured logging format and level for the server?",
+          "altQueries": [],
+          "category": "onboarding",
+          "expectedPaths": [
+            "server/logging/logger.go"
+          ],
+          "returnedPaths": [
+            "server/logging/logger.go",
+            "server/middleware/logging.go",
+            "server/backup/meta.go",
+            "server/sandbox/ext_module.go",
+            "sidecars/test-sidecar/sidecar.py"
+          ],
+          "recallAt5": 1,
+          "hitAt5": 1,
+          "topScore": 32.37943951048565,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-session-auth-routes",
+          "repo": "plinth",
+          "query": "how does the system handle user login and session creation?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/auth/handlers.cpp",
+            "src/kernel/auth/handlers.hpp",
+            "src/kernel/auth/middleware.hpp"
+          ],
+          "returnedPaths": [
+            "tests/kernel/auth/auth_integration_test.cpp",
+            "data/extensions/shell/0.6.3/client/shell.js",
+            "client/shell/client/shell.js",
+            "src/kernel/auth/handlers.cpp",
+            "src/kernel/frontend/api_frontend.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.602313525523506,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-capability-registry-api",
+          "repo": "plinth",
+          "query": "where do extensions register new capabilities?",
+          "altQueries": [
+            "capability registration api: register_capability and RegisterResult",
+            "register_capability function and CapabilityError validation",
+            "capabilities namespace registration types and signature"
+          ],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/capabilities/registration.cpp",
+            "src/kernel/capabilities/registration.hpp",
+            "src/kernel/capabilities/types.hpp"
+          ],
+          "returnedPaths": [
+            "tests/kernel/capabilities/registration_integration_test.cpp",
+            "tests/kernel/capabilities/listener_integration_test.cpp",
+            "tests/kernel/capabilities/resolution_test.cpp",
+            "src/kernel/packages/install_lifecycle.cpp",
+            "src/kernel/capabilities/resolution.cpp"
+          ],
+          "recallAt5": 0,
+          "hitAt5": 0,
+          "topScore": 27.361318350131082,
+          "perQueryDetail": [
+            {
+              "query": "where do extensions register new capabilities?",
+              "returnedPaths": [
+                "src/kernel/packages/install_lifecycle.cpp",
+                "tests/kernel/capabilities/bootstrap_integration_test.cpp",
+                "tests/kernel/packages/lifecycle_transitions_test.cpp",
+                "tests/kernel/capabilities/registration_integration_test.cpp",
+                "tests/kernel/rbac/anonymous_identity_test.cpp"
+              ],
+              "recallAt5": 0,
+              "hitAt5": 0,
+              "topScore": 13.399321267437436
+            },
+            {
+              "query": "capability registration api: register_capability and RegisterResult",
+              "returnedPaths": [
+                "src/kernel/capabilities/registration.cpp",
+                "src/kernel/capabilities/registration.hpp",
+                "src/kernel/capabilities/types.hpp",
+                "src/kernel/cap/api_cap.cpp",
+                "src/kernel/cap/api_cap.hpp"
+              ],
+              "recallAt5": 1,
+              "hitAt5": 1,
+              "topScore": 27.361318350131082
+            },
+            {
+              "query": "register_capability function and CapabilityError validation",
+              "returnedPaths": [
+                "src/kernel/capabilities/registration.hpp",
+                "tests/kernel/capabilities/validation_test.cpp",
+                "src/kernel/capabilities/parser.hpp",
+                "src/kernel/capabilities/validation.cpp",
+                "src/kernel/js/stdlib/cap_bindings.cpp"
+              ],
+              "recallAt5": 0.3333333333333333,
+              "hitAt5": 1,
+              "topScore": 21.168728231840763
+            },
+            {
+              "query": "capabilities namespace registration types and signature",
+              "returnedPaths": [
+                "src/kernel/capabilities/types.hpp",
+                "src/kernel/capabilities/registration.hpp",
+                "tests/kernel/capabilities/parser_test.cpp",
+                "tests/kernel/capabilities/registration_integration_test.cpp",
+                "src/kernel/capabilities/registration.cpp"
+              ],
+              "recallAt5": 1,
+              "hitAt5": 1,
+              "topScore": 19.140932913841002
+            }
+          ]
+        },
+        {
+          "id": "plinth-capability-tier-resolution",
+          "repo": "plinth",
+          "query": "how does the system resolve which handler to call for a given capability signature?",
+          "altQueries": [],
+          "category": "function-discovery",
+          "expectedPaths": [
+            "src/kernel/capabilities/resolution.cpp",
+            "src/kernel/capabilities/resolution.hpp",
+            "src/kernel/extensions/runtime_registry.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/rbac/rule_validator.cpp",
+            "src/kernel/capabilities/resolution.hpp",
+            "tests/kernel/capabilities/resolution_test.cpp",
+            "src/kernel/capabilities/resolution.cpp",
+            "tests/kernel/capabilities/batch_test.cpp"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "hitAt5": 1,
+          "topScore": 25.92249388819378,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-rbac-enforcement-filter",
+          "repo": "plinth",
+          "query": "how does the HTTP request pipeline enforce role-based access control?",
+          "altQueries": [
+            "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+            "register_rule_requirement and get_required_rules registry",
+            "rbac authorization filter: granting_rule and permission_granted"
+          ],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/rbac/enforcement.cpp",
+            "src/kernel/rbac/enforcement.hpp",
+            "src/kernel/rbac/rule_registrar.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/rbac/enforcement.cpp",
+            "src/kernel/rbac/enforcement.hpp",
+            "src/kernel/capabilities/resolution.hpp",
+            "tests/kernel/rbac/anonymous_identity_test.cpp",
+            "tests/kernel/packages/lifecycle_transitions_http_test.cpp"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "hitAt5": 1,
+          "topScore": 33.87456525527936,
+          "perQueryDetail": [
+            {
+              "query": "how does the HTTP request pipeline enforce role-based access control?",
+              "returnedPaths": [
+                "tests/kernel/packages/lifecycle_transitions_http_test.cpp",
+                "tests/kernel/packages/asset_server_test.cpp",
+                "src/kernel/auth/middleware.hpp",
+                "tests/kernel/packages/migrations_test.cpp",
+                "src/kernel/packages/cross_file_validator.cpp"
+              ],
+              "recallAt5": 0,
+              "hitAt5": 0,
+              "topScore": 13.119579443410567
+            },
+            {
+              "query": "RbacFilter HttpFilter enforcement and RbacContext effective_rules",
+              "returnedPaths": [
+                "src/kernel/rbac/enforcement.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "src/kernel/capabilities/resolution.hpp",
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/capabilities/resolution_test.cpp"
+              ],
+              "recallAt5": 0.6666666666666666,
+              "hitAt5": 1,
+              "topScore": 26.947707136238225
+            },
+            {
+              "query": "register_rule_requirement and get_required_rules registry",
+              "returnedPaths": [
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/audit/audit_test.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "src/kernel/groups/handlers.cpp",
+                "tests/kernel/rbac/anonymous_identity_test.cpp"
+              ],
+              "recallAt5": 0.3333333333333333,
+              "hitAt5": 1,
+              "topScore": 33.87456525527936
+            },
+            {
+              "query": "rbac authorization filter: granting_rule and permission_granted",
+              "returnedPaths": [
+                "src/kernel/rbac/enforcement.cpp",
+                "src/kernel/rbac/enforcement.hpp",
+                "tests/kernel/rbac/enforcement_test.cpp",
+                "tests/kernel/groups/rbac_integration_test.cpp",
+                "tests/kernel/packages/rbac_test_runner_test.cpp"
+              ],
+              "recallAt5": 0.6666666666666666,
+              "hitAt5": 1,
+              "topScore": 31.069717486220316
+            }
+          ]
+        },
+        {
+          "id": "plinth-group-bootstrap-rbac-setup",
+          "repo": "plinth",
+          "query": "how are the initial admin group and kernel.admin rule created at startup?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/groups/handlers.cpp",
+            "src/kernel/groups/handlers.hpp",
+            "src/kernel/rbac/rule_registrar.hpp"
+          ],
+          "returnedPaths": [
+            "tests/kernel/ws/ws_test_fixture.cpp",
+            "src/kernel/groups/handlers.hpp",
+            "src/kernel/auth/handlers.cpp",
+            "tests/kernel/groups/rbac_integration_test.cpp",
+            "src/kernel/rbac/rbac_manifest.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 30.618335527819546,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-realtime-pubsub-broker",
+          "repo": "plinth",
+          "query": "how are WebSocket subscriptions managed and how do messages fan out?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/realtime/broker.cpp",
+            "src/kernel/realtime/broker.hpp",
+            "src/kernel/realtime/listener.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/realtime/broker.cpp",
+            "tests/kernel/capabilities/batch_test.cpp",
+            "data/extensions/shell/0.6.3/client/sdk.js",
+            "client/shell/client/sdk.js",
+            "src/kernel/ws/close_codes.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 19.316721023720405,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-websocket-call-dispatch",
+          "repo": "plinth",
+          "query": "how does a WebSocket client invoke a capability and receive the result?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/ws/call_dispatch.cpp",
+            "src/kernel/ws/call_dispatch.hpp",
+            "src/kernel/ws/connection_registry.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/ws/call_dispatch.hpp",
+            "data/extensions/shell/0.6.3/client/sdk.js",
+            "client/shell/client/sdk.js",
+            "tests/integration/events_replay_integration_test.cpp",
+            "src/kernel/packages/rbac_test_runner.hpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 20.82679972345979,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-package-install-state-machine",
+          "repo": "plinth",
+          "query": "what are the stages of package installation and how is state persisted?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/packages/install_lifecycle.cpp",
+            "src/kernel/packages/install_lifecycle.hpp",
+            "src/kernel/packages/manifest.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/packages/rbac_test_runner.hpp",
+            "src/kernel/packages/install_lifecycle.hpp",
+            "src/kernel/realtime/broker.cpp",
+            "src/kernel/shell/firstboot.hpp",
+            "src/kernel/js/conversion.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 16.6364529641948,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-schema-migrations-runner",
+          "repo": "plinth",
+          "query": "how do extension packages apply their database schema migrations?",
+          "altQueries": [],
+          "category": "task-related",
+          "expectedPaths": [
+            "src/kernel/packages/migration_error.hpp",
+            "src/kernel/packages/migrations.cpp",
+            "src/kernel/packages/migrations.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/config.cpp",
+            "src/kernel/packages/migrations.hpp",
+            "tests/kernel/scheduled_tasks/cleanup_events_test.cpp",
+            "tests/kernel/realtime/cursor_store_test.cpp",
+            "tests/kernel/realtime/envelope_shape_test.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.94658821491964,
+          "perQueryDetail": null
+        },
+        {
+          "id": "plinth-audit-logging-write",
+          "repo": "plinth",
+          "query": "where does the system write audit events to the database?",
+          "altQueries": [],
+          "category": "topic",
+          "expectedPaths": [
+            "src/kernel/audit/handlers.hpp",
+            "src/kernel/logging.cpp",
+            "src/kernel/logging.hpp"
+          ],
+          "returnedPaths": [
+            "src/kernel/capabilities/bootstrap.cpp",
+            "tests/kernel/scheduled_tasks/cleanup_events_test.cpp",
+            "src/kernel/logging.hpp",
+            "src/kernel/realtime/broker.hpp",
+            "src/kernel/js/stdlib/pubsub_bindings.cpp"
+          ],
+          "recallAt5": 0.3333333333333333,
+          "hitAt5": 1,
+          "topScore": 18.044233061822585,
+          "perQueryDetail": null
+        }
+      ],
+      "aggregate": {
+        "overall": {
+          "count": 20,
+          "meanHitAt5": 0.95,
+          "meanRecallAt5": 0.625
+        },
+        "byRepo": {
+          "armature": {
+            "count": 10,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.8833333333333332
+          },
+          "plinth": {
+            "count": 10,
+            "meanHitAt5": 0.9,
+            "meanRecallAt5": 0.3666666666666667
+          }
+        },
+        "byCategory": {
+          "armature/topic": {
+            "count": 4,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.8333333333333333
+          },
+          "armature/file-discovery": {
+            "count": 2,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "armature/function-discovery": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "armature/task-related": {
+            "count": 2,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.75
+          },
+          "armature/onboarding": {
+            "count": 1,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 1
+          },
+          "plinth/topic": {
+            "count": 6,
+            "meanHitAt5": 1,
+            "meanRecallAt5": 0.38888888888888884
+          },
+          "plinth/task-related": {
+            "count": 3,
+            "meanHitAt5": 0.6666666666666666,
+            "meanRecallAt5": 0.2222222222222222
           },
           "plinth/function-discovery": {
             "count": 1,

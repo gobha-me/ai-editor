@@ -107,6 +107,16 @@ const SKIP_DIRS = new Set([
 const MAX_FILE_BYTES = 500 * 1024; // 500 KB per file
 const TOP_K = 5;
 
+// Per-query ranking depth used as input to RRF fusion. Deeper than
+// `TOP_K` so a path that ranks 7th under one phrasing but 1st under
+// another can still surface in the fused top-5. 50 mirrors the
+// Semantic strategy's k-NN candidate-pool depth before re-ranking.
+const FUSION_DEPTH = 50;
+
+// RRF constant. 60 is the Cormack/Clarke/Buettcher 2009 default and the
+// constant the Semantic strategy uses when fusing paraphrase rankings.
+const RRF_K = 60;
+
 /* -------------------------------------------------------------------------- */
 /* Filesystem walker                                                          */
 /* -------------------------------------------------------------------------- */
@@ -273,46 +283,160 @@ function topPathsForQuery(idx, query, topK, weights) {
     return { paths: ranked, topScore };
 }
 
+/**
+ * Reciprocal Rank Fusion over multiple file-path rankings. Each ranking
+ * is an ordered list (rank 1 first). A path that appears in N rankings
+ * accumulates `Σ 1/(RRF_K + rank_i)` and the fused list is sorted
+ * descending by that score, then truncated to `topK`.
+ *
+ * Mirrors the fusion shape used in the Semantic strategy when paraphrase
+ * mode is active; inlined here so the benchmark stays self-contained.
+ *
+ * @param {string[][]} rankings
+ * @param {number} topK
+ * @returns {string[]}
+ */
+function rrfFusePathRankings(rankings, topK) {
+    /** @type {Map<string, number>} */
+    const scores = new Map();
+    for (const ranking of rankings) {
+        for (let i = 0; i < ranking.length; i++) {
+            const path = ranking[i];
+            const rank = i + 1;
+            scores.set(path, (scores.get(path) || 0) + 1 / (RRF_K + rank));
+        }
+    }
+    return Array.from(scores.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, topK)
+        .map(([p]) => p);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Run                                                                        */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * @typedef {Object} PerQueryDetail
+ * @property {string}   query
+ * @property {string[]} returnedPaths   Top-5 paths for this query alone.
+ * @property {number}   recallAt5       Recall against the fixture's expectedPaths.
+ * @property {number}   hitAt5
+ * @property {number}   topScore
+ */
 
 /**
  * @typedef {Object} FixtureResult
  * @property {string}   id
  * @property {string}   repo
  * @property {string}   query
+ * @property {string[]} altQueries        Empty when fixture has no alts.
  * @property {string}   category
  * @property {string[]} expectedPaths
  * @property {string[]} returnedPaths
  * @property {number}   recallAt5    Fraction of expected paths in returned top-5.
  * @property {number}   hitAt5       1 if any expected path is in the top-5, else 0.
  * @property {number}   topScore
+ * @property {PerQueryDetail[]|null} perQueryDetail   Populated only for
+ *                                     `mode: 'best-of'` and `'rrf'` configs
+ *                                     on fixtures that have altQueries.
+ */
+
+/**
+ * @typedef {'baseline' | 'best-of' | 'rrf'} RunMode
  */
 
 /**
  * @param {RepoIndex} idx
  * @param {ReturnType<typeof getFixturesByRepo>} fixtures
- * @param {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null} weights
+ * @param {{ weights: ({ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null), mode: RunMode }} cfg
  * @returns {FixtureResult[]}
  */
-function runFixtures(idx, fixtures, weights) {
+function runFixtures(idx, fixtures, cfg) {
+    const { weights, mode } = cfg;
     /** @type {FixtureResult[]} */
     const out = [];
     for (const f of fixtures) {
-        const { paths, topScore } = topPathsForQuery(idx, f.query, TOP_K, weights);
-        const hits = f.expectedPaths.filter((p) => paths.includes(p));
+        const altQueries = Array.isArray(/** @type {any} */ (f).altQueries)
+            ? /** @type {string[]} */ (/** @type {any} */ (f).altQueries)
+            : [];
+
+        let returnedPaths;
+        let topScore = 0;
+        /** @type {PerQueryDetail[]|null} */
+        let perQueryDetail = null;
+
+        // 'baseline' OR a fixture with no altQueries: single-query path
+        // (lever-B configs collapse to baseline behavior here, which is
+        // exactly what we want — the lift is only visible on fixtures
+        // that have alts to fuse).
+        if (mode === 'baseline' || altQueries.length === 0) {
+            const r = topPathsForQuery(idx, f.query, TOP_K, weights);
+            returnedPaths = r.paths;
+            topScore = r.topScore;
+        } else {
+            // Score the baseline + every alt at FUSION_DEPTH so paths that
+            // rank 6th–50th under one phrasing can still surface in the
+            // fused top-5 if other phrasings rank them higher.
+            const queries = [f.query, ...altQueries];
+            const perQuery = queries.map((q) => {
+                const r = topPathsForQuery(idx, q, FUSION_DEPTH, weights);
+                const top5 = r.paths.slice(0, TOP_K);
+                const hits = f.expectedPaths.filter((p) => top5.includes(p));
+                const recall = f.expectedPaths.length === 0 ? 0 : hits.length / f.expectedPaths.length;
+                return {
+                    query: q,
+                    fullPaths: r.paths,
+                    topScore: r.topScore,
+                    detail: {
+                        query: q,
+                        returnedPaths: top5,
+                        recallAt5: recall,
+                        hitAt5: hits.length > 0 ? 1 : 0,
+                        topScore: r.topScore,
+                    },
+                };
+            });
+            perQueryDetail = perQuery.map((p) => p.detail);
+
+            if (mode === 'best-of') {
+                // Pick the per-query top-5 with the highest recall@5.
+                // Ties broken by topScore (higher wins) — keeps the choice
+                // deterministic without leaning on ranking order.
+                let best = perQuery[0];
+                let bestRecall = perQuery[0].detail.recallAt5;
+                for (let i = 1; i < perQuery.length; i++) {
+                    const cand = perQuery[i];
+                    if (cand.detail.recallAt5 > bestRecall
+                        || (cand.detail.recallAt5 === bestRecall && cand.topScore > best.topScore)) {
+                        best = cand;
+                        bestRecall = cand.detail.recallAt5;
+                    }
+                }
+                returnedPaths = best.detail.returnedPaths;
+                topScore = best.topScore;
+            } else { // 'rrf'
+                returnedPaths = rrfFusePathRankings(perQuery.map((p) => p.fullPaths), TOP_K);
+                // No native fused score; surface the max per-query topScore
+                // so the JSON dump retains a comparable magnitude.
+                topScore = perQuery.reduce((m, p) => Math.max(m, p.topScore), 0);
+            }
+        }
+
+        const hits = f.expectedPaths.filter((p) => returnedPaths.includes(p));
         const recallAt5 = f.expectedPaths.length === 0 ? 0 : hits.length / f.expectedPaths.length;
         out.push({
             id: f.id,
             repo: f.repo,
             query: f.query,
+            altQueries,
             category: f.category,
             expectedPaths: f.expectedPaths,
-            returnedPaths: paths,
+            returnedPaths,
             recallAt5,
             hitAt5: hits.length > 0 ? 1 : 0,
             topScore,
+            perQueryDetail,
         });
     }
     return out;
@@ -359,6 +483,7 @@ function aggregate(results) {
  * @typedef {Object} ConfigRun
  * @property {string} name
  * @property {{ content_types?: Object<string, number>, prefixes?: Object<string, number> }|null} weights
+ * @property {RunMode} mode
  * @property {FixtureResult[]} results
  * @property {ReturnType<typeof aggregate>} aggregate
  */
@@ -385,11 +510,11 @@ function renderMarkdown(indexes, configRuns) {
     lines.push('');
     lines.push('## Configurations compared');
     lines.push('');
-    lines.push('| Config | Weights |');
-    lines.push('|---|---|');
+    lines.push('| Config | Mode | Weights |');
+    lines.push('|---|---|---|');
     for (const c of configRuns) {
-        const w = c.weights ? `\`${JSON.stringify(c.weights)}\`` : '_(none — baseline)_';
-        lines.push(`| **${c.name}** | ${w} |`);
+        const w = c.weights ? `\`${JSON.stringify(c.weights)}\`` : '_(none)_';
+        lines.push(`| **${c.name}** | ${c.mode} | ${w} |`);
     }
     lines.push('');
     lines.push('## Aggregate (side-by-side)');
@@ -425,6 +550,58 @@ function renderMarkdown(indexes, configRuns) {
         }
         lines.push('');
     }
+
+    // ─── Lever-B focused detail ────────────────────────────────────────
+    // Pull every fixture that grew altQueries, then for each show:
+    //   - baseline R@5 (from the 'baseline' config)
+    //   - per-alt R@5 (one row per query string)
+    //   - best-of R@5 (from 'lever-B-best-of' config)
+    //   - rrf-fused R@5 (from 'lever-B-rrf-fused' config)
+    //
+    // The decision rule for the PR is "did rrf-fused lift both stuck-
+    // zero fixtures off zero?". The block below makes that legible
+    // without scanning the prose.
+    const baselineRun = configRuns.find((c) => c.name === 'baseline');
+    const bestOfRun = configRuns.find((c) => c.name === 'lever-B-best-of');
+    const rrfRun = configRuns.find((c) => c.name === 'lever-B-rrf-fused');
+    if (baselineRun && bestOfRun && rrfRun) {
+        // Per-fixture results carry altQueries; identify alt-bearing ones from
+        // the lever-B run (perQueryDetail is non-null only there).
+        const altFixtures = bestOfRun.results.filter((r) => Array.isArray(r.perQueryDetail) && r.perQueryDetail.length > 1);
+        if (altFixtures.length > 0) {
+            lines.push('## Lever-B probe — stuck-zero fixture detail');
+            lines.push('');
+            lines.push('Per-fixture breakdown for fixtures with curated `altQueries`. Baseline = `f.query` only; alts = each `altQueries[*]` scored independently; best-of = highest-recall alt; rrf-fused = reciprocal-rank fusion of baseline + every alt over depth-50 rankings, truncated to top-5.');
+            lines.push('');
+            for (const f of altFixtures) {
+                const base = baselineRun.results.find((r) => r.id === f.id);
+                const rrf = rrfRun.results.find((r) => r.id === f.id);
+                if (!base || !rrf) continue;
+                lines.push(`### \`${f.id}\``);
+                lines.push('');
+                lines.push(`Expected: ${f.expectedPaths.map((p) => `\`${p}\``).join(', ')}`);
+                lines.push('');
+                lines.push('| Source | Query | R@5 | Hit | Top-5 paths |');
+                lines.push('|---|---|---:|:-:|---|');
+                const baseGot = base.returnedPaths.length === 0 ? '_(no results)_' : base.returnedPaths.map((p) => `\`${p}\``).join('<br>');
+                lines.push(`| **baseline** | \`${base.query}\` | ${base.recallAt5.toFixed(2)} | ${base.hitAt5 ? '✅' : '❌'} | ${baseGot} |`);
+                if (Array.isArray(f.perQueryDetail)) {
+                    // perQueryDetail[0] is the baseline query echoed back; skip it
+                    // since it's already represented above.
+                    for (let i = 1; i < f.perQueryDetail.length; i++) {
+                        const d = f.perQueryDetail[i];
+                        const got = d.returnedPaths.length === 0 ? '_(no results)_' : d.returnedPaths.map((p) => `\`${p}\``).join('<br>');
+                        lines.push(`| alt ${i} | \`${d.query}\` | ${d.recallAt5.toFixed(2)} | ${d.hitAt5 ? '✅' : '❌'} | ${got} |`);
+                    }
+                }
+                const bestGot = f.returnedPaths.length === 0 ? '_(no results)_' : f.returnedPaths.map((p) => `\`${p}\``).join('<br>');
+                lines.push(`| **best-of** | _(highest-recall single query)_ | ${f.recallAt5.toFixed(2)} | ${f.hitAt5 ? '✅' : '❌'} | ${bestGot} |`);
+                const rrfGot = rrf.returnedPaths.length === 0 ? '_(no results)_' : rrf.returnedPaths.map((p) => `\`${p}\``).join('<br>');
+                lines.push(`| **rrf-fused** | _(RRF of baseline + alts)_ | ${rrf.recallAt5.toFixed(2)} | ${rrf.hitAt5 ? '✅' : '❌'} | ${rrfGot} |`);
+                lines.push('');
+            }
+        }
+    }
     return lines.join('\n');
 }
 
@@ -447,16 +624,32 @@ function parseArgs(argv) {
 }
 
 /**
- * Configurations the benchmark sweeps in a single run. Each entry is
- * passed through `applyScoreWeights` post-rank, pre-truncation. The
- * `tests/`-prefix penalties target the AST chunker Phase 2 lever C
- * hypothesis: that integration-test files out-score source files when
- * both contain query keywords (the Plinth/C++ stuck-zero fixtures).
+ * Configurations the benchmark sweeps in a single run.
+ *
+ * - `weights` is passed through `applyScoreWeights` post-rank, pre-
+ *   truncation. The `tests/`-prefix penalties target lever C: that
+ *   integration-test files out-score source files when both contain
+ *   query keywords (the Plinth/C++ stuck-zero fixtures).
+ * - `mode` selects how multi-query fixtures combine: `'baseline'` uses
+ *   `f.query` only (current production shape); `'best-of'` picks the
+ *   highest-recall top-5 across `[f.query, ...f.altQueries]`; `'rrf'`
+ *   reciprocal-rank-fuses every query's full ranking before truncating
+ *   to top-5 (the lever-B feasibility probe added in 1.7.3 — mirrors the
+ *   Semantic strategy's paraphraser-fusion shape).
+ *
+ * Lever-B configs collapse to baseline behavior on fixtures with no
+ * `altQueries`, so their aggregate numbers differ from baseline only on
+ * the two stuck-zero Plinth fixtures (and any other fixture that grows
+ * alts later).
+ *
+ * @type {Array<{ name: string, weights: any, mode: RunMode }>}
  */
 const RUN_CONFIGS = [
-    { name: 'baseline', weights: null },
-    { name: 'tests-prefix-0.5', weights: { prefixes: { 'tests/': 0.5, 'test/': 0.5, 'integration_tests/': 0.5 } } },
-    { name: 'tests-prefix-0.3', weights: { prefixes: { 'tests/': 0.3, 'test/': 0.3, 'integration_tests/': 0.3 } } },
+    { name: 'baseline', weights: null, mode: 'baseline' },
+    { name: 'tests-prefix-0.5', weights: { prefixes: { 'tests/': 0.5, 'test/': 0.5, 'integration_tests/': 0.5 } }, mode: 'baseline' },
+    { name: 'tests-prefix-0.3', weights: { prefixes: { 'tests/': 0.3, 'test/': 0.3, 'integration_tests/': 0.3 } }, mode: 'baseline' },
+    { name: 'lever-B-best-of', weights: null, mode: 'best-of' },
+    { name: 'lever-B-rrf-fused', weights: null, mode: 'rrf' },
 ];
 
 async function main() {
@@ -489,12 +682,13 @@ async function main() {
         const allResults = [];
         for (const idx of indexes) {
             const fixtures = getFixturesByRepo(/** @type {any} */ (idx.repo));
-            const results = runFixtures(idx, fixtures, cfg.weights);
+            const results = runFixtures(idx, fixtures, { weights: cfg.weights, mode: cfg.mode });
             allResults.push(...results);
         }
         configRuns.push({
             name: cfg.name,
             weights: cfg.weights,
+            mode: cfg.mode,
             results: allResults,
             aggregate: aggregate(allResults),
         });
