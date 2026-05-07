@@ -334,6 +334,8 @@ export function resetSessionCost() {
         totalOutputTokens: 0,
         cachedInputTokens: 0,
         reasoningTokens: 0,
+        cacheReadTokens: 0,      // 1.8.5
+        cacheCreationTokens: 0,  // 1.8.5
         totalCost: 0,
         cacheSavings: 0,
         requests: 0

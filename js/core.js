@@ -361,8 +361,10 @@ const State = {
     sessionCost: {
         totalInputTokens: 0,
         totalOutputTokens: 0,
-        cachedInputTokens: 0,   // Tokens served from prompt cache
+        cachedInputTokens: 0,   // Tokens served from prompt cache (OpenAI prompt_tokens_details.cached_tokens; falls back to Anthropic cache_read_input_tokens via extractUsage in 1.8.5)
         reasoningTokens: 0,     // Thinking/reasoning tokens consumed
+        cacheReadTokens: 0,     // 1.8.5 — Anthropic-native cache_read_input_tokens, surfaced separately for UI even when also folded into cachedInputTokens
+        cacheCreationTokens: 0, // 1.8.5 — Anthropic-native cache_creation_input_tokens (no OpenAI equivalent)
         totalCost: 0,           // USD estimate
         cacheSavings: 0,        // USD saved from cache hits
         requests: 0

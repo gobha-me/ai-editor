@@ -95,6 +95,17 @@ function _renderSessionCard() {
         ['Reasoning', _fmtTokens(sc.reasoningTokens || 0)],
         ['Requests', String(sc.requests || 0)],
     ];
+    // 1.8.5 — Anthropic-native cache fields, surfaced only when non-zero
+    // so OpenRouter / Venice users (whose responses normalize to OpenAI
+    // shape) don't see stagnant zero rows. The two values are still
+    // captured into ConvCost / sessionCost regardless — just hidden until
+    // the active session's provider populates them.
+    if ((sc.cacheReadTokens || 0) > 0) {
+        cells.push(['Cache read', _fmtTokens(sc.cacheReadTokens)]);
+    }
+    if ((sc.cacheCreationTokens || 0) > 0) {
+        cells.push(['Cache creation', _fmtTokens(sc.cacheCreationTokens)]);
+    }
     grid.innerHTML = cells.map(([label, value]) => `
         <div style="display: flex; flex-direction: column; gap: 0.15rem;">
             <span style="font-size: var(--font-sm); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">${escapeHtml(label)}</span>

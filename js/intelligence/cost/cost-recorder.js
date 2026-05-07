@@ -26,6 +26,7 @@ import {
     getMonthSpend,
     localDateKey,
 } from './cost-store.js';
+import { extractUsage } from './usage-shape.js';
 import { checkThresholds, pickWorse } from './budget.js';
 
 let _initialized = false;
@@ -108,17 +109,28 @@ function _onCostUpdated(payload) {
     const convId = _inFlightConvId || ConversationManager.getActiveId() || null;
     _inFlightConvId = null;
 
-    const usage = payload.usage;
-    const inputTokens     = usage.prompt_tokens     || 0;
-    const outputTokens    = usage.completion_tokens || 0;
-    const cachedTokens    = usage.prompt_tokens_details?.cached_tokens || 0;
+    // 1.8.5 — `extractUsage` is the single shape-tolerant extractor; it
+    // handles OpenAI (`prompt_tokens`/`completion_tokens` + `_details`) and
+    // Anthropic (`input_tokens`/`output_tokens` + `cache_*_input_tokens`)
+    // and falls back from one to the other field-by-field. Same helper
+    // wired into `LLM._trackUsage()` so the live `State.sessionCost` and
+    // the persisted ConvCost can't drift on field coverage.
+    //
     // Reasoning tokens (1.3.1): provider-reported under
-    // completion_tokens_details.reasoning_tokens. They are NOT re-added to
-    // inputTokens here — the provider has already counted the reasoning
-    // portion of the *next* request's prompt under prompt_tokens when
-    // history is replayed. Double-counting would require extracting reasoning
-    // from our captured text and adding it again; we do not.
-    const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    // completion_tokens_details.reasoning_tokens. They are NOT re-added
+    // to inputTokens here — the provider has already counted the
+    // reasoning portion of the *next* request's prompt under
+    // prompt_tokens when history is replayed. Double-counting would
+    // require extracting reasoning from our captured text and adding it
+    // again; we do not.
+    const {
+        inputTokens,
+        outputTokens,
+        cachedTokens,
+        reasoningTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+    } = extractUsage(payload.usage);
 
     const modelId = payload.modelId || State.settings.llmModel || '';
     const provider = State.settings.apiProvider || null;
@@ -142,6 +154,8 @@ function _onCostUpdated(payload) {
         outputTokens,
         cachedTokens,
         reasoningTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
         cost,
         cacheSavings,
         byTool,

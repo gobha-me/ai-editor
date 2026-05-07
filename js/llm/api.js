@@ -67,6 +67,7 @@ import { Catalog, composeAdmission, renderForLLM } from '../intelligence/tools/i
 import { CODER_V1 } from '../profiles/coder-v1.js';
 import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
+import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -520,10 +521,17 @@ export const LLM = {
     _trackUsage(usage, modelId, context) {
         if (!usage) return;
 
-        const inputTokens = usage.prompt_tokens || 0;
-        const outputTokens = usage.completion_tokens || 0;
-        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
-        const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+        // 1.8.5 — single shape-tolerant extractor, mirrored in
+        // cost-recorder.js so the live State.sessionCost can't drift on
+        // field coverage with the persisted ConvCost.
+        const {
+            inputTokens,
+            outputTokens,
+            cachedTokens,
+            reasoningTokens,
+            cacheReadTokens,
+            cacheCreationTokens,
+        } = extractUsage(usage);
 
         // 1.6.4 — stash the wire-level prompt size so ChatSummarizer.shouldSummarize()
         // can gate on real token count rather than estimated message count.
@@ -537,6 +545,11 @@ export const LLM = {
         State.sessionCost.totalOutputTokens += outputTokens;
         State.sessionCost.cachedInputTokens += cachedTokens;
         State.sessionCost.reasoningTokens += reasoningTokens;
+        // 1.8.5 — defensive `|| 0` keeps live sessions from poisoning to
+        // NaN when older browser sessions reload the page mid-stream and
+        // pick up a sessionCost shape that predates these fields.
+        State.sessionCost.cacheReadTokens     = (State.sessionCost.cacheReadTokens     || 0) + cacheReadTokens;
+        State.sessionCost.cacheCreationTokens = (State.sessionCost.cacheCreationTokens || 0) + cacheCreationTokens;
         State.sessionCost.requests += 1;
 
         const model = State.models.find(m => m.id === modelId);

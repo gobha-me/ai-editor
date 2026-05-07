@@ -100,6 +100,8 @@ export function daysBetween(a, b) {
  * @property {number}  outputTokens
  * @property {number}  cachedTokens
  * @property {number}  reasoningTokens
+ * @property {number}  cacheReadTokens     1.8.5 — Σ Anthropic-native `cache_read_input_tokens` across requests. Folded into `cachedTokens` for cost-discount purposes by `extractUsage()` when no OpenAI `prompt_tokens_details.cached_tokens` is present; tracked separately so the dashboard can show the Anthropic-native value alongside or instead of OpenAI's `cached_tokens`. Absent on legacy on-disk records.
+ * @property {number}  cacheCreationTokens 1.8.5 — Σ Anthropic-native `cache_creation_input_tokens` (no OpenAI equivalent — Anthropic charges a 25% premium when caching, so this is the surcharge bucket). Absent on legacy on-disk records.
  * @property {number}  cost
  * @property {number}  cacheSavings
  * @property {number}  requests
@@ -121,6 +123,8 @@ function emptyConvCost(id) {
         outputTokens: 0,
         cachedTokens: 0,
         reasoningTokens: 0,
+        cacheReadTokens: 0,      // 1.8.5
+        cacheCreationTokens: 0,  // 1.8.5
         cost: 0,
         cacheSavings: 0,
         requests: 0,
@@ -276,6 +280,8 @@ export function setBudget(budget) {
  * @property {number}      outputTokens
  * @property {number}      cachedTokens
  * @property {number}      reasoningTokens
+ * @property {number}      [cacheReadTokens]      1.8.5 — Anthropic-native `cache_read_input_tokens` for this turn. Absent on records emitted before the field existed.
+ * @property {number}      [cacheCreationTokens]  1.8.5 — Anthropic-native `cache_creation_input_tokens` for this turn.
  * @property {number}      cost
  * @property {number}      cacheSavings
  * @property {Object<string, ToolSpend>} byTool
@@ -314,6 +320,12 @@ export async function recordTurn(rec) {
             prev.outputTokens    += rec.outputTokens || 0;
             prev.cachedTokens    += rec.cachedTokens || 0;
             prev.reasoningTokens += rec.reasoningTokens || 0;
+            // 1.8.5 — `|| 0` defensive reads protect against legacy on-disk
+            // ConvCost records written before these fields existed (mirrors
+            // the 1.3.18 toolDef* pattern). New records carry the values;
+            // old records sum from undefined → 0 cleanly.
+            prev.cacheReadTokens     = (prev.cacheReadTokens     || 0) + (rec.cacheReadTokens     || 0);
+            prev.cacheCreationTokens = (prev.cacheCreationTokens || 0) + (rec.cacheCreationTokens || 0);
             prev.cost            += rec.cost || 0;
             prev.cacheSavings    += rec.cacheSavings || 0;
             prev.requests        += 1;

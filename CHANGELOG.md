@@ -4,6 +4,99 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-05-07
+
+### Feature — accurate provider `usage` parsing for cost reporting
+
+Memory `project_wishlist_token_usage_reporting.md` flagged 2026-05-07: the
+cost dashboard shipped 1.2.1 ([`js/settings/cost-tab.js`](js/settings/cost-tab.js))
+but the parsing path under-extracts what providers actually return.
+Anthropic-shape responses (`input_tokens` / `output_tokens` /
+`cache_read_input_tokens` / `cache_creation_input_tokens`) silently land
+as zero in the persistence path; the live debug-slideout has its own
+Anthropic fallback for display, but those numbers never reach
+`recordTurn` so `ConvCost` and the dashboard see no cache benefit when
+direct-Anthropic providers (or future Anthropic-compatible plugins)
+get wired in. Accurate `cached_tokens` numbers are the load-bearing
+input to the under-spend / over-spend grading axis
+(`project_cost_quality_tradeoff`) the dogfood-battery now grades
+against — wrong cache numbers mean miscalibrated cost-quality
+decisions across the four-axis trace.
+
+**What lands.** A single shape-tolerant extractor and four wiring sites
+that all flow through it.
+
+- **New** [`js/intelligence/cost/usage-shape.js`](js/intelligence/cost/usage-shape.js) —
+  exports `extractUsage(usage)` returning
+  `{ inputTokens, outputTokens, cachedTokens, reasoningTokens, cacheReadTokens, cacheCreationTokens }`.
+  "First present wins" — OpenAI keys take priority for input/output
+  (because OpenRouter / Venice normalize Claude responses to OpenAI
+  shape, and we want their normalized counts to win); Anthropic-native
+  cache fields surface separately AND fold into `cachedTokens` when
+  OpenAI's `prompt_tokens_details.cached_tokens` is absent so the
+  existing `_computeCost` cached-token discount picks up Anthropic-via-
+  direct without a separate pricing path.
+- **Extraction-site replacement** — [`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js)
+  `_onCostUpdated()` and [`js/llm/api.js`](js/llm/api.js) `_trackUsage()`
+  both now destructure the helper's six fields. Same call shape on both
+  sides means the live `State.sessionCost` and the persisted `ConvCost`
+  can no longer drift on field coverage (a real risk before this PR —
+  the 1.6.4 prompt-size stash and the cost-store both copy-pasted the
+  same four-line OpenAI extraction).
+- **Schema additions (additive, no migration)** — `ConvCost` and
+  `TurnRecord` typedefs in [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js)
+  gain `cacheReadTokens` and `cacheCreationTokens`. `emptyConvCost()`
+  initializes them to 0; `recordTurn()` accumulates with the same `|| 0`
+  defensive read that protects 1.3.18's toolDef* fields against legacy
+  on-disk records. `DailyEntry` is intentionally unchanged (daily-trend
+  visibility for cache fields is out of scope; revisit if dashboard
+  demand emerges from the dogfood battery).
+- **Live `State.sessionCost`** — [`js/core.js`](js/core.js) and
+  [`js/model-manager.js`](js/model-manager.js) `resetSessionCost()`
+  initialize the two new fields to 0; `_trackUsage()` accumulates with
+  `(prev || 0)` to keep mid-stream reloads from poisoning to NaN.
+- **Dashboard surfacing** — [`js/settings/cost-tab.js`](js/settings/cost-tab.js)
+  `_renderSessionCard()` pushes "Cache read" and "Cache creation" rows
+  onto the existing 7-cell grid **only when non-zero**. OpenRouter /
+  Venice users see the original card; direct-Anthropic users see two
+  extra cells. No new chart, no per-conversation-list change, no
+  export-shape change beyond the schema-derived inclusion (the export
+  reads `ConvCost` whole, so new fields ride along automatically).
+
+**Out of scope (deliberately deferred).**
+
+- `DailyEntry` cache/reasoning split — daily trend visibility for
+  cached/reasoning tokens. Not gated on parser fidelity; revisit only
+  if the dogfood battery surfaces dashboard demand.
+- `byProvider` cache split in 30-day chart hover — same reason; chart
+  UI work, not parsing.
+- `debug-slideout` adoption of `extractUsage()` — already has its own
+  Anthropic fallback for display; safe as-is, doesn't feed persistence,
+  no drift risk to fix.
+- `audio_tokens` / `accepted_prediction_tokens` (OpenAI `*_details`
+  sub-fields) — not interesting for the current cost model.
+- Cost-formula change — `_computeCost` already discounts `cachedTokens`
+  against full input price; folding `cacheReadTokens` into
+  `cachedTokens` (when OpenAI `cached_tokens` is absent) keeps the
+  formula right without a per-provider pricing branch.
+
+**Tests** — [`tests/test-usage-shape.mjs`](tests/test-usage-shape.mjs)
+pins seven cases: null/undefined/empty fall-through; pure OpenAI shape;
+pure Anthropic shape (with cache_read fallback into cachedTokens);
+mixed shape with OpenAI counts winning; mixed shape with Anthropic
+filling in when OpenAI `_details` is absent; non-numeric / NaN values
+falling through cleanly without poisoning the sums; the returned
+six-field shape contract.
+
+### Bookkeeping — close github#34 on the GitHub mirror
+
+`closes github#34` in PR #310's commit didn't fire because origin is
+Gitea (xcaliber); GitHub (gobha-me) is a mirror, so the GitHub keyword
+parser never sees the merge. Closed by hand with a pointer to PR #310
+and CHANGELOG §1.8.4. Pattern for future cross-tracker bookkeeping:
+`closes` keywords are tracker-local; the mirror needs a manual
+`gh issue close` or a tracker-aware commit-hook.
+
 ## [1.8.4] - 2026-05-07
 
 ### Feature — scratchpad visibility panel (closes github#34)
