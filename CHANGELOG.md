@@ -4,6 +4,81 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-05-07
+
+### Feature — TodoRead/TodoWrite tools (github#26)
+
+A structured, conversation-scoped task list the LLM owns and updates,
+re-injected into the system prompt every turn so it survives chat
+summarization. Mirrors the shape of Claude Code's TodoWrite (id, content,
+status `pending|in_progress|completed`, optional activeForm), which is the
+prior art the issue cited.
+
+**Why ship this.** github#26 argued that two adjacent already-filed
+failures — github#13 (page refresh loses chat context) and github#17
+(tool-result eviction makes the model forget what it just did) — share a
+root cause: there's no structured anchor for *what was decided / what's
+next* that survives compaction independently of the message stream. The
+scratchpad already proves the re-injection pattern works
+([js/tools/scratchpad-tools.js:211](js/tools/scratchpad-tools.js)) — this
+ships the structured-task-list version of the same idea, since "where
+am I in this multi-step task" is the failure mode the model hits most
+visibly during long sessions.
+
+**Why not just use the scratchpad.** Free-text key/value notes don't
+give the model a status field it can check, an id it can refer to across
+turns, or a count it can reason about. The scratchpad stays the right
+home for `task: "Issue #42 — fix login timeout"` and similar prose; the
+todo list is for the structured `[1] Read issue, [2] Implement retry,
+[3] Test` checklist alongside it.
+
+**What lands.**
+
+- New tools `todo_write({ todos })` and `todo_read()` in
+  [`js/tools/todo-tools.js`](js/tools/todo-tools.js). `todo_write` is a
+  full-list replace (matches Claude Code's TodoWrite semantics — simpler
+  than per-item ops, idempotent given the same input). Hard caps:
+  20 items, 200 chars per `content`. Statuses validated against
+  `{pending, in_progress, completed}`. Stable LLM-assigned ids (no
+  auto-generation) so the model can refer to a given todo across turns.
+  Both tools `roles: 'all'`.
+- `State.todo` added to [`js/core.js`](js/core.js) alongside
+  `scratchpad` / `toolActionLog`. Conversation-scoped — persisted as
+  part of the existing `conv-{id}` payload by `ConversationManager`
+  ([js/chat/conversations.js](js/chat/conversations.js)) so save/load/
+  create/delete already cover it; no new storage keys.
+- `buildTodoPrompt()` in `todo-tools.js`, called from
+  [`js/prompts.js`](js/prompts.js) right after `buildScratchpadPrompt()`.
+  Empty list → empty string (zero token cost when unused). Non-empty →
+  compact `--- TODO LIST (...) ---` header + one line per item with
+  status glyphs `[x]` / `[~]` / `[ ]` and stable id parens. ~30-40
+  tokens for a 5-item list.
+- `LEGACY_TOOL_ENUMERATION` extended with the `todo_*` tool pair
+  ([js/prompts.js:29](js/prompts.js)) — required for non-coder roles
+  that bypass the Composer's dynamic enumeration, per the recurring
+  parallel-enumeration rule (1.3.14 made the same miss invisible).
+- Tests in [`tests/test-todo-tools.mjs`](tests/test-todo-tools.mjs)
+  (16 cases, CI-runnable under `node --test`): cap enforcement,
+  content/status validation, id presence + uniqueness, full-replace
+  semantics, round-trip, empty-state behavior, prompt rendering, and
+  a stability check that `buildTodoPrompt()` output is independent of
+  `chatHistory` (the load-bearing claim — re-injection survives
+  summarization because the prompt builder doesn't read the message
+  stream).
+
+**Why a minor (not a patch).** Cadence rule in
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Cadence and versioning":
+self-contained feature spanning multiple files = minor. This is also
+off the active 1.7.x AST-chunker track — opening 1.8.x as a fresh
+non-AST minor keeps the version number honest about scope.
+
+**Out of scope (deferred, not abandoned).** A UI panel surfacing the
+list in the chat sidebar — github#26 explicitly leaves that as an open
+question, and a read-only first cut against the system prompt is the
+faster way to learn whether the structured-anchor hypothesis holds.
+Plan-mode integration (github#25) — once Plan Mode lands, an approved
+plan can seed the initial todo list; that wiring stays a follow-up.
+
 ## [1.7.2] - 2026-05-06
 
 ### Measurement — AST chunker Phase 2 lever C (test/source path weighting)

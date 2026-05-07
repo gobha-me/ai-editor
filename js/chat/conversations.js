@@ -172,11 +172,13 @@ const ConversationManager = {
         const summaryInfo = Storage.get('chatSummaryInfo', null);
         const pruneStash = Storage.get('chatPruneStash', null);
         const toolActionLog = State.toolActionLog || [];
+        const todos = State.todo || [];
         Storage.set(`conv-${id}`, {
             messages,
             summaryInfo,
             pruneStash,
-            toolActionLog: toolActionLog.slice(-50)
+            toolActionLog: toolActionLog.slice(-50),
+            todos
         });
         // Update index
         const index = _getIndex();
@@ -255,6 +257,9 @@ const ConversationManager = {
         // Restore tool action log
         State.toolActionLog = payload.toolActionLog || [];
 
+        // Restore todo list (github#26)
+        State.todo = Array.isArray(payload.todos) ? payload.todos : [];
+
         EventBus.emit('conversation:loaded', { id });
         console.log(`[conversations] Loaded conversation ${id}`);
     },
@@ -278,6 +283,7 @@ const ConversationManager = {
         State.lastExchangeTokens = null;
         State.scratchpad = {};
         State.toolActionLog = [];
+        State.todo = [];
         Storage.set('chatHistory', []);
         Storage.set('activeConversation', id);
         Storage.remove('chatSummaryInfo');
@@ -329,6 +335,7 @@ const ConversationManager = {
                 State.chatHistory = [];
                 State.lastExchangeTokens = null;
                 State.scratchpad = {};
+                State.todo = [];
                 Storage.set('chatHistory', []);
                 Storage.remove('activeConversation');
                 Storage.remove('chatSummaryInfo');
