@@ -1697,6 +1697,115 @@
 }
 
 /* ============================================
+   QUEUED INPUT PANEL (1.9.1 — github#33 Phase 2)
+   Shown only when the user has typed messages while a chat run is in
+   flight. Sits between scratchpad-panel and the chat input wrapper;
+   hidden when the queue is empty (the component returns null).
+   ============================================ */
+
+.queued-input-panel-root {
+    margin-bottom: 0.4rem;
+}
+
+.queued-input-panel {
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-size: var(--font-sm);
+    padding: 0.35rem 0.5rem;
+}
+
+.queued-input-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+    margin-bottom: 0.3rem;
+}
+
+.queued-input-panel__icon {
+    line-height: 1;
+}
+
+.queued-input-panel__label {
+    font-weight: 600;
+}
+
+.queued-input-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.queued-input-panel__item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.4rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: var(--font-xs);
+}
+
+.queued-input-panel__text {
+    flex: 1 1 auto;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queued-input-panel__attach {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.queued-input-panel__remove {
+    flex: 0 0 auto;
+    width: 1.4em;
+    height: 1.4em;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.queued-input-panel__remove:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.queued-input-panel__remove:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.queued-input-load-error {
+    padding: 0.4rem 0.6rem;
+    color: var(--error);
+    font-size: var(--font-xs);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+}
+
+/* While a run is generating, dim the textarea slightly so users see the
+   queueing affordance is engaged. The textarea remains fully usable. */
+#chatInput.is-generating {
+    background: var(--bg-tertiary);
+}
+
+/* ============================================
    ASK_USER CARD (1.9.0 — github#33 Phase 1)
    Inline question card mounted by ask-user-card.js into a fresh
    .chat-message slot in #chatMessages while the LLM awaits an answer.

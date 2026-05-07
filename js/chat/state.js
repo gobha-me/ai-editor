@@ -212,3 +212,103 @@ export function removePendingFile(index) {
 export function clearPendingFiles() {
     pendingFiles = [];
 }
+
+// ============================================
+// QUEUED USER INPUT (github#33 Phase 2)
+// ============================================
+
+// Cap from issue spec — 1.9.1 ships 5; tunable later if dogfood demands.
+const MAX_QUEUE = 5;
+
+// Holds full user message payloads (text + images + files) sent while a
+// chat run is in flight. Drained at the iteration boundary in
+// handlers.js between rounds, so the model sees the messages as fresh
+// user turns on its next call. NOT cleared by cancelToolLoop — the
+// spec'd behavior is preservation across cancellation, so a Stop +
+// new-prompt sequence drains them into the next run's first round.
+let pendingMessageQueue = [];
+
+/**
+ * Enqueue a user message payload. The shape mirrors what
+ * handleUserInputDirect builds today: text + an optional snapshot of
+ * the pendingImages array (which actually carries both images and text
+ * files via the `type: 'text'` discriminator). The live picker is
+ * cleared by the caller so subsequent typing doesn't re-attach them.
+ *
+ * Caps at MAX_QUEUE = 5; oldest is dropped when full and the return
+ * envelope advertises it so the caller can surface the toast.
+ *
+ * Emits `chat:queueChanged` with the new length.
+ *
+ * @param {{text: string, images?: Array}} msg
+ * @returns {{queued: boolean, droppedOldest: boolean, length: number}}
+ */
+export function enqueueUserMessage(msg) {
+    const entry = {
+        text: msg.text || '',
+        images: Array.isArray(msg.images) ? msg.images.slice() : [],
+    };
+    let droppedOldest = false;
+    if (pendingMessageQueue.length >= MAX_QUEUE) {
+        pendingMessageQueue.shift();
+        droppedOldest = true;
+    }
+    pendingMessageQueue.push(entry);
+    try { EventBus.emit('chat:queueChanged', pendingMessageQueue.length); } catch { /* best-effort */ }
+    return { queued: true, droppedOldest, length: pendingMessageQueue.length };
+}
+
+/**
+ * Read-only view of queued messages. Returns a shallow copy so the UI
+ * can render previews without mutating the queue.
+ *
+ * @returns {Array<{text: string, images: Array}>}
+ */
+export function peekUserMessageQueue() {
+    return pendingMessageQueue.slice();
+}
+
+/**
+ * Drain the queue. Returns the messages in FIFO order and empties
+ * internal storage. Emits `chat:queueChanged` with 0.
+ *
+ * @returns {Array<{text: string, images: Array}>}
+ */
+export function drainUserMessageQueue() {
+    const drained = pendingMessageQueue;
+    pendingMessageQueue = [];
+    try { EventBus.emit('chat:queueChanged', 0); } catch { /* best-effort */ }
+    return drained;
+}
+
+/**
+ * Remove a single queued message by index (for the panel's × button).
+ * No-op when out of range.
+ *
+ * @param {number} index
+ * @returns {boolean} True if a message was removed.
+ */
+export function removeQueuedUserMessage(index) {
+    if (index < 0 || index >= pendingMessageQueue.length) return false;
+    pendingMessageQueue.splice(index, 1);
+    try { EventBus.emit('chat:queueChanged', pendingMessageQueue.length); } catch { /* best-effort */ }
+    return true;
+}
+
+/**
+ * Explicit clear — distinct from drain because no caller takes the
+ * messages. Reserved for future "Clear queue" UX; NOT wired into the
+ * cancel path (preservation across cancellation is the spec).
+ */
+export function clearUserMessageQueue() {
+    if (pendingMessageQueue.length === 0) return;
+    pendingMessageQueue = [];
+    try { EventBus.emit('chat:queueChanged', 0); } catch { /* best-effort */ }
+}
+
+/**
+ * @returns {number}
+ */
+export function getUserMessageQueueLength() {
+    return pendingMessageQueue.length;
+}

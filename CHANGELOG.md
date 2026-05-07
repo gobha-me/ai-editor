@@ -4,6 +4,77 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-05-07
+
+### Feature — queued user input during long runs (github#33 Phase 2)
+
+[github#33](https://github.com/gobha-me/ai-editor/issues/33) Phase 1
+shipped at 1.9.0 (the `ask_user` tool); Phase 2 — the queued-user-input
+half — closes the gap where Enter-presses sent while a chat run was in
+flight were silently swallowed by the input bar's
+`!State.isGenerating` guard. Users mid-thought during a long tool loop
+now see a "queued" indicator instead of a dropped keystroke; the
+message is delivered as a `user` turn at the next iteration boundary
+(never mid-round); cancellation preserves the queue.
+
+**What lands.**
+
+- **Queue state** in [`js/chat/state.js`](js/chat/state.js) — new
+  module-level `pendingMessageQueue` with FIFO ordering and a
+  `MAX_QUEUE = 5` cap (oldest dropped on overflow, signalled in the
+  return envelope so the caller surfaces a toast). Exports
+  `enqueueUserMessage`, `peekUserMessageQueue`, `drainUserMessageQueue`,
+  `removeQueuedUserMessage`, `clearUserMessageQueue`,
+  `getUserMessageQueueLength`. `cancelToolLoop()` does **NOT** clear
+  the queue — preservation across cancellation is the spec'd behavior.
+- **Input gate flip** in [`js/chat/input.js`](js/chat/input.js) — the
+  Enter handler now routes to `enqueueUserMessage` when
+  `State.isGenerating` is true (and `getPendingUserResponse()` is null,
+  so an active `ask_user` card still owns the input as Phase 1
+  defined). Snapshots `getPendingImages()` into the queued payload and
+  clears the live picker so subsequent typing doesn't re-attach them.
+- **Drain seam** in [`js/chat/handlers.js`](js/chat/handlers.js) —
+  immediately after each round commits assistant text + tool results
+  to `messages[]` and `State.chatHistory`, queued messages drain in
+  FIFO order as user turns. Critically, the drain runs **before** the
+  forward-progress check, and any drained message resets the
+  no-progress streak so a stalling model can't be killed before it
+  sees the user's queued input. A `finally`-block kick dispatches a
+  fresh `handleUserInputDirect` via `queueMicrotask` when the loop
+  ends with the queue still non-empty (re-queues the rest), so
+  cancellation + new-prompt sequences also drain correctly. Extracted
+  `buildUserContent(text, images)` helper, now shared between
+  `handleUserInputDirect` and the drain path.
+- **New panel** —
+  [`js/chat/queued-input-panel.js`](js/chat/queued-input-panel.js)
+  (lifecycle wrapper, mirrors `scratchpad-panel.js`) and
+  [`js/chat/queued-input-panel/QueuedInputPanel.js`](js/chat/queued-input-panel/QueuedInputPanel.js)
+  (Preact component). Renders nothing when the queue is empty;
+  otherwise shows a count header + per-message preview row with a
+  remove (×) button. Subscribes to `EventBus('chat:queueChanged')`.
+  Joins the Decision §9 Preact + htm allow-list.
+- **Slot** in [`html/chat-panel.html`](html/chat-panel.html) — new
+  `#queuedInputPanelRoot` sibling between `#scratchpadPanelRoot` and
+  `#memoryChipRoot`, same pattern as the scratchpad panel.
+- **Textarea no longer disabled while generating** —
+  [`js/chat/index.js`](js/chat/index.js) `llm:generating` listener
+  drops `input.disabled = isGenerating` and replaces it with a
+  `.is-generating` class so users can keep typing during a run; the
+  queue absorbs the sends. CSS dims the textarea slightly via
+  `#chatInput.is-generating { background: var(--bg-tertiary); }`.
+
+**Tests.** New [`tests/test-message-queue.mjs`](tests/test-message-queue.mjs)
+(12 cases, ~60ms) covers FIFO ordering, the MAX_QUEUE = 5 cap with
+oldest-dropped, peek-returns-copy, removal-by-index out-of-range
+guard, the load-bearing `cancelToolLoop`-does-not-clear contract, and
+`chat:queueChanged` emission on every mutator. Browser-side panel
+behavior and the chat-loop drain seam are covered by the manual
+verification in `docs/dogfood-battery/`.
+
+**Deferred.** "Insert at top of next round" reorder (FIFO only matches
+the issue's "delivered in order" spec); editing a queued message
+in-place (× + retype is the lighter-weight pivot path).
+
 ## [1.9.0] - 2026-05-07
 
 ### Feature — `ask_user` structured-question tool (github#33 Phase 1)

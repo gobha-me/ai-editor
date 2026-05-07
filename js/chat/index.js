@@ -54,6 +54,7 @@ import {
 } from './handlers.js';
 import { executeToolCall } from './tools.js';
 import { mountScratchpadPanel } from './scratchpad-panel.js';
+import { mountQueuedInputPanel } from './queued-input-panel.js';
 import { initAskUserCard } from './ask-user-card.js';
 
 // ============================================
@@ -144,6 +145,11 @@ function initChat(containerEl, inputEl) {
     // out of initChat.
     mountScratchpadPanel();
 
+    // 1.9.1 / github#33 Phase 2 — queued user input panel. Hidden when
+    // the queue is empty; subscribes to chat:queueChanged. Same vanilla-
+    // error-banner pattern as the scratchpad mount above.
+    mountQueuedInputPanel();
+
     // 1.9.0 / github#33 Phase 1 — ask_user inline card. Subscribes to
     // ask_user:pending / ask_user:resolved on the EventBus; idempotent.
     initAskUserCard();
@@ -187,11 +193,16 @@ function initChat(containerEl, inputEl) {
     EventBus.on('cost:budget-warning', (info) => _renderBudgetBanner(info));
     EventBus.on('cost:budget-ok', () => _renderBudgetBanner(null));
 
-    // Listen for LLM events
+    // Listen for LLM events.
+    // github#33 Phase 2: don't disable the textarea while generating —
+    // input.js routes Enter-presses through enqueueUserMessage(), which
+    // delivers them at the next iteration boundary. We add a styling
+    // hook (`.is-generating`) so the panel/CSS can dim or annotate the
+    // bar without blocking typing.
     EventBus.on('llm:generating', (isGenerating) => {
         const input = getInputElement();
         if (input) {
-            input.disabled = isGenerating;
+            input.classList.toggle('is-generating', !!isGenerating);
         }
     });
 

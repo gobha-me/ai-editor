@@ -12,7 +12,9 @@ import {
     getPendingImages,
     addPendingImage,
     removePendingImage,
-    clearPendingImages
+    clearPendingImages,
+    getPendingUserResponse,
+    enqueueUserMessage
 } from './state.js';
 import {
     showChip,
@@ -107,10 +109,29 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             const inputValue = inputElement.value.trim();
-            inputElement.value = '';
-            if ((inputValue || getPendingImages().length > 0) && !State.isGenerating) {
-                handleUserInputFn(inputValue);
+            const images = getPendingImages().slice();
+            if (!inputValue && images.length === 0) {
+                inputElement.value = '';
+                return;
             }
+            // ask_user is up — the AskUserCard owns input. Don't queue
+            // (the user is already responding via the card UI).
+            // Don't send either; the existing card-submit path handles it.
+            if (getPendingUserResponse()) {
+                return;  // leave inputValue alone so user sees what they typed
+            }
+            inputElement.value = '';
+            if (State.isGenerating) {
+                // github#33 Phase 2 — queue for delivery between rounds.
+                const result = enqueueUserMessage({ text: inputValue, images });
+                clearPendingImages();
+                renderImagePreview();
+                if (result.droppedOldest) {
+                    addMessage('system', '⚠️ Queued message limit reached (5) — oldest queued message dropped.');
+                }
+                return;
+            }
+            handleUserInputFn(inputValue);
         }
     });
 

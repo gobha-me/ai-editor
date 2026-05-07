@@ -16,14 +16,18 @@ import {
     addConsentCardMessage,
     formatMessageContent
 } from './messages.js';
-import { 
-    getPendingEdit, 
-    setPendingEdit, 
+import {
+    getPendingEdit,
+    setPendingEdit,
     clearPendingEdit,
     isToolLoopCancelled,
     resetToolLoopCancel,
     getPendingImages,
-    clearPendingImages
+    clearPendingImages,
+    addPendingImage,
+    getUserMessageQueueLength,
+    drainUserMessageQueue,
+    enqueueUserMessage
 } from './state.js';
 import { renderImagePreview } from './input.js';
 import { executeToolCall } from './tools.js';
@@ -52,41 +56,47 @@ import { CODER_V1 } from '../profiles/coder-v1.js';
 const MAX_INPUT_RETRIES = 2;   // 3 total attempts (1 original + 2 retries)
 const INPUT_RETRY_BASE_MS = 2000;
 
+/**
+ * Build the multimodal user message content from text + attached
+ * images/text-files. Plain string when there are no attachments,
+ * otherwise an array of `{type:'text'|'image_url', ...}` parts in the
+ * shape providers expect. Used by `handleUserInputDirect` (live send)
+ * and the queue-drain seam in `handleGeneralRequest` (Phase 2).
+ *
+ * @param {string} text
+ * @param {Array<{type?: string, name?: string, dataUrl?: string, textContent?: string}>} images
+ * @returns {string | Array<{type: string, [k: string]: any}>}
+ */
+export function buildUserContent(text, images) {
+    if (!images || images.length === 0) return text;
+    const parts = [];
+    if (text) parts.push({ type: 'text', text });
+    for (const img of images) {
+        if (img.type === 'text' && img.textContent) {
+            parts.push({
+                type: 'text',
+                text: `--- Attached file: ${img.name} ---\n${img.textContent}\n--- End of ${img.name} ---`
+            });
+        } else if (img.dataUrl) {
+            parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
+        }
+    }
+    return parts;
+}
+
 export async function handleUserInputDirect(input) {
     console.log(`[handleUserInputDirect] Received input="${input}"`);
-    
+
     const images = getPendingImages().slice(); // snapshot
-    
+
     if (!input && images.length === 0) return;
     if (State.isGenerating) return;
 
-    // Build message content — multimodal array if attachments present, plain string otherwise
-    let messageContent;
+    const messageContent = buildUserContent(input, images);
     if (images.length > 0) {
-        messageContent = [];
-        if (input) {
-            messageContent.push({ type: 'text', text: input });
-        }
-        for (const img of images) {
-            if (img.type === 'text' && img.textContent) {
-                // Text file — include as labelled text block
-                messageContent.push({
-                    type: 'text',
-                    text: `--- Attached file: ${img.name} ---\n${img.textContent}\n--- End of ${img.name} ---`
-                });
-            } else if (img.dataUrl) {
-                // Image — include as image_url
-                messageContent.push({
-                    type: 'image_url',
-                    image_url: { url: img.dataUrl }
-                });
-            }
-        }
-        // Clear pending images and preview strip
+        // Clear pending images and preview strip — they belong to this message now.
         clearPendingImages();
         renderImagePreview();
-    } else {
-        messageContent = input;
     }
 
     // Flush any pending prune stash — undo window is over
@@ -999,6 +1009,24 @@ export async function handleGeneralRequest(input) {
                     });
                 }
 
+                // === QUEUED USER INPUT DRAIN (github#33 Phase 2) ===
+                // If the user typed messages while the loop was running,
+                // they're delivered here — between rounds, never mid-round.
+                // Each queued payload becomes a user turn appended to both
+                // chat history (for replay/persistence) and the messages[]
+                // array that feeds the next LLM call. Ordered FIFO.
+                if (getUserMessageQueueLength() > 0) {
+                    const drained = drainUserMessageQueue();
+                    for (const msg of drained) {
+                        const content = buildUserContent(msg.text, msg.images);
+                        addMessage('user', content);
+                        messages.push({ role: 'user', content });
+                    }
+                    // User input counts as forward progress — don't let a
+                    // mid-stall queue drain trip the no-progress break.
+                    madeProgressThisRound = true;
+                }
+
                 // === FORWARD-PROGRESS CHECK ===
                 // If the round produced no fresh tool execution and no
                 // visible text, it's a stall round. After NO_PROGRESS_LIMIT
@@ -1050,6 +1078,29 @@ export async function handleGeneralRequest(input) {
         // Always clean up generating state
         State.isGenerating = false;
         EventBus.emit('llm:generating', false);
+
+        // === QUEUED USER INPUT — KICK NEW RUN (github#33 Phase 2) ===
+        // The loop ended (natural stop OR cancellation) while messages
+        // were still queued. Take the next queued message and dispatch
+        // a fresh handleUserInputDirect so the model sees it. Remaining
+        // queued messages stay queued and will drain at iteration
+        // boundaries inside the new run. queueMicrotask breaks the
+        // call-stack so the current finally completes cleanly.
+        if (getUserMessageQueueLength() > 0) {
+            const next = drainUserMessageQueue();
+            const [first, ...rest] = next;
+            // Re-queue the rest (FIFO preserved) so they drain inside
+            // the new run rather than all dispatching as separate runs.
+            for (const m of rest) enqueueUserMessage(m);
+            // Restore images onto the live picker so handleUserInputDirect
+            // picks them up via getPendingImages().
+            for (const img of first.images) addPendingImage(img);
+            queueMicrotask(() => {
+                try { handleUserInputDirect(first.text); } catch (e) {
+                    console.error('[queue] kick-new-run failed:', e);
+                }
+            });
+        }
     }
 
     // Handle empty responses
