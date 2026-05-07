@@ -52,6 +52,7 @@ import {
     rejectPendingEdit
 } from './handlers.js';
 import { executeToolCall } from './tools.js';
+import { mountScratchpadPanel } from './scratchpad-panel.js';
 
 // ============================================
 // TOOL REGISTRATION
@@ -132,6 +133,13 @@ function initChat(containerEl, inputEl) {
     renderMessages(displayHistory);
     setupInputHandlers(inputEl, handleUserInputDirect);
     initConversationDrawer();
+
+    // 1.8.4 / github#34 — Scratchpad visibility panel. Component owns its
+    // own EventBus subscriptions (scratchpad:changed, conversation:loaded,
+    // conversation:created); this just kicks off the mount. Failure inside
+    // mountScratchpadPanel renders a vanilla error banner — won't throw
+    // out of initChat.
+    mountScratchpadPanel();
 
     // Debounced conversation save — persists after message activity settles
     let _saveTimer = null;

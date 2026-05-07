@@ -140,6 +140,23 @@ export const CODER_V1 = {
             'list_tool_categories',
             'list_tools_by_category',
             'find_tool',
+            // Structural-anchor tools — promoted to static in 1.8.4 alongside
+            // the scratchpad visibility panel (github#34). Pre-1.3.15 these
+            // tools were always-loaded; the 1.3.15 admission policy moved
+            // them behind discovery, which silently dropped scratchpad usage
+            // because cheap-tier models don't reliably run
+            // `list_tools_by_category` to admit them, and the
+            // `SCRATCHPAD_INSTRUCTIONS` block at js/prompts.js:233 is gated
+            // on `scratchpad_write` admission. Hidden-by-default is for
+            // niche / expensive tools (MCP, peek_*, eval_*); structural
+            // anchors are load-bearing for compression-survival and the
+            // visibility panel makes their first-class status legible to
+            // users — they belong in static.
+            'scratchpad_write',
+            'scratchpad_read',
+            'scratchpad_clear',
+            'todo_write',
+            'todo_read',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',

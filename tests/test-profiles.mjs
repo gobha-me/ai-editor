@@ -165,10 +165,23 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
     // edit_file + commit_files + list_dirty_files. Names that do not yet
     // exist in the registry (the meta-tools, until 1.4.0 PR 3) are
     // silently skipped by the admission consumer.
+    //
+    // 1.8.4 promoted the structural-anchor tools (scratchpad_*, todo_*)
+    // to static after the scratchpad visibility panel made their hidden-
+    // by-default policy untenable — `SCRATCHPAD_INSTRUCTIONS` at
+    // js/prompts.js:233 only renders when `scratchpad_write` is admitted,
+    // and cheap-tier models weren't reliably running discovery
+    // meta-tools, so usage was silently regressing.
     assert.deepEqual(CODER_V1.tools.static, [
         'list_tool_categories',
         'list_tools_by_category',
         'find_tool',
+        // 1.8.4 — structural-anchor tools (compression-survival).
+        'scratchpad_write',
+        'scratchpad_read',
+        'scratchpad_clear',
+        'todo_write',
+        'todo_read',
         'read_file',
         'read_lines',
         'scan_file',

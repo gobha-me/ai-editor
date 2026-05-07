@@ -12,7 +12,7 @@
  *   custom:       15 keys, 1000 chars/value,  4K auto-inject  (user values)
  */
 
-import { State, Storage } from '../core.js';
+import { State, Storage, EventBus } from '../core.js';
 
 /**
  * Scratchpad limits per summarizer mode (scaled to context capability).
@@ -67,6 +67,7 @@ export function registerScratchpadTools(registry) {
         const wasTruncated = (content || '').length > lim.maxValueLen;
         pad[k] = val;
         State.scratchpad = pad;
+        EventBus.emit('scratchpad:changed', { key: k, action: 'write' });
 
         const result = {
             success: true,
@@ -162,6 +163,7 @@ export function registerScratchpadTools(registry) {
             }
             delete pad[k];
             State.scratchpad = pad;
+            EventBus.emit('scratchpad:changed', { key: k, action: 'clear' });
             return {
                 success: true,
                 removed: k,
@@ -172,6 +174,7 @@ export function registerScratchpadTools(registry) {
 
         // Clear everything
         State.scratchpad = {};
+        EventBus.emit('scratchpad:changed', { key: null, action: 'clearAll' });
         return {
             success: true,
             message: 'Scratchpad cleared'

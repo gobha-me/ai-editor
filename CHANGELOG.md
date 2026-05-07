@@ -4,6 +4,102 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-05-07
+
+### Feature — scratchpad visibility panel (closes github#34)
+
+[`Feature: Scratchpad visibility panel — real-time user view of LLM notes`](https://github.com/gobha-me/ai-editor/issues/34) —
+the scratchpad has been LLM-private storage since it shipped (notes
+survive context compression — same structured-anchor mechanism that
+backs `TodoRead`/`TodoWrite` at 1.8.0). Users had no visibility into
+what the LLM was "remembering," which is a trust + UX gap: the model
+can silently overwrite its own notes between turns and there's no audit
+surface.
+
+**What lands.** A real-time **Notes** tray inside the chat input area —
+collapsed by default (header-only with a count badge), expands inline
+to show one `<details>` per scratchpad key with the content as
+preformatted text. Reads `State.scratchpad` directly each render;
+re-renders on every mutation via a new EventBus channel.
+
+- **New event** — `EventBus.emit('scratchpad:changed', { key, action })`
+  fires on every `scratchpad_write` / `scratchpad_clear` invocation in
+  [`js/tools/scratchpad-tools.js`](js/tools/scratchpad-tools.js).
+  `action` is one of `'write' | 'clear' | 'clearAll'`. The panel
+  subscribes to this channel; other consumers (debug surfaces, future
+  cost-aware admission) can subscribe too.
+- **Conversation-switch reset** — the panel also subscribes to
+  `conversation:loaded` and `conversation:created` so the rendered state
+  follows the same "scratchpad clears on conversation switch / new chat"
+  semantics that `js/chat/conversations.js` already implements at the
+  state level.
+- **Lifecycle wrapper** — [`js/chat/scratchpad-panel.js`](js/chat/scratchpad-panel.js)
+  mirrors the `js/settings/memory-tab.js` precedent: idempotent
+  `mountScratchpadPanel()` / `unmountScratchpadPanel()`, vanilla error
+  banner on Preact load failure, `_isMounted()` test seam.
+- **Preact component** — [`js/chat/scratchpad-panel/ScratchpadPanel.js`](js/chat/scratchpad-panel/ScratchpadPanel.js)
+  uses the same `getPreact()`-via-top-level-await pattern as MemoryTab;
+  collapsed/expanded state persists via `Storage.set('scratchpadPanelExpanded', …)`.
+- **DOM slot** — `#scratchpadPanelRoot` in [`html/chat-panel.html`](html/chat-panel.html)
+  sits in `.chat-input-area` directly above `#memoryChipRoot`. Memory
+  chips are action-related (closest to the textarea); scratchpad is
+  reference-related (sits above).
+- **Styling** — appended to [`css/chat.css`](css/chat.css). All colors
+  resolve through `--tk-*` tokens (token contract frozen at Decision §1
+  of 1.3.5); zero standalone hex.
+- **Read-only scope.** Editing scratchpad entries is deferred to a
+  follow-up — the issue itself flags conflict resolution (LLM writes
+  mid-edit) as an open question. The trust + visibility win lands
+  without solving the conflict model.
+- **Tests** — [`tests/test-scratchpad-panel.js`](tests/test-scratchpad-panel.js)
+  pins: header + count rendering, empty state copy, alphabetical entry
+  order, live update on `scratchpad:changed`, conversation-switch
+  re-render, cleanup unsubscribe (listener-count baseline), post-cleanup
+  emit does not repopulate.
+
+### Fix — structural-anchor tools promoted to `coder.v1` static set
+
+Companion fix to the visibility panel above. While testing the panel
+on Qwen-3-6-plus during the 2026-05-07 dogfood pass we observed the
+model **describe** the scratchpad concept inline (formatting a
+mock entry as chat text) rather than **call** the tool — diagnostic
+of the tool not being admitted. Root cause: tool-admission policy
+moved scratchpad behind discovery in 1.3.15, but `coder.v1`'s
+`tools.static` didn't include scratchpad_* or todo_*, and
+`SCRATCHPAD_INSTRUCTIONS` at [`js/prompts.js:233`](js/prompts.js)
+is gated on `scratchpad_write` being admitted. Cheap-tier models
+weren't reliably running discovery meta-tools to admit it, so the
+strong scratchpad guidance never rendered for them — silent usage
+regression.
+
+**What lands.** [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js)
+`tools.static` now includes `scratchpad_write`, `scratchpad_read`,
+`scratchpad_clear`, `todo_write`, `todo_read`. Tool-budget impact
+is ~250–500 tokens against the 5000-token budget — bounded, low.
+Both [`tests/test-profiles.mjs`](tests/test-profiles.mjs) and
+[`tests/test-profiles.js`](tests/test-profiles.js) updated to pin
+the new static-set contents (regression lock).
+
+**Rationale.** Hidden-by-default is for niche / expensive tools
+(MCP, peek_*, eval_*); structural anchors are load-bearing for
+compression-survival and the visibility panel makes their first-
+class status legible to users — they belong in static. Pre-1.3.15
+behavior restored without rolling back the admission policy.
+
+### Docs — second dogfood-battery trace (artifact-review shape)
+
+[`docs/dogfood-battery/2026-05-07-html-games-prs-138-142.md`](docs/dogfood-battery/2026-05-07-html-games-prs-138-142.md) —
+post-action review of five HTML-Games PRs (#138–#142). Adds a new
+trace-template variant: **artifact review** alongside the
+live-loop shape established by the first trace. Findings: semantics
+correct on all five PRs; one comment-eating artifact in PR #142 —
+same family as the 1.8.3 silent-deletion class but a different rule
+(insertion-before-existing-block, not re-edit-overlap) — held
+pending sibling repro before any cure ships; one trailing-blank-line
+pattern across 4 PRs also held pending sibling repro. Per ROADMAP
+"trace > PR" discipline, no ai-editor cures land from this session
+alone.
+
 ### Docs — first dogfood-battery trace
 
 [`docs/dogfood-battery/2026-05-07-grok-minesweeper-ci-loop.md`](docs/dogfood-battery/2026-05-07-grok-minesweeper-ci-loop.md) —

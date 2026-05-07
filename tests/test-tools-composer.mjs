@@ -245,11 +245,14 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 12 names → 6 admitted, 6 unresolved
-// (3 meta-tools + 3 CI tools intentionally absent from this fixture)
+// coder.v1 fixture — 17 names → 6 admitted, 11 unresolved
+// (3 meta-tools + 3 CI tools + 5 structural-anchor tools intentionally
+//  absent from this fixture; the 1.8.4 anchor promotion expanded the
+//  unresolved set without changing what this fixture registers, so the
+//  assertion just got longer.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 6 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 11 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -263,6 +266,10 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 6 unresolved
     assert.equal(result.admitted.length, 6);
     assert.deepEqual(result.diagnostics.unresolved_static, [
         'list_tool_categories', 'list_tools_by_category', 'find_tool',
+        // 1.8.4 — structural-anchor tools, intentionally absent from the
+        // fixture so the unresolved-path assertion still has signal.
+        'scratchpad_write', 'scratchpad_read', 'scratchpad_clear',
+        'todo_write', 'todo_read',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

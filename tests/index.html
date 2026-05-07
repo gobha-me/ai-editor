@@ -230,6 +230,10 @@
             } catch (e) { errors.push(['Debug Slide-out Clear (1.8.3)', e]); }
 
             try {
+                await import('./test-scratchpad-panel.js');
+            } catch (e) { errors.push(['Scratchpad Panel (1.8.4)', e]); }
+
+            try {
                 await import('./test-help-hotkey-registry.js');
             } catch (e) { errors.push(['Help — Hotkey Registry', e]); }
 

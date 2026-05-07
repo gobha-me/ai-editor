@@ -101,6 +101,13 @@ T.deepEq(CODER_V1.tools.static, [
     'list_tool_categories',
     'list_tools_by_category',
     'find_tool',
+    // 1.8.4 — structural-anchor tools promoted to static (github#34
+    // sibling fix). See coder-v1.js comment for why.
+    'scratchpad_write',
+    'scratchpad_read',
+    'scratchpad_clear',
+    'todo_write',
+    'todo_read',
     'read_file',
     'read_lines',
     'scan_file',
@@ -110,7 +117,7 @@ T.deepEq(CODER_V1.tools.static, [
     'get_ci_status',
     'wait_for_ci',
     'get_ci_logs',
-], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5');
+], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5 / 1.8.4');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');

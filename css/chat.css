@@ -1536,3 +1536,162 @@
     font-size: var(--font-sm);
     padding: 0.75rem;
 }
+
+/* ============================================
+   SCRATCHPAD VISIBILITY PANEL (1.8.4 — github#34)
+   In-chat tray surfacing State.scratchpad to the user.
+   Mounted into #scratchpadPanelRoot inside .chat-input-area.
+   All colors via --tk-*-routed aliases — no standalone hex.
+   ============================================ */
+
+.scratchpad-panel-root {
+    /* Slot lives between .chat-cursor-context and #memoryChipRoot.
+       The panel collapses to header-only by default so it never crowds
+       the textarea; expanded body caps at 30vh and scrolls. */
+    margin-bottom: 0.4rem;
+}
+
+.scratchpad-panel {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-size: var(--font-sm);
+}
+
+.scratchpad-panel--collapsed {
+    /* Header is the entire panel — keep it inert visually. */
+    background: transparent;
+    border-color: transparent;
+}
+
+.scratchpad-panel__toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    padding: 0.3rem 0.5rem;
+    background: transparent;
+    border: 0;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.scratchpad-panel__toggle:hover {
+    color: var(--text-primary);
+}
+
+.scratchpad-panel__toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.scratchpad-panel__caret {
+    display: inline-block;
+    width: 0.8em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    line-height: 1;
+}
+
+.scratchpad-panel__label {
+    font-weight: 600;
+    color: inherit;
+}
+
+.scratchpad-panel__count {
+    margin-left: auto;
+    padding: 0 0.4rem;
+    min-width: 1.4em;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-xs);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+}
+
+.scratchpad-panel--expanded .scratchpad-panel__count {
+    color: var(--text-primary);
+}
+
+.scratchpad-panel__body {
+    max-height: 30vh;
+    overflow-y: auto;
+    padding: 0.25rem 0.5rem 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.scratchpad-panel__empty {
+    padding: 0.5rem 0.25rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.scratchpad-panel__entry {
+    margin: 0.25rem 0;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-secondary);
+}
+
+.scratchpad-panel__entry[open] {
+    border-color: var(--accent);
+}
+
+.scratchpad-panel__entry-key {
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    color: var(--accent);
+    cursor: pointer;
+    list-style: none;
+    word-break: break-word;
+}
+
+.scratchpad-panel__entry-key::-webkit-details-marker {
+    /* Use the native disclosure-triangle on the <details> default,
+       but hide it in WebKit so we can render a consistent caret via
+       ::before. Keep a lightweight ::before so it stays visible across
+       browsers. */
+    display: none;
+}
+
+.scratchpad-panel__entry-key::before {
+    content: '▸';
+    display: inline-block;
+    width: 0.9em;
+    color: var(--text-muted);
+    margin-right: 0.2em;
+}
+
+.scratchpad-panel__entry[open] > .scratchpad-panel__entry-key::before {
+    content: '▾';
+    color: var(--accent);
+}
+
+.scratchpad-panel__entry-content {
+    margin: 0.3rem 0 0;
+    padding: 0.4rem 0.5rem;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-xs);
+    line-height: 1.45;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 14em;
+    overflow-y: auto;
+}
+
+.scratchpad-load-error {
+    padding: 0.4rem 0.6rem;
+    color: var(--error);
+    font-size: var(--font-xs);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+}

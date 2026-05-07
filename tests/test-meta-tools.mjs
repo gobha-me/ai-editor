@@ -49,6 +49,16 @@ function registerStaticFixture() {
     reg('get_ci_status',    'Fetch CI status for a ref.',           { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
     reg('wait_for_ci',      'Poll CI until terminal state.',        { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
     reg('get_ci_logs',      'Fetch a CI job log tail.',             { type: 'object', properties: { ref: { type: 'string' } } }, ['coder']);
+    // 1.8.4 — structural-anchor tools promoted to static (github#34
+    // sibling fix). The exit-criteria assertion below
+    // (`unresolved_static: []`) requires every name in
+    // CODER_V1.tools.static to resolve through the catalog, so this
+    // fixture must register them too.
+    reg('scratchpad_write', 'Write a note to the scratchpad.',      { type: 'object', properties: { key: { type: 'string' }, content: { type: 'string' } } });
+    reg('scratchpad_read',  'Read from the scratchpad.',            { type: 'object', properties: { key: { type: 'string' } } });
+    reg('scratchpad_clear', 'Clear scratchpad entries.',            { type: 'object', properties: { key: { type: 'string' } } });
+    reg('todo_write',       'Replace the conversation todo list.',  { type: 'object', properties: { todos: { type: 'array' } } });
+    reg('todo_read',        'Read the conversation todo list.',     { type: 'object', properties: {} });
 }
 
 // ============================================
