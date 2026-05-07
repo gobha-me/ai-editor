@@ -4,6 +4,90 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-05-07
+
+### Fix — `EditTracker.checkStale` now detects target/edit range overlap
+
+Closes the silent-deletion class of bugs in `edit_file` surfaced by the
+2026-05-07 HTML-Games dogfood pass. The dogfood found "valid-looking
+diffs that delete unrelated nearby lines" clustered around shared HTML
+files (root `index.html` head/wrapper structure) — `<style>` opening
+tags, Google Fonts `<link>`s, `* {}` resets, CSS variables, and a
+2048 launcher card body all silently disappeared after sequential
+edits hit adjacent line ranges.
+
+**Root cause.** [`js/tools/edit-tracker.js`](js/tools/edit-tracker.js)
+RULE 3 used `e.startLine < targetStartLine` to filter "edits since the
+last read that invalidate the target." Strict-less-than missed two
+cases:
+
+1. **Re-edit at the same `startLine`** — model reads lines 1–30, edits
+   5–10 (delta any), then re-edits 5–8. Filter: `5 < 5` → false.
+   Stale check passes. The lines at 5–8 are now NEW content, but the
+   model's mental model is still the OLD content from the read.
+2. **Target overlaps from above** — model reads lines 1–30, edits
+   10–15, then edits 8–12. Filter: `10 < 8` → false. Stale check
+   passes. Lines 10–12 are NEW content, model still thinks it's
+   editing the old content.
+
+In both cases the destructive `replaceRange` ran on lines whose content
+had already been mutated by a prior edit in the same session — silently
+overwriting the new content. The damage clustered in the HTML head
+because that's where multiple sequential edits stack up at adjacent
+ranges (the `<link>` / `<style>` neighborhood).
+
+**What lands.**
+
+- [`js/tools/edit-tracker.js`](js/tools/edit-tracker.js) RULE 3 replaced
+  with overlap-aware filter:
+  - **(a)** any edit whose post-edit range (`startLine`..`startLine + (originalSpan + lineDelta) - 1`) overlaps the target range is now flagged stale.
+  - **(b)** above-target edits with non-zero delta still flag stale (existing line-shift behavior preserved).
+  - The reason message split: overlapping edits demand a re-read (no drift adjustment can recover OLD content), above-only edits keep the existing drift suggestion path.
+- Five regression tests in
+  [`tests/test-edit-tracker.js`](tests/test-edit-tracker.js) under
+  *EditTracker — Range Overlap Detection (1.8.3 silent-deletion regression)*:
+  same-startLine re-edit, target-overlaps-from-above, target-inside-edit
+  (delta=0), control above-edit (must NOT be stale), control below-edit
+  (drift suggestion preserved).
+
+**Out of scope.** The downstream html-games tickets (#1–#9 in the
+dogfood report) are handled by the html-games session — this commit
+addresses the upstream tool failure in ai-editor only.
+
+### Fix — Debug slide-out Clear button restored (closes breakout #124 dogfood UX gaps)
+
+When 1.3.9 retired the standalone `#errorLogModal` and `#llmDebugModal`
+into the right-edge Debug slide-out, the Clear buttons were not
+migrated. The handlers
+[`clearErrorLog()`](js/error-logger.js) and
+[`clearLLMDebug()`](js/llm-debug-modal.js) continued to exist but no
+UI surface invoked them. Consequence: `ErrorLogger.logs` could only
+grow, and the red badge `ErrorLogger.updateBadge()` paints on
+`#btnDebugMenu` had no user-accessible reset path. The breakout #124
+dogfood (2026-05-06) flagged both halves as "missing clear-log button
+(regression)" and "sticky error status (never clears)" — a single
+root cause.
+
+**What lands.**
+
+- New `#debugClearBtn` in [`html/debug-slideout.html`](html/debug-slideout.html)
+  head, between *Copy bundle* and *Close*. Same `debug__head-btn--icon`
+  styling.
+- Tab-aware dispatch in
+  [`js/debug-slideout.js`](js/debug-slideout.js) `_clearActiveTab`:
+  - Logs tab → `clearErrorLog()` → `ErrorLogger.clear()` →
+    `updateBadge()` (badge resets as a side-effect).
+  - AI tab → `clearLLMDebug()` → `LLMDebug.clear()`.
+  - Other tabs are read-only views of live state — Clear is a no-op
+    with a *"Nothing to clear on this tab"* toast.
+- Test seam `__test_clearActiveTab` mirrors the existing `__test_*`
+  pattern in `js/debug-slideout.js`.
+- New
+  [`tests/test-debug-slideout-clear.js`](tests/test-debug-slideout-clear.js)
+  pins: button presence, ErrorLogger.clear → badge reset (sticky-badge
+  half), end-to-end click → `showConfirm` → clear chain on logs and AI
+  tabs, no-op-with-toast on non-clearable tabs.
+
 ## [1.8.2] - 2026-05-08
 
 ### Fix — Tool-aware `next_action_hint` on REFUSED envelopes

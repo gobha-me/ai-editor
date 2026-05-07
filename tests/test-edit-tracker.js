@@ -85,6 +85,61 @@ const outOfRange = EditTracker.checkStale('range.js', 60, 70);
 T.eq(outOfRange.stale, true, 'Edit beyond read range is stale');
 T.assert(outOfRange.reason.includes('last read was'), 'Reason mentions read range');
 
+T.suite('EditTracker — Range Overlap Detection (1.8.3 silent-deletion regression)');
+
+// Background: prior to 1.8.3, RULE 3 used `e.startLine < targetStartLine`,
+// which missed the case where a re-edit overlaps a prior edit's range. The
+// model's earlier read saw OLD content at those lines, but the strict-less-
+// than filter let the second edit through, silently overwriting lines whose
+// content had already been mutated. Surfaced by the html-games dogfood
+// (launcher index.html head gutted by sequential CSS edits).
+
+EditTracker.clearAll();
+EditTracker.recordRead('index.html', 1, 30, 30);
+EditTracker.recordEdit('index.html', 'replace', 5, 10, -2);
+
+// Case 1: re-edit at the SAME starting line — content there is now NEW
+const sameStart = EditTracker.checkStale('index.html', 5, 8);
+T.eq(sameStart.stale, true,
+    'Re-edit at same startLine after prior edit is stale (content was replaced)');
+
+// Case 2: target starts BEFORE prior edit but overlaps it — lines inside the
+// overlap region are now new content
+EditTracker.clearAll();
+EditTracker.recordRead('index.html', 1, 30, 30);
+EditTracker.recordEdit('index.html', 'replace', 10, 15, -3);
+const overlapFromAbove = EditTracker.checkStale('index.html', 8, 12);
+T.eq(overlapFromAbove.stale, true,
+    'Target overlapping a prior edit from above is stale (overlap region has new content)');
+
+// Case 3: target starts INSIDE prior edit (within edit's post-edit range) —
+// lines are entirely new content
+EditTracker.clearAll();
+EditTracker.recordRead('index.html', 1, 30, 30);
+EditTracker.recordEdit('index.html', 'replace', 5, 10, 0); // delta=0, same length
+const targetInsideEdit = EditTracker.checkStale('index.html', 7, 9);
+T.eq(targetInsideEdit.stale, true,
+    'Target entirely inside a prior edit (delta=0) is stale (content was replaced)');
+
+// Case 4: control — target far above prior edit is unaffected
+EditTracker.clearAll();
+EditTracker.recordRead('index.html', 1, 30, 30);
+EditTracker.recordEdit('index.html', 'replace', 20, 25, -2);
+const aboveEdit = EditTracker.checkStale('index.html', 5, 10);
+T.eq(aboveEdit.stale, false,
+    'Target above a later edit is unaffected (line numbers and content unchanged)');
+
+// Case 5: control — target below prior edit catches drift correctly (existing
+// behavior must keep working)
+EditTracker.clearAll();
+EditTracker.recordRead('index.html', 1, 30, 30);
+EditTracker.recordEdit('index.html', 'replace', 5, 10, -2);
+const belowEdit = EditTracker.checkStale('index.html', 20, 25);
+T.eq(belowEdit.stale, true,
+    'Target below prior edit is stale (line numbers shifted)');
+T.eq(belowEdit.suggestedAdjustment, -2,
+    'Drift suggestion still works for below-edit targets after fix');
+
 T.suite('EditTracker — Debug Info');
 
 EditTracker.clearAll();

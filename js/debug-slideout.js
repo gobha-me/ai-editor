@@ -26,9 +26,9 @@
  */
 
 import { EventBus, Storage, Plugins, State } from './core.js';
-import { ErrorLogger } from './error-logger.js';
+import { ErrorLogger, clearErrorLog } from './error-logger.js';
 import { LLMDebug } from './llm.js';
-import { renderExchangeDetail } from './llm-debug-modal.js';
+import { renderExchangeDetail, clearLLMDebug } from './llm-debug-modal.js';
 import { GitProviderRegistry } from './git.js';
 import { statusFor as connStatusFor } from './settings/connections-tab.js';
 import { RetrievalManager } from './intelligence/retrieval/manager.js';
@@ -103,6 +103,7 @@ export function initDebugSlideOut() {
     document.getElementById('debugCloseBtn')?.addEventListener('click', closeDebugSlideOut);
     document.getElementById('debugPauseBtn')?.addEventListener('click', _togglePause);
     document.getElementById('debugCopyBundleBtn')?.addEventListener('click', copyDiagnosticBundle);
+    document.getElementById('debugClearBtn')?.addEventListener('click', _clearActiveTab);
 
     // Tab switching
     overlay.querySelectorAll('[data-debug-tab]').forEach(btn => {
@@ -192,6 +193,24 @@ function _selectTab(tab, skipRender = false) {
         p.hidden = p.dataset.debugPanel !== tab;
     });
     if (!skipRender) _renderActive();
+}
+
+// 1.8.3 — Clear button: dispatches to the active tab's clear handler.
+// Only Logs and AI are clearable today (the two ring buffers with
+// dedicated clear* exports). Other tabs are read-only views of live state,
+// so the button is a no-op there with a toast hint.
+async function _clearActiveTab() {
+    if (_activeTab === 'logs') {
+        await clearErrorLog(); // calls ErrorLogger.clear() → updateBadge()
+        _refreshTabCounts();
+        if (_activeTab === 'logs') _renderActive();
+    } else if (_activeTab === 'ai') {
+        await clearLLMDebug();
+        _refreshTabCounts();
+        if (_activeTab === 'ai') _renderActive();
+    } else {
+        window.showToast?.('Nothing to clear on this tab', 'info');
+    }
 }
 
 function _togglePause() {
@@ -658,6 +677,7 @@ export async function copyDiagnosticBundle() {
 export const __test_renderActive = _renderActive;
 export const __test_selectTab = _selectTab;
 export const __test_setLogLevel = (l) => { _logLevel = l; };
+export const __test_clearActiveTab = _clearActiveTab;
 export const __test_resetState = () => {
     _activeTab = 'logs';
     _paused = false;

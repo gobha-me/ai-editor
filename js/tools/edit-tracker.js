@@ -107,29 +107,57 @@ const EditTracker = {
             };
         }
         
-        // RULE 3: No edits should have occurred AFTER the last read that would shift target lines
-        const editsAfterRead = pathEdits.filter(e => 
-            e.seq > lastRead.seq &&
-            e.lineDelta !== 0 &&           // delta=0 means no line shift, so no staleness
-            e.startLine < targetStartLine  // Edit was above target, so it shifted target's line numbers
-        );
-        
+        // RULE 3: An edit since the last read invalidates the target range if either
+        //   (a) the edit's range OVERLAPS the target — the lines at the target now
+        //       contain new content (model's read saw the OLD content), or
+        //   (b) the edit was entirely ABOVE the target with non-zero delta — line
+        //       numbers below shifted, so the target's content is at different
+        //       line numbers than the model recorded.
+        // Pre-1.8.3 only checked (b) with strict `<`, missing (a) entirely. The
+        // gap let sequential overlapping edits silently mutate lines whose content
+        // had already been replaced — surfaced by the html-games dogfood report.
+        const tEnd = targetEndLine != null ? targetEndLine : targetStartLine;
+        const editsAfterRead = pathEdits.filter(e => {
+            if (e.seq <= lastRead.seq) return false;
+            // Post-edit length of the affected region: original span + delta.
+            // Min-clamped to 0 because a delete can leave nothing behind.
+            const editPostLen = Math.max(0, (e.endLine - e.startLine + 1) + (e.lineDelta || 0));
+            const editPostEnd = e.startLine + Math.max(0, editPostLen - 1);
+            // (a) overlap: max-of-starts <= min-of-ends
+            const overlap = Math.max(e.startLine, targetStartLine) <= Math.min(editPostEnd, tEnd);
+            if (overlap) return true;
+            // (b) above-target shift
+            if (e.lineDelta !== 0 && e.startLine < targetStartLine) return true;
+            return false;
+        });
+
         if (editsAfterRead.length > 0) {
-            // Calculate total drift from all edits above the target
-            const totalDrift = editsAfterRead.reduce((sum, e) => sum + (e.lineDelta || 0), 0);
-            
-            const editDescriptions = editsAfterRead.map(e => 
+            // Split for messaging: overlapping edits demand a re-read; above-only
+            // edits can be papered over with a drift suggestion.
+            const overlapping = editsAfterRead.filter(e => {
+                const editPostLen = Math.max(0, (e.endLine - e.startLine + 1) + (e.lineDelta || 0));
+                const editPostEnd = e.startLine + Math.max(0, editPostLen - 1);
+                return Math.max(e.startLine, targetStartLine) <= Math.min(editPostEnd, tEnd);
+            });
+            const aboveOnly = editsAfterRead.filter(e => !overlapping.includes(e));
+
+            const editDescriptions = editsAfterRead.map(e =>
                 `${e.operation} at lines ${e.startLine}-${e.endLine} (${e.lineDelta >= 0 ? '+' : ''}${e.lineDelta})`
             ).join(', ');
-            
+
+            // Drift only meaningful when no overlap — overlap means content
+            // changed, no line-number adjustment can recover the old content.
+            const totalDrift = aboveOnly.reduce((sum, e) => sum + (e.lineDelta || 0), 0);
+            const overlapMsg = overlapping.length > 0
+                ? `${overlapping.length} edit(s) modified content within or overlapping target lines ${targetStartLine}-${tEnd}: ${editDescriptions}. The lines at this range no longer match what your read returned. You MUST call read_lines on the target region before editing.`
+                : `${editsAfterRead.length} edit(s) changed line numbers since your last read: ${editDescriptions}. Total line drift: ${totalDrift >= 0 ? '+' : ''}${totalDrift}. You MUST call read_lines on the target region before editing.`;
+
             return {
                 stale: true,
-                reason: `${editsAfterRead.length} edit(s) changed line numbers since your last read: ${editDescriptions}. ` +
-                       `Total line drift: ${totalDrift >= 0 ? '+' : ''}${totalDrift}. ` +
-                       `You MUST call read_lines on the target region before editing.`,
+                reason: overlapMsg,
                 suggestedAdjustment: totalDrift,
-                suggestedStartLine: targetStartLine + totalDrift,
-                suggestedEndLine: targetEndLine ? targetEndLine + totalDrift : null
+                suggestedStartLine: overlapping.length === 0 ? targetStartLine + totalDrift : null,
+                suggestedEndLine: overlapping.length === 0 && targetEndLine ? targetEndLine + totalDrift : null
             };
         }
         
