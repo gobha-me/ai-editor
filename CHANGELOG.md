@@ -4,6 +4,75 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-05-08
+
+### Fix — Tool-aware `next_action_hint` on REFUSED envelopes
+
+Patches the duplicate-streak refusal envelope built in
+[`js/chat/handlers.js`](js/chat/handlers.js) so cheap-tier models can
+break out of identical-args loops without escalating to a more expensive
+tier.
+
+**Pathology.** HTML-Games dogfood pass on 2026-05-07: Grok-4-3 ran
+`get_ci_status` against a freshly-created branch with no PR (real
+result: structurally `success`, informationally empty — the build had
+no checks because no PR existed yet to trigger CI), then looped on
+`get_ci_status` 6+ more times through the cross-request `_cached: true`
+envelope and finally `REFUSED: ... N consecutive times with identical
+args` envelopes. The 1.7.1 cross-request dup cache + REFUSED chain
+fired correctly — `_cached: true` → `_cached:true (nested)` →
+`REFUSED: 3x` → … → `REFUSED: 7x` is the cache-invalidation path doing
+exactly what it should. The infrastructure is **not** the fault.
+
+The fault is at the model-recovery layer: weak/cheap-tier models read
+the `error` string ("called N consecutive times with identical args.
+Use the prior result or pick a different approach.") and fail to
+extract a behavioral hint pointing at *what* different approach. The
+envelope shape had no actionable next-action guidance.
+
+**What lands.**
+
+- New module
+  [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) — pure
+  (zero-browser-globals, `node --test` shim-free) accessor exporting
+  `getRefusalHint(toolName)`. Backed by a small `HINTS` table keyed by
+  tool name with a `GENERIC` fallback. Initial entries cover the two
+  CI tools surfaced by the 2026-05-07 dogfood trace
+  (`get_ci_status`, `wait_for_ci`); both name `create_pull_request` as
+  the recovery action when the precondition for a meaningful CI
+  signal is missing.
+
+- `handlers.js` REFUSED envelope (line 642) now concatenates
+  `getRefusalHint(toolName)` into the `error` string. Concatenation
+  rather than a new top-level field — models reliably read `error`,
+  while a new field would gamble on parser behavior across providers.
+  The `_refused: true` flag is unchanged so existing consumers
+  (tool-loop instrumentation, debug pane) are not affected.
+
+- Tests in
+  [`tests/test-refusal-hints.mjs`](tests/test-refusal-hints.mjs) pin
+  the regression: the `get_ci_status` hint must mention
+  `create_pull_request` (the specific recovery path the dogfood fault
+  demanded), the generic fallback fires for unknown tools, and the
+  return value is always a non-empty string (handlers concatenates
+  directly without a null guard).
+
+**Why not per-tool `nextActionHint` on `ToolDefinition`.** Cleaner
+long-term — data lives with the tool. But it's a wider change
+(registry contract + every relevant tool file) for a payoff that
+today's two known loop-prone tools don't justify. Revisit if the
+HINTS table grows past ~10 entries.
+
+**No changes to `_cached: true` / `_cache_note` envelopes.** Those
+already carry behavioral guidance (added in 1.7.1) and the dogfood
+data does not show a loop on the cache path itself — only on the
+escalation past the cache into the refusal path. Add hints there only
+if a future trace shows a loop on the cache path.
+
+**Extension model.** Future dogfood traces that surface another
+loop-prone tool extend the `HINTS` table with a one-line entry.
+`handlers.js` does not need to change.
+
 ## [1.8.1] - 2026-05-08
 
 ### Feature — Cross-file query expansion (AST chunker Phase 2 lever B)

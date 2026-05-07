@@ -36,6 +36,7 @@ import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
 import { invalidateCachesForPath } from './cache-invalidation.js';
+import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
@@ -638,8 +639,9 @@ export async function handleGeneralRequest(input) {
                     let toolResult;
                     if (isDup && streak >= DUP_REFUSE_THRESHOLD) {
                         console.warn(`[TOOL-LOOP] Refusing duplicate ${toolName} (streak=${streak})`);
+                        const hint = getRefusalHint(toolName);
                         toolResult = {
-                            error: `REFUSED: ${toolName} called ${streak} consecutive times with identical args. Use the prior result or pick a different approach.`,
+                            error: `REFUSED: ${toolName} called ${streak} consecutive times with identical args. ${hint}`,
                             _refused: true
                         };
                     } else if (crossRequestDuplicate) {
