@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="facelift-v3.css?v=1" />
 <link rel="stylesheet" href="facelift-v3-extras.css?v=1" />
 <link rel="stylesheet" href="window-v2.css?v=1" />
+<link rel="stylesheet" href="zip-flow.css?v=1" />
 </head>
 <body>
 <div id="root"></div>
@@ -31,6 +32,7 @@
 <script type="text/babel" src="left-pane.jsx"></script>
 <script type="text/babel" src="left-pane-v2.jsx"></script>
 <script type="text/babel" src="window-v2.jsx"></script>
+<script type="text/babel" src="zip-flow.jsx"></script>
 <script type="text/babel" src="pr-review.jsx"></script>
 <script type="text/babel" src="merge-conflict.jsx"></script>
 
@@ -48,6 +50,24 @@
 
     return (
       <DesignCanvas>
+        <DCSection id="zip-flow" title="Zip Up / Zip Down — three scopes, three homes" subtitle="Project zip lives in the project switcher. Branch zip lives in the Branches rail. Session zip lives on session tabs. Atomic-batch-commit semantics persist; the new modal lets you decide where it lands (current branch / new branch / new session) up front.">
+          <DCArtboard id="zip-project" label="1. Project switcher menu · whole-repo zip" width={560} height={620}>
+            <ZipProjectMenu theme="refined" />
+          </DCArtboard>
+          <DCArtboard id="zip-branches" label="2. Branches rail · per-branch export + drop-to-import" width={344} height={620}>
+            <ZipBranchesView theme="refined" />
+          </DCArtboard>
+          <DCArtboard id="zip-session" label="3. Session tab menu · snapshot = branch + chat" width={560} height={620}>
+            <ZipSessionMenu theme="refined" />
+          </DCArtboard>
+          <DCArtboard id="zip-modal" label="Upload Zip modal · v2 visual language" width={620} height={920}>
+            <ZipUploadModal theme="refined" />
+          </DCArtboard>
+          <DCArtboard id="zip-modal-ed" label="Upload Zip modal · Editorial Calm" width={620} height={920}>
+            <ZipUploadModal theme="editorial" />
+          </DCArtboard>
+        </DCSection>
+
         <DCSection id="window-v2" title="Window v2 — chat is the spine, sessions are real" subtitle="With agents driving most edits, chat earns the center. The middle becomes a stage that swaps mode (welcome / file / diff / PR / conflict). Sessions across the top let you run multiple branches or whole projects in one window.">
           <DCArtboard id="w2-welcome" label="Welcome · chat-dominant idle state" width={1600} height={900}>
             <WindowV2Welcome theme="refined" />

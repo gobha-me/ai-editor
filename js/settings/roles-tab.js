@@ -36,6 +36,18 @@ export function populateRoleCards() {
     });
 
     updateRoleToolsList(currentRole);
+
+    // Plan Mode auto-engage checkbox (github#25, 1.10.0). Persist
+    // immediately on toggle so the setting survives even if the user
+    // closes the modal without clicking Save (matches the "settings
+    // are live" behavior of the other checkboxes here).
+    const autoPlanEl = document.getElementById('autoPlanOnIssueStart');
+    if (autoPlanEl) {
+        autoPlanEl.checked = !!State.settings.autoPlanOnIssueStart;
+        autoPlanEl.onchange = () => {
+            State.settings.autoPlanOnIssueStart = !!autoPlanEl.checked;
+        };
+    }
 }
 
 /**

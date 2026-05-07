@@ -62,6 +62,9 @@ function registerStaticFixture() {
     // 1.9.0 — `ask_user` (github#33 Phase 1) joined the static set
     // for the same compression-survival reason as scratchpad/todo.
     reg('ask_user',         'Ask the user a structured question.',  { type: 'object', properties: { question: { type: 'string' }, type: { type: 'string' } } });
+    // 1.10.0 — `submit_plan_for_approval` (github#25) joined the
+    // static set as the always-admitted approval gate for Plan Mode.
+    reg('submit_plan_for_approval', 'Submit an implementation plan for user approval.', { type: 'object', properties: { plan: { type: 'string' } } });
 }
 
 // ============================================

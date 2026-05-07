@@ -17,6 +17,7 @@ import { RetrievalManager } from './intelligence/retrieval/manager.js';
 import { getCursorContext } from './editor.js';
 import { isConnectionDown } from './offline-indicator.js';
 import { wrapUntrusted, UNTRUSTED_KINDS } from './security/untrusted-wrap.js';
+import { getPlanMode } from './chat/state.js';
 
 // ============================================
 // EDITOR-SPECIFIC PROMPTS
@@ -343,6 +344,26 @@ function buildSystemPrompt(opts = {}) {
 
     // Inject live cursor / selection context from the editor
     prompt += buildCursorPrompt(admittedNames);
+
+    // Plan Mode (github#25, 1.10.0) — when active, prepend a load-bearing
+    // instruction block telling the model to plan first and submit via
+    // submit_plan_for_approval. The tool catalog filter in
+    // LLMTools.getToolsForRole() drops mutating tools regardless of what
+    // the prompt says, but the prompt addendum tells the model *why* its
+    // catalog shrank and how to escape (Approve unfreezes; Reject
+    // iterates). Do NOT gate this on `composerActive` — Plan Mode applies
+    // to every role.
+    if (getPlanMode()) {
+        prompt += `\n\n--- PLAN MODE ACTIVE ---`;
+        prompt += `\n🛑 The user has restricted you to read-only tools. Your task is to produce a structured implementation plan and submit it for approval BEFORE executing anything.`;
+        prompt += `\n\nWorkflow:`;
+        prompt += `\n1. Use read-only tools (read_file, find_relevant_files, scan_file, search_in_files, git_log, etc.) to gather what you need.`;
+        prompt += `\n2. If you need clarification before planning, call ask_user.`;
+        prompt += `\n3. When ready, call submit_plan_for_approval(plan: <markdown>) with the FULL plan: files to change and why, new files to create, order of operations, risks, open questions.`;
+        prompt += `\n4. The user will Approve → Plan Mode lifts, you regain full tool access, and you implement the approved plan.`;
+        prompt += `\n   Or Reject with feedback → you receive their feedback and re-plan; Plan Mode stays on.`;
+        prompt += `\n\nMutating tools (edit_file, write_file, commit_files, git push, scratchpad_write, todo_write, memory_remember, etc.) are NOT in your catalog right now. Don't try to call them — they'll be admitted again after approval.`;
+    }
 
     // Inject offline warning if the active project's git connection is down
     if (State.currentProject?.connectionId && isConnectionDown(State.currentProject.connectionId)) {

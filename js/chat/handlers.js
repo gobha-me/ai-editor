@@ -690,12 +690,14 @@ export async function handleGeneralRequest(input) {
                         // Execute with configurable timeout — long-running tools (wait_for_ci, etc.)
                         // get a separate timeout to avoid being killed by the standard tool timeout.
                         const LONG_RUNNING_TOOLS = new Set(['wait_for_ci']);
-                        // ask_user (github#33) blocks on the user's response via an inline
-                        // Preact card; the chat loop's `isToolLoopCancelled` cancel path
-                        // calls `cancelUserResponse()` to release the awaited Promise.
-                        // Bypassing the timer entirely is correct here — the user can
-                        // sit with a question for as long as they want.
-                        const USER_PAUSE_TOOLS = new Set(['ask_user']);
+                        // ask_user (github#33) and submit_plan_for_approval (github#25)
+                        // block on the user's response via an inline Preact card; the
+                        // chat loop's `isToolLoopCancelled` cancel path calls
+                        // `cancelUserResponse()` / `cancelPlanApproval()` to release
+                        // the awaited Promise. Bypassing the timer entirely is correct
+                        // here — the user can sit with a question or plan for as long
+                        // as they want.
+                        const USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval']);
                         const isUserPause = USER_PAUSE_TOOLS.has(toolName);
                         const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
                         const toolTimeout = isLongRunning
@@ -716,6 +718,17 @@ export async function handleGeneralRequest(input) {
                             toolResult = { error: e.message };
                         }
                         
+                        // Plan Mode (github#25) — when the user approves the plan,
+                        // lift Plan Mode before the next round so the LLM regains
+                        // its full tool catalog and can implement what it just
+                        // proposed. Rejection leaves Plan Mode on so the LLM
+                        // iterates on the same constraint set.
+                        if (toolName === 'submit_plan_for_approval' && toolResult && toolResult.status === 'approved') {
+                            const { setPlanMode } = await import('./state.js');
+                            setPlanMode(false);
+                            console.log('[TOOL-LOOP] Plan approved — Plan Mode lifted; LLM regains full tool catalog next round.');
+                        }
+
                         // Invalidate cached reads when a write tool modifies a file
                         // or when open_file changes the active file (stales read_current_file).
                         // Walks both the same-request `toolCallCache` AND the cross-request

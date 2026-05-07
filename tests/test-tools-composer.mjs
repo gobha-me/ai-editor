@@ -245,14 +245,15 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 18 names → 6 admitted, 12 unresolved
+// coder.v1 fixture — 19 names → 6 admitted, 13 unresolved
 // (3 meta-tools + 3 CI tools + 5 structural-anchor tools + 1 interaction
-//  tool (ask_user, 1.9.0) intentionally absent from this fixture; the
-//  promotions expanded the unresolved set without changing what this
-//  fixture registers, so the assertion just got longer.)
+//  tool (ask_user, 1.9.0) + 1 plan-mode approval tool
+//  (submit_plan_for_approval, 1.10.0 / github#25) intentionally absent
+//  from this fixture; the promotions expanded the unresolved set
+//  without changing what this fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 12 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 13 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -273,6 +274,8 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 12 unresolve
         // 1.9.0 — interaction tool (github#33 Phase 1), same fixture-absent
         // pattern as the 1.8.4 anchors.
         'ask_user',
+        // 1.10.0 — plan-mode approval gate (github#25), same pattern.
+        'submit_plan_for_approval',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

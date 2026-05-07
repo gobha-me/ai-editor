@@ -149,6 +149,12 @@ export function collectAndSave() {
     const activeRoleCard = document.querySelector('.role-card.active');
     State.settings.role = activeRoleCard ? activeRoleCard.dataset.role : 'full';
 
+    // Plan Mode auto-engage on issue start (github#25, 1.10.0)
+    const autoPlanEl = document.getElementById('autoPlanOnIssueStart');
+    if (autoPlanEl) {
+        State.settings.autoPlanOnIssueStart = !!autoPlanEl.checked;
+    }
+
     // Advanced Parameters
     const advancedParams = {};
     

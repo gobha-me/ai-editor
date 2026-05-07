@@ -68,6 +68,7 @@ import { CODER_V1 } from '../profiles/coder-v1.js';
 import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
+import { getPlanMode } from '../chat/state.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -989,6 +990,28 @@ export const LLMTools = {
             return [];
         }
 
+        // Plan Mode (github#25) — applied at the end of whichever branch
+        // assembles the result. The filter is name-based because the
+        // Composer's renderForLLM output is OpenAI-shape and strips the
+        // registry's `readOnly` flag; we look up read-only-ness in the
+        // registry by tool name to stay consistent across both paths.
+        const planMode = getPlanMode();
+        const readOnlyNames = planMode
+            ? new Set(defs.filter(d => d.readOnly === true).map(d => d.function?.name).filter(Boolean))
+            : null;
+        const applyPlanModeFilter = (toolList) => {
+            if (!planMode || !readOnlyNames) return toolList;
+            const filtered = toolList.filter(t => {
+                // Legacy path: raw registry def with `function.name`. Composer
+                // path: OpenAI shape `{type, function: {name, ...}}`. Both
+                // expose the name in the same place.
+                const name = t?.function?.name;
+                return typeof name === 'string' && readOnlyNames.has(name);
+            });
+            console.log('[LLMTools] Plan Mode active — filtered to', filtered.length, '/', toolList.length, 'read-only tools');
+            return filtered;
+        };
+
         // 1.3.18 — baseline = what THIS request would have shipped without
         // the Composer (role-filtered legacy set). Unfiltered = ungated whole
         // registry. Both computed from `Catalog` so `metadata.cost_estimate`
@@ -1015,7 +1038,7 @@ export const LLMTools = {
                 role,
                 composerActive: false,
             };
-            return filtered;
+            return applyPlanModeFilter(filtered);
         }
 
         const reductionPct = baseline > 0
@@ -1055,7 +1078,7 @@ export const LLMTools = {
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
-        return renderForLLM(result);
+        return applyPlanModeFilter(renderForLLM(result));
     },
 
     /**

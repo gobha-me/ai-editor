@@ -264,9 +264,10 @@ export function registerScanTools(registry) {
                 required: ['path']
             }
         },
-        roles: 'all'  // All roles can scan file structure
+        roles: 'all',  // All roles can scan file structure
+        readOnly: true
     });
-    
+
     // ========================================
     // read_function - Fetch specific function
     // ========================================
@@ -358,9 +359,10 @@ export function registerScanTools(registry) {
                 required: ['path', 'name']
             }
         },
-        roles: 'all'  // All roles can read specific functions
+        roles: 'all',  // All roles can read specific functions
+        readOnly: true
     });
-    
+
     // ========================================
     // find_references - Locate symbol usage
     // ========================================
@@ -500,9 +502,10 @@ export function registerScanTools(registry) {
                 required: ['symbol']
             }
         },
-        roles: 'all'  // All roles can find symbol references
+        roles: 'all',  // All roles can find symbol references
+        readOnly: true
     });
-    
+
     // ========================================
     // read_lines - Read specific line range
     // ========================================
@@ -583,6 +586,7 @@ export function registerScanTools(registry) {
                 required: ['path', 'start_line', 'end_line']
             }
         },
-        roles: 'all'  // All roles can read specific line ranges
+        roles: 'all',  // All roles can read specific line ranges
+        readOnly: true
     });
 }

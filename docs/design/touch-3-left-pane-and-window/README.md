@@ -23,3 +23,13 @@ The design medium is **HTML/CSS/JS** — these are prototypes, not production co
 - `ai-editor/README.md` — this file
 - `ai-editor/chats/` — conversation transcripts (read these!)
 - `ai-editor/project/` — the `ai-editor` project files (HTML prototypes, assets, components)
+
+## Note on the 2026-05-08 addendum (Touch 3, follow-on session)
+
+This bundle was originally archived 2026-05-07 with four major surfaces — Left pane v2, PR Review, Merge Conflict Resolver, Window v2 / Sessions. A follow-on session 2026-05-08 added a **fifth** surface to the same `Facelift.html` canvas: **Zip Up / Zip Down** — three scopes, three homes. The new content was re-imported into this directory rather than spun out as a separate touch:
+
+- `chats/chat2.md` — extended with the zip-flow exchange (the existing prefix is unchanged).
+- `project/Facelift.html` — adds a `zip-flow` `DCSection` with five artboards.
+- `project/zip-flow.jsx` + `project/zip-flow.css` — new component + styles.
+
+The zip-flow design closes the [`docs/design/OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md) entry filed 2026-05-07 about where Zip Up / Zip Down lives in the new chrome — see that doc's status line.

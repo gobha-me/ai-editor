@@ -162,6 +162,7 @@ async function indexProject({ force }) {
 ToolRegistry.register('find_relevant_files', findRelevantFiles, {
     type: 'function',
     roles: 'all', // 1.6.9 — read-only retrieval; opened to PM and plugin-dev (mirrors git_log at 1.6.8 / github#32)
+    readOnly: true,
     function: {
         name: 'find_relevant_files',
         description: 'Find semantically relevant files for a query using embeddings. Use this BEFORE reading files to dramatically reduce token usage. Returns the top N most relevant files based on their content and purpose.',
@@ -186,6 +187,7 @@ ToolRegistry.register('find_relevant_files', findRelevantFiles, {
 ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
     type: 'function',
     roles: 'all',
+    readOnly: true,
     function: {
         name: 'get_embeddings_status',
         description: 'Get the current status of the embeddings system, including number of files indexed and configuration',

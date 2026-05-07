@@ -1964,3 +1964,197 @@
     font-size: var(--font-xs);
     flex: 1 1 auto;
 }
+
+/* ============================================
+   PLAN MODE — chip + approval card (github#25, 1.10.0)
+   Chip lives in the chat input area's chip row;
+   approval card mounts in a fresh .chat-message slot
+   when submit_plan_for_approval pauses the loop.
+   ============================================ */
+
+.plan-mode-chip-root {
+    /* Empty by default — the chip itself supplies padding. */
+}
+
+.plan-mode-chip-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.25rem 0;
+}
+
+.plan-mode-chip {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 0.2rem 0.7rem;
+    font-size: var(--font-xs);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.plan-mode-chip:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.plan-mode-chip--active {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.plan-mode-chip--active:hover {
+    /* Active chip already has high contrast — keep it stable on hover. */
+    border-color: var(--accent);
+    color: var(--bg-primary);
+}
+
+.plan-mode-banner {
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+    line-height: 1.4;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.plan-approval-slot {
+    padding: 0;
+    background: transparent;
+}
+
+.plan-approval-card {
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.plan-approval-card--submitted {
+    opacity: 0.7;
+    border-color: var(--border);
+}
+
+.plan-approval-card--error {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.plan-approval-card__header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: var(--font-sm);
+}
+
+.plan-approval-card__icon {
+    font-size: 1rem;
+}
+
+.plan-approval-card__title {
+    color: inherit;
+}
+
+.plan-approval-card__plan {
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.75rem;
+    max-height: 24rem;
+    overflow-y: auto;
+}
+
+.plan-approval-card__plan--pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono, monospace);
+}
+
+.plan-approval-card__feedback-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+}
+
+.plan-approval-card__feedback-hint {
+    color: var(--text-muted);
+}
+
+.plan-approval-card__feedback {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-sm);
+    resize: vertical;
+}
+
+.plan-approval-card__feedback:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.plan-approval-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.plan-approval-card__approve {
+    padding: 0.4rem 0.9rem;
+    border: 0;
+    border-radius: 4px;
+    background: var(--accent);
+    color: var(--bg-primary);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.plan-approval-card__approve:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.plan-approval-card__reject {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.plan-approval-card__reject:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.plan-approval-card__reject:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.plan-approval-card__hint {
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    flex: 1 1 auto;
+}

@@ -19,6 +19,7 @@
  * @property {ToolFunctionSchema} function
  * @property {string|string[]}    roles            - 'all' or array of role IDs
  * @property {string[]}           [_registeredRoles] - Normalized role array (set at registration)
+ * @property {boolean}            [readOnly]        - True if the tool reads only and never mutates files / repo / persistent state. Used by Plan Mode (github#25) to filter the LLM's tool catalog. Default: undefined ⇒ treated as mutating (safe default — opt-in to read-only).
  */
 
 /**
@@ -225,17 +226,39 @@ export const ToolRegistry = {
      */
     getToolsForRole(roleId) {
         const activeRole = roleId || State.settings.role;
-        
+
         // If 'full' role, return everything
         if (activeRole === 'full') {
             return this.definitions;
         }
-        
+
         // Filter based on tool's registered roles
         return this.definitions.filter(tool => {
             const toolRoles = tool._registeredRoles || [];
             return toolRoles.includes('all') || toolRoles.includes(activeRole);
         });
+    },
+
+    /**
+     * Filter a tool-definition list down to read-only entries. Used by
+     * Plan Mode (github#25) to constrain what the LLM can call while a
+     * plan is being assembled. The filter is applied on top of role
+     * filtering / Composer admission — i.e. callers pass the list they
+     * would otherwise send to the LLM, and this drops any tool whose
+     * definition lacks an explicit `readOnly: true` flag.
+     *
+     * Default-mutating is the safe default: a tool author who forgets
+     * to declare read-only-ness loses plan-mode admission, not the
+     * other way around (opt-in, not opt-out). MCP tools land without
+     * this flag and therefore can't be invoked while planning, which
+     * is the conservative choice — most MCP servers expose write
+     * actions, and the registry can't introspect their semantics.
+     *
+     * @param {ToolDefinition[]} defs
+     * @returns {ToolDefinition[]}
+     */
+    filterReadOnly(defs) {
+        return defs.filter(tool => tool && tool.readOnly === true);
     },
     
     /**

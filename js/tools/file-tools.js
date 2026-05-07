@@ -73,7 +73,8 @@ export function registerFileTools(registry) {
                 required: []
             }
         },
-        roles: 'all'  // All roles can read files
+        roles: 'all',  // All roles can read files
+        readOnly: true
     });
 
     // NOTE: read_lines is now in scan-tools.js with enhanced features (context_lines parameter)
@@ -149,7 +150,8 @@ export function registerFileTools(registry) {
                 required: ['path']
             }
         },
-        roles: 'all'  // All roles can read files
+        roles: 'all',  // All roles can read files
+        readOnly: true
     });
 
     // ========================================
@@ -228,6 +230,7 @@ export function registerFileTools(registry) {
                 required: []
             }
         },
-        roles: 'all'  // All roles can see open tabs
+        roles: 'all',  // All roles can see open tabs
+        readOnly: true
     });
 }

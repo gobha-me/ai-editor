@@ -169,7 +169,8 @@ ToolRegistry.register('list_dirty_files', listDirtyFiles, {
             required: []
         }
     },
-    roles: ['coder']  // Read-only but scoped to coder workflow
+    roles: ['coder'],  // Read-only but scoped to coder workflow
+    readOnly: true
 });
 
 export { commitFiles, listDirtyFiles };

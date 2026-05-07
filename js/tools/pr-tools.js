@@ -135,7 +135,8 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -254,7 +255,8 @@ export function registerPRTools(registry) {
                 required: ['number']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -433,7 +435,8 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -555,6 +558,7 @@ Use get_ci_status first to see which checks passed/failed, then get_ci_logs to r
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 }

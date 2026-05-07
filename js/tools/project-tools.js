@@ -53,7 +53,8 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -154,7 +155,8 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        roles: 'all'  // All roles can view project structure
+        roles: 'all',  // All roles can view project structure
+        readOnly: true
     });
 
     // ========================================

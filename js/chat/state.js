@@ -23,6 +23,27 @@ let pendingUserResponse = null;  // { question, type, options, allow_custom, res
 let pendingImages = [];  // Images [{ dataUrl, name, size, type: 'image' }]let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
 let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
 
+// Plan Mode (github#25) — global flag that restricts the LLM to read-only
+// tools, instructs it to produce a structured plan, and surfaces an
+// approval card before any mutating action. Persisted to localStorage so a
+// refresh keeps the mode the user last saw. Toggled from the chip in the
+// chat input area, the auto-engage-on-issue-start setting in roles-tab,
+// or implicitly cleared when an approval card resolves with status:
+// 'approved'. See pendingPlanApproval below for the gate that pauses the
+// tool loop.
+let planMode = false;
+try {
+    planMode = localStorage.getItem('chat.planMode') === '1';
+} catch { /* localStorage unavailable */ }
+
+// Plan-approval pending state — single-slot, mirrors pendingUserResponse.
+// Set by submit_plan_for_approval tool handler; resolved by the
+// PlanApprovalCard component. Held separately from pendingUserResponse so
+// the two cards can mount independently and so handlers.js can inspect
+// the resolution envelope (approved → setPlanMode(false)) without
+// guessing which card resolved.
+let pendingPlanApproval = null;  // { plan, resolve }
+
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 
@@ -149,13 +170,105 @@ export function isToolLoopCancelled() {
 /**
  * Cancel tool loop. Also releases any pending ask_user Promise so the
  * tool handler doesn't leak — without this, cancelling mid-question
- * would leave the awaited Promise unsettled forever.
+ * would leave the awaited Promise unsettled forever. Same goes for
+ * pending plan approval (github#25).
  */
 export function cancelToolLoop() {
     _cancelToolLoop = true;
     if (pendingUserResponse) {
         cancelUserResponse();
     }
+    if (pendingPlanApproval) {
+        cancelPlanApproval();
+    }
+}
+
+// ============================================
+// PLAN MODE (github#25)
+// ============================================
+
+/**
+ * @returns {boolean}
+ */
+export function getPlanMode() {
+    return planMode;
+}
+
+/**
+ * Toggle plan mode. Persists to localStorage and emits
+ * `plan-mode:changed` so the chip + banner re-render. The chat loop
+ * reads this fresh per round in handlers.js, and the system prompt
+ * builder reads it inside buildSystemPrompt() — both paths see the new
+ * value on the next message boundary, never mid-round.
+ *
+ * @param {boolean} value
+ */
+export function setPlanMode(value) {
+    const next = !!value;
+    if (next === planMode) return;
+    planMode = next;
+    try { localStorage.setItem('chat.planMode', planMode ? '1' : '0'); } catch { /* best-effort */ }
+    try { EventBus.emit('plan-mode:changed', planMode); } catch { /* best-effort */ }
+}
+
+/**
+ * @returns {{ plan: string, resolve: Function } | null}
+ */
+export function getPendingPlanApproval() {
+    return pendingPlanApproval;
+}
+
+/**
+ * Set the pending plan-approval state. Called by submit_plan_for_approval
+ * tool handler immediately before it returns the Promise that `resolve`
+ * will eventually settle. Emits `plan_approval:pending` so the card mounts.
+ *
+ * @param {{ plan: string, resolve: Function }} pending
+ */
+export function setPendingPlanApproval(pending) {
+    pendingPlanApproval = pending;
+    try { EventBus.emit('plan_approval:pending', pending); } catch { /* best-effort */ }
+}
+
+/**
+ * Resolve the pending plan-approval Promise with the user's verdict.
+ * Called by the PlanApprovalCard's Approve / Reject buttons. The
+ * envelope shape ({ status: 'approved' | 'rejected', feedback?: string })
+ * becomes the tool_result the chat loop forwards to the LLM. handlers.js
+ * separately watches for { status: 'approved' } to call setPlanMode(false)
+ * before the next round.
+ *
+ * @param {{ status: 'approved' | 'rejected', feedback?: string }} envelope
+ * @returns {boolean} True if a Promise was resolved.
+ */
+export function resolvePlanApproval(envelope) {
+    if (!pendingPlanApproval) return false;
+    const { resolve } = pendingPlanApproval;
+    pendingPlanApproval = null;
+    try { EventBus.emit('plan_approval:resolved', { cancelled: false, ...envelope }); } catch { /* best-effort */ }
+    try { resolve(envelope); } catch (err) {
+        console.error('[plan_approval] resolve threw:', err);
+    }
+    return true;
+}
+
+/**
+ * Cancel the pending plan-approval Promise. Called from the Stop-button
+ * cancel path (cancelToolLoop) so the awaited handler doesn't leak.
+ *
+ * @returns {boolean} True if a Promise was cancelled.
+ */
+export function cancelPlanApproval() {
+    if (!pendingPlanApproval) return false;
+    const { resolve } = pendingPlanApproval;
+    pendingPlanApproval = null;
+    try { EventBus.emit('plan_approval:resolved', { cancelled: true }); } catch { /* best-effort */ }
+    try {
+        resolve({ status: 'cancelled', cancelled: true, error: 'User cancelled the plan approval.' });
+    } catch (err) {
+        console.error('[plan_approval] cancel resolve threw:', err);
+    }
+    return true;
 }
 
 /**

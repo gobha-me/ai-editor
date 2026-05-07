@@ -729,6 +729,20 @@ export async function startWorkOnIssue(issue) {
             'success'
         );
 
+        // Plan Mode auto-engage (github#25, 1.10.0) — when the
+        // `autoPlanOnIssueStart` setting is on, flip Plan Mode before
+        // kicking off the chat run so the LLM sees the read-only tool
+        // catalog + plan-mode addendum from round 1. Approval lifts it
+        // automatically. Default-off; opt-in from Settings → Roles.
+        if (State.settings.autoPlanOnIssueStart) {
+            try {
+                const { setPlanMode } = await import('./chat/state.js');
+                setPlanMode(true);
+            } catch (e) {
+                console.warn('[issue-detail] Could not auto-engage Plan Mode:', e?.message || e);
+            }
+        }
+
         // Kick off the LLM — it will see the active issue in the system prompt
         // and can read_issue for full details
         window.Chat?.sendMessage(`Start work on issue #${issue.number}`);

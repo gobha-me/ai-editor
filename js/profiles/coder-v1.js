@@ -162,6 +162,12 @@ export const CODER_V1 = {
             // case as scratchpad/todo (cheap-tier models won't reliably
             // discover it through find_tool / list_tools_by_category).
             'ask_user',
+            // Plan Mode approval gate — github#25 (1.10.0). Always
+            // admitted so it's available the moment Plan Mode is
+            // toggled on. Marked readOnly so the plan-mode filter
+            // keeps it in the LLM's catalog while every mutating
+            // tool is dropped.
+            'submit_plan_for_approval',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',

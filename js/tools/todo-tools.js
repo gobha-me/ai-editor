@@ -168,6 +168,7 @@ export function registerTodoTools(registry) {
             parameters: { type: 'object', properties: {}, required: [] },
         },
         roles: 'all',
+        readOnly: true,
     });
 }
 

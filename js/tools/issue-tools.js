@@ -72,7 +72,8 @@ export function registerIssueTools(registry) {
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -152,7 +153,8 @@ export function registerIssueTools(registry) {
                 required: ['number']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================

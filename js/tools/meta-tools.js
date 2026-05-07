@@ -115,6 +115,7 @@ export function registerMetaTools(registry) {
             parameters: { type: 'object', properties: {}, required: [] },
         },
         roles: 'all',
+        readOnly: true,
     });
 
     /* ============================================================ */
@@ -151,6 +152,7 @@ export function registerMetaTools(registry) {
             },
         },
         roles: 'all',
+        readOnly: true,
     });
 
     /* ============================================================ */
@@ -225,6 +227,7 @@ export function registerMetaTools(registry) {
             },
         },
         roles: 'all',
+        readOnly: true,
     });
 }
 

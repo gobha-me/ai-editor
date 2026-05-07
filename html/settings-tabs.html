@@ -653,6 +653,25 @@
             <!-- Populated dynamically -->
         </div>
     </div>
+
+    <!-- Plan Mode (github#25, 1.10.0) — auto-engage on issue start. -->
+    <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1.5rem;">
+        <label style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+            Plan Mode
+        </label>
+        <p style="font-size: var(--font-sm); color: var(--text-secondary); margin: 0 0 0.5rem 0;">
+            Plan Mode restricts the LLM to read-only tools and requires it to submit a plan for approval before executing. Toggle it on/off any time via the chip in the chat input area.
+        </p>
+        <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; padding: 0.4rem 0;">
+            <input type="checkbox" id="autoPlanOnIssueStart" style="margin-top: 0.25rem;">
+            <span>
+                <strong>Automatically enter Plan Mode when starting work on an issue.</strong>
+                <span style="display: block; font-size: var(--font-sm); color: var(--text-muted); margin-top: 0.15rem;">
+                    Clicking ▶ Start Work on an issue will turn Plan Mode on before the chat run launches. The LLM produces a plan first, you approve, then it executes.
+                </span>
+            </span>
+        </label>
+    </div>
 </div>
 
 <!-- Memory Tab — Preact mount target. UI rendered by js/settings/memory-tab/MemoryTab.js -->

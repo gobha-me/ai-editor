@@ -188,6 +188,8 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'todo_read',
         // 1.9.0 — interaction tool (github#33 Phase 1).
         'ask_user',
+        // 1.10.0 — Plan Mode approval gate (github#25).
+        'submit_plan_for_approval',
         'read_file',
         'read_lines',
         'scan_file',

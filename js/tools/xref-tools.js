@@ -94,7 +94,8 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -194,7 +195,8 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo', 'path']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================
@@ -280,6 +282,7 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo', 'path', 'start_line', 'end_line']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 }

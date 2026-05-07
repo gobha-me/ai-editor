@@ -147,7 +147,8 @@ export function registerScratchpadTools(registry) {
                 required: []
             }
         },
-        roles: 'all'
+        roles: 'all',
+        readOnly: true
     });
 
     // ========================================

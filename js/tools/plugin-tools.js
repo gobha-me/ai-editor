@@ -59,7 +59,8 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev']
+        roles: ['plugin-dev'],
+        readOnly: true
     });
 
     // ── write_plugin_source ────────────────────────
@@ -230,6 +231,7 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev']
+        roles: ['plugin-dev'],
+        readOnly: true
     });
 }

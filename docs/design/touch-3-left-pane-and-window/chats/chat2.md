@@ -189,3 +189,75 @@ Each tab in the top bar is a self-contained session = branch + task + chat + ope
 
 Editorial Calm variant of the welcome shipped too so you can see how the type stretches at full size.
 
+## User
+
+how did we come up with a feature this good without you ;)
+
+## Assistant
+
+_[tool: snip]_
+
+_[tool: write_file]_
+
+_[tool: write_file]_
+
+_[tool: str_replace_edit]_
+
+_[tool: snip]_
+
+_[tool: done]_
+
+A new **Zip Up / Zip Down** section is now at the top of the canvas — five artboards answering all three of your open questions:
+
+**Where it lives in v2 chrome — three scopes, three homes:**
+
+1. **Project menu** (next to the brand) — whole-repo zip. *Bring in*: Clone from URL, Import from .zip. *Take out*: Export project / Export branch. The zip lives where projects live.
+
+2. **Branches rail** — per-branch export. Each branch row gets a zip icon (📦) next to Switch/Cut release. Plus a top-of-pane import button and a drop zone that materializes when you drag a .zip anywhere over the window — drops become *new branches*, never clobber your current one.
+
+3. **Session tab right-click** — the new mental model. **Session snapshot = branch + chat history + notes**, all in one zip. Hand it to a teammate, they reopen the agent thread mid-flow. Also offered: "Export branch only · no chat" for when you don't want to share the conversation.
+
+**Refined Upload Zip modal** keeps everything that already works (selectable list, diff scan badges, target dir, commit message, atomic commit) but adds the answer to your destination question up front: a segmented control — `main` / `new branch` / `new session` — so the user picks the landing scope before scrolling the file list. Default is **new branch**, named auto from the zip filename.
+
+**Behavior decisions baked in:**
+- Atomic batch commit **stays** — that's the magic. Footer call-out: "One atomic commit · revert with one click."
+- Drag-and-drop import **always lands in a new branch** by default (safer than today's "active branch" default; user can override in modal).
+- Session import creates a fresh branch *and* opens a new session tab restoring the chat — so the receiver lands exactly where the sender left off.
+
+Editorial Calm variant of the modal also shipped.
+
+## User
+
+some of the styling is off, but you just had the "hold my beer smartass" moment, golf clap, good job
+
+## Assistant
+
+_[tool: snip]_
+
+🥃 *holds beer, hands it back*
+
+Glad the session-as-zip idea landed — that one wrote itself the moment "branch + task + chat + open files" came out of your mouth. Snapshot semantics fall out for free.
+
+Styling fixes are on standby — point at what's off (or scribble on the artboards) and I'll tighten. Common suspects given the new surfaces:
+- Modal at 560px is probably tight against the file list
+- The drop-zone inside the Branches rail competes visually with the branch cards
+- Session tab pip + label spacing in the top bar
+
+But beer first. 🤝
+
+## User
+
+example #2, white on white, its the only one, minor
+
+## Assistant
+
+_[tool: snip]_
+
+_[tool: grep]_
+
+_[tool: str_replace_edit]_
+
+_[tool: snip]_
+
+Fixed — the Branches rail body now sits on `--tk-bg-0` so the cards and dashed drop-zone don't disappear into white. Refresh the canvas. 👌
+

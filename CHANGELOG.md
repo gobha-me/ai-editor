@@ -6,6 +6,138 @@ All notable changes to AI Editor are documented here.
 
 ### Docs
 
+- **docs(design):** Touch 3 follow-on bundle merged in-place at [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) — adds the **Zip Up / Zip Down** surface (three scopes — project menu / branches rail / session tab — plus a refined Upload Zip modal with an up-front `main / new branch / new session` segmented control). New `project/zip-flow.jsx` + `project/zip-flow.css`; `project/Facelift.html` gains a `zip-flow` `DCSection` with five artboards; `chats/chat2.md` extended with the design exchange. Closes the open question filed 2026-05-07 at [`docs/design/OPEN-QUESTIONS.md`](docs/design/OPEN-QUESTIONS.md) (status flipped to `resolved (2026-05-08)`). Roadmap §Touch 3 deliverables row added for the new surface; the Sessions ↔ profile-contract dependency stays unchanged. No version bump (docs-only — see `feedback_no_bump_for_measurement_only.md`).
+
+## [1.10.0] - 2026-05-07
+
+### Feature — Plan Mode (github#25)
+
+[github#25](https://github.com/gobha-me/ai-editor/issues/25) ships as a
+read-only planning phase with an approval gate, layered on top of the
+`pendingUserResponse` seam introduced for `ask_user` (1.9.0) and the
+queued-input drain (1.9.1). When Plan Mode is active the LLM is
+restricted to read-only tools and instructed to submit a structured
+implementation plan via a new `submit_plan_for_approval` tool — the
+user reviews the plan inline and Approves (Plan Mode lifts and the
+LLM regains full tool access for execution) or Rejects with optional
+feedback (the LLM iterates while Plan Mode stays on).
+
+**What lands.**
+
+- **State** in [`js/chat/state.js`](js/chat/state.js) — new module-level
+  `planMode` flag persisted to `localStorage('chat.planMode')` so a
+  refresh keeps the mode the user last saw; `getPlanMode()` /
+  `setPlanMode()` accessors that emit `plan-mode:changed` only on
+  transition. New `pendingPlanApproval` slot mirroring
+  `pendingUserResponse` in shape — `setPendingPlanApproval` /
+  `resolvePlanApproval` / `cancelPlanApproval` settle the awaited
+  Promise. `cancelToolLoop()` now releases pending plan approvals
+  alongside ask_user, so Stop never leaks an unsettled handler.
+- **Tool metadata** in [`js/tools/registry.js`](js/tools/registry.js) —
+  optional `readOnly: boolean` on `ToolDefinition`; default unset =
+  treated as mutating (safe default — opt-in to read-only). New
+  `ToolRegistry.filterReadOnly(defs)` helper. Marked across the
+  registry: `read_*`, `find_relevant_files`, `scan_*`, `git_log`,
+  `search_in_files`, `xref` peeks, `meta_*`, `list_*`, `get_*`,
+  `peek_read_lines`, `read_function`, `find_references`,
+  `read_issue` / `read_pull_request`, `list_issues` / `list_pull_requests`,
+  `list_dirty_files`, `read_docs`, `read_plugin_source` /
+  `list_user_plugins`, `memory_recall`, `scratchpad_read`, `todo_read`,
+  CI tools, and `ask_user` (pauses the loop but doesn't mutate). All
+  edit / commit / write / push / scratchpad-write / todo-write /
+  memory-write / create / update tools intentionally lack the flag
+  and are dropped while Plan Mode is on.
+- **Tool catalog filter** in [`js/llm/api.js`](js/llm/api.js)
+  `LLMTools.getToolsForRole()` — when `getPlanMode()` is true, builds a
+  Set of read-only tool *names* from the registry once per call and
+  filters both the legacy and Composer paths' returned tool list down
+  to that set before sending to the LLM. Name-based to bridge the
+  legacy registry shape and the Composer's OpenAI shape (which strips
+  `readOnly`); registry is the single source of truth.
+- **submit_plan_for_approval tool** in
+  [`js/tools/plan-tools.js`](js/tools/plan-tools.js) — registered with
+  `roles: 'all'`, `readOnly: true`. Validates a non-empty `plan` string
+  arg, calls `setPendingPlanApproval`, returns the awaited Promise.
+  `'submit_plan_for_approval'` joins `'ask_user'` in the
+  `USER_PAUSE_TOOLS` set in [`js/chat/handlers.js`](js/chat/handlers.js)
+  so the 30s tool-execution timeout is bypassed.
+  `submit_plan_for_approval` is also added to
+  [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js) `tools.static`
+  so the Composer keeps it admitted alongside `ask_user`.
+- **Auto-toggle-off** in [`js/chat/handlers.js`](js/chat/handlers.js) —
+  after a `submit_plan_for_approval` tool call completes, if the
+  envelope is `{ status: 'approved' }` the loop calls
+  `setPlanMode(false)` before the next round so the LLM's next
+  request sees the full tool catalog and the Plan Mode addendum
+  drops out of the system prompt.
+- **System prompt addendum** in [`js/prompts.js`](js/prompts.js) — when
+  `getPlanMode()` is true, `buildSystemPrompt()` injects a load-bearing
+  block telling the model to plan first, call
+  `submit_plan_for_approval`, and stop attempting mutations (the
+  catalog filter physically prevents them, but the prompt explains
+  why and how to escape).
+- **Plan Mode chip** in
+  [`js/chat/plan-mode-chip.js`](js/chat/plan-mode-chip.js) +
+  [`js/chat/plan-mode-chip/PlanModeChip.js`](js/chat/plan-mode-chip/PlanModeChip.js)
+  — Preact + htm under [Decision §9](docs/ROADMAP.md). Mounts into
+  `#planModeChipRoot`; subscribes to `plan-mode:changed` so toggles
+  from any path (chip click, auto-engage hook, approval card lifting
+  it) keep the chip + banner in sync. When active the chip renders a
+  `🛑 Plan Mode — read-only` pill plus a one-line banner explaining
+  the constraint; click toggles `setPlanMode(!getPlanMode())`.
+- **Plan-approval card** in
+  [`js/chat/plan-approval-card.js`](js/chat/plan-approval-card.js)
+  (lifecycle wrapper) +
+  [`js/chat/plan-approval-card/PlanApprovalCard.js`](js/chat/plan-approval-card/PlanApprovalCard.js)
+  (Preact component). Mirrors the ask-user-card lifecycle exactly:
+  EventBus subscriptions on `plan_approval:pending` /
+  `plan_approval:resolved`, mounts a fresh slot in the chat container,
+  unmounts on resolution. Renders the plan markdown via the global
+  `marked.parse` (falls back to `<pre>` when unavailable), an
+  Approve / Reject pair, and an optional feedback textarea used on
+  rejection.
+- **Slots** in [`html/chat-panel.html`](html/chat-panel.html) — new
+  `#planModeChipRoot` between `#queuedInputPanelRoot` and
+  `#memoryChipRoot`, mirroring the existing chip-row pattern.
+- **Auto-engage on issue start** — new `State.settings.autoPlanOnIssueStart`
+  boolean (default **false**, opt-in). Wired in
+  [`js/issue-detail.js`](js/issue-detail.js) `startWorkOnIssue` —
+  immediately before `window.Chat?.sendMessage(...)` the auto-engage
+  hook calls `setPlanMode(true)` if the setting is on, so the chat
+  run launches in Plan Mode and the LLM sees the read-only catalog
+  + addendum from round 1. Approval lifts it automatically.
+- **Settings UI** — new "Plan Mode" section at the bottom of Settings →
+  Roles ([`html/settings-tabs.html`](html/settings-tabs.html) +
+  [`js/settings/roles-tab.js`](js/settings/roles-tab.js)) with the
+  `autoPlanOnIssueStart` checkbox; persisted via
+  [`js/settings/persistence.js`](js/settings/persistence.js)
+  `collectAndSave()`.
+- **CSS** in [`css/chat.css`](css/chat.css) — chip pill, active-state
+  highlight, banner styling, plus the plan-approval card to match
+  the ask-user-card visual weight (border in `--accent`, scrollable
+  plan body capped at ~24rem).
+
+**Tests.** New [`tests/test-plan-mode.mjs`](tests/test-plan-mode.mjs)
+(~17 cases) covers the planMode flag toggle + persistence + transition-
+gated event emission, the pendingPlanApproval slot's resolve / cancel
+envelopes, `cancelToolLoop` releasing pending approvals,
+`ToolRegistry.filterReadOnly` keeping order, and the
+`submit_plan_for_approval` registration + handler validation +
+end-to-end Promise settlement via `resolvePlanApproval`. Browser-side
+chip / card mount-unmount and the chat-loop auto-toggle-off path are
+covered by the dogfood verification in this PR.
+
+**What's deferred.** The `/plan` slash command (no slash-command
+parser exists today; UI toggle is enough for Phase 1), plan
+persistence to a file in the repo (plan lives in chat history as the
+LLM's last assistant message), strict-mode deviation penalties (the
+catalog filter physically prevents mutations), per-role plan-mode
+defaults (Phase 1 is one global flag plus one auto-engage setting),
+and sub-agent inheritance ([github#24](https://github.com/gobha-me/ai-editor/issues/24)
+is post-2.0 — that's where this gets revisited).
+
+### Docs
+
 - **docs(roadmap):** refresh `ROADMAP.md` HEAD pointer to 1.9.1 (and tagged-release pointer to 1.9.1 — the "untagged in main" backlog has cleared); fold 1.8.5, 1.9.0, 1.9.1 into the "Just shipped" row; rewrite the "Now" / "Later" rows to reflect the reopened slot and the remaining open issues (#37 Phase 2, #27, #25, #24, #18); add a new closed entry for github#33 (Phase 1 + Phase 2 both complete) and inline the eight deferred design questions under the github#37 Phase 1 closed entry. Sync `docs/ARCHITECTURE.md` "Last sync" timestamp from 1.6.11 → 1.9.1. No version bump (docs-only — see `feedback_no_bump_for_measurement_only.md`).
 - **docs(design):** archive Touch 3 design deliverable (left pane + window architecture, received 2026-05-07) at [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) — README + 2 chat transcripts + `Facelift.html` design canvas + JSX/CSS deliverables (`left-pane.jsx` / `left-pane-v2.jsx` / `window-v2.jsx` / `pr-review.jsx` / `merge-conflict.jsx` + supporting CSS). Repo dumps under `project/uploads/` and `project/app/` and the `.design-canvas.state.json` sidecar were pruned (~11MB) — bundle is 449KB on disk.
 - **docs(roadmap):** updated Decision §10 from a two-touch to a three-touch design model. Added a new "Touch 3 deliverables" subsection under §"Deferred / unscheduled" listing the four major surfaces (Window v2 / Sessions, PR Review, Merge Conflict Resolver, Rail v2 full conversion) as dominantly post-2.0, plus three small 1.x extraction candidates (A. branch switcher upgrade, B. ▶ Start prominence on issues, C. Files Now-strip) that don't depend on the larger rework. Tagged Window v2 / Sessions with its hard prerequisite: production rate-limit pacer (multiple concurrent agents saturate per-provider caps faster than single-chat). Updated the existing §"Provider rate-limit respect" line to reflect the new gating reason and point at [`evals/pacing.js`](evals/pacing.js) as the reference implementation (`RateLimiter` + per-model `RateLimiterPool`).

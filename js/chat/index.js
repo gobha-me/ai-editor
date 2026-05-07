@@ -15,6 +15,7 @@ import { registerPRTools } from '../tools/pr-tools.js';
 import { registerScratchpadTools } from '../tools/scratchpad-tools.js';
 import { registerTodoTools } from '../tools/todo-tools.js';
 import { registerAskUserTools } from '../tools/ask-user-tools.js';
+import { registerPlanTools } from '../tools/plan-tools.js';
 import { registerXRefTools } from '../tools/xref-tools.js';
 import { registerDocTools } from '../tools/doc-tools.js';
 import { registerMultiFileTools } from '../tools/multifile-tools.js';
@@ -56,6 +57,8 @@ import { executeToolCall } from './tools.js';
 import { mountScratchpadPanel } from './scratchpad-panel.js';
 import { mountQueuedInputPanel } from './queued-input-panel.js';
 import { initAskUserCard } from './ask-user-card.js';
+import { mountPlanModeChip } from './plan-mode-chip.js';
+import { initPlanApprovalCard } from './plan-approval-card.js';
 
 // ============================================
 // TOOL REGISTRATION
@@ -76,6 +79,7 @@ registerPRTools(ToolRegistry);
 registerScratchpadTools(ToolRegistry);
 registerTodoTools(ToolRegistry);
 registerAskUserTools(ToolRegistry);
+registerPlanTools(ToolRegistry);
 registerXRefTools(ToolRegistry);
 registerDocTools(ToolRegistry);
 registerMultiFileTools(ToolRegistry);
@@ -153,6 +157,14 @@ function initChat(containerEl, inputEl) {
     // 1.9.0 / github#33 Phase 1 — ask_user inline card. Subscribes to
     // ask_user:pending / ask_user:resolved on the EventBus; idempotent.
     initAskUserCard();
+
+    // 1.10.0 / github#25 — Plan Mode chip + approval card. The chip
+    // toggles `State` plan mode; the card mounts when the LLM calls
+    // `submit_plan_for_approval`. Same pattern as ask-user-card and
+    // queued-input-panel — failure inside mount renders a vanilla
+    // error banner, won't throw out of initChat.
+    mountPlanModeChip();
+    initPlanApprovalCard();
 
     // Debounced conversation save — persists after message activity settles
     let _saveTimer = null;

@@ -431,6 +431,7 @@ export function registerMemoryTools(registry) {
             },
         },
         roles: 'all',
+        readOnly: true,
     });
 
     /* ============================================================ */
