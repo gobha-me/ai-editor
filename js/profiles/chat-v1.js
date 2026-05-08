@@ -1,0 +1,120 @@
+// @ts-check
+/**
+ * `chat.v1` — the canonical standard-chat profile and the base from which
+ * every other canonical profile inherits (per `docs/DESIGN-profiles.md`
+ * §"Canonical Profiles" → *"chat.v1 — Standard chat — The base profile
+ * from which the others inherit"*).
+ *
+ * **No consumer wires up to this object yet.** Same posture as
+ * [`coder-v1.js`](./coder-v1.js): the data file lands first; subsystems
+ * begin reading the relevant slices in subsequent slices, and the full
+ * profile contract becomes load-bearing in 2.0. Today's runtime still
+ * routes through `js/profiles/resolve.js`'s role-string switch (and its
+ * `rule5_only_shim` for non-coder roles); switching that switch to read
+ * from a resolved profile is deferred until a follow-up that proves
+ * `resolveProfile(coder_with_base) ≡ CODER_V1_standalone` field-by-field.
+ *
+ * Field-by-field provenance: every value mirrors the chat.v1 row of the
+ * `docs/DESIGN-profiles.md` Canonical Profiles table (the 32K reference
+ * window). Where a field has no design value (e.g. `chunkers`,
+ * `metadata_extensions`), the empty-but-typedef-satisfying value is used —
+ * the chunker registry doesn't exist yet (lands with retrieval Phase 1.5.0).
+ *
+ * @module profiles/chat-v1
+ */
+
+/**
+ * @typedef {import('./profile-contract.js').Profile} Profile
+ */
+
+/**
+ * Standard-chat baseline. The four other canonical profiles in
+ * `DESIGN-profiles.md` (`chat_multi.v1`, `rp.v1`, `coder.v1`, `kb.v1`)
+ * inherit from this one and override only what their surface needs.
+ *
+ * @type {Profile}
+ */
+export const CHAT_V1 = {
+    name: 'chat.v1',
+    version: '1',
+    base: null, // chat.v1 IS the base; the design's passing reference to a deeper "base.v1" is not a separate profile.
+
+    budget: {
+        // 32K reference window from DESIGN-profiles.md §chat.v1 row.
+        // retrieval_budget = 32000 - (2000 + 4000 + 8000 + 2000) = 16000 (residual).
+        total_tokens: 32000,
+        system_reserve: 2000,
+        output_reserve: 4000,
+        history_reserve: 8000,
+        memory_reserve: 2000,
+    },
+
+    retrieval: {
+        // Standard chat queries attached docs only — workspace_code etc.
+        // are coder-only and arrive via the coder override.
+        collections: ['attached_docs'],
+        memory_collections: ['user', 'persona'],
+        strategy_weights: {
+            semantic: 1.0,
+            structural: 0.5,
+            thematic: 0.0,
+        },
+        chunkers: [],            // Populated when ingest pipeline lands in 1.5.0.
+        metadata_extensions: [], // Populated when chunkers register fields in 1.5.0.
+        novelty_threshold: 0.5,  // Mid-range; chat re-admits less liberally than coder (0.3) but more than KB.
+    },
+
+    memory: {
+        // chat.v1 default scope is `user` — coder will override to `workspace`,
+        // rp.v1 will override to `persona`, kb.v1 disables memory entirely.
+        default_scope: 'user',
+        propose_after_n_turns: null, // No automatic proposals until 1.3.0 ships consent UI.
+        capacity_warnings: {},        // Populated per scope as the memory subsystem matures.
+    },
+
+    compression: {
+        // chat.v1 ships Rule 5 only — DESIGN-profiles.md §chat.v1 row:
+        // *"Compression rules: Rule 5 only (generic summarization)"*.
+        // Coder layers Rules 1, 2, (3, 4 when they land), 5 on top.
+        rules: [
+            { name: 'summarization', priority: 50 },
+        ],
+        // DESIGN-profiles.md §chat.v1 row: *"preserve_recent: 4"*. This is
+        // the design target for the standard-chat surface; the existing
+        // `rule5_only_shim` in `js/profiles/resolve.js` keeps a more
+        // conservative 24 because today's non-coder runtime path predates
+        // the chat.v1 contract. The two reconcile when a follow-up wires
+        // the chat surfaces to read from this profile (out of scope for
+        // this slice).
+        preserve_recent: 4,
+        summarizer: {
+            mode: 'balanced',  // Mirrors State.settings.summarizerMode default (same as coder).
+            promptTemplate: null,
+            modelOverride: null,
+        },
+    },
+
+    tools: {
+        catalog: [],            // Source of truth is js/tools/registry.js via the Catalog adapter (1.3.4).
+        static: [
+            // Chat baseline keeps only the interaction tool. Everything else
+            // (file ops, ci tools, scratchpad/todo, plan-mode gate) is coder-
+            // surface scope and arrives via the coder override. Cheap-tier
+            // models won't reliably discover `ask_user` through the meta-
+            // tools, so it stays static across every profile that allows
+            // structured pauses (same load-bearing reason it joined coder.v1
+            // in 1.9.0; see js/prompts.js §ASK_USER_INSTRUCTIONS).
+            'ask_user',
+        ],
+        discovery_strategies: ['categorical'], // Same default as coder.v1; semantic discovery in 1.4.1.
+        budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
+        expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
+    },
+
+    task_ledger: {
+        // DESIGN-profiles.md §chat.v1 row: *"Task ledger enabled, 100-record cap"*.
+        enabled: true,
+        capacity: 100,
+        novelty_threshold: 0.5, // Mirrors retrieval.novelty_threshold; profiles may diverge later.
+    },
+};

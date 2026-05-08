@@ -18,6 +18,9 @@ export {
 export { isProfile } from './profile-contract.js';
 
 export { CODER_V1 } from './coder-v1.js';
+export { CHAT_V1 } from './chat-v1.js';
+
+export { resolveProfile } from './inheritance.js';
 
 export { resolveCompressionConfig } from './resolve.js';
 

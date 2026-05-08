@@ -4,6 +4,90 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-05-08
+
+### Feature — `chat.v1` profile data + `resolveProfile` inheritance helper (Profiles Phase 1 continuation)
+
+First profile-inheritance slice toward 2.0. Closes the
+[`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md) Phase-1 deliverable
+*"`base.v1` and `chat.v1` and `coder.v1` profiles"* on the `chat.v1` half;
+`coder.v1` already shipped at 1.1.0. The comment in
+[`js/profiles/coder-v1.js:74`](js/profiles/coder-v1.js:74) reads literally
+*"1.1.0 ships only `coder.v1`; `chat.v1` arrives with 2.0 inheritance"* —
+this is the slice that pays that note off.
+
+**What ships.**
+
+- **[`js/profiles/chat-v1.js`](js/profiles/chat-v1.js) (new)** — `CHAT_V1`
+  profile data object. Field values mirror the DESIGN-profiles.md §"Canonical
+  Profiles" → `chat.v1` row for the 32K reference window: budget
+  `32000 / 2000 / 4000 / 8000 / 2000 → retrieval = 16000`; retrieval
+  `collections: ['attached_docs']`, memory scopes `['user', 'persona']`,
+  semantic 1.0 / structural 0.5 / thematic 0.0 weights; memory
+  `default_scope: 'user'`; compression Rule 5 only with `preserve_recent: 4`;
+  `tools.static: ['ask_user']` only (coder layers the rest); task ledger
+  enabled with 100-record cap.
+- **[`js/profiles/inheritance.js`](js/profiles/inheritance.js) (new)** —
+  `resolveProfile(profile, lookup)` deep-merge helper. Walks the `base`
+  chain leaf-up, folds root → leaf so leaf overrides win. Plain objects
+  recurse; arrays in the override fully *replace* arrays in the base
+  (per design *"no multi-inheritance, no late binding"* — extending an
+  array means writing the full extended array, never appending). Throws
+  on cycles and unknown base names per DESIGN-profiles.md §"Failure Modes".
+  Pure: input profiles are not mutated; the returned object is fresh.
+  No registry yet — caller passes a `lookup` function so a future
+  `Profiles.get(name)` can wire in cleanly.
+- **[`js/profiles/index.js`](js/profiles/index.js)** — re-exports
+  `CHAT_V1` and `resolveProfile`.
+
+**No runtime behavior change.** No consumer wires up to the new exports
+yet. [`js/profiles/resolve.js`](js/profiles/resolve.js)'s
+`resolveCompressionConfig(role)` keeps its role-string switch and the
+`rule5_only_shim` fallback for non-coder roles. [`js/chat/handlers.js`](js/chat/handlers.js)
+keeps reading from `CODER_V1` directly. The `CHAT_V1.preserve_recent: 4`
+design target and the shim's hardcoded 24 reconcile in a follow-up that
+proves `resolveProfile(coder_with_base) ≡ CODER_V1_standalone` field-by-
+field; that follow-up is also where `coder-v1.js` flips its `base: null`
+to `base: 'chat.v1'`.
+
+**Tests.**
+
+- **[`tests/test-profiles-chat-v1.mjs`](tests/test-profiles-chat-v1.mjs)** — 9 cases mirroring the
+  CODER_V1 conformance suite: `isProfile`, name/version/base, budget
+  residual = 16000, retrieval row, memory row, compression row
+  (`preserve_recent === 4`), tools row (`static === ['ask_user']`), ledger
+  row, cross-profile distinctness vs CODER_V1.
+- **[`tests/test-profiles-inheritance.mjs`](tests/test-profiles-inheritance.mjs)** — 16 cases on the
+  resolver: null-base passthrough + immutability, leaf-wins deep-merge,
+  budget partial-override, array replacement (not concatenation), explicit
+  null replaces but undefined doesn't erase, two-level + three-level
+  chains, cycle detection (mutual + self), unknown-base error, non-string
+  base error, missing-name error, bad-input TypeErrors.
+
+**Why this slot.** [1.13.0](#1130---2026-05-08) shipped Touch 3 extraction B
+and reopened the Now slot. The 2.0 Profiles arc is the roadmap's next
+major commitment but a multi-PR path. This is the smallest first slice
+that lands cleanly: data file + pure helper + tests, additive, no
+consumer wiring. Subsequent slices add the task-ledger admission/
+suppression logic, switch `coder-v1.base` to `chat.v1`, and finally
+flip the resolver to read from a profile instead of switching on role.
+
+### Out of scope (deferred to follow-ups)
+
+- `coder-v1.base = 'chat.v1'` switch — needs a regression test that the
+  resolved shape ≡ today's standalone CODER_V1 field-by-field. Worth its
+  own branch.
+- Subsystem wiring beyond compression — `resolveCompressionConfig` keeps
+  switching on role string; no changes to `js/chat/compactor-integration.js`
+  or `js/chat/handlers.js`.
+- Settings UI — no profile picker yet; role selector unchanged.
+- Task ledger admission/exclusion logic — typedefs already exist; the
+  scoring + suppression-with-marker is a separate slice.
+- `docs/ROADMAP.md` 2.X.Y re-layout — handled by a separately spawned
+  task.
+- Browser-suite mirror in `tests/test-profiles.js` — `.mjs` only this
+  branch; the in-page suite stays on its existing CODER_V1 cases.
+
 ## [1.13.0] - 2026-05-08
 
 ### Feature — inline ▶ Start button on issue rows (Touch 3 extraction B)
