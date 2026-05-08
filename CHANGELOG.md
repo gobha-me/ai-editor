@@ -4,6 +4,88 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-05-08
+
+### Feature — Memory subsystem resolver (profile-keyed)
+
+Second *consumer* rewire of the path-to-2.0.0 profiles arc per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"2.X path" — the memory
+subsystem joins compression on the resolved-profile lookup pattern
+shipped at 1.17.0. `memory_remember`'s default scope now derives
+from `profile.memory.default_scope` (deep-merged via
+[`resolveProfile`](js/profiles/inheritance.js)) instead of a
+hardcoded `'workspace'` literal. New `resolveMemoryConfig(profileName)`
+mirrors `resolveCompressionConfig` byte-for-byte in shape, and exposes
+`propose_after_n_turns` + `capacity_warnings` for the consent-UI /
+Settings consumers that arrive in subsequent slices.
+
+### User-visible — non-coder roles now default to `'user'` scope
+
+`memory_remember` is registered for three roles: `full`, `coder`,
+and `pm`. Pre-1.18.0 they all defaulted the admit scope to a
+hardcoded `'workspace'`. Post-1.18.0 the default routes through
+`resolveDefaultRememberScope(role)`:
+
+- **coder** stays at `'workspace'`. `coder.v1.memory.default_scope`
+  is `'session'` (intentional — describes scratchpad, not the
+  memory store, see [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js)),
+  which falls outside `MEMORY_SCOPES = ['user', 'workspace']`, so
+  the helper clamps back to `'workspace'`. Zero diff for the role
+  that drives memory-tool usage today.
+- **`full` and `pm`** now default to `'user'` per
+  `chat.v1.memory.default_scope`. This is the design intent the
+  roadmap names ("chat surfaces start using `'user'` as the design
+  intends," §"2.X path"). Users on those roles who relied on the
+  hardcoded `'workspace'` default will see admits land in `'user'`
+  scope unless they pass `scope: 'workspace'` explicitly. The
+  `memory_remember` tool schema's `scope.description` now spells
+  the new default rule out loud.
+
+- **Edit** [`js/profiles/resolve.js`](js/profiles/resolve.js) — added
+  `resolveMemoryConfig(profileName)` over the existing
+  `PROFILE_REGISTRY` + `resolveProfile` path. Returns
+  `{ default_scope, propose_after_n_turns, capacity_warnings, profileName }`.
+  Defaults: `default_scope` falls back to `'user'` (chat baseline) on
+  missing data; unknown profile names fall back to `chat.v1` with a
+  `console.warn`, matching the compression resolver's defensive
+  posture. Module docblock updated to note memory joins the family.
+- **Edit** [`js/profiles/index.js`](js/profiles/index.js) — re-exports
+  `resolveMemoryConfig` from the barrel.
+- **Edit** [`js/profiles/resolve.js`](js/profiles/resolve.js) (cont.) —
+  added `resolveDefaultRememberScope(role)` — pure helper that
+  resolves the active profile's memory slice and clamps
+  non-`MEMORY_SCOPES` values (e.g. coder's `'session'`) back to
+  `'workspace'`. Lives here rather than `memory-tools.js` so the
+  helper is Node-importable for tests; `memory-tools.js`
+  transitively pulls `core.js`'s browser-only
+  `window.addEventListener`.
+- **Edit** [`js/tools/memory-tools.js`](js/tools/memory-tools.js) —
+  imports `resolveDefaultRememberScope`. Replaces the
+  `a.scope || 'workspace'` literal at the `memory_remember` admit
+  path with `a.scope || resolveDefaultRememberScope(State?.settings?.role)`.
+  Behavior unchanged for coder (the only role that exercises memory
+  tools today). The `memory_remember` tool schema's
+  `scope.description` updated to acknowledge profile-derived defaults.
+  The `memory_recall` / `memory_revise` paths are untouched —
+  `'all'` is a tool-side aggregator, not a profile concept.
+
+### Tests
+
+- **New** [`tests/test-memory-resolve.mjs`](tests/test-memory-resolve.mjs) —
+  Removability proof per ROADMAP §Decisions 7. Asserts
+  `resolveDefaultRememberScope('coder') === 'workspace'` (zero behavior
+  diff vs the pre-1.18.0 literal); `resolveDefaultRememberScope('chat') === 'user'`;
+  every other role / null / unknown / undefined falls through to
+  `'user'` via `roleToProfileName`. Two sanity tests verify the clamp's
+  premise: `coder.v1.memory.default_scope === 'session'` and
+  `'session' ∉ MEMORY_SCOPES`. If a future change ever adds `'session'`
+  to `MEMORY_SCOPES`, these tests fire — and the clamp becomes a bug.
+- **Edit** [`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs) —
+  added four `resolveMemoryConfig` tests proving the resolver returns
+  raw profile data verbatim (chat → `'user'` + `{}`; coder → `'session'`
+  + `{ session: 20 }`); unknown name and null/undefined both fall back
+  to `chat.v1`. Mirrors the compression resolver's test coverage.
+
 ## [1.17.0] - 2026-05-08
 
 ### Feature — Compression resolver (profile-keyed)

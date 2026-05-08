@@ -17,8 +17,8 @@
  * `preserve_recent` from `24` to `4`, reconciling the divergence noted
  * in `js/profiles/chat-v1.js`.
  *
- * Other subsystem resolvers (memory, tools, retrieval) follow this
- * shape in 1.18.0 / 1.19.0 / 1.20.0.
+ * 1.18.0 added `resolveMemoryConfig(profileName)` over the same
+ * lookup pattern; tools (1.19.0) and retrieval (1.20.0) follow.
  *
  * @module profiles/resolve
  */
@@ -31,6 +31,7 @@ import {
     INVALIDATION_RULE,
     SUMMARIZATION_RULE,
 } from '../intelligence/compression/index.js';
+import { MEMORY_SCOPES } from '../intelligence/memory/contracts.js';
 
 /**
  * @typedef {import('./profile-contract.js').Profile} Profile
@@ -114,6 +115,72 @@ export function resolveCompressionConfig(profileName) {
         preserve_recent: resolved.compression?.preserve_recent ?? 4,
         profileName: resolved.name,
     };
+}
+
+/**
+ * Resolve memory configuration for a given profile. Returns the
+ * `profile.memory` slice — `default_scope`, `propose_after_n_turns`,
+ * `capacity_warnings` — sourced from the *resolved* profile (deep-merge
+ * of the named profile on top of its `base` chain).
+ *
+ * Mirrors `resolveCompressionConfig` byte-for-byte in shape; the only
+ * surface that consumes it today is `js/tools/memory-tools.js`
+ * (admit-default scope) — `propose_after_n_turns` and
+ * `capacity_warnings` are exposed for the consent-UI / Settings tab
+ * consumers that land in subsequent slices.
+ *
+ * Note that `default_scope` may be a value outside `MEMORY_SCOPES`
+ * (e.g. coder.v1's `'session'`, which describes scratchpad rather than
+ * the memory store). Callers that route to the memory store must
+ * validate / fall back; the resolver returns the raw profile data
+ * unchanged.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; `roleToProfileName` never emits anything else.
+ *
+ * @param {string|null|undefined} profileName
+ * @returns {{ default_scope: string, propose_after_n_turns: number|null, capacity_warnings: object, profileName: string }}
+ */
+export function resolveMemoryConfig(profileName) {
+    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = PROFILE_REGISTRY[name];
+    const resolved = resolveProfile(leaf, profileLookup);
+    const memory = resolved.memory || {};
+
+    return {
+        default_scope: memory.default_scope ?? 'user',
+        propose_after_n_turns: memory.propose_after_n_turns ?? null,
+        capacity_warnings: memory.capacity_warnings ?? {},
+        profileName: resolved.name,
+    };
+}
+
+/**
+ * Resolve the default scope for `memory_remember` admits when the
+ * model omits `scope`. Reads `profile.memory.default_scope` via the
+ * resolver; falls back to `'workspace'` when the profile's value
+ * isn't a memory-store scope (e.g. coder.v1's `'session'`, which
+ * describes scratchpad rather than the memory store). The fallback
+ * preserves pre-1.18.0 behavior for coder — the Removability check
+ * (§Decisions 7) verifies this in `tests/test-memory-resolve.mjs`.
+ *
+ * Lives in `resolve.js` rather than `memory-tools.js` so the helper
+ * is Node-importable for tests (memory-tools transitively pulls
+ * `core.js`'s browser-only `window.addEventListener`).
+ *
+ * @param {string|null|undefined} role
+ * @returns {'user'|'workspace'}
+ */
+export function resolveDefaultRememberScope(role) {
+    const profileName = roleToProfileName(role);
+    const cfg = resolveMemoryConfig(profileName);
+    return MEMORY_SCOPES.includes(cfg.default_scope) ? cfg.default_scope : 'workspace';
 }
 
 /**

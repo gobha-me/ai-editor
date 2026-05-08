@@ -55,9 +55,15 @@ beforeEach(() => {
         globalThis.localStorage.clear();
     }
 
-    // Default role/model for the audit-format assertions.
+    // Default role/model for the audit-format assertions. `coder` —
+    // memory tools are most associated with the coder workflow and the
+    // role is one of the three (`full`, `coder`, `pm`) registered for
+    // `memory_remember`. Picking coder also keeps the post-1.18.0
+    // default scope at `'workspace'` (chat-side profiles default to
+    // `'user'` per chat.v1.memory.default_scope; tests would otherwise
+    // need explicit `scope: 'workspace'` on every admit).
     State.settings = State.settings || {};
-    State.settings.role = 'full';
+    State.settings.role = 'coder';
     State.settings.llmModel = 'opus-test';
     State.settings.embeddingModel = 'stub-model';
     State.scratchpad = {};
@@ -125,6 +131,22 @@ test('memory_remember defaults: scope→workspace, source→agent_proposed → r
     assert.equal(out.source, 'agent_proposed');
     // No record exists; consent flow has to resolve the candidate first.
     assert.equal(out.id, undefined);
+});
+
+test("1.18.0 — memory_remember default scope follows the active profile (role='full' → chat.v1 → 'user')", async () => {
+    // Pre-1.18.0 the default was a hardcoded `'workspace'` for every
+    // role. 1.18.0 routes the default through `resolveMemoryConfig`:
+    // coder → clamp(`'session'`) = `'workspace'`; non-coder roles
+    // (`full`, `pm`, `reviewer`) → chat.v1 = `'user'`. This is the
+    // explicit regression test for the user-visible change called out
+    // in CHANGELOG §1.18.0.
+    State.settings.role = 'full';
+    const reg = freshRegistry();
+    const out = await reg.execute('memory_remember', {
+        key: 'k', value: 'v', category: 'workflow', source: 'user_explicit',
+    });
+    assert.equal(out.success, true);
+    assert.equal(out.scope, 'user');
 });
 
 test('memory_remember with scope=workspace and no active workspace → actionable error', async () => {
@@ -374,7 +396,8 @@ test('role=reviewer cannot call memory_remember (role-gate denial)', async () =>
 test('role=reviewer can call memory_recall (read-only is allowed for all)', async () => {
     const reg = freshRegistry();
     // First seed a record with a non-reviewer role so it exists.
-    State.settings.role = 'full';
+    // Use coder so the default scope is `'workspace'` (post-1.18.0).
+    State.settings.role = 'coder';
     await reg.execute('memory_remember', {
         key: 'seed', value: 's', category: 'workflow', source: 'user_explicit',
     });

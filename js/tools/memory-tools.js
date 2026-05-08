@@ -38,6 +38,7 @@ import {
     getOrCreateUserOwnerId,
     consentEnqueue,
 } from '../intelligence/memory/index.js';
+import { resolveDefaultRememberScope } from '../profiles/resolve.js';
 import { EmbeddingsClient } from '../embeddings-client.js';
 
 const CATEGORIES = Array.from(MEMORY_CATEGORIES);
@@ -166,7 +167,7 @@ export function registerMemoryTools(registry) {
         if (a.value === undefined || a.value === null) return { error: 'value is required' };
         if (!a.category) return { error: `category is required; one of: ${CATEGORIES.join(', ')}` };
 
-        const scope = a.scope || 'workspace';
+        const scope = a.scope || resolveDefaultRememberScope(State?.settings?.role);
         const source = a.source || 'agent_proposed';
         const reason = typeof a.reason === 'string' ? a.reason : '';
 
@@ -299,7 +300,7 @@ export function registerMemoryTools(registry) {
                     scope: {
                         type: 'string',
                         enum: SCOPES,
-                        description: "'workspace' (default) for project-specific facts that round-trip to .aieditor/memory/*.md; 'user' for facts that follow this user across all projects.",
+                        description: "Omit to use the active profile's default (coder → 'workspace'; chat → 'user'). 'workspace' for project-specific facts that round-trip to .aieditor/memory/*.md; 'user' for facts that follow this user across all projects.",
                     },
                     source: {
                         type: 'string',

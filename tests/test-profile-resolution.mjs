@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
     resolveProfile,
+    resolveMemoryConfig,
     CODER_V1,
     CHAT_V1,
     isProfile,
@@ -212,4 +213,39 @@ test('resolved retrieval keeps coder collections + inherited empty chunker array
     // Inherited from chat.v1 (still empty until 1.5.0 ingest pipeline):
     assert.deepEqual(r.chunkers, []);
     assert.deepEqual(r.metadata_extensions, []);
+});
+
+// ============================================
+// 1.18.0 — resolveMemoryConfig
+// ============================================
+
+test('resolveMemoryConfig(coder.v1) returns coder profile data verbatim', () => {
+    const cfg = resolveMemoryConfig('coder.v1');
+    // Coder's `default_scope: 'session'` is intentionally outside MEMORY_SCOPES
+    // (it describes scratchpad, not the memory store). Tool-side defaulting
+    // handles the clamp; the resolver must not mutate the data.
+    assert.equal(cfg.default_scope, 'session');
+    assert.equal(cfg.propose_after_n_turns, null);
+    assert.deepEqual(cfg.capacity_warnings, { session: 20 });
+    assert.equal(cfg.profileName, 'coder.v1');
+});
+
+test('resolveMemoryConfig(chat.v1) returns chat-baseline values', () => {
+    const cfg = resolveMemoryConfig('chat.v1');
+    // chat.v1 is the design-intended memory-store consumer: `'user'` scope.
+    assert.equal(cfg.default_scope, 'user');
+    assert.equal(cfg.propose_after_n_turns, null);
+    assert.deepEqual(cfg.capacity_warnings, {});
+    assert.equal(cfg.profileName, 'chat.v1');
+});
+
+test('resolveMemoryConfig falls back to chat.v1 on unknown profile name', () => {
+    const cfg = resolveMemoryConfig('nonexistent.v9');
+    assert.equal(cfg.profileName, 'chat.v1');
+    assert.equal(cfg.default_scope, 'user');
+});
+
+test('resolveMemoryConfig falls back to chat.v1 on null/undefined', () => {
+    assert.equal(resolveMemoryConfig(null).profileName, 'chat.v1');
+    assert.equal(resolveMemoryConfig(undefined).profileName, 'chat.v1');
 });

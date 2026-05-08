@@ -57,8 +57,11 @@ beforeEach(() => {
         globalThis.localStorage.clear();
     }
 
+    // 1.18.0: `coder` keeps the post-resolver default scope at
+    // `'workspace'` (clamp from `'session'`); chat-side roles default
+    // to `'user'`. Tests below assert workspace defaults.
     State.settings = State.settings || {};
-    State.settings.role = 'full';
+    State.settings.role = 'coder';
     State.settings.llmModel = 'opus-test';
     State.settings.embeddingModel = 'stub-model';
     State.scratchpad = {};
