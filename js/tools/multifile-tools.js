@@ -89,6 +89,46 @@ function _getStaleWindow(suggestedStart, suggestedEnd) {
     return slice.map((l, i) => `${winStart + i}: ${l}`).join('\n');
 }
 
+/**
+ * Directional hint for `edit_file` calls that arrive in a wrong shape.
+ *
+ * Origin: HTML-Games dogfood, qwen-3-6-plus, 2026-05-08. The model invented
+ * `operations: '[{"type":"replace","start_line":92,...}]'` (a JSON-encoded
+ * batched-ops array) — a field that does not exist on this tool — and burned
+ * 4 turns guessing `new_text` → `new_content` against the bare
+ * "replace requires …" validation error. Same pattern as 1.8.2's
+ * `getRefusalHint`: detect a known-bad shape and emit a targeted hint
+ * naming the real shape, not the whole schema.
+ *
+ * Returns `{ error, hint }` if a wrong-shape key is present, else `null` so
+ * the existing per-op validators fire as before for genuine omissions.
+ */
+function _detectWrongShape(args) {
+    if (!args || typeof args !== 'object') return null;
+    const keys = Object.keys(args);
+    const correctShape =
+        '{ path, operation, start_line, end_line, new_content }';
+
+    if (keys.includes('operations') || keys.includes('ops') || keys.includes('op')) {
+        return {
+            error: `edit_file does not accept '${keys.includes('operations') ? 'operations' : keys.includes('ops') ? 'ops' : 'op'}'. It takes a single op at the top level.`,
+            hint: `edit_file takes a single op at the top level: ${correctShape}. The "operations" / batched-ops shape does not exist on this tool — call edit_file once per change.`
+        };
+    }
+
+    if (keys.includes('new_text') || keys.includes('text') || keys.includes('content')) {
+        const wrong = keys.includes('new_text') ? 'new_text'
+            : keys.includes('text') ? 'text'
+            : 'content';
+        return {
+            error: `edit_file does not accept '${wrong}'. The content parameter is named 'new_content'.`,
+            hint: `edit_file shape: ${correctShape}. Rename '${wrong}' → 'new_content'.`
+        };
+    }
+
+    return null;
+}
+
 // ============================================
 // TOOL REGISTRATION
 // ============================================
@@ -101,7 +141,19 @@ export function registerMultiFileTools(registry) {
     // ========================================
     // edit_file — replace/insert/delete by path
     // ========================================
-    registry.register('edit_file', async ({ path, operation, start_line, end_line, after_line, new_content }) => {
+    // Take the full args object so wrong-shape detection can inspect
+    // top-level keys before destructuring strips the unrecognized ones.
+    // Same hint pattern as 1.8.2's `getRefusalHint` — narrowly scoped
+    // to known-bad shapes surfaced by the 2026-05-08 HTML-Games dogfood
+    // (qwen-3-6-plus invented `operations: '[...]'`).
+    registry.register('edit_file', async (args) => {
+        // Wrong-shape pre-check fires *before* any State or path
+        // preconditions — schema mistakes are more directional than
+        // "no project loaded" and don't depend on workspace state.
+        const wrongShape = _detectWrongShape(args);
+        if (wrongShape) return wrongShape;
+
+        const { path, operation, start_line, end_line, after_line, new_content } = args || {};
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }

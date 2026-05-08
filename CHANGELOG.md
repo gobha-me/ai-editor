@@ -4,6 +4,94 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-05-08
+
+### Fix — Directional shape hint on `edit_file`
+
+Patches `edit_file`'s validation error so wrong-shape calls surface a
+targeted next-action hint instead of the bare per-op validator. Same
+pattern as 1.8.2's `getRefusalHint(toolName)` — narrowly scoped to
+known-bad shapes surfaced by a real dogfood trace, not a generic
+schema-validation pass.
+
+**Pathology.** HTML-Games dogfood, qwen-3-6-plus, Jeff's session
+2026-05-08:
+
+```
+edit_file({ path, operations: '[{"type":"replace","start_line":92,...,"new_text":"…"}]' })
+→ "replace requires start_line, end_line, and new_content"
+```
+
+The model invented `operations` (a JSON-encoded batched-ops array — a
+field that does not exist on the tool). The destructure at
+[`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) silently
+dropped it, which left `start_line` / `end_line` / `new_content` all
+`undefined`, so the existing per-op validator fired correctly — but
+nothing in the error pointed at *why* the destructure had emptied out.
+The model then guessed `new_text` → `new_content` → repeat, burning
+4 turns before falling back to `open_file` + `replace_lines`.
+
+Same family as the 1.8.2 fault: the infrastructure (validator) works,
+but the error string is not directional enough for cheap-tier models
+to recover without escalation.
+
+**What lands.**
+
+- New module-level helper `_detectWrongShape(args)` in
+  [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) inspects
+  the raw args object for known-bad top-level keys before
+  destructuring strips them. Two families:
+  - **Batched-ops shape** (`operations`, `ops`, `op` at top level):
+    error names the offending key; hint says `edit_file takes a single
+    op at the top level: { path, operation, start_line, end_line,
+    new_content }. The "operations" / batched-ops shape does not exist
+    on this tool — call edit_file once per change.`
+  - **Wrong content key** (`new_text`, `text`, `content` at top
+    level): error names the offending key; hint says `edit_file shape:
+    { … }. Rename '<wrong>' → 'new_content'.`
+- `edit_file`'s registered handler signature changed from a
+  destructured params object to the full `args` so the pre-check sees
+  unrecognized keys. Existing destructure happens immediately after.
+- The pre-check runs *before* the `!State.currentProject` and
+  `ensureFileActive` preconditions — schema mistakes are more
+  directional than workspace-state errors and don't depend on State
+  being set up. The bare `replace requires …` error remains the
+  fallback for genuine omissions (e.g. dropping `end_line` from an
+  otherwise well-shaped call).
+
+**Why not a generic schema-validation pass for every tool.** Same
+reason 1.8.2's `getRefusalHint` was scoped to specific known-bad
+tools: a registry-wide refactor is a wider blast radius than today's
+single dogfood-traced tool justifies. Revisit if more tools surface
+the same anti-pattern.
+
+**Why not also `replace_lines`.** Its existing validator already
+names the missing parameter (`Missing required parameters:
+end_line`). The bug is specific to `edit_file` because the destructure
+swallows unrecognized keys silently — `replace_lines` doesn't have
+that gap.
+
+### Tests
+
+- **New** [`tests/test-edit-file-refusal-hint.mjs`](tests/test-edit-file-refusal-hint.mjs) —
+  eight assertions:
+  - `operations: '[…]'` returns error + hint mentioning the real
+    shape, `new_content`, `operations`, and "once per change"
+    (regression pin on the dogfood-shaped fault)
+  - `ops` family returns the same batched-ops hint
+  - `new_text`, `text`, `content` each return a hint naming
+    `new_content` and the offending key
+  - simple omission (correct keys, missing one required) gets the
+    bare validator error and **no** `hint` field (no
+    false-positive)
+  - well-formed call passes the wrong-shape gate cleanly and fails
+    downstream on the existing `No project is currently loaded`
+    precondition (proves the gate doesn't false-positive on good
+    shapes)
+  - the wrong-shape hint fires *before* `State.currentProject` is
+    checked — the schema mistake surfaces regardless of workspace
+    state
+
 ## [1.18.0] - 2026-05-08
 
 ### Feature — Memory subsystem resolver (profile-keyed)
