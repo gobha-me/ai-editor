@@ -365,7 +365,11 @@ function _renderCleanupActions(totals, items) {
 
             // Post-cleanup side effects
             if (action.category === 'chat') {
-                State.chatHistory = [];
+                // Mirror the just-wiped chatHistory key in memory. Not routed
+                // through ChatHistoryStore — the store would re-persist `[]`
+                // and undo the explicit Storage.remove above. In-place clear
+                // preserves any captured array reference.
+                State.chatHistory.length = 0;
                 State.lastExchangeTokens = null;
                 EventBus.emit('chat:cleared');
             }

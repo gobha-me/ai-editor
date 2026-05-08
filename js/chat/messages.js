@@ -7,6 +7,7 @@ import { State, EventBus, Storage } from '../core.js';
 import { stripThinkBlocks, splitThinkBlocks } from '../llm.js';
 import { getChatContainer } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
+import { ChatHistoryStore } from './history-store.js';
 import { escapeHtml } from '../utils/html.js';
 import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consent-card.js';
 import { consentList } from '../intelligence/memory/index.js';
@@ -64,13 +65,7 @@ export function addMessage(role, content, meta = {}) {
         ...meta
     };
 
-    State.chatHistory.push(message);
-
-    // Persist the full history. Storage is IndexedDB-backed (GB-level
-    // quota); arbitrary truncation here was the root cause of the
-    // "refresh trims chat" bug — messages older than the last 100
-    // were silently lost on every write.
-    Storage.set('chatHistory', State.chatHistory);
+    ChatHistoryStore.append(message);
 
     // Async summarization — fire and forget, never blocks UI
     if (ChatSummarizer.shouldSummarize()) {
@@ -307,13 +302,12 @@ export function finalizeStreamingMessage(content, meta = {}) {
     // already split off into meta.reasoning by the streaming layer in
     // 1.3.1; pre-1.3.1 turns may still carry inline think blocks, which
     // the renderer's `splitThinkBlocks` fallback handles at display time).
-    State.chatHistory.push({
+    ChatHistoryStore.append({
         role: 'assistant',
         content,
         timestamp: Date.now(),
         ...meta
     });
-    Storage.set('chatHistory', State.chatHistory);
 
     // Tag the finalized streaming node so the virtualizer prune treats it
     // like any other rendered turn (the streaming placeholder pre-dates the
@@ -714,9 +708,8 @@ export function renderMessages(historyOverride = null) {
  * Clear all chat messages
  */
 export function clearChat() {
-    State.chatHistory = [];
+    ChatHistoryStore.clear();
     State.lastExchangeTokens = null;
-    Storage.set('chatHistory', []);
     ChatSummarizer.clear();
     // Drain consent-card mounts before renderMessages rebuilds the DOM.
     // The `chat:cleared` event below also drains the consent *queue*

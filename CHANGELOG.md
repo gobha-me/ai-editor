@@ -4,9 +4,58 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-05-08
+
+### Feature — `ChatHistoryStore` encapsulation + per-conversation scratchpad
+
+Two structural risks paid off in one PR.
+
+**1. `ChatHistoryStore` ([`js/chat/history-store.js`](js/chat/history-store.js)).**
+Pre-1.11.0 `State.chatHistory` was mutated directly from fifteen call sites
+across six files (`messages.js`, `handlers.js`, `summarizer.js`, `index.js`,
+`conversations.js`, plus a sixteenth in `storage-metrics.js`), and each one
+independently called `Storage.set('chatHistory', …)` afterward. Three issue
+#16 patches in a row had to walk every site to change persistence policy;
+missing one (1.5.9 #16; 1.6.5 had to revisit) kept the bug alive. The new
+module is the single owner — `append / splice / setLength / replace /
+clear`, all in-place mutations so any captured array reference stays valid,
+each method calling `Storage.set('chatHistory', …)` exactly once. Every
+in-tree mutation routes through it; the `storage-metrics.js` post-wipe
+in-memory mirror stays out of the store deliberately (it follows an explicit
+`Storage.remove` and the store would re-create the just-deleted key).
+
+**2. Per-conversation scratchpad.** Pre-1.11.0 `State.scratchpad` was
+memory-only — initialized as `{}` in `js/core.js`, mutated only via
+`scratchpad-tools.js`, never persisted to `Storage`, reset on every refresh /
+new chat / conversation switch. Asymmetric to todos, which shipped at 1.8.0
+in the `conv-{id}` payload and survive refresh. From 1.11.0 the scratchpad
+joins the same seam in [`js/chat/conversations.js`](js/chat/conversations.js):
+`save()` shallow-copies `State.scratchpad` into the payload, `load()`
+restores it (defaulting to `{}` for pre-1.11.0 payloads or non-object
+data), `create()` clears it, `delete()` of the last conversation clears it.
+Each lifecycle hook emits `scratchpad:changed` so the existing
+[`ScratchpadPanel`](js/chat/scratchpad-panel/ScratchpadPanel.js) re-renders
+without subscribing to a new channel. **User-visible behavior change:** the
+scratchpad now survives refresh and is pinned to the chat that owns it —
+each conversation has its own pad, deleted conversations take their pad
+with them.
+
+**Tests.** [`tests/test-history-store.mjs`](tests/test-history-store.mjs)
+(10 tests — append/splice/setLength/replace/clear correctness, in-place
+identity preservation, persist-once guarantee).
+[`tests/test-scratchpad-conv-persistence.mjs`](tests/test-scratchpad-conv-persistence.mjs)
+(9 tests — save payload shape, load round-trip, missing-field default,
+create/delete clearing, EventBus emission). Both run under
+`node --test tests/test-*.mjs` (CI auto-glob).
+
 ### Docs
 
-- **docs(design):** Touch 3 follow-on bundle merged in-place at [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) — adds the **Zip Up / Zip Down** surface (three scopes — project menu / branches rail / session tab — plus a refined Upload Zip modal with an up-front `main / new branch / new session` segmented control). New `project/zip-flow.jsx` + `project/zip-flow.css`; `project/Facelift.html` gains a `zip-flow` `DCSection` with five artboards; `chats/chat2.md` extended with the design exchange. Closes the open question filed 2026-05-07 at [`docs/design/OPEN-QUESTIONS.md`](docs/design/OPEN-QUESTIONS.md) (status flipped to `resolved (2026-05-08)`). Roadmap §Touch 3 deliverables row added for the new surface; the Sessions ↔ profile-contract dependency stays unchanged. No version bump (docs-only — see `feedback_no_bump_for_measurement_only.md`).
+- **docs(design):** Touch 3 follow-on bundle merged in-place at [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) — adds the **Zip Up / Zip Down** surface (three scopes — project menu / branches rail / session tab — plus a refined Upload Zip modal with an up-front `main / new branch / new session` segmented control). New `project/zip-flow.jsx` + `project/zip-flow.css`; `project/Facelift.html` gains a `zip-flow` `DCSection` with five artboards; `chats/chat2.md` extended with the design exchange. Closes the open question filed 2026-05-07 at [`docs/design/OPEN-QUESTIONS.md`](docs/design/OPEN-QUESTIONS.md) (status flipped to `resolved (2026-05-08)`). Roadmap §Touch 3 deliverables row added for the new surface; the Sessions ↔ profile-contract dependency stays unchanged.
+
+### Bookkeeping
+
+- **[github#25](https://github.com/gobha-me/ai-editor/issues/25) closed** — Plan Mode shipped at 1.10.0; the issue stayed Open by oversight.
+- **ROADMAP refresh** ([`docs/ROADMAP.md`](docs/ROADMAP.md)) — header pointer updated to reflect 1.10.0 + 1.11.0, "Just shipped" row extended, github#25 moved from Open to Closed, the ChatHistoryStore item under "Other deferred" marked shipped.
 
 ## [1.10.0] - 2026-05-07
 

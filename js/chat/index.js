@@ -32,6 +32,7 @@ import {
     getInputElement
 } from './state.js';
 import { ChatSummarizer } from './summarizer.js';
+import { ChatHistoryStore } from './history-store.js';
 import { ConversationManager } from './conversations.js';
 import { getConvCost } from '../intelligence/cost/index.js';
 import { 
@@ -117,11 +118,10 @@ function initChat(containerEl, inputEl) {
     // (skipped for assistant-only tool_calls with no text content).
     let displayHistory;
     if (pruneStash && Array.isArray(pruneStash) && pruneStash.length > 0) {
-        State.chatHistory = [...pruneStash, ...savedHistory];
-        Storage.set('chatHistory', State.chatHistory);
+        ChatHistoryStore.replace([...pruneStash, ...savedHistory]);
         console.log(`[initChat] Restored ${pruneStash.length} pruned messages from stash`);
     } else {
-        State.chatHistory = savedHistory;
+        ChatHistoryStore.replace(savedHistory);
     }
     displayHistory = State.chatHistory;
 
@@ -358,10 +358,9 @@ function retryLastMessage() {
     }
 
     const content = State.chatHistory[lastUserIdx].content;
-    
+
     // Truncate from the user message onward (removes user + assistant + tool messages)
-    State.chatHistory.splice(lastUserIdx);
-    Storage.set('chatHistory', State.chatHistory);
+    ChatHistoryStore.splice(lastUserIdx);
     renderMessages();
     
     // Resend the same content as a fresh message
@@ -394,8 +393,7 @@ function editAndResend(newContent) {
     }
 
     // Truncate from the user message onward
-    State.chatHistory.splice(lastUserIdx);
-    Storage.set('chatHistory', State.chatHistory);
+    ChatHistoryStore.splice(lastUserIdx);
     renderMessages();
 
     // Send the edited content as a fresh message

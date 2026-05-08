@@ -19,6 +19,7 @@
 
 import { State, Storage, EventBus } from '../core.js';
 import { ChatSummarizer } from './summarizer.js';
+import { ChatHistoryStore } from './history-store.js';
 import { removeConvCost } from '../intelligence/cost/cost-store.js';
 
 /** Max conversations kept in the index */
@@ -173,12 +174,18 @@ const ConversationManager = {
         const pruneStash = Storage.get('chatPruneStash', null);
         const toolActionLog = State.toolActionLog || [];
         const todos = State.todo || [];
+        // Scratchpad rides per-conversation from 1.11.0 — pre-1.11.0 it was
+        // memory-only and reset on every refresh / new chat. Shallow copy so
+        // future mutations to State.scratchpad don't bleed into the payload
+        // already in IDB before the next save.
+        const scratchpad = { ...(State.scratchpad || {}) };
         Storage.set(`conv-${id}`, {
             messages,
             summaryInfo,
             pruneStash,
             toolActionLog: toolActionLog.slice(-50),
-            todos
+            todos,
+            scratchpad
         });
         // Update index
         const index = _getIndex();
@@ -237,9 +244,8 @@ const ConversationManager = {
         }
 
         // Load into State
-        State.chatHistory = payload.messages || [];
+        ChatHistoryStore.replace(payload.messages || []);
         State.lastExchangeTokens = null;
-        Storage.set('chatHistory', State.chatHistory);
         Storage.set('activeConversation', id);
 
         // Restore summarizer state
@@ -260,6 +266,13 @@ const ConversationManager = {
         // Restore todo list (github#26)
         State.todo = Array.isArray(payload.todos) ? payload.todos : [];
 
+        // Restore scratchpad (1.11.0 — per-conversation persistence).
+        // Pre-1.11.0 payloads have no `scratchpad` field; treat as empty.
+        State.scratchpad = (payload.scratchpad && typeof payload.scratchpad === 'object')
+            ? payload.scratchpad
+            : {};
+        EventBus.emit('scratchpad:changed', { action: 'restored' });
+
         EventBus.emit('conversation:loaded', { id });
         console.log(`[conversations] Loaded conversation ${id}`);
     },
@@ -279,16 +292,16 @@ const ConversationManager = {
         const now = Date.now();
 
         // Clear in-memory state
-        State.chatHistory = [];
+        ChatHistoryStore.clear();
         State.lastExchangeTokens = null;
         State.scratchpad = {};
         State.toolActionLog = [];
         State.todo = [];
-        Storage.set('chatHistory', []);
         Storage.set('activeConversation', id);
         Storage.remove('chatSummaryInfo');
         Storage.remove('chatPruneStash');
         ChatSummarizer.clear();
+        EventBus.emit('scratchpad:changed', { action: 'cleared' });
 
         // Add to index (will get real title on first message)
         const index = _getIndex();
@@ -332,15 +345,15 @@ const ConversationManager = {
                 this.load(sorted[0].id);
             } else {
                 // No conversations left — create a blank one
-                State.chatHistory = [];
+                ChatHistoryStore.clear();
                 State.lastExchangeTokens = null;
                 State.scratchpad = {};
                 State.todo = [];
-                Storage.set('chatHistory', []);
                 Storage.remove('activeConversation');
                 Storage.remove('chatSummaryInfo');
                 Storage.remove('chatPruneStash');
                 ChatSummarizer.clear();
+                EventBus.emit('scratchpad:changed', { action: 'cleared' });
                 EventBus.emit('conversation:loaded', { id: null });
             }
         }

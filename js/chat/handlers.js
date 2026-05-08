@@ -3,7 +3,7 @@
  * Intent detection and specialized request handlers (edit, explain, commit, issue, general)
  */
 
-import { State, EventBus, Storage } from '../core.js';
+import { State, EventBus } from '../core.js';
 import { LLM, LLMTools, generateEdit, generateCommitMessage, buildSystemPrompt, stripThinkBlocks, getContextScale } from '../llm.js';
 import { applyEdit, computeSimpleDiff } from '../editor.js';
 import {
@@ -33,6 +33,7 @@ import { renderImagePreview } from './input.js';
 import { executeToolCall } from './tools.js';
 import { parseTextToolCalls } from './tools.js';
 import { ChatSummarizer } from './summarizer.js';
+import { ChatHistoryStore } from './history-store.js';
 import { enrichToolResultTurn } from './turn-enrich.js';
 import { getCompressedContextMessages } from './compactor-integration.js';
 import { validateAndCleanHistory } from './history-validator.js';
@@ -987,18 +988,16 @@ export async function handleGeneralRequest(input) {
                     assistantMsg.content = cleanContent || '';
                 }
                 
-                State.chatHistory.push(assistantMsg);
-                Storage.set('chatHistory', State.chatHistory);
+                ChatHistoryStore.append(assistantMsg);
 
                 // Save tool results to State.chatHistory for context continuity
                 if (toolCallSource === 'structured') {
                     for (const tr of structuredResults) {
-                        State.chatHistory.push({
+                        ChatHistoryStore.append({
                             ...tr,
                             timestamp: Date.now()
                         });
                     }
-                    Storage.set('chatHistory', State.chatHistory);
                 }
 
                 if (toolCallSource === 'structured') {
@@ -1168,8 +1167,7 @@ export async function handleGeneralRequest(input) {
 function _rollbackHistory(snapshotLength) {
     const removed = State.chatHistory.length - snapshotLength;
     if (removed > 0) {
-        State.chatHistory.length = snapshotLength;
-        Storage.set('chatHistory', State.chatHistory);
+        ChatHistoryStore.setLength(snapshotLength);
         console.warn(`[_rollbackHistory] Rolled back ${removed} message(s) from failed request`);
     }
 }

@@ -50,6 +50,7 @@
 
 import { State, EventBus, Storage } from '../core.js';
 import { LLM, getContextScale } from '../llm.js';
+import { ChatHistoryStore } from './history-store.js';
 
 // ============================================
 // PERCENTAGE-BASED SCALING CONSTANTS
@@ -733,14 +734,15 @@ SUMMARY:`;
             console.log(`[ChatSummarizer] Adjusted prune count from ${pruneCount} to ${adjusted} to preserve tool-call boundary`);
         }
 
-        // 1. Splice old messages out of in-memory array
-        const pruned = State.chatHistory.splice(0, adjusted);
-
-        // 2. Persist the now-smaller chatHistory FIRST to free localStorage space
-        //    Remove before set — if localStorage is already full, set() would fail
-        //    because the OLD big chatHistory is still consuming space.
+        // 1. Pre-clear the persisted key to free localStorage space if we're
+        //    on the LS fallback path (IDB has GB quota; LS does not). If LS
+        //    is already full, the upcoming `splice` write would fail because
+        //    the OLD big chatHistory is still consuming space.
         Storage.remove('chatHistory');
-        Storage.set('chatHistory', State.chatHistory);
+
+        // 2. Splice old messages out of in-memory array via the store; the
+        //    store re-persists the now-smaller history.
+        const pruned = ChatHistoryStore.splice(0, adjusted);
 
         // 3. Try to stash pruned messages for undo — may fail if still tight on space
         Storage.set('chatPruneStash', pruned);
@@ -774,11 +776,12 @@ SUMMARY:`;
         const stash = Storage.get('chatPruneStash', null);
         if (!stash || !Array.isArray(stash)) return false;
 
-        // Restore: prepend stash to current history
-        State.chatHistory.unshift(...stash);
+        // Restore: prepend stash to current history. Replace via the store
+        // so persistence routes through one owner; the in-place semantics
+        // preserve any captured array reference.
+        ChatHistoryStore.replace([...stash, ...State.chatHistory]);
         Storage.remove('chatPruneStash');
         Storage.remove('chatSummaryInfo');
-        Storage.set('chatHistory', State.chatHistory);
         console.log(`[ChatSummarizer] Undo prune — restored ${stash.length} messages`);
         EventBus.emit('chat:pruneUndone');
         return true;
