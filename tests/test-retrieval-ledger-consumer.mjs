@@ -21,6 +21,7 @@ import {
     _findMostRecentAdmission,
     _computeNovelty,
     _resetTurnIdCounterForTests,
+    scoreNovelty,
 } from '../js/intelligence/retrieval/ledger-consumer.js';
 import { createTaskLedger } from '../js/profiles/task-ledger.js';
 
@@ -547,4 +548,100 @@ test('exported defaults match module documentation', () => {
     assert.equal(DEFAULT_NOVELTY_THRESHOLD, 0.4);
     assert.equal(DEFAULT_TIME_DECAY_MS, 30 * 60 * 1000);
     assert.equal(MARKER_TOKEN_COST, 20);
+});
+
+/* ---------------- 1.15.0 — marker format pins ~{tokens} suffix ---------------- */
+
+test('marker text includes "; ~{prior.tokens} tokens" suffix per DESIGN-profiles.md line 216', () => {
+    const ledger = newLedger();
+    const c1 = makeChunk('alpha', { tokens: 100, id: 'chunk_authmw' });
+    seedAdmission(ledger, c1.id, {
+        query: 'authentication middleware',
+        admitted_at: 1_700_000_000_000,
+        turn_id: 'turn_0',
+        tokens: 3000,  // matches the design's example "multi-hundred-token chunk"
+    });
+    const result = consultLedger(
+        [c1],
+        baseReq({ query: 'authentication middleware', turn_id: 'turn_1' }),
+        ledger,
+        { now: 1_700_000_001_000 },
+    );
+    assert.equal(result.suppressedCount, 1);
+    const marker = result.kept[0];
+    // Pin the exact full-format text per ROADMAP §1.15.0.
+    assert.equal(
+        marker.content,
+        '[Already admitted: chunk_authmw — see turn turn_0; ~3000 tokens]',
+    );
+});
+
+test('marker reports prior.tokens=0 when admission record carried no tokens', () => {
+    const ledger = newLedger();
+    const c1 = makeChunk('alpha', { tokens: 100, id: 'chunk_zero' });
+    seedAdmission(ledger, c1.id, {
+        query: 'auth',
+        tokens: 0,
+        admitted_at: 1_700_000_000_000,
+    });
+    const result = consultLedger([c1], baseReq({ query: 'auth' }), ledger, { now: 1_700_000_001_000 });
+    assert.equal(result.suppressedCount, 1);
+    assert.match(result.kept[0].content, /; ~0 tokens\]$/);
+});
+
+/* ---------------- 1.15.0 — public scoreNovelty alias ---------------- */
+
+test('scoreNovelty alias delegates to _computeNovelty', () => {
+    const prior = {
+        chunk_id: 'cid',
+        admitted_at: 1000,
+        turn_id: 't0',
+        tokens: 50,
+        query: 'auth',
+        query_embedding: null,
+        strategy: 'semantic',
+        facets_covered: [],
+    };
+    const args = {
+        candidateId: 'cid',
+        currentQuery: 'auth',
+        currentEmbedding: null,
+        hints: null,
+        prior,
+        now: 1100,
+        timeDecayMs: DEFAULT_TIME_DECAY_MS,
+    };
+    assert.equal(scoreNovelty(args), _computeNovelty(args));
+});
+
+/* ---------------- 1.15.0 — weighted-mean math (no embedding, 12h elapsed) ---------------- */
+
+test('_computeNovelty: identical query + 12h elapsed + no embedding → 0.25 (suppress under default)', () => {
+    const prior = {
+        chunk_id: 'cid',
+        admitted_at: 1_000_000,
+        turn_id: 't0',
+        tokens: 50,
+        query: 'authentication middleware',
+        query_embedding: null,
+        strategy: 'semantic',
+        facets_covered: [],
+    };
+    // 12 hours elapsed against the implementation's 30-minute time-decay
+    // window (DEFAULT_TIME_DECAY_MS) → timeNov saturates to 1.0.
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    const n = _computeNovelty({
+        candidateId: 'cid',
+        currentQuery: 'authentication middleware',
+        currentEmbedding: null,
+        hints: null,
+        prior,
+        now: 1_000_000 + twelveHoursMs,
+        timeDecayMs: DEFAULT_TIME_DECAY_MS,
+    });
+    // jacNov=0 (identical), cosNov=null → fallback weight 0.75 on Jaccard,
+    // timeNov=1, time weight 0.25. Composite = 0.75*0 + 0.25*1 = 0.25.
+    assert.ok(Math.abs(n - 0.25) < 1e-9, `expected 0.25, got ${n}`);
+    // 0.25 < DEFAULT_NOVELTY_THRESHOLD (0.4) → would suppress.
+    assert.ok(n < DEFAULT_NOVELTY_THRESHOLD);
 });

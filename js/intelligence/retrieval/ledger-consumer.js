@@ -59,12 +59,15 @@
  *   `noveltyThreshold` and `timeDecayMs` are tunable via `opts` so that
  *   profile-level tuning lands as config, not code.
  *
- * **Marker shape** (per design line 469):
+ * **Marker shape** (per design line 216):
  *
  *   ```
  *   id: "ledger_marker:<original_id>:<turn_id>"
- *   content: "[Already admitted: <original_id> — see turn <prior_turn_id>]"
- *   tokens: 20  // fixed; matches design's "~20 tokens"
+ *   content: "[Already admitted: <original_id> — see turn <prior_turn_id>; ~<prior_tokens> tokens]"
+ *   tokens: 20  // fixed; matches design's "~20 tokens" (the marker's own cost,
+ *               // distinct from the `~<prior_tokens>` figure inside the
+ *               // content text — that surfaces the suppressed chunk's cost
+ *               // for the model's awareness).
  *   provenance.retrieved_by: "ledger_marker"
  *   ```
  *
@@ -90,11 +93,20 @@
  * pseudocode places consultation before overflow, so this PR honors
  * that ordering and documents the trade-off rather than diverging.
  *
- * **Capacity spill.** When `ledger.admissions.length` reaches
- * `ledger.capacity`, older records should spill to a compact form (drop
- * `query_embedding`) and eventually drop entirely. That's the ledger
- * owner's job (`js/profiles/task-ledger.js`), not the consumer's — this
- * module appends unconditionally.
+ * **Capacity cap.** When `ledger.admissions.length` would exceed
+ * `ledger.capacity`, the consumer drops the oldest record before the
+ * push so callers can rely on `ledger.admissions.length <= capacity`
+ * after every consultation pass. The to-be-dropped record's
+ * `query_embedding` is nulled prior to the `shift` (preserves the
+ * "spill embedding before drop record" lifecycle from DESIGN-profiles.md
+ * line 226 in a single call; the intermediate "compact form lives in
+ * the array between spill and drop" stage is a memory-pressure
+ * optimization deferred to a follow-up — Phase 1 enforces the count
+ * cap directly). A single `console.warn` per drop signals that the
+ * task is pressing the cap; per the design, this means the profile's
+ * task boundaries are too coarse, not that `capacity` should grow.
+ * Implemented in `_spillIfAtCapacity`; called from `appendAdmission`
+ * *before* push.
  *
  * **Removability.** Like the rest of the 1.5.0 stream, no production
  * wiring: `find_relevant_files` continues to run through
@@ -293,6 +305,17 @@ function hasExplicitForce(candidateId, prior, hints) {
  * @param {number}                 args.timeDecayMs
  * @returns {number}
  */
+/**
+ * Public alias for `_computeNovelty`. The DESIGN-profiles.md spec (and
+ * the ROADMAP slice line for 1.15.0) names the algorithm `scoreNovelty`;
+ * the implementation predates that lexicon and uses `_computeNovelty`.
+ * Keeping both names lets internal call sites stay unchanged while
+ * external callers get the documented identifier.
+ *
+ * @type {typeof _computeNovelty}
+ */
+export const scoreNovelty = (args) => _computeNovelty(args);
+
 export function _computeNovelty({ candidateId, currentQuery, currentEmbedding, hints, prior, now, timeDecayMs }) {
     if (hasExplicitForce(candidateId, prior, hints)) return 1;
 
@@ -337,7 +360,7 @@ function synthesizeTurnId(now) {
  * @returns {ChunkRef}
  */
 function buildMarker(chunk, prior, turnId) {
-    const content = `[Already admitted: ${chunk.id} — see turn ${prior.turn_id}]`;
+    const content = `[Already admitted: ${chunk.id} — see turn ${prior.turn_id}; ~${prior.tokens} tokens]`;
     return {
         id: `ledger_marker:${chunk.id}:${turnId}`,
         collection: chunk.collection,
@@ -390,10 +413,46 @@ function appendAdmission(ledger, chunk, query, queryEmbedding, turnId, now, isPi
         strategy: isPinned ? 'pinned' : (chunk.provenance && chunk.provenance.retrieved_by) || 'semantic',
         facets_covered: [],
     };
-    // TODO(1.5.x): ledger capacity spill — when admissions.length === capacity,
-    // older records should spill to compact form (drop query_embedding) per
-    // js/profiles/task-ledger.js docstring. Owner's job, not the consumer's.
+    _spillIfAtCapacity(ledger);
     ledger.admissions.push(rec);
+}
+
+/**
+ * Enforce the ledger's `capacity` cap. Pre-push hook: if the array
+ * is at-or-over cap, null the oldest record's `query_embedding`
+ * (the embedding is the first thing to go under pressure per
+ * DESIGN-profiles.md line 226) and shift that record off. Single
+ * `console.warn` per drop. Idempotent under cap.
+ *
+ * After this returns, the caller can push one new record without
+ * exceeding `capacity`. The intermediate "compact form lives between
+ * spill and drop" lifecycle stage from the design is a memory-pressure
+ * optimization deferred to a follow-up — Phase 1 enforces count.
+ *
+ * The `spilled` counter in the return value reflects whether the
+ * dropped record still had an embedding at drop time (i.e. it was
+ * "fresh" rather than already-compacted by some other path); it's
+ * primarily for test assertions.
+ *
+ * @param {TaskLedger} ledger
+ * @returns {{ spilled: number, dropped: number }}
+ */
+export function _spillIfAtCapacity(ledger) {
+    if (!ledger || !Array.isArray(ledger.admissions)) {
+        return { spilled: 0, dropped: 0 };
+    }
+    const cap = typeof ledger.capacity === 'number' && ledger.capacity > 0 ? ledger.capacity : 500;
+    if (ledger.admissions.length < cap) return { spilled: 0, dropped: 0 };
+
+    const oldest = ledger.admissions[0];
+    let spilled = 0;
+    if (oldest && oldest.query_embedding != null) {
+        oldest.query_embedding = null;
+        spilled = 1;
+    }
+    ledger.admissions.shift();
+    console.warn(`[task-ledger] ${ledger.task_id}: dropped oldest admission record at cap=${cap}; consider re-tuning task boundaries`);
+    return { spilled, dropped: 1 };
 }
 
 /**

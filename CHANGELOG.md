@@ -4,6 +4,151 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-05-08
+
+### Feature — Task Ledger Phase 1 (re-admission markers + capacity cap)
+
+First user-visible slice of the **path to 2.0.0** profiles arc per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"2.X path". Follow-up turns that
+re-touch already-admitted chunks now see a `[Already admitted: <id> —
+see turn <prior_turn>; ~<tokens> tokens]` marker (~20 tokens) instead
+of a re-pasted multi-hundred-token chunk, while still admitting
+sufficiently-novel queries against the same chunk for the *new aspect*
+case (`DESIGN-profiles.md` §"Re-admission Decision"). Token savings
+land on multi-turn coder workflows where the model legitimately
+re-queries against the same files across follow-up turns.
+
+**Reframing.** The novelty algorithm (`scoreNovelty` / `_computeNovelty`)
+and the Composer's step 6.5 wiring shipped in 1.4.18 at
+[`js/intelligence/retrieval/ledger-consumer.js`](js/intelligence/retrieval/ledger-consumer.js)
++ [`js/intelligence/retrieval/composer.js:571`](js/intelligence/retrieval/composer.js).
+The per-conversation ledger registry shipped in 1.3.17 at
+[`js/chat/task-state.js`](js/chat/task-state.js). 1.4.18's docstring
+recorded "Removability holds — with `composer.js` deleted nothing in
+production degrades" — true *because the production call passed
+`task_ledger: null`*. 1.15.0 is the slice that flips that null and
+ties off four loose ends.
+
+- **[`js/intelligence/retrieval/manager.js:651`](js/intelligence/retrieval/manager.js)** —
+  `findRelevantFiles` now reads/writes a per-conversation ledger via
+  `getOrCreateLedger(conversationId, 'coder.v1')`, embeds the query
+  once via `EmbeddingsClient.embed` for cosine novelty, and threads
+  `turn_id` + `queryEmbedding` + `noveltyThreshold: 0.3` (from
+  `coder.v1.retrieval.novelty_threshold`) into `compose()`'s opts. The
+  duplicate `embed(query)` call is intentional — `EmbeddingsClient`
+  caches by content hash so the second hit (semantic strategy) is a
+  memory hit, not a token hit. Embedding failure degrades silently to
+  the Jaccard-only path. The direct `CODER_V1` import is the same
+  smell flagged in ROADMAP §"2.X path" *State of Phase 1*; clears at
+  slice 1.18.0 when the tools resolver lands. The per-conversation
+  ledger registry is shared with the 1.3.17 tools track, so the
+  `conversation:deleted` → `dropLedger` cleanup wired at
+  [`js/chat/index.js:193`](js/chat/index.js) covers retrieval admissions
+  for free.
+- **[`js/intelligence/retrieval/ledger-consumer.js`](js/intelligence/retrieval/ledger-consumer.js)** —
+  Three changes. (a) **Marker format.** Now matches DESIGN-profiles.md
+  line 216 verbatim including the `; ~<prior.tokens> tokens` suffix —
+  surfaces the suppressed chunk's cost so the model's awareness of
+  the trade-off is legible. The marker's own token cost stays at 20
+  per the design's *"~20 tokens in place of a multi-hundred-token chunk"*
+  framing (`MARKER_TOKEN_COST` constant unchanged). (b) **Capacity
+  cap.** New `_spillIfAtCapacity(ledger)`, called from
+  `appendAdmission` *before* push, drops the oldest record (with its
+  embedding nulled first per the spill-before-drop lifecycle from
+  `task-ledger.js:137–151`) and emits a single `console.warn` per
+  drop. After every consultation pass,
+  `ledger.admissions.length <= ledger.capacity` (default 500). The
+  intermediate "compact form lives in the array between spill and
+  drop" lifecycle stage is deferred to a memory-pressure follow-up;
+  Phase 1 enforces count. (c) **`scoreNovelty` public alias.** The
+  DESIGN spec (and ROADMAP slice line) names the algorithm
+  `scoreNovelty`; the implementation predates the lexicon and uses
+  `_computeNovelty`. One-line alias resolves the naming mismatch
+  without renaming internal call sites.
+- **[`js/intelligence/retrieval/manager-helpers.js:56`](js/intelligence/retrieval/manager-helpers.js)** —
+  `rollupToFiles` now skips chunks whose ids start with the reserved
+  `ledger_marker:` namespace. Markers carry
+  `source_uri="ledger://<turn>"` and would otherwise surface as bogus
+  file paths in `find_relevant_files`'s `{path, similarity, summary}`
+  LLM-tool rollup, polluting results and hiding the real file the
+  marker references. The model still sees the marker in the rendered
+  prompt block (Composer step 8); the rollup is files-only.
+
+### Tests
+
+- **New** [`tests/test-task-ledger-capacity.mjs`](tests/test-task-ledger-capacity.mjs) —
+  `_spillIfAtCapacity` unit + end-to-end via `consultLedger`: cap=3
+  with five cold candidates → only the 3 most-recent admissions
+  survive, two `console.warn`s emitted; pinned admission also
+  subject to cap; malformed-input tolerance.
+- **Edit** [`tests/test-retrieval-ledger-consumer.mjs`](tests/test-retrieval-ledger-consumer.mjs) —
+  marker format pin including `; ~3000 tokens` suffix;
+  `prior.tokens=0` edge case; `scoreNovelty` alias delegation;
+  weighted-mean math (identical query + 12h elapsed + no embedding →
+  0.25, suppress).
+- **New** [`tests/test-retrieval-manager-ledger-wiring.mjs`](tests/test-retrieval-manager-ledger-wiring.mjs) —
+  `rollupToFiles` regression: synthetic result with one real chunk +
+  one `ledger_marker:` chunk → returns one path (not two), no
+  `ledger://` paths surface.
+- **New** [`tests/test-retrieval-removability.mjs`](tests/test-retrieval-removability.mjs) —
+  Two-arm regression per ROADMAP §Decisions 7 ("User-visible: Yes"
+  slices get an explicit pin). Arm 1: `task_ledger: null` → both
+  calls return chunk content, no marker, `ledger_consulted=false`.
+  Arm 2: live ledger → call 2 emits marker + `ledger_suppressions=1`.
+  Arms diff *only* on marker emission; diagnostics shape unchanged.
+
+### Verification
+
+- `node --test tests/test-task-ledger-capacity.mjs
+  tests/test-retrieval-ledger-consumer.mjs
+  tests/test-retrieval-manager-ledger-wiring.mjs
+  tests/test-retrieval-removability.mjs tests/test-task-state.mjs
+  tests/test-retrieval-composer.mjs` — all green; full
+  `node --test tests/test-*.mjs` shows 2140 pass / 0 fail.
+- **Browser verification:** drive two `find_relevant_files` calls
+  with the same query in one conversation; Settings → Retrieval →
+  Diagnostics shows `ledger_suppressions > 0` on call 2 and lower
+  `tokens_used`. The cost-dashboard sanity is the manual browser
+  pass for this slice.
+
+### Punt list (called out, not scope)
+
+- **Duplicate embed call.** `EmbeddingsClient.embed(query)` runs
+  alongside `semantic.js`'s embed; both hit the content-hash cache,
+  so the second is a memory hit, not a token hit. Single-threaded
+  embedding optimisation deferred.
+- **`turn_id` synthesis.** Manager mints `find_relevant_files:<ms>`;
+  consumer fallback at `ledger-consumer.js:324` mints
+  `composer:<ms>:<counter>`. Two formats coexist; both
+  uniqueness-preserving. Canonical generator deferred.
+- **Chat-v1 threshold parity.** `chat-v1.novelty_threshold = 0.5` not
+  threaded — chat surfaces don't call `find_relevant_files` today.
+  Resolves at slice 1.16.0 along with the rest of the resolver
+  rewire.
+- **Phase 1 known limitation** (carried over from 1.4.18). Admissions
+  appended *before* `dropOverflow` (Composer step 7), so a
+  budget-evicted chunk leaves an admission record behind that the
+  next call can suppress against. Documented at
+  [`ledger-consumer.js:86–91`](js/intelligence/retrieval/ledger-consumer.js);
+  post-overflow reconciliation parked as a 1.5.x follow-up.
+- **Compact-form lifecycle.** DESIGN-profiles.md line 226's
+  intermediate "spill embedding, keep slot, eventually drop"
+  lifecycle is collapsed to a single-call cap enforcement in 1.15.0
+  (drop oldest with embedding nulled first). The memory-pressure
+  benefit of carrying compacted records lives in a follow-up if real
+  task ledgers actually press the 500-record cap; per the design,
+  cap pressure is a signal to re-tune task boundaries, not expand
+  `capacity`.
+- **Browser integration test.** A dedicated browser test that drives
+  `findRelevantFiles` end-to-end against an indexed corpus would
+  require booting the full State + EmbeddingsClient + ingest
+  pipeline. Node-level coverage is comprehensive (algorithm + wiring
+  + diagnostics + removability arms); the cost-dashboard sanity
+  serves as the manual browser pass. A focused integration test
+  parks behind a measurable test-environment harness.
+
+
+
 ## [1.14.2] - 2026-05-08
 
 ### Patch — chat-loop hygiene (DRY, deep-stable cache key, user-pause watchdog)

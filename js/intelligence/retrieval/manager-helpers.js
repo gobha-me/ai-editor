@@ -55,6 +55,13 @@ export function rollupToFiles(result, topK) {
         if (!block || !Array.isArray(block.chunks)) continue;
         for (const id of block.chunks) {
             if (typeof id !== 'string' || id.length === 0) continue;
+            // 1.15.0 — Ledger marker surrogates carry source_uri="ledger://<turn>"
+            // (see js/intelligence/retrieval/ledger-consumer.js reserved-namespace
+            // doc on ChunkID). They're a model-facing prompt artifact, not a
+            // discoverable file; surfacing them through `find_relevant_files`'s
+            // file-rollup would pollute results with bogus `ledger://...` paths
+            // and hide the actual file the marker references.
+            if (id.startsWith('ledger_marker:')) continue;
             const chunk = chunksById[id];
             if (!chunk || typeof chunk !== 'object') continue;
             const meta = /** @type {any} */ (chunk).metadata;

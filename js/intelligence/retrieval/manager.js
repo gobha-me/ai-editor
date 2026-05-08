@@ -26,6 +26,8 @@ import { Git } from '../../git.js';
 import { IgnoreManager } from '../../ignore.js';
 import { LLM } from '../../llm/api.js';
 import { ConversationManager } from '../../chat/conversations.js';
+import { getOrCreateLedger } from '../../chat/task-state.js';
+import { CODER_V1 } from '../../profiles/coder-v1.js';
 
 import { createInMemoryChunkStore } from './store.js';
 import { createProductionIngestWalker } from './wiring.js';
@@ -638,6 +640,33 @@ async function findRelevantFiles(query, topK = 5) {
         // Merge in the score weights so live calls match the canonical 1.5.11 T7 recipe.
         // (`defaultComposeFiltersResolver` already merges DEFAULT_SCORE_WEIGHTS.)
 
+        // 1.15.0 — Task Ledger Phase 1. Flip the previously-null ledger
+        // wiring on so the Composer's step 6.5 (shipped 1.4.18) becomes
+        // load-bearing in production. Per-conversation registry from
+        // `js/chat/task-state.js`; coder.v1's capacity (500) and
+        // novelty_threshold (0.3) drive sizing and re-admission policy.
+        // The direct `CODER_V1` import is the same smell flagged in
+        // ROADMAP §"2.X path" State of Phase 1; clears at slice 1.18.0
+        // when the tools subsystem stops reading raw `CODER_V1` slices.
+        const conversationId = ConversationManager.getActiveId();
+        const ledger = getOrCreateLedger(conversationId, CODER_V1.name, {
+            capacity: (CODER_V1.task_ledger && CODER_V1.task_ledger.capacity) || 500,
+        });
+        // Embed the query once for cosine novelty scoring. Failure
+        // degrades to the Jaccard-only path (consumer handles
+        // `queryEmbedding === undefined` via the same fallback that
+        // covers a missing prior embedding). EmbeddingsClient caches by
+        // content hash so semantic strategy's later embed() of the same
+        // string is a memory hit, not a token hit.
+        let queryEmbedding = null;
+        try {
+            const embedded = await EmbeddingsClient.embed(query);
+            if (Array.isArray(embedded)) queryEmbedding = embedded;
+        } catch (e) {
+            console.warn('[Retrieval] Query embedding failed; ledger novelty falls back to Jaccard-only:', e?.message || e);
+        }
+        const turnId = `find_relevant_files:${Date.now()}`;
+
         /** @type {any} */
         const req = {
             task: '',
@@ -648,7 +677,8 @@ async function findRelevantFiles(query, topK = 5) {
             filters,
             strategy_hints: null,
             priority_pins: null,
-            task_ledger: null,
+            task_ledger: ledger,
+            turn_id: turnId,
         };
 
         const paraphraser = buildParaphraserFromSettings(State.settings, {
@@ -673,6 +703,17 @@ async function findRelevantFiles(query, topK = 5) {
         const composeOpts = {};
         if (expander) composeOpts.queryExpander = expander;
         else if (paraphraser) composeOpts.queryParaphraser = paraphraser;
+
+        // 1.15.0 — thread ledger opts so step 6.5 picks them up. Threshold
+        // sources from coder.v1 (0.3 — re-admit liberally per
+        // DESIGN-profiles.md "novelty threshold low"). The chat-v1
+        // threshold (0.5) doesn't ship through here in 1.15.0 — chat
+        // surfaces don't call `find_relevant_files` today, and the
+        // resolver rewire that picks the right profile per surface
+        // lands at slice 1.16.0+ per ROADMAP §"2.X path".
+        composeOpts.turnId = turnId;
+        if (Array.isArray(queryEmbedding)) composeOpts.queryEmbedding = queryEmbedding;
+        composeOpts.noveltyThreshold = (CODER_V1.retrieval && CODER_V1.retrieval.novelty_threshold) ?? 0.4;
 
         // 1.6.8 — snapshot session totals before compose() so a delta
         // captures any LLM tokens spent inside retrieval (paraphrase chatFn
