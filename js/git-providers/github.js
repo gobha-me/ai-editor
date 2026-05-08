@@ -812,7 +812,32 @@ const githubProvider = {
             deletions: f.deletions || 0,
             patch: f.patch || ''
         }));
-        return { commits, files, totalCommits: result.total_commits ?? commits.length };
+        return {
+            commits,
+            files,
+            totalCommits: result.total_commits ?? commits.length,
+            aheadBy: typeof result.ahead_by === 'number' ? result.ahead_by : null,
+            behindBy: typeof result.behind_by === 'number' ? result.behind_by : null,
+        };
+    },
+
+    // GitHub's /compare endpoint already returns ahead_by + behind_by in a
+    // single round-trip — override the base two-call default.
+    async getBranchAheadBehind(connection, owner, repo, branch, base) {
+        if (!base || !branch || base === branch) {
+            return { ahead: 0, behind: 0 };
+        }
+        try {
+            const result = await this.request(connection, 'GET',
+                `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}`
+            );
+            return {
+                ahead: typeof result.ahead_by === 'number' ? result.ahead_by : null,
+                behind: typeof result.behind_by === 'number' ? result.behind_by : null,
+            };
+        } catch {
+            return { ahead: null, behind: null };
+        }
     },
 
     async listReleases(connection, owner, repo) {

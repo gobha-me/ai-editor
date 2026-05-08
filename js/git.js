@@ -492,6 +492,23 @@ const Git = {
         return provider.compareRefs(connection, owner, repo, base, head);
     },
 
+    /**
+     * Return the number of commits `branch` is ahead/behind `base` (default branch).
+     * Returns `{ ahead: null, behind: null }` when the provider cannot determine
+     * the counts (local provider, network error, unsupported endpoint). The UI
+     * treats null as "no count to render", not "0".
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch - The branch to measure.
+     * @param {string} [base='main'] - The base ref to compare against.
+     * @returns {Promise<{ahead: number|null, behind: number|null}>}
+     */
+    async getBranchAheadBehind(owner, repo, branch, base = 'main') {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getBranchAheadBehind(connection, owner, repo, branch, base);
+    },
+
     async listReleases(owner, repo) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.listReleases(connection, owner, repo);

@@ -4,6 +4,137 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-05-08
+
+### Feature — branch switcher with ahead/behind + inline switch/delete/cut-release (Touch 3 extraction A)
+
+The static `<select id="branchSelect">` dropdown that has lived at the
+top of the left rail since the early days becomes a row-list panel.
+Each row shows the branch name, a `↑N ↓M` ahead/behind chip when the
+counts are known, and inline action buttons:
+
+- **Switch** on non-current branches.
+- **Cut release** on the current branch (opens the existing release
+  modal pre-targeted at the current branch).
+- **Delete** on non-current, non-protected branches (with a confirm
+  dialog; protected branches and the active branch never expose it).
+
+Picked from the [`docs/ROADMAP.md`](docs/ROADMAP.md) §"1.x extraction
+candidates" table — candidate A out of three Touch 3 derivations
+sized as standalone single-PR work without depending on the full
+left-pane Rail v2 rework.
+
+**Why this slot.** [1.11.1](#1111---2026-05-08) closed the Plan Mode
+follow-up; `[Unreleased]` was empty; the Now slot reopened. 2.0
+Profiles is the *next* arc but a 6–10-PR commitment, so this minor
+takes a single-PR UX upgrade that surfaces real branch state in the
+sidebar without architectural blast radius. The `#tbBranchCounts`
+slot was scaffolded back in 1.3.6 as a stub for ahead/behind counts
+that never landed; this minor is the closest analogue to that
+debt-payoff in the sidebar surface (the top-bar slot stays stub for
+now — a follow-up if it earns it).
+
+**What changes.**
+
+- **`html/sidebar.html`** — replaces `<select id="branchSelect">` and
+  its three sibling buttons with a `.branch-selector__toolbar`
+  (Branches title + New / Download / Release buttons) plus a
+  `<div id="branchPanel" class="branch-panel" role="list">` for the
+  row-list. The three sibling buttons keep their IDs (`btnNewBranch`,
+  `btnDownloadZip`, `btnRelease`) so `js/app.js` event wiring is
+  unchanged.
+- **`js/ui/branch-panel.js` (new)** — the renderer
+  (`renderBranchPanelHtml`) is pure: HTML in, HTML out, no DOM. Wire-up
+  lives in `mountBranchPanel({ onSwitch, onDelete, onCutRelease })`,
+  which binds delegated click handlers and re-renders on
+  `project:loaded`, `project:cleared`, `branches:refresh`,
+  `branches:metadataChanged`, `branch:switch`, and `branch:created`.
+  `populateBranchMetadata(project, branches)` is the
+  concurrency-capped fan-out that fills `State.branchMetadata` —
+  cap of 4 in-flight requests, idempotent via a `_activeSignature`
+  guard, fire-and-forget from the call site, panel re-renders as
+  each branch's count lands.
+- **`js/git.js`** — new `Git.getBranchAheadBehind(owner, repo, branch,
+  base)` provider-facade method. Returns `{ ahead, behind }` where
+  either count can be `null` when the provider can't determine it
+  (local provider, network error). UI hides counts when both are
+  null — null is "unknown", not "0 / 0 in sync".
+- **`js/git-providers/base.js`** — default implementation calls
+  `compareRefs(base, branch)` (ahead) and `compareRefs(branch, base)`
+  (behind), reads counts from `commits.length ?? totalCommits ?? null`,
+  swallows errors into `{ ahead: null, behind: null }`. Returns
+  `{ ahead: 0, behind: 0 }` early when `branch === base` or args missing.
+- **`js/git-providers/github.js`** — overrides
+  `getBranchAheadBehind` for a single round-trip: GitHub's
+  `/repos/:owner/:repo/compare/:base...:head` endpoint already
+  returns `ahead_by` + `behind_by` in the response; the override
+  reads those directly. The existing `compareRefs` is also extended
+  to surface `aheadBy` / `behindBy` on its return shape (additive —
+  existing callers ignore the new fields).
+- **`js/git-providers/local.js`** — no override; the in-browser local
+  provider doesn't implement `compareRefs` (throws `notSupported`),
+  the base implementation catches that, and the panel hides counts
+  for branches owned by local-only projects.
+- **`js/core.js`** — adds `State.branchMetadata = {}` (map of branch
+  name → `{ ahead, behind }`). Cleared on `project:cleared`.
+- **`js/project-manager.js`** — `renderBranchSelector()` callsites
+  consolidated into `renderBranchPanel()` from the new module;
+  `onBranchChange` now takes either a branch name or a legacy event
+  (kept the dual signature for one release in case any plugin
+  surfaces still pass an event); `refreshBranches()` rerenders the
+  panel and kicks off `populateBranchMetadata()` instead of touching
+  the dropdown; `clearProject()` resets `branchMetadata` alongside
+  `branches`.
+- **`js/ui/branch.js`** — new-branch flow no longer rewrites
+  `#branchSelect`'s `innerHTML`; emits `branches:refresh` so the
+  panel + metadata refresh through their event subscriptions.
+- **`js/issue-detail.js`** — same dropdown-rewrite removed from the
+  "Start work on issue" flow; `branch:switch` event drives the
+  re-render.
+- **`js/app.js`** — drops the `change` listener on `#branchSelect` (no
+  longer in the DOM); branch picker is now wired through
+  `mountBranchPanel({ onSwitch })` in `initProjectListeners()`. The
+  top-bar branch indicator (`#tbBranchName`) re-renders on
+  `branch:switch` instead of the old `change` event.
+- **`css/sidebar.css`** — adds `.branch-panel` + `.branch-panel__row`
+  + `.branch-panel__row--current` + `.branch-panel__name` +
+  `.branch-panel__counts` + `.branch-panel__count{--ahead,--behind}`
+  + `.branch-panel__tag--protected` + `.branch-panel__btn` (with
+  `--release` and `--delete` modifiers). Uses existing `--tk-*` token
+  bridge values (orange for protected, accent for current row); no
+  standalone hex literals (theme-token lint clean).
+
+**Tests.**
+
+- **`tests/test-branch-panel.mjs` (new)** — 14 cases on the pure
+  renderer. Covers row count, current/--current modifier placement,
+  Cut release vs Switch button visibility, Delete-button rules
+  (current branch hidden, protected branches hidden, non-protected
+  non-current shown), counts hidden when null/null or when current
+  branch is 0/0, single-direction chip when only one count is known,
+  HTML escaping in row body, attribute-context escaping in
+  `data-branch-name`.
+- **`tests/test-compare-refs-ahead-behind.mjs` (new)** — 12 cases on
+  `getBranchAheadBehind`. Same-ref short-circuit (0/0), missing args
+  (0/0), base default's two-call pattern, fallback from
+  `commits.length` to `totalCommits`, error → null/null, GitHub's
+  single round-trip + `ahead_by`/`behind_by` extraction, GitHub's
+  null/null on missing fields and on request failure, GitHub's
+  `compareRefs` extended return shape.
+
+**What's intentionally out of scope** (Touch 3 design has them; they
+need cross-surface data and earn their own slot):
+
+- Age timestamp ("2h", "12m") on each row.
+- PR badge on rows whose head is an open PR.
+- Conflict warning when the branch can't fast-forward into base.
+- Agent tag for branches owned by an active session.
+- Touch 3 visual reskin (BEM class set, icon family, density).
+
+The deferred items live in the [`docs/ROADMAP.md`](docs/ROADMAP.md)
+Touch 3 deliverables table (Left-pane Rail v2) and roll into the
+post-2.0 Sessions / Window v2 slot.
+
 ## [1.11.1] - 2026-05-08
 
 ### Fix — Plan Mode admits session-local writes (github#25 follow-up)

@@ -6,6 +6,11 @@ import { State, EventBus, Storage } from './core.js';
 import { Git, loadProject } from './git.js';
 import { renderFileTree } from './file-tree.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import {
+    renderBranchPanel,
+    mountBranchPanel,
+    populateBranchMetadata,
+} from './ui/branch-panel.js';
 
 export async function refreshProjects() {
     try {
@@ -132,18 +137,12 @@ export async function switchProject(connectionId, owner, repo, { branch } = {}) 
 
     await loadProject(connectionId, owner, repo);
 
-    // Update branch selector
-    const branchSelect = document.getElementById('branchSelect');
-    if (branchSelect) {
-        branchSelect.innerHTML = '';
-        State.branches.forEach(b => {
-            const option = document.createElement('option');
-            option.value = b.name;
-            option.textContent = b.name + (b.protected ? ' 🔒' : '');
-            branchSelect.appendChild(option);
-        });
-        branchSelect.value = State.currentBranch;
-    }
+    // Reset metadata so we don't render stale ahead/behind counts from the
+    // previous project; the populate-step below repopulates lazily.
+    State.branchMetadata = {};
+    renderBranchPanel();
+    // Fire-and-forget — counts pop in via `branches:metadataChanged`.
+    populateBranchMetadata(State.currentProject, State.branches);
 
     // Update project selector to match
     const projectSelect = document.getElementById('projectSelect');
@@ -185,10 +184,22 @@ export async function onProjectChange(e) {
     }
 }
 
-export async function onBranchChange(e) {
+/**
+ * Switch the editor to a different branch.
+ *
+ * @param {string|Event} branchOrEvent — branch name (preferred) or a legacy
+ *   change-event from a `<select>` (kept for backward-compat with any
+ *   external caller). The legacy form is only used when `branchOrEvent`
+ *   is an Event-like object with `.target.value`.
+ */
+export async function onBranchChange(branchOrEvent) {
+    const newBranch = typeof branchOrEvent === 'string'
+        ? branchOrEvent
+        : branchOrEvent?.target?.value;
+    if (!newBranch || newBranch === State.currentBranch) return;
+
     const previousBranch = State.currentBranch;
-    const newBranch = e.target.value;
-    
+
     // Check for dirty tabs before switching branches
     const dirtyTabs = State.openTabs.filter(t => t.dirty);
     if (dirtyTabs.length > 0) {
@@ -203,11 +214,7 @@ export async function onBranchChange(e) {
                 variant: 'danger',
             }
         );
-        if (!confirmed) {
-            // Cancel — revert the branch select back to previous branch
-            e.target.value = previousBranch;
-            return;
-        }
+        if (!confirmed) return;
         // User chose to discard — clear drafts from storage for the old branch
         if (State.currentProject) {
             const { owner, repo } = State.currentProject;
@@ -377,6 +384,7 @@ export async function clearProject() {
     State.issues = [];
     State.pullRequests = [];
     State.branches = [];
+    State.branchMetadata = {};
 
     // Clear session storage
     Storage.set('session', null);
@@ -384,9 +392,8 @@ export async function clearProject() {
     // Reset UI
     const projectSelect = document.getElementById('projectSelect');
     if (projectSelect) projectSelect.value = '';
-    
-    const branchSelect = document.getElementById('branchSelect');
-    if (branchSelect) branchSelect.innerHTML = '<option value="main">main</option>';
+
+    renderBranchPanel();
 
     const editorContainer = document.getElementById('editorContainer');
     if (editorContainer) {
@@ -571,7 +578,7 @@ export async function refreshPullRequests() {
 }
 
 /**
- * Re-fetch the branch list and update the branch selector dropdown.
+ * Re-fetch the branch list and re-render the branch panel.
  * Called after merge (especially with delete-branch), branch creation, etc.
  */
 export async function refreshBranches() {
@@ -586,23 +593,16 @@ export async function refreshBranches() {
         return;
     }
 
-    const branchSelect = document.getElementById('branchSelect');
-    if (!branchSelect) return;
-
-    branchSelect.innerHTML = State.branches.map(b =>
-        `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
-    ).join('');
-
-    // Keep current selection if it still exists, otherwise switch to default
+    // Keep current selection if it still exists, otherwise fall back to default.
     const stillExists = State.branches.some(b => b.name === State.currentBranch);
-    if (stillExists) {
-        branchSelect.value = State.currentBranch;
-    } else {
+    if (!stillExists) {
         const defaultBranch = State.currentProject.defaultBranch || 'main';
-        branchSelect.value = defaultBranch;
         State.currentBranch = defaultBranch;
         EventBus.emit('branch:switch', { branch: defaultBranch });
     }
+
+    renderBranchPanel();
+    populateBranchMetadata(State.currentProject, State.branches);
 }
 
 // ============================================
@@ -801,6 +801,46 @@ export async function submitNewProject() {
 
 // Setup event listeners for project changes
 export function initProjectListeners() {
+    // Mount the branch row-list panel and its delegated handlers (1.12.0).
+    mountBranchPanel({
+        onSwitch: (name) => onBranchChange(name),
+        onDelete: async (name) => {
+            if (!State.currentProject) return;
+            const protectedSet = new Set(
+                (State.branches || []).filter(b => b.protected).map(b => b.name)
+            );
+            if (protectedSet.has(name)) {
+                window.showToast?.(`Cannot delete protected branch "${name}"`, 'warning');
+                return;
+            }
+            const { showConfirm } = await import('./ui/dialogs.js');
+            const confirmed = await showConfirm(
+                `Delete branch "${name}"? This cannot be undone.`,
+                {
+                    title: 'Delete branch',
+                    okLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                }
+            );
+            if (!confirmed) return;
+            const { owner, repo } = State.currentProject;
+            try {
+                await Git.deleteBranch(owner, repo, name);
+                window.showToast?.(`Deleted branch "${name}"`, 'success');
+                await refreshBranches();
+            } catch (err) {
+                console.error('[Branches] Delete failed:', err);
+                window.showToast?.(`Failed to delete "${name}": ${err.message || err}`, 'error');
+            }
+        },
+        onCutRelease: () => {
+            // Existing modal reads `State.currentBranch` and pre-fills target;
+            // the panel's Cut release button only renders on the current row.
+            window.openReleaseModal?.();
+        },
+    });
+
     EventBus.on('project:loaded', () => {
         renderFileTree();
         renderIssues();

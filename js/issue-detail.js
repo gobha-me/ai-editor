@@ -670,14 +670,9 @@ export async function startWorkOnIssue(issue) {
         const previousBranch = State.currentBranch;
         State.currentBranch = branchName;
 
-        // Update branch selector to reflect reality
-        const branchSelect = document.getElementById('branchSelect');
-        if (branchSelect) {
-            branchSelect.innerHTML = State.branches.map(b =>
-                `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
-            ).join('');
-            branchSelect.value = branchName;
-        }
+        // Branch panel re-renders off the `branch:switch` event emitted below
+        // (1.12.0 — was a direct `<select>` rewrite). `State.branches` is
+        // already current from the listBranches() call above.
 
         // Clear open tabs (branch context changed)
         State.openTabs = [];

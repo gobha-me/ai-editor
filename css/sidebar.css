@@ -186,24 +186,159 @@
 .branch-selector {
     padding: 0 0.5rem 0.5rem;
     display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.branch-selector__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
+}
+
+.branch-selector__title {
+    font-size: var(--font-xs, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.branch-selector__toolbar-actions {
+    display: flex;
+    gap: 2px;
     align-items: center;
 }
 
-.branch-selector select {
-    flex: 1;
-    min-width: 0; /* Allow shrinking below content width */
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    padding: 0.35rem 0.5rem;
-    font-size: var(--font-sm);
-    text-overflow: ellipsis;
+.branch-selector__toolbar-actions button {
+    flex-shrink: 0;
 }
 
-.branch-selector button {
-    flex-shrink: 0; /* Prevent button from shrinking */
+/* ---- Branch Panel (1.12.0 — Touch 3 extraction A) ---- */
+
+.branch-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 30vh;
+    overflow-y: auto;
+}
+
+.branch-panel__empty {
+    padding: 0.5rem 0.25rem;
+    color: var(--text-muted);
+    font-size: var(--font-xs, 0.75rem);
+}
+
+.branch-panel__row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-size: var(--font-sm);
+}
+
+.branch-panel__row--current {
+    border-color: var(--accent);
+    background: var(--bg-secondary);
+}
+
+.branch-panel__row-main {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.branch-panel__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.branch-panel__row--current .branch-panel__name {
+    font-weight: 600;
+}
+
+.branch-panel__tag {
+    font-size: 0.75em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.branch-panel__tag--protected {
+    color: var(--tk-color-orange, var(--text-muted));
+    background: rgba(217, 122, 58, 0.12);
+    border: 1px solid rgba(217, 122, 58, 0.3);
+}
+
+.branch-panel__counts {
+    display: inline-flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.branch-panel__count {
+    font-variant-numeric: tabular-nums;
+}
+
+.branch-panel__count--ahead {
+    color: var(--text-secondary, var(--text-primary));
+}
+
+.branch-panel__count--behind {
+    color: var(--text-muted);
+}
+
+.branch-panel__actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.branch-panel__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    font-size: var(--font-xs, 0.75rem);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.branch-panel__btn:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.branch-panel__btn--release {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.branch-panel__btn--delete {
+    color: var(--text-muted);
+}
+
+.branch-panel__btn--delete:hover {
+    color: var(--tk-color-red, #e34a4a);
+    border-color: var(--tk-color-red, #e34a4a);
+    background: rgba(227, 74, 74, 0.08);
 }
 
 /* File Tree - see scrollbar styling section below */

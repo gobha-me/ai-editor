@@ -54,19 +54,18 @@ export async function createNewBranch() {
     
     try {
         await Git.createBranch(owner, repo, name, from);
-        
+
         State.branches = await Git.listBranches(owner, repo);
         const previousBranch = State.currentBranch;
         State.currentBranch = name;
 
         // Copy embedding index from parent branch (files are identical at creation)
         EventBus.emit('branch:created', { sourceBranch: from, targetBranch: name });
-        
-        const branchSelect = document.getElementById('branchSelect');
-        branchSelect.innerHTML = State.branches.map(b => 
-            `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}${b.protected ? ' 🔒' : ''}</option>`
-        ).join('');
-        branchSelect.value = name;
+
+        // Re-render the branch panel via its event subscriptions; emitting
+        // `branches:refresh` triggers refreshBranches() which calls
+        // renderBranchPanel() + populateBranchMetadata() in project-manager.
+        EventBus.emit('branches:refresh');
 
         // Notify context manager about branch switch
         EventBus.emit('branch:switch', { branch: name, previousBranch });

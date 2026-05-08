@@ -338,6 +338,7 @@ const State = {
     currentFile: null,         // { path, content, sha }
     fileTree: [],              // [{ path, type, sha }]
     branches: [],              // ['main', 'feature-x', ...]
+    branchMetadata: {},        // { [branchName]: { ahead: number|null, behind: number|null } } — populated lazily on `branches:refresh` against the project's default branch (1.12.0). null = "unknown / not applicable" (e.g. local provider, comparison failed); UI hides counts in that case.
     projectConventions: null,  // Verbatim contents of repo-root CLAUDE.md fetched once on `project:loaded`; null when absent or fetch failed (github#37 Phase 1).
     models: [],                // [{ id, name, capabilities, pricing, meta }]
     

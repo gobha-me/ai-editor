@@ -28,19 +28,25 @@
             </select>
         </div>
         <div class="branch-selector">
-            <label for="branchSelect" class="sr-only">Branch</label>
-            <select id="branchSelect" aria-label="Select branch">
-                <option value="main">main</option>
-            </select>
-            <button type="button" class="btn btn-secondary" id="btnNewBranch" title="New Branch" aria-label="Create new branch">
-                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            <button type="button" class="btn btn-secondary" id="btnDownloadZip" title="Download project as zip" aria-label="Download project as zip">
-                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
-            </button>
-            <button type="button" class="btn btn-secondary" id="btnRelease" title="Release Manager" aria-label="Release manager" onclick="window.openReleaseModal()">
-                <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
-            </button>
+            <div class="branch-selector__toolbar">
+                <span class="branch-selector__title">Branches</span>
+                <div class="branch-selector__toolbar-actions">
+                    <button type="button" class="btn btn-secondary" id="btnNewBranch" title="New Branch" aria-label="Create new branch">
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btnDownloadZip" title="Download project as zip" aria-label="Download project as zip">
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btnRelease" title="Release Manager" aria-label="Release manager" onclick="window.openReleaseModal()">
+                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="branch-panel" id="branchPanel" role="list" aria-label="Branches">
+                <div class="branch-panel__empty" style="padding: 0.5rem 0.25rem; color: var(--text-muted); font-size: var(--font-xs, 0.75rem);">
+                    No project loaded
+                </div>
+            </div>
         </div>
     </div>
 

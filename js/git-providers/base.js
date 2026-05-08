@@ -484,6 +484,40 @@ const BASE_GIT_PROVIDER = {
     },
 
     /**
+     * Return ahead/behind commit counts for `branch` relative to `base`.
+     * Default implementation calls `compareRefs(base, branch)` and reads the
+     * length of the returned commits array as the "ahead" count, then
+     * `compareRefs(branch, base)` for the "behind" count. Providers whose
+     * native compare endpoint exposes ahead_by/behind_by directly (GitHub)
+     * should override this to use a single round-trip.
+     *
+     * Returns `{ ahead: null, behind: null }` on any error — callers treat
+     * null as "unknown", not "0", and hide the counts.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch
+     * @param {string} base - Base ref (e.g. 'main')
+     * @returns {Promise<{ahead: number|null, behind: number|null}>}
+     */
+    async getBranchAheadBehind(connection, owner, repo, branch, base) {
+        if (!base || !branch || base === branch) {
+            return { ahead: 0, behind: 0 };
+        }
+        try {
+            const aheadResult = await this.compareRefs(connection, owner, repo, base, branch);
+            const behindResult = await this.compareRefs(connection, owner, repo, branch, base);
+            return {
+                ahead: aheadResult?.commits?.length ?? aheadResult?.totalCommits ?? null,
+                behind: behindResult?.commits?.length ?? behindResult?.totalCommits ?? null,
+            };
+        } catch {
+            return { ahead: null, behind: null };
+        }
+    },
+
+    /**
      * List existing releases.
      * @param {GitConnection} connection
      * @param {string} owner

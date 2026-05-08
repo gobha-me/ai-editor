@@ -671,12 +671,10 @@ function initBranchIndicator() {
     render();
     EventBus.on('project:loaded', render);
     EventBus.on('branches:refresh', render);
-    // Branch picker is in the sidebar; mirror its change into the top bar.
-    document.getElementById('branchSelect')?.addEventListener('change', () => {
-        // onBranchChange runs first (async), but State.currentBranch is set
-        // synchronously inside it before the await; render is safe immediately.
-        setTimeout(render, 0);
-    });
+    // 1.12.0: branch picker is the row-list panel; the handler in
+    // project-manager updates State.currentBranch and emits `branch:switch`
+    // before any await, so a synchronous re-render here stays correct.
+    EventBus.on('branch:switch', render);
 }
 
 function setupEventListeners() {
@@ -763,7 +761,8 @@ function setupEventListeners() {
 
     // Selectors
     safeAdd('projectSelect', 'change', onProjectChange);
-    safeAdd('branchSelect', 'change', onBranchChange);
+    // Branch selector is now the row-list panel — its switch button delegates
+    // through `mountBranchPanel({ onSwitch })` in project-manager.js (1.12.0).
     safeAdd('modelSelect', 'change', onModelChange);
     safeAdd('roleSelect', 'change', onRoleChange);
     // Cost reset moves to the §1.3.9 Debug slide-out — until then expose on
