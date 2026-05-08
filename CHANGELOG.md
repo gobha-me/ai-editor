@@ -4,6 +4,32 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-05-08
+
+### Bug fix — recent chats fail to reload (chatHistory alias corruption)
+
+`ConversationManager.save()` stored `messages: State.chatHistory`
+directly into the cached payload — a live reference, not a snapshot.
+Since 1.11.0, `ChatHistoryStore.replace()` mutates `State.chatHistory`
+**in place** (`length = 0` then `push(...arr)`) so virtualizers and
+renderers that captured the array stay valid. The combination meant
+that switching conversations corrupted the previously-active
+conversation's cached payload — `cache['conv-${oldId}'].messages`
+aliased `State.chatHistory`, so `replace()` cleared *both* in the
+same mutation. The fire-and-forget IDB write queued by the prior
+`save()` then structured-cloned the post-mutation array, persisting
+empty messages to durable storage. Symptom: clicking a recently-active
+conversation in the drawer rendered the welcome screen with no console
+error. localStorage held the correct snapshot via synchronous
+`JSON.stringify` write-through, but IDB hydration takes precedence on
+init so the localStorage copy was shadowed. Fix:
+[`js/chat/conversations.js:182`](js/chat/conversations.js) snapshots
+`messages` with `.slice()` before storing, breaking the alias. Same
+pattern the scratchpad already used since 1.11.0. Regression test
+[`tests/test-conversation-load-alias.mjs`](tests/test-conversation-load-alias.mjs)
+walks the save → load → save → load sequence that reproduces the
+corruption.
+
 ## [1.21.0] - 2026-05-08
 
 ### Path to 2.0.0 — Settings profile picker (load-bearing flip turns user-visible)

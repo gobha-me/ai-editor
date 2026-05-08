@@ -179,8 +179,13 @@ const ConversationManager = {
         // future mutations to State.scratchpad don't bleed into the payload
         // already in IDB before the next save.
         const scratchpad = { ...(State.scratchpad || {}) };
+        // Snapshot `messages` so the cached payload doesn't alias
+        // `State.chatHistory`. ChatHistoryStore mutates that array in place
+        // (length=0 + push), so without the copy a later `load(otherId)` call
+        // would clear the previously-saved conversation's cached messages —
+        // and the queued async IDB write would persist the corrupted state.
         Storage.set(`conv-${id}`, {
-            messages,
+            messages: messages.slice(),
             summaryInfo,
             pruneStash,
             toolActionLog: toolActionLog.slice(-50),
