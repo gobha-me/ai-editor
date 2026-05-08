@@ -4,8 +4,8 @@
  * Pins the integration contract:
  *   - openHelpSlideOut() activates the overlay; closeHelpSlideOut()
  *     deactivates it.
- *   - Nav renders 10 items grouped per the design (3 ungrouped + Building 3
- *     + Concepts 3 + Reference 1).
+ *   - Nav renders 11 items grouped per the design (3 ungrouped + Building 3
+ *     + Concepts 4 + Reference 1).
  *   - Clicking a nav item swaps the active page.
  *   - Hotkeys page renders rows from the registry.
  *   - Search input populates results when the index is mocked.
@@ -75,17 +75,19 @@ const overlay = document.getElementById('helpSlideOut');
 T.assert(overlay.classList.contains('active'), 'openHelpSlideOut() activates the overlay');
 T.eq(overlay.getAttribute('aria-hidden'), 'false', 'Overlay aria-hidden flips to false when active');
 
-// ----- 2. Nav renders 10 items in 4 groups -----
+// ----- 2. Nav renders 11 items in 4 groups -----
+// 1.14.1 — Security entry joined the Concepts group when SECURITY.md was
+// registered as a help page so cross-doc links from PLUGIN.md route in-app.
 
-T.eq(NAV_ITEMS_FOR_TEST.length, 10, 'NAV_ITEMS contains all 10 design items');
+T.eq(NAV_ITEMS_FOR_TEST.length, 11, 'NAV_ITEMS contains all 11 design items');
 
 const navBtns = [...document.querySelectorAll('[data-help-page]')];
-T.eq(navBtns.length, 10, 'Nav rendered 10 buttons');
+T.eq(navBtns.length, 11, 'Nav rendered 11 buttons');
 
 const expectedIds = [
     'getting-started', 'hotkeys', 'command-palette',
     'plugin-sdk', 'tools', 'themes',
-    'roles', 'memory', 'architecture',
+    'roles', 'memory', 'architecture', 'security',
     'changelog',
 ];
 T.deepEq(

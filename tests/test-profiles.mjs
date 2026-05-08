@@ -15,7 +15,20 @@ import {
     DEFAULT_LEDGER_CAPACITY,
     isProfile,
     CODER_V1,
+    CHAT_V1,
+    resolveProfile,
 } from '../js/profiles/index.js';
+
+// 1.14.1 — coder.v1 inherits from chat.v1. Fields trimmed from the literal
+// (`budget.total_tokens`, `system_reserve`, `history_reserve`,
+// `retrieval.chunkers`, `metadata_extensions`) only appear on the resolved
+// profile. Equivalence with the pre-trim literal is proven separately by
+// tests/test-profile-resolution.mjs; here we just point assertions at the
+// resolved view when they read trimmed fields.
+const RESOLVED_CODER = resolveProfile(
+    CODER_V1,
+    /** @param {string} n */ (n) => (n === 'chat.v1' ? CHAT_V1 : null),
+);
 
 // ============================================
 // createTaskLedger — happy path
@@ -109,14 +122,18 @@ test('CODER_V1 satisfies isProfile', () => {
 test('CODER_V1 declares the canonical name and version', () => {
     assert.equal(CODER_V1.name, 'coder.v1');
     assert.equal(CODER_V1.version, '1');
-    assert.equal(CODER_V1.base, null); // 1.1.0 ships only coder.v1; no base.
+    assert.equal(CODER_V1.base, 'chat.v1'); // 1.14.1 — coder inherits from chat.v1.
 });
 
 test('CODER_V1 budget shape matches DESIGN-profiles.md coder overrides', () => {
     // Coder inherits chat.v1's 32K total + system_reserve 2K + history_reserve 8K,
     // overrides output_reserve to 8000 and memory_reserve to 1500.
     // Residual retrieval_budget = 32000 - 19500 = 12500.
-    const b = CODER_V1.budget;
+    // Post-1.14.1: total_tokens / system_reserve / history_reserve are inherited,
+    // so they only appear on the resolved profile. The two override fields stay on raw.
+    assert.equal(CODER_V1.budget.output_reserve, 8000);
+    assert.equal(CODER_V1.budget.memory_reserve, 1500);
+    const b = RESOLVED_CODER.budget;
     assert.equal(b.total_tokens, 32000);
     assert.equal(b.system_reserve, 2000);
     assert.equal(b.output_reserve, 8000);
@@ -127,13 +144,15 @@ test('CODER_V1 budget shape matches DESIGN-profiles.md coder overrides', () => {
 });
 
 test('CODER_V1 retrieval mirrors current single-strategy semantic behavior', () => {
-    const r = CODER_V1.retrieval;
-    assert.equal(r.strategy_weights.semantic, 1.0);
-    assert.equal(r.strategy_weights.structural, 0.0);
-    assert.equal(r.strategy_weights.thematic, 0.0);
-    assert.deepEqual(r.chunkers, []);            // 1.5.0 fills these in.
-    assert.deepEqual(r.metadata_extensions, []); // 1.5.0 fills these in.
-    assert.ok(r.novelty_threshold >= 0 && r.novelty_threshold <= 1);
+    // Strategy weights + novelty_threshold are coder overrides — read on raw.
+    assert.equal(CODER_V1.retrieval.strategy_weights.semantic, 1.0);
+    assert.equal(CODER_V1.retrieval.strategy_weights.structural, 0.0);
+    assert.equal(CODER_V1.retrieval.strategy_weights.thematic, 0.0);
+    assert.ok(CODER_V1.retrieval.novelty_threshold >= 0 && CODER_V1.retrieval.novelty_threshold <= 1);
+    // chunkers / metadata_extensions are inherited from chat.v1 post-1.14.1
+    // (both empty until 1.5.0 ingest pipeline lands).
+    assert.deepEqual(RESOLVED_CODER.retrieval.chunkers, []);
+    assert.deepEqual(RESOLVED_CODER.retrieval.metadata_extensions, []);
 });
 
 test('CODER_V1 memory mirrors current scratchpad-only state', () => {

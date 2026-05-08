@@ -1,18 +1,26 @@
 // @ts-check
 /**
- * `coder.v1` — the canonical coder profile, scaffolded data-only in 1.1.0.
+ * `coder.v1` — the canonical coder profile.
  *
- * **No consumer wires up to this object yet.** The roadmap exit criteria
- * for §1.1.0 is explicit: *"Unified `TaskLedger` typedef + empty-state
- * struct present in `js/profiles/`; no consumer wires up yet."* Subsystems
- * begin reading these fields in 1.2.0 (compression), 1.3.0 (memory),
- * 1.4.0 (tools), and 1.5.0 (retrieval), and the full profile contract
- * becomes load-bearing in 2.0.
+ * Originally scaffolded data-only in 1.1.0 with `base: null`. **As of 1.14.1
+ * `coder.v1` inherits from `chat.v1`** (the canonical baseline registered by
+ * 1.14.0); the literal here carries only the fields where coder *diverges*
+ * from chat. Identical fields fall through to the base via
+ * [`resolveProfile`](./inheritance.js).
  *
- * This file's job is to land *the shape* of a profile that mirrors
- * current coder-role behavior (`role: 'coder'` in
- * `js/core.js#BUILTIN_ROLES`). When a future PR wires a subsystem to a
- * field here, that field should already match what the editor does today.
+ * No consumer wires up to a *resolved* coder profile yet — subsystems still
+ * read raw `CODER_V1` slices on the existing role-keyed paths
+ * (compression at [`resolve.js`](./resolve.js), tools at
+ * [`js/chat/handlers.js`](../chat/handlers.js)). The slices kept on the raw
+ * literal — `compression.rules` / `preserve_recent`, the full `tools.static`
+ * array, `task_ledger.capacity` — are exactly what those raw consumers
+ * still need; the slices removed (`budget.total_tokens` etc.) are the ones
+ * no consumer reads off raw, so trimming them is safe today and proven
+ * sound under resolution by [`tests/test-profile-resolution.mjs`](../../tests/test-profile-resolution.mjs).
+ *
+ * Subsystems migrate to reading from the *resolved* profile in 1.16
+ * (compression), 1.17 (memory), 1.18 (tools), 1.19 (retrieval); see
+ * [`docs/ROADMAP.md`](../../docs/ROADMAP.md) §"2.X path".
  *
  * Design source: `docs/DESIGN-profiles.md` §"Canonical Profiles" → "coder.v1".
  *
@@ -24,62 +32,66 @@
  */
 
 /**
- * Mirror of the existing coder role's behavior. Field-by-field provenance:
+ * Coder overrides on top of `chat.v1`. Field-by-field provenance for the
+ * surviving (non-trimmed) overrides:
  *
- * - **budget**: Numbers from DESIGN-profiles.md §Budget for the 32K
- *   reference window (chat.v1 baseline + coder overrides: output_reserve
- *   raised to 8000, memory_reserve 1500). At runtime the actual budget
- *   would scale with the loaded model's context window — the
- *   `js/chat/summarizer.js` `getContextScale()` already does this for the
- *   summarizer alone. A future PR will add a `resolveProfileBudget(profile,
- *   model)` helper; until then, these are the documented defaults.
+ * - **budget**: Coder raises `output_reserve` to 8000 (longer code edits)
+ *   and trims `memory_reserve` to 1500 (coder leans on retrieval, not
+ *   memory). The unchanged knobs (`total_tokens` 32000, `system_reserve`
+ *   2000, `history_reserve` 8000) come from `chat.v1`'s 32K reference
+ *   window. Residual retrieval_budget = 32000 - (2000 + 8000 + 8000 +
+ *   1500) = 12500. A future PR will add a `resolveProfileBudget(profile,
+ *   model)` helper that scales these with the loaded model's context;
+ *   today these are the documented defaults.
  *
- * - **retrieval**: Mirrors the single-strategy semantic retrieval
- *   currently provided by `js/context-manager.js` and the
- *   `find_relevant_files` tool. The full multi-strategy Composer arrives
- *   in 1.5.0; until then `chunkers` and `metadata_extensions` are the
- *   minimum to keep the typedef satisfied.
+ * - **retrieval**: Coder targets workspace corpora and session memory only,
+ *   pulls retrieval down to a single semantic strategy (no structural at
+ *   coder surfaces yet — that lands with retrieval Phase 1.5.0+ tuning),
+ *   and runs a low novelty threshold (re-admits liberally so a second
+ *   look at an already-seen file works for the *new aspect* case).
+ *   `chunkers` and `metadata_extensions` are inherited from `chat.v1`
+ *   (both `[]` until ingest pipeline lands in 1.5.0).
  *
  * - **memory**: Current memory is `js/tools/scratchpad-tools.js` (session
  *   scope only). `default_scope: 'session'` is the honest description;
- *   1.3.0 will flip the default to `workspace` for coder.
+ *   1.3.0 will flip the default to `workspace`. `capacity_warnings.session:
+ *   20` matches the scratchpad balanced-mode maxKeys.
  *
- * - **compression**: Today only Rule 5 (summarization) runs, via
- *   `js/chat/summarizer.js`. `preserve_recent: 24` matches the
- *   existing `summarizer.recentCountTools` from `core.js#State.settings`
- *   — the value the summarizer uses when tool calls are in recent
- *   history (which is always true for coder). Rules 1–4 register here
- *   in 1.2.x as their implementations land.
+ * - **compression**: Coder runs Rules 1, 2, 5 (`subsumption`,
+ *   `invalidation`, `summarization`); chat runs Rule 5 only. The full
+ *   3-rule array is an explicit override — array values *replace*
+ *   wholesale per [`inheritance.js`](./inheritance.js) (no append).
+ *   `preserve_recent: 24` matches `summarizer.recentCountTools` from
+ *   `core.js#State.settings` — the conservative window coder needs because
+ *   tool-call sequences cluster densely; chat's 4-turn protected window
+ *   would put many active sequences inside the eviction zone. The two
+ *   reconcile in 1.16.0 when chat surfaces start reading from chat.v1's
+ *   resolved compression slice. Inherited from `chat.v1`: `summarizer`
+ *   (mode/promptTemplate/modelOverride all match).
  *
- * - **tools**: `catalog` stays as `[]` — the source of truth is
- *   `js/tools/registry.js`, surfaced via the
- *   `js/intelligence/tools/Catalog` adapter (1.3.4 foundation). The
- *   `static` array carries the names called out in ROADMAP §1.4.0:
- *   meta-tools (`list_tool_categories`, `list_tools_by_category`,
- *   `find_tool`) plus `read_file` + `read_lines` + `scan_file` +
- *   `edit_file` + `commit_files` + `list_dirty_files`. The set is
- *   *declared* in 1.3.4 and *consumed* when admission lands in 1.4.0
- *   PR 2; entries the catalog cannot resolve (the meta-tools, until
- *   PR 3) are silently skipped by the consumer.
+ * - **tools.static**: Carries the full coder admission set — meta-tools,
+ *   structural-anchor tools (scratchpad/todo, promoted in 1.8.4),
+ *   `ask_user` (1.9.0), `submit_plan_for_approval` (1.10.0), file ops,
+ *   commit ops, CI tools (1.4.5). The full array is an explicit override
+ *   (replaces base wholesale). Inherited from `chat.v1`: `catalog: []`,
+ *   `discovery_strategies`, `budget_tokens: 5000`, `expansion_mode`.
  *
- * - **task_ledger**: Enabled with the coder-tuned cap and a low novelty
- *   threshold per DESIGN-profiles.md (coder re-admits liberally so a
- *   second look at an already-seen file works for the *new aspect* case).
+ * - **task_ledger**: Coder-tuned 500-record cap (vs chat's 100) and a low
+ *   novelty threshold per DESIGN-profiles.md.
  *
  * @type {Profile}
  */
 export const CODER_V1 = {
     name: 'coder.v1',
     version: '1',
-    base: null, // 1.1.0 ships only `coder.v1`; `chat.v1` arrives with 2.0 inheritance.
+    base: 'chat.v1', // 1.14.1 — coder inherits from chat.v1; resolveProfile fills in the gaps.
 
     budget: {
-        total_tokens: 32000,
-        system_reserve: 2000,
-        output_reserve: 8000,   // coder override per DESIGN-profiles.md
-        history_reserve: 8000,
-        memory_reserve: 1500,   // coder override per DESIGN-profiles.md
-        // retrieval_budget = 32000 - (2000 + 8000 + 8000 + 1500) = 12500 (residual).
+        // total_tokens: 32000           — inherited from chat.v1
+        // system_reserve: 2000          — inherited from chat.v1
+        output_reserve: 8000,            // coder override per DESIGN-profiles.md
+        // history_reserve: 8000         — inherited from chat.v1
+        memory_reserve: 1500,            // coder override per DESIGN-profiles.md
     },
 
     retrieval: {
@@ -93,8 +105,8 @@ export const CODER_V1 = {
             structural: 0.0,
             thematic: 0.0,
         },
-        chunkers: [],            // Populated when ingest pipeline lands in 1.5.0.
-        metadata_extensions: [], // Populated when chunkers register fields in 1.5.0.
+        // chunkers: []            — inherited from chat.v1 (populated in 1.5.0)
+        // metadata_extensions: [] — inherited from chat.v1 (populated in 1.5.0)
         novelty_threshold: 0.3,  // Coder re-admits liberally — see DESIGN-profiles.md "novelty threshold low".
     },
 

@@ -4,6 +4,60 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-05-08
+
+### Patch — `coder.v1` inherits from `chat.v1` (Profiles Phase 1, slice 2)
+
+Pays off the slice [`docs/ROADMAP.md:74`](docs/ROADMAP.md) calls
+*"1.14.1 (patch) — `coder-v1.js` profile trimming + equivalence test"*.
+1.14.0 landed `chat.v1` and `resolveProfile`; this slice points
+`coder.v1.base` at `'chat.v1'` and trims the literal so it carries only
+the fields where coder *diverges* from chat. The new equivalence test
+proves `resolveProfile(CODER_V1_TRIMMED, lookup)` reconstructs the
+pre-trim coder.v1 field-for-field — the load-bearing test that lets
+slices 1.16 (compression), 1.17 (memory), 1.18 (tools), 1.19 (retrieval)
+rewire their lookups against a *resolved* profile without re-justifying
+that resolution is sound. Data-only, no user-visible change. Removability
+check (per ROADMAP §Decisions 7) holds: replacing `resolveProfile(CODER_V1, …)`
+with the pre-trim literal returns identical state to every consumer.
+
+- **[`js/profiles/coder-v1.js`](js/profiles/coder-v1.js)** — `base: null`
+  → `base: 'chat.v1'`. Trimmed five fields whose values match chat.v1
+  exactly: `budget.total_tokens` (32000), `budget.system_reserve` (2000),
+  `budget.history_reserve` (8000), `retrieval.chunkers` (`[]`),
+  `retrieval.metadata_extensions` (`[]`). Every override stays — the
+  full 3-rule `compression.rules` array, `compression.preserve_recent: 24`,
+  the full `tools.static` admission set, `task_ledger.capacity: 500`,
+  the two `novelty_threshold: 0.3` knobs, and the divergent
+  `budget.output_reserve: 8000` / `memory_reserve: 1500` /
+  `memory.default_scope: 'session'` / `retrieval.collections` /
+  `memory_collections` / `strategy_weights`. Module-level doc comment
+  rewritten to explain the inheritance posture and to point readers at
+  the equivalence test.
+- **[`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs) (new)** —
+  Frozen pre-trim snapshot literal of `coder.v1` (the file's reason to
+  exist). Equivalence test asserts `resolveProfile(CODER_V1, lookupOver([CHAT_V1]))`
+  is deep-equal to the snapshot modulo the intentional `base: null` →
+  `'chat.v1'` flip. Sanity tests guard the trimmed-shape (each of the
+  five trimmed keys is `undefined` on raw `CODER_V1`) so a future change
+  that re-duplicates a base value gets caught. Closing tests confirm the
+  resolved budget reconstructs the chat.v1-derived defaults
+  (`12500`-token retrieval residual lands where it always did) and that
+  inherited empty arrays show up as `[]` on the resolved retrieval slice.
+- **[`tests/test-profiles.mjs`](tests/test-profiles.mjs)** — Imports
+  `CHAT_V1` + `resolveProfile` and builds `RESOLVED_CODER` once at module
+  scope. Six trimmed-field assertions (the `b.total_tokens / system_reserve
+  / history_reserve` triple in the budget block, the `r.chunkers /
+  metadata_extensions` pair in the retrieval block, and the
+  `CODER_V1.base === null` line) read off `RESOLVED_CODER` instead of raw.
+  All other assertions — explicit overrides — keep reading raw `CODER_V1`,
+  proving the override slices stay where consumers expect them.
+- **[`tests/test-profiles.js`](tests/test-profiles.js)** — Browser-side
+  parity for the same six assertions. **Drift fix:** the `tools.static`
+  deep-equal was missing `ask_user` (1.9.0) and `submit_plan_for_approval`
+  (1.10.0); both names are added so the in-page `T` suite matches the
+  current `CODER_V1.tools.static` array.
+
 ### Fix — help cross-doc links route in-app
 
 `docs/PLUGIN.md` carries `[SECURITY.md](SECURITY.md)`. The help slide-out
@@ -34,6 +88,12 @@ cross-doc link in any rendered doc routes correctly.
   (new)** — covers the rewrite for cross-doc, external, anchor, unknown
   basename, nested path, and fragment cases, plus an end-to-end
   `renderDocInto` flow with a stubbed `marked` + `fetch`.
+- **[`tests/test-help-slideout.js`](tests/test-help-slideout.js)** — count
+  bumped from 10 to 11 with `'security'` inserted in the Concepts group
+  of the expected-IDs array. The original PR shipped without updating
+  this companion browser-suite assertion, so the in-page run reported
+  3 reds; folded the fix in here as the same release rolls up the help
+  cross-doc work.
 
 ### Docs — Path to 2.0.0 is now pinned, not "n-z more changes"
 

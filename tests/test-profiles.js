@@ -12,9 +12,19 @@ import {
     DEFAULT_LEDGER_CAPACITY,
     isProfile,
     CODER_V1,
+    CHAT_V1,
+    resolveProfile,
 } from '../js/profiles/index.js';
 
 const { T } = window;
+
+// 1.14.1 — coder.v1 inherits from chat.v1. Trimmed budget/retrieval fields
+// only appear on the resolved profile. Equivalence with the pre-trim
+// literal is proven by tests/test-profile-resolution.mjs.
+const RESOLVED_CODER = resolveProfile(
+    CODER_V1,
+    (n) => (n === 'chat.v1' ? CHAT_V1 : null),
+);
 
 T.suite('Profiles — createTaskLedger empty-state shape');
 
@@ -59,28 +69,36 @@ T.suite('Profiles — CODER_V1 conformance');
 T.eq(isProfile(CODER_V1), true, 'CODER_V1 satisfies isProfile');
 T.eq(CODER_V1.name, 'coder.v1', 'name is canonical');
 T.eq(CODER_V1.version, '1', 'version is "1"');
-T.eq(CODER_V1.base, null, 'no base profile yet (chat.v1 base arrives with 2.0)');
+T.eq(CODER_V1.base, 'chat.v1', '1.14.1 — coder inherits from chat.v1');
 
 T.suite('Profiles — CODER_V1 budget shape');
 
-const b = CODER_V1.budget;
-T.eq(b.total_tokens, 32000, 'total_tokens 32000 (chat.v1 baseline)');
-T.eq(b.system_reserve, 2000, 'system_reserve 2000');
-T.eq(b.output_reserve, 8000, 'output_reserve 8000 (coder override)');
-T.eq(b.history_reserve, 8000, 'history_reserve 8000');
-T.eq(b.memory_reserve, 1500, 'memory_reserve 1500 (coder override)');
+// Post-1.14.1: total_tokens / system_reserve / history_reserve are inherited
+// from chat.v1, so they only appear on the resolved profile. Overrides stay raw.
+T.eq(CODER_V1.budget.output_reserve, 8000, 'output_reserve 8000 (coder override, raw)');
+T.eq(CODER_V1.budget.memory_reserve, 1500, 'memory_reserve 1500 (coder override, raw)');
+const b = RESOLVED_CODER.budget;
+T.eq(b.total_tokens, 32000, 'total_tokens 32000 (chat.v1 baseline, resolved)');
+T.eq(b.system_reserve, 2000, 'system_reserve 2000 (resolved)');
+T.eq(b.output_reserve, 8000, 'output_reserve 8000 (resolved)');
+T.eq(b.history_reserve, 8000, 'history_reserve 8000 (resolved)');
+T.eq(b.memory_reserve, 1500, 'memory_reserve 1500 (resolved)');
 const residual = b.total_tokens - (b.system_reserve + b.output_reserve + b.history_reserve + b.memory_reserve);
 T.eq(residual, 12500, 'retrieval residual is 12500');
 
 T.suite('Profiles — CODER_V1 retrieval mirrors current behavior');
 
-const r = CODER_V1.retrieval;
-T.eq(r.strategy_weights.semantic, 1.0, 'semantic weight 1.0 (current single strategy)');
-T.eq(r.strategy_weights.structural, 0.0, 'structural weight 0.0 until 1.5.0');
-T.eq(r.strategy_weights.thematic, 0.0, 'thematic weight 0.0 until 1.5.0');
-T.deepEq(r.chunkers, [], 'chunkers empty until 1.5.0');
-T.deepEq(r.metadata_extensions, [], 'metadata_extensions empty until 1.5.0');
-T.assert(r.novelty_threshold >= 0 && r.novelty_threshold <= 1, 'novelty_threshold in [0,1]');
+// strategy_weights + novelty_threshold are coder overrides — read on raw.
+T.eq(CODER_V1.retrieval.strategy_weights.semantic, 1.0, 'semantic weight 1.0 (current single strategy)');
+T.eq(CODER_V1.retrieval.strategy_weights.structural, 0.0, 'structural weight 0.0 until 1.5.0');
+T.eq(CODER_V1.retrieval.strategy_weights.thematic, 0.0, 'thematic weight 0.0 until 1.5.0');
+T.assert(
+    CODER_V1.retrieval.novelty_threshold >= 0 && CODER_V1.retrieval.novelty_threshold <= 1,
+    'novelty_threshold in [0,1]',
+);
+// chunkers / metadata_extensions are inherited from chat.v1 post-1.14.1.
+T.deepEq(RESOLVED_CODER.retrieval.chunkers, [], 'chunkers inherited from chat.v1 (empty until 1.5.0)');
+T.deepEq(RESOLVED_CODER.retrieval.metadata_extensions, [], 'metadata_extensions inherited from chat.v1 (empty until 1.5.0)');
 
 T.suite('Profiles — CODER_V1 memory + compression + tools');
 
@@ -108,6 +126,10 @@ T.deepEq(CODER_V1.tools.static, [
     'scratchpad_clear',
     'todo_write',
     'todo_read',
+    // 1.9.0 — interaction tool (github#33 Phase 1).
+    'ask_user',
+    // 1.10.0 — Plan Mode approval gate (github#25).
+    'submit_plan_for_approval',
     'read_file',
     'read_lines',
     'scan_file',
@@ -117,7 +139,7 @@ T.deepEq(CODER_V1.tools.static, [
     'get_ci_status',
     'wait_for_ci',
     'get_ci_logs',
-], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5 / 1.8.4');
+], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5 / 1.8.4 / 1.9.0 / 1.10.0');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');
