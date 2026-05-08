@@ -104,7 +104,12 @@ export function registerScratchpadTools(registry) {
                 required: ['key', 'content']
             }
         },
-        roles: 'all'
+        roles: 'all',
+        // Plan Mode (github#25): the scratchpad is conversation-scoped working
+        // memory — writes don't leave the chat session, so the planning LLM
+        // gets to keep its working notes (files identified, decisions in flight)
+        // while the rest of the mutating catalog is filtered out.
+        readOnly: true
     });
 
     // ========================================

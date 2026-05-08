@@ -146,6 +146,11 @@ export function registerTodoTools(registry) {
             },
         },
         roles: 'all',
+        // Plan Mode (github#25): the todo list is conversation-scoped — it
+        // rides in the `conv-{id}` payload and dies with the chat. A planning
+        // LLM uses this surface to break down what it's about to propose, so
+        // we admit it under Plan Mode's read-only-from-outside-session axis.
+        readOnly: true,
     });
 
     // ========================================

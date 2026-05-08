@@ -4,6 +4,70 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-05-08
+
+### Fix — Plan Mode admits session-local writes (github#25 follow-up)
+
+Plan Mode shipped at 1.10.0 with a `readOnly` flag on every tool
+registration; `LLMTools.getToolsForRole()` in
+[`js/llm/api.js`](js/llm/api.js) drops anything unflagged while a plan
+is being drafted. The original axis was *"does this tool mutate
+state."* Two tools the planning LLM actually needs were dropped under
+that read of the rule: `scratchpad_write` and `todo_write`. A planning
+LLM uses both as working memory — files identified, decisions in
+flight, the breakdown of what it's about to propose. With them
+filtered out, the model either re-derived everything from chat
+history each iteration (token cost) or buried decisions in the
+submitted plan body (legibility).
+
+The fix is a one-axis reframe rather than a special-case admission.
+**The `readOnly` flag now means *"no effect outside the current chat
+session"* rather than *"no mutation."*** Session-local working memory
+(scratchpad and todos) is admitted in Plan Mode because both surfaces
+are conversation-scoped — the scratchpad lives in the `conv-{id}`
+payload as of [1.11.0](#1110---2026-05-08), todos have ridden there
+since 1.8.0, and both die when the chat is deleted. Persistent
+memory writes (`memory_write`) stay blocked because they hit IDB
+workspace memory and, in opt-in repo mode, write `.aieditor/*.md` —
+those *do* leak outside the conversation, which is exactly what Plan
+Mode is meant to prevent until the user approves.
+
+**What changes.**
+
+- **[`js/tools/scratchpad-tools.js`](js/tools/scratchpad-tools.js)** —
+  `scratchpad_write` registration gains `readOnly: true` with an
+  inline comment explaining the new axis. `scratchpad_clear` stays
+  intentionally unflagged: even though clearing is session-local in
+  effect, it's a destructive bulk-drop the user might not want
+  happening unsupervised mid-planning, and an LLM that wrote the
+  wrong note can simply overwrite by key (writes are keyed). If we
+  ever decide to admit `scratchpad_clear`, flip the flag and update
+  the test comment that pins this decision.
+- **[`js/tools/todo-tools.js`](js/tools/todo-tools.js)** —
+  `todo_write` registration gains `readOnly: true` with the same
+  reframe comment. `todo_read` already had the flag (shipped 1.8.0,
+  re-confirmed 1.10.0).
+- **`memory_write` is intentionally unchanged.** Persistent memory
+  writes leave the session and remain filtered.
+
+**Tests.**
+[`tests/test-plan-mode.mjs`](tests/test-plan-mode.mjs) gains three
+tests (now 18 total): `scratchpad_write` and `todo_write` carry
+`readOnly: true` on their stub-captured registrations; an end-to-end
+`filterReadOnly` slice asserts admit/drop on a representative cross
+section (`scratchpad_write` + `todo_write` admitted; `scratchpad_clear`,
+`memory_write`, `edit_file` dropped).
+
+**Conceptual note for future tool authors.** When adding a new tool,
+ask: *can this tool's effect be observed outside the current chat
+session?* If no (writes to in-memory or `conv-{id}`-scoped state),
+flag `readOnly: true`. If yes (filesystem, network, persistent memory,
+git, IDB workspace state), leave it unflagged — Plan Mode will block
+it. The flag name is preserved for continuity with the 1.10.0 PR
+([github#25](https://github.com/gobha-me/ai-editor/issues/25),
+[#316](https://github.com/gobha-me/ai-editor/pull/316)) but the
+*semantics* are now session-locality, not mutation.
+
 ## [1.11.0] - 2026-05-08
 
 ### Feature — `ChatHistoryStore` encapsulation + per-conversation scratchpad
