@@ -35,11 +35,12 @@ const NAV_ITEMS = [
     { id: 'roles',           label: 'Roles',           icon: 'AtSign',     group: 'Concepts' },
     { id: 'memory',          label: 'Memory',          icon: 'Brain',      group: 'Concepts' },
     { id: 'architecture',    label: 'Architecture',    icon: 'Server',     group: 'Concepts' },
+    { id: 'security',        label: 'Security',        icon: 'Shield',     group: 'Concepts' },
     { id: 'changelog',       label: 'Changelog',       icon: 'GitBranch',  group: 'Reference' },
 ];
 
 const STATIC_PAGES = new Set(['getting-started', 'hotkeys', 'command-palette', 'themes']);
-const MARKDOWN_PAGES = new Set(['plugin-sdk', 'tools', 'roles', 'memory', 'architecture', 'changelog']);
+const MARKDOWN_PAGES = new Set(['plugin-sdk', 'tools', 'roles', 'memory', 'architecture', 'security', 'changelog']);
 
 // Slide-out state (module-singleton, mirrors debug-slideout.js).
 let _activePage = 'getting-started';
@@ -86,6 +87,7 @@ export function initHelpSlideOut() {
 
     _renderNav();
     _wireSearch();
+    _wireContentClicks();
 
     // Set the platform-aware key hint on the search input.
     const isMac = /mac|darwin/i.test(navigator.platform || '');
@@ -310,6 +312,23 @@ function _runSearch(query) {
 
 function _index_doc_count() {
     return STATIC_PAGES.size + MARKDOWN_PAGES.size;
+}
+
+// Delegated click handler — catches in-page anchors rewritten by
+// `markdown-loader.js#rewriteCrossDocLinks` so a `[SECURITY.md](SECURITY.md)`
+// link inside a rendered doc routes to the Security page instead of
+// downloading the file or 404'ing in the SPA.
+function _wireContentClicks() {
+    const content = document.getElementById('helpContent');
+    if (!content) return;
+    content.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('[data-help-page]');
+        if (!link || !content.contains(link)) return;
+        const pageId = link.dataset.helpPage;
+        if (!pageId) return;
+        e.preventDefault();
+        _selectPage(pageId);
+    });
 }
 
 // ============================================

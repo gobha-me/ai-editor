@@ -40,6 +40,7 @@ const MARKDOWN_DOC_TITLES = {
     'roles':        'Roles',
     'memory':       'Memory',
     'architecture': 'Architecture',
+    'security':     'Security',
     'changelog':    'Changelog',
 };
 
@@ -49,6 +50,7 @@ const MARKDOWN_DOC_GROUPS = {
     'roles':        'Concepts',
     'memory':       'Concepts',
     'architecture': 'Concepts',
+    'security':     'Concepts',
     'changelog':    'Reference',
 };
 

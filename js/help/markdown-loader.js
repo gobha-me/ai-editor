@@ -11,9 +11,43 @@
  */
 
 import { escapeHtml } from '../utils/html.js';
+import { DOC_PATHS } from './pages/markdown-pages.js';
 
 const _htmlCache = new Map();
 const _textCache = new Map();
+
+/** Build a `{ "BASENAME.md": "page-id" }` lookup from `DOC_PATHS` so any
+ *  `<a href="…/BASENAME.md">` that marked produces can be rewritten to
+ *  in-app navigation. Recomputed on every call so tests that mutate
+ *  `DOC_PATHS` see fresh state. */
+function _basenameToPageId() {
+    const out = {};
+    for (const [id, path] of Object.entries(DOC_PATHS)) {
+        const base = path.split('/').pop();
+        if (base) out[base] = id;
+    }
+    return out;
+}
+
+/** Walk sanitized HTML for `<a href="…">` links. If the href resolves to
+ *  a known help-page basename (e.g. `SECURITY.md`, `PLUGIN.md`), rewrite
+ *  it to an in-app link the help slide-out can intercept. External
+ *  links and same-page anchors pass through untouched.
+ *  Exported for `tests/test-help-internal-links.mjs`. */
+export function rewriteCrossDocLinks(html) {
+    const map = _basenameToPageId();
+    return String(html).replace(
+        /<a\b([^>]*?)\shref="([^"]+)"([^>]*)>/gi,
+        (match, before, href, after) => {
+            if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|mailto:)/i.test(href)) return match;
+            const cleanHref = href.replace(/^\.\//, '').split(/[?#]/)[0];
+            const basename = cleanHref.split('/').pop();
+            const pageId = map[basename];
+            if (!pageId) return match;
+            return `<a${before} href="#" data-help-page="${pageId}" class="help__internal-link"${after}>`;
+        }
+    );
+}
 
 /** Render markdown into a target element. The target must already
  *  exist; the caller controls the wrapper class.
@@ -41,6 +75,7 @@ export async function renderDocInto(panel, docPath) {
         } else {
             html = `<pre>${escapeHtml(md)}</pre>`;
         }
+        html = rewriteCrossDocLinks(html);
         _htmlCache.set(docPath, html);
         panel.innerHTML = `<div class="help__doc">${html}</div>`;
     } catch (err) {

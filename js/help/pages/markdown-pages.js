@@ -15,6 +15,7 @@ export const DOC_PATHS = {
     'roles':        'docs/ROLES_AND_TOOLS.md',
     'memory':       'docs/DESIGN-memory.md',
     'architecture': 'docs/ARCHITECTURE.md',
+    'security':     'docs/SECURITY.md',
     'changelog':    'CHANGELOG.md',
 };
 

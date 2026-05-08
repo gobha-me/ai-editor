@@ -4,6 +4,37 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Fix — help cross-doc links route in-app
+
+`docs/PLUGIN.md` carries `[SECURITY.md](SECURITY.md)`. The help slide-out
+renders that doc as the "Plugin SDK" page, but `SECURITY.md` was not a
+registered help page, so the link either downloaded the markdown or
+404'd in the SPA. Loader-side fix (not a content patch) so any future
+cross-doc link in any rendered doc routes correctly.
+
+- **[`js/help/pages/markdown-pages.js`](js/help/pages/markdown-pages.js)** —
+  `'security': 'docs/SECURITY.md'` joins the `DOC_PATHS` map.
+- **[`js/help/index.js`](js/help/index.js)** — new "Security" entry under
+  the Concepts group (`Shield` icon), added to `MARKDOWN_PAGES`. New
+  delegated click handler on `#helpContent` intercepts
+  `[data-help-page]` so internal anchors flip the active nav and render
+  the target page.
+- **[`js/help/markdown-loader.js`](js/help/markdown-loader.js)** — new
+  `rewriteCrossDocLinks(html)` walks marked + DOMPurify output for
+  `<a href="…">`. If the href resolves to a known help-page basename
+  (e.g. `SECURITY.md`, `PLUGIN.md`, `TOOLS.md`), it's rewritten to
+  `data-help-page="<id>" href="#" class="help__internal-link"`.
+  External links and same-page anchors pass through unchanged. Result
+  is cached so re-renders skip the regex pass.
+- **[`js/help/search-index.js`](js/help/search-index.js)** — Security
+  page registered with the search index (Concepts group).
+- **[`js/ui/icons.js`](js/ui/icons.js)** — `Shield` Lucide-shaped icon
+  added.
+- **[`tests/test-help-internal-links.mjs`](tests/test-help-internal-links.mjs)
+  (new)** — covers the rewrite for cross-doc, external, anchor, unknown
+  basename, nested path, and fragment cases, plus an end-to-end
+  `renderDocInto` flow with a stubbed `marked` + `fetch`.
+
 ## [1.14.0] - 2026-05-08
 
 ### Feature — `chat.v1` profile data + `resolveProfile` inheritance helper (Profiles Phase 1 continuation)
