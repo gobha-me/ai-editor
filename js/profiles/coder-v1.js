@@ -191,6 +191,19 @@ export const CODER_V1 = {
             // admits it (handler is read-only; the per-invocation
             // approval gate handles the actual side effect).
             'submit_script_for_approval',
+            // 1.22.0 — In-editor preview & verify Tier 1 (DESIGN-preview.md).
+            // Three sandbox-iframe tools: start a workspace preview, stop a
+            // running preview, list current previews. Closes the Sokoban-class
+            // gap exposed by the 2026-05-08 HTML-Games dogfood — agent had no
+            // way to load the page and observe a boot-time TypeError. The
+            // runtime filter in `js/llm/api.js` (`applyPreviewToolFilter`)
+            // drops these when `preview.enabled === false` on the resolved
+            // profile + settings overlay; otherwise admission flows through
+            // static like `submit_script_for_approval`. All readOnly so Plan
+            // Mode admits them — they observe the workspace, never edit.
+            'preview_start',
+            'preview_stop',
+            'preview_list',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',
@@ -229,5 +242,13 @@ export const CODER_V1 = {
         enabled: true,
         timeout_ms: 30000,         // 30s — bumped from 10s after live Tier-0 testing; see CHANGELOG §1.16.0.
         max_output_bytes: 262144,  // DESIGN line 188.
+    },
+
+    // 1.22.0 — In-editor preview & verify Tier 1 (DESIGN-preview.md).
+    // Coder is the value-case surface for the preview iframe — render the
+    // workspace, observe whether the page boots, fix what doesn't. This
+    // override flips the inherited `enabled: false` from chat.v1 to `true`.
+    preview: {
+        enabled: true,
     },
 };

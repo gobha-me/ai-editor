@@ -352,3 +352,27 @@ export function resolveScriptAutomationConfig(role) {
         profileName: profile.name,
     };
 }
+
+/**
+ * Resolve the in-editor preview (Tier 1 sandboxed iframe) config for the
+ * active role. Coder gets the value-case `enabled: true`; every other
+ * role inherits chat.v1's `enabled: false`. Settings overlay can flip
+ * either direction at runtime via `State.settings.preview`
+ * (see `js/settings/tools-tab.js` row).
+ *
+ * Mirrors `resolveScriptAutomationConfig` byte-for-byte in shape — same
+ * Phase-1 escape hatch (kept role-keyed for now; gets folded into the
+ * profile-keyed rewire when the preview track ships Tier 2/3 and the
+ * config slice grows past a single boolean).
+ *
+ * @param {string|null|undefined} role  Value from `State.settings.role`.
+ * @returns {{ enabled: boolean, profileName: string }}
+ */
+export function resolvePreviewConfig(role) {
+    const profile = role === 'coder' ? CODER_V1 : CHAT_V1;
+    const cfg = profile.preview || {};
+    return {
+        enabled: cfg.enabled === true,
+        profileName: profile.name,
+    };
+}

@@ -97,6 +97,10 @@ const CODER_V1_PRE_TRIM = {
             'submit_plan_for_approval',
             // 1.16.0 — LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
             'submit_script_for_approval',
+            // 1.22.0 — In-editor preview & verify Tier 1 (DESIGN-preview.md).
+            'preview_start',
+            'preview_stop',
+            'preview_list',
             'read_file',
             'read_lines',
             'scan_file',
@@ -126,6 +130,13 @@ const CODER_V1_PRE_TRIM = {
         enabled: true,
         timeout_ms: 30000,
         max_output_bytes: 262144,
+    },
+
+    // 1.22.0 — In-editor preview & verify Tier 1. Coder is the value-case
+    // surface (chat.v1 has `enabled: false`). Coder's `enabled: true`
+    // overrides chat's `enabled: false`.
+    preview: {
+        enabled: true,
     },
 };
 

@@ -211,6 +211,10 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'submit_plan_for_approval',
         // 1.16.0 — LLM-authored automation Phase 1.
         'submit_script_for_approval',
+        // 1.22.0 — In-editor preview & verify Tier 1 (DESIGN-preview.md).
+        'preview_start',
+        'preview_stop',
+        'preview_list',
         'read_file',
         'read_lines',
         'scan_file',

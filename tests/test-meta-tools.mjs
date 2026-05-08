@@ -71,6 +71,13 @@ function registerStaticFixture() {
     // tool list. Static enumeration must still resolve it through the
     // catalog so the unresolved_static exit signal stays clean.
     reg('submit_script_for_approval', 'Submit a JS script for user approval and sandboxed run.', { type: 'object', properties: { source: { type: 'string' }, description: { type: 'string' }, expected_output: { type: 'string' } } });
+    // 1.22.0 — preview tools (DESIGN-preview.md Tier 1) joined the
+    // coder static set. Same compression-survival rationale as the
+    // 1.16.0 script tool: static enumeration must resolve them through
+    // the catalog so the unresolved_static exit signal stays clean.
+    reg('preview_start',    'Start a sandboxed preview iframe.',    { type: 'object', properties: { path: { type: 'string' } } });
+    reg('preview_stop',     'Stop a running preview server.',       { type: 'object', properties: { serverId: { type: 'string' } } });
+    reg('preview_list',     'List running preview servers.',        { type: 'object', properties: {} });
 }
 
 // ============================================

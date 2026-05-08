@@ -69,7 +69,7 @@ import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import { getPlanMode } from '../chat/state.js';
-import { resolveScriptAutomationConfig } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig } from '../profiles/resolve.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -1034,6 +1034,29 @@ export const LLMTools = {
             return toolList.filter(t => t?.function?.name !== 'submit_script_for_approval');
         };
 
+        // 1.22.0 — In-editor preview & verify Tier 1.
+        // Drop the three preview tools (`preview_start`, `preview_stop`,
+        // `preview_list`) from the per-turn tool list when the resolved
+        // profile + settings overlay reports `preview.enabled === false`.
+        // Profile default is coder=on / chat=off; settings overlay
+        // (`State.settings.preview.enabled`) wins when set.
+        // Mirror of `applyScriptAutomationFilter` above. Per
+        // DESIGN-preview.md §"Profile / tool admission gating": catalog
+        // admission via `coder.v1.tools.static` is the first gate; this
+        // runtime filter is the second so the user can switch the
+        // surface off without changing role.
+        const _previewRole = State?.settings?.role || null;
+        const previewCfg = resolvePreviewConfig(_previewRole);
+        const previewOverlay = State?.settings?.preview;
+        const previewEnabled = (previewOverlay && typeof previewOverlay.enabled === 'boolean')
+            ? previewOverlay.enabled
+            : previewCfg.enabled;
+        const PREVIEW_TOOL_NAMES = new Set(['preview_start', 'preview_stop', 'preview_list']);
+        const applyPreviewToolFilter = (toolList) => {
+            if (previewEnabled) return toolList;
+            return toolList.filter(t => !PREVIEW_TOOL_NAMES.has(t?.function?.name));
+        };
+
         // 1.3.18 — baseline = what THIS request would have shipped without
         // the Composer (role-filtered legacy set). Unfiltered = ungated whole
         // registry. Both computed from `Catalog` so `metadata.cost_estimate`
@@ -1060,7 +1083,7 @@ export const LLMTools = {
                 role,
                 composerActive: false,
             };
-            return applyScriptAutomationFilter(applyPlanModeFilter(filtered));
+            return applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered)));
         }
 
         const reductionPct = baseline > 0
@@ -1100,7 +1123,7 @@ export const LLMTools = {
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
-        return applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result)));
+        return applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result))));
     },
 
     /**

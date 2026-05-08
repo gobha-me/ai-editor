@@ -133,7 +133,8 @@ export async function buildAppLayout() {
         'search-panel',
         'modals',
         'debug-slideout',
-        'help-slideout'
+        'help-slideout',
+        'preview-slideout'
     ]);
     
     // Build the main layout structure
@@ -152,6 +153,7 @@ export async function buildAppLayout() {
         ${templates.get('modals')}
         ${templates.get('debug-slideout')}
         ${templates.get('help-slideout')}
+        ${templates.get('preview-slideout')}
     `;
     
     appContainer.innerHTML = html;

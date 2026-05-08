@@ -1,0 +1,28 @@
+<!-- Preview slide-out — 1.22.0 In-editor preview & verify Tier 1.
+     Right-edge drawer hosting the sandboxed iframe spawned by the
+     `preview_start` tool. Mirrors the debug slide-out shape
+     (html/debug-slideout.html) so it inherits the existing
+     `.slide-out` CSS contract from css/slide-out.css.
+     Distinct from the secondary-pane "preview" mode (static HTML/MD
+     of the open editor file) — that is per-file user-initiated; this
+     pane is workspace-scoped tool-driven. -->
+<div class="slide-out-overlay" id="previewSlideOut" role="dialog"
+     aria-modal="true" aria-labelledby="previewSlideOutTitle" aria-hidden="true">
+    <aside class="slide-out" role="document">
+        <div class="debug">
+            <div class="debug__head">
+                <div class="debug__title" id="previewSlideOutTitle">
+                    <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Agent Preview</span>
+                </div>
+                <div class="debug__head-meta" id="previewSlideOutSubtitle" aria-live="polite"></div>
+                <div class="debug__head-spacer" aria-hidden="true"></div>
+                <button type="button" class="debug__head-btn debug__head-btn--icon"
+                        id="previewCloseBtn" title="Close (Esc)" aria-label="Close">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="debug__body" id="previewSlideOutBody" style="padding: 0; overflow: hidden;"></div>
+        </div>
+    </aside>
+</div>

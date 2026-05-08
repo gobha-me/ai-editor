@@ -245,16 +245,17 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 20 names → 6 admitted, 14 unresolved
+// coder.v1 fixture — 23 names → 6 admitted, 17 unresolved
 // (3 meta-tools + 3 CI tools + 5 structural-anchor tools + 1 interaction
 //  tool (ask_user, 1.9.0) + 1 plan-mode approval tool
 //  (submit_plan_for_approval, 1.10.0 / github#25) + 1 sandbox approval
-//  tool (submit_script_for_approval, 1.16.0) intentionally absent from
-//  this fixture; the promotions expanded the unresolved set without
-//  changing what this fixture registers.)
+//  tool (submit_script_for_approval, 1.16.0) + 3 preview tools
+//  (preview_start/stop/list, 1.22.0) intentionally absent from this
+//  fixture; each promotion expanded the unresolved set without changing
+//  what this fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 14 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 17 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -279,6 +280,8 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 14 unresolve
         'submit_plan_for_approval',
         // 1.16.0 — sandbox approval gate (LLM-authored automation Phase 1).
         'submit_script_for_approval',
+        // 1.22.0 — preview tools (DESIGN-preview.md Tier 1), same pattern.
+        'preview_start', 'preview_stop', 'preview_list',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

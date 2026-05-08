@@ -29,7 +29,7 @@ import {
     DEFAULT_TOP_K,
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
-import { resolveScriptAutomationConfig } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig } from '../profiles/resolve.js';
 
 let _bound = false;
 
@@ -97,6 +97,26 @@ function _persistScript(patch) {
     EventBus.emit('settings:changed', { section: 'scriptAutomation', patch });
 }
 
+// 1.22.0 — preview overlay. Stored under `State.settings.preview` so it
+// parallels the profile's `preview` slice. Settings overlay wins when
+// set; otherwise the resolved profile default applies. Same shape as
+// `_readScript` / `_persistScript` above.
+function _readPreview() {
+    const role = State?.settings?.role || null;
+    const cfg = resolvePreviewConfig(role);
+    const overlay = (State.settings && State.settings.preview) || {};
+    const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
+    return { enabled, profileDefault: cfg.enabled };
+}
+
+function _persistPreview(patch) {
+    if (!State.settings.preview || typeof State.settings.preview !== 'object') {
+        State.settings.preview = {};
+    }
+    Object.assign(State.settings.preview, patch);
+    EventBus.emit('settings:changed', { section: 'preview', patch });
+}
+
 /**
  * Initialise the tab. Idempotent — safe to call on every modal open.
  */
@@ -110,6 +130,18 @@ export function initToolsTab() {
     root.addEventListener('change', _onChange);
     root.addEventListener('input', _onInput);
     root.addEventListener('change', _onScriptChange);
+    root.addEventListener('change', _onPreviewChange);
+}
+
+function _onPreviewChange(ev) {
+    const target = ev.target;
+    if (!target || !target.dataset) return;
+    const key = target.dataset.previewKey;
+    if (!key) return;
+    if (key === 'enabled' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+        _persistPreview({ enabled: !!target.checked });
+        render();
+    }
 }
 
 function _onScriptChange(ev) {
@@ -235,6 +267,43 @@ export function render() {
       </div>
 
       ${_renderScriptAutomationSection()}
+
+      ${_renderPreviewSection()}
+    `;
+}
+
+function _renderPreviewSection() {
+    const p = _readPreview();
+    const profileLabel = p.profileDefault ? 'enabled' : 'disabled';
+    return `
+      <h3 style="margin-top: 1.5em;">In-editor preview (Tier 1)</h3>
+      <p class="settings-help">
+        Lets the LLM render the active workspace in a sandboxed iframe and
+        return a URL the agent can verify against. The iframe runs at a
+        sandbox <em>null</em> origin (no <code>allow-same-origin</code>) so
+        workspace JS cannot reach the editor's State, tokens, or
+        <code>localStorage</code>; a Service Worker resolves workspace
+        paths via <code>Git.getFile</code> and a CSP locks outbound
+        network. Closes the Sokoban-class boot-error gap surfaced by the
+        2026-05-08 HTML-Games dogfood. Per-profile default for the
+        current role: <strong>${profileLabel}</strong>.
+      </p>
+
+      <div class="form-group" data-setting-key="preview.enabled">
+        <label>
+          <input type="checkbox"
+                 data-preview-key="enabled"
+                 ${p.enabled ? 'checked' : ''}>
+          Enable <code>preview_start</code> / <code>preview_stop</code> / <code>preview_list</code> tools
+        </label>
+        <small>
+          Overrides the profile default. When off, the model never sees
+          the preview tools and cannot spawn an iframe. Tier 2 (console
+          + error capture) and Tier 3 (driveable preview) ship later as
+          their own minors — this row only gates the static-iframe
+          tools.
+        </small>
+      </div>
     `;
 }
 

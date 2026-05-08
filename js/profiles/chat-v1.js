@@ -127,4 +127,14 @@ export const CHAT_V1 = {
         timeout_ms: 30000,         // 30s — bumped from 10s after live Tier-0 testing; see CHANGELOG §1.16.0.
         max_output_bytes: 262144,  // 256 KB — DESIGN line 188.
     },
+
+    // 1.22.0 — In-editor preview & verify Tier 1 (DESIGN-preview.md).
+    // chat.v1 keeps the preview surface DISABLED. Standard chat has no
+    // workspace to render; the value case (closing the Sokoban-class
+    // boot-error gap) is a coder-surface concern. Coder overrides
+    // `enabled: true`. Per DESIGN-preview.md §"First-Ship Scope" → Profile
+    // config row.
+    preview: {
+        enabled: false,
+    },
 };
