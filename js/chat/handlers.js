@@ -41,6 +41,7 @@ import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
 import { invalidateCachesForPath } from './cache-invalidation.js';
+import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
@@ -576,16 +577,16 @@ export async function handleGeneralRequest(input) {
                     } catch (e) { /* malformed args */ }
 
                     // === DUPLICATE DETECTION ===
-                    // Build a canonical cache key from tool name + sorted args
-                    const cacheKey = toolName + '|' + JSON.stringify(args, Object.keys(args).sort());
+                    // Build a canonical cache key from tool name + deep-sorted args.
+                    // canonicalArgsKey recurses (1.14.2) so nested-arg tools don't
+                    // produce divergent keys for equivalent payloads.
+                    const cacheKey = toolName + '|' + canonicalArgsKey(args);
                     const cachedResult = toolCallCache.get(cacheKey);
                     
                     // === CROSS-REQUEST DUPLICATE DETECTION (Issue #17) ===
                     // Check if this exact tool+args was already executed in a previous request
-                    // (before summarization evicted the results from context)
-                    const WRITE_TOOLS = ['replace_lines', 'insert_lines', 'delete_lines', 'create_file',
-                                          'edit_file', 'write_file', 'delete_file',
-                                          'update_issue', 'add_issue_comment'];
+                    // (before summarization evicted the results from context).
+                    // WRITE_TOOLS imported from ./tool-classifications.js (1.14.2 hoist).
 
                     // Tools whose duplicate-call cache hit means "your prior mutation
                     // already succeeded" — not "wait, did it actually go through?".
@@ -630,10 +631,10 @@ export async function handleGeneralRequest(input) {
                     let crossRequestDuplicate = false;
                     if (!skipCache && !WRITE_TOOLS.includes(toolName) && State.toolActionLog && State.toolActionLog.length > 0) {
                         const recentLog = State.toolActionLog.slice(-30);
-                        const argsStr = JSON.stringify(args, Object.keys(args).sort());
+                        const argsStr = canonicalArgsKey(args);
                         for (const entry of recentLog) {
                             if (entry.tool === toolName && entry.success) {
-                                const loggedArgsStr = JSON.stringify(entry.args, Object.keys(entry.args || {}).sort());
+                                const loggedArgsStr = canonicalArgsKey(entry.args || {});
                                 if (argsStr === loggedArgsStr) {
                                     crossRequestDuplicate = true;
                                     console.log(`[TOOL-LOOP] Cross-request duplicate detected: ${toolName}`);
@@ -695,26 +696,31 @@ export async function handleGeneralRequest(input) {
                         // block on the user's response via an inline Preact card; the
                         // chat loop's `isToolLoopCancelled` cancel path calls
                         // `cancelUserResponse()` / `cancelPlanApproval()` to release
-                        // the awaited Promise. Bypassing the timer entirely is correct
-                        // here — the user can sit with a question or plan for as long
-                        // as they want.
+                        // the awaited Promise. The user can sit with a question or
+                        // plan for as long as they want — but if the card fails to
+                        // mount (DOM error, Preact crash, race during conversation
+                        // switch) the user never sees a question and the Promise
+                        // hangs forever. The 1.14.2 watchdog floor (default 24h) is
+                        // a defensive last-resort: long enough that no real user
+                        // hits it, bounded so the loop can't deadlock indefinitely.
                         const USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval']);
                         const isUserPause = USER_PAUSE_TOOLS.has(toolName);
                         const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
                         const toolTimeout = isLongRunning
                             ? (State.settings.longRunningToolTimeout || 300000)
                             : (State.settings.toolTimeout || 30000);
+                        const userPauseTimeout = State.settings.userPauseTimeout ?? (24 * 60 * 60 * 1000);
+                        const effectiveTimeout = isUserPause ? userPauseTimeout : toolTimeout;
+                        const timeoutError = isUserPause
+                            ? `User-pause tool ${toolName} exceeded max-pause watchdog (${effectiveTimeout/1000}s) — likely a UI mount failure`
+                            : `Tool execution timeout (${effectiveTimeout/1000}s)`;
                         try {
-                            if (isUserPause) {
-                                toolResult = await executeToolCall(toolCall);
-                            } else {
-                                toolResult = await Promise.race([
-                                    executeToolCall(toolCall),
-                                    new Promise((_, reject) =>
-                                        setTimeout(() => reject(new Error(`Tool execution timeout (${toolTimeout/1000}s)`)), toolTimeout)
-                                    )
-                                ]);
-                            }
+                            toolResult = await Promise.race([
+                                executeToolCall(toolCall),
+                                new Promise((_, reject) =>
+                                    setTimeout(() => reject(new Error(timeoutError)), effectiveTimeout)
+                                )
+                            ]);
                         } catch (e) {
                             toolResult = { error: e.message };
                         }
@@ -750,9 +756,7 @@ export async function handleGeneralRequest(input) {
                         }
                         
                         // Cache successful read-only results (skip write tools)
-                        if (!toolResult?.error && !['replace_lines', 'insert_lines', 'delete_lines', 
-                             'create_file', 'edit_file', 'write_file', 'delete_file',
-                             'update_issue', 'add_issue_comment'].includes(toolName)) {
+                        if (!toolResult?.error && !WRITE_TOOLS.includes(toolName)) {
                             toolCallCache.set(cacheKey, toolResult);
                         }
                     }

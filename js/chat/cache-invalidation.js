@@ -18,11 +18,7 @@
  * This helper does both walks. Pure: no module-level state, no globals.
  */
 
-const FILE_MUTATING_TOOLS = [
-    'replace_lines', 'insert_lines', 'delete_lines',
-    'create_file', 'edit_file', 'write_file', 'delete_file',
-    'open_file', // not a write but stales `read_current_file`
-];
+import { FILE_MUTATING_TOOLS } from './tool-classifications.js';
 
 /**
  * Invalidate cached reads when a tool mutates (or switches) a file.

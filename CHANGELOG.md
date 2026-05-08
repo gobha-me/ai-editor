@@ -4,7 +4,72 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-## [1.14.1] - 2026-05-08
+## [1.14.2] - 2026-05-08
+
+### Patch — chat-loop hygiene (DRY, deep-stable cache key, user-pause watchdog)
+
+Three small cleanups in the chat tool loop, surfaced by a post-architecture-turnover
+review. None are urgent; bundling them now pays down a latent cache-key bug,
+adds a defensive watchdog against UI mount failures hanging the loop, and
+pre-positions the loop for the upcoming `ToolDef.side_effects` migration
+(architecture-side change-pack item 11). User-visible behavior unchanged on
+the happy path; the watchdog only fires on failure modes that previously
+hung indefinitely.
+
+- **[`js/chat/tool-classifications.js`](js/chat/tool-classifications.js) (new)** —
+  Single home for `WRITE_TOOLS` (the cross-request dup-skip + cache-write set,
+  9 tools including `update_issue` / `add_issue_comment`) and `FILE_MUTATING_TOOLS`
+  (the file-content cache-invalidation set, 8 tools including `open_file` for
+  its `read_current_file`-staling effect). Both arrays `Object.freeze`d so a
+  downstream `.push` accident becomes a `TypeError` at the accident site
+  rather than silent membership drift. Also exports `canonicalArgsKey(args)`
+  — a deep-recursive stable JSON helper for cache-key purposes. Module-level
+  comment explains why the three axes (`WRITE_TOOLS`, `FILE_MUTATING_TOOLS`,
+  the cache-key function) are *not* the same question and shouldn't be merged
+  or derived from each other, and why `MUTATING_TOOLS` and `STATEFUL_READ_TOOLS`
+  in `handlers.js` deliberately stay where they are (one is internally cohesive
+  and not duplicated; the other is a cache-key axis structurally distinct from
+  side-effects).
+- **[`js/chat/handlers.js`](js/chat/handlers.js)** — Imports `WRITE_TOOLS` +
+  `canonicalArgsKey` from the new module. Removes the inline `WRITE_TOOLS`
+  literal that lived just under the `Issue #17` comment block, and replaces
+  the inline anonymous `['replace_lines', …]` array 167 lines down (the
+  same membership, hardcoded twice — DRY violation against itself). Both
+  `cacheKey` build sites — the same-request cache (`cacheKey = toolName + '|' + …`)
+  and the cross-request log scan — now go through `canonicalArgsKey`, so
+  nested-arg shapes like `find_relevant_files({ query: { keywords: […], filters: {…} } })`
+  produce stable keys regardless of the model's argument-key insertion order.
+  **User-pause watchdog:** `ask_user` and `submit_plan_for_approval` previously
+  bypassed the `Promise.race` against the timeout entirely — correct on the
+  happy path, but if `AskUserCard` / `PlanApprovalCard` failed to mount the
+  awaited Promise hung indefinitely. The new code unifies the race for both
+  branches: user-pause tools race against `State.settings.userPauseTimeout ?? 24h`,
+  the rest race against the existing per-tool / long-running timeout.
+  Settable to a small value in tests; the 24h default is long enough that
+  no real user can hit it (questions don't legitimately stay open for a day)
+  but bounded so the loop can't deadlock when the UI fails to mount.
+- **[`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js)** —
+  `FILE_MUTATING_TOOLS` literal removed; imported from the new module.
+  Membership unchanged (8 tools including `open_file`).
+- **[`tests/test-tool-classifications.mjs`](tests/test-tool-classifications.mjs)
+  (new)** — Three blocks. (a) Set-membership tests: `WRITE_TOOLS` lists the
+  9 expected tools including the issue-tracker writes; `FILE_MUTATING_TOOLS`
+  includes `open_file` and excludes `update_issue` / `add_issue_comment`;
+  both arrays are `Object.isFrozen` and reject `.push`. (b) `canonicalArgsKey`
+  tests: nested-key reorder produces equal strings, top-level reorder
+  produces equal strings, array order is preserved (sequence not set),
+  arrays-of-objects recurse correctly, primitives + null pass through, deep
+  mixed shapes round-trip. (c) Regression test pinning the issue-tracker
+  membership of `WRITE_TOOLS` so the hoist can't silently drop entries the
+  inline anonymous array used to carry.
+
+`MUTATING_TOOLS` (handlers.js:599) and `STATEFUL_READ_TOOLS` (handlers.js:619)
+were intentionally left in `handlers.js`. The first is internally cohesive
+and not duplicated. The second is a cache-key axis (does the result depend
+on hidden State?), not a side-effects axis, and won't migrate to the future
+`ToolDef.side_effects` field.
+
+
 
 ### Patch — `coder.v1` inherits from `chat.v1` (Profiles Phase 1, slice 2)
 
