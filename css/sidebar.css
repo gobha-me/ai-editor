@@ -564,4 +564,45 @@
     font-weight: 700;
 }
 
+/* 1.13.0 — inline Start action on issue rows (Touch 3 extraction B).
+   Click bubbling is suppressed in the row HTML's onclick, so the row's
+   openIssueTab handler doesn't double-fire when the button is pressed. */
+.issue-item .issue-item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.4rem;
+}
+
+.issue-item-start {
+    background: var(--accent);
+    color: var(--accent-fg, #fff);
+    border: none;
+    font-family: inherit;
+    font-size: var(--font-sm);
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.issue-item-start:hover:not(:disabled) {
+    background: var(--accent-hover, var(--accent));
+    filter: brightness(1.1);
+}
+
+.issue-item-start:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.issue-item-start:disabled,
+.issue-item-start--active {
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    filter: none;
+}
+
 /* ============================================

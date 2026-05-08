@@ -57,12 +57,42 @@ if (typeof globalThis.indexedDB === 'undefined') {
 
 // `document` — empty stub. getElementById returns null so DOM-poking tests
 // either no-op or hit the null branch.
+//
+// `createElement` returns an element-like stub that supports the textContent
+// → innerHTML round-trip used by `utils/html.js#escapeHtml` (textContent set
+// is stored as escaped innerHTML). Without this, `escapeHtml(x)` would return
+// `undefined` under Node and any renderer test that exercises an HTML-encoded
+// substring would silently pass for the wrong reason.
 if (typeof globalThis.document === 'undefined') {
+    const _htmlEscape = (s) => String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     globalThis.document = {
         getElementById: () => null,
         querySelector: () => null,
         querySelectorAll: () => [],
-        createElement: () => ({ style: {}, setAttribute: () => {}, appendChild: () => {} }),
+        createElement: () => {
+            const el = {
+                style: {},
+                _innerHTML: '',
+                setAttribute: () => {},
+                appendChild: () => {},
+            };
+            Object.defineProperty(el, 'textContent', {
+                get() { return this._textContent ?? ''; },
+                set(v) {
+                    this._textContent = v == null ? '' : String(v);
+                    this._innerHTML = _htmlEscape(this._textContent);
+                },
+            });
+            Object.defineProperty(el, 'innerHTML', {
+                get() { return this._innerHTML; },
+                set(v) { this._innerHTML = v == null ? '' : String(v); },
+            });
+            return el;
+        },
         addEventListener: () => {},
         removeEventListener: () => {},
         body: null,

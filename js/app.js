@@ -218,6 +218,12 @@ window.createNewBranch = createNewBranch;
 
 window.openIssueTab = openIssueTab;
 window.openIssueDetailModal = openIssueDetailModal;
+// 1.13.0 — Touch 3 extraction B: inline "Start" button on issue rows. Looks
+// up the issue by number from State.issues so the row HTML can stay numeric.
+window.startWorkOnIssueFromList = async (issueNumber) => {
+    const issue = State.issues.find(i => i.number === issueNumber);
+    if (issue) await startWorkOnIssue(issue);
+};
 window.focusIssue = focusIssue;
 window.unfocusIssue = unfocusIssue;
 window.closeIssueDetailModal = closeIssueDetailModal;

@@ -223,10 +223,14 @@ function _buildIssueTabView(issue) {
         `;
     }
 
-    // Branch info
-    const branchName = issueBranchName(issue.number, issue.title);
-    const existingBranch = State.branches.find(b => b.name === branchName);
-    const isOnBranch = State.currentBranch === branchName;
+    // Branch info — driven by the shared computeIssueBranchState helper so the
+    // modal and the inline issue-row Start button stay in lockstep.
+    const { branchName, existingBranch, isOnBranch, defaultBranch: baseBranch } =
+        computeIssueBranchState(issue, {
+            branches: State.branches,
+            currentBranch: State.currentBranch,
+            defaultBranch: State.currentProject?.defaultBranch,
+        });
     let branchInfoHtml = '';
     let startBtnLabel = '✏️ Start Work';
     let startBtnDisabled = false;
@@ -239,7 +243,6 @@ function _buildIssueTabView(issue) {
         branchInfoHtml = `<div class="issue-detail-branch-info branch-exists">🔀 Branch exists: <strong>${escapeHtml(branchName)}</strong> — Start Work will switch to it</div>`;
         startBtnLabel = '🔀 Switch & Start';
     } else {
-        const baseBranch = State.currentProject?.defaultBranch || 'main';
         branchInfoHtml = `<div class="issue-detail-branch-info branch-create">🌱 Will create: <strong>${escapeHtml(branchName)}</strong> from <strong>${escapeHtml(baseBranch)}</strong></div>`;
     }
 
@@ -423,7 +426,7 @@ let _modalIssue = null;
  * @param {string} title
  * @returns {string}
  */
-function issueBranchName(number, title) {
+export function issueBranchName(number, title) {
     const slug = title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')   // non-alphanumeric → dash
@@ -432,6 +435,30 @@ function issueBranchName(number, title) {
         .slice(0, 50)                   // cap length
         .replace(/-$/, '');             // trim trailing dash after truncation
     return `issue/${number}-${slug}`;
+}
+
+/**
+ * Pure helper: given an issue and the current branch context, return the
+ * three-state shape used by both the issue-detail modal and the inline
+ * "Start" button on issue rows. Single source of truth for the multi-start
+ * guard semantics.
+ *
+ * Caller-supplied `ctx` keeps this testable (no implicit State reads).
+ *
+ * @param {{ number: number, title: string }} issue
+ * @param {Object} ctx
+ * @param {Array<{ name: string }>} [ctx.branches]
+ * @param {string} [ctx.currentBranch]
+ * @param {string} [ctx.defaultBranch]
+ * @returns {{ branchName: string, existingBranch: object|undefined, isOnBranch: boolean, defaultBranch: string }}
+ */
+export function computeIssueBranchState(issue, ctx = {}) {
+    const branches = ctx.branches || [];
+    const branchName = issueBranchName(issue.number, issue.title || '');
+    const existingBranch = branches.find(b => b.name === branchName);
+    const isOnBranch = ctx.currentBranch === branchName;
+    const defaultBranch = ctx.defaultBranch || 'main';
+    return { branchName, existingBranch, isOnBranch, defaultBranch };
 }
 
 /**

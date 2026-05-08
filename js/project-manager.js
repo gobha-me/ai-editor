@@ -11,6 +11,7 @@ import {
     mountBranchPanel,
     populateBranchMetadata,
 } from './ui/branch-panel.js';
+import { renderIssueRowsHtml } from './ui/issue-list.js';
 
 export async function refreshProjects() {
     try {
@@ -458,37 +459,14 @@ export function renderIssues() {
         return;
     }
 
-    container.innerHTML = State.issues.map(issue => {
-        // Build dependencies display
-        let depsHtml = '';
-        if (issue.dependencies && issue.dependencies.length > 0) {
-            const depLinks = issue.dependencies.map(depNum => 
-                `<span class="dep-link" onclick="event.stopPropagation(); window.Chat.sendMessage('Show me issue #${depNum}')">#${depNum}</span>`
-            ).join(', ');
-            depsHtml = `<div class="issue-deps"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg> Depends on: ${depLinks}</div>`;
-        }
-
-        // Highlight if this issue is active (working) or focused (triaging)
-        const isActive = State.currentIssue?.number === issue.number;
-        const isFocused = State.focusedIssue?.number === issue.number;
-        const activeClass = isActive ? ' issue-item-active' : isFocused ? ' issue-item-focused' : '';
-        
-        return `
-            <div class="issue-item${activeClass}" role="listitem" tabindex="0"
-                 onclick="window.openIssueTab(${issue.number})"
-                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openIssueTab(${issue.number})}"
-                 aria-label="Issue #${issue.number}: ${escapeAttr(issue.title)}">
-                <div class="issue-number">#${issue.number}</div>
-                <div class="issue-title">${escapeHtml(issue.title)}</div>
-                ${issue.labels.length ? `
-                    <div class="issue-labels">
-                        ${issue.labels.map(l => `<span class="issue-label">${escapeHtml(l)}</span>`).join('')}
-                    </div>
-                ` : ''}
-                ${depsHtml}
-            </div>
-        `;
-    }).join('');
+    container.innerHTML = renderIssueRowsHtml({
+        issues: State.issues,
+        branches: State.branches,
+        currentBranch: State.currentBranch,
+        defaultBranch: State.currentProject?.defaultBranch,
+        currentIssue: State.currentIssue,
+        focusedIssue: State.focusedIssue,
+    });
 }
 
 export async function refreshIssues() {
@@ -866,6 +844,12 @@ export function initProjectListeners() {
     // Events from extracted modules (avoids circular imports)
     EventBus.on('issues:render', renderIssues);
     EventBus.on('prs:render', renderPullRequests);
+    // Manual branch switches (via the row-list panel) need to refresh issue
+    // rows so the inline "Start" button flips between Active / Switch / Start.
+    // `startWorkOnIssue` already emits `issues:render` after a session-start
+    // switch; this catches the user-initiated case.
+    EventBus.on('branch:switch', renderIssues);
+    EventBus.on('branches:refresh', renderIssues);
     EventBus.on('project:refreshAfterMerge', async () => {
         await refreshPullRequests();
         await refreshBranches();
