@@ -34,7 +34,7 @@
  */
 
 import { State } from '../core.js';
-import { resolveCompressionConfig } from '../profiles/resolve.js';
+import { resolveCompressionConfig, roleToProfileName } from '../profiles/resolve.js';
 import {
     Compactor,
     chatHistoryToTurns,
@@ -98,7 +98,7 @@ export async function getCompressedContextMessages() {
 
     try {
         const role = State?.settings?.role || null;
-        const config = resolveCompressionConfig(role);
+        const config = resolveCompressionConfig(roleToProfileName(role));
 
         const turns = chatHistoryToTurns(State.chatHistory);
         const result = await Compactor.compress({

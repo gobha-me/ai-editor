@@ -4,6 +4,91 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-05-08
+
+### Feature — Compression resolver (profile-keyed)
+
+First *consumer* rewire of the path-to-2.0.0 profiles arc per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"2.X path" (renumbered from 1.16.0
+after the parallel LLM-automation track interleaved). The compression
+subsystem now reads its rules + `preserve_recent` window from a
+*resolved* profile — deep-merged over the `base` chain via
+[`resolveProfile`](js/profiles/inheritance.js) — instead of branching on
+`role` and reading raw `CODER_V1` or the `rule5_only_shim` constant.
+The data foundation shipped at 1.14.0 (the resolver) and 1.14.1
+(`coder.v1` flipped to `base: 'chat.v1'` and proven equivalent under
+resolution); this slice flips the consumer.
+
+**Load-bearing decision: translator at the boundary, not at every call site.**
+The naïve rewire would propagate a `profileName` parameter through every
+caller. The right seam keeps the existing role-keyed call sites alone
+and translates at the resolver entry — `roleToProfileName(role)` is a
+single function that retires at 2.0.0 when the role selector goes away.
+Same shape the design pinned for 1.21.0 picker UI: callers don't care
+whether profiles are load-bearing yet.
+
+- **Edit** [`js/profiles/resolve.js`](js/profiles/resolve.js) —
+  `resolveCompressionConfig` signature changed from `(role)` to
+  `(profileName)`. Internal `PROFILE_REGISTRY` (`'chat.v1' → CHAT_V1`,
+  `'coder.v1' → CODER_V1`) feeds `resolveProfile` for `base` lookups.
+  The resolved profile's `compression.rules` array maps name+priority
+  entries to runtime rules via the existing `RUNTIME_RULES` table; the
+  resolved `compression.preserve_recent` is returned verbatim. The
+  `rule5_only_shim` branch is retired — `chat.v1.compression` (Rule 5
+  only, `preserve_recent: 4`) supersedes it. New export
+  `roleToProfileName(role)` — `'coder' → 'coder.v1'`, everything else
+  → `'chat.v1'`. Defensive: unknown `profileName` falls back to
+  `chat.v1` with a `console.warn`. `resolveScriptAutomationConfig`
+  untouched — keeps its 1.16.0 role-keyed shape until its own slice.
+- **Edit** [`js/chat/compactor-integration.js:101`](js/chat/compactor-integration.js) —
+  `resolveCompressionConfig(role)` → `resolveCompressionConfig(roleToProfileName(role))`.
+  The single production call site of the resolver.
+- **Edit** [`js/profiles/index.js`](js/profiles/index.js) — re-exports
+  `roleToProfileName` from the barrel.
+
+### User-visible — chat surfaces drop `preserve_recent` 24 → 4
+
+Chat surfaces (every `role` except `'coder'`) previously read from the
+`rule5_only_shim` with `preserve_recent: 24`; they now read from
+`chat.v1.compression.preserve_recent: 4`, reconciling the divergence
+noted in [`js/profiles/chat-v1.js:82–89`](js/profiles/chat-v1.js) since
+the chat.v1 profile data shipped. Today the chat path runs Compactor
+with `budget_tokens: Infinity` and `summarizer: null`
+([compactor-integration.js:113](js/chat/compactor-integration.js)), so
+Rule 5 doesn't actually evict under budget pressure — the
+`preserve_recent` change is dormant until the §1.2.4 *tighter Rule 5
+integration* slice lands. The reconciliation pins the load-bearing
+value now so the future change is visible (a single number flip rather
+than a buried constant migration).
+
+### Tests
+
+- **Updated** [`tests/test-profile-resolve.mjs`](tests/test-profile-resolve.mjs) —
+  asserts the new profile-keyed signature (`resolveCompressionConfig('chat.v1')`
+  → preserve_recent 4 / Rule 5 only / profileName 'chat.v1';
+  `'coder.v1'` → unchanged). Covers the role-translator across the
+  full role enumeration and a defensive unknown-profile fallback test.
+- **New** [`tests/test-compression-long-chat.mjs`](tests/test-compression-long-chat.mjs) —
+  the long-chat regression the roadmap pinned as the 1.17.0 exit
+  criterion. Drives `Compactor.compress` over a 30-turn synthetic
+  history under both resolved configs and pins the
+  preserve-recent-beats-rules invariant: a subsumable read pair planted
+  *outside* the trailing-24 window evicts under coder.v1 (Rule 1
+  fires); the same pair planted *inside* the window is kept
+  (`preserve_recent` invariant beats Rule 1).
+
+### Out of scope
+
+- Memory subsystem resolver (`resolveMemoryConfig`) — pinned for 1.18.0.
+- Tools subsystem resolver — 1.19.0; the three direct `CODER_V1` reads
+  at [`js/chat/handlers.js:47, 779, 780, 803`](js/chat/handlers.js)
+  stay until then.
+- Retrieval Composer profile-keyed lookup — 1.20.0.
+- Settings UI profile picker — 1.21.0; the role selector is the
+  user-visible surface today.
+- `resolveScriptAutomationConfig` — keeps its 1.16.0 role-keyed shape
+  until the next LLM-authored automation slice lands.
+
 ## [1.16.0] - 2026-05-08
 
 ### Feature — LLM-authored automation Phase 1 (Tier 0, in-browser Worker)

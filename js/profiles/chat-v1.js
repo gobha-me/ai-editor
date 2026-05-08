@@ -79,13 +79,11 @@ export const CHAT_V1 = {
         rules: [
             { name: 'summarization', priority: 50 },
         ],
-        // DESIGN-profiles.md §chat.v1 row: *"preserve_recent: 4"*. This is
-        // the design target for the standard-chat surface; the existing
-        // `rule5_only_shim` in `js/profiles/resolve.js` keeps a more
-        // conservative 24 because today's non-coder runtime path predates
-        // the chat.v1 contract. The two reconcile when a follow-up wires
-        // the chat surfaces to read from this profile (out of scope for
-        // this slice).
+        // DESIGN-profiles.md §chat.v1 row: *"preserve_recent: 4"*. As of
+        // 1.17.0 chat surfaces read from this resolved compression slice
+        // via `resolveCompressionConfig('chat.v1')`, so this value is now
+        // load-bearing — the previous `rule5_only_shim` (preserve_recent: 24)
+        // was retired with that slice.
         preserve_recent: 4,
         summarizer: {
             mode: 'balanced',  // Mirrors State.settings.summarizerMode default (same as coder).

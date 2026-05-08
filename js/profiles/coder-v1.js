@@ -18,9 +18,9 @@
  * no consumer reads off raw, so trimming them is safe today and proven
  * sound under resolution by [`tests/test-profile-resolution.mjs`](../../tests/test-profile-resolution.mjs).
  *
- * Subsystems migrate to reading from the *resolved* profile in 1.16
- * (compression), 1.17 (memory), 1.18 (tools), 1.19 (retrieval); see
- * [`docs/ROADMAP.md`](../../docs/ROADMAP.md) §"2.X path".
+ * Subsystems migrate to reading from the *resolved* profile in 1.17
+ * (compression — shipped), 1.18 (memory), 1.19 (tools), 1.20 (retrieval);
+ * see [`docs/ROADMAP.md`](../../docs/ROADMAP.md) §"2.X path".
  *
  * Design source: `docs/DESIGN-profiles.md` §"Canonical Profiles" → "coder.v1".
  *
@@ -65,7 +65,7 @@
  *   `core.js#State.settings` — the conservative window coder needs because
  *   tool-call sequences cluster densely; chat's 4-turn protected window
  *   would put many active sequences inside the eviction zone. The two
- *   reconcile in 1.16.0 when chat surfaces start reading from chat.v1's
+ *   reconciled at 1.17.0 when chat surfaces started reading from chat.v1's
  *   resolved compression slice. Inherited from `chat.v1`: `summarizer`
  *   (mode/promptTemplate/modelOverride all match).
  *
