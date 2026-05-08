@@ -4,6 +4,57 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — In-editor preview & verify design + roadmap slot
+
+New [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md) closes a
+platform-level gap surfaced by the 2026-05-08 Sokoban dogfood
+incident on HTML-Games (`xcaliber/HTML-Games` PR #170 shipped a
+Sokoban whose `bindEvents()` never ran because `updateUI()` threw
+on a missing `#level-display`; every key was a no-op end-to-end).
+The agent had no surface to load the page in a browser, so it could
+not observe the failure — a class of bug ai-editor cannot catch
+today regardless of model.
+
+The design proposes a three-tier preview surface, each tier
+admitting a strictly larger blast radius behind its own gate.
+Tier 1 = sandboxed iframe at a distinct preview origin (or full
+`sandbox` attribute for self-host) + Service Worker resolving
+workspace paths via the existing `Git.getFile` adapter + three
+new tools (`preview_start`, `preview_stop`, `preview_list`),
+all `readOnly: true`. Tier 2 layers a console + error capture
+shim (`preview_console_logs`, `preview_errors`, `preview_logs`,
+`preview_network`) — this is the tier that closes the Sokoban
+class specifically. Tier 3 adds a Playwright-style sidecar with
+selector-shaped tools (`preview_snapshot`, `preview_click`,
+`preview_fill`, `preview_inspect`, `preview_screenshot`,
+`preview_resize`) plus the `preview_eval` per-invocation-gate
+question that may never ship. Tool names mirror the Claude Code
+preview MCP that runs against this very codebase, so the model's
+existing preview-tool muscle memory carries over.
+
+The trust boundary at the *content* level mirrors §1.16.0's
+Tier-0 Worker boundary at the *execution* level: distinct origin
++ CSP + iframe `sandbox` (no `allow-same-origin`) + postMessage
+origin check + Service Worker as the only path into the
+workspace virtual file tree. The catalog stays the trust boundary
+at the tool level; the iframe sandbox stays the trust boundary at
+the content level. Build-step projects (Cogfall — Vite/TS/Pixi)
+return `requires_build_step: true` at Tier 1 rather than
+misleading "broken" output; the per-workspace `npm run dev`
+sidecar that handles them is downstream at Tier 3.
+
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"2.X path → Parallel 1.X
+tracks" gains the Tier 1 row alongside Plugin Discoverability and
+Retrieval ingest hardening, sized as a single feature minor.
+Tiers 2/3 phase behind dogfood signal per the §"Measurement
+before scale" commitment — each its own minor, gated on a
+measured class of bug the prior tier cannot serve. Supersedes
+the §"3.0 / Post-2.0 candidates" "Browser-in-browser preview"
+stub, which framed it as a 3.x maybe; the Sokoban evidence pulled
+the gap forward to load-bearing for the agent feedback loop.
+
+No code yet; the implementation slice is for a future PR.
+
 ## [1.20.0] - 2026-05-08
 
 ### Path to 2.0.0 — retrieval subsystem resolver rewire
