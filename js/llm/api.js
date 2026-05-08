@@ -69,6 +69,7 @@ import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import { getPlanMode } from '../chat/state.js';
+import { resolveScriptAutomationConfig } from '../profiles/resolve.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -1012,6 +1013,27 @@ export const LLMTools = {
             return filtered;
         };
 
+        // 1.16.0 — LLM-authored automation Phase 1.
+        // Drop `submit_script_for_approval` from the per-turn tool list
+        // when the resolved profile + settings overlay reports
+        // `scriptAutomation.enabled === false`. Profile default is
+        // coder=on / chat=off; settings overlay
+        // (`State.settings.scriptAutomation.enabled`) wins when set.
+        // The tool stays in the registry — the filter just prevents the
+        // model from seeing it on this turn. Per
+        // DESIGN-llm-authored-automation.md §"Failure Modes" row
+        // *"Profile has scriptAutomation.enabled: false"*.
+        const _scriptRole = State?.settings?.role || null;
+        const scriptCfg = resolveScriptAutomationConfig(_scriptRole);
+        const scriptOverlay = State?.settings?.scriptAutomation;
+        const scriptEnabled = (scriptOverlay && typeof scriptOverlay.enabled === 'boolean')
+            ? scriptOverlay.enabled
+            : scriptCfg.enabled;
+        const applyScriptAutomationFilter = (toolList) => {
+            if (scriptEnabled) return toolList;
+            return toolList.filter(t => t?.function?.name !== 'submit_script_for_approval');
+        };
+
         // 1.3.18 — baseline = what THIS request would have shipped without
         // the Composer (role-filtered legacy set). Unfiltered = ungated whole
         // registry. Both computed from `Catalog` so `metadata.cost_estimate`
@@ -1038,7 +1060,7 @@ export const LLMTools = {
                 role,
                 composerActive: false,
             };
-            return applyPlanModeFilter(filtered);
+            return applyScriptAutomationFilter(applyPlanModeFilter(filtered));
         }
 
         const reductionPct = baseline > 0
@@ -1078,7 +1100,7 @@ export const LLMTools = {
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
-        return applyPlanModeFilter(renderForLLM(result));
+        return applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result)));
     },
 
     /**

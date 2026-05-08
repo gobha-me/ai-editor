@@ -44,6 +44,15 @@ try {
 // guessing which card resolved.
 let pendingPlanApproval = null;  // { plan, resolve }
 
+// Script-approval pending state — single-slot, mirrors pendingPlanApproval.
+// 1.16.0: LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
+// Set by submit_script_for_approval tool handler; resolved by the
+// ScriptApprovalCard component (after the Worker run completes, on Reject,
+// or on Cancel). Held separately because the resolution envelope shape is
+// different (approved → carries stdout/stderr/runtime_ms/truncated; cancel
+// can carry partial_stdout / partial_stderr).
+let pendingScriptApproval = null;  // { source, description, expected_output, resolve }
+
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 
@@ -181,6 +190,9 @@ export function cancelToolLoop() {
     if (pendingPlanApproval) {
         cancelPlanApproval();
     }
+    if (pendingScriptApproval) {
+        cancelScriptApproval();
+    }
 }
 
 // ============================================
@@ -276,6 +288,89 @@ export function cancelPlanApproval() {
  */
 export function resetToolLoopCancel() {
     _cancelToolLoop = false;
+}
+
+// ============================================
+// SCRIPT-APPROVAL (1.16.0 — DESIGN-llm-authored-automation.md)
+// ============================================
+
+/**
+ * @returns {{ source: string, description: string, expected_output: string, resolve: Function } | null}
+ */
+export function getPendingScriptApproval() {
+    return pendingScriptApproval;
+}
+
+/**
+ * Set the pending script-approval state. Called by the
+ * `submit_script_for_approval` tool handler immediately before it returns
+ * the Promise that `resolve` will eventually settle. Emits
+ * `script_approval:pending` so the card mounts.
+ *
+ * Single-slot: nesting is impossible because the chat loop is paused on
+ * the awaited Promise. If a second pending fires anyway it indicates a
+ * bug in the chat loop; the existing `console.warn` from the card layer
+ * is the visible signal.
+ *
+ * @param {{ source: string, description: string, expected_output: string, resolve: Function }} pending
+ */
+export function setPendingScriptApproval(pending) {
+    pendingScriptApproval = pending;
+    try { EventBus.emit('script_approval:pending', pending); } catch { /* best-effort */ }
+}
+
+/**
+ * Resolve the pending script-approval Promise with the user's verdict +
+ * (when approved) the Worker's captured output. The envelope shape:
+ *   - { status: 'approved', stdout, stderr, runtime_ms, truncated }
+ *   - { status: 'rejected', feedback }
+ *   - { status: 'cancelled', cancelled: true, partial_stdout?, partial_stderr? }
+ *
+ * The chat loop forwards this verbatim as the tool_result; the model
+ * uses stdout/stderr/runtime_ms/truncated to decide its next move
+ * (re-author tighter? aggregate? give up?).
+ *
+ * @param {Object} envelope
+ * @returns {boolean} True if a Promise was resolved.
+ */
+export function resolveScriptApproval(envelope) {
+    if (!pendingScriptApproval) return false;
+    const { resolve } = pendingScriptApproval;
+    pendingScriptApproval = null;
+    try { EventBus.emit('script_approval:resolved', { cancelled: false, ...envelope }); } catch { /* best-effort */ }
+    try { resolve(envelope); } catch (err) {
+        console.error('[script_approval] resolve threw:', err);
+    }
+    return true;
+}
+
+/**
+ * Cancel the pending script-approval Promise. Called from the Stop-button
+ * cancel path (cancelToolLoop) so the awaited handler doesn't leak. If
+ * the Worker was already running, the card layer terminates it before
+ * calling this function and passes any captured partial output.
+ *
+ * @param {{ partial_stdout?: string, partial_stderr?: string }} [extras]
+ * @returns {boolean} True if a Promise was cancelled.
+ */
+export function cancelScriptApproval(extras) {
+    if (!pendingScriptApproval) return false;
+    const { resolve } = pendingScriptApproval;
+    pendingScriptApproval = null;
+    const partial = (extras && typeof extras === 'object') ? extras : {};
+    try { EventBus.emit('script_approval:resolved', { cancelled: true }); } catch { /* best-effort */ }
+    try {
+        resolve({
+            status: 'cancelled',
+            cancelled: true,
+            error: 'User cancelled the script approval.',
+            partial_stdout: typeof partial.partial_stdout === 'string' ? partial.partial_stdout : '',
+            partial_stderr: typeof partial.partial_stderr === 'string' ? partial.partial_stderr : '',
+        });
+    } catch (err) {
+        console.error('[script_approval] cancel resolve threw:', err);
+    }
+    return true;
 }
 
 // ============================================

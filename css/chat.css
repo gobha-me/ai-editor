@@ -2158,3 +2158,259 @@
     font-size: var(--font-xs);
     flex: 1 1 auto;
 }
+
+/* ============================================
+ * Script-approval card (1.16.0 — LLM-authored automation Phase 1)
+ * Mirrors plan-approval-card, plus a scrollable source block. The
+ * source `<pre><code>` MUST scroll independently — long source lines
+ * would otherwise push the card wider than the chat container and
+ * displace the input box + buttons. `min-width: 0` on the card
+ * (flex-column parent) breaks the flex `min-content` propagation that
+ * causes the horizontal blow-out.
+ * ============================================ */
+
+.script-approval-card {
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    min-width: 0;  /* flex-shrink-safety against long source lines */
+}
+
+.script-approval-card--done {
+    opacity: 0.7;
+    border-color: var(--border);
+}
+
+.script-approval-card--error {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.script-approval-card__header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: var(--font-sm);
+}
+
+.script-approval-card__icon {
+    font-size: 1rem;
+}
+
+.script-approval-card__title {
+    color: inherit;
+    flex: 1 1 auto;
+}
+
+.script-approval-card__tier {
+    font-size: var(--font-xs);
+    font-weight: 500;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.05rem 0.35rem;
+    background: var(--bg-tertiary);
+}
+
+.script-approval-card__section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.script-approval-card__section-label {
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.script-approval-card__description,
+.script-approval-card__expected {
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.65rem;
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+.script-approval-card__description--pre,
+.script-approval-card__expected--pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono, monospace);
+    margin: 0;
+}
+
+/* The source block is the security-load-bearing view. Independent
+ * scroll on BOTH axes — code lines are commonly long; word-wrap
+ * would hide the actual structure the user is reviewing. */
+.script-approval-card__source {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-sm);
+    line-height: 1.45;
+    color: var(--text-primary);
+    max-height: 24rem;
+    overflow: auto;          /* both axes — horizontal for long source lines */
+    white-space: pre;        /* preserve indentation; do not wrap code */
+}
+
+.script-approval-card__source code {
+    display: block;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+}
+
+.script-approval-card__feedback-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+}
+
+.script-approval-card__feedback-hint {
+    color: var(--text-muted);
+}
+
+.script-approval-card__feedback {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-sm);
+    resize: vertical;
+}
+
+.script-approval-card__feedback:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.script-approval-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.script-approval-card__approve {
+    padding: 0.4rem 0.9rem;
+    border: 0;
+    border-radius: 4px;
+    background: var(--accent);
+    color: var(--bg-primary);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.script-approval-card__approve:hover:not(:disabled) {
+    filter: brightness(1.05);
+}
+
+.script-approval-card__approve:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.script-approval-card__reject {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.script-approval-card__reject:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.script-approval-card__reject:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.script-approval-card__hint {
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    flex: 1 1 auto;
+}
+
+.script-approval-card__hint code {
+    font-size: 0.95em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+}
+
+.script-approval-card__running {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+}
+
+.script-approval-card__spinner {
+    font-size: 1rem;
+    animation: script-approval-spin 1.4s linear infinite;
+    display: inline-block;
+}
+
+@keyframes script-approval-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.script-approval-card__running-label {
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    flex: 1 1 auto;
+}
+
+.script-approval-card__stop {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--error, #c44);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--error, #c44);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.script-approval-card__stop:hover {
+    background: var(--error, #c44);
+    color: var(--bg-primary);
+}
+
+.script-approval-card__done {
+    color: var(--text-muted);
+    font-size: var(--font-xs);
+    font-style: italic;
+}

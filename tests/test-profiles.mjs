@@ -209,6 +209,8 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'ask_user',
         // 1.10.0 — Plan Mode approval gate (github#25).
         'submit_plan_for_approval',
+        // 1.16.0 — LLM-authored automation Phase 1.
+        'submit_script_for_approval',
         'read_file',
         'read_lines',
         'scan_file',

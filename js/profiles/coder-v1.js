@@ -180,6 +180,17 @@ export const CODER_V1 = {
             // keeps it in the LLM's catalog while every mutating
             // tool is dropped.
             'submit_plan_for_approval',
+            // LLM-authored automation Phase 1 — 1.16.0. Tier-0
+            // sandboxed Worker runs the LLM's reviewed script against
+            // the project's virtual file tree. The runtime filter in
+            // `js/llm/api.js` (`applyScriptAutomationFilter`) drops
+            // this tool when `scriptAutomation.enabled === false` on
+            // the resolved profile + settings overlay; otherwise
+            // admission flows through static like every other
+            // structural-anchor tool. Marked readOnly so Plan Mode
+            // admits it (handler is read-only; the per-invocation
+            // approval gate handles the actual side effect).
+            'submit_script_for_approval',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',
@@ -204,5 +215,19 @@ export const CODER_V1 = {
         enabled: true,
         capacity: 500,         // DESIGN-profiles.md "coder.v1": 500-record cap.
         novelty_threshold: 0.3, // Mirrors retrieval.novelty_threshold for now; profiles may diverge later.
+    },
+
+    // 1.16.0 — LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
+    // Coder is the value-case surface for the Tier-0 Worker — dead-CSS sweeps,
+    // unused-export scans, import-graph audits collapse from ~50 grep calls /
+    // ~2M tokens to 2 calls / ~5–10K tokens (DESIGN line 13, 256–262). This
+    // override flips the inherited `enabled: false` from chat.v1 to `true`;
+    // the timeout / cap defaults stay at chat.v1's values (re-stated here so
+    // the override block is self-describing without requiring a resolveProfile
+    // round-trip to read the active values).
+    scriptAutomation: {
+        enabled: true,
+        timeout_ms: 30000,         // 30s — bumped from 10s after live Tier-0 testing; see CHANGELOG §1.16.0.
+        max_output_bytes: 262144,  // DESIGN line 188.
     },
 };

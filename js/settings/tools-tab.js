@@ -29,6 +29,7 @@ import {
     DEFAULT_TOP_K,
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
+import { resolveScriptAutomationConfig } from '../profiles/resolve.js';
 
 let _bound = false;
 
@@ -68,6 +69,34 @@ function _persist(patch) {
     EventBus.emit('settings:changed', { section: 'tools', patch });
 }
 
+// 1.16.0 — script automation overlay. Stored under
+// `State.settings.scriptAutomation` so it parallels the profile's
+// `scriptAutomation` slice. Settings overlay wins when set; otherwise
+// the resolved profile default applies. Same pattern as `tools.*` —
+// kept in a separate object because the profile slice is per-profile,
+// not per-tool.
+function _readScript() {
+    const role = State?.settings?.role || null;
+    const cfg = resolveScriptAutomationConfig(role);
+    const overlay = (State.settings && State.settings.scriptAutomation) || {};
+    const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
+    const timeout_ms = Number.isInteger(overlay.timeout_ms) && overlay.timeout_ms > 0
+        ? overlay.timeout_ms
+        : cfg.timeout_ms;
+    const max_output_bytes = Number.isInteger(overlay.max_output_bytes) && overlay.max_output_bytes > 0
+        ? overlay.max_output_bytes
+        : cfg.max_output_bytes;
+    return { enabled, timeout_ms, max_output_bytes, profileDefault: cfg.enabled };
+}
+
+function _persistScript(patch) {
+    if (!State.settings.scriptAutomation || typeof State.settings.scriptAutomation !== 'object') {
+        State.settings.scriptAutomation = {};
+    }
+    Object.assign(State.settings.scriptAutomation, patch);
+    EventBus.emit('settings:changed', { section: 'scriptAutomation', patch });
+}
+
 /**
  * Initialise the tab. Idempotent — safe to call on every modal open.
  */
@@ -80,6 +109,29 @@ export function initToolsTab() {
     if (!root) return;
     root.addEventListener('change', _onChange);
     root.addEventListener('input', _onInput);
+    root.addEventListener('change', _onScriptChange);
+}
+
+function _onScriptChange(ev) {
+    const target = ev.target;
+    if (!target || !target.dataset) return;
+    const key = target.dataset.scriptKey;
+    if (!key) return;
+    if (key === 'enabled' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+        _persistScript({ enabled: !!target.checked });
+        render();
+        return;
+    }
+    if (target instanceof HTMLInputElement && target.type === 'number') {
+        const min = Number(target.min) || 0;
+        const max = Number(target.max) || 120000;
+        let v = Number(target.value);
+        if (!Number.isFinite(v)) v = (key === 'timeout_ms') ? 30000 : 262144;
+        v = Math.min(Math.max(Math.floor(v), min), max);
+        target.value = String(v);
+        _persistScript({ [key]: v });
+        render();
+    }
 }
 
 function _onInput(ev) {
@@ -179,6 +231,62 @@ export function render() {
           that surfaces as a configuration error in the LLM Debug modal.
           See <strong>LRU evicted</strong> rows under each turn's tool
           admission section.
+        </small>
+      </div>
+
+      ${_renderScriptAutomationSection()}
+    `;
+}
+
+function _renderScriptAutomationSection() {
+    const s = _readScript();
+    const profileLabel = s.profileDefault ? 'enabled' : 'disabled';
+    return `
+      <h3 style="margin-top: 1.5em;">Script Automation (Tier 0 sandbox)</h3>
+      <p class="settings-help">
+        Lets the LLM submit a JS script for you to review and approve.
+        On approval the script runs in a sandboxed Web Worker with no
+        network, no DOM, no <code>process</code> — only
+        <code>Git.getFile</code> / <code>Git.getFileTree</code>. Useful
+        for the X^N-shaped audits that otherwise grind through dozens of
+        <code>read_file</code> calls (dead-CSS sweeps, unused-export
+        scans, import-graph audits). Per-profile default for the
+        current role: <strong>${profileLabel}</strong>.
+      </p>
+
+      <div class="form-group" data-setting-key="scriptAutomation.enabled">
+        <label>
+          <input type="checkbox"
+                 data-script-key="enabled"
+                 ${s.enabled ? 'checked' : ''}>
+          Enable <code>submit_script_for_approval</code> tool
+        </label>
+        <small>
+          Overrides the profile default. When off, the model never sees
+          the tool and can't trigger a sandbox run.
+        </small>
+      </div>
+
+      <div class="form-group" data-setting-key="scriptAutomation.timeout_ms">
+        <label for="scriptTimeoutMs">Worker timeout (ms)</label>
+        <input id="scriptTimeoutMs" type="number" min="1000" max="120000" step="500"
+               data-script-key="timeout_ms" value="${s.timeout_ms}">
+        <small>
+          Hard timeout on the sandboxed run. Default
+          <strong>30000</strong> ms. Range 1000–120000. Real fs walks
+          against a multi-hundred-file repo can saturate the smaller
+          budget on the postMessage round-trip alone.
+        </small>
+      </div>
+
+      <div class="form-group" data-setting-key="scriptAutomation.max_output_bytes">
+        <label for="scriptMaxOutput">Max stdout+stderr bytes</label>
+        <input id="scriptMaxOutput" type="number" min="1024" max="1048576" step="1024"
+               data-script-key="max_output_bytes" value="${s.max_output_bytes}">
+        <small>
+          Hard byte cap on combined stdout+stderr. Default
+          <strong>262144</strong> (256 KB). Truncation surfaces as
+          <code>truncated: true</code> in the tool result.
         </small>
       </div>
     `;

@@ -703,7 +703,7 @@ export async function handleGeneralRequest(input) {
                         // hangs forever. The 1.14.2 watchdog floor (default 24h) is
                         // a defensive last-resort: long enough that no real user
                         // hits it, bounded so the loop can't deadlock indefinitely.
-                        const USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval']);
+                        const USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval', 'submit_script_for_approval']);
                         const isUserPause = USER_PAUSE_TOOLS.has(toolName);
                         const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
                         const toolTimeout = isLongRunning

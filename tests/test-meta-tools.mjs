@@ -65,6 +65,12 @@ function registerStaticFixture() {
     // 1.10.0 — `submit_plan_for_approval` (github#25) joined the
     // static set as the always-admitted approval gate for Plan Mode.
     reg('submit_plan_for_approval', 'Submit an implementation plan for user approval.', { type: 'object', properties: { plan: { type: 'string' } } });
+    // 1.16.0 — `submit_script_for_approval` (LLM-authored automation
+    // Phase 1) joined the static set; the runtime filter in
+    // `js/llm/api.js` controls whether it's admitted to the per-turn
+    // tool list. Static enumeration must still resolve it through the
+    // catalog so the unresolved_static exit signal stays clean.
+    reg('submit_script_for_approval', 'Submit a JS script for user approval and sandboxed run.', { type: 'object', properties: { source: { type: 'string' }, description: { type: 'string' }, expected_output: { type: 'string' } } });
 }
 
 // ============================================

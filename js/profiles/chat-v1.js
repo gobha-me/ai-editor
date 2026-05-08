@@ -117,4 +117,16 @@ export const CHAT_V1 = {
         capacity: 100,
         novelty_threshold: 0.5, // Mirrors retrieval.novelty_threshold; profiles may diverge later.
     },
+
+    // 1.16.0 — LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
+    // chat.v1 keeps the Tier-0 Worker surface DISABLED. Standard chat doesn't
+    // need ad-hoc fs walks; the value case (X^N collapse on dead-CSS / unused-
+    // export shapes) is a coder-surface concern. Coder overrides `enabled: true`.
+    // The `timeout_ms` and `max_output_bytes` defaults are inherited but the
+    // surface never spawns a Worker until enabled flips.
+    scriptAutomation: {
+        enabled: false,
+        timeout_ms: 30000,         // 30s — bumped from 10s after live Tier-0 testing; see CHANGELOG §1.16.0.
+        max_output_bytes: 262144,  // 256 KB — DESIGN line 188.
+    },
 };

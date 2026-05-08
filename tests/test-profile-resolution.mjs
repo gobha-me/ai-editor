@@ -94,6 +94,8 @@ const CODER_V1_PRE_TRIM = {
             'todo_read',
             'ask_user',
             'submit_plan_for_approval',
+            // 1.16.0 — LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
+            'submit_script_for_approval',
             'read_file',
             'read_lines',
             'scan_file',
@@ -113,6 +115,16 @@ const CODER_V1_PRE_TRIM = {
         enabled: true,
         capacity: 500,
         novelty_threshold: 0.3,
+    },
+
+    // 1.16.0 — LLM-authored automation Phase 1. Coder is the value-case
+    // surface (chat.v1 has `enabled: false`). The snapshot mirrors the
+    // post-resolution shape: coder's `enabled: true` overrides chat's
+    // `enabled: false`; timeout/cap are coder's own (matching defaults).
+    scriptAutomation: {
+        enabled: true,
+        timeout_ms: 30000,
+        max_output_bytes: 262144,
     },
 };
 

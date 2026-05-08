@@ -4,6 +4,217 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-05-08
+
+### Feature — LLM-authored automation Phase 1 (Tier 0, in-browser Worker)
+
+First slice of the **LLM-authored ad-hoc automation** track per
+[`docs/ROADMAP.md`](docs/ROADMAP.md) §"Parallel 1.X tracks" and the full
+design at [`docs/DESIGN-llm-authored-automation.md`](docs/DESIGN-llm-authored-automation.md).
+Closes the X^N tool-loop blast on combinatorially-shaped analytical
+tasks (dead-CSS sweeps, unused-export scans, import-graph audits): the
+post-mortem on a single dead-CSS audit measured ~50 tool calls / ~2M
+tokens via the manual `read_file` / `search_in_files` loop, vs ~2 calls
+/ ~5–10K tokens / ~30s via a single sandboxed-Worker pass — two orders
+of magnitude on the same question. Independent of the Profiles arc;
+gated only on Plan Mode (shipped 1.10.0). Phase 2 (graduation
+measurement) and Phase 3+ (Tier 1+ HTTP allowlist, ESM deps, backend
+bridge) park behind real Phase-1 usage data.
+
+**Load-bearing decision: per-invocation gate, not per-tool gate.** The
+naïve `eval` failure mode is treating the gate as a property of the
+*tool* — admit once, run anything. The right seam is the *invocation*:
+the tool's handler returns a Promise that resolves only after a human
+reviews the script source. Identical mechanism to the 1.10.0
+`submit_plan_for_approval` lifecycle — the chat loop sees a
+slow-running tool, the resolution path runs the script in a sandboxed
+Web Worker that cannot reach `window`, the tool registry, the network,
+or any write API, then settles the Promise with the captured output.
+
+- **New** [`js/tools/script-tools.js`](js/tools/script-tools.js) —
+  `registerScriptTools(registry)` registers the
+  `submit_script_for_approval` tool with `roles: 'all'` and
+  `readOnly: true` (the *handler* is read-only; what the user does on
+  approval is a separate authorization decision). Args:
+  `{ source, description, expected_output }` — all required strings,
+  rejected on whitespace-only or non-string input. Handler returns
+  `new Promise((resolve) => setPendingScriptApproval(...))` —
+  byte-for-byte the Plan Mode pattern. Tool description steers the
+  model into Tier-0 reach (`Git.getFile` / `Git.getFileTree` only;
+  forbidden globals named explicitly).
+- **Adapter ergonomics fix (post-merge follow-up).** A live HTML-Games
+  CSS-audit session exposed an API-shape gap: `Git.getFile()` returns
+  the provider envelope `{name, path, sha, size, content, encoding}`,
+  not a raw string — but the tool description claimed it exposed
+  "exactly what `read_file` exposes". The model burned three iterations
+  + a debug probe to discover the unwrap (`(await Git.getFile(...)).content`).
+  Fix: added `Git.readFile(owner, repo, path, ref?)` to the Worker
+  adapter — returns just the content string, mirroring `read_file`'s
+  contract — and updated the tool description to lead with `readFile`
+  for the 99% case while documenting `getFile`'s envelope for the
+  metadata cases (skip-large-files, sha-keyed caching). Forbidden-
+  global enumeration in the `source` schema description now lists all
+  16 names so the model knows what throws on read.
+- **New** [`js/intelligence/script-runner.js`](js/intelligence/script-runner.js) —
+  Pure `runScript({source, timeout_ms, max_output_bytes, gitAdapter})`
+  helper. Wraps user source in `(async () => { ... })()`, captures
+  `console.log/info/warn/debug` to stdout and `console.error` to
+  stderr, races against a `setTimeout` for hard timeout enforcement
+  (default 30s — bumped from the design's 10s after live Tier-0 testing
+  showed real fs walks against this repo (~200+ CSS files) saturate
+  the smaller budget on the postMessage round-trip alone; tunable
+  1–120s; `truncated: true` + `'Timeout after Nms'` stderr line
+  on miss), and applies a soft byte ceiling on stdout+stderr combined
+  (default 256 KB; `truncated: true` flag). Never throws — parse
+  errors, runtime throws, forbidden-global ReferenceErrors, timeout,
+  output cap all surface as fields on the structured result. Pure
+  helper because Workers don't run under `node:test`; the browser-side
+  Worker is a thin postMessage wrapper around this function.
+- **New** [`js/workers/script-runner-worker.js`](js/workers/script-runner-worker.js) —
+  Tier-0 Worker. Top-of-file overrides 16 forbidden globals on
+  `self` (`fetch / XMLHttpRequest / WebSocket / EventSource /
+  importScripts / indexedDB / localStorage / sessionStorage / caches /
+  Worker / SharedWorker / MessageChannel / BroadcastChannel /
+  Notification / navigator / crypto`) with throwing accessors via
+  `Object.defineProperty` *before* user source runs. **Plain `delete
+  self.fetch` is a no-op** because Worker built-ins are non-configurable
+  on the global scope; defining a getter that throws
+  `ReferenceError: <name> is not available in the Tier-0 sandbox` on
+  read is what actually denies access. Verified live in the browser
+  preview against direct `fetch(...)` and `new XMLHttpRequest()` —
+  both throw before any network traffic leaves the page. Listens for
+  `{type: 'run_script', id, source, timeout_ms, max_output_bytes}`,
+  proxies `Git.getFile` / `Git.getFileTree` calls to the main thread
+  via `{type: 'git_call'}` postMessage round-trips (the Worker can't
+  reach `window.AIEditor`, so the host owns the actual `Git.*`
+  invocation), posts `{type: 'scriptComplete', stdout, stderr,
+  runtime_ms, truncated}` on completion. Lazy-imports `script-runner.js`
+  for fast bootstrap.
+- **New** [`js/chat/script-approval-card.js`](js/chat/script-approval-card.js) +
+  [`js/chat/script-approval-card/ScriptApprovalCard.js`](js/chat/script-approval-card/ScriptApprovalCard.js) —
+  Mirrors `plan-approval-card.js` lifecycle byte-for-byte, except the
+  card transitions through three phases (`review` → `running` →
+  `done`) instead of plan mode's single `review`: Approve doesn't
+  immediately resolve; it spawns the Worker (this file owns the
+  handle for tear-down hygiene), wires the postMessage proxy back to
+  the main-thread `Git.*` API, and waits for `scriptComplete` before
+  resolving. The card renders source in a `<pre><code>` block (the
+  security-load-bearing view), description + expected_output as
+  markdown, and exposes Approve / Reject / Cancel + Stop (mid-run).
+  Stop terminates the Worker and resolves with
+  `{status: 'cancelled', cancelled: true, partial_stdout, partial_stderr}`
+  preserving whatever output had accumulated. Joins the Decision §9
+  Preact + htm allow-list.
+- **Edit** [`js/chat/state.js`](js/chat/state.js) — added
+  `pendingScriptApproval` slot + `setPendingScriptApproval`,
+  `getPendingScriptApproval`, `resolveScriptApproval`,
+  `cancelScriptApproval` mirroring the `pendingPlanApproval` shape.
+  `cancelToolLoop` extended to release the script-approval Promise
+  (same leak-prevention as ask_user + plan_approval).
+- **Edit** [`js/chat/handlers.js:706`](js/chat/handlers.js) —
+  `submit_script_for_approval` joins `USER_PAUSE_TOOLS` so the 30s
+  `toolTimeout` is bypassed for the long-running approval Promise
+  (24h `userPauseTimeout` watchdog floor still applies).
+- **Edit** [`js/chat/index.js`](js/chat/index.js) — `registerScriptTools`
+  in the static-registration block; `initScriptApprovalCard()` in the
+  init block alongside `initPlanApprovalCard()`.
+- **Edit** [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js) +
+  [`js/profiles/chat-v1.js`](js/profiles/chat-v1.js) — added
+  `scriptAutomation: { enabled, timeout_ms, max_output_bytes }`
+  block. Coder ships `enabled: true`; chat.v1 ships `enabled: false`
+  (chat surfaces don't need ad-hoc fs walks). `coder-v1.js#tools.static`
+  also gains `submit_script_for_approval`.
+- **Edit** [`js/profiles/resolve.js`](js/profiles/resolve.js) — added
+  `resolveScriptAutomationConfig(role)` helper. Same role-keyed
+  pattern as `resolveCompressionConfig`; the broader profile-keyed
+  rewire happens at the deferred 1.17.0 compression-resolver slice.
+- **Edit** [`js/llm/api.js`](js/llm/api.js) — added
+  `applyScriptAutomationFilter(toolList)` alongside
+  `applyPlanModeFilter`. Drops `submit_script_for_approval` from the
+  per-turn tool list when the resolved profile + settings overlay
+  reports `scriptAutomation.enabled === false`. Same name-based
+  pattern as the Plan Mode filter; works across both legacy and
+  Composer paths.
+- **Edit** [`js/settings/tools-tab.js`](js/settings/tools-tab.js) —
+  added "Script Automation (Tier 0 sandbox)" section with three
+  controls: `enabled` toggle, `timeout_ms` (1000–120000), and
+  `max_output_bytes` (1024–1048576). Settings overlay
+  (`State.settings.scriptAutomation.*`) wins when set; otherwise the
+  resolved profile default applies. Per-profile default for the
+  current role is surfaced inline.
+
+### Tests
+
+- **New** [`tests/test-script-tools.mjs`](tests/test-script-tools.mjs) —
+  30 pins covering pending-slot state shape (set / get / resolve /
+  cancel envelopes, `script_approval:pending|resolved` EventBus
+  emissions, `cancelToolLoop` release path), tool registration
+  (`readOnly: true`, `roles: 'all'`, required args, malformed-arg
+  rejection, Promise-settling round-trip), and
+  `resolveScriptAutomationConfig` defaults for coder vs non-coder
+  roles. Mirrors the 1.10.0 Plan Mode test pattern.
+- **New** [`tests/test-script-runner.mjs`](tests/test-script-runner.mjs) —
+  18 pins covering `runScript`'s curated-globals + timeout +
+  output-cap + Git-adapter logic. Smoke (console.log capture, return
+  value as JSON line, top-level `await`), forbidden-globals
+  ReferenceError surfacing, timeout firing on long awaits, output cap
+  truncating stdout, Git adapter proxy round-trip + throw surfacing,
+  `null` adapter rejection, parse-error + runtime-error surfacing,
+  defaults applied when timeout/cap omitted. Browser-side Worker
+  round-trip lives in `tests/index.html`.
+- **Edit** [`tests/test-meta-tools.mjs`](tests/test-meta-tools.mjs),
+  [`tests/test-profiles.mjs`](tests/test-profiles.mjs),
+  [`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs),
+  [`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs) —
+  fixture / snapshot updates for the static-set addition + the
+  pre-trim coder.v1 snapshot equivalence pin.
+
+### Verification
+
+- `node --test tests/test-*.mjs` — 2170 pass / 0 fail / 1 skipped
+  (script-tools + script-runner add 48 pins; the 4 fixture-drift fixes
+  keep the existing exit-criteria tests green).
+- **Browser verification** (release-readiness gate per §Decisions 12):
+  drive a coder-role session, trigger `submit_script_for_approval` with
+  a small `Git.getFile` + aggregate script, verify approval card
+  renders source in `<pre><code>`, Approve runs Worker, output lands
+  as a tool_result. Reject path returns feedback. Cancel-while-running
+  captures partial output. Forbidden-global script (`fetch(...)`)
+  surfaces `ReferenceError` in stderr (no network tab traffic).
+  Settings → Tools toggle disables for coder; verify tool is filtered
+  out of the per-turn tool list.
+
+### Punt list (called out, not scope)
+
+- **Tier 1 HTTP allowlist** (Phase 3) — outbound `fetch()` against a
+  profile-level URL allowlist surfaced in the approval card.
+- **ESM dep imports + dep-manifest preview** (Phase 3) — supply chain
+  + dep allowlist; almost certainly gated to a backend bridge.
+- **Backend bridge** (Phase 4) — Tier 2/3 with real Node sandbox,
+  auth/CORS/transport. Substantially larger PR; gated on a use case
+  Phase 3 can't serve. May never ship.
+- **Heuristic-fingerprint graduation seam** (Phase 2) — debug-modal
+  chip + tool-stub PR generator routes recurring shapes toward named
+  tools. Gated on Phase 1 producing a real script corpus.
+- **Tokens-saved-vs-counterfactual estimate** (Phase 2) — v1 records
+  raw tokens-of-source + tokens-of-output via the existing cost
+  store; the actual savings estimate against a simulated `read_file`
+  loop ships in Phase 2.
+- **Cross-session fingerprint persistence** (Phase 5) — gated on a
+  consent design.
+- **Auto-approval of "trusted shapes"** (out forever — category error
+  of the trust model).
+- **Multi-language support** (out — JS only; Worker eats it natively).
+- **Persistent script storage / "save snippet" UX** (out — graduation,
+  not persistence, is the seam for recurring shapes).
+- **Worker round-trip browser test** in `tests/index.html` — manual
+  scoped follow-up; `tests/test-script-runner.mjs` covers the pure
+  helper directly under `node:test` because Workers don't run there.
+- **`State.scriptAutomation` workspace-settings safelist entry** —
+  not in this PR; `State.settings.scriptAutomation.*` keys persist
+  through localStorage today and pick up the profile default on cold
+  start. The `.aieditor/settings.json` safelist add is its own slot.
+
 ## [1.15.0] - 2026-05-08
 
 ### Feature — Task Ledger Phase 1 (re-admission markers + capacity cap)

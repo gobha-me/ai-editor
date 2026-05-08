@@ -18,6 +18,7 @@
  */
 
 import { CODER_V1 } from './coder-v1.js';
+import { CHAT_V1 } from './chat-v1.js';
 import {
     SUBSUMPTION_RULE,
     INVALIDATION_RULE,
@@ -70,5 +71,33 @@ export function resolveCompressionConfig(role) {
         rules: [SUMMARIZATION_RULE],
         preserve_recent: 24,
         profileName: 'rule5_only_shim',
+    };
+}
+
+/**
+ * Resolve the LLM-authored automation (Tier-0 Worker) config for the
+ * active role. Coder gets the value-case `enabled: true`; every other
+ * role inherits chat.v1's `enabled: false`. Settings overlay can flip
+ * either direction at runtime via `State.settings.scriptAutomation`
+ * (see `js/settings/tools-tab.js` row).
+ *
+ * Phase 1 — same role-keyed shape as `resolveCompressionConfig` because
+ * the broader profile-keyed rewire (slice 1.17.0+) hasn't landed yet.
+ *
+ * @param {string|null|undefined} role  Value from `State.settings.role`.
+ * @returns {{ enabled: boolean, timeout_ms: number, max_output_bytes: number, profileName: string }}
+ */
+export function resolveScriptAutomationConfig(role) {
+    const profile = role === 'coder' ? CODER_V1 : CHAT_V1;
+    const cfg = profile.scriptAutomation || {};
+    return {
+        enabled: cfg.enabled === true,
+        timeout_ms: Number.isInteger(cfg.timeout_ms) && cfg.timeout_ms > 0
+            ? cfg.timeout_ms
+            : 30000,
+        max_output_bytes: Number.isInteger(cfg.max_output_bytes) && cfg.max_output_bytes > 0
+            ? cfg.max_output_bytes
+            : 262144,
+        profileName: profile.name,
     };
 }
