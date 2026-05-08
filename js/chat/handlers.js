@@ -45,7 +45,7 @@ import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
-import { CODER_V1 } from '../profiles/coder-v1.js';
+import { resolveTools } from '../profiles/resolve.js';
 
 /**
  * Main entry point for user input
@@ -773,6 +773,7 @@ export async function handleGeneralRequest(input) {
                     // path which never consults the ledger. Failed tool
                     // calls are skipped inside `recordToolInvocation`.
                     if (State.settings.role === 'coder') {
+                        const tools = resolveTools('coder.v1');
                         const td = Catalog.getByName(toolName);
                         recordToolInvocation({
                             conversationId: ConversationManager.getActiveId(),
@@ -780,8 +781,8 @@ export async function handleGeneralRequest(input) {
                             args,
                             toolResult,
                             turnId: toolCall.id || null,
-                            surface: CODER_V1.name,
-                            staticNames: CODER_V1.tools.static,
+                            surface: tools.profileName,
+                            staticNames: tools.static,
                             toolCost: td ? td.metadata.cost_estimate : 0,
                         });
 
@@ -804,7 +805,7 @@ export async function handleGeneralRequest(input) {
                                 }));
                             recordDiscoveryAdmissions({
                                 conversationId: ConversationManager.getActiveId(),
-                                surface: CODER_V1.name,
+                                surface: tools.profileName,
                                 candidates,
                                 cap: _readDiscoveryCap(),
                             });

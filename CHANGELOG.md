@@ -4,6 +4,94 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-05-08
+
+### Path to 2.0.0 — tools subsystem resolver rewire
+
+Third consumer rewire of the profiles arc per ROADMAP §"2.X path"
+(after 1.17.0 compression and 1.18.0 memory). The tools subsystem now
+reads its static admission set through a profile-keyed resolver
+(`resolveTools(profileName)`) instead of the direct `CODER_V1` import
+that lived in [`js/chat/handlers.js`](js/chat/handlers.js) since
+1.3.17. Same static set is admitted; the lookup path is the change.
+
+By 1.19.0, every intelligence subsystem (compression, memory, tools)
+reads from a *resolved* profile via `resolve.js`. Retrieval Composer
+follows at 1.20.0; the picker UI surfaces at 1.21.0; the role
+selector retires at 2.0.0. **User-visible: No** — the Removability
+check (§Decisions 7) confirms zero diff against the pre-slice direct
+reads.
+
+**What lands.**
+
+- New `resolveTools(profileName)` helper in
+  [`js/profiles/resolve.js`](js/profiles/resolve.js) — mirrors
+  `resolveCompressionConfig` and `resolveMemoryConfig` byte-for-byte
+  in shape. Returns `{ static, profileName }` from the resolved
+  profile (deep-merge of the named profile on top of its `base`
+  chain). Unknown profile names fall back to `chat.v1` with a warn —
+  defensive only; `roleToProfileName` never emits anything else.
+  Other `tools` fields (`catalog`, `discovery_strategies`,
+  `budget_tokens`, `expansion_mode`) stay reachable via
+  `resolveProfile` directly when a future slice needs them — the
+  resolver doesn't widen its surface speculatively.
+- [`js/chat/handlers.js`](js/chat/handlers.js): replaces
+  `import { CODER_V1 } from '../profiles/coder-v1.js'` with
+  `import { resolveTools } from '../profiles/resolve.js'`. Inside
+  the `if (State.settings.role === 'coder')` block at the
+  task-ledger record sites, hoists a single
+  `const tools = resolveTools('coder.v1')` and sources
+  `surface: tools.profileName` + `staticNames: tools.static` from
+  it. The `'coder.v1'` literal is fine here — the call site is
+  already gated on `role === 'coder'`. The role↔profile translator
+  (`roleToProfileName`) stays in `resolve.js`; the picker UI flips
+  the gate at 1.21.0.
+
+**Why a wholesale override, not a merge.** `coder.v1` has
+`base: 'chat.v1'` per the 1.14.1 trim, so the tools block falls
+through inheritance. Profile inheritance treats arrays as wholesale
+replacements (per `js/profiles/inheritance.js`), so the resolved
+`tools.static` for coder is the coder array, not a merge of chat's
+`['ask_user']` with coder's 20-tool set. The new test file pins this
+— a future inheritance tweak that flipped arrays to deep-merge-with-
+concat would double-admit `ask_user` and silently widen the surface.
+
+**Why the resolver doesn't return `catalog`, `budget_tokens`, etc.**
+Today's only consumer (`handlers.js` task-ledger record sites) needs
+the `static` array and the profile name. Returning the full `tools`
+slice would be speculative widening — `resolveCompressionConfig` and
+`resolveMemoryConfig` set the precedent of narrow returns shaped for
+the actual call site. Future slices (1.20.0 retrieval, the discovery
+budget surfaces) can extend the return as they need fields, with
+test pins.
+
+### Tests
+
+- **New** [`tests/test-resolve-tools.mjs`](tests/test-resolve-tools.mjs) —
+  eight assertions:
+  - `resolveTools('coder.v1').static` element-equals
+    `CODER_V1.tools.static` (the load-bearing Removability check)
+  - `resolveTools('coder.v1').profileName === CODER_V1.name`
+  - `resolveTools('chat.v1').static === ['ask_user']` (forward-
+    looking pin for when the picker UI lands)
+  - `resolveTools('chat.v1').profileName === 'chat.v1'`
+  - `resolveTools('unknown.profile')` falls back to `chat.v1` with
+    a single `console.warn` matching `/unknown profileName/`
+  - `resolveTools(null)` + `resolveTools(undefined)` both fall back
+    to `chat.v1` and both warn (pinned explicitly so a future
+    "silent fallback for null" optimization surfaces here)
+  - coder's 20-tool static set is a wholesale override over chat's
+    `['ask_user']` (single `ask_user` entry, not a duplicated
+    inheritance merge)
+
+### Files changed
+
+- [`js/profiles/resolve.js`](js/profiles/resolve.js) — `+resolveTools`
+- [`js/chat/handlers.js`](js/chat/handlers.js) — import swap + 3 read
+  sites
+- [`tests/test-resolve-tools.mjs`](tests/test-resolve-tools.mjs) — new
+- [`js/version.js`](js/version.js) — bump to 1.19.0
+
 ## [1.18.1] - 2026-05-08
 
 ### Fix — Directional shape hint on `edit_file`

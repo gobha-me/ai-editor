@@ -18,7 +18,8 @@
  * in `js/profiles/chat-v1.js`.
  *
  * 1.18.0 added `resolveMemoryConfig(profileName)` over the same
- * lookup pattern; tools (1.19.0) and retrieval (1.20.0) follow.
+ * lookup pattern; 1.19.0 adds `resolveTools(profileName)`; retrieval
+ * (1.20.0) follows.
  *
  * @module profiles/resolve
  */
@@ -157,6 +158,47 @@ export function resolveMemoryConfig(profileName) {
         default_scope: memory.default_scope ?? 'user',
         propose_after_n_turns: memory.propose_after_n_turns ?? null,
         capacity_warnings: memory.capacity_warnings ?? {},
+        profileName: resolved.name,
+    };
+}
+
+/**
+ * Resolve tools configuration for a given profile. Returns the
+ * `profile.tools` slice's `static` array — the always-loaded tool
+ * names — sourced from the *resolved* profile (deep-merge of the named
+ * profile on top of its `base` chain).
+ *
+ * Mirrors `resolveCompressionConfig` and `resolveMemoryConfig` byte-
+ * for-byte in shape. Today the surfaces that consume it are
+ * `js/chat/handlers.js`'s task-ledger record sites
+ * (`recordToolInvocation`, `recordDiscoveryAdmissions`) — they need
+ * the profile name (the ledger's `surface` key) and the static-
+ * admission set so the ledger can tell static admissions from the
+ * discovery-admitted ones. Other `tools` fields (`catalog`,
+ * `discovery_strategies`, `budget_tokens`, `expansion_mode`) stay
+ * reachable via `resolveProfile` directly when a future slice needs
+ * them — the resolver doesn't widen its surface speculatively.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; `roleToProfileName` never emits anything else.
+ *
+ * @param {string|null|undefined} profileName
+ * @returns {{ static: string[], profileName: string }}
+ */
+export function resolveTools(profileName) {
+    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = PROFILE_REGISTRY[name];
+    const resolved = resolveProfile(leaf, profileLookup);
+    const tools = resolved.tools || {};
+
+    return {
+        static: tools.static ?? [],
         profileName: resolved.name,
     };
 }
