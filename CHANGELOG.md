@@ -4,6 +4,10 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — design pass for LLM-authored ad-hoc automation
+
+Closes the design pass owed by [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Deferred / unscheduled" → *"LLM-authored ad-hoc automation (parked, design first; gates required)."* New file [`docs/DESIGN-llm-authored-automation.md`](docs/DESIGN-llm-authored-automation.md) covers: the X^N-vs-linear cost case (the dead-CSS post-mortem — ~50+ tool calls / ~$1–2 per audit vs. 2 tool calls / ~$0.05 for a one-off script; ~6.5M tokens / >$4 across the broader incident); the per-invocation gate as the load-bearing seam (tool catalog stays the trust boundary; gate runs at *call* granularity, not *tool* granularity); a file-for-file mapping of the Plan Mode lifecycle (1.10.0 `submit_plan_for_approval`) onto a `submit_script_for_approval` surface; a four-tier scope ladder (Tier 0 read-only fs walk → Tier 1 + HTTP allowlist → Tier 2 + dep imports → Tier 3 + sandbox writes); two sandbox seams compared (in-browser Web Worker vs. backend bridge) with a recommendation to ship the Worker first; a graduation seam (heuristic fingerprint of `(paths read, globals imported, top-level operation)` → 3+ repeats triggers a "promote to tool?" debug-modal chip → human-reviewed PR stub, no auto-registration); a first-ship scope sized as a feature minor (Tier 0 + Worker + Plan-Mode-shaped card, no graduation measurement in v1 — that ships once a real script corpus exists); a tight Out-of-Scope list (arbitrary shell, persistent scripts, recursive tool calls, multi-language, auto-approval, auto-graduation — each a category error of the trust model, not a missing feature). No version bump — design-only docs accumulate in `[Unreleased]` until they ship alongside something else.
+
 ## [1.12.0] - 2026-05-08
 
 ### Feature — branch switcher with ahead/behind + inline switch/delete/cut-release (Touch 3 extraction A)
