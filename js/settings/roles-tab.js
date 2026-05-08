@@ -5,6 +5,8 @@
 import { State, Roles } from '../core.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
+import { Profiles } from '../profiles/registry.js';
+import { getActiveProfileName } from '../profiles/resolve.js';
 
 /**
  * Populate role selection cards and wire click handlers.
@@ -15,9 +17,9 @@ export function populateRoleCards() {
         console.warn('[Settings] roleCards container not found, skipping role cards population');
         return;
     }
-    
+
     const currentRole = State.settings.role || 'full';
-    
+
     container.innerHTML = Roles.list().map(role => `
         <div class="role-card ${role.id === currentRole ? 'active' : ''}" data-role="${escapeAttr(role.id)}">
             <div class="role-card-icon">${escapeHtml(role.icon)}</div>
@@ -26,16 +28,20 @@ export function populateRoleCards() {
         </div>
     `).join('');
 
-    // Click handlers
+    // Click handlers — clicking a role card also refreshes the picker's
+    // active-profile readout so the row that says "Active profile: <name>"
+    // stays in sync without waiting for Save.
     container.querySelectorAll('.role-card').forEach(card => {
         card.onclick = () => {
             container.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
             card.classList.add('active');
             updateRoleToolsList(card.dataset.role);
+            updateActiveProfileReadout();
         };
     });
 
     updateRoleToolsList(currentRole);
+    populateProfilePicker();
 
     // Plan Mode auto-engage checkbox (github#25, 1.10.0). Persist
     // immediately on toggle so the setting survives even if the user
@@ -48,6 +54,58 @@ export function populateRoleCards() {
             State.settings.autoPlanOnIssueStart = !!autoPlanEl.checked;
         };
     }
+}
+
+/**
+ * 1.21.0 — populate the profile picker `<select>` and wire its change
+ * handler. The picker has one sentinel option (`(use role)` → `''`)
+ * and one option per registered profile from `Profiles.list()`. The
+ * sentinel maps to `null` in `State.settings.profile`, which lets
+ * `getActiveProfileName` fall through to `roleToProfileName(role)` —
+ * pre-1.21.0 behavior.
+ */
+function populateProfilePicker() {
+    const select = /** @type {HTMLSelectElement|null} */ (document.getElementById('settingProfilePicker'));
+    if (!select) return;
+
+    const currentProfile = State.settings.profile || '';
+    const opts = [
+        { value: '', label: '(use role)' },
+        ...Profiles.list().map(p => ({ value: p.name, label: `${p.label} — ${p.name}` })),
+    ];
+
+    select.innerHTML = opts.map(o =>
+        `<option value="${escapeAttr(o.value)}"${o.value === currentProfile ? ' selected' : ''}>${escapeHtml(o.label)}</option>`
+    ).join('');
+
+    // Live state: persist the picker change immediately + refresh the
+    // readout. Mirrors the autoPlanOnIssueStart pattern so a user who
+    // closes the modal without Save still keeps the picker selection.
+    select.onchange = () => {
+        const v = select.value;
+        State.settings.profile = v ? v : null;
+        updateActiveProfileReadout();
+    };
+
+    updateActiveProfileReadout();
+}
+
+/**
+ * Refresh the "Active profile: …" readout next to the picker. Reads
+ * the live DOM state — picker's current value + the active role card
+ * — so it doesn't need `collectAndSave` to have run yet.
+ */
+function updateActiveProfileReadout() {
+    const out = document.getElementById('activeProfileReadout');
+    if (!out) return;
+
+    const select = /** @type {HTMLSelectElement|null} */ (document.getElementById('settingProfilePicker'));
+    const activeRoleCard = document.querySelector('.role-card.active');
+    const settingsView = {
+        profile: select && select.value ? select.value : null,
+        role: activeRoleCard ? /** @type {HTMLElement} */ (activeRoleCard).dataset.role : (State.settings.role || null),
+    };
+    out.textContent = getActiveProfileName(settingsView);
 }
 
 /**

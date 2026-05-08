@@ -167,7 +167,7 @@ export function registerMemoryTools(registry) {
         if (a.value === undefined || a.value === null) return { error: 'value is required' };
         if (!a.category) return { error: `category is required; one of: ${CATEGORIES.join(', ')}` };
 
-        const scope = a.scope || resolveDefaultRememberScope(State?.settings?.role);
+        const scope = a.scope || resolveDefaultRememberScope(State?.settings);
         const source = a.source || 'agent_proposed';
         const reason = typeof a.reason === 'string' ? a.reason : '';
 

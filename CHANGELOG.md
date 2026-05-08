@@ -4,6 +4,168 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-05-08
+
+### Path to 2.0.0 — Settings profile picker (load-bearing flip turns user-visible)
+
+Fifth slice of the path-to-2.0.0 profile arc per ROADMAP §"2.X path"
+(after 1.17.0 compression, 1.18.0 memory, 1.19.0 tools, 1.20.0
+retrieval — the four resolver rewires that made profiles load-bearing
+*internally*). 1.21.0 surfaces a profile picker in
+[`Settings → Roles`](js/settings/roles-tab.js) alongside the existing
+role selector, with the explicit semantics: **the picker exists; role
+still wins if untouched.** Default behavior is unchanged — every
+existing user has `settings.profile === undefined`, which threads
+through `getActiveProfileName` to `roleToProfileName(role)`
+byte-for-byte.
+
+This is the last user-visible slice before 2.0.0 retires the role
+selector entirely. The advanced (raw `Profile` struct) view is
+deferred to **2.0.x** per the ROADMAP §"2.X path" sizing — power-user
+surface, deferrable without breaking the load-bearing claim.
+
+**What lands.**
+
+- New [`js/profiles/registry.js`](js/profiles/registry.js) — extracts
+  the `PROFILE_REGISTRY` map that lived inline in
+  [`js/profiles/resolve.js:63–71`](js/profiles/resolve.js) since 1.17.0
+  (the comment there had pinned this slice: *"a future
+  `Profiles.get(name)` (1.21.0 picker UI) will subsume it."*). Exposes
+  `Profiles.get(name)`, `Profiles.has(name)`, and
+  `Profiles.list()` returning `[{ name, label, description }]` for the
+  picker. Two registered profiles today: `chat.v1`, `coder.v1`. Phase 2
+  (`chat_multi.v1`, `rp.v1`, `kb.v1`) registers here when those
+  profiles ship.
+- [`js/profiles/resolve.js`](js/profiles/resolve.js): drops the local
+  `PROFILE_REGISTRY` map; all four resolver functions
+  (`resolveCompressionConfig`, `resolveMemoryConfig`, `resolveTools`,
+  `resolveRetrievalConfig`) now consult `Profiles.has` / `Profiles.get`
+  for the same lookup contract. Adds new exported helper
+  `getActiveProfileName({ profile, role })` — the load-bearing
+  semantic for the picker: returns `profile` if set and registered,
+  otherwise falls through to `roleToProfileName(role)`. `null`/empty/
+  unknown picker values silently fall through (the picker UI only
+  writes registry-known names + `null`; defensive degradation for
+  stale settings blobs).
+- `resolveDefaultRememberScope` becomes polymorphic — accepts either a
+  role string (legacy: existing `tests/test-memory-resolve.mjs`
+  callers) or a settings-shaped object (new: routes through
+  `getActiveProfileName`). [`js/tools/memory-tools.js`](js/tools/memory-tools.js)
+  flips its caller from
+  `resolveDefaultRememberScope(State?.settings?.role)` to
+  `resolveDefaultRememberScope(State?.settings)` so the picker
+  threads through.
+- [`js/chat/compactor-integration.js`](js/chat/compactor-integration.js):
+  flips the per-turn lookup from
+  `resolveCompressionConfig(roleToProfileName(role))` to
+  `resolveCompressionConfig(getActiveProfileName(State?.settings))` —
+  zero behavior diff when the picker is untouched (per Removability
+  test below); honors picker selection on every turn when set.
+- [`html/settings-tabs.html`](html/settings-tabs.html): new picker
+  section at the top of the Roles tab — `<select id="settingProfilePicker">`
+  with a `(use role)` sentinel option (value `''`) plus one option per
+  registered profile. Live "Active profile: `<name>`" readout below
+  the picker, computed via `getActiveProfileName(settingsView)` so it
+  reflects role-card clicks before Save.
+- [`js/settings/roles-tab.js`](js/settings/roles-tab.js):
+  `populateProfilePicker()` populates the `<select>` from
+  `Profiles.list()` and wires `onchange` to write
+  `State.settings.profile` immediately + refresh the readout.
+  `updateActiveProfileReadout()` reads the live DOM (active role card
+  + picker value) so the readout stays in sync without waiting for
+  `collectAndSave`. Role-card clicks also refresh the readout —
+  changing role while the picker is on `(use role)` updates the
+  active-profile display in real time.
+- [`js/settings/persistence.js`](js/settings/persistence.js):
+  `collectAndSave()` writes `State.settings.profile` from the picker
+  (`''` sentinel → `null`); `exportSettings()` includes the new field
+  via `pickGlobal('profile')`. `Object.assign` on import covers the
+  field naturally — no migration script needed.
+- [`js/profiles/index.js`](js/profiles/index.js): re-exports `Profiles`
+  + `getActiveProfileName` + the four resolver functions + the helper
+  `resolveDefaultRememberScope` so the barrel covers the full
+  public-facing surface.
+
+**What does *not* change.** The two coder-gated resolver call sites at
+[`js/chat/handlers.js`](js/chat/handlers.js) (tools) and
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+(retrieval) keep their hardcoded `'coder.v1'` literal — those branches
+already run inside `role === 'coder'` gates per the deliberate 1.19.0/
+1.20.0 decisions; the picker doesn't widen the gate at this slice.
+2.0.0 retires the role gate entirely along with the role selector;
+those literals get replaced with `getActiveProfileName(State.settings)`
+in the same cut.
+
+### Tests
+
+- **New** [`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs) —
+  pins the registry contract: `Profiles.get('chat.v1') === CHAT_V1`,
+  `Profiles.get('coder.v1') === CODER_V1`, unknown names return
+  `null`, `Profiles.has` is prototype-pollution-safe (`'__proto__'` /
+  `'constructor'` not reported as registered), `Profiles.list()`
+  returns both profiles in `chat → coder` order with the
+  `{ name, label, description }` shape, named exports
+  (`get` / `has` / `list`) are referentially equal to `Profiles.*`.
+- **New** [`tests/test-resolve-active-profile.mjs`](tests/test-resolve-active-profile.mjs) —
+  fifteen tests covering `getActiveProfileName`:
+  - **Picker-wins precedence:**
+    `{ profile: 'coder.v1', role: 'reviewer' }` → `'coder.v1'`;
+    `{ profile: 'chat.v1', role: 'coder' }` → `'chat.v1'` (the
+    interesting case: coder + picker=chat at runtime).
+  - **Picker-untouched fallback:** all of `null` / `undefined` / `{}`
+    profile values fall through to `roleToProfileName(role)`; missing
+    role defaults to `'chat.v1'`; `getActiveProfileName(null)` and
+    `getActiveProfileName(undefined)` return `'chat.v1'` without
+    throwing (matches `State?.settings?.…` optional-chain at the call
+    sites).
+  - **§Decisions 7 Removability check (load-bearing):** with
+    `profile: null`, `getActiveProfileName(s) === roleToProfileName(s.role)`
+    for every role the editor emits (`coder`, `reviewer`, `pm`,
+    `plugin-dev`, `full`, `null`, `undefined`, unknown strings) — the
+    proof that flipping the compression/memory call sites yields zero
+    behavior diff.
+  - **Defensive:** unknown profile names, non-string profile values,
+    and the empty-string picker sentinel all fall through to the role
+    path without warning.
+  - **Picker-without-role:** `{ profile: 'coder.v1' }` (no role)
+    returns `'coder.v1'` — covers the picker-only call shape.
+
+Existing resolver tests
+([`test-profile-resolve.mjs`](tests/test-profile-resolve.mjs),
+[`test-resolve-retrieval.mjs`](tests/test-resolve-retrieval.mjs),
+[`test-resolve-tools.mjs`](tests/test-resolve-tools.mjs),
+[`test-memory-resolve.mjs`](tests/test-memory-resolve.mjs),
+[`test-profile-resolution.mjs`](tests/test-profile-resolution.mjs))
+need no updates — they consume profile names directly; only the
+*source* of the name changes. `test-memory-resolve.mjs`'s role-string
+calls keep working because `resolveDefaultRememberScope` accepts both
+shapes.
+
+### Files changed
+
+- [`js/profiles/registry.js`](js/profiles/registry.js) — **new**
+- [`js/profiles/resolve.js`](js/profiles/resolve.js) — drops local
+  `PROFILE_REGISTRY`; imports `Profiles`; adds `getActiveProfileName`;
+  `resolveDefaultRememberScope` becomes polymorphic
+- [`js/profiles/index.js`](js/profiles/index.js) — barrel adds
+  `Profiles`, `resolveTools`, `resolveRetrievalConfig`,
+  `resolveDefaultRememberScope`, `getActiveProfileName`
+- [`js/chat/compactor-integration.js`](js/chat/compactor-integration.js) —
+  picker-aware compression lookup
+- [`js/tools/memory-tools.js`](js/tools/memory-tools.js) — passes
+  settings instead of role through `resolveDefaultRememberScope`
+- [`html/settings-tabs.html`](html/settings-tabs.html) — picker section
+  at the top of Roles tab
+- [`js/settings/roles-tab.js`](js/settings/roles-tab.js) —
+  `populateProfilePicker` + live readout
+- [`js/settings/persistence.js`](js/settings/persistence.js) —
+  collect + export `settings.profile`
+- [`js/version.js`](js/version.js) — `1.20.0` → `1.21.0`
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — slice-table refresh:
+  1.18.0/1.19.0/1.20.0 marked ✅ shipped; 1.21.0 row marked ✅
+- [`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs) — **new**
+- [`tests/test-resolve-active-profile.mjs`](tests/test-resolve-active-profile.mjs) — **new**
+
 ### Docs — In-editor preview & verify design + roadmap slot
 
 New [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md) closes a

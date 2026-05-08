@@ -22,7 +22,17 @@ export { CHAT_V1 } from './chat-v1.js';
 
 export { resolveProfile } from './inheritance.js';
 
-export { resolveCompressionConfig, resolveMemoryConfig, roleToProfileName } from './resolve.js';
+export { Profiles } from './registry.js';
+
+export {
+    resolveCompressionConfig,
+    resolveMemoryConfig,
+    resolveTools,
+    resolveRetrievalConfig,
+    resolveDefaultRememberScope,
+    roleToProfileName,
+    getActiveProfileName,
+} from './resolve.js';
 
 /**
  * Re-export the typedefs so consumers can `import('./profiles')` and pick

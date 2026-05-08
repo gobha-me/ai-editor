@@ -149,6 +149,18 @@ export function collectAndSave() {
     const activeRoleCard = document.querySelector('.role-card.active');
     State.settings.role = activeRoleCard ? activeRoleCard.dataset.role : 'full';
 
+    // 1.21.0 — profile picker. Sentinel `''` value (the "(use role)"
+    // option) clears the field so `getActiveProfileName` falls through
+    // to `roleToProfileName(role)` (pre-1.21.0 behavior). Any other
+    // value is the picker-selected profile name; `getActiveProfileName`
+    // validates it against the registry on read, so a stale/unknown
+    // string degrades gracefully without erroring here.
+    const profilePickerEl = document.getElementById('settingProfilePicker');
+    if (profilePickerEl) {
+        const v = profilePickerEl.value;
+        State.settings.profile = v ? v : null;
+    }
+
     // Plan Mode auto-engage on issue start (github#25, 1.10.0)
     const autoPlanEl = document.getElementById('autoPlanOnIssueStart');
     if (autoPlanEl) {
@@ -321,6 +333,7 @@ export function exportSettings() {
 
         // Other
         role: pickGlobal('role'),
+        profile: pickGlobal('profile'),
         disabledModels: State.settings.disabledModels || [],
         ignorePatterns: State.settings.ignorePatterns,
         

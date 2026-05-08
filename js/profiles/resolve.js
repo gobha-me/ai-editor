@@ -28,6 +28,7 @@
 import { CODER_V1 } from './coder-v1.js';
 import { CHAT_V1 } from './chat-v1.js';
 import { resolveProfile } from './inheritance.js';
+import { Profiles } from './registry.js';
 import {
     SUBSUMPTION_RULE,
     INVALIDATION_RULE,
@@ -54,20 +55,17 @@ const RUNTIME_RULES = {
 };
 
 /**
- * Profile registry — the inputs `resolveProfile` walks for `base`
- * names. Kept local to this module; a future `Profiles.get(name)`
- * (1.21.0 picker UI) will subsume it.
+ * `resolveProfile`'s `base`-name lookup — delegates to the registry
+ * extracted at 1.21.0 (`js/profiles/registry.js`). The pre-1.21.0
+ * inline `PROFILE_REGISTRY` map lifted to that module so the picker
+ * UI in `js/settings/roles-tab.js` can share it without circular-
+ * importing `resolve.js`.
  *
- * @type {Record<string, Profile>}
+ * @param {string} name
+ * @returns {Profile|null}
  */
-const PROFILE_REGISTRY = {
-    'chat.v1':  CHAT_V1,
-    'coder.v1': CODER_V1,
-};
-
-/** @param {string} name */
 function profileLookup(name) {
-    return PROFILE_REGISTRY[name] || null;
+    return Profiles.get(name);
 }
 
 /**
@@ -85,6 +83,36 @@ export function roleToProfileName(role) {
 }
 
 /**
+ * Pick the active profile name from a settings-shaped object — the
+ * load-bearing semantic for 1.21.0's picker UI: *"the picker exists;
+ * role still wins if untouched."*
+ *
+ * Precedence:
+ *   1. If `settings.profile` is a known profile name (per
+ *      `Profiles.has`), it wins — the user touched the picker.
+ *   2. Otherwise fall through to `roleToProfileName(settings.role)` —
+ *      pre-1.21.0 behavior, byte-for-byte.
+ *
+ * Validation is permissive: an *unknown* string in `settings.profile`
+ * silently falls through to the role path rather than warning. The
+ * picker UI only writes registry-known names + `null` (the "(use
+ * role)" sentinel), so an unknown value implies a stale settings blob
+ * (e.g. an export from a future version with a removed profile) — the
+ * graceful degradation is to honor the role selector instead of
+ * surfacing a noisy warning every turn.
+ *
+ * @param {{ profile?: string|null, role?: string|null } | null | undefined} settings
+ * @returns {'coder.v1' | 'chat.v1'}
+ */
+export function getActiveProfileName(settings) {
+    const profile = settings && typeof settings.profile === 'string' ? settings.profile : null;
+    if (profile && Profiles.has(profile)) {
+        return /** @type {'coder.v1' | 'chat.v1'} */ (profile);
+    }
+    return roleToProfileName(settings && settings.role);
+}
+
+/**
  * Resolve compression configuration for a given profile. Returns the
  * exact shape `Compactor.compress()` consumes for `rules` +
  * `preserve_recent` (the caller still supplies `history`,
@@ -99,14 +127,14 @@ export function roleToProfileName(role) {
  * @returns {{ rules: RuntimeRule[], preserve_recent: number, profileName: string }}
  */
 export function resolveCompressionConfig(profileName) {
-    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
         ? profileName
         : 'chat.v1';
     if (name !== profileName) {
         console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
     }
 
-    const leaf = PROFILE_REGISTRY[name];
+    const leaf = Profiles.get(name);
     const resolved = resolveProfile(leaf, profileLookup);
     const rules = (resolved.compression?.rules || [])
         .map(r => RUNTIME_RULES[r.name])
@@ -144,14 +172,14 @@ export function resolveCompressionConfig(profileName) {
  * @returns {{ default_scope: string, propose_after_n_turns: number|null, capacity_warnings: object, profileName: string }}
  */
 export function resolveMemoryConfig(profileName) {
-    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
         ? profileName
         : 'chat.v1';
     if (name !== profileName) {
         console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
     }
 
-    const leaf = PROFILE_REGISTRY[name];
+    const leaf = Profiles.get(name);
     const resolved = resolveProfile(leaf, profileLookup);
     const memory = resolved.memory || {};
 
@@ -187,14 +215,14 @@ export function resolveMemoryConfig(profileName) {
  * @returns {{ static: string[], profileName: string }}
  */
 export function resolveTools(profileName) {
-    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
         ? profileName
         : 'chat.v1';
     if (name !== profileName) {
         console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
     }
 
-    const leaf = PROFILE_REGISTRY[name];
+    const leaf = Profiles.get(name);
     const resolved = resolveProfile(leaf, profileLookup);
     const tools = resolved.tools || {};
 
@@ -241,14 +269,14 @@ export function resolveTools(profileName) {
  * @returns {{ collections: string[], memory_collections: string[], strategy_weights: object, novelty_threshold: number, profileName: string }}
  */
 export function resolveRetrievalConfig(profileName) {
-    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
         ? profileName
         : 'chat.v1';
     if (name !== profileName) {
         console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
     }
 
-    const leaf = PROFILE_REGISTRY[name];
+    const leaf = Profiles.get(name);
     const resolved = resolveProfile(leaf, profileLookup);
     const retrieval = resolved.retrieval || {};
 
@@ -274,11 +302,24 @@ export function resolveRetrievalConfig(profileName) {
  * is Node-importable for tests (memory-tools transitively pulls
  * `core.js`'s browser-only `window.addEventListener`).
  *
- * @param {string|null|undefined} role
+ * **1.21.0 — polymorphic argument.** Accepts either a role string
+ * (pre-1.21.0 callers / existing tests — `resolveDefaultRememberScope('coder')`)
+ * or a settings-shaped object with `{ role, profile }` keys
+ * (`resolveDefaultRememberScope(State.settings)`). The settings form
+ * threads the picker via `getActiveProfileName`; the string form
+ * preserves the legacy `roleToProfileName` path so the existing
+ * memory-resolve test suite passes byte-identical.
+ *
+ * @param {string|null|undefined|{ role?: string|null, profile?: string|null }} input
  * @returns {'user'|'workspace'}
  */
-export function resolveDefaultRememberScope(role) {
-    const profileName = roleToProfileName(role);
+export function resolveDefaultRememberScope(input) {
+    let profileName;
+    if (input && typeof input === 'object') {
+        profileName = getActiveProfileName(input);
+    } else {
+        profileName = roleToProfileName(/** @type {string|null|undefined} */ (input));
+    }
     const cfg = resolveMemoryConfig(profileName);
     return MEMORY_SCOPES.includes(cfg.default_scope) ? cfg.default_scope : 'workspace';
 }

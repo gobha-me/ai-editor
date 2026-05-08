@@ -639,6 +639,25 @@
 </div>
 
 <div class="settings-tab-content" id="tabRoles">
+    <!-- 1.21.0 — profile picker. Sits alongside the role selector
+         below; both write the same internal profile-name state via
+         getActiveProfileName(). The picker exists; role still wins
+         if untouched. The role selector retires at 2.0.0. -->
+    <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
+        <label for="settingProfilePicker" style="font-weight: 600; font-size: var(--font-md); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+            Profile
+        </label>
+        <p style="font-size: var(--font-sm); color: var(--text-secondary); margin: 0 0 0.5rem 0;">
+            Picks the intelligence-layer config (compression, memory, retrieval, tools) directly. When set, this overrides the Role selector below; choose <em>(use role)</em> to fall back to role-based selection.
+        </p>
+        <select id="settingProfilePicker" style="width: 100%; max-width: 340px; padding: 0.4rem 0.6rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: var(--font-base);">
+            <!-- Populated dynamically -->
+        </select>
+        <div style="font-size: var(--font-sm); color: var(--text-muted); margin-top: 0.4rem;">
+            Active profile: <code id="activeProfileReadout" style="color: var(--text-secondary);">…</code>
+        </div>
+    </div>
+
     <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
         Choose a role to control which tools the AI can use. Limiting tools reduces prompt token usage and can improve response quality.
     </p>
