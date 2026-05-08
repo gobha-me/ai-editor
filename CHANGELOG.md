@@ -35,6 +35,59 @@ cross-doc link in any rendered doc routes correctly.
   basename, nested path, and fragment cases, plus an end-to-end
   `renderDocInto` flow with a stubbed `marked` + `fetch`.
 
+### Docs — Path to 2.0.0 is now pinned, not "n-z more changes"
+
+[`docs/ROADMAP.md`](docs/ROADMAP.md) gains a top-level §"2.X path —
+the load-bearing flip and what runs alongside it" that decomposes
+the previously-monolithic 2.0 slot into five minors + one patch from
+1.14.0 (just-shipped chat.v1 + `resolveProfile` inheritance helper,
+PR #322, tag `v1.14.0`) to the 2.0.0 role-selector removal. Each
+pre-2.0 slice rewires exactly one subsystem's lookup from role-keyed
+to profile-keyed; the table calls out which slices are user-visible
+(1.15.0 ledger markers, 1.16.0 `preserve_recent` 24→4 reconciliation,
+1.20.0 picker UI, 2.0.0 role removal) and which are pure plumbing
+under the Removability-check exit criterion (per §Decisions 7).
+Continuation table covers 2.0.x stabilization → 2.3.0+ Phase 4
+extensibility.
+
+The same section names **three** parallel 1.X tracks that interleave
+with the Profiles arc without moving the major-version needle: a
+Sandbox minor implementing `submit_script_for_approval` (Tier 0 +
+in-browser Web Worker) per [`docs/DESIGN-llm-authored-automation.md`](docs/DESIGN-llm-authored-automation.md);
+a Plugin Discoverability minor that promotes the three "Works But No
+Settings UI" rows from the rendered Plugin SDK help page
+([`docs/PLUGIN.md`](docs/PLUGIN.md) lines 429–437) into scheduled
+work — provider-registry-driven dropdowns + plugin-tool listing; and
+a **Retrieval ingest hardening** minor that pays down two friction
+points the user has now hit on real repos — re-embed-on-branch-switch
+cost (delta-indexing keyed off `git diff <merge-base>...HEAD --name-only`,
+plus invalidate-on-save / commit) and the 500-file ceiling becoming a
+squeeze (provider language-stats — GitHub/GitLab/Gitea all expose
+`byte-count-per-language` — drive descending priority order, plus a
+migration from file-count cap to token-budget cap so file count stops
+being the squeeze metric). Baseline for that track is recorded from
+the 2026-05-08 cost-dashboard export: `search_in_files` is the dominant
+cost shape (12,380 calls / ~1.3M tokens / >$1 on a single conversation),
+the X^N grep-fallback the model reaches for when retrieval isn't earning
+its keep. Validation = re-export the dashboard a week post-ship and
+diff `search_in_files` token spend — earns the slot or refutes it.
+
+Bookkeeping: deleted the now-redundant §"Later (sequenced)" →
+"2.0.0 — Profiles ascend" block (single source of truth in §"2.X
+path"); shortened the §"Other deferred" LLM-automation entry to a
+cross-reference; updated github#24's "post-2.0" wording to name
+2.0.0 specifically; updated the Now/Next/Later "Next" row to drop
+the stale "not started" claim and point at the new section; updated
+the header line to reflect 1.14.0 as the current released and main
+HEAD version.
+
+Also adds §Decisions 13 — *paper-only planning sessions are
+scheduled, not ad-hoc* — formalizing the cadence that produced this
+layout. Trigger: a session answers a roadmap question with "n-z more
+changes" instead of a pinned slice. Output: a docs-only re-layout
+pass, no code. First applied 2026-05-08 in the path-to-2.0.0
+re-layout.
+
 ## [1.14.0] - 2026-05-08
 
 ### Feature — `chat.v1` profile data + `resolveProfile` inheritance helper (Profiles Phase 1 continuation)
