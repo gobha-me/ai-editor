@@ -28,6 +28,7 @@ import { LLM } from '../../llm/api.js';
 import { ConversationManager } from '../../chat/conversations.js';
 import { getOrCreateLedger } from '../../chat/task-state.js';
 import { CODER_V1 } from '../../profiles/coder-v1.js';
+import { resolveRetrievalConfig } from '../../profiles/resolve.js';
 
 import { createInMemoryChunkStore } from './store.js';
 import { createProductionIngestWalker } from './wiring.js';
@@ -645,9 +646,12 @@ async function findRelevantFiles(query, topK = 5) {
         // load-bearing in production. Per-conversation registry from
         // `js/chat/task-state.js`; coder.v1's capacity (500) and
         // novelty_threshold (0.3) drive sizing and re-admission policy.
-        // The direct `CODER_V1` import is the same smell flagged in
-        // ROADMAP §"2.X path" State of Phase 1; clears at slice 1.18.0
-        // when the tools subsystem stops reading raw `CODER_V1` slices.
+        // 1.20.0 — `novelty_threshold` now reads through
+        // `resolveRetrievalConfig` per the path-to-2.0.0 arc. The
+        // `task_ledger.capacity` read at line 654 is the surviving
+        // direct-import use of `CODER_V1`; it clears with a future
+        // `task_ledger` resolver (separate slice — task_ledger is its
+        // own profile section, out of scope for the retrieval rewire).
         const conversationId = ConversationManager.getActiveId();
         const ledger = getOrCreateLedger(conversationId, CODER_V1.name, {
             capacity: (CODER_V1.task_ledger && CODER_V1.task_ledger.capacity) || 500,
@@ -707,13 +711,17 @@ async function findRelevantFiles(query, topK = 5) {
         // 1.15.0 — thread ledger opts so step 6.5 picks them up. Threshold
         // sources from coder.v1 (0.3 — re-admit liberally per
         // DESIGN-profiles.md "novelty threshold low"). The chat-v1
-        // threshold (0.5) doesn't ship through here in 1.15.0 — chat
-        // surfaces don't call `find_relevant_files` today, and the
-        // resolver rewire that picks the right profile per surface
-        // lands at slice 1.16.0+ per ROADMAP §"2.X path".
+        // threshold (0.5) doesn't ship through here in 1.20.0 either —
+        // chat surfaces don't call `find_relevant_files` today; the
+        // role↔profile translator at the call-site lands with the
+        // 1.21.0 picker UI per ROADMAP §"2.X path".
+        // 1.20.0 — read via `resolveRetrievalConfig` (last subsystem
+        // rewire of the path-to-2.0.0 arc). Behavior unchanged —
+        // §Decisions 7 Removability check is `tests/test-resolve-retrieval.mjs`.
         composeOpts.turnId = turnId;
         if (Array.isArray(queryEmbedding)) composeOpts.queryEmbedding = queryEmbedding;
-        composeOpts.noveltyThreshold = (CODER_V1.retrieval && CODER_V1.retrieval.novelty_threshold) ?? 0.4;
+        const retrievalCfg = resolveRetrievalConfig('coder.v1');
+        composeOpts.noveltyThreshold = retrievalCfg.novelty_threshold;
 
         // 1.6.8 — snapshot session totals before compose() so a delta
         // captures any LLM tokens spent inside retrieval (paraphrase chatFn

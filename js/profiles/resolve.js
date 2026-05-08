@@ -18,8 +18,9 @@
  * in `js/profiles/chat-v1.js`.
  *
  * 1.18.0 added `resolveMemoryConfig(profileName)` over the same
- * lookup pattern; 1.19.0 adds `resolveTools(profileName)`; retrieval
- * (1.20.0) follows.
+ * lookup pattern; 1.19.0 added `resolveTools(profileName)`; 1.20.0
+ * adds `resolveRetrievalConfig(profileName)` — the last subsystem
+ * rewire of the path-to-2.0.0 arc.
  *
  * @module profiles/resolve
  */
@@ -199,6 +200,63 @@ export function resolveTools(profileName) {
 
     return {
         static: tools.static ?? [],
+        profileName: resolved.name,
+    };
+}
+
+/**
+ * Resolve retrieval configuration for a given profile. Returns the
+ * `profile.retrieval` slice's load-bearing fields — `collections`,
+ * `memory_collections`, `strategy_weights`, `novelty_threshold` —
+ * sourced from the *resolved* profile (deep-merge of the named profile
+ * on top of its `base` chain).
+ *
+ * Mirrors `resolveCompressionConfig`, `resolveMemoryConfig`, and
+ * `resolveTools` byte-for-byte in shape. The fourth and final consumer
+ * rewire of the path-to-2.0.0 profile arc per ROADMAP §"2.X path":
+ * after this slice ships, every intelligence subsystem reads from a
+ * resolved profile, so profiles are load-bearing internally even
+ * though the Settings surface is still role-keyed (the picker UI
+ * lands at 1.21.0; the role selector retires at 2.0.0).
+ *
+ * Today the surface that consumes it is the retrieval Composer call
+ * site at `js/intelligence/retrieval/manager.js:findRelevantFiles` —
+ * specifically the `composeOpts.noveltyThreshold` thread (step 6.5
+ * re-admission gating). The other three fields (`collections`,
+ * `memory_collections`, `strategy_weights`) are returned for
+ * forward-looking parity with the slice spec; today's call site
+ * supplies a runtime collection ID directly and does not thread
+ * strategy weights through this layer. Pinning them in the resolver
+ * shape now keeps subsequent slices additive — same shape decision as
+ * 1.18.0 returning `propose_after_n_turns` ahead of its consumer.
+ *
+ * Other `retrieval` fields (`chunkers`, `metadata_extensions`) stay
+ * reachable via `resolveProfile` directly when a future slice needs
+ * them — the resolver doesn't widen its surface speculatively.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; `roleToProfileName` never emits anything else.
+ *
+ * @param {string|null|undefined} profileName
+ * @returns {{ collections: string[], memory_collections: string[], strategy_weights: object, novelty_threshold: number, profileName: string }}
+ */
+export function resolveRetrievalConfig(profileName) {
+    const name = typeof profileName === 'string' && PROFILE_REGISTRY[profileName]
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = PROFILE_REGISTRY[name];
+    const resolved = resolveProfile(leaf, profileLookup);
+    const retrieval = resolved.retrieval || {};
+
+    return {
+        collections: retrieval.collections ?? [],
+        memory_collections: retrieval.memory_collections ?? [],
+        strategy_weights: retrieval.strategy_weights ?? {},
+        novelty_threshold: retrieval.novelty_threshold ?? 0.4,
         profileName: resolved.name,
     };
 }

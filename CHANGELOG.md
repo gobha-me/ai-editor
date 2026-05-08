@@ -4,6 +4,122 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-05-08
+
+### Path to 2.0.0 — retrieval subsystem resolver rewire
+
+Fourth and final consumer rewire of the profiles arc per ROADMAP §"2.X
+path" (after 1.17.0 compression, 1.18.0 memory, 1.19.0 tools). The
+retrieval Composer call site in
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+now reads its `noveltyThreshold` (and forward-looking
+`collections` / `memory_collections` / `strategy_weights`) through a
+profile-keyed resolver (`resolveRetrievalConfig(profileName)`) instead
+of the direct `CODER_V1.retrieval.novelty_threshold` read that lived
+in `findRelevantFiles` since 1.15.0 (Task Ledger Phase 1).
+
+**Profiles are now load-bearing internally.** Every intelligence
+subsystem (compression, memory, tools, retrieval) reads from a
+*resolved* profile via `resolve.js`. The Settings surface is still
+role-keyed today; the picker UI surfaces at 1.21.0 and the role
+selector retires at 2.0.0. **User-visible: No** — the Removability
+check (§Decisions 7) confirms zero diff against the pre-slice direct
+read.
+
+**What lands.**
+
+- New `resolveRetrievalConfig(profileName)` helper in
+  [`js/profiles/resolve.js`](js/profiles/resolve.js) — mirrors
+  `resolveCompressionConfig`, `resolveMemoryConfig`, and `resolveTools`
+  byte-for-byte in shape. Returns
+  `{ collections, memory_collections, strategy_weights, novelty_threshold, profileName }`
+  from the resolved profile (deep-merge of the named profile on top
+  of its `base` chain). Unknown profile names fall back to `chat.v1`
+  with a warn — defensive only; `roleToProfileName` never emits
+  anything else. Defaults on missing fields preserve the
+  pre-slice fallback (`novelty_threshold: 0.4`).
+- [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js):
+  adds the resolver import alongside the existing `CODER_V1` import,
+  hoists a single
+  `const retrievalCfg = resolveRetrievalConfig('coder.v1')` above
+  `composeOpts`, and sources `composeOpts.noveltyThreshold` from it.
+  The `'coder.v1'` literal is fine here — the call site already runs
+  inside the coder-gated `findRelevantFiles` body. The role↔profile
+  translator (`roleToProfileName`) stays in `resolve.js`; the picker
+  UI flips the gate at 1.21.0.
+
+**Why the surviving `CODER_V1` import.** The `task_ledger.capacity`
+read at the ledger-creation site (`getOrCreateLedger(...,
+{ capacity: CODER_V1.task_ledger.capacity || 500 })`) is a separate
+profile section — `task_ledger` is its own slice, not part of the
+retrieval block named in the ROADMAP §"2.X path" 1.20.0 row. It
+clears with a future `task_ledger` resolver, not bundled here. The
+inline smell-comment is updated to reflect this (the prior comment
+predicted clearance "at slice 1.18.0" which already wasn't true).
+
+**Why a wholesale override, not a merge.** `coder.v1` has
+`base: 'chat.v1'` per the 1.14.1 trim, so the retrieval block falls
+through inheritance. Profile inheritance treats arrays/objects as
+wholesale replacements (per `js/profiles/inheritance.js`), so the
+resolved `retrieval.collections` for coder is the coder array
+(`['workspace_code', 'workspace_docs', 'recent_tool_results']`, len 3)
+rather than a merge with chat's `['attached_docs']` (which would be
+len 4). The new test file pins this — a future inheritance tweak that
+flipped arrays to deep-merge-with-concat would silently widen
+retrieval to 4 collections.
+
+**Why the resolver returns three forward-looking fields.** Today's
+only consumer (`manager.js` Composer call site) actually reads
+`novelty_threshold`. The current call site hardcodes
+`collections: [_collection]` (a runtime collection ID, not the
+profile's static list) and doesn't thread strategy weights through
+this layer. Returning `collections` / `memory_collections` /
+`strategy_weights` matches the slice spec verbatim from the ROADMAP
+row and matches the precedent of 1.18.0 returning
+`propose_after_n_turns` ahead of its consumer — keeps subsequent
+slices additive.
+
+### Tests
+
+- **New** [`tests/test-resolve-retrieval.mjs`](tests/test-resolve-retrieval.mjs) —
+  seven tests:
+  - `resolveRetrievalConfig('coder.v1')` field-by-field equals
+    `CODER_V1.retrieval` for `collections`, `memory_collections`,
+    `strategy_weights`, `novelty_threshold` (the load-bearing
+    Removability check)
+  - `resolveRetrievalConfig('coder.v1').profileName === CODER_V1.name`
+  - `resolveRetrievalConfig('chat.v1')` chat baseline:
+    `collections: ['attached_docs']`,
+    `memory_collections: ['user', 'persona']`,
+    `novelty_threshold: 0.5`
+  - `resolveRetrievalConfig('chat.v1').profileName === 'chat.v1'`
+  - `resolveRetrievalConfig('unknown.profile')` falls back to
+    `chat.v1` with a single `console.warn` matching
+    `/unknown profileName/`
+  - `resolveRetrievalConfig(null)` + `resolveRetrievalConfig(undefined)`
+    both fall back to `chat.v1` and both warn
+  - coder's 3-collection retrieval set is a wholesale override over
+    chat's `['attached_docs']` (length 3, no `attached_docs` member)
+
+Existing retrieval tests
+([`tests/test-retrieval-composer.mjs`](tests/test-retrieval-composer.mjs),
+[`tests/test-retrieval-removability.mjs`](tests/test-retrieval-removability.mjs),
+[`tests/test-retrieval-manager.mjs`](tests/test-retrieval-manager.mjs))
+need no updates — they consume the threshold via injected
+`opts.noveltyThreshold`; only the source of that number changes.
+
+### Files changed
+
+- [`js/profiles/resolve.js`](js/profiles/resolve.js) — `+resolveRetrievalConfig`,
+  module docstring updated
+- [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+  — `+resolveRetrievalConfig` import; `composeOpts.noveltyThreshold`
+  reads through the resolver; smell-comment correction at the
+  ledger-creation site
+- [`tests/test-resolve-retrieval.mjs`](tests/test-resolve-retrieval.mjs)
+  — new (Removability proof)
+- [`js/version.js`](js/version.js) — `1.19.0 → 1.20.0`
+
 ## [1.19.0] - 2026-05-08
 
 ### Path to 2.0.0 — tools subsystem resolver rewire
