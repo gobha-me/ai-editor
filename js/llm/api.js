@@ -1059,10 +1059,9 @@ export const LLMTools = {
         };
 
         // 1.22.0 — In-editor preview & verify Tier 1.
-        // Drop the three preview tools (`preview_start`, `preview_stop`,
-        // `preview_list`) from the per-turn tool list when the resolved
-        // profile + settings overlay reports `preview.enabled === false`.
-        // Profile default is coder=on / chat=off; settings overlay
+        // 2.7.0 — Tier 2 capture surfaces (preview_console_logs,
+        // preview_errors, preview_logs, preview_network) join the same
+        // gate. Profile default is coder=on / chat=off; settings overlay
         // (`State.settings.preview.enabled`) wins when set.
         // Mirror of `applyScriptAutomationFilter` above. Per
         // DESIGN-preview.md §"Profile / tool admission gating": catalog
@@ -1075,7 +1074,11 @@ export const LLMTools = {
         const previewEnabled = (previewOverlay && typeof previewOverlay.enabled === 'boolean')
             ? previewOverlay.enabled
             : previewCfg.enabled;
-        const PREVIEW_TOOL_NAMES = new Set(['preview_start', 'preview_stop', 'preview_list']);
+        const PREVIEW_TOOL_NAMES = new Set([
+            'preview_start', 'preview_stop', 'preview_list',
+            // Tier 2 (2.7.0)
+            'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
+        ]);
         const applyPreviewToolFilter = (toolList) => {
             if (previewEnabled) return toolList;
             return toolList.filter(t => !PREVIEW_TOOL_NAMES.has(t?.function?.name));

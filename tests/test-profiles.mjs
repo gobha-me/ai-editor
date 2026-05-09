@@ -215,6 +215,11 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'preview_start',
         'preview_stop',
         'preview_list',
+        // 2.7.0 — Tier 2 capture readers.
+        'preview_console_logs',
+        'preview_errors',
+        'preview_logs',
+        'preview_network',
         'read_file',
         'read_lines',
         'scan_file',

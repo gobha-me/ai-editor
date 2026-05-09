@@ -85,17 +85,24 @@ export const PREVIEW_MUTATING_TOOLS = Object.freeze(['preview_stop']);
 
 /**
  * Cached preview reads invalidated by any PREVIEW_MUTATING_TOOLS call.
- * Tier 1 (1.22.0) ships only `preview_start` + `preview_list`. Tier 2
- * readers (`preview_logs`, `preview_console_logs`, `preview_network`,
- * `preview_snapshot`) belong here when they ship — same invalidation
- * semantics; add them at the same time the tool registrations land so
- * the dup-cache deadlock pattern doesn't recur.
+ * Tier 1 (1.22.0) shipped `preview_start` + `preview_list`. Tier 2
+ * (2.7.0) added the four capture readers below; same invalidation
+ * semantics apply — once the server is torn down, prior buffered
+ * console / error / route / network entries no longer correspond to a
+ * live preview, so dup-cache hits would mislead the model.
  *
  * @type {readonly string[]}
  */
 export const PREVIEW_READ_TOOLS = Object.freeze([
     'preview_start',  // returns {serverId,url,reused} — wrong after stop
     'preview_list',   // server set just changed
+    // Tier 2 (2.7.0) — capture buffers cleared on preview_stop, so any
+    // cached read for a torn-down serverId returns content the host has
+    // already dropped.
+    'preview_console_logs',
+    'preview_errors',
+    'preview_logs',
+    'preview_network',
 ]);
 
 /**

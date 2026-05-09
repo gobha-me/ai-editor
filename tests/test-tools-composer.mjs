@@ -245,17 +245,18 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 23 names → 6 admitted, 17 unresolved
+// coder.v1 fixture — 27 names → 6 admitted, 21 unresolved
 // (3 meta-tools + 3 CI tools + 5 structural-anchor tools + 1 interaction
 //  tool (ask_user, 1.9.0) + 1 plan-mode approval tool
 //  (submit_plan_for_approval, 1.10.0 / github#25) + 1 sandbox approval
 //  tool (submit_script_for_approval, 1.16.0) + 3 preview tools
-//  (preview_start/stop/list, 1.22.0) intentionally absent from this
-//  fixture; each promotion expanded the unresolved set without changing
-//  what this fixture registers.)
+//  (preview_start/stop/list, 1.22.0) + 4 Tier-2 capture readers
+//  (preview_console_logs/errors/logs/network, 2.7.0) intentionally
+//  absent from this fixture; each promotion expanded the unresolved
+//  set without changing what this fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 17 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 21 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -282,6 +283,8 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 17 unresolve
         'submit_script_for_approval',
         // 1.22.0 — preview tools (DESIGN-preview.md Tier 1), same pattern.
         'preview_start', 'preview_stop', 'preview_list',
+        // 2.7.0 — Tier 2 capture readers, same fixture-absent pattern.
+        'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

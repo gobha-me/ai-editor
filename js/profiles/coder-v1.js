@@ -204,6 +204,16 @@ export const CODER_V1 = {
             'preview_start',
             'preview_stop',
             'preview_list',
+            // Tier 2 (2.7.0) — capture readers. The shim injected by the
+            // SW into HTML responses forwards `console.*` / `window.error`
+            // / `unhandledrejection` over postMessage; these tools expose
+            // the host's per-serverId ring buffers + the SW's route /
+            // network event log. All readOnly. Closes the boot-time
+            // TypeError class (Sokoban) that Tier 1 alone could not see.
+            'preview_console_logs',
+            'preview_errors',
+            'preview_logs',
+            'preview_network',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',

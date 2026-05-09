@@ -43,6 +43,18 @@ const SCOPE_PREFIX = self.location.pathname.replace(/[^/]*$/, '');
 const SW_SCRIPT_PATH = self.location.pathname;
 const REQUEST_TIMEOUT_MS = 10000;
 
+// Tier 2 (2.7.0) — load the console + error capture shim source so we can
+// inject it into served HTML responses. `preview-shim.js` is a plain script
+// that defines `self.PREVIEW_SHIM_SOURCE`. importScripts is synchronous and
+// runs at SW startup; the constant is available before any fetch event
+// fires. Failure to load is non-fatal — `_injectShim` no-ops if the constant
+// is missing, so HTML still serves (Tier 1 behavior preserved).
+try {
+    importScripts('./preview-shim.js');
+} catch (err) {
+    console.warn('[preview-sw] failed to load preview-shim.js; Tier 2 capture unavailable:', err);
+}
+
 self.addEventListener('install', (event) => {
     // Take over old SWs immediately — the editor is the only thing
     // registering this file, and a stale SW serving stale workspace
@@ -111,7 +123,7 @@ self.addEventListener('fetch', (event) => {
     // fires before respondWith so it's not blocked on bridge resolution.
     _broadcastDebug({ stage: 'fetch-intercept', path, serverId, mode: event.request.mode, destination: event.request.destination });
 
-    event.respondWith(_servePreview(event, path));
+    event.respondWith(_servePreview(event, path, serverId));
 });
 
 /**
@@ -138,30 +150,32 @@ async function _broadcastDebug(payload) {
  *
  * @param {FetchEvent} event
  * @param {string} path
+ * @param {string} serverId
  * @returns {Promise<Response>}
  */
-async function _servePreview(event, path) {
+async function _servePreview(event, path, serverId) {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     _broadcastDebug({
         stage: 'serve-preview-start',
         path,
+        serverId,
         clientCount: all.length,
         clients: all.map(c => ({ url: c.url, frameType: c.frameType, type: c.type })),
     });
     const client = await _findHostClient(event);
     if (!client) {
-        _broadcastDebug({ stage: 'no-host-client', path });
+        _broadcastDebug({ stage: 'no-host-client', path, serverId });
         return _errorResponse(503, 'No editor client available to resolve preview path.');
     }
-    _broadcastDebug({ stage: 'host-client-picked', path, clientUrl: client.url });
+    _broadcastDebug({ stage: 'host-client-picked', path, serverId, clientUrl: client.url });
     let payload;
     try {
         payload = await _askBridge(client, path);
     } catch (err) {
-        _broadcastDebug({ stage: 'bridge-error', path, error: err && err.message ? err.message : String(err) });
+        _broadcastDebug({ stage: 'bridge-error', path, serverId, error: err && err.message ? err.message : String(err) });
         return _errorResponse(500, `Bridge error: ${err && err.message ? err.message : String(err)}`);
     }
-    _broadcastDebug({ stage: 'bridge-replied', path, ok: !!(payload && payload.ok), status: payload?.status, ext: payload?.ext });
+    _broadcastDebug({ stage: 'bridge-replied', path, serverId, ok: !!(payload && payload.ok), status: payload?.status, ext: payload?.ext });
     if (!payload || payload.ok !== true) {
         const status = payload && Number.isInteger(payload.status) ? payload.status : 500;
         const message = payload && payload.error ? String(payload.error) : 'Failed to resolve preview path';
@@ -209,8 +223,52 @@ async function _servePreview(event, path) {
     });
     // Bridge returns `body: ArrayBuffer` (transferable). Falls back to
     // `content: string` for older bridge protocol — defensive only.
-    const responseBody = payload.body || payload.content;
+    let responseBody = payload.body || payload.content;
+    // Tier 2 (2.7.0) — inject the console + error capture shim into HTML
+    // responses so it runs before any workspace `<script>` tag. Decode the
+    // bytes as UTF-8 (text/html responses are always UTF-8 here — see
+    // `_mimeFromExt` line 285), inject the shim, re-encode. Non-HTML files
+    // pass through unchanged (binary safety preserved for fonts / images).
+    if (mime.startsWith('text/html') && self.PREVIEW_SHIM_SOURCE) {
+        const decoder = new TextDecoder('utf-8');
+        const html = (responseBody instanceof ArrayBuffer)
+            ? decoder.decode(responseBody)
+            : String(responseBody);
+        const injected = _injectShim(html);
+        responseBody = new TextEncoder().encode(injected).buffer;
+    }
     return new Response(responseBody, { status: 200, headers });
+}
+
+/**
+ * Inject the Tier 2 capture shim into an HTML document. The shim must run
+ * before any workspace `<script>` tag so its `console.*` wrappers and
+ * error listeners install before user code can stash references. Three
+ * insertion points, in order of preference:
+ *
+ *   1. Right after the opening `<head>` tag (the most common shape).
+ *   2. Right after the opening `<html>` tag (no `<head>` in the document).
+ *   3. Prepended to the document (no `<html>`; rare but possible).
+ *
+ * The shim is wrapped in `<script>…</script>`. CSP allows inline scripts
+ * (`script-src 'self' 'unsafe-inline'`); no hash / nonce needed.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+function _injectShim(html) {
+    const tag = '<script>' + self.PREVIEW_SHIM_SOURCE + '</script>';
+    const headMatch = html.match(/<head\b[^>]*>/i);
+    if (headMatch) {
+        const idx = headMatch.index + headMatch[0].length;
+        return html.slice(0, idx) + tag + html.slice(idx);
+    }
+    const htmlMatch = html.match(/<html\b[^>]*>/i);
+    if (htmlMatch) {
+        const idx = htmlMatch.index + htmlMatch[0].length;
+        return html.slice(0, idx) + tag + html.slice(idx);
+    }
+    return tag + html;
 }
 
 /**

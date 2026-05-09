@@ -78,6 +78,12 @@ function registerStaticFixture() {
     reg('preview_start',    'Start a sandboxed preview iframe.',    { type: 'object', properties: { path: { type: 'string' } } });
     reg('preview_stop',     'Stop a running preview server.',       { type: 'object', properties: { serverId: { type: 'string' } } });
     reg('preview_list',     'List running preview servers.',        { type: 'object', properties: {} });
+    // 2.7.0 — Tier 2 capture readers joined the coder static set; same
+    // compression-survival rationale.
+    reg('preview_console_logs', 'Read captured console.* output from a preview.', { type: 'object', properties: { serverId: { type: 'string' } } });
+    reg('preview_errors',       'Read captured uncaught errors from a preview.',   { type: 'object', properties: { serverId: { type: 'string' } } });
+    reg('preview_logs',         'Read SW route stages for a preview.',             { type: 'object', properties: { serverId: { type: 'string' } } });
+    reg('preview_network',      'List finished workspace fetches for a preview.',  { type: 'object', properties: { serverId: { type: 'string' } } });
 }
 
 // ============================================

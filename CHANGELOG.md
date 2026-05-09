@@ -4,6 +4,120 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-05-09
+
+### Feature — In-editor preview Tier 2: console + error capture
+
+Closes the **Sokoban class** of dogfood failures specifically. The
+2026-05-08 HTML-Games incident (`xcaliber/HTML-Games` PR #170) shipped a
+Sokoban whose `bindEvents()` never ran because `updateUI()` threw on a
+missing `#level-display` — the page rendered, the script was dead, every
+keypress a no-op. Tier 1 (1.22.0 — sandboxed iframe + 3 lifecycle tools)
+catches "the page didn't render at all" but cannot see boot-time
+TypeErrors. Tier 2 ships the layer that does: a sealed shim injected
+*before* user code that wraps `console.{log,info,warn,error,debug}` /
+`window.onerror` / `unhandledrejection`, forwards events over
+`postMessage`, and four new readers exposing the per-`serverId` ring
+buffers to the model. Per [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md)
+§Phase 2 + §"Worker shim load order" — the iframe sandbox stays the
+trust boundary at the *content* level; this PR adds *one* well-bounded
+reach-back from iframe → editor over postMessage with origin /
+contentWindow source verification.
+
+**New tools** (all `readOnly: true`, `roles: 'all'`, registered in
+[`js/tools/preview-tools.js`](js/tools/preview-tools.js)):
+
+| Tool | Returns |
+|---|---|
+| `preview_console_logs({serverId, level?, lines?})` | `{logs: [{level, message, ts}], truncated?}` |
+| `preview_errors({serverId, lines?})` | `{errors: [{message, source, line, col, stack?, ts}], truncated?}` |
+| `preview_logs({serverId, lines?, search?})` | `{logs: [{stage, path, ts, …}], truncated?}` — SW route stages |
+| `preview_network({serverId, filter?})` | `{requests: [{path, ok, status, stage, ts}]}` |
+
+The Sokoban `TypeError` lands in `preview_errors` with full
+`{message, source, line, col, stack}` — enough to point the model
+directly at the failing reference on the same turn it shipped the edit.
+
+**Architecture.** Three new pieces, all in `js/preview/`:
+
+- [`preview-shim.js`](js/preview/preview-shim.js) — a plain script
+  (not an ES module) exposing `self.PREVIEW_SHIM_SOURCE`, an IIFE
+  string. Loaded by the SW via `importScripts('./preview-shim.js')` at
+  startup; the SW prepends the IIFE inside a `<script>` tag at the top
+  of every served HTML response. The shim seals its captured `console`
+  / `window.parent` references in `var`s and uses
+  `Object.defineProperty(console, level, {writable: false, configurable: false})`
+  so workspace JS cannot unhook by `console.log = …`. Per-message
+  truncation cap of 4 KB (`…[truncated]` suffix). `__previewShimInstalled`
+  guards re-entry.
+- [`service-worker.js`](js/preview/service-worker.js) — `_servePreview`
+  gains a regex-based `_injectShim(html)` pass for `text/html`
+  responses (insertion preference: after `<head>` → after `<html>` →
+  prepend). Non-HTML files pass through unchanged so binary safety
+  (fonts / images / wasm) is preserved. The SW now stamps `serverId`
+  into every `_broadcastDebug` payload so the host can attribute SW
+  events to the right per-serverId buffer.
+- [`preview-host.js`](js/preview/preview-host.js) — four per-serverId
+  ring buffers (`_consoleBuffers`, `_errorBuffers`, `_routeBuffers`,
+  `_networkBuffers`), capped at 200 entries each (drop oldest).
+  `_attachCaptureListeners()` is idempotent and runs once per session
+  (called from `_ensureServiceWorker`). The shim listener validates
+  `event.source` against an iframe under `#previewSlideOutBody` whose
+  `dataset.previewServerId` is set — messages from any other window
+  are dropped silently. The SW listener routes by `data.serverId`.
+  `previewStop` clears the buffers for that `serverId` so a re-started
+  preview at the same path doesn't inherit stale capture.
+
+**Profile + admission gating.** All four new tools join `coder.v1.tools.static`
+and the runtime `applyPreviewToolFilter` set in
+[`js/llm/api.js`](js/llm/api.js) — same coder=on / chat=off /
+overlay-wins ladder as Tier 1. They also join `PREVIEW_READ_TOOLS` in
+[`js/chat/tool-classifications.js`](js/chat/tool-classifications.js)
+so `preview_stop`'s github#39 dup-cache invalidation auto-extends to
+the capture readers (the `invalidateCachesForPreviewMutation` helper
+iterates `PREVIEW_READ_TOOLS` dynamically — adding tools doesn't
+require a separate code change).
+
+**What's still single-origin.** Tier 1's known limitation carries over:
+the iframe runs at the editor origin (not opaque) because Chromium's
+SW semantics deny interception to opaque-origin clients. The shim's
+`window.parent.postMessage` works trivially because the parent is
+same-origin; the multi-origin deploy
+(`preview.editor.gobha.ai` subdomain) remains the design's preferred
+path and stays in [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md)
+§"Open Questions". This PR does not change the trust-boundary
+trade-off documented in `preview-host.js`.
+
+**Out of scope (deferred — earn slot through dogfood signal):**
+- Tier 3 (Playwright sidecar, selector-shaped tools, `preview_eval`).
+- Multi-origin deploy with a real preview subdomain.
+- Buffer streaming / head+tail / structured-only output for >1 MB
+  consoles.
+- `preview_eval` per-invocation gate (may never ship — selector tools
+  are sufficient for most probes).
+
+**Tests.**
+- [`tests/test-preview-tier2.mjs`](tests/test-preview-tier2.mjs) —
+  registration shape (4 readers, all readOnly), arg validation, ring-
+  buffer drop-oldest at 200, level / lines / search / filter knobs,
+  `previewStop` buffer drop, per-serverId isolation, empty-buffer
+  envelopes.
+- [`tests/test-preview-tools.mjs`](tests/test-preview-tools.mjs) —
+  Tier 1 count assertion updated from 3 → 7 to enforce parity.
+- [`tests/test-profiles.mjs`](tests/test-profiles.mjs) /
+  [`test-profile-resolution.mjs`](tests/test-profile-resolution.mjs) /
+  [`test-tools-composer.mjs`](tests/test-tools-composer.mjs) /
+  [`test-meta-tools.mjs`](tests/test-meta-tools.mjs) /
+  [`fixtures/profiles/coder.v1.snapshot.json`](tests/fixtures/profiles/coder.v1.snapshot.json) —
+  `coder.v1.tools.static` and the unresolved-static fixture pair
+  expanded to include the 4 readers.
+
+**Side fix.** Closes [github#37](https://github.com/gobha-me/ai-editor/issues/37)
+(CLAUDE.md autoload analogue) — LLMs read `AGENTS.md` / `CLAUDE.md`
+through the existing `read_file` tool fine; the autoload-into-system-
+prompt infrastructure is overkill for the current need. Convention
+files in the repo root are reachable through normal exploration.
+
 ## [2.6.0] - 2026-05-09
 
 ### Feature — Profiles Phase 2: data + harness coverage for `chat_multi.v1`, `rp.v1`, `kb.v1`

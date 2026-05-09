@@ -1,11 +1,13 @@
 /**
  * Tests for In-editor preview & verify Tier 1 (1.22.0 — DESIGN-preview.md).
  *
- * Exercises the registration shape of the three preview tools, argument
- * validation in handlers that don't depend on browser globals, and the
- * `resolvePreviewConfig` helper. The Service Worker round-trip and
- * iframe lifecycle are covered in the browser suite (tests/index.html)
- * — Node cannot register a real SW.
+ * Tier 1 tool registrations (`preview_start`, `preview_stop`, `preview_list`),
+ * argument validation in handlers that don't depend on browser globals, and
+ * the `resolvePreviewConfig` helper. Tier 2 capture readers (2.7.0 —
+ * `preview_console_logs` / `preview_errors` / `preview_logs` /
+ * `preview_network`) live in `tests/test-preview-tier2.mjs`. Service
+ * Worker round-trip and iframe lifecycle are covered in the browser suite
+ * (`tests/index.html`) — Node cannot register a real SW.
  *
  * Runs under `node --test`.
  */
@@ -21,7 +23,7 @@ import { previewList, _resetForTests } from '../js/preview/preview-host.js';
 // Tool registration shape
 // ============================================
 
-test('registerPreviewTools registers three tools', () => {
+test('registerPreviewTools registers seven tools (Tier 1 + Tier 2)', () => {
     const captured = [];
     const stub = {
         register(name, handler, definition) {
@@ -29,12 +31,17 @@ test('registerPreviewTools registers three tools', () => {
         },
     };
     registerPreviewTools(stub);
-    assert.equal(captured.length, 3);
+    assert.equal(captured.length, 7);
     const names = captured.map(c => c.name).sort();
-    assert.deepEqual(names, ['preview_list', 'preview_start', 'preview_stop']);
+    assert.deepEqual(names, [
+        // Tier 1 (1.22.0)
+        'preview_list', 'preview_start', 'preview_stop',
+        // Tier 2 (2.7.0)
+        'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
+    ].sort());
 });
 
-test('all three preview tools are readOnly + roles all', () => {
+test('all seven preview tools are readOnly + roles all', () => {
     const captured = [];
     const stub = { register(name, handler, definition) { captured.push({ name, definition }); } };
     registerPreviewTools(stub);

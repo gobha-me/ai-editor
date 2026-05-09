@@ -61,6 +61,25 @@ let _swPending = null;
 let _slideOutWired = false;
 
 /**
+ * Tier 2 (2.7.0) — per-`serverId` ring buffers for the four capture
+ * surfaces. Keys are `serverId`; values are arrays of capture entries
+ * appended on receipt and shifted when length exceeds `BUFFER_CAP`.
+ * Buffers are cleared on `previewStop` so a re-started server doesn't
+ * inherit stale capture from the prior run.
+ *
+ * @type {Map<string, Array<{level: string, message: string, ts: number}>>}
+ */
+const _consoleBuffers = new Map();
+/** @type {Map<string, Array<{message: string, source: string, line: number|null, col: number|null, stack: string|null, ts: number}>>} */
+const _errorBuffers = new Map();
+/** @type {Map<string, Array<{stage: string, path?: string, ts: number, [k: string]: any}>>} */
+const _routeBuffers = new Map();
+/** @type {Map<string, Array<{path: string, ok: boolean, status: number|null, stage: string, ts: number}>>} */
+const _networkBuffers = new Map();
+const BUFFER_CAP = 200;
+let _captureListenersAttached = false;
+
+/**
  * Generate a short, URL-safe server id. Shape: `srv_<8 hex>`.
  * Using `crypto.getRandomValues` if available, falling back to
  * `Math.random` — collision risk is irrelevant given the in-memory
@@ -91,6 +110,212 @@ function _generateServerId() {
 function _buildPreviewUrl(serverId, path) {
     const cleanPath = path.replace(/^\/+/, '');
     return `${SW_SCOPE}${serverId}/${cleanPath}`;
+}
+
+/**
+ * Push an entry into a per-`serverId` ring buffer, dropping the oldest
+ * entry when capacity is exceeded.
+ *
+ * @template T
+ * @param {Map<string, Array<T>>} bufferMap
+ * @param {string} serverId
+ * @param {T} entry
+ */
+function _pushBuffer(bufferMap, serverId, entry) {
+    let buf = bufferMap.get(serverId);
+    if (!buf) {
+        buf = [];
+        bufferMap.set(serverId, buf);
+    }
+    buf.push(entry);
+    while (buf.length > BUFFER_CAP) buf.shift();
+}
+
+/**
+ * Drop all Tier 2 capture state for a given `serverId`. Called on
+ * `previewStop` so a subsequent `preview_start` for the same path
+ * doesn't surface stale logs from the prior run.
+ *
+ * @param {string} serverId
+ */
+function _dropBuffers(serverId) {
+    _consoleBuffers.delete(serverId);
+    _errorBuffers.delete(serverId);
+    _routeBuffers.delete(serverId);
+    _networkBuffers.delete(serverId);
+}
+
+/**
+ * Look up the `serverId` for a given iframe `contentWindow`. The slide-
+ * over mounts iframes with `dataset.previewServerId` set; matching the
+ * `event.source` against an iframe's `contentWindow` is the load-bearing
+ * authentication that the message came from a registered preview iframe
+ * and not from some other window on the page. Returns `null` if no
+ * matching iframe is found.
+ *
+ * @param {WindowProxy|null} source
+ * @returns {string|null}
+ */
+function _resolveServerIdFromSource(source) {
+    if (!source || typeof document === 'undefined') return null;
+    const iframes = document.querySelectorAll('iframe[data-preview-server-id]');
+    for (const el of iframes) {
+        const iframe = /** @type {HTMLIFrameElement} */ (el);
+        if (iframe.contentWindow === source) {
+            return iframe.dataset.previewServerId || null;
+        }
+    }
+    return null;
+}
+
+/**
+ * Attach the page-side listeners that feed the Tier 2 buffers.
+ * Idempotent — `_captureListenersAttached` guards re-entry.
+ *
+ *   - `window.message` events with `data.__preview === true` come from
+ *     the in-iframe shim (`js/preview/preview-shim.js`). Routed by
+ *     `event.source` → iframe `dataset.previewServerId`. Messages from
+ *     unknown sources are silently dropped (defense against arbitrary
+ *     `postMessage` from any other window on the page).
+ *   - `navigator.serviceWorker.message` events with `data.type === 'preview:debug'`
+ *     come from the SW's `_broadcastDebug`. The SW stamps `serverId`
+ *     into every broadcast (since 2.7.0 — see service-worker.js
+ *     `_servePreview` signature change) so the host attributes by id.
+ */
+function _attachCaptureListeners() {
+    if (_captureListenersAttached) return;
+    if (typeof window === 'undefined') return;
+    _captureListenersAttached = true;
+
+    window.addEventListener('message', (event) => {
+        const data = event.data;
+        if (!data || typeof data !== 'object' || data.__preview !== true) return;
+        const serverId = _resolveServerIdFromSource(/** @type {WindowProxy} */ (event.source));
+        if (!serverId) return;
+        if (data.type === 'console') {
+            _pushBuffer(_consoleBuffers, serverId, {
+                level: typeof data.level === 'string' ? data.level : 'log',
+                message: typeof data.message === 'string' ? data.message : String(data.message ?? ''),
+                ts: typeof data.ts === 'number' ? data.ts : Date.now(),
+            });
+        } else if (data.type === 'error') {
+            _pushBuffer(_errorBuffers, serverId, {
+                message: typeof data.message === 'string' ? data.message : String(data.message ?? ''),
+                source: typeof data.source === 'string' ? data.source : '',
+                line: typeof data.line === 'number' ? data.line : null,
+                col: typeof data.col === 'number' ? data.col : null,
+                stack: typeof data.stack === 'string' ? data.stack : null,
+                ts: typeof data.ts === 'number' ? data.ts : Date.now(),
+            });
+        }
+    });
+
+    if (navigator && navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data || data.type !== 'preview:debug') return;
+            const serverId = typeof data.serverId === 'string' ? data.serverId : null;
+            if (!serverId) return;
+            const ts = Date.now();
+            const stage = typeof data.stage === 'string' ? data.stage : 'unknown';
+            const path = typeof data.path === 'string' ? data.path : undefined;
+            // Route log: every stage gets recorded.
+            const routeEntry = { stage, path, ts };
+            // Carry through any extra fields the SW broadcast (status, ext, error, mode, destination, etc.)
+            for (const k of Object.keys(data)) {
+                if (k === 'type' || k === 'serverId' || k === 'stage' || k === 'path') continue;
+                routeEntry[k] = data[k];
+            }
+            _pushBuffer(_routeBuffers, serverId, routeEntry);
+            // Network log: derived from the request-completion stages so
+            // each entry represents a finished workspace fetch.
+            if (path && (stage === 'bridge-replied' || stage === 'bridge-error' || stage === 'no-host-client')) {
+                _pushBuffer(_networkBuffers, serverId, {
+                    path,
+                    ok: stage === 'bridge-replied' && data.ok === true,
+                    status: typeof data.status === 'number' ? data.status : (stage === 'no-host-client' ? 503 : null),
+                    stage,
+                    ts,
+                });
+            }
+        });
+    }
+}
+
+/**
+ * Tier 2 accessor — return captured `console.*` lines for a `serverId`.
+ *
+ * @param {{serverId: string, level?: string, lines?: number}} args
+ * @returns {{logs: Array<{level: string, message: string, ts: number}>, truncated?: boolean}}
+ */
+export function getConsoleLogs({ serverId, level, lines }) {
+    const buf = _consoleBuffers.get(serverId) || [];
+    let filtered = buf;
+    if (level && level !== 'all') {
+        if (level === 'error') filtered = buf.filter(e => e.level === 'error');
+        else if (level === 'warn') filtered = buf.filter(e => e.level === 'warn' || e.level === 'error');
+    }
+    const cap = Math.max(1, Math.min(typeof lines === 'number' ? lines : 50, 200));
+    const sliced = filtered.slice(-cap);
+    const result = { logs: sliced };
+    if (filtered.length > sliced.length) result.truncated = true;
+    return result;
+}
+
+/**
+ * Tier 2 accessor — return captured `window.onerror` + `unhandledrejection`
+ * events for a `serverId`. The Sokoban class lands here.
+ *
+ * @param {{serverId: string, lines?: number}} args
+ * @returns {{errors: Array<object>, truncated?: boolean}}
+ */
+export function getErrors({ serverId, lines }) {
+    const buf = _errorBuffers.get(serverId) || [];
+    const cap = Math.max(1, Math.min(typeof lines === 'number' ? lines : 50, 100));
+    const sliced = buf.slice(-cap);
+    const result = { errors: sliced };
+    if (buf.length > sliced.length) result.truncated = true;
+    return result;
+}
+
+/**
+ * Tier 2 accessor — return SW route stages for a `serverId`. Useful for
+ * "the asset didn't exist in the workspace at the path the page asked
+ * for" — distinct from the in-page console.
+ *
+ * @param {{serverId: string, lines?: number, search?: string}} args
+ * @returns {{logs: Array<object>, truncated?: boolean}}
+ */
+export function getRouteLogs({ serverId, lines, search }) {
+    const buf = _routeBuffers.get(serverId) || [];
+    let filtered = buf;
+    if (typeof search === 'string' && search.length > 0) {
+        const needle = search.toLowerCase();
+        filtered = buf.filter(e => {
+            return (e.stage && e.stage.toLowerCase().includes(needle))
+                || (e.path && e.path.toLowerCase().includes(needle));
+        });
+    }
+    const cap = Math.max(1, Math.min(typeof lines === 'number' ? lines : 50, 200));
+    const sliced = filtered.slice(-cap);
+    const result = { logs: sliced };
+    if (filtered.length > sliced.length) result.truncated = true;
+    return result;
+}
+
+/**
+ * Tier 2 accessor — return per-fetch network entries for a `serverId`.
+ * Each entry is a finished workspace fetch (bridge-replied or bridge-error
+ * stage). With `filter: 'failed'`, only failed requests are returned.
+ *
+ * @param {{serverId: string, filter?: string}} args
+ * @returns {{requests: Array<object>}}
+ */
+export function getNetwork({ serverId, filter }) {
+    const buf = _networkBuffers.get(serverId) || [];
+    let filtered = buf;
+    if (filter === 'failed') filtered = buf.filter(e => !e.ok);
+    return { requests: filtered.slice() };
 }
 
 /**
@@ -183,6 +408,10 @@ async function _ensureServiceWorker() {
         // Wire the page-side bridge so SW fetch events resolve against
         // `Git.getFile`. Idempotent.
         initSwBridge();
+        // Tier 2 (2.7.0) — attach capture listeners for shim postMessages
+        // and SW debug broadcasts. Idempotent; safe to call on every
+        // `_ensureServiceWorker` invocation.
+        _attachCaptureListeners();
         _swRegistration = reg;
         console.log('[preview-host] SW ready', { scope: reg.scope, scriptURL: reg.active.scriptURL });
         return reg;
@@ -392,6 +621,12 @@ export async function previewStart({ path }) {
  */
 export async function previewStop({ serverId }) {
     const had = _servers.delete(serverId);
+    // Tier 2 (2.7.0) — drop capture buffers regardless of whether the
+    // serverId was registered. A subsequent `preview_start` for the same
+    // path generates a new serverId, so stale buffers under the old id
+    // would never be reachable anyway, but freeing them keeps the host's
+    // memory profile bounded across long sessions.
+    _dropBuffers(serverId);
     if (had && typeof document !== 'undefined') {
         const overlay = document.getElementById('previewSlideOut');
         const iframe = overlay?.querySelector(`iframe[data-preview-server-id="${serverId}"]`);
@@ -433,7 +668,56 @@ export function previewList() {
  */
 export function _resetForTests() {
     _servers.clear();
+    _consoleBuffers.clear();
+    _errorBuffers.clear();
+    _routeBuffers.clear();
+    _networkBuffers.clear();
     _swRegistration = null;
     _swPending = null;
     _slideOutWired = false;
+    _captureListenersAttached = false;
+}
+
+/**
+ * Test seam — push a synthetic shim event into the buffers, bypassing
+ * the message listener. Lets `tests/test-preview-tier2.mjs` assert ring-
+ * buffer drop-oldest behavior without mounting an iframe.
+ *
+ * @param {string} serverId
+ * @param {object} entry
+ * @returns {void}
+ */
+export function _pushCaptureForTests(serverId, entry) {
+    if (!entry || typeof entry !== 'object') return;
+    if (entry.type === 'console') {
+        _pushBuffer(_consoleBuffers, serverId, {
+            level: typeof entry.level === 'string' ? entry.level : 'log',
+            message: typeof entry.message === 'string' ? entry.message : String(entry.message ?? ''),
+            ts: typeof entry.ts === 'number' ? entry.ts : Date.now(),
+        });
+    } else if (entry.type === 'error') {
+        _pushBuffer(_errorBuffers, serverId, {
+            message: typeof entry.message === 'string' ? entry.message : '',
+            source: typeof entry.source === 'string' ? entry.source : '',
+            line: typeof entry.line === 'number' ? entry.line : null,
+            col: typeof entry.col === 'number' ? entry.col : null,
+            stack: typeof entry.stack === 'string' ? entry.stack : null,
+            ts: typeof entry.ts === 'number' ? entry.ts : Date.now(),
+        });
+    } else if (entry.type === 'route') {
+        _pushBuffer(_routeBuffers, serverId, {
+            stage: entry.stage || 'unknown',
+            path: entry.path,
+            ts: typeof entry.ts === 'number' ? entry.ts : Date.now(),
+            ...(entry.extra || {}),
+        });
+    } else if (entry.type === 'network') {
+        _pushBuffer(_networkBuffers, serverId, {
+            path: entry.path || '',
+            ok: entry.ok === true,
+            status: typeof entry.status === 'number' ? entry.status : null,
+            stage: entry.stage || 'bridge-replied',
+            ts: typeof entry.ts === 'number' ? entry.ts : Date.now(),
+        });
+    }
 }

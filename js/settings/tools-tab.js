@@ -294,14 +294,17 @@ function _renderPreviewSection() {
           <input type="checkbox"
                  data-preview-key="enabled"
                  ${p.enabled ? 'checked' : ''}>
-          Enable <code>preview_start</code> / <code>preview_stop</code> / <code>preview_list</code> tools
+          Enable preview tools (Tier 1 + Tier 2)
         </label>
         <small>
           Overrides the profile default. When off, the model never sees
-          the preview tools and cannot spawn an iframe. Tier 2 (console
-          + error capture) and Tier 3 (driveable preview) ship later as
-          their own minors — this row only gates the static-iframe
-          tools.
+          any of the seven preview tools (Tier 1 lifecycle:
+          <code>preview_start</code> / <code>preview_stop</code> /
+          <code>preview_list</code>; Tier 2 capture readers:
+          <code>preview_console_logs</code> /
+          <code>preview_errors</code> / <code>preview_logs</code> /
+          <code>preview_network</code>) and cannot spawn an iframe.
+          Tier 3 (driveable preview) ships later as its own minor.
         </small>
       </div>
     `;
