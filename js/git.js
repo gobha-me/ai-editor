@@ -509,6 +509,23 @@ const Git = {
         return provider.getBranchAheadBehind(connection, owner, repo, branch, base);
     },
 
+    /**
+     * Return the list of file paths whose content differs between two refs.
+     * Returns `null` on error or unsupported provider — callers treat `null`
+     * as "fall back to a full re-walk", `[]` as "branches differ by zero
+     * files". Used by the retrieval index to delta-index on branch switch.
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branchA
+     * @param {string} branchB
+     * @returns {Promise<string[]|null>}
+     */
+    async getChangedFilesBetween(owner, repo, branchA, branchB) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getChangedFilesBetween(connection, owner, repo, branchA, branchB);
+    },
+
     async listReleases(owner, repo) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.listReleases(connection, owner, repo);

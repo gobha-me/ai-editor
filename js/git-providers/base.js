@@ -518,6 +518,53 @@ const BASE_GIT_PROVIDER = {
     },
 
     /**
+     * Return the de-duplicated list of file paths whose content differs
+     * between two refs. Used by the retrieval index to delta-index on a
+     * branch switch instead of re-walking the entire tree.
+     *
+     * Default implementation: union of `compareRefs(branchA, branchB).files`
+     * and `compareRefs(branchB, branchA).files`. Each call is a 3-dot diff
+     * against the merge-base, so the union covers the symmetric difference
+     * (files added/changed/removed on either branch since divergence).
+     * Providers whose API exposes a direct two-tip diff in one round-trip
+     * may override.
+     *
+     * Returns `null` on any error or unsupported provider — caller treats
+     * `null` as "fall back to a full re-walk", `[]` as "branches differ
+     * by zero files".
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branchA
+     * @param {string} branchB
+     * @returns {Promise<string[]|null>}
+     */
+    async getChangedFilesBetween(connection, owner, repo, branchA, branchB) {
+        if (!branchA || !branchB || branchA === branchB) return [];
+        try {
+            const [aToB, bToA] = await Promise.all([
+                this.compareRefs(connection, owner, repo, branchA, branchB),
+                this.compareRefs(connection, owner, repo, branchB, branchA),
+            ]);
+            const paths = new Set();
+            for (const f of aToB?.files || []) {
+                if (f && typeof f.filename === 'string' && f.filename.length > 0) {
+                    paths.add(f.filename);
+                }
+            }
+            for (const f of bToA?.files || []) {
+                if (f && typeof f.filename === 'string' && f.filename.length > 0) {
+                    paths.add(f.filename);
+                }
+            }
+            return Array.from(paths);
+        } catch {
+            return null;
+        }
+    },
+
+    /**
      * List existing releases.
      * @param {GitConnection} connection
      * @param {string} owner

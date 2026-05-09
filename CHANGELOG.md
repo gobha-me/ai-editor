@@ -4,6 +4,96 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-05-09
+
+### Feature — Retrieval delta-indexing on branch switch
+
+First half of the **Retrieval ingest hardening** parallel 1.X track named
+in [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Now / Next / Later". The 2026-05-08
+cost-dashboard export pinned `search_in_files` as the dominant cost shape
+(12,380 calls / ~1.3M tokens / >$1 on a single conversation in
+`mow5xbbvn7m1`). That's the X^N grep-fallback the model reaches for when
+retrieval isn't earning its keep — the symptom of a cold embedder after a
+branch switch. This release closes the cold-embedder half.
+
+**Pre-2.2.0 branch-switch path.** [`js/intelligence/retrieval/manager.js:1129`](js/intelligence/retrieval/manager.js)
+nulled `_indexedProject`, called `loadIndexFromStorage` for the new
+branch's per-branch persisted blob, and — if no blob existed — re-walked
+the entire file tree from scratch. Even with the embedder's
+`(modelId, content_hash)` cache short-circuiting unchanged content, every
+file still had to be fetched from the provider and re-chunked. Switching
+between sibling branches (e.g. `main` → `feat/foo`) paid full ingest cost
+on every switch.
+
+**New behavior.** The handler now checks for the previous branch's
+persisted index. When present and the provider can compute a tip-vs-tip
+diff, the handler clones the previous index to the new branch (existing
+`copyIndexForBranch` precedent at [`manager.js:893`](js/intelligence/retrieval/manager.js)
+— already used by `branch:created`), then re-embeds only the diff set via
+existing `reindexChanged` ([`manager.js:949`](js/intelligence/retrieval/manager.js)).
+Dirty open tabs are unioned in (their content differs from any branch
+tip). Unchanged files keep their warm chunks + embeddings. On any
+failure (missing previous index, provider error, unsupported provider,
+clone failure) the handler falls back to the pre-2.2.0 full re-walk
+behavior — never ships a stale index.
+
+**Diff resolution.** New `getChangedFilesBetween(branchA, branchB)` on
+`BASE_GIT_PROVIDER` ([`js/git-providers/base.js`](js/git-providers/base.js))
+takes the symmetric union of `compareRefs(A, B).files` and
+`compareRefs(B, A).files`. Each is a 3-dot diff against the merge-base,
+so the union covers the full symmetric difference (files added/changed/
+removed on either branch since divergence). Returns `null` on any error
+or unsupported provider. GitHub / Gitea / GitLab inherit the default
+(their `compareRefs` is already implemented); Local provider falls
+through to `null` — no real branches → full re-walk preserved. New
+`Git.getChangedFilesBetween` thin wrapper in
+[`js/git.js`](js/git.js).
+
+**Why "getChangedFilesBetween" and not "getMergeBase".** The plan
+originally named this `getMergeBase` (a SHA-returning helper). The
+implementation evolved to return file paths directly instead of a
+merge-base SHA the caller would then have to feed back through
+`compareRefs` — one less round trip and a clearer name. The "merge base"
+is still the conceptual anchor (3-dot diffs use it under the hood), just
+not the API surface.
+
+**Decision tree extracted to `manager-helpers.js`.** The orchestration
+(check source index → fetch diff → clone → load → union with dirty tabs
+→ reindex) lives in `tryDeltaIndexFromBranch` with all deps injected, so
+`node --test` exercises the full decision tree without importing the
+browser-bound manager singleton. The wrapper in `manager.js` supplies
+live deps (Storage / Git / clone / load / reindex). Pattern mirrors
+`summaryForChunk`, `rollupToFiles`, `resolveLiveBranches` already in
+[`manager-helpers.js`](js/intelligence/retrieval/manager-helpers.js).
+
+**Out of scope for 2.2.0 (PR 2).** Language-stats-driven ingest order +
+token-budget cap migration. Ships in 2.3.0 once the dashboard re-export
+shows whether 2.2.0's delta path materially dropped `search_in_files`
+spend. The deeper-lever rewrite (extending [`computeChunkID`](js/intelligence/retrieval/chunk-id.js)
+to include `content_hash` so chunk identity becomes content-addressable)
+stays parked unless the dashboard shows the cache *is* warming on
+branch switch but boundary-shift evictions still hurt — meaning a
+`search_in_files` drop <30% with semantic-strategy cost flat or rising.
+
+**Validation per Decision §8 ("Measurement before scale").** Re-export
+`buildCostExport()` from [`js/settings/cost-tab.js`](js/settings/cost-tab.js)
+a week after this release lands; diff `search_in_files` token spend
+vs. the 2026-05-08 baseline. Before/after diff lands in the next
+release's CHANGELOG entry as the validation artifact.
+
+**Tests.**
+- New [`tests/test-git-changed-files-between.mjs`](tests/test-git-changed-files-between.mjs)
+  (9 cases): same-branch short-circuit, A↔B union dedup, throw → null,
+  partial-failure short-circuit, falsy `filename` filter, asymmetric `files`
+  arrays, empty diff, both-pairs-issued.
+- New [`tests/test-retrieval-delta-indexing.mjs`](tests/test-retrieval-delta-indexing.mjs)
+  (12 cases): happy path, empty-diff-cloned-suffices, dirty-tab union,
+  every decline reason (`no-previous-branch`, `no-source-index`,
+  `diff-unavailable` from throw + null, `clone-failed`, `load-failed`),
+  reindex-count propagation.
+- Full retrieval suite (`node --test tests/test-retrieval-*.mjs
+  tests/test-handlers-cache-invalidation.mjs`): 964 tests, all green.
+
 ### Docs — Trim shipped-slice detail out of `docs/ROADMAP.md`
 
 `docs/ROADMAP.md` line 7 explicitly states *"Shipped work and per-PR rationale

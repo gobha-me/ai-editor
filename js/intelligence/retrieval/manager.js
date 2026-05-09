@@ -47,6 +47,7 @@ import {
     rollupToFiles,
     projectKeyFromString,
     resolveLiveBranches,
+    tryDeltaIndexFromBranch,
 } from './manager-helpers.js';
 
 // ============================================
@@ -967,6 +968,41 @@ async function reindexChanged(changedPaths) {
     return updated;
 }
 
+/**
+ * Wrapper around `tryDeltaIndexFromBranch` (manager-helpers.js) that
+ * supplies the production-singleton's deps (Storage / Git / clone / load /
+ * reindex). The pure decision tree is unit-tested under `node --test`;
+ * this wrapper is the integration point.
+ *
+ * @param {string|undefined} previousBranch
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branch
+ * @returns {Promise<boolean>} true if delta succeeded; false → full re-walk
+ */
+async function _tryDeltaIndexFromBranch(previousBranch, owner, repo, branch) {
+    const sourceKey = storageKeyFor(projectKeyFor(owner, repo, /** @type {string} */ (previousBranch)));
+    const result = await tryDeltaIndexFromBranch({
+        previousBranch,
+        branch,
+        openTabs: State.openTabs || [],
+        hasSourceIndex: () => Storage.get(sourceKey),
+        fetchDiff: () => Git.getChangedFilesBetween(owner, repo, /** @type {string} */ (previousBranch), branch),
+        cloneIndex: () => copyIndexForBranch(/** @type {string} */ (previousBranch), branch),
+        loadIndex: () => loadIndexFromStorage(),
+        reindexChanged: (paths) => reindexChanged(paths),
+    });
+    if (result.ok) {
+        if (result.totalDelta === 0) {
+            console.log(`[Retrieval] Branch switch ${previousBranch} → ${branch}: no diff, cloned index suffices`);
+        } else {
+            console.log(`[Retrieval] Branch switch ${previousBranch} → ${branch}: re-embedded ${result.reindexed}/${result.totalDelta} delta path(s)`);
+        }
+        return true;
+    }
+    return false;
+}
+
 // ============================================
 // Pause / resume API
 // ============================================
@@ -1126,7 +1162,7 @@ EventBus.on('project:loaded', async () => {
     }
 });
 
-EventBus.on('branch:switch', async () => {
+EventBus.on('branch:switch', async (payload) => {
     if (!isEnabled() || !State.currentProject) return;
     const { owner, repo } = State.currentProject;
     const branch = State.currentBranch;
@@ -1136,10 +1172,15 @@ EventBus.on('branch:switch', async () => {
     _indexedProject = null;
     _queryCount = 0;
     _lastQueried = null;
+
     const loaded = await loadIndexFromStorage();
-    if (!loaded && State.settings.autoReindex !== false) {
-        setTimeout(() => indexProject(), 1000);
-    }
+    if (loaded) return;
+    if (State.settings.autoReindex === false) return;
+
+    const previousBranch = payload?.previousBranch;
+    if (await _tryDeltaIndexFromBranch(previousBranch, owner, repo, branch)) return;
+
+    setTimeout(() => indexProject(), 1000);
 });
 
 EventBus.on('git:branchDeleted', ({ name }) => {

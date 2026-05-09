@@ -159,3 +159,82 @@ export function resolveLiveBranches(payload, stateBranches) {
     }
     return null;
 }
+
+/**
+ * @typedef {Object} DeltaIndexResult
+ * @property {boolean} ok                 — true means delta path completed; false means caller should fall back to a full re-walk.
+ * @property {string}  [reason]           — short tag for why delta declined (only set when `ok` is false).
+ * @property {number}  [reindexed]        — count of paths actually re-ingested (only set when `ok` is true).
+ * @property {number}  [totalDelta]       — diff + dirty-tabs union size (only set when `ok` is true).
+ */
+
+/**
+ * @typedef {Object} DeltaIndexDeps
+ * @property {string|undefined} previousBranch
+ * @property {string} branch
+ * @property {Array<{path?: string, dirty?: boolean}>} openTabs
+ * @property {() => unknown} hasSourceIndex            — falsy result short-circuits before any IO
+ * @property {() => Promise<string[]|null>} fetchDiff  — resolves to paths, or null on error/unsupported
+ * @property {() => boolean} cloneIndex                — clone source-branch index → target branch
+ * @property {() => Promise<boolean>} loadIndex        — load cloned blob into runtime
+ * @property {(paths: string[]) => Promise<number>} reindexChanged — re-ingest the diff set
+ */
+
+/**
+ * Decide and execute the delta-indexing path for a branch switch.
+ *
+ * If the previous branch has a persisted index AND the provider can
+ * compute the diff between two tips, the caller can clone that index to
+ * the new branch and re-embed only files that differ — instead of a full
+ * re-walk. Layers in any dirty open tabs since their content differs from
+ * any branch tip.
+ *
+ * Dependencies are injected so this orchestration is testable under
+ * `node --test` without importing the production manager (which pulls in
+ * browser-bound `core.js` / `git.js`).
+ *
+ * @param {DeltaIndexDeps} deps
+ * @returns {Promise<DeltaIndexResult>}
+ */
+export async function tryDeltaIndexFromBranch(deps) {
+    const {
+        previousBranch, branch, openTabs,
+        hasSourceIndex, fetchDiff, cloneIndex, loadIndex, reindexChanged,
+    } = deps;
+
+    if (!previousBranch || previousBranch === branch) {
+        return { ok: false, reason: 'no-previous-branch' };
+    }
+    if (!hasSourceIndex()) {
+        return { ok: false, reason: 'no-source-index' };
+    }
+
+    let diffPaths;
+    try {
+        diffPaths = await fetchDiff();
+    } catch {
+        diffPaths = null;
+    }
+    if (!Array.isArray(diffPaths)) {
+        return { ok: false, reason: 'diff-unavailable' };
+    }
+
+    if (!cloneIndex()) {
+        return { ok: false, reason: 'clone-failed' };
+    }
+    if (!(await loadIndex())) {
+        return { ok: false, reason: 'load-failed' };
+    }
+
+    const dirtyPaths = (openTabs || [])
+        .filter(t => t && t.dirty && typeof t.path === 'string' && t.path.length > 0)
+        .map(t => /** @type {string} */ (t.path));
+    const allPaths = Array.from(new Set([...diffPaths, ...dirtyPaths]));
+
+    if (allPaths.length === 0) {
+        return { ok: true, reindexed: 0, totalDelta: 0 };
+    }
+
+    const reindexed = await reindexChanged(allPaths);
+    return { ok: true, reindexed, totalDelta: allPaths.length };
+}
