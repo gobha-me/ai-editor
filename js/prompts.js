@@ -11,6 +11,8 @@
  */
 
 import { State, Roles } from './core.js';
+import { Profiles } from './profiles/index.js';
+import { getActiveProfileName } from './profiles/resolve.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { buildTodoPrompt } from './tools/todo-tools.js';
 import { RetrievalManager } from './intelligence/retrieval/manager.js';
@@ -275,9 +277,15 @@ function buildSystemPrompt(opts = {}) {
     const role = Roles.get(State.settings.role);
     if (role && role.id !== 'full') {
         prompt += `\n\nActive role: ${role.name}. ${role.description}`;
-        // Roles with a systemPrompt field inject additional context (e.g., SDK docs)
-        if (role.systemPrompt) {
-            prompt += `\n\n${role.systemPrompt}`;
+        // 1.24.0 — slice 2 of path-to-2.0.0: SDK / role-specific addendum now
+        // injects from `profile.systemPrompt` (synthetic profiles carry the
+        // legacy text via inheritance from base or as direct override). The
+        // pre-1.24.0 read was `role.systemPrompt`; `Roles.get` stays for
+        // `role.name`/`role.description` until slice 3 (2.0.0) retires the
+        // role grid entirely.
+        const profile = Profiles.get(getActiveProfileName(State.settings));
+        if (profile && profile.systemPrompt) {
+            prompt += `\n\n${profile.systemPrompt}`;
         }
     }
 

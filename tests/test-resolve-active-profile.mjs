@@ -15,6 +15,15 @@
  * `roleToProfileName(settings.role)` for every role the editor emits.
  * The `picker-untouched` test below pins that.
  *
+ * **1.24.0 (slice 2 of path-to-2.0.0)** — `roleToProfileName` widened
+ * from `coder ? 'coder.v1' : 'chat.v1'` to a 5-key table that maps
+ * every legacy role to its canonical profile (synthetic profiles for
+ * `full` / `plugin-dev` / `pm` / `reviewer` registered at 1.23.0).
+ * The `roleToProfileName` direct-mapping block + the per-role
+ * fallback assertions below pin that 5-way mapping. The Removability
+ * check survives the widening because both helpers shift in lockstep
+ * — picker-untouched equivalence is preserved by construction.
+ *
  * Pure logic; no DOM/IDB/fetch. Runs under `node --test`.
  *
  * @module tests/test-resolve-active-profile
@@ -59,10 +68,45 @@ test("getActiveProfileName({ profile: null, role: 'coder' }) === 'coder.v1' (rol
     );
 });
 
-test("getActiveProfileName({ profile: null, role: 'reviewer' }) === 'chat.v1'", () => {
+test("getActiveProfileName({ profile: null, role: 'reviewer' }) === 'reviewer.v1' (1.24.0 — synthetic profile)", () => {
+    // Pre-1.24.0 returned 'chat.v1' (narrow `roleToProfileName`); slice 2
+    // widens the translator to map `reviewer` → `reviewer.v1`. The
+    // synthetic profile inherits `base: 'chat.v1'` with empty subsystem
+    // overrides except `tools.allowed_groups: ['all', 'reviewer']`, so
+    // downstream resolvers (compression/memory) resolve byte-identically.
     assert.equal(
         getActiveProfileName({ profile: null, role: 'reviewer' }),
-        'chat.v1'
+        'reviewer.v1'
+    );
+});
+
+test("getActiveProfileName({ profile: null, role: 'pm' }) === 'pm.v1' (1.24.0 — synthetic profile)", () => {
+    assert.equal(
+        getActiveProfileName({ profile: null, role: 'pm' }),
+        'pm.v1'
+    );
+});
+
+test("getActiveProfileName({ profile: null, role: 'plugin-dev' }) === 'plugin-dev.v1' (1.24.0 — synthetic profile)", () => {
+    // Carries `systemPrompt: PLUGIN_DEV_SYSTEM_PROMPT` so
+    // `js/prompts.js`'s slice-2 flip from `role.systemPrompt` to
+    // `profile.systemPrompt` keeps the SDK addendum injecting for users
+    // with `role: 'plugin-dev'` and the picker untouched.
+    assert.equal(
+        getActiveProfileName({ profile: null, role: 'plugin-dev' }),
+        'plugin-dev.v1'
+    );
+});
+
+test("getActiveProfileName({ profile: null, role: 'full' }) === 'full.v1' (1.24.0 — synthetic profile)", () => {
+    // `full.v1` carries `tools.allowed_groups: ['*']` — the legacy
+    // `'full'` bypass marker. Without the slice-2 widening, role=full
+    // users would fall back to `chat.v1` and lose the bypass; with it,
+    // tool admission for full-role users is byte-equivalent to
+    // pre-2.0.0 `Roles.filterTools(toolDefinitions)` short-circuit.
+    assert.equal(
+        getActiveProfileName({ profile: null, role: 'full' }),
+        'full.v1'
     );
 });
 
@@ -157,4 +201,43 @@ test("getActiveProfileName({ profile: 'coder.v1' }) === 'coder.v1' (picker valid
 
 test("getActiveProfileName({ profile: 'chat.v1' }) === 'chat.v1'", () => {
     assert.equal(getActiveProfileName({ profile: 'chat.v1' }), 'chat.v1');
+});
+
+// ============================================
+// 1.24.0 — `roleToProfileName` direct mapping (slice 2 widening)
+// ============================================
+//
+// Pre-1.24.0 mapping: `coder ? 'coder.v1' : 'chat.v1'`. Slice 2 widens
+// to a 5-key table mirroring `tests/test-profile-filter-tools.mjs`'s
+// `ROLE_TO_PROFILE` constant verbatim — same target the 2.0.0 migration
+// script (slice 3) writes into `settings.profile` for each user. Any
+// divergence between this mapping, the cross-product equivalence test,
+// and the migration script is the bug.
+
+test("1.24.0 — roleToProfileName('coder') === 'coder.v1'", () => {
+    assert.equal(roleToProfileName('coder'), 'coder.v1');
+});
+
+test("1.24.0 — roleToProfileName('full') === 'full.v1'", () => {
+    assert.equal(roleToProfileName('full'), 'full.v1');
+});
+
+test("1.24.0 — roleToProfileName('plugin-dev') === 'plugin-dev.v1'", () => {
+    assert.equal(roleToProfileName('plugin-dev'), 'plugin-dev.v1');
+});
+
+test("1.24.0 — roleToProfileName('pm') === 'pm.v1'", () => {
+    assert.equal(roleToProfileName('pm'), 'pm.v1');
+});
+
+test("1.24.0 — roleToProfileName('reviewer') === 'reviewer.v1'", () => {
+    assert.equal(roleToProfileName('reviewer'), 'reviewer.v1');
+});
+
+test("1.24.0 — roleToProfileName(null|undefined|unknown) === 'chat.v1' (default fallback)", () => {
+    assert.equal(roleToProfileName(null), 'chat.v1');
+    assert.equal(roleToProfileName(undefined), 'chat.v1');
+    assert.equal(roleToProfileName('chat'), 'chat.v1');
+    assert.equal(roleToProfileName('unknown.role.string'), 'chat.v1');
+    assert.equal(roleToProfileName(''), 'chat.v1');
 });

@@ -70,16 +70,35 @@ function profileLookup(name) {
 
 /**
  * Translate a UI-side `role` value to the canonical profile name.
- * Coder is the only role with its own profile today; everything else
- * (Reviewer, PM, plugin-dev, full, null/undefined, unknown strings)
- * resolves to `chat.v1`. Retires at 2.0.0 when the role selector goes
- * away (callers will pass profile names directly).
+ *
+ * 1.24.0 (slice 2 of path-to-2.0.0) — widened from the pre-1.24.0 narrow
+ * `coder ? 'coder.v1' : 'chat.v1'` mapping to a 5-key table covering
+ * every legacy role. The four synthetic profiles registered at 1.23.0
+ * (`full.v1`, `plugin-dev.v1`, `pm.v1`, `reviewer.v1`) are now the
+ * resolution targets for their matching legacy roles, so consumer call
+ * sites that flow through this translator (the admission filter at
+ * `Profiles.filterTools` and the `profile.systemPrompt` injection at
+ * `js/prompts.js`) get byte-equivalent runtime behavior to the legacy
+ * `Roles.filterTools` + `role.systemPrompt` paths. Cross-product
+ * equivalence pinned by `tests/test-profile-filter-tools.mjs`; this
+ * mapping mirrors that test's `ROLE_TO_PROFILE` table verbatim.
+ *
+ * Default fallback (null/undefined/unknown roles) resolves to `chat.v1`
+ * unchanged. Retires at 2.0.0 when the role selector goes away
+ * (callers will pass profile names directly).
  *
  * @param {string|null|undefined} role
- * @returns {'coder.v1' | 'chat.v1'}
+ * @returns {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
  */
 export function roleToProfileName(role) {
-    return role === 'coder' ? 'coder.v1' : 'chat.v1';
+    switch (role) {
+        case 'coder':       return 'coder.v1';
+        case 'full':        return 'full.v1';
+        case 'plugin-dev':  return 'plugin-dev.v1';
+        case 'pm':          return 'pm.v1';
+        case 'reviewer':    return 'reviewer.v1';
+        default:            return 'chat.v1';
+    }
 }
 
 /**
@@ -102,12 +121,12 @@ export function roleToProfileName(role) {
  * surfacing a noisy warning every turn.
  *
  * @param {{ profile?: string|null, role?: string|null } | null | undefined} settings
- * @returns {'coder.v1' | 'chat.v1'}
+ * @returns {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
  */
 export function getActiveProfileName(settings) {
     const profile = settings && typeof settings.profile === 'string' ? settings.profile : null;
     if (profile && Profiles.has(profile)) {
-        return /** @type {'coder.v1' | 'chat.v1'} */ (profile);
+        return /** @type {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'} */ (profile);
     }
     return roleToProfileName(settings && settings.role);
 }

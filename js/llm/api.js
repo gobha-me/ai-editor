@@ -58,18 +58,19 @@
  * @property {ToolDefinition[]|null} [tools=null]
  */
 
-import { State, EventBus, Storage, Providers, ProviderRegistry, Plugins, Roles } from '../core.js';
+import { State, EventBus, Storage, Providers, ProviderRegistry, Plugins } from '../core.js';
 import { applyModelOverrides } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
 import { Catalog, composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
+import { Profiles } from '../profiles/index.js';
 import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import { getPlanMode } from '../chat/state.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, getActiveProfileName } from '../profiles/resolve.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -1058,18 +1059,26 @@ export const LLMTools = {
         };
 
         // 1.3.18 — baseline = what THIS request would have shipped without
-        // the Composer (role-filtered legacy set). Unfiltered = ungated whole
-        // registry. Both computed from `Catalog` so `metadata.cost_estimate`
-        // (`approxTokens(name+description) + approxTokens(schema)`) is the
-        // single source of truth for per-tool size — same number the Composer
-        // sums into `result.tokens_used`.
-        const baseline = sumDefCosts(Roles.filterTools(defs));
+        // the Composer (profile-filtered legacy set). Unfiltered = ungated
+        // whole registry. Both computed from `Catalog` so
+        // `metadata.cost_estimate` (`approxTokens(name+description) +
+        // approxTokens(schema)`) is the single source of truth for per-tool
+        // size — same number the Composer sums into `result.tokens_used`.
+        //
+        // 1.24.0 — slice 2 of path-to-2.0.0: this admission filter flipped
+        // from legacy `Roles.filterTools(defs)` (read `State.settings.role`
+        // internally) to `Profiles.filterTools(defs, profileName)` over the
+        // profile-keyed lookup. `roleToProfileName` widened to map every
+        // legacy role to its synthetic-or-canonical profile, so the runtime
+        // path is byte-equivalent to pre-1.24.0 for every existing user.
+        const profileName = getActiveProfileName(State?.settings);
+        const baseline = sumDefCosts(Profiles.filterTools(defs, profileName));
         const unfiltered = sumDefCosts(defs);
 
         const { result, composerActive, role } = this._runComposer();
 
         if (!composerActive) {
-            const filtered = Roles.filterTools(defs);
+            const filtered = Profiles.filterTools(defs, profileName);
             const filteredCost = sumDefCosts(filtered);
             const reason = isToolsComposeDisabled() ? 'kill-switch' : `no profile static set for role ${role}`;
             console.log('[LLMTools] Legacy path (', reason, '):', filtered.length, 'tools,', filteredCost, 'tokens (0% reduction)');

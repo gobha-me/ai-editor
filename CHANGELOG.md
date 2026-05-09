@@ -4,6 +4,95 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-05-09
+
+### Feature — Consumer flip to `Profiles.filterTools` (path-to-2.0.0 slice 2 / 3)
+
+Slice 2 of the 2.0.0 role-selector retirement (ROADMAP §"2.X path"). With
+slice 1's parallel filter + synthetic profiles in place at 1.23.0, this
+slice flips every consumer call site that today reads `Roles.filterTools(defs)`
+or `role.systemPrompt` to read profile-keyed equivalents instead. The
+field-test gate before slice 3 (2.0.0) is **byte-equivalent runtime
+behavior for every existing user** — pre-1.24.0 tool admission and
+system-prompt injection are preserved across every legacy role.
+
+**Three flips landed.** Each call site that historically reached for the
+legacy `Roles` namespace now reaches for the profile-keyed equivalent:
+
+- [`js/llm/api.js:1067`](js/llm/api.js) (cost-baseline measurement) and
+  [`js/llm/api.js:1073`](js/llm/api.js) (legacy fallback path when the
+  Composer is inactive). Both flipped from
+  `Roles.filterTools(defs)` to
+  `Profiles.filterTools(defs, getActiveProfileName(State?.settings))`,
+  with the profile-name derivation lifted to a shared local so the
+  baseline and fallback resolve to the same name. `Roles` dropped from
+  the file's `core.js` import — confirmed unused after the flip.
+- [`js/prompts.js:280`](js/prompts.js) (SDK / role-specific system-prompt
+  addendum). Flipped from `role.systemPrompt` to
+  `Profiles.get(getActiveProfileName(State.settings))?.systemPrompt`,
+  matching the slice-1 self-pin at
+  [`js/profiles/plugin-dev-v1.js:14–18`](js/profiles/plugin-dev-v1.js)
+  and [`js/core.js:175–178`](js/core.js). `Roles.get` stays for
+  `role.name` / `role.description` (role-grid metadata; retires at
+  slice 3).
+
+**Translator widened.** [`roleToProfileName`](js/profiles/resolve.js)
+expanded from the pre-1.24.0 narrow `coder ? 'coder.v1' : 'chat.v1'`
+mapping to a 5-key table covering every legacy role:
+
+```
+coder       → coder.v1
+full        → full.v1
+plugin-dev  → plugin-dev.v1
+pm          → pm.v1
+reviewer    → reviewer.v1
+default     → chat.v1
+```
+
+The mapping mirrors `tests/test-profile-filter-tools.mjs`'s
+`ROLE_TO_PROFILE` constant verbatim — the same target the 2.0.0 migration
+script (slice 3) writes into `settings.profile` for each user. Without
+this widening, the consumer flip would silently strip plugin-dev tools
+(plugin-dev's `_registeredRoles: ['plugin-dev']` doesn't intersect
+`chat.v1`'s `tools.allowed_groups: ['all', 'pm', 'reviewer']`) and lose
+the `'*'` bypass for `role: 'full'` users. The synthetic profiles
+inherit `base: 'chat.v1'` with empty subsystem overrides except
+`tools.allowed_groups` (and `systemPrompt` for `plugin-dev.v1`), so
+downstream resolvers (`resolveCompressionConfig`, `resolveMemoryConfig`)
+resolve byte-identically through the inheritance chain.
+
+`getActiveProfileName`'s JSDoc return type widened in lockstep from
+`'coder.v1' | 'chat.v1'` to the union of all six profile names; the
+type cast on the picker-set branch widened to match. No consumer
+relies on the narrow shape — the picker UI can already write any
+registry-known profile name, so the cast was already documenting
+"narrower than runtime" pre-1.24.0.
+
+**Picker UI unchanged.** `Profiles.list()` still excludes synthetics —
+the picker dropdown shows only `chat.v1` + `coder.v1`. Synthetics are
+runtime-only resolution targets for the legacy-role fallback path.
+
+**Tests.** [`tests/test-resolve-active-profile.mjs`](tests/test-resolve-active-profile.mjs)
+gains four new `getActiveProfileName({ profile: null, role: ... })`
+assertions for `pm` / `reviewer` / `plugin-dev` / `full` and a six-test
+`roleToProfileName` direct-mapping block pinning the 5-key table +
+default fallback. The Removability check at line 139 (load-bearing for
+the §Decisions 7 picker-untouched equivalence) survives unchanged
+because `getActiveProfileName` and `roleToProfileName` shifted in
+lockstep — picker-untouched fallback always equals the translator by
+construction. The pre-1.24.0 `role: 'reviewer' → 'chat.v1'` literal
+expectation flipped to `'reviewer.v1'`. Cross-product equivalence at
+[`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs)
+needed no changes — its inline `ROLE_TO_PROFILE` already encoded the
+mapping slice 2 promotes.
+
+**Field-test expectation.** Slice 2 ships in `main` and runs in
+production for one or more minors before slice 3 (2.0.0) yanks the role
+selector + runs the migration script. A bug surfaced during this
+window means the parallel filter or the synthetic profiles need
+patching, not the migration; that's why slice 1 + slice 2 are separate
+cuts rather than co-shipped.
+
 ## [1.23.0] - 2026-05-09
 
 ### Feature — Profile-side admission filter (path-to-2.0.0 slice 1 / 3)

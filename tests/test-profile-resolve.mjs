@@ -25,9 +25,20 @@ import {
     SUMMARIZATION_RULE,
 } from '../js/intelligence/compression/index.js';
 
-test('roleToProfileName: coder → coder.v1; everything else → chat.v1', () => {
+test('roleToProfileName: 5-key table mapping legacy roles to synthetic profiles (1.24.0 widening)', () => {
+    // 1.24.0 (slice 2 of path-to-2.0.0) — pre-1.24.0 was a narrow
+    // `coder ? 'coder.v1' : 'chat.v1'` mapping; widened to a 5-key table
+    // so consumer-flipped admission filter + system-prompt injection get
+    // byte-equivalent behavior for every legacy role. Mirrors the
+    // `ROLE_TO_PROFILE` constant in `tests/test-profile-filter-tools.mjs`.
     assert.equal(roleToProfileName('coder'), 'coder.v1');
-    for (const role of ['reviewer', 'pm', 'plugin-dev', 'full', null, undefined, '', 'made-up']) {
+    assert.equal(roleToProfileName('full'), 'full.v1');
+    assert.equal(roleToProfileName('plugin-dev'), 'plugin-dev.v1');
+    assert.equal(roleToProfileName('pm'), 'pm.v1');
+    assert.equal(roleToProfileName('reviewer'), 'reviewer.v1');
+    // Default fallback unchanged — null / undefined / empty / unknown
+    // strings resolve to chat.v1.
+    for (const role of [null, undefined, '', 'made-up']) {
         assert.equal(roleToProfileName(role), 'chat.v1', `role=${role}`);
     }
 });
@@ -50,12 +61,32 @@ test('chat.v1 → Rule 5 only with preserve_recent 4 (1.17.0 reconciliation)', (
     assert.equal(cfg.preserve_recent, 4);
 });
 
-test('translator + resolver compose: every non-coder role lands on chat.v1 / preserve_recent 4', () => {
-    for (const role of ['reviewer', 'pm', 'plugin-dev', 'full', null, undefined, '']) {
+test('translator + resolver compose: non-coder legacy roles get chat.v1 compression behavior via inheritance (1.24.0)', () => {
+    // 1.24.0 — synthetic profiles inherit `base: 'chat.v1'` with empty
+    // `compression: {}`, so the resolved compression slice for
+    // pm.v1/reviewer.v1/plugin-dev.v1/full.v1 comes through chat.v1's
+    // compression byte-for-byte (Rule 5 only, preserve_recent 4). The
+    // `profileName` field reflects the leaf (the synthetic profile)
+    // rather than the inheritance base — this is the documented shape
+    // of `resolveCompressionConfig`'s return at `js/profiles/resolve.js:165`.
+    const ROLE_TO_LEAF = {
+        reviewer:     'reviewer.v1',
+        pm:           'pm.v1',
+        'plugin-dev': 'plugin-dev.v1',
+        full:         'full.v1',
+    };
+    for (const [role, leaf] of Object.entries(ROLE_TO_LEAF)) {
+        const cfg = resolveCompressionConfig(roleToProfileName(role));
+        assert.equal(cfg.profileName, leaf, `role=${role}`);
+        assert.equal(cfg.rules.length, 1, `role=${role}`);
+        assert.equal(cfg.rules[0], SUMMARIZATION_RULE, `role=${role}`);
+        assert.equal(cfg.preserve_recent, 4, `role=${role}`);
+    }
+    // Default fallback (null/undefined/empty) still resolves to chat.v1
+    // directly — `roleToProfileName` returns 'chat.v1' for those.
+    for (const role of [null, undefined, '']) {
         const cfg = resolveCompressionConfig(roleToProfileName(role));
         assert.equal(cfg.profileName, 'chat.v1', `role=${role}`);
-        assert.equal(cfg.rules.length, 1);
-        assert.equal(cfg.rules[0], SUMMARIZATION_RULE);
         assert.equal(cfg.preserve_recent, 4);
     }
 });
