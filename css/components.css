@@ -218,25 +218,6 @@
     color: var(--info, #5bc0de);
 }
 
-/* Role selector in chat header */
-#roleSelect {
-    width: auto;
-    min-width: 0;
-    max-width: 90px;
-    padding: 0.2rem 0.3rem;
-    font-size: var(--font-sm);
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text-primary);
-    cursor: pointer;
-}
-
-#roleSelect:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-
 /* ============================================
 
    QUICK OPEN (Ctrl+P) FILE FINDER

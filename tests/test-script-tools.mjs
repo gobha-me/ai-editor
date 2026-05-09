@@ -240,18 +240,19 @@ test('submit_script_for_approval handler returns Promise that settles via resolv
 // resolveScriptAutomationConfig
 // ============================================
 
-test('resolveScriptAutomationConfig returns coder.v1 defaults for coder', () => {
-    const cfg = resolveScriptAutomationConfig('coder');
+test('resolveScriptAutomationConfig returns coder.v1 defaults for coder.v1', () => {
+    // 2.0.0 — slice 3: takes profile name, not role.
+    const cfg = resolveScriptAutomationConfig('coder.v1');
     assert.equal(cfg.enabled, true);
     assert.equal(cfg.timeout_ms, 30000);
     assert.equal(cfg.max_output_bytes, 262144);
     assert.equal(cfg.profileName, 'coder.v1');
 });
 
-test('resolveScriptAutomationConfig returns chat.v1 defaults for non-coder roles', () => {
-    for (const role of [null, undefined, '', 'reviewer', 'pm', 'unknown']) {
-        const cfg = resolveScriptAutomationConfig(role);
-        assert.equal(cfg.enabled, false, `role ${JSON.stringify(role)} is disabled by default`);
+test('resolveScriptAutomationConfig returns chat.v1 defaults for non-coder profiles', () => {
+    for (const profileName of [null, undefined, '', 'chat.v1', 'reviewer.v1', 'pm.v1', 'plugin-dev.v1', 'full.v1', 'unknown']) {
+        const cfg = resolveScriptAutomationConfig(profileName);
+        assert.equal(cfg.enabled, false, `profile ${JSON.stringify(profileName)} is disabled by default`);
         assert.equal(cfg.timeout_ms, 30000);
         assert.equal(cfg.max_output_bytes, 262144);
         assert.equal(cfg.profileName, 'chat.v1');

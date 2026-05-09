@@ -23,7 +23,17 @@ import * as protocol from './protocol.js';
 let _servers = [];
 
 const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
-const BUILTIN_ROLES = ['full', 'coder', 'pm', 'reviewer', 'plugin-dev'];
+
+/**
+ * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
+ * "role IDs" used by `Roles.filterTools`; post-2.0.0 they're consumed
+ * as group tags by `Profile.tools.allowed_groups` (same semantics,
+ * same vocabulary). The MCP per-server `roles:` field is preserved
+ * unchanged for back-compat with existing user records.
+ *
+ * @type {string[]}
+ */
+const LEGACY_GROUP_TAGS = ['full', 'coder', 'pm', 'reviewer', 'plugin-dev'];
 
 /**
  * Normalise a roles value into a canonical array.
@@ -36,7 +46,7 @@ function normaliseRoles(roles) {
     if (typeof roles === 'string') return roles === 'all' ? 'all' : [roles];
     if (Array.isArray(roles)) {
         if (roles.includes('all')) return 'all';
-        return roles.filter(r => BUILTIN_ROLES.includes(r));
+        return roles.filter(r => LEGACY_GROUP_TAGS.includes(r));
     }
     return 'all';
 }
@@ -198,4 +208,4 @@ const MCPServerRegistry = {
     },
 };
 
-export { MCPServerRegistry, BUILTIN_ROLES };
+export { MCPServerRegistry, LEGACY_GROUP_TAGS };

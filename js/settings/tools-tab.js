@@ -29,7 +29,7 @@ import {
     DEFAULT_TOP_K,
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, getActiveProfileName } from '../profiles/resolve.js';
 
 let _bound = false;
 
@@ -76,8 +76,8 @@ function _persist(patch) {
 // kept in a separate object because the profile slice is per-profile,
 // not per-tool.
 function _readScript() {
-    const role = State?.settings?.role || null;
-    const cfg = resolveScriptAutomationConfig(role);
+    const profileName = getActiveProfileName(State?.settings);
+    const cfg = resolveScriptAutomationConfig(profileName);
     const overlay = (State.settings && State.settings.scriptAutomation) || {};
     const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
     const timeout_ms = Number.isInteger(overlay.timeout_ms) && overlay.timeout_ms > 0
@@ -102,8 +102,8 @@ function _persistScript(patch) {
 // set; otherwise the resolved profile default applies. Same shape as
 // `_readScript` / `_persistScript` above.
 function _readPreview() {
-    const role = State?.settings?.role || null;
-    const cfg = resolvePreviewConfig(role);
+    const profileName = getActiveProfileName(State?.settings);
+    const cfg = resolvePreviewConfig(profileName);
     const overlay = (State.settings && State.settings.preview) || {};
     const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
     return { enabled, profileDefault: cfg.enabled };

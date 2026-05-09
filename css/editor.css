@@ -786,11 +786,7 @@
     flex-wrap: wrap;
 }
 
-/* Role + Model selectors wrap properly on narrow panels */
-#roleSelect {
-    max-width: 75px;
-}
-
+/* Model selector wraps properly on narrow panels */
 #modelSelect {
     max-width: 120px;
     text-overflow: ellipsis;

@@ -276,22 +276,23 @@ test('makeRegistration: server.roles array survives bridge → registry → chec
     assert.ok(def);
     assert.deepEqual(def._registeredRoles, ['coder']);
 
-    // Save/restore the active role so we don't leak into later tests.
-    const priorRole = State.settings.role;
+    // 2.0.0 — slice 3: profile-keyed gate. Save/restore the active
+    // profile so we don't leak into later tests.
+    const priorProfile = State.settings.profile;
     try {
-        State.settings.role = 'coder';
+        State.settings.profile = 'coder.v1';
         assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
 
-        State.settings.role = 'pm';
+        State.settings.profile = 'pm.v1';
         const blocked = ToolRegistry.checkRoleAccess('mcp__demo__echo');
         assert.equal(blocked.allowed, false);
-        assert.match(blocked.reason, /pm.*not permitted/);
+        assert.match(blocked.reason, /pm\.v1.*not permitted/);
 
-        // 'full' bypasses everything — sanity check.
-        State.settings.role = 'full';
+        // 'full.v1' carries `tools.allowed_groups: ['*']` — bypass.
+        State.settings.profile = 'full.v1';
         assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
     } finally {
-        State.settings.role = priorRole;
+        State.settings.profile = priorProfile;
     }
 
     globalThis.fetch = ORIG_FETCH;

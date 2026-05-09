@@ -45,7 +45,7 @@ import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
-import { resolveTools } from '../profiles/resolve.js';
+import { resolveTools, getActiveProfileName } from '../profiles/resolve.js';
 
 /**
  * Main entry point for user input
@@ -767,12 +767,15 @@ export async function handleGeneralRequest(input) {
                     // 1.3.17 / Tools PR 4 — record the invocation against
                     // the conversation's TaskLedger so a non-static tool
                     // the model just used becomes sticky-admissible on the
-                    // next turn. Gated to the `coder` role because that is
-                    // the only role with a populated `tools.static` set
-                    // today; other roles run the legacy `Roles.filterTools`
-                    // path which never consults the ledger. Failed tool
+                    // next turn. Gated to `coder.v1` because that is the
+                    // only profile with a populated `tools.static` set
+                    // today; other profiles run the profile-side admission
+                    // filter which never consults the ledger. Failed tool
                     // calls are skipped inside `recordToolInvocation`.
-                    if (State.settings.role === 'coder') {
+                    //
+                    // 2.0.0 — slice 3: was `State.settings.role === 'coder'`
+                    // pre-2.0.0; flips to the picker-mapped profile name.
+                    if (getActiveProfileName(State.settings) === 'coder.v1') {
                         const tools = resolveTools('coder.v1');
                         const td = Catalog.getByName(toolName);
                         recordToolInvocation({

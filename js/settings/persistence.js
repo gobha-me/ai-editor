@@ -145,20 +145,12 @@ export function collectAndSave() {
     }
     // In named modes, don't save slider values — they're computed from context window + mode
 
-    // Roles
-    const activeRoleCard = document.querySelector('.role-card.active');
-    State.settings.role = activeRoleCard ? activeRoleCard.dataset.role : 'full';
-
-    // 1.21.0 — profile picker. Sentinel `''` value (the "(use role)"
-    // option) clears the field so `getActiveProfileName` falls through
-    // to `roleToProfileName(role)` (pre-1.21.0 behavior). Any other
-    // value is the picker-selected profile name; `getActiveProfileName`
-    // validates it against the registry on read, so a stale/unknown
-    // string degrades gracefully without erroring here.
-    const profilePickerEl = document.getElementById('settingProfilePicker');
+    // 2.0.0 — slice 3: profile picker is the only configuration
+    // surface (role grid retired). The picker `<select>` writes
+    // profile names directly; the `(use role)` sentinel is gone.
+    const profilePickerEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('settingProfilePicker'));
     if (profilePickerEl) {
-        const v = profilePickerEl.value;
-        State.settings.profile = v ? v : null;
+        State.settings.profile = profilePickerEl.value;
     }
 
     // Plan Mode auto-engage on issue start (github#25, 1.10.0)
@@ -244,12 +236,6 @@ export function collectAndSave() {
     const ignorePatternsEl = document.getElementById('settingIgnorePatterns');
     if (ignorePatternsEl) {
         IgnoreManager.setGlobalPatterns(ignorePatternsEl.value);
-    }
-
-    // Sync main page role selector
-    const roleSelectEl = document.getElementById('roleSelect');
-    if (roleSelectEl) {
-        roleSelectEl.value = State.settings.role;
     }
 
     // Persist to localStorage is handled by the caller (coreSaveSettings)

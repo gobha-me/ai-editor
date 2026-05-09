@@ -1,22 +1,19 @@
 /**
- * 1.18.0 — Memory subsystem resolver: Removability proof.
+ * Memory subsystem resolver: Removability proof.
  *
- * The slice replaces a hardcoded literal in `js/tools/memory-tools.js`
- * (`a.scope || 'workspace'`) with a profile-keyed lookup
- * (`a.scope || resolveDefaultRememberScope(role)`). Per ROADMAP
- * §Decisions 7 "Removability check," the rewire's exit criterion is
- * **zero behavior diff** against the pre-slice literal for the role
- * that actually exercises memory tools (coder).
+ * The 1.18.0 slice replaced a hardcoded literal in
+ * `js/tools/memory-tools.js` (`a.scope || 'workspace'`) with a
+ * profile-keyed lookup (`a.scope || resolveDefaultRememberScope(...)`).
+ * Per ROADMAP §Decisions 7 "Removability check," the rewire's exit
+ * criterion is **zero behavior diff** against the pre-slice literal
+ * for the surface that actually exercises memory tools (coder).
  *
- * That's exactly what this file proves.
- * `resolveDefaultRememberScope('coder')` must return `'workspace'` —
- * identical to the literal — because
- * `coder.v1.memory.default_scope === 'session'` falls outside
- * `MEMORY_SCOPES` and the helper clamps invalid scopes back to
- * `'workspace'`. For chat surfaces (which don't have memory tools
- * exposed today), the helper returns `'user'` as `chat.v1` declares —
- * forward-looking when chat surfaces gain memory tools in a later
- * slice.
+ * **2.0.0 — slice 3 collapse.** The pre-2.0.0 polymorphic shape
+ * (string-arg legacy role / object-arg settings) collapsed to a
+ * single settings-shape input. Tests below pass `{ profile: 'X.v1' }`
+ * directly. The clamp semantic is unchanged: `coder.v1.memory.default_scope
+ * === 'session'` falls outside `MEMORY_SCOPES`, so the helper
+ * returns `'workspace'`. For chat surfaces, `'user'` passes through.
  *
  * Pure logic; no DOM/IDB/fetch. Runs under `node --test`. Helper
  * lives in `js/profiles/resolve.js` (not `memory-tools.js`) so
@@ -38,34 +35,37 @@ import { MEMORY_SCOPES } from '../js/intelligence/memory/contracts.js';
 // Removability check — the load-bearing test
 // ============================================
 
-test("resolveDefaultRememberScope('coder') === 'workspace' (zero diff vs pre-1.18.0 literal)", () => {
+test("resolveDefaultRememberScope({ profile: 'coder.v1' }) === 'workspace' (zero diff vs pre-1.18.0 literal)", () => {
     // The whole point of the §Decisions 7 check: replacing the
     // pre-slice literal `'workspace'` with this call must yield zero
-    // behavior diff for coder, the role that actually exercises
+    // behavior diff for coder, the surface that actually exercises
     // memory_remember today. coder.v1.memory.default_scope is
     // 'session' (intentional — describes scratchpad, see
     // js/profiles/coder-v1.js), which falls outside MEMORY_SCOPES,
     // so the clamp inside resolveDefaultRememberScope returns 'workspace'.
-    assert.equal(resolveDefaultRememberScope('coder'), 'workspace');
+    assert.equal(resolveDefaultRememberScope({ profile: 'coder.v1' }), 'workspace');
 });
 
-test("resolveDefaultRememberScope('chat') === 'user' (forward-looking; chat surfaces gain memory tools later)", () => {
+test("resolveDefaultRememberScope({ profile: 'chat.v1' }) === 'user' (chat baseline)", () => {
     // chat.v1.memory.default_scope === 'user', and 'user' is in
-    // MEMORY_SCOPES, so no clamp. No user-visible effect today
-    // (chat surfaces don't expose memory tools), but the resolver
-    // shape is correct for when 1.19.0+ surfaces the picker.
-    assert.equal(resolveDefaultRememberScope('chat'), 'user');
+    // MEMORY_SCOPES, so no clamp.
+    assert.equal(resolveDefaultRememberScope({ profile: 'chat.v1' }), 'user');
 });
 
-test('roles outside coder fall through roleToProfileName to chat.v1', () => {
-    // `pm`, `full`, plugin-dev, null, undefined, unknown strings —
-    // all map to chat.v1 in roleToProfileName, hence 'user' here.
-    assert.equal(resolveDefaultRememberScope('pm'), 'user');
-    assert.equal(resolveDefaultRememberScope('full'), 'user');
-    assert.equal(resolveDefaultRememberScope('plugin-dev'), 'user');
+test('synthetic profiles (pm/full/plugin-dev/reviewer) inherit chat.v1 default', () => {
+    // The four synthetic profiles inherit `base: 'chat.v1'` with
+    // empty `memory` overrides → resolve to chat.v1's `'user'`.
+    assert.equal(resolveDefaultRememberScope({ profile: 'pm.v1' }), 'user');
+    assert.equal(resolveDefaultRememberScope({ profile: 'full.v1' }), 'user');
+    assert.equal(resolveDefaultRememberScope({ profile: 'plugin-dev.v1' }), 'user');
+    assert.equal(resolveDefaultRememberScope({ profile: 'reviewer.v1' }), 'user');
+});
+
+test('unknown / null / undefined settings shapes fall through to chat.v1 → user', () => {
+    assert.equal(resolveDefaultRememberScope({ profile: 'unknown.profile' }), 'user');
+    assert.equal(resolveDefaultRememberScope({}), 'user');
     assert.equal(resolveDefaultRememberScope(null), 'user');
     assert.equal(resolveDefaultRememberScope(undefined), 'user');
-    assert.equal(resolveDefaultRememberScope('unknown.role.string'), 'user');
 });
 
 // ============================================

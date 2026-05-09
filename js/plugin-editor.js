@@ -442,41 +442,46 @@ export async function loadUserPlugins() {
 registerTabRenderer('plugin-editor', renderPluginEditorTab);
 
 // ============================================
-// AUTO-ROLE SWITCHING
+// AUTO-PROFILE SWITCHING
 // ============================================
-// When a plugin-editor tab becomes active, auto-switch to plugin-dev role.
-// When switching away, restore the previous role.
+// When a plugin-editor tab becomes active, auto-switch to plugin-dev.v1.
+// When switching away, restore the previously-selected profile.
+//
+// 2.0.0 — slice 3 flip. Pre-2.0.0 this auto-switched
+// `State.settings.role` between the user's saved role and `'plugin-dev'`;
+// now it switches `State.settings.profile` between the saved value
+// (which may be `null` if the picker was untouched) and `'plugin-dev.v1'`.
+// `_syncProfileUI` updates the picker `<select>` so the Settings tab
+// stays in sync if it's open.
 
-let _savedRole = null;
+let _savedProfile = null;
 
-function _syncRoleUI(roleId) {
-    const select = document.getElementById('roleSelect');
-    if (select) select.value = roleId;
-    // Sync settings modal role cards if open
-    document.querySelectorAll('.role-card').forEach(c => {
-        c.classList.toggle('active', c.dataset.role === roleId);
-    });
+function _syncProfileUI(profileName) {
+    const select = /** @type {HTMLSelectElement|null} */ (document.getElementById('settingProfilePicker'));
+    if (select) {
+        select.value = profileName || '';
+    }
 }
 
 EventBus.on('tab:switched', ({ tab }) => {
     const isPluginTab = tab?.type === 'plugin-editor';
-    const currentRole = State.settings.role;
+    const currentProfile = State.settings.profile || null;
 
-    if (isPluginTab && currentRole !== 'plugin-dev') {
-        // Entering plugin editor — save current role and switch
-        _savedRole = currentRole;
-        State.settings.role = 'plugin-dev';
+    if (isPluginTab && currentProfile !== 'plugin-dev.v1') {
+        // Entering plugin editor — save current profile and switch
+        _savedProfile = currentProfile;
+        State.settings.profile = 'plugin-dev.v1';
         Storage.set('settings', State.settings);
-        _syncRoleUI('plugin-dev');
-        EventBus.emit('role:changed', { role: 'plugin-dev', auto: true });
-        console.log(`[plugin-editor] Auto-switched role: ${_savedRole} → plugin-dev`);
-    } else if (!isPluginTab && _savedRole && currentRole === 'plugin-dev') {
-        // Leaving plugin editor — restore previous role
-        State.settings.role = _savedRole;
+        _syncProfileUI('plugin-dev.v1');
+        EventBus.emit('profile:changed', { profile: 'plugin-dev.v1', auto: true });
+        console.log(`[plugin-editor] Auto-switched profile: ${_savedProfile} → plugin-dev.v1`);
+    } else if (!isPluginTab && currentProfile === 'plugin-dev.v1') {
+        // Leaving plugin editor — restore previous profile
+        State.settings.profile = _savedProfile;
         Storage.set('settings', State.settings);
-        _syncRoleUI(_savedRole);
-        EventBus.emit('role:changed', { role: _savedRole, auto: true });
-        console.log(`[plugin-editor] Restored role: plugin-dev → ${_savedRole}`);
-        _savedRole = null;
+        _syncProfileUI(_savedProfile);
+        EventBus.emit('profile:changed', { profile: _savedProfile, auto: true });
+        console.log(`[plugin-editor] Restored profile: plugin-dev.v1 → ${_savedProfile}`);
+        _savedProfile = null;
     }
 });

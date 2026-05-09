@@ -57,11 +57,12 @@ beforeEach(() => {
         globalThis.localStorage.clear();
     }
 
-    // 1.18.0: `coder` keeps the post-resolver default scope at
-    // `'workspace'` (clamp from `'session'`); chat-side roles default
-    // to `'user'`. Tests below assert workspace defaults.
+    // 1.18.0: `coder.v1` keeps the post-resolver default scope at
+    // `'workspace'` (clamp from `'session'`); chat-side profiles
+    // default to `'user'`. Tests below assert workspace defaults.
+    // 2.0.0 — slice 3: profile-keyed (was role-keyed pre-2.0.0).
     State.settings = State.settings || {};
-    State.settings.role = 'coder';
+    State.settings.profile = 'coder.v1';
     State.settings.llmModel = 'opus-test';
     State.settings.embeddingModel = 'stub-model';
     State.scratchpad = {};

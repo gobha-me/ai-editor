@@ -142,16 +142,17 @@ test('previewList returns {servers: []} when registry is empty', () => {
 // resolvePreviewConfig — coder enables, others disable
 // ============================================
 
-test('resolvePreviewConfig returns coder.v1 default (enabled) for coder', () => {
-    const cfg = resolvePreviewConfig('coder');
+test('resolvePreviewConfig returns coder.v1 default (enabled) for coder.v1', () => {
+    // 2.0.0 — slice 3: takes profile name, not role.
+    const cfg = resolvePreviewConfig('coder.v1');
     assert.equal(cfg.enabled, true);
     assert.equal(cfg.profileName, 'coder.v1');
 });
 
-test('resolvePreviewConfig returns chat.v1 default (disabled) for non-coder roles', () => {
-    for (const role of [null, undefined, '', 'reviewer', 'pm', 'unknown']) {
-        const cfg = resolvePreviewConfig(role);
-        assert.equal(cfg.enabled, false, `role ${JSON.stringify(role)} disabled by default`);
+test('resolvePreviewConfig returns chat.v1 default (disabled) for non-coder profiles', () => {
+    for (const profileName of [null, undefined, '', 'chat.v1', 'reviewer.v1', 'pm.v1', 'plugin-dev.v1', 'full.v1', 'unknown']) {
+        const cfg = resolvePreviewConfig(profileName);
+        assert.equal(cfg.enabled, false, `profile ${JSON.stringify(profileName)} disabled by default`);
         assert.equal(cfg.profileName, 'chat.v1');
     }
 });

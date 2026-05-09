@@ -10,7 +10,7 @@
  * @module prompts
  */
 
-import { State, Roles } from './core.js';
+import { State } from './core.js';
 import { Profiles } from './profiles/index.js';
 import { getActiveProfileName } from './profiles/resolve.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
@@ -273,20 +273,18 @@ function buildSystemPrompt(opts = {}) {
         prompt = prompt.replace('{{issues}}', '');
     }
 
-    // Add role context
-    const role = Roles.get(State.settings.role);
-    if (role && role.id !== 'full') {
-        prompt += `\n\nActive role: ${role.name}. ${role.description}`;
-        // 1.24.0 — slice 2 of path-to-2.0.0: SDK / role-specific addendum now
-        // injects from `profile.systemPrompt` (synthetic profiles carry the
-        // legacy text via inheritance from base or as direct override). The
-        // pre-1.24.0 read was `role.systemPrompt`; `Roles.get` stays for
-        // `role.name`/`role.description` until slice 3 (2.0.0) retires the
-        // role grid entirely.
-        const profile = Profiles.get(getActiveProfileName(State.settings));
-        if (profile && profile.systemPrompt) {
-            prompt += `\n\n${profile.systemPrompt}`;
-        }
+    // Add profile-specific system-prompt addendum.
+    //
+    // 2.0.0 — slice 3 of path-to-2.0.0. The pre-2.0.0 `Active role: …`
+    // text injection retires alongside the role grid; the `profile.systemPrompt`
+    // injection (slice-2 1.24.0 wire-up) is the load-bearing surface — the
+    // picker UI surfaces the active profile in Settings, no need for in-prompt
+    // redundancy. `plugin-dev.v1` carries `PLUGIN_DEV_SYSTEM_PROMPT` as its
+    // `systemPrompt`; other profiles have none, so the block is a no-op for
+    // them.
+    const profile = Profiles.get(getActiveProfileName(State.settings));
+    if (profile && profile.systemPrompt) {
+        prompt += `\n\n${profile.systemPrompt}`;
     }
 
     // Inject active issue context (working on a branch for this issue)

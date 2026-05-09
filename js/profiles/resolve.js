@@ -69,58 +69,24 @@ function profileLookup(name) {
 }
 
 /**
- * Translate a UI-side `role` value to the canonical profile name.
+ * Pick the active profile name from a settings-shaped object.
  *
- * 1.24.0 (slice 2 of path-to-2.0.0) — widened from the pre-1.24.0 narrow
- * `coder ? 'coder.v1' : 'chat.v1'` mapping to a 5-key table covering
- * every legacy role. The four synthetic profiles registered at 1.23.0
- * (`full.v1`, `plugin-dev.v1`, `pm.v1`, `reviewer.v1`) are now the
- * resolution targets for their matching legacy roles, so consumer call
- * sites that flow through this translator (the admission filter at
- * `Profiles.filterTools` and the `profile.systemPrompt` injection at
- * `js/prompts.js`) get byte-equivalent runtime behavior to the legacy
- * `Roles.filterTools` + `role.systemPrompt` paths. Cross-product
- * equivalence pinned by `tests/test-profile-filter-tools.mjs`; this
- * mapping mirrors that test's `ROLE_TO_PROFILE` table verbatim.
- *
- * Default fallback (null/undefined/unknown roles) resolves to `chat.v1`
- * unchanged. Retires at 2.0.0 when the role selector goes away
- * (callers will pass profile names directly).
- *
- * @param {string|null|undefined} role
- * @returns {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
- */
-export function roleToProfileName(role) {
-    switch (role) {
-        case 'coder':       return 'coder.v1';
-        case 'full':        return 'full.v1';
-        case 'plugin-dev':  return 'plugin-dev.v1';
-        case 'pm':          return 'pm.v1';
-        case 'reviewer':    return 'reviewer.v1';
-        default:            return 'chat.v1';
-    }
-}
-
-/**
- * Pick the active profile name from a settings-shaped object — the
- * load-bearing semantic for 1.21.0's picker UI: *"the picker exists;
- * role still wins if untouched."*
- *
- * Precedence:
- *   1. If `settings.profile` is a known profile name (per
- *      `Profiles.has`), it wins — the user touched the picker.
- *   2. Otherwise fall through to `roleToProfileName(settings.role)` —
- *      pre-1.21.0 behavior, byte-for-byte.
+ * **2.0.0 — slice 3 simplification.** The role grid retired; the
+ * picker is the only configuration surface. `settings.profile` is
+ * the load-bearing field; the pre-2.0.0 fallback to
+ * `roleToProfileName(settings.role)` is gone. Stored settings blobs
+ * that pre-date 2.0.0 are migrated at `loadSettings` time
+ * (`migrateRoleToProfile`); fresh installs and any post-migration
+ * read get `'chat.v1'` — the lowest-config baseline + the new
+ * default.
  *
  * Validation is permissive: an *unknown* string in `settings.profile`
- * silently falls through to the role path rather than warning. The
- * picker UI only writes registry-known names + `null` (the "(use
- * role)" sentinel), so an unknown value implies a stale settings blob
- * (e.g. an export from a future version with a removed profile) — the
- * graceful degradation is to honor the role selector instead of
- * surfacing a noisy warning every turn.
+ * silently falls through to `'chat.v1'` rather than warning. The
+ * picker UI only writes registry-known names, so an unknown value
+ * implies a stale settings blob (e.g. an export from a future
+ * version with a removed profile).
  *
- * @param {{ profile?: string|null, role?: string|null } | null | undefined} settings
+ * @param {{ profile?: string|null } | null | undefined} settings
  * @returns {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
  */
 export function getActiveProfileName(settings) {
@@ -128,7 +94,7 @@ export function getActiveProfileName(settings) {
     if (profile && Profiles.has(profile)) {
         return /** @type {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'} */ (profile);
     }
-    return roleToProfileName(settings && settings.role);
+    return 'chat.v1';
 }
 
 /**
@@ -321,44 +287,37 @@ export function resolveRetrievalConfig(profileName) {
  * is Node-importable for tests (memory-tools transitively pulls
  * `core.js`'s browser-only `window.addEventListener`).
  *
- * **1.21.0 — polymorphic argument.** Accepts either a role string
- * (pre-1.21.0 callers / existing tests — `resolveDefaultRememberScope('coder')`)
- * or a settings-shaped object with `{ role, profile }` keys
- * (`resolveDefaultRememberScope(State.settings)`). The settings form
- * threads the picker via `getActiveProfileName`; the string form
- * preserves the legacy `roleToProfileName` path so the existing
- * memory-resolve test suite passes byte-identical.
+ * **2.0.0 — slice 3 collapse.** The pre-2.0.0 polymorphic shape
+ * (string-arg = legacy role, object-arg = settings) collapses to
+ * settings-only. `roleToProfileName` retires; consumers pass
+ * `State.settings` (or any `{profile?: string}` shape).
  *
- * @param {string|null|undefined|{ role?: string|null, profile?: string|null }} input
+ * @param {{ profile?: string|null } | null | undefined} settings
  * @returns {'user'|'workspace'}
  */
-export function resolveDefaultRememberScope(input) {
-    let profileName;
-    if (input && typeof input === 'object') {
-        profileName = getActiveProfileName(input);
-    } else {
-        profileName = roleToProfileName(/** @type {string|null|undefined} */ (input));
-    }
+export function resolveDefaultRememberScope(settings) {
+    const profileName = getActiveProfileName(settings);
     const cfg = resolveMemoryConfig(profileName);
     return MEMORY_SCOPES.includes(cfg.default_scope) ? cfg.default_scope : 'workspace';
 }
 
 /**
  * Resolve the LLM-authored automation (Tier-0 Worker) config for the
- * active role. Coder gets the value-case `enabled: true`; every other
- * role inherits chat.v1's `enabled: false`. Settings overlay can flip
- * either direction at runtime via `State.settings.scriptAutomation`
- * (see `js/settings/tools-tab.js` row).
+ * active profile. Coder gets the value-case `enabled: true`; every
+ * other profile inherits chat.v1's `enabled: false`. Settings overlay
+ * can flip either direction at runtime via
+ * `State.settings.scriptAutomation` (see `js/settings/tools-tab.js`).
  *
- * Phase 1 — kept role-keyed because the Tier-0 sandbox shipped before
- * the broader profile-keyed rewire; gets its own slice when the
- * automation track resumes.
+ * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0; profile-keyed
+ * now. `coder.v1` matches the pre-2.0.0 `role === 'coder'` short-
+ * circuit; everything else (including the four synthetic profiles)
+ * falls through to `CHAT_V1`'s defaults.
  *
- * @param {string|null|undefined} role  Value from `State.settings.role`.
+ * @param {string|null|undefined} profileName  e.g. from `getActiveProfileName(State.settings)`.
  * @returns {{ enabled: boolean, timeout_ms: number, max_output_bytes: number, profileName: string }}
  */
-export function resolveScriptAutomationConfig(role) {
-    const profile = role === 'coder' ? CODER_V1 : CHAT_V1;
+export function resolveScriptAutomationConfig(profileName) {
+    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
     const cfg = profile.scriptAutomation || {};
     return {
         enabled: cfg.enabled === true,
@@ -373,22 +332,19 @@ export function resolveScriptAutomationConfig(role) {
 }
 
 /**
- * Resolve the in-editor preview (Tier 1 sandboxed iframe) config for the
- * active role. Coder gets the value-case `enabled: true`; every other
- * role inherits chat.v1's `enabled: false`. Settings overlay can flip
- * either direction at runtime via `State.settings.preview`
- * (see `js/settings/tools-tab.js` row).
+ * Resolve the in-editor preview (Tier 1 sandboxed iframe) config for
+ * the active profile. Mirrors `resolveScriptAutomationConfig` byte-
+ * for-byte in shape — same `coder.v1` short-circuit, same chat.v1
+ * fallback. Settings overlay (`State.settings.preview`) wins when set.
  *
- * Mirrors `resolveScriptAutomationConfig` byte-for-byte in shape — same
- * Phase-1 escape hatch (kept role-keyed for now; gets folded into the
- * profile-keyed rewire when the preview track ships Tier 2/3 and the
- * config slice grows past a single boolean).
+ * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0; profile-keyed
+ * now.
  *
- * @param {string|null|undefined} role  Value from `State.settings.role`.
+ * @param {string|null|undefined} profileName  e.g. from `getActiveProfileName(State.settings)`.
  * @returns {{ enabled: boolean, profileName: string }}
  */
-export function resolvePreviewConfig(role) {
-    const profile = role === 'coder' ? CODER_V1 : CHAT_V1;
+export function resolvePreviewConfig(profileName) {
+    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
     const cfg = profile.preview || {};
     return {
         enabled: cfg.enabled === true,

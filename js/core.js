@@ -172,11 +172,15 @@
 // Import provider registry (auto-registers built-in providers)
 import { ProviderRegistry, DEFAULT_CAPABILITIES } from './providers/index.js';
 
-// 1.23.0 — single source of truth for the plugin-dev SDK addendum. Lives
-// in `js/profiles/plugin-dev-v1.js` so slice 2 (1.24.0) can flip
-// `js/prompts.js` to read from `profile.systemPrompt`; slice 3 (2.0.0)
-// deletes BUILTIN_ROLES below and this import along with it.
-import { PLUGIN_DEV_SYSTEM_PROMPT } from './profiles/plugin-dev-v1.js';
+// 2.0.0 — slice 3 of path-to-2.0.0. One-shot `settings.role` →
+// `settings.profile` migration; runs from `loadSettings`. Helper extracted
+// to `profiles/migration.js` so the migration test suite is Node-importable
+// (browser-only globals on `core.js` are otherwise transitive).
+import { migrateRoleToProfile } from './profiles/migration.js';
+
+// 2.0.0 — slice 3: profile registry, exposed via `window.AIEditor.Profiles`
+// for external plugins (replaces the retired `Roles` namespace).
+import { Profiles } from './profiles/registry.js';
 
 // ============================================
 // EVENT BUS
@@ -315,7 +319,12 @@ const State = {
         summaryTimeout: 60000,     // 1 minute - Chat summary generation timeout
         
         // UI Configuration
-        role: 'full',              // Active role: full | coder | pm | reviewer
+        // 2.0.0 — slice 3: `role` retired. Active surface is the profile
+        // picker; pre-2.0.0 settings blobs are migrated by
+        // `migrateRoleToProfile` at `loadSettings` time. Default `null`
+        // resolves to `chat.v1` (the lowest-config baseline) via
+        // `getActiveProfileName`.
+        profile: null,             // Active profile: 'coder.v1' | 'chat.v1' | null (= chat.v1 implicit)
         uiScale: 100,              // UI scale percent (80-175); drives --ui-font-size and --chat-font-size from a 13px base
         editorFontSize: 14,        // Editor font size in px (independent of uiScale by design — code is the one place users want different sizing)
         showIssues: true,          // Show issues panel in sidebar
@@ -1322,149 +1331,17 @@ const Providers = {
 };
 
 // ============================================
-// ROLE DEFINITIONS
+// ROLE DEFINITIONS — RETIRED AT 2.0.0
 // ============================================
-
-/**
- * Roles control which tools are available to the LLM.
- * Tools declare which roles can access them at registration time.
- * 
- * Role shape: { id, name, icon, description }
- * 
- * Special considerations:
- * - Roles can be registered dynamically by plugins
- * - Tools reference roles by ID and are validated at registration
- * - Role 'full' is special: gets all tools regardless of their role declarations
- */
-
-const Roles = {
-    _registered: {},
-
-    /**
-     * Register a role.
-     * @param {Object} role - { id, name, icon, description }
-     */
-    register(role) {
-        if (!role.id || !role.name) {
-            console.error('Role missing id or name:', role);
-            return false;
-        }
-        
-        // Prevent duplicate registration
-        if (this._registered[role.id]) {
-            console.warn(`Role ${role.id} already registered, skipping`);
-            return false;
-        }
-        
-        this._registered[role.id] = {
-            id: role.id,
-            name: role.name,
-            icon: role.icon || '🔧',
-            description: role.description || ''
-        };
-        
-        console.log(`Role registered: ${role.name} (${role.id})`);
-        EventBus.emit('role:registered', role);
-        return true;
-    },
-
-    /**
-     * Get a role by ID.
-     */
-    get(id) {
-        return this._registered[id] || this._registered['full'];
-    },
-
-    /**
-     * List all registered roles.
-     */
-    list() {
-        return Object.values(this._registered);
-    },
-
-    /**
-     * Check if a role exists.
-     */
-    exists(id) {
-        return !!this._registered[id];
-    },
-
-    /**
-     * Filter tool definitions based on the active role.
-     * Tools must explicitly declare which roles can access them.
-     * The 'full' role gets all tools regardless of their declarations.
-     * Tools with roles: 'all' are available to every role.
-     * 
-     * @param {Array} toolDefinitions - Array of tool definition objects
-     * @returns {Array} Filtered tool definitions
-     */
-    filterTools(toolDefinitions) {
-        const activeRole = State.settings.role;
-        
-        // 'full' role gets everything
-        if (activeRole === 'full') {
-            return toolDefinitions;
-        }
-
-        return toolDefinitions.filter(tool => {
-            const toolRoles = tool._registeredRoles || [];
-            
-            // Tools marked as 'all' are available to everyone
-            if (toolRoles.includes('all')) {
-                return true;
-            }
-            
-            // Check if active role is in the tool's allowed roles
-            return toolRoles.includes(activeRole);
-        });
-    }
-};
-
-// ============================================
-// BUILT-IN ROLE DEFINITIONS
-// ============================================
-
-const BUILTIN_ROLES = [
-    {
-        id: 'full',
-        name: 'Full Access',
-        icon: '🔓',
-        description: 'All tools enabled. Maximum capability, highest token overhead.'
-    },
-    {
-        id: 'coder',
-        name: 'Coder',
-        icon: '💻',
-        description: 'Read/edit/create code, search the codebase, navigate project tree, read issues for context. No issue creation.'
-    },
-    {
-        id: 'pm',
-        name: 'Project Manager',
-        icon: '📋',
-        description: 'Create/manage issues, search and read code for context. No code editing.'
-    },
-    {
-        id: 'reviewer',
-        name: 'Reviewer',
-        icon: '🔍',
-        description: 'Read-only code access with search, can comment on issues. No code editing or issue creation.'
-    },
-    {
-        id: 'plugin-dev',
-        name: 'Plugin Developer',
-        icon: '🧩',
-        description: 'Plugin editor tools (read/write/run plugin source) plus read-only code access and SDK reference. Auto-activated when a plugin editor tab is open.',
-        // 1.23.0 — sourced from `js/profiles/plugin-dev-v1.js` to avoid
-        // drift while both BUILTIN_ROLES (legacy) and PLUGIN_DEV_V1
-        // (new) co-exist. `js/prompts.js` still reads via
-        // `Roles.get(role).systemPrompt`; that read flips to
-        // `profile.systemPrompt` at slice 2 (1.24.0).
-        systemPrompt: PLUGIN_DEV_SYSTEM_PROMPT
-    }
-];
-
-// Register built-in roles
-BUILTIN_ROLES.forEach(role => Roles.register(role));
+//
+// The pre-2.0.0 `Roles` namespace + `BUILTIN_ROLES` + `Roles.filterTools`
+// retired with slice 3 of path-to-2.0.0 (ROADMAP §"2.X path"). The profile
+// picker is the only configuration surface; admission filtering goes through
+// `Profiles.filterTools` (`js/profiles/registry.js`).
+//
+// External plugins that imported `Roles` from `window.AIEditor` get a
+// one-version deprecation shim below — see the `window.AIEditor` block
+// at the bottom of this module. The shim retires at 2.1.0.
 
 // ============================================
 // INITIALIZATION
@@ -1508,6 +1385,25 @@ function loadSettings() {
             saved.uiScale = Math.max(80, Math.min(175, snapped));
             delete saved.fontSize;
             delete saved.chatFontSize;
+        }
+        // One-shot migration (2.0.0): role-keyed surface → profile-keyed surface.
+        // Pre-2.0.0 the chat panel + settings tab carried a Role selector;
+        // 2.0.0 retires it for the profile picker. The 5-key table inside
+        // `migrateRoleToProfile` mirrors the cross-product equivalence test
+        // (`tests/test-profile-filter-tools.mjs:ROLE_TO_PROFILE`) verbatim —
+        // divergence across the two is the bug. Subsequent loads idle through
+        // (the helper is idempotent — once `profile` is set, no rewrite).
+        //
+        // Slice 3 ships in two commits: commit A (this) writes `profile` and
+        // preserves `role` for legacy readers; commit B flips every consumer
+        // and adds `delete saved.role` to the helper.
+        const _profileMigration = migrateRoleToProfile(saved);
+        if (_profileMigration.migrated) {
+            console.log(
+                `[loadSettings] 2.0.0 migration: role='${_profileMigration.fromRole}' → ` +
+                `profile='${_profileMigration.toProfile}'. Profile picker is now the ` +
+                `load-bearing configuration surface.`
+            );
         }
 
         if (saved.embeddingProvider === undefined) {
@@ -1608,8 +1504,26 @@ window.AIEditor = {
     State,
     Storage,
     Providers,
-    Roles
+    Profiles,
+    // 2.0.0 — slice 3: `Roles` retired. Deprecation shim warns once on
+    // first access so plugin authors importing `Roles` from
+    // `window.AIEditor` see a migration hint instead of a silent
+    // `undefined` crash. The shim retires at 2.1.0.
+    get Roles() {
+        if (!_rolesDeprecationWarned) {
+            _rolesDeprecationWarned = true;
+            console.warn(
+                '[ai-editor] `window.AIEditor.Roles` was retired at 2.0.0. ' +
+                'Use `window.AIEditor.Profiles` (filter tools via ' +
+                '`Profiles.filterTools(defs, profileName)`); the active profile ' +
+                'is `State.settings.profile` (default `chat.v1`). This shim ' +
+                'retires at 2.1.0.'
+            );
+        }
+        return undefined;
+    },
 };
+let _rolesDeprecationWarned = false;
 
 // ============================================
 // EXPORTS
@@ -1622,7 +1536,6 @@ export {
     Plugins,
     Providers,
     ProviderRegistry,
-    Roles,
     DEFAULT_CAPABILITIES,
     loadSettings,
     saveSettings,

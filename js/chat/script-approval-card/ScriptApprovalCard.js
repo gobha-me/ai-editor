@@ -50,8 +50,14 @@ function _renderMarkdown(text) {
 function _resolvedConfig() {
     try {
         const State = (typeof window !== 'undefined' && window.AIEditor?.State) || null;
-        const role = State?.settings?.role || null;
-        const cfg = resolveScriptAutomationConfig(role);
+        const Profiles = (typeof window !== 'undefined' && window.AIEditor?.Profiles) || null;
+        // 2.0.0 — slice 3: read profile-keyed via the picker. Mirror the
+        // tools-tab.js flip; falling back to chat.v1 if the helper isn't
+        // window-exposed (defensive, since this runs from a Worker boundary).
+        const profileName = (State?.settings?.profile && Profiles?.has?.(State.settings.profile))
+            ? State.settings.profile
+            : 'chat.v1';
+        const cfg = resolveScriptAutomationConfig(profileName);
         const overlay = State?.settings?.scriptAutomation || {};
         const timeout_ms = Number.isInteger(overlay.timeout_ms) && overlay.timeout_ms > 0
             ? overlay.timeout_ms

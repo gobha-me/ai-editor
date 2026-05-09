@@ -2,7 +2,9 @@
 // MODEL MANAGER
 // ============================================
 
-import { State, Storage, Roles, EventBus, ProviderRegistry, Plugins } from './core.js';
+import { State, Storage, EventBus, ProviderRegistry, Plugins } from './core.js';
+import { Profiles } from './profiles/registry.js';
+import { getActiveProfileName } from './profiles/resolve.js';
 import { applyModelOverrides } from './providers/registry.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 import { LLM } from './llm.js';
@@ -61,13 +63,22 @@ export function onModelChange(e) {
 export function updateModelStatusBar() {
     const bar = document.getElementById('modelStatusBar');
     const model = State.models.find(m => m.id === State.settings.llmModel);
-    const role = Roles.get(State.settings.role);
-    
+
+    // 2.0.0 — slice 3: profile badge.
+    // Pre-2.0.0 read `Roles.get(State.settings.role)` and showed the
+    // role's `name` for any non-full role. Now reads the active profile;
+    // shows the picker label for any non-default profile (chat.v1 is
+    // the new "implicit" baseline, equivalent to the pre-2.0.0 'full'
+    // hide-when-default treatment).
+    const profileName = getActiveProfileName(State.settings);
+    const profileEntry = Profiles.list().find(e => e.name === profileName);
+
     const badges = [];
 
-    // Role badge
-    if (role && role.id !== 'full') {
-        badges.push(`<span class="cap-badge cap-yes">${role.name}</span>`);
+    // Profile badge — hidden when on the default chat.v1
+    if (profileName !== 'chat.v1') {
+        const label = profileEntry ? profileEntry.label : profileName;
+        badges.push(`<span class="cap-badge cap-yes">${escapeHtml(label)}</span>`);
     }
 
     if (model && model.capabilities) {
@@ -90,17 +101,6 @@ export function updateModelStatusBar() {
     
     bar.innerHTML = badges.join('');
     bar.style.display = badges.length ? 'flex' : 'none';
-}
-
-// ============================================
-// ROLE SELECTOR (Chat Panel)
-// ============================================
-
-export function populateRoleSelector() {
-    const select = document.getElementById('roleSelect');
-    select.innerHTML = Roles.list().map(role =>
-        `<option value="${role.id}" ${role.id === State.settings.role ? 'selected' : ''}>${role.name}</option>`
-    ).join('');
 }
 
 /**
@@ -136,21 +136,6 @@ function _repopulateMainModelSelect() {
         Storage.set('settings', State.settings);
     }
     updateModelStatusBar();
-}
-
-export function onRoleChange(e) {
-    State.settings.role = e.target.value;
-    Storage.set('settings', State.settings);
-    updateModelStatusBar();
-
-    // Also sync settings modal role cards if they exist
-    const cards = document.querySelectorAll('.role-card');
-    cards.forEach(c => {
-        c.classList.toggle('active', c.dataset.role === e.target.value);
-    });
-
-    const role = Roles.get(e.target.value);
-    window.showToast(`Role: ${role.name}`, 'success');
 }
 
 // ============================================

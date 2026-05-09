@@ -181,7 +181,6 @@ Namespace keys with plugin ID: Storage.set('my-plugin:cache', data)
 Plugins.registerTool('my-plugin', { name, description, parameters, roles, handler }) — Add LLM tools (convenience wrapper, auto-formats definition).
 Plugins.injectCSS('my-plugin', cssText) — Inject a scoped <style> tag. Call again to replace. Plugins.removeCSS('my-plugin') to remove.
 Providers.register(provider) — Add LLM providers (no settings UI auto-discovery).
-Roles.register({ id, name, icon, description }) — Add custom roles.
 
 ### Plugins.registerTool() example
 \`\`\`javascript

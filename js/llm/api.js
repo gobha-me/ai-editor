@@ -916,27 +916,38 @@ export const LLMTools = {
     },
 
     /**
-     * Run the Composer for the active role, or report that it isn't
+     * Run the Composer for the active profile, or report that it isn't
      * applicable. Pure read of registry + profile + flag; no diagnostics
      * emitted (callers that drive the LLM exchange decide whether to
      * stamp `LLMDebug`).
      *
-     * @returns {{ result: import('../intelligence/tools/contracts.js').ToolAdmissionResult|null, composerActive: boolean, role: string }}
+     * **2.0.0 — slice 3 flip.** `State.settings.role` is gone; the
+     * Composer activates on `profileName === 'coder.v1'` (the picker-
+     * mapped or migrated value). `user_groups` is derived from the
+     * active profile's `tools.allowed_groups` so the Composer's
+     * authorization check (`isAuthorized` in `intelligence/tools/composer.js`,
+     * which expects role-style group tags like `'coder'`/`'pm'`)
+     * continues to work over the 5 legacy tags. The `'*'` bypass on
+     * `full.v1` translates to `['full']` so the legacy "full role
+     * bypass" branch in `isAuthorized` still fires for migrated full
+     * users.
+     *
+     * @returns {{ result: import('../intelligence/tools/contracts.js').ToolAdmissionResult|null, composerActive: boolean, profileName: string }}
      * @private
      */
     _runComposer() {
-        const role = State.settings.role;
+        const profileName = getActiveProfileName(State?.settings);
 
         if (isToolsComposeDisabled()) {
-            return { result: null, composerActive: false, role };
+            return { result: null, composerActive: false, profileName };
         }
 
-        const useComposer = role === 'coder'
+        const useComposer = profileName === 'coder.v1'
             && Array.isArray(CODER_V1.tools.static)
             && CODER_V1.tools.static.length > 0;
 
         if (!useComposer) {
-            return { result: null, composerActive: false, role };
+            return { result: null, composerActive: false, profileName };
         }
 
         // 1.3.17 / Tools PR 4 — thread the per-conversation TaskLedger so
@@ -947,18 +958,30 @@ export const LLMTools = {
         const conversationId = Storage.get('activeConversation', null);
         const ledger = getOrCreateLedger(conversationId, CODER_V1.name);
 
+        // 2.0.0 — slice 3: derive the legacy group-tag list from the
+        // resolved profile's `allowed_groups`. `'*'` translates to
+        // `['full']` to preserve the pre-2.0.0 full-role bypass; `'all'`
+        // is filtered because the Composer's `isAuthorized` admits
+        // `required_groups: ['all']` unconditionally regardless of
+        // `user_groups` content.
+        const profile = Profiles.get(profileName);
+        const allowed = (profile && profile.tools && profile.tools.allowed_groups) || [];
+        const userGroups = allowed.includes('*')
+            ? ['full']
+            : allowed.filter(g => g !== 'all');
+
         const result = composeAdmission({
             task: 'chat',
             query: null,
             budget_tokens: CODER_V1.tools.budget_tokens,
             profile_static: CODER_V1.tools.static,
             task_ledger: ledger,
-            user_groups: [role],
+            user_groups: userGroups,
             discovery_call: null,
             expansion_mode: CODER_V1.tools.expansion_mode,
         });
 
-        return { result, composerActive: true, role };
+        return { result, composerActive: true, profileName };
     },
 
     /**
@@ -1024,8 +1047,8 @@ export const LLMTools = {
         // model from seeing it on this turn. Per
         // DESIGN-llm-authored-automation.md §"Failure Modes" row
         // *"Profile has scriptAutomation.enabled: false"*.
-        const _scriptRole = State?.settings?.role || null;
-        const scriptCfg = resolveScriptAutomationConfig(_scriptRole);
+        const _scriptProfile = getActiveProfileName(State?.settings);
+        const scriptCfg = resolveScriptAutomationConfig(_scriptProfile);
         const scriptOverlay = State?.settings?.scriptAutomation;
         const scriptEnabled = (scriptOverlay && typeof scriptOverlay.enabled === 'boolean')
             ? scriptOverlay.enabled
@@ -1046,8 +1069,8 @@ export const LLMTools = {
         // admission via `coder.v1.tools.static` is the first gate; this
         // runtime filter is the second so the user can switch the
         // surface off without changing role.
-        const _previewRole = State?.settings?.role || null;
-        const previewCfg = resolvePreviewConfig(_previewRole);
+        const _previewProfile = getActiveProfileName(State?.settings);
+        const previewCfg = resolvePreviewConfig(_previewProfile);
         const previewOverlay = State?.settings?.preview;
         const previewEnabled = (previewOverlay && typeof previewOverlay.enabled === 'boolean')
             ? previewOverlay.enabled
@@ -1075,12 +1098,12 @@ export const LLMTools = {
         const baseline = sumDefCosts(Profiles.filterTools(defs, profileName));
         const unfiltered = sumDefCosts(defs);
 
-        const { result, composerActive, role } = this._runComposer();
+        const { result, composerActive } = this._runComposer();
 
         if (!composerActive) {
             const filtered = Profiles.filterTools(defs, profileName);
             const filteredCost = sumDefCosts(filtered);
-            const reason = isToolsComposeDisabled() ? 'kill-switch' : `no profile static set for role ${role}`;
+            const reason = isToolsComposeDisabled() ? 'kill-switch' : `no profile static set for profile ${profileName}`;
             console.log('[LLMTools] Legacy path (', reason, '):', filtered.length, 'tools,', filteredCost, 'tokens (0% reduction)');
             // Emit metrics on the legacy path too so the dashboard zeroes
             // correctly — `admitted === baseline` ⇒ 0% reduction. Useful
@@ -1089,7 +1112,7 @@ export const LLMTools = {
                 admitted: filteredCost,
                 baseline: filteredCost,
                 unfiltered,
-                role,
+                profileName,
                 composerActive: false,
             };
             return applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered)));
@@ -1115,7 +1138,7 @@ export const LLMTools = {
             admitted: result.tokens_used,
             baseline,
             unfiltered,
-            role,
+            profileName,
             composerActive: true,
         };
 

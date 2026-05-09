@@ -4,6 +4,135 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-09
+
+### Breaking — Role selector retired (path-to-2.0.0 slice 3 / 3, final)
+
+Slice 3 closes the role-to-profile migration that's been running across
+1.14.0 through 1.24.0. The role selector — the chat-panel `<select>` and
+the Settings → Roles role-card grid — is gone. The profile picker
+(shipped at 1.21.0) is the only configuration surface for the
+intelligence-layer (compression, memory, retrieval, tools). The legacy
+primitives — `Roles.filterTools` in [`js/core.js`](js/core.js),
+`BUILTIN_ROLES`, the `Roles` namespace, `roleToProfileName` in
+[`js/profiles/resolve.js`](js/profiles/resolve.js) — are deleted. With
+1.23.0's parallel `Profiles.filterTools` and 1.24.0's consumer flip
+already in production, every existing user gets byte-equivalent runtime
+behavior under the migrated profile name. **Unblocks** github#24
+(sub-agents — gated specifically on the role-selector removal; profile
+contract becomes the abstraction child profiles inherit from) and Touch 3
+Window v2 / Sessions.
+
+**One-shot migration on `loadSettings`.** A new helper at
+[`js/profiles/migration.js`](js/profiles/migration.js) translates
+`saved.role` to `saved.profile` against a 5-key table mirroring
+`tests/test-profile-filter-tools.mjs`'s `ROLE_TO_PROFILE` constant
+verbatim. Idempotent — subsequent loads idle through the helper. Two
+branches:
+
+- **Migration path** (`saved.role !== undefined && saved.profile == null`):
+  writes the mapped profile, deletes `saved.role`, audit-logs the
+  translation to console (`[loadSettings] 2.0.0 migration: role='X' → profile='X.v1'. …`).
+- **Picker-already-won path** (`saved.role !== undefined && saved.profile != null`):
+  picker write from 1.21.0+ wins; quiet-drop the stale `role` so
+  subsequent loads skip the block.
+
+Rollback caveat: the migration is irreversible by load-time detection
+alone. Downgrading to a 1.x build with a settings blob that has
+`profile` but no `role` will see undefined role. Users with workspace-
+saved settings should re-export before downgrading.
+
+**Picker UX changes.** The `(use role)` sentinel option retired (no
+role to fall back to); the picker writes profile names directly. Default
+on fresh install is `chat.v1` — the lowest-config baseline + the new
+2.0.0 default. Stored settings blobs pre-dating 2.0.0 are migrated at
+load. The settings-tab "Roles" stays named (DOM IDs preserved); the
+description copy widens to describe the picker's full scope rather than
+framing it as overriding a now-gone role selector. Top-bar profile
+badge in the chat header reads the profile picker label; hidden when
+on `chat.v1` (mirroring the pre-2.0.0 "hide on full" treatment).
+
+**Plugin-dev auto-switch preserved.** Opening a plugin-editor tab still
+auto-switches the active configuration to plugin-dev semantics — but
+now via `State.settings.profile = 'plugin-dev.v1'` instead of
+`State.settings.role = 'plugin-dev'`. The saved profile is restored
+when the plugin tab closes. `'role:changed'` events on the EventBus
+became `'profile:changed'` (no remaining listeners — verified via grep).
+
+**Tool-execute server-side gate** (`ToolRegistry.checkRoleAccess`)
+delegates to `Profiles.filterTools` — single source of truth, no
+parallel implementation. Removability cross-check: live, against the
+production tool registry, every (legacy_role, mapped_profile) pair
+admits the same set under `Profiles.filterTools(profileName)` as the
+legacy `Roles.filterTools(role)` did. Verified in-browser for `coder`
+→ `coder.v1` (60 tools), `full` → `full.v1` (68), `pm` → `pm.v1` (47),
+`reviewer` → `reviewer.v1` (42), `plugin-dev` → `plugin-dev.v1` (44).
+
+### Breaking — `window.AIEditor.Roles` deprecation shim
+
+External plugins that import `Roles` from `window.AIEditor` see a
+one-time `console.warn` directing them to `window.AIEditor.Profiles`
+(newly added) and return `undefined`. Shim retires at 2.1.0. Profile
+filtering: `Profiles.filterTools(defs, profileName)`; the active
+profile is `State.settings.profile` (default `chat.v1`).
+
+### Migration — settings.role → settings.profile
+
+5-key table (mirrors the cross-product equivalence test verbatim;
+divergence is a bug):
+
+```
+coder       → coder.v1
+full        → full.v1
+plugin-dev  → plugin-dev.v1
+pm          → pm.v1
+reviewer    → reviewer.v1
+default     → chat.v1
+```
+
+[`State.settings`](js/core.js) defaults flipped from `role: 'full'` to
+`profile: null` so the deep-merge in `loadSettings` doesn't
+re-introduce the migrated-out `role` from defaults. The MCP per-server
+`roles:` field on user records is preserved unchanged for back-compat;
+the underlying `BUILTIN_ROLES` allowlist in `js/mcp/registry.js`
+renamed to `LEGACY_GROUP_TAGS` with a clarifying comment about its
+new role as `Profile.tools.allowed_groups` admission tags.
+
+### Tests
+
+- New: [`tests/test-settings-role-migration.mjs`](tests/test-settings-role-migration.mjs)
+  — 12 cases covering all 5 mappings, unknown / empty / null / undefined
+  inputs, idempotency, picker-already-won quiet-drop.
+- Updated: [`tests/test-resolve-active-profile.mjs`](tests/test-resolve-active-profile.mjs)
+  — per-role fallback assertions retired (role no longer consulted);
+  picker-default + sentinel-removed cases added; `roleToProfileName`
+  direct-mapping block (6 tests) deleted.
+- Updated: [`tests/test-profile-resolve.mjs`](tests/test-profile-resolve.mjs)
+  — `roleToProfileName` 5-key table test deleted; `translator + resolver
+  compose` test rewritten to address synthetic profiles directly.
+- Updated: [`tests/test-memory-resolve.mjs`](tests/test-memory-resolve.mjs)
+  — `resolveDefaultRememberScope` signature flipped from polymorphic
+  (string-arg legacy / object-arg settings) to settings-only.
+- Updated: [`tests/test-script-tools.mjs`](tests/test-script-tools.mjs) +
+  [`tests/test-preview-tools.mjs`](tests/test-preview-tools.mjs) —
+  `resolveScriptAutomationConfig` / `resolvePreviewConfig` callers pass
+  profile names; `coder.v1` short-circuit, all other profile names
+  (including the 4 synthetics) inherit `chat.v1` defaults.
+- Updated: `tests/test-mcp-bridge.mjs`, `tests/test-memory-tools.mjs`,
+  `tests/test-memory-consent-tool-flow.mjs` — `State.settings.role`
+  writes flipped to `State.settings.profile`.
+
+Cross-product equivalence test at
+[`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs)
+unchanged — its `ROLE_TO_PROFILE` constant was already the migration's
+load-bearing reference.
+
+### Sized
+
+Five commits in a single PR — A (migration helper), B (consumer flips
++ `delete saved.role`), C (UI deletions), D (legacy-primitive
+deletions), E (version + docs).
+
 ## [1.24.0] - 2026-05-09
 
 ### Feature — Consumer flip to `Profiles.filterTools` (path-to-2.0.0 slice 2 / 3)

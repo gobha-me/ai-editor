@@ -40,7 +40,6 @@ export {
     resolveTools,
     resolveRetrievalConfig,
     resolveDefaultRememberScope,
-    roleToProfileName,
     getActiveProfileName,
 } from './resolve.js';
 

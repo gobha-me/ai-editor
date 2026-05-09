@@ -73,12 +73,10 @@ import {
     restoreSession,
     initSessionListeners
 } from './project-manager.js';
-import { 
-    fetchModels, 
-    onModelChange, 
-    updateModelStatusBar, 
-    populateRoleSelector, 
-    onRoleChange,
+import {
+    fetchModels,
+    onModelChange,
+    updateModelStatusBar,
     initCostTracker,
     resetSessionCost,
     initCostTrackerListener,
@@ -770,7 +768,6 @@ function setupEventListeners() {
     // Branch selector is now the row-list panel — its switch button delegates
     // through `mountBranchPanel({ onSwitch })` in project-manager.js (1.12.0).
     safeAdd('modelSelect', 'change', onModelChange);
-    safeAdd('roleSelect', 'change', onRoleChange);
     // Cost reset moves to the §1.3.9 Debug slide-out — until then expose on
     // window for power users / docs.
     window.resetSessionCost = resetSessionCost;
@@ -878,10 +875,9 @@ async function init() {
     initProjectConventions(); // Subscribes to git:projectLoaded to fetch repo-root CLAUDE.md (github#37)
     applyVisualSettings();
     initPanelResize();
-    
-    
+
+
     // Initialize components
-    populateRoleSelector();
     initCostTracker();
     
     // Initialize components

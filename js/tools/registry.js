@@ -28,8 +28,21 @@
  * @returns {Promise<Object>} Tool result object
  */
 
-import { Roles, State, EventBus } from '../core.js';
+import { State, EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
+import { Profiles } from '../profiles/registry.js';
+import { getActiveProfileName } from '../profiles/resolve.js';
+
+/**
+ * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
+ * "role IDs"; post-2.0.0 they're consumed as group tags by
+ * `Profile.tools.allowed_groups`. The `register()` validator below
+ * rejects any other value at registration time so tool authors
+ * surface the typo immediately.
+ *
+ * @type {string[]}
+ */
+const LEGAL_GROUP_TAGS = ['all', 'coder', 'pm', 'reviewer', 'plugin-dev', 'full'];
 
 export const ToolRegistry = {
     /** @type {Map<string, ToolHandler>} */
@@ -70,12 +83,15 @@ export const ToolRegistry = {
             );
         }
         
-        // 3. Validate role IDs exist (skip 'all')
-        const invalidRoles = toolRoles.filter(r => r !== 'all' && !Roles.exists(r));
+        // 3. Validate group tags against the legacy 5-key tag list.
+        //    2.0.0 — slice 3: pre-2.0.0 this validated against `Roles.exists()`;
+        //    profile-keyed admission consumes the same tag vocabulary, so
+        //    the validator stays a flat allowlist of legal tags.
+        const invalidRoles = toolRoles.filter(r => !LEGAL_GROUP_TAGS.includes(r));
         if (invalidRoles.length > 0) {
             throw new Error(
                 `Tool "${name}" references invalid role(s): ${invalidRoles.join(', ')}. ` +
-                `Valid roles: ${Roles.list().map(r => r.id).join(', ')}, 'all'`
+                `Valid tags: ${LEGAL_GROUP_TAGS.join(', ')}`
             );
         }
         
@@ -126,18 +142,19 @@ export const ToolRegistry = {
     },
 
     /**
-     * Check whether the active role is allowed to invoke a given tool.
+     * Check whether the active profile is allowed to invoke a given tool.
+     *
+     * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0 (`State.settings.role`
+     * → special-case `'full'` → intersect `_registeredRoles` with the role).
+     * Now delegates to `Profiles.filterTools` so the runtime tool-execute
+     * gate and the per-turn admission filter share a single implementation.
+     * The pre-2.0.0 `'full'` bypass is preserved via `full.v1`'s
+     * `tools.allowed_groups: ['*']` short-circuit inside `filterTools`.
+     *
      * @param {string} name - Tool name
      * @returns {{ allowed: boolean, reason?: string }}
      */
     checkRoleAccess(name) {
-        const activeRole = State.settings.role;
-        
-        // 'full' role bypasses all restrictions
-        if (activeRole === 'full') {
-            return { allowed: true };
-        }
-        
         const def = this.definitions.find(
             d => d.function?.name === name
         );
@@ -145,17 +162,19 @@ export const ToolRegistry = {
             // Unknown tool — let execute() handle the "not found" error
             return { allowed: true };
         }
-        
-        const toolRoles = def._registeredRoles || [];
-        if (toolRoles.includes('all') || toolRoles.includes(activeRole)) {
+
+        const profileName = getActiveProfileName(State.settings);
+        const filtered = Profiles.filterTools([def], profileName);
+        if (filtered.length === 1) {
             return { allowed: true };
         }
-        
+
+        const toolRoles = def._registeredRoles || [];
         return {
             allowed: false,
-            reason: `Role '${activeRole}' is not permitted to use tool '${name}'. ` +
-                    `Allowed roles: ${toolRoles.join(', ')}. ` +
-                    `Switch to an appropriate role or use a different tool.`
+            reason: `Profile '${profileName}' is not permitted to use tool '${name}'. ` +
+                    `Tool requires one of: ${toolRoles.join(', ') || '(none declared)'}. ` +
+                    `Switch profile in Settings or use a different tool.`
         };
     },
     
@@ -170,7 +189,7 @@ export const ToolRegistry = {
         // === ROLE ENFORCEMENT (server-side gate) ===
         const access = this.checkRoleAccess(name);
         if (!access.allowed) {
-            console.warn(`[ToolRegistry] 🚫 Role violation: ${name} blocked for role '${State.settings.role}'`);
+            console.warn(`[ToolRegistry] 🚫 Profile violation: ${name} blocked for profile '${getActiveProfileName(State.settings)}'`);
             return { error: access.reason };
         }
         
@@ -220,23 +239,25 @@ export const ToolRegistry = {
     },
     
     /**
-     * Get tools filtered for a specific role.
-     * @param {string} [roleId] - Role name (defaults to current active role)
+     * Get tools filtered for a specific profile.
+     *
+     * **2.0.0 — slice 3 flip.** Was `getToolsForRole(roleId)` pre-2.0.0;
+     * now keyed on profile name with the body delegating to
+     * `Profiles.filterTools`. Caller-supplied profileName is honored;
+     * default reads `getActiveProfileName(State.settings)`. The legacy
+     * name `_registeredRoles` on tool defs is preserved — those values
+     * are admission tags consumed by `Profile.tools.allowed_groups`.
+     *
+     * Renamed from `getToolsForRole`; the legacy alias is preserved
+     * below for any plugin-side caller that still imports the old
+     * name (deprecation shim retires at 2.1.0).
+     *
+     * @param {string} [profileName] - Profile name (defaults to active)
      * @returns {ToolDefinition[]}
      */
-    getToolsForRole(roleId) {
-        const activeRole = roleId || State.settings.role;
-
-        // If 'full' role, return everything
-        if (activeRole === 'full') {
-            return this.definitions;
-        }
-
-        // Filter based on tool's registered roles
-        return this.definitions.filter(tool => {
-            const toolRoles = tool._registeredRoles || [];
-            return toolRoles.includes('all') || toolRoles.includes(activeRole);
-        });
+    getToolsForProfile(profileName) {
+        const name = profileName || getActiveProfileName(State.settings);
+        return Profiles.filterTools(this.definitions, name);
     },
 
     /**
@@ -263,6 +284,14 @@ export const ToolRegistry = {
     
     /**
      * Get statistics about registered tools.
+     *
+     * **2.0.0 — slice 3.** Was role-keyed pre-2.0.0 (5 entries via
+     * `Roles.list()`); now profile-keyed (2 entries via `Profiles.list()`
+     * — chat + coder). Synthetic profiles (`full`/`pm`/`reviewer`/
+     * `plugin-dev`) are excluded from the dashboard mirror of their
+     * exclusion from the picker; they're migration targets, not
+     * user-facing surfaces.
+     *
      * @returns {{total: number, byRole: Object.<string, number>}}
      */
     getStats() {
@@ -270,19 +299,9 @@ export const ToolRegistry = {
             total: this.definitions.length,
             byRole: {}
         };
-        
-        // Count tools per role
-        const allRoles = Roles.list();
-        for (const role of allRoles) {
-            // Temporarily set role and filter
-            const filtered = this.definitions.filter(tool => {
-                const toolRoles = tool._registeredRoles || [];
-                if (role.id === 'full') return true;
-                return toolRoles.includes('all') || toolRoles.includes(role.id);
-            });
-            stats.byRole[role.id] = filtered.length;
+        for (const entry of Profiles.list()) {
+            stats.byRole[entry.name] = Profiles.filterTools(this.definitions, entry.name).length;
         }
-        
         return stats;
     },
     
