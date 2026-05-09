@@ -62,7 +62,11 @@ test("Profiles.has('constructor') === false (prototype-pollution safety)", () =>
 // list — picker-shape
 // ============================================
 
-test("Profiles.list() returns both registered profiles", () => {
+test("Profiles.list() returns chat.v1 + coder.v1 (Phase 2 profiles ship lookup-only)", () => {
+    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 land as data + harness coverage
+    // but stay excluded from the picker until they earn user-visible weight
+    // (per-profile systemPrompt addenda). See SYNTHETIC_ENTRIES rationale
+    // in `js/profiles/registry.js` and ROADMAP §"After 2.0.0".
     const entries = Profiles.list();
     assert.equal(entries.length, 2);
     const names = entries.map(e => e.name);
@@ -72,9 +76,8 @@ test("Profiles.list() returns both registered profiles", () => {
 
 test("Profiles.list() returns chat.v1 first (the inheritance base)", () => {
     // The picker UI renders options in the order list() returns. Chat
-    // first matches the inheritance hierarchy (coder.v1 has
-    // `base: 'chat.v1'`) and matches the order Phase 2 expects when
-    // `chat_multi.v1` / `rp.v1` / `kb.v1` join the list.
+    // first matches the inheritance hierarchy (every other profile has
+    // `base: 'chat.v1'`).
     const entries = Profiles.list();
     assert.equal(entries[0].name, 'chat.v1');
     assert.equal(entries[1].name, 'coder.v1');

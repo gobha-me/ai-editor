@@ -45,11 +45,14 @@ const FIXTURE_DIR = join(__dirname, 'fixtures', 'profiles');
 
 const PROFILE_NAMES = [
     'chat.v1',
+    'chat_multi.v1',
     'coder.v1',
     'full.v1',
+    'kb.v1',
     'plugin-dev.v1',
     'pm.v1',
     'reviewer.v1',
+    'rp.v1',
 ];
 
 /**

@@ -47,16 +47,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, 'fixtures', 'profiles');
 
 /**
- * The full snapshot population. Add a profile name here when the
- * registry grows (e.g. Phase 2: `chat_multi.v1`, `rp.v1`, `kb.v1`).
+ * The full snapshot population. Mirrors `PROFILE_NAMES` in
+ * `tests/test-profiles-fixtures.mjs` — both must list the same set or
+ * the harness will fail on a missing fixture (or a stale one).
  */
 const PROFILE_NAMES = [
     'chat.v1',
+    'chat_multi.v1',
     'coder.v1',
     'full.v1',
+    'kb.v1',
     'plugin-dev.v1',
     'pm.v1',
     'reviewer.v1',
+    'rp.v1',
 ];
 
 /**

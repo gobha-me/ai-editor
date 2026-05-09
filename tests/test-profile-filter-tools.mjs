@@ -197,6 +197,10 @@ test('synthetic profiles satisfy Profiles.has', () => {
 });
 
 test('synthetic profiles are excluded from Profiles.list (picker UI)', () => {
+    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 ship lookup-only alongside the
+    // legacy-role synthetics until per-profile systemPrompt addenda land
+    // (promotion gate documented in `js/profiles/registry.js` and ROADMAP
+    // §"After 2.0.0").
     const names = Profiles.list().map(e => e.name);
     assert.deepEqual(names, ['chat.v1', 'coder.v1']);
 });

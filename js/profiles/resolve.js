@@ -87,12 +87,12 @@ function profileLookup(name) {
  * version with a removed profile).
  *
  * @param {{ profile?: string|null } | null | undefined} settings
- * @returns {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
+ * @returns {'coder.v1' | 'chat.v1' | 'chat_multi.v1' | 'rp.v1' | 'kb.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'}
  */
 export function getActiveProfileName(settings) {
     const profile = settings && typeof settings.profile === 'string' ? settings.profile : null;
     if (profile && Profiles.has(profile)) {
-        return /** @type {'coder.v1' | 'chat.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'} */ (profile);
+        return /** @type {'coder.v1' | 'chat.v1' | 'chat_multi.v1' | 'rp.v1' | 'kb.v1' | 'full.v1' | 'plugin-dev.v1' | 'pm.v1' | 'reviewer.v1'} */ (profile);
     }
     return 'chat.v1';
 }

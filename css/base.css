@@ -113,6 +113,19 @@ button, input, textarea, select {
     font-family: inherit;
 }
 
+/* `<option>` elements paint inside the browser-native dropdown popup,
+ * which doesn't inherit `background` / `color` from the parent `<select>`
+ * — Chrome / Firefox / Edge default to OS chrome (typically white), which
+ * looks broken under any of our dark themes. Theme the options globally
+ * so every select in the app (profile picker, model picker, project
+ * picker, etc.) renders its dropdown list with theme colors. Safari
+ * partially honors these but uses native chrome anyway; acceptable
+ * fallback. */
+option {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
 /* ============================================
    LAYOUT
    ============================================ */

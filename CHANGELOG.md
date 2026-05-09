@@ -4,6 +4,174 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-05-09
+
+### Feature — Profiles Phase 2: data + harness coverage for `chat_multi.v1`, `rp.v1`, `kb.v1`
+
+Pays down [`docs/ROADMAP.md`](docs/ROADMAP.md) §"After 2.0.0" line 111 in
+its **architectural** half — registers the three remaining canonical
+chat-family profiles called out by [`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md)
+lines 252–307, with per-profile resolved-shape fixtures so any future
+drift produces a structured diff. The 2.5.0 differ + regression harness
+slice was explicitly built as this work's safety net; it earns its keep
+here.
+
+**Posture: lookup-only, not picker-promoted.**
+[`js/profiles/registry.js`](js/profiles/registry.js) registers the three
+new profiles in `SYNTHETIC_ENTRIES` (the `get` / `has` lookup map only),
+**not** in `ENTRIES` (the picker `list()` source). The roadmap's *"surface
+count goes from 1 to 4"* deliberately stays at 2 in the picker until each
+profile earns user-visible weight: their declared overrides reference
+runtime infrastructure that doesn't exist yet (`shared_conversation` /
+`per_speaker` / `lore` / `per_persona` / `kb_documents` collections;
+chunker metadata fields; Rule 4; voice-preserving Rule 5 prompts). Picking
+one today would behave indistinguishably from `chat.v1` for any user
+interaction the editor currently exposes — that's worse than not offering
+it at all.
+
+**Promotion gate.** Move them back to `ENTRIES` when each profile carries
+*something a user can observe choosing it for*. The natural lever is
+profile-specific `systemPrompt` addenda mirroring 1.23.x's
+[`plugin-dev.v1`](js/profiles/plugin-dev-v1.js) precedent: a `kb.v1` that
+prompts *"answer only from attached_docs, cite line ranges, no edits"*
+actually behaves differently. Same shape for `chat_multi.v1` (speaker-
+attribution instructions) and `rp.v1` (in-character continuity / persona
+adoption). Tracked as [`docs/ROADMAP.md`](docs/ROADMAP.md) §"After 2.0.0"
+"Profiles Phase 2 picker promotion." Custom plugin profiles inheriting
+`base: 'rp.v1'` etc. unlock with the Phase 4 authoring API (parked).
+
+**New profile data files** — each declares `base: 'chat.v1'` and overrides
+only what its surface needs (per `inheritance.js`'s no-multi-inheritance
+contract):
+
+- [`js/profiles/chat-multi-v1.js`](js/profiles/chat-multi-v1.js) — multi-
+  user chat. `retrieval.collections` adds `'shared_conversation'`;
+  `retrieval.memory_collections` adds `'per_speaker'`. Compression /
+  budget / strategy_weights inherited unchanged.
+- [`js/profiles/rp-v1.js`](js/profiles/rp-v1.js) — role-play / personas.
+  `retrieval.collections` adds `'lore'`; `memory_collections` adds
+  `'per_persona'`; `strategy_weights` retunes to `{semantic: 1.0,
+  structural: 0.8, thematic: 0.3}` (hierarchies matter for lore);
+  `memory.default_scope` overrides chat's `'user'` to `'persona'`;
+  `compression.preserve_recent` raises from `4` to `8` (preserve more
+  in-character continuity).
+- [`js/profiles/kb-v1.js`](js/profiles/kb-v1.js) — minimal knowledge-base
+  surface. `retrieval.collections` narrows wholesale to `['kb_documents']`;
+  `memory_collections` clears to `[]`; `strategy_weights` retunes to
+  `{semantic: 1.0, structural: 0.6, thematic: 0.4}`; `compression.rules`
+  empties (no compression — sessions too short); `task_ledger.enabled`
+  flips to `false`; `tools.allowed_groups` narrows to `['all']` only.
+  Demonstrates the design's *"opt-in at the profile level"* claim — a
+  surface that doesn't need compression pays no cost for it.
+
+**Registry shape.** `ENTRIES` stays at chat + coder (picker shows 2);
+`SYNTHETIC_ENTRIES` grows from 4 → 7 with the three new profiles
+joining the legacy-role migration targets. The header docstring on
+[`registry.js`](js/profiles/registry.js) explicitly carries the two-flavor
+distinction so future readers don't conflate the legacy-role synthetics
+with the Phase 2 architectural surfaces.
+
+**Harness coverage.**
+[`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs)'s
+`PROFILE_NAMES` manifest grows from 6 → 9 entries; the matching list in
+[`tests/update-profile-fixtures.mjs`](tests/update-profile-fixtures.mjs)
+mirrors. Three new on-disk fixtures land at
+`tests/fixtures/profiles/{chat_multi.v1,rp.v1,kb.v1}.snapshot.json` —
+each captures `resolved` + `subsystem_dispatch` layers per the 2.5.0
+contract. Total fixture cases: 12 → 18.
+
+**Worked-example inheritance test** — new
+[`tests/test-profiles-phase2.mjs`](tests/test-profiles-phase2.mjs)
+(21 cases). Distinct from
+[`tests/test-profiles-inheritance.mjs`](tests/test-profiles-inheritance.mjs)
+(generic `resolveProfile` helper coverage from 1.14.0) and
+[`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs)
+(byte-exact fixture regression). The Phase 2 file's job is the human-
+readable inheritance proof: each leaf inherits its base's fields where
+it doesn't override, and overrides take precedence where declared.
+Failures here read as design-spec assertions ("rp.v1 must use the
+persona memory scope") rather than fixture regen prompts. Per ROADMAP
+§"After 2.0.0" line 111's *"per-profile worked-example test fixtures"*
+ask.
+
+**`getActiveProfileName` return-type union extended** —
+[`js/profiles/resolve.js`](js/profiles/resolve.js):90 picks up
+`'chat_multi.v1' | 'rp.v1' | 'kb.v1'` so TypeScript checking on
+downstream consumers stays strict.
+
+**Out of scope (deferred — drives the picker promotion gate).** Each
+of these is a reason picking one of the three profiles today wouldn't
+behave differently from chat.v1 — and each one's landing makes the
+profile worth offering in the picker. Per [`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md)
+lines 252–307 the design called out a few facets whose runtime
+infrastructure isn't there yet:
+
+- **Per-profile `systemPrompt` addenda** (the headline lever) —
+  [`plugin-dev.v1`](js/profiles/plugin-dev-v1.js) shipped a profile-
+  specific systemPrompt at 1.23.x; the same shape applied to the Phase 2
+  trio is the cheapest path to *"this profile actually behaves
+  differently."* `kb.v1` → answer-only-from-attached-docs + cite-line-
+  ranges + no-edits; `chat_multi.v1` → speaker-attribution instructions;
+  `rp.v1` → in-character continuity + persona adoption. Promotion to
+  picker `ENTRIES` happens when this lands.
+- **Chunker metadata fields** for chat_multi / rp (`speaker_id`,
+  `persona_id`, `in_character`, `scene_id`) — chunker registry exists
+  post-1.5.0 but profile-side custom metadata registration isn't wired.
+- **Compression Rule 4 (Resolution)** for rp.v1 keyed off `scene_id`
+  boundaries — Rule 4 sits in [`docs/ROADMAP.md`](docs/ROADMAP.md)
+  §"Compression (was 1.2.x)" deferred bucket; rp.v1 ships with chat.v1's
+  Rule 5 inherited until the rule itself lands.
+- **Voice-preserving Rule 5 prompt** for rp.v1 / speaker-attribution
+  Rule 5 prompt for chat_multi.v1 — `summarizer.promptTemplate` plumbing
+  isn't there.
+- **Novelty-score weighting** changes (rp / chat_multi) — Phase 3
+  (operational maturity) work.
+- **Standalone `citation_lookup` tool** for kb.v1 — kb's `allowed_groups`
+  narrows to universal-tagged tools only; a dedicated citation tool is
+  follow-up work.
+- **Phase 4 authoring API** — unlocks plugin-defined custom profiles
+  inheriting `base: 'rp.v1'` etc. Parked at 2.6.0+ pending UI/persistence
+  shape.
+
+**Roadmap doc cleanup deferred.** Line 111 strikethrough lands here, but
+the line-3 *"Last updated: 2026-05-09 (post-2.1.1)"* timestamp is now ~5
+minors stale and the "Now / Next / Later" table at the top still
+references unreleased states. A dedicated doc-cleanup slot will sweep
+the roadmap end-to-end; bundling it here would balloon the slice.
+
+**Tests.** New [`tests/test-profiles-phase2.mjs`](tests/test-profiles-phase2.mjs)
+(21 cases — registration, lookup-only picker exclusion, inheritance
+proofs across all three profiles' overrides + carry-throughs). Existing
+[`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs)
+gains 6 cases (3 profiles × 2 layers) automatically via the manifest
+update. The picker-list assertions in
+[`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs)
+and [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs)
+stay pinned to `['chat.v1', 'coder.v1']` so the lookup-only posture is
+load-bearing — promoting any of the three to the picker requires
+updating those assertions too, which is the audit trail the gate is
+designed to surface. All runnable under `node --test`.
+
+### Theme — `<option>` elements + restore profile-picker bg token
+
+Browser-native dropdown popups don't inherit `background` / `color` from
+the parent `<select>` — Chrome / Firefox / Edge default to OS chrome
+(typically white). Under the dark themes the popup looked unreadable;
+not specific to the profile picker but most visible there.
+
+[`css/base.css`](css/base.css) gains a global `option { background-color:
+var(--bg-primary); color: var(--text-primary); }` rule. Affects every
+`<select>` in the app — profile picker, model picker, project picker,
+provider dropdown, etc.
+
+[`html/settings-tabs.html:667`](html/settings-tabs.html) — the profile-
+picker inline style referenced `var(--bg-input)`, a token that was never
+defined anywhere (typo introduced when the picker shipped at 1.21.0).
+Closed-state bg fell through to transparent, harmless on dark themes by
+coincidence and broken on light themes. Aligned with the canonical
+`var(--bg-primary)` used by `.form-group select` in
+[`css/modals.css`](css/modals.css).
+
 ## [2.5.0] - 2026-05-09
 
 ### Feature — Profiles Phase 4 sub-slice 1: profile diffing + regression harness

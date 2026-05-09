@@ -23,18 +23,29 @@
  * cross-product equivalence so slice 2 (1.24.0) consumers can flip the
  * read site safely.
  *
- * Phase 2 (`chat_multi.v1`, `rp.v1`, `kb.v1`, per ROADMAP §"After 2.0.0")
- * registers here when those profiles ship.
+ * **2.6.0 — Phase 2 lands as data + harness coverage.** `chat_multi.v1`,
+ * `rp.v1`, `kb.v1` join the registry for `get` / `has` lookup but
+ * **deliberately not** the picker `ENTRIES` list. Their declared overrides
+ * reference runtime infrastructure that doesn't exist (chunker metadata,
+ * Rule 4, voice-preserving Rule 5 prompts), so picking one today would
+ * behave indistinguishably from `chat.v1` for the user. Promoting them
+ * back into `ENTRIES` is gated on profile-specific `systemPrompt` addenda
+ * (per the 1.23.x `plugin-dev.v1` precedent) — that's the lift that makes
+ * picking each one observable. See `SYNTHETIC_ENTRIES` rationale below
+ * and ROADMAP §"After 2.0.0" for the promotion trigger.
  *
  * @module profiles/registry
  */
 
 import { CHAT_V1 } from './chat-v1.js';
+import { CHAT_MULTI_V1 } from './chat-multi-v1.js';
 import { CODER_V1 } from './coder-v1.js';
 import { FULL_V1 } from './full-v1.js';
+import { KB_V1 } from './kb-v1.js';
 import { PLUGIN_DEV_V1 } from './plugin-dev-v1.js';
 import { PM_V1 } from './pm-v1.js';
 import { REVIEWER_V1 } from './reviewer-v1.js';
+import { RP_V1 } from './rp-v1.js';
 
 /**
  * @typedef {import('./profile-contract.js').Profile} Profile
@@ -68,20 +79,43 @@ const ENTRIES = [
 ];
 
 /**
- * Synthetic profiles — registered for `get` / `has` but excluded from
- * `list()`. Targeted by the 2.0.0 migration script (slice 3) for users
- * whose legacy `settings.role` was one of `full` / `plugin-dev` / `pm` /
- * `reviewer`. The picker UI does not surface them; users who want
- * coder-or-chat keep using the picker, and the migration preserves
- * granularity for everyone else without polluting the picker dropdown.
+ * Lookup-only profiles — registered for `get` / `has` but excluded from
+ * `list()`. Two flavors share this list today:
+ *
+ *   1. **Legacy-role migration targets** — `full.v1` / `plugin-dev.v1` /
+ *      `pm.v1` / `reviewer.v1`. The 2.0.0 migration script (slice 3) maps
+ *      legacy `settings.role` strings onto these. Hidden from the picker
+ *      so the dropdown stays simple; the migration preserves granularity
+ *      for everyone whose role didn't fit `chat` or `coder`.
+ *
+ *   2. **Phase 2 architectural surfaces** — `chat_multi.v1` / `rp.v1` /
+ *      `kb.v1`. Shipped as data + harness coverage at 2.6.0; *deliberately
+ *      not* surfaced in the picker yet. Their declared overrides
+ *      (shared_conversation / per_speaker / lore / per_persona / kb_documents
+ *      collections, Rule 4, voice-preserving Rule 5) reference runtime
+ *      infrastructure that doesn't exist. Picking one today would behave
+ *      indistinguishably from `chat.v1` in most respects, which is worse
+ *      than not offering it at all.
+ *
+ *      **Promotion gate** — move back to `ENTRIES` when each profile has
+ *      *something a user can observe choosing it for*. The natural lever
+ *      is per-profile `systemPrompt` addenda mirroring 1.23.x's
+ *      `plugin-dev.v1` precedent: a `kb.v1` that prompts *"answer only
+ *      from attached_docs, cite line ranges, no edits"* actually behaves
+ *      differently. See ROADMAP §"After 2.0.0" → "Profiles Phase 2 picker
+ *      promotion" for the trigger spec. Custom plugin profiles inheriting
+ *      `base: 'rp.v1'` etc. unlock with the Phase 4 authoring API.
  *
  * @type {Profile[]}
  */
 const SYNTHETIC_ENTRIES = [
+    CHAT_MULTI_V1,
     FULL_V1,
+    KB_V1,
     PLUGIN_DEV_V1,
     PM_V1,
     REVIEWER_V1,
+    RP_V1,
 ];
 
 /** @type {Record<string, Profile>} */
