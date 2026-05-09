@@ -975,6 +975,10 @@ const Plugins = {
     _buttons: [],
     /** @type {Object.<string, {pluginId: string, id: string, title: string, render: Function, width?: number}>} */
     _modals: {},
+    /** @type {Map<string, string>} Tool name → owning pluginId, populated by registerTool. */
+    _toolOrigins: new Map(),
+    /** @type {Object|null} Cached ToolRegistry reference (resolved on first registerTool call). */
+    _toolRegistry: null,
 
     /**
      * Register a plugin.
@@ -1197,6 +1201,8 @@ const Plugins = {
                 },
                 roles: roles || 'all'
             });
+            this._toolRegistry = ToolRegistry;
+            this._toolOrigins.set(name, pluginId);
             console.log(`[Plugins] Tool registered: ${name} (plugin: ${pluginId})`);
             EventBus.emit('plugin:toolRegistered', { pluginId, name });
             return true;
@@ -1204,6 +1210,34 @@ const Plugins = {
             console.error(`[Plugins.registerTool] ${pluginId}: failed to register ${name}:`, err);
             return false;
         }
+    },
+
+    /**
+     * Enumerate plugin-registered tools that are currently in the live
+     * ToolRegistry. Joins the in-memory `_toolOrigins` (toolName → pluginId)
+     * map against the registry — entries whose tool was unregistered (e.g.
+     * the MCP bridge dropping a server) are filtered out via the live
+     * lookup. Returns the empty array before any plugin has registered a
+     * tool (the ToolRegistry import hasn't resolved yet).
+     *
+     * Surfaced in Settings → Plugins → "Plugin Tools" subsection.
+     *
+     * @returns {Array<{name: string, pluginId: string, description: string, roles: string|string[]}>}
+     */
+    getRegisteredTools() {
+        if (!this._toolRegistry) return [];
+        const out = [];
+        for (const [name, pluginId] of this._toolOrigins) {
+            const def = this._toolRegistry.definitions.find(d => d.function?.name === name);
+            if (!def) continue;
+            out.push({
+                name,
+                pluginId,
+                description: def.function?.description || '',
+                roles: def.roles || 'all'
+            });
+        }
+        return out;
     },
 
     /**
@@ -1305,6 +1339,13 @@ const Plugins = {
         Storage.set('pluginState', state);
     }
 };
+
+// Drop the toolName→pluginId entry when ToolRegistry.unregister() fires.
+// Reuses the `tools:unregistered` event already emitted at js/tools/registry.js:139.
+EventBus.on('tools:unregistered', (payload) => {
+    const name = payload && typeof payload.name === 'string' ? payload.name : null;
+    if (name) Plugins._toolOrigins.delete(name);
+});
 
 // ============================================
 // API PROVIDER REGISTRY (delegated to providers/)

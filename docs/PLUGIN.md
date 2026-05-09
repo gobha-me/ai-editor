@@ -425,16 +425,9 @@ What the plugin system **can do today** — and what it can't.
 | **External plugins** | Load from URL via `window.AIEditor` — no build step | v0.8.x |
 | **Built-in plugin editor** | CodeMirror tab with save, hot-reload, and LLM assistance | v0.9.42 |
 | **Custom roles** | `Roles.register()` — add new roles dynamically | v0.8.x |
-
-### ⚠️ Works But No Settings UI
-
-These registries are functional but the settings UI doesn't auto-discover them:
-
-| Capability | Registry | Limitation |
-|---|---|---|
-| **Register LLM providers** | `Providers.register(provider)` | Works, but the settings dropdown won't automatically show new providers. |
-| **Register git providers** | `GitProviderRegistry.register(provider)` | Same — must implement the base interface, but settings UI won't list it. |
-| **Plugin-registered tools** | `Plugins.registerTool()` | Works, but there's no UI to view/manage plugin-registered tools. |
+| **Register LLM providers** | `Providers.register(provider)` — auto-listed in Settings → LLM provider dropdown via `Providers.list()` (settings-manager.js) | v1.x (UI), v0.9 (API) |
+| **Register git providers** | `GitProviderRegistry.register(provider)` — auto-listed in Settings → Connections via `GitProviderRegistry.list()` (connections-tab.js) | v1.x (UI), v1.0 (API) |
+| **Plugin-registered tools** | `Plugins.registerTool()` — listed in Settings → Plugins → "Plugin Tools" subsection with owning plugin id, description, and roles | v2.1.0 (UI), v1.0 (API) |
 
 ### ❌ Not Currently Possible
 

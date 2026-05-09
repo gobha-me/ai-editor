@@ -4,6 +4,80 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-05-09
+
+### Feature — Plugin Tools subsection in Settings → Plugins
+
+Closes the third "Works But No Settings UI" row from
+[`docs/PLUGIN.md`](docs/PLUGIN.md) §"Capabilities & Limitations" — the
+only one of the three that turned out to be a real gap. An audit during
+planning found:
+
+- **LLM provider dropdown** at `<select id="settingApiProvider">` is
+  *already* dynamic — populated from `Providers.list()` at
+  [`js/settings-manager.js:131-134`](js/settings-manager.js).
+- **Git provider dropdown** at `<select id="connEditProvider">` is
+  *already* dynamic — populated from `GitProviderRegistry.list()` at
+  [`js/settings/connections-tab.js:179-182`](js/settings/connections-tab.js).
+- **Plugin-registered tools** had no surface — the row was real.
+
+So the actual scope shrank to: build the Plugin Tools subsection, retire
+the two stale doc rows, and update the §"Capabilities & Limitations"
+table to reflect the auto-discovery that already shipped.
+
+**What lands.**
+
+- Two-line state addition to the `Plugins` namespace at
+  [`js/core.js`](js/core.js): `_toolOrigins: Map<toolName, pluginId>`
+  populated by `registerTool()` after a successful
+  `ToolRegistry.register()`, plus a cached `_toolRegistry` reference so
+  the read API stays sync.
+- New `Plugins.getRegisteredTools()` at
+  [`js/core.js`](js/core.js) — returns
+  `Array<{name, pluginId, description, roles}>` by joining the origins
+  Map against the live `ToolRegistry.definitions`. Tools removed from
+  the registry (e.g. an MCP server dropping) drop from the list via the
+  live lookup; the matching `_toolOrigins` entry is also cleaned up via
+  a `tools:unregistered` event listener bound right after the namespace
+  closes (reuses the existing event emitted at
+  [`js/tools/registry.js:139`](js/tools/registry.js)).
+- New "Plugin Tools" subsection in
+  [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) inserted
+  between "Toolbar actions" and "Installed from URL". Per-tool card:
+  name (mono), owning plugin id, roles badge, description. Subsection
+  not rendered when `getRegisteredTools()` returns empty (mirrors the
+  existing "Toolbar actions" empty-state pattern). Two new
+  `EventBus.on(...)` subscriptions (`plugin:toolRegistered` and
+  `tools:unregistered`) reuse the file's `_refreshIfVisible()` helper
+  so toggling a tool-registering plugin updates the subsection without
+  a manual reload.
+
+**Out of scope.** Tool enable/disable, per-tool role assignment, and
+per-tool config UI all stay deferred under PLUGIN.md §"❌ Not Currently
+Possible" → "Tool configuration UI" — that's a separate, larger minor.
+This subsection is read-only.
+
+**Doc cleanup.**
+
+- [`docs/PLUGIN.md`](docs/PLUGIN.md) §"Capabilities & Limitations" —
+  the §"⚠️ Works But No Settings UI" subsection retired entirely; all
+  three rows promoted into §"✅ What Works" with version notes
+  documenting the auto-discovery seams (settings-manager.js,
+  connections-tab.js) and the new Plugin Tools subsection.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Now / Next / Later" — Plugin
+  Discoverability moved from "Next" to "Now"; the §"After 2.0.0" table
+  shifted Phase 2 profile work from 2.1.0 to 2.2.0 (the
+  `window.AIEditor.Roles` deprecation shim retirement, originally
+  pinned to 2.1.0 by the 2.0.0 changelog, also shifts to 2.2.0). New
+  github#38 row added to §"Known open issues — not yet scheduled" for
+  the approval-card visibility gap surfaced during this minor's review.
+
+**Tests.** New
+[`tests/test-plugin-tools-tracker.mjs`](tests/test-plugin-tools-tracker.mjs)
+exercises the `_toolOrigins` map shape — adds on register, removes on
+the `tools:unregistered` event, double-register replaces, and
+`getRegisteredTools()` joins correctly against a stub ToolRegistry.
+
 ## [2.0.0] - 2026-05-09
 
 ### Breaking — Role selector retired (path-to-2.0.0 slice 3 / 3, final)

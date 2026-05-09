@@ -18,6 +18,8 @@ function _refreshIfVisible() {
 }
 EventBus.on('plugin:buttonRegistered', _refreshIfVisible);
 EventBus.on('plugin:enabledChanged', _refreshIfVisible);
+EventBus.on('plugin:toolRegistered', _refreshIfVisible);
+EventBus.on('tools:unregistered', _refreshIfVisible);
 
 /**
  * Populate the Plugins tab with install UI + all registered plugins.
@@ -80,6 +82,33 @@ export function populatePluginsTab() {
             </div>
         `).join('');
         toolbarHtml += '<div style="margin-bottom: 1rem;"></div>';
+    }
+
+    // ------------------------------------------
+    // Plugin Tools section (1.X+ — closes the third "Works But No
+    // Settings UI" row in docs/PLUGIN.md). Lists tools registered via
+    // Plugins.registerTool() with their owning plugin id, description,
+    // and roles. Read-only surface in this minor; enable/disable + role
+    // assignment stay deferred under PLUGIN.md §"Tool configuration UI".
+    // ------------------------------------------
+    const pluginTools = Plugins.getRegisteredTools();
+    let pluginToolsHtml = '';
+    if (pluginTools.length > 0) {
+        pluginToolsHtml = `<div class="plugin-section-header">Plugin Tools</div>`;
+        pluginToolsHtml += pluginTools.map(t => {
+            const rolesText = Array.isArray(t.roles) ? t.roles.join(', ') : (t.roles || 'all');
+            return `
+                <div class="connection-card" data-plugin-tool="${escapeAttr(t.name)}">
+                    <div class="connection-card-icon">${Icon.Bolt}</div>
+                    <div class="connection-card-info">
+                        <div class="connection-card-label"><code>${escapeHtml(t.name)}</code></div>
+                        <div class="connection-card-meta">Registered by ${escapeHtml(t.pluginId)} · roles: ${escapeHtml(rolesText)}</div>
+                        ${t.description ? `<div class="connection-card-meta plugin-tool-description">${escapeHtml(t.description)}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        pluginToolsHtml += '<div style="margin-bottom: 1rem;"></div>';
     }
 
     // ------------------------------------------
@@ -224,7 +253,7 @@ export function populatePluginsTab() {
         return;
     }
 
-    container.innerHTML = installHtml + toolbarHtml + externalHtml + userHtml + builtinHtml;
+    container.innerHTML = installHtml + toolbarHtml + pluginToolsHtml + externalHtml + userHtml + builtinHtml;
 
     // ------------------------------------------
     // Wire event handlers
