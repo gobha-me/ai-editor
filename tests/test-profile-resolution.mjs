@@ -114,6 +114,10 @@ const CODER_V1_PRE_TRIM = {
         discovery_strategies: ['categorical'],
         budget_tokens: 5000,
         expansion_mode: 'short',
+        // 1.23.0 — profile-side admission set added to coder.v1 + chat.v1.
+        // Coder overrides chat.v1's `['all', 'pm', 'reviewer']` wholesale
+        // (array replacement per inheritance.js).
+        allowed_groups: ['all', 'coder'],
     },
 
     task_ledger: {

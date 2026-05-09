@@ -107,6 +107,15 @@ export const CHAT_V1 = {
         discovery_strategies: ['categorical'], // Same default as coder.v1; semantic discovery in 1.4.1.
         budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
+        // 1.23.0 — profile-side admission set, parallel to the legacy tool-
+        // registration `roles: [...]` lists. `Profiles.filterTools` reads
+        // this and admits a tool when its `_registeredRoles` and this list
+        // overlap (or when the tool is `'all'`-tagged). Picker-selected
+        // chat.v1 covers historical pm + reviewer roles in addition to its
+        // own surface — both are subsets of "chat with full issue access".
+        // Tighter pm.v1 / reviewer.v1 synthetic profiles preserve granularity
+        // for migrated users; see `js/profiles/{pm,reviewer}-v1.js`.
+        allowed_groups: ['all', 'pm', 'reviewer'],
     },
 
     task_ledger: {

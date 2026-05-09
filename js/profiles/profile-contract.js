@@ -125,12 +125,21 @@
 /**
  * Tools configuration consumed by the tools subsystem (1.4.0).
  *
+ * `allowed_groups` (1.23.0) is the profile-side authorization vector
+ * consumed by `Profiles.filterTools`. Mirrors the legacy tool-side
+ * `_registeredRoles` shape — `'all'` admits every tool tagged 'all',
+ * `'*'` is the bypass marker (every tool admits regardless), otherwise
+ * a tool admits when its `_registeredRoles` and the profile's
+ * `allowed_groups` overlap. Optional during the prep slice; consumed
+ * for real at 1.24.0.
+ *
  * @typedef {Object} ToolsConfig
  * @property {ToolDefRef[]} catalog               Available tools for this surface.
  * @property {string[]}     static                Always-loaded subset (tool names — `ToolID` once 1.4.0 lands).
  * @property {string[]}     discovery_strategies  "categorical" | "semantic" | "frequency".
  * @property {number}       budget_tokens         Ceiling for the tool slice (default 5000 per ROADMAP §Decision 5).
  * @property {"short"|"full"} expansion_mode      Default lazy-schema state for discovered tools.
+ * @property {string[]}     [allowed_groups]      Profile-side admission set; see `Profiles.filterTools`.
  */
 
 /**
@@ -146,6 +155,13 @@
 /**
  * The full profile contract.
  *
+ * `systemPrompt` (1.23.0) is the profile-side replacement for the
+ * legacy `Roles.get(role).systemPrompt` field consumed by
+ * [`js/prompts.js`](../prompts.js). Optional — `null` / undefined
+ * means no addendum. Today only the synthetic `plugin-dev.v1` carries
+ * a value (the SDK addendum lifted from `js/core.js`); other profiles
+ * leave it absent.
+ *
  * @typedef {Object} Profile
  * @property {string}             name           Canonical id, e.g. "coder.v1".
  * @property {string}             version
@@ -156,6 +172,7 @@
  * @property {CompressionConfig}  compression
  * @property {ToolsConfig}        tools
  * @property {TaskLedgerConfig}   task_ledger
+ * @property {string|null}        [systemPrompt] Optional profile-scoped prompt addendum.
  */
 
 /**

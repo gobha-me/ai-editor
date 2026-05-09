@@ -4,6 +4,74 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-05-09
+
+### Feature — Profile-side admission filter (path-to-2.0.0 slice 1 / 3)
+
+Prep slice for the 2.0.0 role-selector retirement (ROADMAP §"2.X path").
+Three-cut path: **slice 1 (this)** — synthetic profiles + parallel
+`Profiles.filterTools` + cross-product equivalence test, **slice 2
+(1.24.0)** — flip every consumer site, **slice 3 (2.0.0)** — delete the
+role selector + run the migration. Each slice is shippable on its own;
+the parallel filter at slice 1 gets field-tested in production `main`
+for one or more minors before slice 3 yanks the role selector.
+
+**Zero behavior change.** No consumer wires up to the new helper yet;
+this slice is data + a parallel filter + tests.
+
+**What lands.**
+
+- Four synthetic profiles registered in
+  [`js/profiles/registry.js`](js/profiles/registry.js): `full.v1`
+  (`tools.allowed_groups: ['*']` — the `'full'` role bypass marker),
+  `plugin-dev.v1` (carries the SDK addendum lifted into
+  [`js/profiles/plugin-dev-v1.js`](js/profiles/plugin-dev-v1.js)
+  `PLUGIN_DEV_SYSTEM_PROMPT`), `pm.v1` (`['all', 'pm']`), `reviewer.v1`
+  (`['all', 'reviewer']`). All four are `Profiles.has` / `Profiles.get`
+  reachable but **excluded from `Profiles.list()`** — the picker UI
+  still shows only `chat.v1` + `coder.v1`. The 2.0.0 migration script
+  (slice 3) targets these for users whose legacy `settings.role` was
+  one of `full` / `plugin-dev` / `pm` / `reviewer`, preserving tool-
+  surface granularity.
+- New `Profiles.filterTools(defs, profileName)` mirroring the legacy
+  `Roles.filterTools(defs)` semantic at
+  [`js/core.js:1395–1414`](js/core.js): `'*'` short-circuits to the
+  unfiltered set (the `'full'` bypass), tools tagged
+  `_registeredRoles: ['all']` admit unconditionally, otherwise tool
+  admits when its `_registeredRoles` and the profile's
+  `allowed_groups` overlap.
+- Profile contract gains two optional fields on
+  [`js/profiles/profile-contract.js`](js/profiles/profile-contract.js):
+  `tools.allowed_groups?: string[]` (the new admission vector) and
+  top-level `systemPrompt?: string|null` (replaces
+  `Roles.get(role).systemPrompt` at slice 2). Both additive; `isProfile`
+  validation unchanged.
+- [`chat-v1.js`](js/profiles/chat-v1.js) gains
+  `tools.allowed_groups: ['all', 'pm', 'reviewer']` — picker-selected
+  chat.v1 covers historical pm + reviewer surfaces alongside its own.
+  [`coder-v1.js`](js/profiles/coder-v1.js) gains
+  `['all', 'coder']` — overrides chat.v1's array wholesale per
+  `inheritance.js`.
+- [`js/core.js`](js/core.js) `BUILTIN_ROLES['plugin-dev'].systemPrompt`
+  switched to import `PLUGIN_DEV_SYSTEM_PROMPT` from
+  [`js/profiles/plugin-dev-v1.js`](js/profiles/plugin-dev-v1.js) — single
+  source of truth while both legacy `Roles` and new `Profiles` co-exist.
+  Slice 3 deletes `BUILTIN_ROLES` entirely along with this import.
+
+**Tests.** New
+[`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs)
+pins the cross-product equivalence: 6 tool-side `roles:` shapes × 5
+legacy-role → profile mappings, asserting `Profiles.filterTools(defs,
+ROLE_TO_PROFILE[role])` returns byte-identical sets vs. the inlined
+legacy `Roles.filterTools` semantic. The test reproduces the legacy
+seven lines inline rather than importing `Roles` (which would pull in
+browser-only `core.js`). Plus per-profile spot checks, edge cases (null
+profileName, non-array defs, mutation safety), and synthetic-registration
+sanity (`Profiles.list()` excludes synthetics; `plugin-dev.v1` carries
+the SDK addendum). [`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs)
+pre-trim snapshot updated with `tools.allowed_groups: ['all', 'coder']`
+to match the resolved coder.v1.
+
 ## [1.22.0] - 2026-05-08
 
 ### Feature — In-editor preview & verify Tier 1 (gitea#334)
