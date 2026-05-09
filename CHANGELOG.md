@@ -4,6 +4,63 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-05-09
+
+### Feature — Provider rate-limit pacer (Touch 3 Window v2 / Sessions prerequisite)
+
+Hard-prerequisite work named at [`docs/ROADMAP.md`](docs/ROADMAP.md):274 —
+*"multiple sessions running in one window saturate per-provider caps faster
+than any single chat ever did."* Sessions tabs (Touch 3) need each
+concurrent agent to respect the same per-API-key quota; this minor adds
+that respect to the live chat path so the chrome rework doesn't ship onto
+a broken floor.
+
+**Wiring path.** A new [`js/llm/pacer.js`](js/llm/pacer.js) production
+wrapper owns a process-global `RateLimiterPool` singleton (per-call delay
+forced to 0 ms — the 1000 ms eval default is grid spacing) and exposes a
+conservative `estimateInputTokens(messages, tools)` (`Math.ceil(JSON.length
+/ CHARS_PER_TOKEN) + 256`). The math itself stays in
+[`evals/pacing.js`](evals/pacing.js) — already pinned by
+[`evals/test-haystack.mjs:172`](evals/test-haystack.mjs):172–230 (ingest,
+10% headroom, null-cap fallback, per-model isolation). Two real
+`fetch()` chokepoints get a three-step insertion:
+
+| File | Insertion |
+|---|---|
+| [`js/llm/api.js:436`](js/llm/api.js) | chat-completions: `await sleep(limiter.msUntilNextSend(...))` → `markSent()` → `ingest(response.headers)` before the `!response.ok` guard so 429-reset values land before the existing retry loop in [`js/retry.js:30`](js/retry.js):30 consumes them. |
+| [`js/llm/completion.js:129`](js/llm/completion.js) | ghost-text: same three-step insertion sharing `State.settings.llmModel` (same key, same provider, one quota). Caller-owned `signal` threads through `sleep`. |
+
+**No-op for providers without `x-ratelimit-*`.** Ollama and OpenRouter
+publish no rate-limit headers; `ingest` reads nulls, `msUntilNextSend`
+returns 0, no conditional needed at the callsites.
+
+**Per-model bucketing.** `pool.for(modelId)` keeps each model's quota
+state isolated — switching tiers (e.g. qwen3-5-9b 3M TPM ↔ deepseek-v3.2
+10M TPM) doesn't smear state.
+
+**Debug surface.** [`js/core.js`](js/core.js)'s `window.AIEditor` block
+gains `Pacer.snapshotAll()` (returns `{ [modelId]: { rpmLimit, tpmLimit,
+remainingReq, remainingTok, resetReqAt, resetTokAt } }` for DevTools
+probing) and `Pacer._pool` (debug hatch for the synthetic near-cap recipe
+in the verification log). The status-bar pill / Settings panel for live
+pacer state is explicitly OUT of scope per the Touch 2 pushback memo
+([`docs/design/touch-3-left-pane-and-window/project/pushback.jsx`](docs/design/touch-3-left-pane-and-window/project/pushback.jsx)
+line 95).
+
+**Tests.** New [`tests/test-pacer-wiring.mjs`](tests/test-pacer-wiring.mjs)
+covers (1) singleton identity, (2) estimator monotonicity + headroom
+constant, (3) wiring trace — stubs `globalThis.fetch` (mirroring
+[`tests/test-ghost-text.mjs:135`](tests/test-ghost-text.mjs):135's
+pattern) to return synthetic `x-ratelimit-*` headers, calls into the
+ghost-text path, asserts the singleton's snapshot reflects ingested
+values. Math is already covered upstream and stays canonical.
+
+**Out of scope.** Status-pill UI, per-conversation pools (wrong
+direction — caps are per-API-key), last-turn `prompt_tokens` as estimator
+(adds variance handling for no measurable win), cross-session fingerprint
+persistence (Tier-2 graduation), Window v2 / Sessions chrome (this minor
+unblocks but doesn't ship the surface).
+
 ## [2.8.0] - 2026-05-09
 
 ### Feature — Profiles Phase 2: `kb.v1` picker promotion + per-chat profile binding

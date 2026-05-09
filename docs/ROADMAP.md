@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-09 (post-2.7.0) · Current released: v2.7.0 · `main` HEAD: 2.7.0.
+> Last updated: 2026-05-09 (post-2.9.0) · Current released: v2.9.0 · `main` HEAD: 2.9.0.
 
 ## How to read this doc
 
@@ -15,7 +15,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 
 | Phase | Track |
 |---|---|
-| **Just shipped** | Shipped through v2.1.1 — see [CHANGELOG.md](../CHANGELOG.md). |
+| **Just shipped** | Shipped through v2.9.0 — see [CHANGELOG.md](../CHANGELOG.md). Recent: 2.8.0 (`kb.v1` picker promotion + per-chat profile binding); 2.9.0 (provider rate-limit pacer — Touch 3 Window v2 / Sessions hard prerequisite cleared). |
 | **Now** | **2.1.0 Plugin Discoverability shipped.** New "Plugin Tools" subsection in [`js/settings/plugins-tab.js`](../js/settings/plugins-tab.js) lists every tool registered via `Plugins.registerTool()` with its owning plugin id, description, and roles — closes the only real "Works But No Settings UI" gap (the LLM-provider and git-provider dropdowns turned out already-dynamic; `docs/PLUGIN.md` updated to reflect). Tracker (`Plugins._toolOrigins` + `getRegisteredTools()`) at [`js/core.js:973-1276`](../js/core.js); cleanup wired to existing `tools:unregistered` event. **Originally placed at 2.1.0 in the After-2.0.0 table for Phase 2 profile work — Phase 2 shifts to 2.2.0.** |
 | **Now (also)** | **2.0.0 shipped (slice 3 of path-to-2.0.0, final).** Role selector retired; one-shot `settings.role` → `settings.profile` migration runs in `loadSettings`; `Roles` namespace + `BUILTIN_ROLES` + `Roles.filterTools` + `roleToProfileName` deleted. `window.AIEditor.Roles` deprecation shim warns once + retires at 2.2.0 (was 2.1.0; shifted with the Phase 2 renumber). **Unblocks** github#24 sub-agents and Touch 3 Window v2 / Sessions. |
 | **Next** | **Profiles Phase 2 picker promotion** — gated on per-profile `systemPrompt` addenda (mirroring 1.23.x's `plugin-dev.v1` precedent). The cheapest first lever is `kb.v1` carrying *"answer only from attached_docs, cite line ranges, no edits"* — once that lands, picker-list assertions in `tests/test-profiles-registry.mjs` flip and the profile graduates from `SYNTHETIC_ENTRIES` to `ENTRIES`. Granular promotion is fine. **In-editor preview Tier 2 (console + error capture) shipped at 2.7.0** — see [CHANGELOG §2.7.0](../CHANGELOG.md). Tier 3 (driveable preview / Playwright sidecar) remains gated on Tier-2 dogfood signal. **Retrieval ingest hardening** shipped through 2.2.0 (delta-indexing) + 2.4.0 (language-stats + token cap). |
@@ -271,7 +271,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 | Rule 4 (Resolution) | (none) | Templated marker generation for "debugging spans that ended successfully." Gated on Rule 3 numbers matching the design. |
 | Rule 5 tuning | (none) | Plug existing summarizer into the pipeline cleanly; measure compression latency and summarizer call rate. |
 | Settings → Compression panel refresh | (none) | Replaces Settings → Chat Summarizer. Establishes the **preset / advanced toggle pattern** (Decision §11) that subsequent panels inherit. Gated on Rules 1–5 live. |
-| Provider rate-limit respect | (none) | Read `x-ratelimit-*` headers; pace requests; back off on 429. Needs to ship before any *non-self-hosted* embedder is viable for repo-scale ingest, **AND** before Touch 3 Window v2 / Sessions concurrent-agents work — multiple sessions running in one window saturate per-provider caps faster than any single chat ever did. Reference implementation in [`evals/pacing.js`](../evals/pacing.js): `RateLimiter` class + per-model `RateLimiterPool` + 10% token-budget headroom + per-call delay + null-cap handling. Production wiring path: `js/providers/venice.js` (and equivalents for OpenAI / OpenRouter / Anthropic) ingests `x-ratelimit-*` from each response, exposes `msUntilNextSend()` to the chat / agent loop. |
+| ~~Provider rate-limit respect~~ *(✅ shipped 2.9.0)* | *see [CHANGELOG §2.9.0](../CHANGELOG.md)* | New [`js/llm/pacer.js`](../js/llm/pacer.js) production wrapper around the eval-canonical pacer — process-global `RateLimiterPool` singleton (per-call delay forced to 0 ms in production) + conservative `estimateInputTokens` estimator + three-step insertion (`await sleep(msUntilNextSend)` → `markSent` → `ingest(headers)`) at the two real fetch chokepoints ([`js/llm/api.js:436`](../js/llm/api.js) chat-completions, [`js/llm/completion.js:129`](../js/llm/completion.js) ghost-text). Per-model bucketing keeps quota state isolated across model switches. Ollama / OpenRouter publish no `x-ratelimit-*` → null caps → no added latency. **Touch 3 Window v2 / Sessions hard-prerequisite cleared.** |
 
 ### Touch 3 deliverables (received 2026-05-07; dominantly post-2.0)
 

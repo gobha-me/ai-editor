@@ -183,6 +183,11 @@ import { migrateRoleToProfile } from './profiles/migration.js';
 // for external plugins (replaces the retired `Roles` namespace).
 import { Profiles } from './profiles/registry.js';
 
+// 2.9.0 — production rate-limit pacer singleton, exposed via
+// `window.AIEditor.Pacer` for DevTools introspection (snapshotAll) and
+// the synthetic near-cap verification recipe (`_pool` debug hatch).
+import { getPool as _getPacerPool } from './llm/pacer.js';
+
 // ============================================
 // EVENT BUS
 // ============================================
@@ -1558,6 +1563,14 @@ window.AIEditor = {
     Storage,
     Providers,
     Profiles,
+    // 2.9.0 — rate-limit pacer state. `snapshotAll()` returns
+    // `{ [modelId]: { rpmLimit, tpmLimit, remainingReq, remainingTok,
+    // resetReqAt, resetTokAt } }` for status-pill or DevTools probing.
+    // `_pool` is a debug hatch for the synthetic near-cap recipe.
+    Pacer: {
+        snapshotAll: () => _getPacerPool().snapshotAll(),
+        get _pool() { return _getPacerPool(); },
+    },
     // 2.0.0 — slice 3: `Roles` retired. Deprecation shim warns once on
     // first access so plugin authors importing `Roles` from
     // `window.AIEditor` see a migration hint instead of a silent

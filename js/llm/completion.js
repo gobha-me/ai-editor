@@ -21,6 +21,7 @@
 import { State, ProviderRegistry } from '../core.js';
 import { buildRequestBody } from './api.js';
 import { stripThinkBlocks } from './utils.js';
+import { getPool, sleep, estimateInputTokens } from './pacer.js';
 
 /**
  * @typedef {Object} GhostTextRequest
@@ -126,6 +127,12 @@ export async function requestGhostTextCompletion(req) {
         tools: null,
     });
 
+    // Shares the chat path's per-model bucket (same key, same provider, one
+    // quota). Caller-owned signal threads through `sleep`.
+    const limiter = getPool().for(model);
+    await sleep(limiter.msUntilNextSend(estimateInputTokens(messages, null)), signal);
+    limiter.markSent();
+
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -136,6 +143,8 @@ export async function requestGhostTextCompletion(req) {
         body: JSON.stringify(requestBody),
         signal,
     });
+
+    limiter.ingest(response.headers);
 
     if (!response.ok) {
         const body = await response.text().catch(() => '');

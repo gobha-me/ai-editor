@@ -63,6 +63,7 @@ import { applyModelOverrides } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { sanitizeMessages, stripThinkBlocks } from './utils.js';
 import { LLMDebug } from './debug.js';
+import { getPool, sleep, estimateInputTokens } from './pacer.js';
 import { Catalog, composeAdmission, renderForLLM } from '../intelligence/tools/index.js';
 import { CODER_V1 } from '../profiles/coder-v1.js';
 import { Profiles } from '../profiles/index.js';
@@ -428,10 +429,22 @@ export const LLM = {
                     `length=${requestBody.tools?.length}`
                 );
             } else {
-                LLMDebug.logThink('tool-success', 
+                LLMDebug.logThink('tool-success',
                     `✅ Sending ${requestBody.tools.length} tools: ${requestBody.tools.map(t => t.function?.name || t.name).join(', ')}`
                 );
             }
+
+            // Rate-limit pacer: await per-model quota before fetch; ingest
+            // headers after. Singleton pool keyed by modelId — Sessions
+            // share quota per-API-key, not per-conversation. Providers
+            // without `x-ratelimit-*` (Ollama, OpenRouter) leave caps null
+            // → msUntilNextSend returns 0 → no added latency.
+            const limiter = getPool().for(hookedModel);
+            await sleep(
+                limiter.msUntilNextSend(estimateInputTokens(hookedMessages, hookedTools)),
+                this.abortController.signal
+            );
+            limiter.markSent();
 
             const response = await fetch(
                 `${State.settings.llmEndpoint.replace(/\/$/, '')}/chat/completions`,
@@ -446,6 +459,10 @@ export const LLM = {
                     signal: this.abortController.signal
                 }
             );
+
+            // Ingest BEFORE the !ok guard so 429-reset values land before
+            // the retry loop consumes them.
+            limiter.ingest(response.headers);
 
             if (!response.ok) {
                 const error = await response.text();
