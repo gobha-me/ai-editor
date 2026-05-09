@@ -1,0 +1,198 @@
+{
+  "resolved": {
+    "name": "coder.v1",
+    "version": "1",
+    "base": "chat.v1",
+    "budget": {
+      "total_tokens": 32000,
+      "system_reserve": 2000,
+      "output_reserve": 8000,
+      "history_reserve": 8000,
+      "memory_reserve": 1500
+    },
+    "retrieval": {
+      "collections": [
+        "workspace_code",
+        "workspace_docs",
+        "recent_tool_results"
+      ],
+      "memory_collections": [
+        "session"
+      ],
+      "strategy_weights": {
+        "semantic": 1,
+        "structural": 0,
+        "thematic": 0
+      },
+      "chunkers": [],
+      "metadata_extensions": [],
+      "novelty_threshold": 0.3
+    },
+    "memory": {
+      "default_scope": "session",
+      "propose_after_n_turns": null,
+      "capacity_warnings": {
+        "session": 20
+      }
+    },
+    "compression": {
+      "rules": [
+        {
+          "name": "subsumption",
+          "priority": 10
+        },
+        {
+          "name": "invalidation",
+          "priority": 20
+        },
+        {
+          "name": "summarization",
+          "priority": 50
+        }
+      ],
+      "preserve_recent": 24,
+      "summarizer": {
+        "mode": "balanced",
+        "promptTemplate": null,
+        "modelOverride": null
+      }
+    },
+    "tools": {
+      "catalog": [],
+      "static": [
+        "list_tool_categories",
+        "list_tools_by_category",
+        "find_tool",
+        "scratchpad_write",
+        "scratchpad_read",
+        "scratchpad_clear",
+        "todo_write",
+        "todo_read",
+        "ask_user",
+        "submit_plan_for_approval",
+        "submit_script_for_approval",
+        "preview_start",
+        "preview_stop",
+        "preview_list",
+        "read_file",
+        "read_lines",
+        "scan_file",
+        "edit_file",
+        "commit_files",
+        "list_dirty_files",
+        "get_ci_status",
+        "wait_for_ci",
+        "get_ci_logs"
+      ],
+      "discovery_strategies": [
+        "categorical"
+      ],
+      "budget_tokens": 5000,
+      "expansion_mode": "short",
+      "allowed_groups": [
+        "all",
+        "coder"
+      ]
+    },
+    "task_ledger": {
+      "enabled": true,
+      "capacity": 500,
+      "novelty_threshold": 0.3
+    },
+    "scriptAutomation": {
+      "enabled": true,
+      "timeout_ms": 30000,
+      "max_output_bytes": 262144
+    },
+    "preview": {
+      "enabled": true
+    }
+  },
+  "subsystem_dispatch": {
+    "compression": {
+      "rules": [
+        {
+          "name": "subsumption",
+          "priority": 10,
+          "evaluate": "[Function]"
+        },
+        {
+          "name": "invalidation",
+          "priority": 20,
+          "evaluate": "[Function]"
+        },
+        {
+          "name": "summarization",
+          "priority": 50,
+          "is_summarizer": true,
+          "evaluate": "[Function]"
+        }
+      ],
+      "preserve_recent": 24,
+      "profileName": "coder.v1"
+    },
+    "memory": {
+      "default_scope": "session",
+      "propose_after_n_turns": null,
+      "capacity_warnings": {
+        "session": 20
+      },
+      "profileName": "coder.v1"
+    },
+    "tools": {
+      "static": [
+        "list_tool_categories",
+        "list_tools_by_category",
+        "find_tool",
+        "scratchpad_write",
+        "scratchpad_read",
+        "scratchpad_clear",
+        "todo_write",
+        "todo_read",
+        "ask_user",
+        "submit_plan_for_approval",
+        "submit_script_for_approval",
+        "preview_start",
+        "preview_stop",
+        "preview_list",
+        "read_file",
+        "read_lines",
+        "scan_file",
+        "edit_file",
+        "commit_files",
+        "list_dirty_files",
+        "get_ci_status",
+        "wait_for_ci",
+        "get_ci_logs"
+      ],
+      "profileName": "coder.v1"
+    },
+    "retrieval": {
+      "collections": [
+        "workspace_code",
+        "workspace_docs",
+        "recent_tool_results"
+      ],
+      "memory_collections": [
+        "session"
+      ],
+      "strategy_weights": {
+        "semantic": 1,
+        "structural": 0,
+        "thematic": 0
+      },
+      "novelty_threshold": 0.3,
+      "profileName": "coder.v1"
+    },
+    "script_automation": {
+      "enabled": true,
+      "timeout_ms": 30000,
+      "max_output_bytes": 262144,
+      "profileName": "coder.v1"
+    },
+    "preview": {
+      "enabled": true,
+      "profileName": "coder.v1"
+    }
+  }
+}

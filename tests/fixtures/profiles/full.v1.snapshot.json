@@ -1,0 +1,129 @@
+{
+  "resolved": {
+    "name": "full.v1",
+    "version": "1",
+    "base": "chat.v1",
+    "budget": {
+      "total_tokens": 32000,
+      "system_reserve": 2000,
+      "output_reserve": 4000,
+      "history_reserve": 8000,
+      "memory_reserve": 2000
+    },
+    "retrieval": {
+      "collections": [
+        "attached_docs"
+      ],
+      "memory_collections": [
+        "user",
+        "persona"
+      ],
+      "strategy_weights": {
+        "semantic": 1,
+        "structural": 0.5,
+        "thematic": 0
+      },
+      "chunkers": [],
+      "metadata_extensions": [],
+      "novelty_threshold": 0.5
+    },
+    "memory": {
+      "default_scope": "user",
+      "propose_after_n_turns": null,
+      "capacity_warnings": {}
+    },
+    "compression": {
+      "rules": [
+        {
+          "name": "summarization",
+          "priority": 50
+        }
+      ],
+      "preserve_recent": 4,
+      "summarizer": {
+        "mode": "balanced",
+        "promptTemplate": null,
+        "modelOverride": null
+      }
+    },
+    "tools": {
+      "catalog": [],
+      "static": [
+        "ask_user"
+      ],
+      "discovery_strategies": [
+        "categorical"
+      ],
+      "budget_tokens": 5000,
+      "expansion_mode": "short",
+      "allowed_groups": [
+        "*"
+      ]
+    },
+    "task_ledger": {
+      "enabled": true,
+      "capacity": 100,
+      "novelty_threshold": 0.5
+    },
+    "scriptAutomation": {
+      "enabled": false,
+      "timeout_ms": 30000,
+      "max_output_bytes": 262144
+    },
+    "preview": {
+      "enabled": false
+    }
+  },
+  "subsystem_dispatch": {
+    "compression": {
+      "rules": [
+        {
+          "name": "summarization",
+          "priority": 50,
+          "is_summarizer": true,
+          "evaluate": "[Function]"
+        }
+      ],
+      "preserve_recent": 4,
+      "profileName": "full.v1"
+    },
+    "memory": {
+      "default_scope": "user",
+      "propose_after_n_turns": null,
+      "capacity_warnings": {},
+      "profileName": "full.v1"
+    },
+    "tools": {
+      "static": [
+        "ask_user"
+      ],
+      "profileName": "full.v1"
+    },
+    "retrieval": {
+      "collections": [
+        "attached_docs"
+      ],
+      "memory_collections": [
+        "user",
+        "persona"
+      ],
+      "strategy_weights": {
+        "semantic": 1,
+        "structural": 0.5,
+        "thematic": 0
+      },
+      "novelty_threshold": 0.5,
+      "profileName": "full.v1"
+    },
+    "script_automation": {
+      "enabled": false,
+      "timeout_ms": 30000,
+      "max_output_bytes": 262144,
+      "profileName": "chat.v1"
+    },
+    "preview": {
+      "enabled": false,
+      "profileName": "chat.v1"
+    }
+  }
+}

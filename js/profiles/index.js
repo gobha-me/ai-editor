@@ -32,6 +32,8 @@ export { REVIEWER_V1 } from './reviewer-v1.js';
 
 export { resolveProfile } from './inheritance.js';
 
+export { diffProfiles, formatProfileDiff } from './diff.js';
+
 export { Profiles } from './registry.js';
 
 export {
@@ -40,6 +42,8 @@ export {
     resolveTools,
     resolveRetrievalConfig,
     resolveDefaultRememberScope,
+    resolveScriptAutomationConfig,
+    resolvePreviewConfig,
     getActiveProfileName,
 } from './resolve.js';
 
@@ -66,4 +70,8 @@ export {
  * @typedef {import('./task-ledger.js').ToolID}                  ToolID
  * @typedef {import('./task-ledger.js').TurnID}                  TurnID
  * @typedef {import('./task-ledger.js').TaskID}                  TaskID
+ *
+ * @typedef {import('./diff.js').ProfileDiff}                    ProfileDiff
+ * @typedef {import('./diff.js').ProfileDiffEntry}               ProfileDiffEntry
+ * @typedef {import('./diff.js').DiffOptions}                    DiffOptions
  */

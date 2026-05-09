@@ -4,6 +4,115 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-05-09
+
+### Feature — Profiles Phase 4 sub-slice 1: profile diffing + regression harness
+
+Quoting [`docs/ROADMAP.md`](docs/ROADMAP.md) line 113 — Phase 4 of the Profiles
+arc = *"Extensibility — custom profile authoring API, profile diffing,
+profile regression testing harness. Unblocks plugin-defined surfaces."*
+This release ships **two of the three** sub-features. The custom
+authoring API stays parked for 2.6.0 because its UI/persistence shape
+(runtime-registration vs. Settings-tab editor; `.js` modules vs. JSON;
+where on disk) is undecided and would balloon the slice.
+
+**Why this slot.** Diffing + harness are the read-only halves and the
+foundation: they make Phase 4 safe by giving us drift detection across
+the six already-shipped profiles before we extend the surface further.
+Authoring API consumers want to validate their custom profile against
+the canonical set, which needs the differ; CI needs the harness to catch
+inheritance ripples (a deliberate `chat.v1` change forces regen of the
+four downstream synthetic fixtures — that is the feature, not a bug).
+
+**Profile diffing.** New
+[`js/profiles/diff.js`](js/profiles/diff.js) ships `diffProfiles(a, b,
+options)` returning a structured `ProfileDiff` (`entries: ProfileDiffEntry[]`,
+each with `path`, `kind ∈ {'added','removed','changed','array_replaced'}`,
+optional `before`/`after`) plus `equal` convenience flag. Edge-case
+policy mirrors `mergeDeep` in
+[`js/profiles/inheritance.js:108`](js/profiles/inheritance.js) byte-for-
+byte so a resolved-mode diff never lies about what `resolveProfile`
+would produce: `undefined` is absent, arrays + side-shape mismatches
+emit a single `'array_replaced'` (not element-wise diffs), `null` is a
+primitive (`changed`, not `removed`). Entry order is deterministic
+(depth-first, lexicographic key sort) so fixture diffs are stable
+across runs. Companion `formatProfileDiff(diff)` renders markdown for
+failure messages and any future UI consumer; short arrays inline as
+JSON, long arrays show length only.
+
+`mode: 'resolved'` (default) walks the deep-merge result; `mode: 'raw'`
+walks the literals. Raw mode is what the future "advanced view" picker
+in 2.0.x stabilization will consume; resolved mode is the load-bearing
+contract from 2.0.0 onward.
+
+**Regression testing harness.** Six per-profile JSON fixtures at
+`tests/fixtures/profiles/<name>.snapshot.json` capture two layers each:
+`resolved` (the `resolveProfile(profile, Profiles.get)` output) and
+`subsystem_dispatch` (the output of all six resolvers in
+[`js/profiles/resolve.js`](js/profiles/resolve.js): compression, memory,
+tools, retrieval, scriptAutomation, preview). Both layers matter
+independently — `resolved` catches changes in raw profile literals or in
+deep-merge semantics; `subsystem_dispatch` catches changes in any
+resolver's mapping of profile data to the runtime contract.
+
+Single test runner — [`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs) —
+loops over a `PROFILE_NAMES` manifest and emits two `test()` blocks per
+profile (12 cases total). Adding a profile to the harness when Phase 2
+lands (`chat_multi.v1`, `rp.v1`, `kb.v1`) is a one-line manifest change.
+Failure messages render `formatProfileDiff` so the human reviewer sees
+exactly what changed and is told exactly which command regenerates:
+`node tests/update-profile-fixtures.mjs`.
+
+The regen script is a sibling, not a `--update` flag — `node --test`
+provides no such flag pattern, and writing fixtures from inside a test
+file would race in CI. The script's header pins the serialization
+invariants: `RuntimeRule.evaluate` functions get replaced with
+`'[Function]'` markers (the only place this substitution lives) so the
+snapshot survives `JSON.stringify`; the harness mirrors the same
+serializer to keep diffs faithful.
+
+**Coverage.** All six registered profiles — `chat.v1`, `coder.v1`,
+`full.v1`, `plugin-dev.v1`, `pm.v1`, `reviewer.v1`. Synthetic profiles
+are exactly the population most likely to drift unnoticed (no picker
+UI), which is why they're in scope from day one rather than added later.
+
+**Barrel additions.** [`js/profiles/index.js`](js/profiles/index.js) gains
+`diffProfiles` / `formatProfileDiff` re-exports plus the
+`ProfileDiff` / `ProfileDiffEntry` / `DiffOptions` typedef re-exports.
+Two missing resolver re-exports also land here:
+`resolveScriptAutomationConfig` and `resolvePreviewConfig` were
+previously direct imports from `./resolve.js`; surfacing them through
+the barrel matches the existing four resolver exports and is what the
+harness consumes.
+
+**Out of scope (2.6.0+).**
+- **Custom profile authoring API** — runtime registration surface,
+  Settings-tab editor, persistence shape, validation. The harness ships
+  here so any future custom profile can be tested against the same
+  contract.
+- **No UI surface in 2.5.0.** `formatProfileDiff` ships as a string
+  helper; no Settings tab or modal wires up. The 2.0.x advanced-view
+  stabilization slice is the natural consumer.
+- **Element-wise array diffs.** `'array_replaced'` is wholesale per
+  merger semantics; finer-grained array deltas would imply
+  concatenation semantics the merger doesn't support.
+- **Phase 3 (operational maturity).** The 2.3.0 slot was consumed by
+  the MCP catalog. Re-sequencing of task-boundary heuristics, novelty-
+  score tuning, and per-profile dashboards stays open for a future minor.
+
+**Naming adjacency.** [`js/profiles/diff.js`](js/profiles/diff.js) sits
+next to [`js/editor/diff.js`](js/editor/diff.js) — different shape
+entirely (the editor differ is line-based string diff for the diff view).
+Header comments in both files cross-reference to prevent wrong-import.
+
+**Tests.** New [`tests/test-profiles-diff.mjs`](tests/test-profiles-diff.mjs)
+(17 cases — equality, added/removed/changed/array_replaced kinds,
+deterministic ordering, resolved vs. raw modes, ignorePaths,
+formatProfileDiff rendering); new
+[`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs)
+(12 cases — 6 profiles × 2 snapshot layers); six new fixtures under
+`tests/fixtures/profiles/`. All runnable under `node --test`.
+
 ## [2.4.0] - 2026-05-09
 
 ### Feature — Retrieval ingest hardening (b): language-stats ordering + token-budget cap
