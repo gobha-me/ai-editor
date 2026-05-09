@@ -7,7 +7,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { invalidateCachesForPath } from '../js/chat/cache-invalidation.js';
+import {
+    invalidateCachesForPath,
+    invalidateCachesForPreviewMutation,
+} from '../js/chat/cache-invalidation.js';
 
 const WRITE_TOOLS = [
     'replace_lines', 'insert_lines', 'delete_lines', 'create_file',
@@ -198,6 +201,124 @@ test('toolActionLog reference is preserved (in-place mutation, not replacement)'
     // State.toolActionLog is held by reference all over handlers.js;
     // the helper must mutate in place rather than replace the array,
     // otherwise other readers see the stale snapshot.
+    assert.strictEqual(toolActionLog, ref, 'array identity preserved');
+    assert.equal(toolActionLog.length, 0, 'array contents updated');
+});
+
+// ============================================================================
+// invalidateCachesForPreviewMutation — github#39 (the deadlock repro)
+//
+// Same recurring cache-invalidation-on-mutation pattern as gitea#301 above,
+// but session-keyed instead of path-keyed: preview_stop({serverId}) doesn't
+// carry the original preview_start({path}) arg, so we evict by tool prefix
+// rather than args match. The active server set is bounded by ~1 in
+// practice, so coarse-grained eviction is fine.
+// ============================================================================
+
+test('preview_stop invalidates preview_start cache for any args (github#39 deadlock repro)', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [];
+
+    // Pre-stop: model started a preview.
+    toolCallCache.set(keyFor('preview_start', { path: 'tetris/index.html' }), {
+        serverId: 'srv_dead', url: 'http://localhost:1234', reused: false,
+    });
+    toolActionLog.push({
+        tool: 'preview_start',
+        args: { path: 'tetris/index.html' },
+        resultSummary: 'srv_dead started',
+        success: true,
+    });
+
+    // Now stop: must invalidate so the next preview_start doesn't hit a
+    // cached envelope pointing at the now-dead serverId.
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_stop',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 1, 'one same-request cache entry evicted');
+    assert.equal(r.evictedLog, 1, 'one cross-request log entry evicted');
+    assert.equal(toolCallCache.size, 0, 'toolCallCache is empty');
+    assert.equal(toolActionLog.length, 0, 'toolActionLog is empty');
+});
+
+test('preview_stop also invalidates preview_list cache (server set just changed)', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'preview_list', args: {}, resultSummary: '1 server', success: true },
+    ];
+    toolCallCache.set(keyFor('preview_list', {}), { servers: [{ serverId: 'srv_X' }] });
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_stop',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 1);
+    assert.equal(r.evictedLog, 1);
+    assert.equal(toolCallCache.size, 0);
+    assert.equal(toolActionLog.length, 0);
+});
+
+test('preview_stop leaves unrelated tool entries alone', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'read_lines', args: { path: 'foo.js', start_line: 1, end_line: 10 }, success: true },
+        { tool: 'preview_start', args: { path: 'foo.html' }, success: true },
+    ];
+    toolCallCache.set(keyFor('read_lines', { path: 'foo.js', start_line: 1, end_line: 10 }), {});
+    toolCallCache.set(keyFor('preview_start', { path: 'foo.html' }), {});
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_stop',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 1, 'only preview_start evicted, read_lines kept');
+    assert.equal(r.evictedLog, 1);
+    assert.equal(toolActionLog.length, 1);
+    assert.equal(toolActionLog[0].tool, 'read_lines');
+    assert.ok(toolCallCache.has(keyFor('read_lines', { path: 'foo.js', start_line: 1, end_line: 10 })));
+});
+
+test('non-preview-mutator is a no-op for the preview helper', () => {
+    const toolCallCache = new Map();
+    toolCallCache.set(keyFor('preview_start', { path: 'foo.html' }), { serverId: 'X' });
+    const toolActionLog = [
+        { tool: 'preview_start', args: { path: 'foo.html' }, success: true },
+    ];
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'edit_file',  // file mutator, not a preview mutator
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 0);
+    assert.equal(r.evictedLog, 0);
+    assert.equal(toolCallCache.size, 1);
+    assert.equal(toolActionLog.length, 1);
+});
+
+test('preview helper preserves toolActionLog reference (in-place mutation)', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'preview_start', args: { path: 'foo.html' }, success: true },
+    ];
+    const ref = toolActionLog;
+
+    invalidateCachesForPreviewMutation({
+        toolName: 'preview_stop',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    // Mirror the path-helper invariant: State.toolActionLog is held by
+    // reference all over handlers.js; the helper must mutate in place.
     assert.strictEqual(toolActionLog, ref, 'array identity preserved');
     assert.equal(toolActionLog.length, 0, 'array contents updated');
 });

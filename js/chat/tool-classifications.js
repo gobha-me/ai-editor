@@ -66,6 +66,39 @@ export const FILE_MUTATING_TOOLS = Object.freeze([
 ]);
 
 /**
+ * Preview-surface mutators — invalidate cached preview reads on success.
+ * github#39: `preview_stop` tears down a server, but the dup-cache still
+ * holds the old `preview_start` envelope pointing at the dead `serverId`.
+ * Without invalidation the next `preview_start` returns the cached dead
+ * `serverId`, the model retries, and the dup-refusal guard kicks in —
+ * second instance of the recurring cache-invalidation-on-mutation pattern
+ * (gitea#301 / 1.7.1 was the first, on `edit_file` / `read_lines`).
+ *
+ * Session-keyed (not path-keyed) — see `invalidateCachesForPreviewMutation`
+ * in `./cache-invalidation.js`. Drops *all* PREVIEW_READ_TOOLS entries
+ * regardless of args; coarser than path-keyed, but the active server set is
+ * bounded by ~1.
+ *
+ * @type {readonly string[]}
+ */
+export const PREVIEW_MUTATING_TOOLS = Object.freeze(['preview_stop']);
+
+/**
+ * Cached preview reads invalidated by any PREVIEW_MUTATING_TOOLS call.
+ * Tier 1 (1.22.0) ships only `preview_start` + `preview_list`. Tier 2
+ * readers (`preview_logs`, `preview_console_logs`, `preview_network`,
+ * `preview_snapshot`) belong here when they ship — same invalidation
+ * semantics; add them at the same time the tool registrations land so
+ * the dup-cache deadlock pattern doesn't recur.
+ *
+ * @type {readonly string[]}
+ */
+export const PREVIEW_READ_TOOLS = Object.freeze([
+    'preview_start',  // returns {serverId,url,reused} — wrong after stop
+    'preview_list',   // server set just changed
+]);
+
+/**
  * Stable JSON for cache-key purposes. Recursively sorts object keys so
  * `{q:{a:1,b:2}}` and `{q:{b:2,a:1}}` produce the same string. Arrays
  * preserve order (semantically meaningful). Primitives, null, and unknown

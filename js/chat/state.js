@@ -9,8 +9,14 @@ import { EventBus } from '../core.js';
 let chatContainer = null;
 let inputElement = null;
 
-// Edit state
-let pendingEdit = null;  // { code, explanation } waiting for user approval
+// Edit state — `{ code, raw, path?, originalContent? }`.
+// `code` is the proposed file contents; `raw` is the model's full reply
+// (often empty when the model returns only a fenced code block).
+// `path` and `originalContent` (1.7.1.x github#38) are snapshotted at
+// `setPendingEdit` time so the approval-card renderer can show path +
+// unified diff against the file the user is looking at, even if the
+// user edits the buffer before approving.
+let pendingEdit = null;
 
 // ask_user (github#33 Phase 1) — pending question state. Holds the
 // resolve fn the tool handler is awaiting; the AskUserCard component

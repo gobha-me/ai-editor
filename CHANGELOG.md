@@ -4,6 +4,99 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-05-09
+
+### Fix — Preview tool dup-cache invalidates on `preview_stop` ([github#39])
+
+Second instance of the recurring cache-invalidation-on-mutation pattern.
+The first was `edit_file` / `read_lines` (gitea#301, fixed at
+[1.7.1](#171---2026-04-25)) — same shape, same deadlock symptom.
+
+**Symptom.** Model calls `preview_start({path: 'index.html'})` → cache
+records `{serverId: 'srv_X', url, reused: false}`. Model later calls
+`preview_stop({serverId: 'srv_X'})` → server torn down, but the cached
+`preview_start` envelope still points at the now-dead `srv_X`. Next
+`preview_start` request hits the dup-cache, returns the dead `serverId`,
+the model retries 3× with identical args, the dup-refusal guard kicks in,
+and the loop dies.
+
+**Why this is the second time.** `js/chat/cache-invalidation.js` already
+hosts `invalidateCachesForPath` for the file-mutation case (FILE_MUTATING_
+TOOLS evict cached file reads). Preview tooling is session-keyed rather
+than path-keyed, so the existing helper is the wrong shape — it wants a
+sibling. We now have two `*_MUTATING_TOOLS` axes; the doc-comment on
+`PREVIEW_READ_TOOLS` flags Tier-2 readers (`preview_logs`,
+`preview_console_logs`, `preview_network`, `preview_snapshot`) to add
+when they ship so the next minor doesn't drift.
+
+**Fix.** New `invalidateCachesForPreviewMutation` in
+[`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js); new
+`PREVIEW_MUTATING_TOOLS` (`['preview_stop']`) and `PREVIEW_READ_TOOLS`
+(`['preview_start', 'preview_list']`) frozen arrays in
+[`js/chat/tool-classifications.js`](js/chat/tool-classifications.js).
+Wired post-execute in [`js/chat/handlers.js`](js/chat/handlers.js) right
+after the existing `invalidateCachesForPath` call. Eviction is
+session-scoped (drops *all* `PREVIEW_READ_TOOLS` entries on any preview
+mutation regardless of args) since the active server set is bounded by
+~1; coarser than path-scoped, but the false-positive eviction surface is
+bounded by 1.
+
+**Why not extend `STATEFUL_READ_TOOLS`.** Adding `preview_start` to that
+set would bypass the cache *unconditionally* and lose the legitimate
+"you already started this preview, here's the existing serverId" reuse
+signal. Mutation-driven invalidation is the right granularity — same
+conclusion the gitea#301 fix reached.
+
+**Tests.** Five new cases in
+[`tests/test-handlers-cache-invalidation.mjs`](tests/test-handlers-cache-invalidation.mjs):
+the deadlock repro at unit level, `preview_list` co-eviction, unrelated
+tool isolation, non-preview-mutator no-op, and the in-place `toolActionLog`
+mutation invariant the path helper already tests.
+
+### Fix — Edit-suggestion approval surface shows path + diff ([github#38])
+
+Shipped from the same HTML-Games dogfood session that surfaced #39.
+
+**Symptom.** When `detectIntent` heuristically routes a prompt to the
+legacy `handleEditRequest` path (e.g. anything with the word "change") and
+the model returns a fenced code block with no surrounding prose,
+`finalizeStreamingMessage('', {hasCode: true})` rendered just two
+buttons (Apply / Reject) over an empty body. The user couldn't tell what
+was being approved, defaulted to Reject, and the model looped silently.
+
+The issue body framed this as an "approval card with no tool name / args
+/ diff". The framing is slightly off — there is no write-tool approval
+card surface (write tools execute directly today, gated by Plan Mode
+cards). The bug was in the legacy edit-suggestion approval surface,
+which has been minimal forever; the symptom matches the issue exactly.
+
+**Fix.** `setPendingEdit` callers now snapshot `path`
+(`State.currentFile?.path`) and `originalContent`
+(`State.currentFile?.content`) at proposal time, so the diff baseline
+doesn't drift if the user edits the buffer before clicking Apply/Reject.
+A new `buildEditProposalCard` helper in
+[`js/chat/messages.js`](js/chat/messages.js) renders a
+`tool-call`-styled card mirroring the existing `addToolCallMessage`
+chrome — same `tool-call-summary` / `tool-call-body` classes, same diff
+tokens (`.diff-line`, `.diff-removed`, `.diff-added`). Three rendering
+tiers based on what `pendingEdit` carries: full unified diff via
+`renderUnifiedView` when path + originalContent are present; proposed
+code in a `<pre>` when there's no baseline; bare buttons (legacy) as a
+defensive fallback for a null `pendingEdit` racing virtualizer
+re-renders.
+
+No new CSS tokens — reuses existing `tool-call` and `diff-*` classes.
+
+**Out of scope.** The `detectIntent` "change"-keyword false-positive that
+funneled a commit-and-PR prompt into the legacy edit path is a separate
+latent bug. Fixing it here would conflate two issues; flagging for a
+follow-up.
+
+**Tests.** New browser test
+[`tests/test-edit-approval-render.js`](tests/test-edit-approval-render.js)
+(registered in `tests/index.html`) covers all three tiers: full path,
+no-baseline fallback, and defensive null.
+
 ## [2.1.0] - 2026-05-09
 
 ### Feature — Plugin Tools subsection in Settings → Plugins

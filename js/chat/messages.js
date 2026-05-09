@@ -5,7 +5,8 @@
 
 import { State, EventBus, Storage } from '../core.js';
 import { stripThinkBlocks, splitThinkBlocks } from '../llm.js';
-import { getChatContainer } from './state.js';
+import { getChatContainer, getPendingEdit } from './state.js';
+import { renderUnifiedView } from '../diff-viewer.js';
 import { ChatSummarizer } from './summarizer.js';
 import { ChatHistoryStore } from './history-store.js';
 import { escapeHtml } from '../utils/html.js';
@@ -271,7 +272,15 @@ export function finalizeStreamingMessage(content, meta = {}) {
         actionsEl.className = 'message-actions';
         
         if (meta.hasCode) {
-            // Code-specific buttons (apply/reject)
+            // github#38 — render an edit-proposal card mirroring the
+            // tool-call chrome (path + diff) so the user can see what
+            // they're approving instead of bare buttons over an empty
+            // body. Reads pendingEdit at render time so virtualizer
+            // re-renders Just Work without stashing state into meta.
+            const proposalEl = buildEditProposalCard();
+            if (proposalEl) {
+                messageEl.appendChild(proposalEl);
+            }
             actionsEl.innerHTML = `
                 <button class="btn-apply" onclick="window.Chat.applyPendingEdit()">✅ Apply to Editor</button>
                 <button class="btn-reject" onclick="window.Chat.rejectPendingEdit()">❌ Reject</button>
@@ -447,6 +456,75 @@ export function renderMessage(message, isLastUserMessage = false) {
     }
 
     chatContainer.appendChild(messageEl);
+}
+
+/**
+ * Build the edit-proposal card shown above the Apply/Reject buttons when
+ * `finalizeStreamingMessage` runs with `meta.hasCode = true`. Mirrors the
+ * `addToolCallMessage` chrome — same `tool-call-*` classes, same diff
+ * tokens — so we don't introduce new CSS surface (github#38).
+ *
+ * Three rendering tiers, picked from what `pendingEdit` carries:
+ *
+ *   1. Full      — path + originalContent + code: unified diff via
+ *                  `renderUnifiedView`.
+ *   2. No baseline — path + code only (no originalContent): proposed
+ *                    code in a `<pre>` (no diff possible).
+ *   3. Defensive — pendingEdit null: returns null, caller falls back to
+ *                  bare buttons. Should be unreachable in normal flow;
+ *                  defends against virtualizer re-renders racing
+ *                  pendingEdit clears.
+ *
+ * @returns {HTMLElement|null}
+ */
+function buildEditProposalCard() {
+    const pendingEdit = getPendingEdit();
+    if (!pendingEdit || typeof pendingEdit !== 'object' || !pendingEdit.code) {
+        return null;
+    }
+
+    const path = pendingEdit.path || null;
+    const proposedCode = String(pendingEdit.code);
+    const originalContent = pendingEdit.originalContent;
+    const hasBaseline = typeof originalContent === 'string';
+
+    const cardEl = document.createElement('div');
+    cardEl.className = 'chat-message tool-call tool-success edit-proposal';
+
+    const argSummary = path ? path : '(no file open)';
+    let body;
+    if (hasBaseline) {
+        const originalLines = originalContent.split('\n');
+        const modifiedLines = proposedCode.split('\n');
+        body = `
+            <div class="tool-call-section">
+                <div class="tool-call-label">Diff</div>
+                <div class="diff-viewer">${renderUnifiedView(originalLines, modifiedLines)}</div>
+            </div>
+        `;
+    } else {
+        body = `
+            <div class="tool-call-section">
+                <div class="tool-call-label">Proposed contents</div>
+                <pre class="tool-call-json">${escapeHtml(proposedCode)}</pre>
+            </div>
+        `;
+    }
+
+    cardEl.innerHTML = `
+        <details class="tool-call-details" open>
+            <summary class="tool-call-summary">
+                <span class="tool-call-icon">✏️</span>
+                <span class="tool-call-name">edit_file (proposed)</span>
+                <span class="tool-call-args-summary">${escapeHtml(argSummary)}</span>
+                <span class="tool-call-status">⏳ awaiting approval</span>
+            </summary>
+            <div class="tool-call-body">
+                ${body}
+            </div>
+        </details>
+    `;
+    return cardEl;
 }
 
 /**

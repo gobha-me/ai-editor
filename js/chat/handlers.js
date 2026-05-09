@@ -40,7 +40,7 @@ import { validateAndCleanHistory } from './history-validator.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
-import { invalidateCachesForPath } from './cache-invalidation.js';
+import { invalidateCachesForPath, invalidateCachesForPreviewMutation } from './cache-invalidation.js';
 import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
@@ -274,7 +274,16 @@ async function handleEditRequest(input) {
     });
 
     if (result.code) {
-        setPendingEdit(result);
+        // github#38 — stash path + originalContent snapshot so the
+        // approval card renderer can show what's being approved (path +
+        // diff against the file the user is currently looking at).
+        // Snapshot at proposal time so the diff baseline doesn't drift if
+        // the user edits the file before clicking Apply/Reject.
+        setPendingEdit({
+            ...result,
+            path: State.currentFile?.path || null,
+            originalContent: State.currentFile?.content ?? null,
+        });
         finalizeStreamingMessage(result.raw, { hasCode: true });
     } else {
         finalizeStreamingMessage(result.raw, { hasCode: false });
@@ -753,6 +762,21 @@ export async function handleGeneralRequest(input) {
                         });
                         if (_inv.evictedCache > 0 || _inv.evictedLog > 0) {
                             console.log(`[TOOL-LOOP] Cache invalidated for ${toolName}(${args.path || args.file_path || State.currentFile?.path || '?'}) — ${_inv.evictedCache} same-req, ${_inv.evictedLog} cross-req`);
+                        }
+
+                        // github#39 — preview-surface mutators (preview_stop)
+                        // invalidate cached preview reads so the next preview_start
+                        // doesn't return a dead serverId from the dup-cache.
+                        // Second instance of the recurring cache-invalidation-on-
+                        // mutation pattern; first was edit_file/read_lines
+                        // (gitea#301 / 1.7.1).
+                        const _invPrev = invalidateCachesForPreviewMutation({
+                            toolName,
+                            toolCallCache,
+                            toolActionLog: State.toolActionLog,
+                        });
+                        if (_invPrev.evictedCache > 0 || _invPrev.evictedLog > 0) {
+                            console.log(`[TOOL-LOOP] Preview cache invalidated for ${toolName} — ${_invPrev.evictedCache} same-req, ${_invPrev.evictedLog} cross-req`);
                         }
                         
                         // Cache successful read-only results (skip write tools)
