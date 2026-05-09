@@ -19,6 +19,7 @@
 
 import { EventBus } from '../core.js';
 import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
+import { buildLanguageEntries } from '../intelligence/retrieval/language-extensions.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -345,6 +346,17 @@ const gitlabProvider = {
             content,
             encoding: file.encoding
         };
+    },
+
+    /**
+     * GitLab `/projects/:id/languages` returns `{ Lang: percent }` already
+     * summing to 100. `buildLanguageEntries` re-normalizes by sum so the
+     * percent-vs-bytes asymmetry between providers doesn't affect rank.
+     */
+    async getLanguages(connection, owner, repo, ref = 'main') {
+        const endpoint = `/projects/${projectId(owner, repo)}/languages`;
+        const raw = await this.request(connection, 'GET', endpoint, null, null);
+        return buildLanguageEntries(raw);
     },
 
     // ========================================

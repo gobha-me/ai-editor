@@ -68,6 +68,7 @@
  * @property {number}               embeddingCacheExpiry
  * @property {number}               maxRelevantFiles
  * @property {number}               maxIndexFiles
+ * @property {number}               maxIndexTokens
  * @property {string}               llmEndpoint
  * @property {string}               llmApiKey
  * @property {string}               llmModel
@@ -250,7 +251,8 @@ const State = {
         autoReindex: true,         // Auto-update embeddings on file changes
         embeddingCacheExpiry: 7,   // Days before re-indexing
         maxRelevantFiles: 5,       // Max files to return for context queries
-        maxIndexFiles: 200,        // Hard cap on files indexed in a project (1.1.2.x will measure & re-tune)
+        maxIndexFiles: 5000,       // Hard upper-bound safety net (2.4.0); was 200 pre-2.4.0 as the primary lever
+        maxIndexTokens: 300000,    // 2.4.0 — primary ingest budget (chars/3.5 heuristic). ~700 avg-size files.
 
         // Retrieval (1.5.12 paraphrase + 1.8.1 cross-file expansion) — query
         // rewriting pre-passes plus future retrieval knobs.
@@ -1460,6 +1462,16 @@ function loadSettings() {
             }
             // Otherwise: no model and no provider → fresh-install default 'local'
             // wins via the merge spread below.
+        }
+        // One-shot migration (2.4.0): legacy `maxIndexFiles` was the primary
+        // ingest lever (default 200, slider min 25). 2.4.0 demotes it to a
+        // safety net (default 5000, slider min 500) and introduces
+        // `maxIndexTokens` as the primary lever. A saved value below the new
+        // slider min would clamp visually but persist as 200 — confusing.
+        // Bump anything below the new floor to the new default; users who
+        // explicitly raised the cap pre-2.4.0 keep their setting.
+        if (typeof saved.maxIndexFiles === 'number' && saved.maxIndexFiles < 500) {
+            saved.maxIndexFiles = 5000;
         }
         // Deep-merge known nested objects so new defaults aren't lost on upgrade.
         // Top-level keys are spread first, then nested objects are merged individually.

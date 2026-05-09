@@ -4,6 +4,94 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-05-09
+
+### Feature — Retrieval ingest hardening (b): language-stats ordering + token-budget cap
+
+Pays down the still-owed half of the "Retrieval ingest hardening"
+slice the roadmap named as Next. Half (a) — delta-indexing on branch
+switch — shipped at 2.2.0. This release ships half (b): the indexer
+walks files in descending primary-language order, and the cap that
+gates the walk migrates from a hardcoded file count to an estimated-
+token budget.
+
+**Why this slot.** The 2026-05-08 cost-dashboard export established
+the baseline — `search_in_files` was the dominant cost shape (12,380
+calls / ~1.3M tokens / >$1 on a single conversation in `mow5xbbvn7m1`).
+That's the X^N grep-fallback the model reaches for when retrieval
+isn't earning its keep, exactly the symptom of an indexer that
+exhausted the file cap before reaching the user's primary language.
+Half (b) addresses both legs: order so primary-language files come
+first, then cap on tokens (the cost-dashboard's natural unit) rather
+than file count.
+
+**Validation policy.** Ship-then-validate per the roadmap's
+"measurement-first minor" framing. Re-export
+`buildCostExport()` ([`js/settings/cost-tab.js`](js/settings/cost-tab.js))
+one week post-merge against a real conversation that exercises
+`search_in_files` heavily; before/after diff on
+`byTool['search_in_files'].estTokens` earns or refutes the slot. Small
+drop = (b) sufficient. Small drop = the deeper lever (content-hashed
+`chunk_id` rewrite) needs to come off the parking lot.
+
+**New tools.** `Git.getLanguages(owner, repo, ref?)`
+([`js/git.js`](js/git.js)) — facade over a new
+provider-interface method. GitHub, Gitea, GitLab implement against
+their respective `/languages` endpoints; the Local provider returns
+`null` and the indexer cascades to an in-memory extension scan over
+the file tree. Note: GitHub's endpoint computes against the default
+branch and ignores the `ref` parameter — accepted as a hint, not a
+filter, since retrieval ordering only consumes rank order.
+
+**Curated language→extensions map.** New
+[`js/intelligence/retrieval/language-extensions.js`](js/intelligence/retrieval/language-extensions.js)
+ships ~80 entries covering languages observed in real repos plus
+common code-editor staples. Keys mirror GitHub Linguist display names
+so raw provider responses match byte-for-byte. Not Linguist itself —
+its YAML is ~14k lines and version-coupled to a Ruby gem, overkill
+for the rank-order use case. Adding a 9th entry: one PR, one test
+run.
+
+**Indexer wire-up.** `manager._indexProject` ([`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js))
+swaps `eligible.slice(0, maxFiles)` for `orderByLanguageStats(...)`
++ `capByTokenBudget(...)` from the new
+[`js/intelligence/retrieval/ingest-ordering.js`](js/intelligence/retrieval/ingest-ordering.js)
+module. Cascade is `provider → extension scan → preserve tree order`;
+no mode ever blocks ingest. Branch-switch delta-indexing (2.2.0)
+keeps tree order — delta paths re-embed only diffs, so ordering
+wouldn't move the cost meaningfully there.
+
+**Cap migration.** `maxIndexFiles` (was 200) becomes the safety net,
+default raised to 5000. New `maxIndexTokens` (default 300_000) is the
+primary lever. Both caps apply; first to fire wins. Settings →
+Embeddings now surfaces both inputs with help text reframing the
+file-count cap. Workspace-settings safelist
+([`js/intelligence/workspace-settings/safelist.js`](js/intelligence/workspace-settings/safelist.js))
+gains `maxIndexTokens` so per-repo overrides can tune it.
+
+**First-file degenerate-case guard.** `capByTokenBudget` always emits
+the first file in the ordered list, even if it alone exceeds the
+budget. Avoids the empty-index outcome when an oversized file sits
+at the head of the dominant-language list.
+
+**Roadmap discrepancy.** ROADMAP.md §"Parallel 1.X tracks" describes
+a "500-file ceiling becoming a squeeze." The actual default was 200
+([`js/core.js:253`](js/core.js)), not 500 — the roadmap line was
+aspirational. The new safety net at 5000 strictly dominates either
+historical reading.
+
+**Out of scope (parked).**
+- **Content-hashed `chunk_id` rewrite** — the roadmap "deeper lever,"
+  gated on this slice's validation diff.
+- **Batched embedding API** — sequential per-chunk ingest unchanged.
+- **Branch-switch delta-path ordering** — delta re-embeds diffs; no
+  meaningful cost lever there.
+- **Live re-ordering during ingest** — order is computed once at walk start.
+
+**Tests.** New `tests/test-language-extensions.mjs` (15 cases),
+`tests/test-ingest-ordering.mjs` (19 cases), `tests/test-ingest-budget.mjs`
+(12 cases) — pure-helper coverage runnable under `node --test`.
+
 ## [2.3.0] - 2026-05-09
 
 ### Feature — Curated MCP server catalog ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 1)

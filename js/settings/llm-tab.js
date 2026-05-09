@@ -496,24 +496,25 @@ export function updateEmbeddingsStatus() {
     const modelName = State.settings.embeddingModel || 'Xenova/all-MiniLM-L6-v2';
     const mode = modelName.startsWith('Xenova/') ? 'Local (Browser)' : 'Remote (API)';
     const modeIcon = modelName.startsWith('Xenova/') ? '🏠' : '☁️';
-    const maxIndex = State.settings.maxIndexFiles || 200;
+    const maxFiles = State.settings.maxIndexFiles || 5000;
+    const maxTokens = State.settings.maxIndexTokens || 300000;
 
     if (!State.settings.useEmbeddings) {
         statusText.innerHTML = '❌ Embeddings disabled';
     } else if (stats.filesIndexed === 0) {
         statusText.innerHTML = `⏳ No files indexed yet. Will index on next project load.<br>
             ${modeIcon} <strong>${mode}</strong> mode selected<br>
-            📊 Limit: ${maxIndex} files max`;
+            📊 Budget: ${maxTokens.toLocaleString()} tokens (${maxFiles} file safety net)`;
     } else {
-        const limitNote = stats.filesIndexed >= maxIndex
-            ? `<br>⚠️ <em>At ${maxIndex}-file limit — increase "Max files to index" to cover more</em>`
+        const limitNote = stats.filesIndexed >= maxFiles
+            ? `<br>⚠️ <em>Hit ${maxFiles}-file safety net — raise "File-count safety net" or token budget</em>`
             : '';
         statusText.innerHTML = `
             ✅ <strong>${stats.filesIndexed} files</strong> indexed<br>
             📁 Project: <code>${stats.project || 'None'}</code><br>
             🤖 Model: <code>${State.settings.embeddingModel}</code><br>
             ${modeIcon} Mode: <strong>${mode}</strong><br>
-            📊 Limit: ${maxIndex} files max${limitNote}
+            📊 Budget: ${maxTokens.toLocaleString()} tokens (${maxFiles} file safety net)${limitNote}
             ${stats.isIndexing ? '<br>⏳ <em>Indexing in progress...</em>' : ''}
         `;
     }

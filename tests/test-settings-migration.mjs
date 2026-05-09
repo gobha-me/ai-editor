@@ -44,6 +44,11 @@ function applyMigration(saved) {
             saved.embeddingApiKey = saved.llmApiKey || '';
         }
     }
+    // 2.4.0 — legacy maxIndexFiles below the new slider floor (500) bumps
+    // to the new default. Mirrors core.js loadSettings exactly.
+    if (typeof saved.maxIndexFiles === 'number' && saved.maxIndexFiles < 500) {
+        saved.maxIndexFiles = 5000;
+    }
     return saved;
 }
 
@@ -214,8 +219,47 @@ test('integration: State.settings.embeddingProvider default is "local"', () => {
     assert.equal(State.settings.embeddingApiKey, '');
 });
 
-test('integration: State.settings.maxIndexFiles default is 200', () => {
+test('integration: State.settings.maxIndexFiles default is 5000 (safety net since 2.4.0)', () => {
     // Promoted from an implicit `|| 200` fallback at the call sites to a
-    // real default in 1.1.2; validates it landed in core.js without drift.
-    assert.equal(State.settings.maxIndexFiles, 200);
+    // real default in 1.1.2; raised to 5000 in 2.4.0 when `maxIndexTokens`
+    // (default 300_000) became the primary lever and `maxIndexFiles`
+    // demoted to a safety upper-bound.
+    assert.equal(State.settings.maxIndexFiles, 5000);
+});
+
+test('integration: State.settings.maxIndexTokens default is 300000 (primary lever, 2.4.0)', () => {
+    // 2.4.0 — token budget is the primary ingest lever; file count is the
+    // safety net. ~700 avg-size files at the chars/3.5 heuristic.
+    assert.equal(State.settings.maxIndexTokens, 300000);
+});
+
+test('migration (2.4.0): legacy maxIndexFiles below new floor bumps to safety-net default', () => {
+    // Legacy default 200 (and any explicit value < 500 from a pre-2.4.0
+    // user) bumps to 5000. The new slider floor is 500; staying below it
+    // would clamp visually but persist as the legacy value, confusing
+    // users on Save. Bumping at load time keeps stored + visible values
+    // in sync.
+    const out = applyMigration({ maxIndexFiles: 200 });
+    assert.equal(out.maxIndexFiles, 5000);
+
+    const out2 = applyMigration({ maxIndexFiles: 100 });
+    assert.equal(out2.maxIndexFiles, 5000);
+});
+
+test('migration (2.4.0): explicit pre-2.4.0 value at or above new floor preserved', () => {
+    // A user who explicitly raised `maxIndexFiles` to 500+ pre-2.4.0
+    // wanted their cap there; don't overwrite it.
+    const out = applyMigration({ maxIndexFiles: 500 });
+    assert.equal(out.maxIndexFiles, 500);
+
+    const out2 = applyMigration({ maxIndexFiles: 1000 });
+    assert.equal(out2.maxIndexFiles, 1000);
+});
+
+test('migration (2.4.0): no maxIndexFiles in saved settings is left alone', () => {
+    // Fresh installs / settings blobs without the key fall through to the
+    // core.js default via the merge spread; the migration shouldn't add
+    // the key.
+    const out = applyMigration({ theme: 'refined' });
+    assert.equal(out.maxIndexFiles, undefined);
 });

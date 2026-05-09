@@ -53,6 +53,21 @@ export function estimateTokens(content) {
 }
 
 /**
+ * Estimate tokens from a byte size when content isn't loaded yet.
+ * Used by ingest ordering (2.4.0) to budget the indexer's walk before
+ * paying to read each file. Same heuristic divisor as `estimateTokens`,
+ * so the two layers agree on cost. `null`/`undefined`/non-number byte
+ * counts return 0 (defensive against providers that omit `size`).
+ *
+ * @param {number|null|undefined} bytes
+ * @returns {number}
+ */
+export function estimateTokensFromSize(bytes) {
+    if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return 0;
+    return Math.ceil(bytes / CHARS_PER_TOKEN);
+}
+
+/**
  * Sum the `tokens` field across a Turn array. Used by Compactor budget
  * checks. Skips entries with non-numeric `tokens` (caller bug, not a
  * runtime crash).

@@ -13,6 +13,7 @@
 import { EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
+import { buildLanguageEntries } from '../intelligence/retrieval/language-extensions.js';
 
 // ============================================
 // ENCODING UTILITIES (shared)
@@ -260,6 +261,16 @@ const giteaProvider = {
             content,
             encoding: file.encoding
         };
+    },
+
+    /**
+     * Gitea `/repos/{owner}/{repo}/languages` mirrors GitHub's shape:
+     * `{ Lang: bytes }` against the default branch.
+     */
+    async getLanguages(connection, owner, repo, ref = 'main') {
+        const endpoint = `/repos/${owner}/${repo}/languages`;
+        const raw = await this.request(connection, 'GET', endpoint, null, null);
+        return buildLanguageEntries(raw);
     },
 
     // ========================================

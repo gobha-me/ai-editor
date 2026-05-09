@@ -204,6 +204,24 @@ const Git = {
         return provider.getFile(connection, owner, repo, path, ref, opts);
     },
 
+    /**
+     * Language statistics for the active connection's repo. Returns a
+     * `LanguageEntry[]` sorted descending by `weight` ∈ [0,1], or
+     * `null` when the provider doesn't expose an upstream endpoint
+     * (Local). The retrieval ingest orchestrator catches errors and
+     * cascades to an extension-scan fallback; callers do not need to
+     * wrap this in try/catch unless they want a different policy.
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} [ref='main']
+     * @returns {Promise<Array<{language: string, weight: number, extensions: string[]}>|null>}
+     */
+    async getLanguages(owner, repo, ref = 'main') {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getLanguages(connection, owner, repo, ref);
+    },
+
     // ========================================
     // BLAME & FILE HISTORY
     // ========================================

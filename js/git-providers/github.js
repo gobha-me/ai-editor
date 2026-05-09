@@ -18,6 +18,7 @@
 
 import { EventBus } from '../core.js';
 import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
+import { buildLanguageEntries } from '../intelligence/retrieval/language-extensions.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -349,6 +350,17 @@ const githubProvider = {
             content,
             encoding: file.encoding
         };
+    },
+
+    /**
+     * GitHub `/repos/{owner}/{repo}/languages` returns `{ Lang: bytes }`.
+     * Note: this endpoint computes against the repo's default branch and
+     * ignores the `ref` argument upstream — kept for interface symmetry.
+     */
+    async getLanguages(connection, owner, repo, ref = 'main') {
+        const endpoint = `/repos/${owner}/${repo}/languages`;
+        const raw = await this.request(connection, 'GET', endpoint, null, null);
+        return buildLanguageEntries(raw);
     },
 
     // ========================================

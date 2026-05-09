@@ -49,6 +49,10 @@ import {
     resolveLiveBranches,
     tryDeltaIndexFromBranch,
 } from './manager-helpers.js';
+import {
+    orderByLanguageStats,
+    capByTokenBudget,
+} from './ingest-ordering.js';
 
 // ============================================
 // Constants & helpers
@@ -430,8 +434,23 @@ async function indexProject(force = false, resume = false) {
     const allFiles = snapshot.fileTree.filter(f => f.type === 'file');
     const eligible = allFiles.filter(f => shouldIndex(f.path, f.size));
     const skipped = allFiles.length - eligible.length;
-    const maxFiles = State.settings.maxIndexFiles || 200;
-    let files = eligible.slice(0, maxFiles);
+
+    // 2.4.0 — order by primary-language weight so the user's main code
+    // is fully indexed before the budget closes. Provider stats win;
+    // an in-memory extension scan is the cascading fallback. Cap then
+    // walks the ordered list under `maxIndexTokens` (primary lever) +
+    // `maxIndexFiles` (safety upper-bound).
+    const ordered = await orderByLanguageStats(
+        eligible,
+        { owner: snapshot.owner, repo: snapshot.repo, ref: snapshot.branch },
+        (owner, repo, ref) => Git.getLanguages(owner, repo, ref),
+    );
+    const capped = capByTokenBudget(ordered.files, State.settings);
+    let files = capped.files;
+    if (capped.droppedForBudget > 0 || skipped > 0) {
+        console.log(`[Retrieval] ingest plan: ${files.length} files (${capped.estTotalTokens} est tokens, ` +
+            `source=${ordered.source}, ${capped.droppedForBudget} dropped for budget, ${skipped} ignored)`);
+    }
 
     if (resume && _resumeRemaining && _resumeRemaining.length > 0) {
         const remaining = new Set(_resumeRemaining);

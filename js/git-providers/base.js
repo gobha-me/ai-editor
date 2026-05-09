@@ -259,6 +259,32 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'getFile');
     },
 
+    /**
+     * Language statistics for the repo. Returns a `LanguageEntry[]`
+     * sorted descending by `weight` ∈ [0,1]. Used by retrieval ingest
+     * (2.4.0) to order eligible files by primary language so the
+     * token-budget cap exhausts on the user's main language last.
+     *
+     * **Feature-detection contract:** returns `null` when the provider
+     * does not support an upstream language-stats endpoint (Local).
+     * Callers cascade to an in-memory extension scan on `null`. Errors
+     * (network, 404, auth) propagate; the indexer's orchestrator
+     * `orderByLanguageStats` catches them and falls back the same way.
+     *
+     * Note: GitHub's `/languages` endpoint computes against the
+     * default branch and ignores the `ref` parameter — accepted as a
+     * hint, not a filter.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} [ref='main']
+     * @returns {Promise<Array<{language: string, weight: number, extensions: string[]}>|null>}
+     */
+    async getLanguages(connection, owner, repo, ref = 'main') {
+        return null;
+    },
+
     // ========================================
     // BLAME & FILE HISTORY
     // ========================================

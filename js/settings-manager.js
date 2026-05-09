@@ -273,11 +273,17 @@ function populateSettingsForm() {
     if (maxRelevantFilesValueEl) maxRelevantFilesValueEl.textContent = State.settings.maxRelevantFiles || 5;
 
     const maxIndexFilesEl = document.getElementById('settingMaxIndexFiles');
-    if (maxIndexFilesEl) maxIndexFilesEl.value = State.settings.maxIndexFiles || 200;
+    if (maxIndexFilesEl) maxIndexFilesEl.value = State.settings.maxIndexFiles || 5000;
 
     const maxIndexFilesValueEl = document.getElementById('maxIndexFilesValue');
-    if (maxIndexFilesValueEl) maxIndexFilesValueEl.textContent = State.settings.maxIndexFiles || 200;
-    
+    if (maxIndexFilesValueEl) maxIndexFilesValueEl.textContent = State.settings.maxIndexFiles || 5000;
+
+    const maxIndexTokensEl = document.getElementById('settingMaxIndexTokens');
+    if (maxIndexTokensEl) maxIndexTokensEl.value = State.settings.maxIndexTokens || 300000;
+
+    const maxIndexTokensValueEl = document.getElementById('maxIndexTokensValue');
+    if (maxIndexTokensValueEl) maxIndexTokensValueEl.textContent = String(State.settings.maxIndexTokens || 300000);
+
     const autoReindexEl = document.getElementById('settingAutoReindex');
     if (autoReindexEl) autoReindexEl.checked = State.settings.autoReindex !== false;
     
@@ -297,6 +303,13 @@ function populateSettingsForm() {
         maxIndexSlider.oninput = () => {
             const valueEl = document.getElementById('maxIndexFilesValue');
             if (valueEl) valueEl.textContent = maxIndexSlider.value;
+        };
+    }
+    const maxIndexTokensSlider = document.getElementById('settingMaxIndexTokens');
+    if (maxIndexTokensSlider) {
+        maxIndexTokensSlider.oninput = () => {
+            const valueEl = document.getElementById('maxIndexTokensValue');
+            if (valueEl) valueEl.textContent = maxIndexTokensSlider.value;
         };
     }
 

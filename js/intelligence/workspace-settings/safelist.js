@@ -89,6 +89,7 @@ export const SAFELIST = Object.freeze([
     'embeddingCacheExpiry',
     'maxRelevantFiles',
     'maxIndexFiles',
+    'maxIndexTokens',
     'embeddingProvider',
     'embeddingModel',
 
