@@ -4,6 +4,34 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — Trim shipped-slice detail out of `docs/ROADMAP.md`
+
+`docs/ROADMAP.md` line 7 explicitly states *"Shipped work and per-PR rationale
+live in CHANGELOG.md — don't duplicate it here"* but several sections had
+accreted CHANGELOG-shaped detail. Trimmed:
+
+- **Line 3 "Last updated" header** — replaced multi-paragraph release-line
+  narrative with a single line (`Last updated: 2026-05-09 (post-2.1.1)`).
+- **Line 18 "Just shipped" cell** — replaced ~3500-char essay summarizing
+  1.6.0–1.11.0 with `Shipped through v2.1.1 — see CHANGELOG.md`.
+- **§"Path to 2.0.0 — pinned slice table"** — collapsed each shipped row's
+  "What it changes" cell to `*see [CHANGELOG §X.Y.Z]*`; preserved structural
+  decision context (slice numbering, parallel-track interleaves) and the
+  Subsystem-contract / User-visible columns. Verification footing + sizing
+  + Settings UI placement notes preserved verbatim.
+- **§"Decision: AST chunker Phase 1 / lever C / lever B"** — dropped the
+  three measurement tables (CHANGELOG §1.7.0 / §1.7.2 / §1.8.1 own them);
+  preserved the decision narrative (which lever shipped + why; what stayed
+  parked + why).
+- **§"1.x extraction candidates" rows A + B** — collapsed the shipped rows
+  (1.12.0 branch switcher; 1.13.0 ▶ Start prominence) to one-line pointers.
+- **§Decisions 10** — collapsed Touch 1 + Touch 2 history (both shipped) to
+  a one-phrase pointer; preserved Touch 3 (in flight) and the
+  OPEN-QUESTIONS.md backfeed mechanism.
+
+Net: −47 / +23 lines, −12 KB. File is now ~15% smaller. No code changes;
+docs-only.
+
 ## [2.1.1] - 2026-05-09
 
 ### Fix — Preview tool dup-cache invalidates on `preview_stop` ([github#39])
