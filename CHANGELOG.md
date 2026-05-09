@@ -4,6 +4,103 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-05-09
+
+### Feature — Curated MCP server catalog ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 1)
+
+Pre-2.3.0 the MCP bridge was bring-your-own-server: users had to know the
+URL, transport, and auth conventions of the server they wanted to connect
+before the Settings tab could do anything for them. Discovery was tracker-
+issue-only — *"the MCP ecosystem is large and growing"* and the editor
+shipped no on-ramp into it. This release closes the on-ramp gap with a
+hand-curated catalog and a one-click pre-fill flow.
+
+**New behavior.** Settings → MCP Servers gains a `📚 Browse Catalog`
+button next to the existing `+ Add MCP Server` CTA. Clicking it opens an
+inline panel listing 8 public, browser-reachable MCP servers — DeepWiki,
+GitMCP, Semgrep, Apify, Firecrawl, Linear, Notion, Sentry — each with a
+description, category icon, transport, "🔑 token required" / "🔓 no
+token" badge, and a Docs ↗ link to the upstream documentation. Picking an
+entry pre-fills the existing add-server form with `label / url /
+transport / enabled / roles` and surfaces the entry's `tokenHint` /
+`authNote` in the test-result strip so the user knows where to get the
+credential. The token field is **never** pre-filled; the existing Save /
+Test path handles validation and the bridge picks up the new server via
+the existing `mcp:serversChanged` event.
+
+**Why curated, not fetched.** Phase 2 of the issue is registry
+integration (Glama / smithery / modelcontextprotocol-servers — pull
+entries dynamically). Phase 1 ships the *user-visible* benefit without
+the fetch / cache / offline-fallback machinery, so it earns its keep on
+its own measurement before we commit to a network dependency. Catalog
+data lives in source ([`js/mcp/catalog.js`](js/mcp/catalog.js)) — adding
+a 9th entry is a one-PR, one-test-run change. Header JSDoc walks an
+unfamiliar reader through how.
+
+**No stdio.** Bridge supports `streamable-http` and `sse` only
+([`js/mcp/protocol.js`](js/mcp/protocol.js)) — the catalog reflects that
+and the data tests refuse any other transport.
+
+**Pre-fill seam — `showServerEditor(serverId, starter?)`.** The new-mode
+branch (previously hardcoded to empty defaults at
+[`js/settings/mcp-servers-tab.js:141-149`](js/settings/mcp-servers-tab.js))
+now accepts an optional starter object. Single point of truth for new-
+server form values; symmetric with the existing `serverId` branch which
+pre-fills from a record. The starter shape is byte-compatible with
+`MCPServerRegistry.addServer()` ([`js/mcp/registry.js:86-105`](js/mcp/registry.js)).
+
+**Duplicate-id semantics.** If a catalog id collides with an already-
+saved server (`MCPServerRegistry.getServer(id)` truthy), the catalog row
+shows an "Already added" affordance and clicking it routes into **edit
+mode** for the existing record — no silent overwrite, no `addServer`
+duplicate-id throw. A toast clarifies "Remove it first to re-import from
+the catalog." (Two paths can collide: re-import after a manual edit, or
+two catalog entries that share a slug — the latter is caught at test
+time by the unique-id invariant.)
+
+**URL placeholders.** GitMCP and Firecrawl have URL templates with
+`{owner}/{repo}` and `{API_KEY}` segments. The catalog preserves them
+verbatim in the pre-filled URL field and the test asserts that. The user
+substitutes manually before clicking Save. Auto-substitution UI is
+deferred to Phase 2 — at 8 entries the friction is one extra paste, and
+the placeholder prose in `tokenHint` calls out the substitution
+explicitly.
+
+**Reuses existing precedent.** Rows render with the
+`.connection-card` / `.connection-card-info` / `.connection-card-label` /
+`.connection-card-meta` / `.connection-card-actions` classes from
+[`css/modals.css:393-467`](css/modals.css) — same shape as
+[`js/settings/plugins-tab.js:72-110`](js/settings/plugins-tab.js)'s
+plugin-tools list. **No new CSS.** Catalog panel uses the existing
+`.connection-editor` chrome (same as `#mcpServerEditor`) so the visual
+language stays consistent inside the tab.
+
+**Out of scope for 2.3.0.**
+- **Phase 2** — fetched registry (Glama / smithery / modelcontextprotocol-servers).
+- **Phase 3** — self-hosted templates / Docker compose flows.
+- **OAuth flows** — Linear and Notion's production posture is OAuth; the
+  catalog entries document the bearer-token workaround in `authNote`.
+  Phase 1.5 territory.
+- **Search / filter / category-tabs** in the picker — defer until catalog
+  has >15 entries; at 8 entries scrolling is fine.
+- **Auto-test on add** — the user hasn't entered a token yet for tokened
+  servers, so an automatic `testConnection` would fail spuriously.
+  Existing `🧪 Test` button stays the explicit-action path.
+- **Catalog versioning / migrations** — catalog is data-in-source; ships
+  with each release.
+
+**Tests.**
+- New [`tests/test-mcp-catalog.mjs`](tests/test-mcp-catalog.mjs) (12
+  cases): data validation — entries are present, frozen, slug-shaped,
+  unique, transport enum, category enum, https URLs (after `{...}`
+  substitution), tokenHint-when-required, icon coverage, fallback icon.
+- New [`tests/test-mcp-catalog-prefill.mjs`](tests/test-mcp-catalog-prefill.mjs)
+  (10 cases): `catalogEntryToStarter` pure-function shape — required
+  keys, never-pre-fill-token invariant across the shipped catalog, label
+  mirroring, URL placeholder preservation, transport fallback, sse pass-
+  through, enabled / roles defaults, null/undefined/non-object guards,
+  round-trip smoke for every shipped entry.
+
 ## [2.2.0] - 2026-05-09
 
 ### Feature — Retrieval delta-indexing on branch switch

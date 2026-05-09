@@ -11,6 +11,7 @@
 
 import { EventBus } from '../core.js';
 import { MCPServerRegistry } from '../mcp/registry.js';
+import { MCP_CATALOG, categoryIcon, catalogEntryToStarter } from '../mcp/catalog.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 let _editingServerId = null;
@@ -68,6 +69,21 @@ export function initMCPServersTab() {
             else if (kind === 'toggle') toggleServer(id);
         });
     }
+
+    const browseBtn = document.getElementById('btnBrowseMCPCatalog');
+    if (browseBtn) browseBtn.onclick = openCatalogBrowser;
+
+    const closeCatalogBtn = document.getElementById('btnCloseMCPCatalog');
+    if (closeCatalogBtn) closeCatalogBtn.onclick = closeCatalogBrowser;
+
+    const catalogList = document.getElementById('mcpCatalogList');
+    if (catalogList) {
+        catalogList.addEventListener('click', (ev) => {
+            const action = ev.target.closest('[data-mcp-catalog-id]');
+            if (!action) return;
+            onCatalogPick(action.dataset.mcpCatalogId);
+        });
+    }
 }
 
 function renderMCPServersList() {
@@ -121,7 +137,7 @@ function renderRow(server) {
     `;
 }
 
-function showServerEditor(serverId) {
+function showServerEditor(serverId, starter) {
     _editingServerId = serverId;
     const editor = document.getElementById('mcpServerEditor');
     const title = document.getElementById('mcpServerEditorTitle');
@@ -140,12 +156,12 @@ function showServerEditor(serverId) {
         setRolesCheckboxes(server.roles);
     } else {
         if (title) title.textContent = 'New MCP Server';
-        document.getElementById('mcpEditLabel').value = '';
-        document.getElementById('mcpEditUrl').value = '';
-        document.getElementById('mcpEditToken').value = '';
-        document.getElementById('mcpEditTransport').value = 'streamable-http';
-        document.getElementById('mcpEditEnabled').checked = true;
-        setRolesCheckboxes('all');
+        document.getElementById('mcpEditLabel').value = starter?.label ?? '';
+        document.getElementById('mcpEditUrl').value = starter?.url ?? '';
+        document.getElementById('mcpEditToken').value = starter?.token ?? '';
+        document.getElementById('mcpEditTransport').value = starter?.transport ?? 'streamable-http';
+        document.getElementById('mcpEditEnabled').checked = starter?.enabled !== false;
+        setRolesCheckboxes(starter?.roles ?? 'all');
     }
     if (result) result.style.display = 'none';
     editor.style.display = 'block';
@@ -286,6 +302,87 @@ async function removeServer(serverId) {
     window.showToast('MCP server removed', 'success');
 }
 
+// ============================================
+// 2.3.0 — github#27 Phase 1: Curated MCP catalog picker.
+// ============================================
+
+function openCatalogBrowser() {
+    const panel = document.getElementById('mcpCatalogPanel');
+    if (!panel) return;
+    hideServerEditor();
+    renderCatalogList();
+    panel.style.display = 'block';
+}
+
+function closeCatalogBrowser() {
+    const panel = document.getElementById('mcpCatalogPanel');
+    if (panel) panel.style.display = 'none';
+}
+
+function renderCatalogList() {
+    const container = document.getElementById('mcpCatalogList');
+    if (!container) return;
+
+    container.innerHTML = MCP_CATALOG.map(entry => {
+        const alreadyAdded = !!MCPServerRegistry.getServer(entry.id);
+        const tokenBadge = entry.requiresToken
+            ? '<span title="Requires a bearer token or API key">🔑 token required</span>'
+            : '<span title="No authentication needed">🔓 no token</span>';
+        const docsLink = `<a href="${escapeAttr(entry.docsUrl)}" target="_blank" rel="noopener noreferrer">Docs ↗</a>`;
+        const action = alreadyAdded
+            ? `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="Edit existing server">Already added</button>`
+            : `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="Pre-fill the add-server form">Use this server</button>`;
+
+        return `
+            <div class="connection-card">
+                <div class="connection-card-icon">${categoryIcon(entry.category)}</div>
+                <div class="connection-card-info">
+                    <div class="connection-card-label">${escapeHtml(entry.name)}</div>
+                    <div class="connection-card-meta">${escapeHtml(entry.description)}</div>
+                    <div class="connection-card-meta">
+                        ${escapeHtml(entry.category)} · ${escapeHtml(entry.transport)} · ${tokenBadge} · ${docsLink}
+                    </div>
+                </div>
+                <div class="connection-card-actions">
+                    ${action}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function onCatalogPick(entryId) {
+    const entry = MCP_CATALOG.find(e => e.id === entryId);
+    if (!entry) return;
+
+    closeCatalogBrowser();
+
+    // Already-added → open existing record in edit mode (no duplicate, no overwrite).
+    const existing = MCPServerRegistry.getServer(entry.id);
+    if (existing) {
+        showServerEditor(entry.id);
+        if (window.showToast) {
+            window.showToast(`Editing existing "${entry.name}". Remove it first to re-import from the catalog.`, 'info');
+        }
+        return;
+    }
+
+    showServerEditor(null, catalogEntryToStarter(entry));
+
+    // Surface tokenHint / authNote into the existing test-result strip — already
+    // styled, already in DOM, no new UI needed.
+    if (entry.tokenHint || entry.authNote) {
+        const resultEl = document.getElementById('mcpServerTestResult');
+        if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.style.color = 'var(--tk-text-muted)';
+            resultEl.textContent = [entry.tokenHint, entry.authNote].filter(Boolean).join(' · ');
+        }
+    }
+}
+
 // Test seam.
 export const __test_renderMCPServersList = renderMCPServersList;
 export const __test_showServerEditor = showServerEditor;
+export const __test_renderCatalogList = renderCatalogList;
+export const __test_onCatalogPick = onCatalogPick;

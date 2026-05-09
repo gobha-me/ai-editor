@@ -705,10 +705,27 @@
             <!-- Populated by js/settings/mcp-servers-tab.js -->
         </div>
 
-        <div style="margin-top: 0.75rem;">
+        <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
             <button type="button" class="btn btn-primary" id="btnAddMCPServer">
                 <span>＋ Add MCP Server</span>
             </button>
+            <button type="button" class="btn btn-secondary" id="btnBrowseMCPCatalog">
+                <span>📚 Browse Catalog</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MCP Catalog Picker (hidden by default, shown on Browse Catalog). 2.3.0 — github#27 Phase 1. -->
+    <div id="mcpCatalogPanel" class="connection-editor" style="display: none;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.75rem;">
+            <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">Browse MCP Server Catalog</h4>
+            <button type="button" class="btn btn-secondary" id="btnCloseMCPCatalog">Close</button>
+        </div>
+        <p style="margin: 0 0 0.75rem 0; color: var(--text-secondary); font-size: var(--font-sm);">
+            Pick a server to pre-fill the form. You'll add your own credentials and review before saving.
+        </p>
+        <div id="mcpCatalogList">
+            <!-- Populated by js/settings/mcp-servers-tab.js -->
         </div>
     </div>
 
