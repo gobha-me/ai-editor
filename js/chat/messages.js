@@ -12,11 +12,69 @@ import { ChatHistoryStore } from './history-store.js';
 import { escapeHtml } from '../utils/html.js';
 import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consent-card.js';
 import { consentList } from '../intelligence/memory/index.js';
+import { Profiles } from '../profiles/registry.js';
+import { ConversationManager } from './conversations.js';
 import {
     mountVirtualizer,
     teardownVirtualizer,
     notifyAppended as virtNotifyAppended,
 } from './message-virtualizer.js';
+
+/**
+ * Build the empty-state profile chip row HTML — one chip per
+ * `Profiles.list()` entry. The active chip is the per-chat binding (if
+ * any) else the workspace default.
+ *
+ * **2.8.0** — surfaces the new-chat profile picker inside `.chat-welcome`
+ * so the user picks at the moment they start a chat (one profile for the
+ * life of a chat, per Decision §2). Picker auto-unmounts on first
+ * message because `.chat-welcome` is replaced by the message virtualizer.
+ *
+ * @returns {string} HTML
+ */
+function _renderEmptyStateProfileChips() {
+    const entries = Profiles.list();
+    const active = ConversationManager.getEffectiveProfileName();
+    const chips = entries.map(e => {
+        const isActive = e.name === active;
+        return `<button class="welcome-profile-chip${isActive ? ' is-active' : ''}" type="button" data-profile-name="${escapeHtml(e.name)}" title="${escapeHtml(e.description)}">${escapeHtml(e.label)}</button>`;
+    }).join('');
+    const activeEntry = entries.find(e => e.name === active) || entries[0];
+    const desc = activeEntry ? activeEntry.description : '';
+    return `
+        <div class="welcome-profile-picker" data-welcome-profile-picker>
+            <p class="welcome-profile-picker-label">Profile for this chat</p>
+            <div class="welcome-profile-chips" role="radiogroup" aria-label="Profile for this chat">
+                ${chips}
+            </div>
+            <p class="welcome-profile-chip-desc" data-welcome-profile-desc>${escapeHtml(desc)}</p>
+        </div>
+    `;
+}
+
+/**
+ * Wire the empty-state chip row's click handlers. Called after innerHTML
+ * is set on the chat container. Idempotent — bails if the picker isn't
+ * mounted (chat is non-empty).
+ */
+function _wireEmptyStateProfileChips() {
+    const picker = document.querySelector('[data-welcome-profile-picker]');
+    if (!picker) return;
+    const desc = picker.querySelector('[data-welcome-profile-desc]');
+    const chips = picker.querySelectorAll('.welcome-profile-chip');
+    chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            const name = chip.getAttribute('data-profile-name');
+            if (!name || !Profiles.has(name)) return;
+            chips.forEach(c => c.classList.remove('is-active'));
+            chip.classList.add('is-active');
+            const entry = Profiles.list().find(e => e.name === name);
+            if (desc && entry) desc.textContent = entry.description;
+            ConversationManager.setActiveProfile(name);
+            EventBus.emit('profile:changed', { profile: name, source: 'welcome-chip' });
+        });
+    });
+}
 
 /**
  * Add a message to chat history and render it.
@@ -749,8 +807,10 @@ export function renderMessages(historyOverride = null) {
                     <li>Fix bugs or improve code</li>
                 </ul>
                 <p class="hint">Tip: Select code in the editor and ask about it specifically!</p>
+                ${_renderEmptyStateProfileChips()}
             </div>
         `;
+        _wireEmptyStateProfileChips();
         return;
     }
 

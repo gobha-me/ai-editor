@@ -34,6 +34,14 @@
  * picking each one observable. See `SYNTHETIC_ENTRIES` rationale below
  * and ROADMAP §"After 2.0.0" for the promotion trigger.
  *
+ * **2.8.0 — first granular promotion: `kb.v1`.** `kb.v1` carries a
+ * `systemPrompt` addendum (*"answer only from attached docs, cite line
+ * ranges, no edits"*) that makes picking it user-observable without
+ * depending on unbuilt infrastructure. Moves to `ENTRIES` alongside
+ * `chat.v1` / `coder.v1`. `chat_multi.v1` and `rp.v1` stay in
+ * `SYNTHETIC_ENTRIES` until they earn their own addenda — granular
+ * promotion is fine.
+ *
  * @module profiles/registry
  */
 
@@ -76,6 +84,11 @@ const ENTRIES = [
         label: 'Coder',
         description: 'Coder surface — Rules 1/2/5 compression, workspace_code retrieval, session-scope scratchpad, full coder tool catalog.',
     },
+    {
+        profile: KB_V1,
+        label: 'KB',
+        description: 'Knowledge-base assistant — answers strictly from attached docs with line-range citations; refuses edits and code generation. No compression, no memory, minimal tools.',
+    },
 ];
 
 /**
@@ -88,30 +101,30 @@ const ENTRIES = [
  *      so the dropdown stays simple; the migration preserves granularity
  *      for everyone whose role didn't fit `chat` or `coder`.
  *
- *   2. **Phase 2 architectural surfaces** — `chat_multi.v1` / `rp.v1` /
- *      `kb.v1`. Shipped as data + harness coverage at 2.6.0; *deliberately
- *      not* surfaced in the picker yet. Their declared overrides
- *      (shared_conversation / per_speaker / lore / per_persona / kb_documents
- *      collections, Rule 4, voice-preserving Rule 5) reference runtime
- *      infrastructure that doesn't exist. Picking one today would behave
- *      indistinguishably from `chat.v1` in most respects, which is worse
- *      than not offering it at all.
+ *   2. **Phase 2 architectural surfaces** — `chat_multi.v1` / `rp.v1`.
+ *      Shipped as data + harness coverage at 2.6.0; *deliberately not*
+ *      surfaced in the picker yet. Their declared overrides
+ *      (shared_conversation / per_speaker / lore / per_persona collections,
+ *      Rule 4, voice-preserving Rule 5) reference runtime infrastructure
+ *      that doesn't exist. Picking one today would behave indistinguishably
+ *      from `chat.v1` in most respects, which is worse than not offering
+ *      it at all.
  *
  *      **Promotion gate** — move back to `ENTRIES` when each profile has
  *      *something a user can observe choosing it for*. The natural lever
  *      is per-profile `systemPrompt` addenda mirroring 1.23.x's
- *      `plugin-dev.v1` precedent: a `kb.v1` that prompts *"answer only
- *      from attached_docs, cite line ranges, no edits"* actually behaves
- *      differently. See ROADMAP §"After 2.0.0" → "Profiles Phase 2 picker
- *      promotion" for the trigger spec. Custom plugin profiles inheriting
- *      `base: 'rp.v1'` etc. unlock with the Phase 4 authoring API.
+ *      `plugin-dev.v1` precedent. `kb.v1` graduated this way at 2.8.0
+ *      (*"answer only from attached docs, cite line ranges, no edits"*)
+ *      and now lives in `ENTRIES`. See ROADMAP §"After 2.0.0" → "Profiles
+ *      Phase 2 picker promotion" for the trigger spec. Custom plugin
+ *      profiles inheriting `base: 'rp.v1'` etc. unlock with the Phase 4
+ *      authoring API.
  *
  * @type {Profile[]}
  */
 const SYNTHETIC_ENTRIES = [
     CHAT_MULTI_V1,
     FULL_V1,
-    KB_V1,
     PLUGIN_DEV_V1,
     PM_V1,
     REVIEWER_V1,

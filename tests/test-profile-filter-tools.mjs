@@ -197,12 +197,13 @@ test('synthetic profiles satisfy Profiles.has', () => {
 });
 
 test('synthetic profiles are excluded from Profiles.list (picker UI)', () => {
-    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 ship lookup-only alongside the
-    // legacy-role synthetics until per-profile systemPrompt addenda land
-    // (promotion gate documented in `js/profiles/registry.js` and ROADMAP
-    // §"After 2.0.0").
+    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 shipped lookup-only alongside
+    // the legacy-role synthetics. 2.8.0 — kb.v1 graduated to ENTRIES
+    // carrying its KB-mode systemPrompt addendum (promotion gate documented
+    // in `js/profiles/registry.js` and ROADMAP §"After 2.0.0"). chat_multi.v1
+    // and rp.v1 stay in SYNTHETIC_ENTRIES until each earns its own addendum.
     const names = Profiles.list().map(e => e.name);
-    assert.deepEqual(names, ['chat.v1', 'coder.v1']);
+    assert.deepEqual(names, ['chat.v1', 'coder.v1', 'kb.v1']);
 });
 
 test('plugin-dev.v1 carries the SDK addendum systemPrompt', () => {
@@ -213,11 +214,19 @@ test('plugin-dev.v1 carries the SDK addendum systemPrompt', () => {
     assert.ok(profile.systemPrompt.includes('END SDK REFERENCE'));
 });
 
-test('non-synthetic profiles do not carry systemPrompt (slice 1 — additive optional)', () => {
+test('kb.v1 carries the KB-mode addendum systemPrompt (2.8.0 promotion gate)', () => {
+    const profile = Profiles.get('kb.v1');
+    assert.ok(profile, 'kb.v1 must resolve');
+    assert.equal(typeof profile.systemPrompt, 'string');
+    assert.ok(profile.systemPrompt.includes('KB MODE'));
+    assert.ok(profile.systemPrompt.includes('attached doc'));
+    assert.ok(profile.systemPrompt.toLowerCase().includes('cite'));
+});
+
+test('non-systemPrompt-carrying profiles leave the field absent', () => {
     // chat.v1 / coder.v1 / full.v1 / pm.v1 / reviewer.v1 leave systemPrompt
-    // absent; only plugin-dev.v1 carries it. Slice 2 (1.24.0) flips
-    // js/prompts.js to read from `profile.systemPrompt`; until then the
-    // absence is the expected shape.
+    // absent. plugin-dev.v1 (1.23.x) and kb.v1 (2.8.0) are the two profiles
+    // that carry one — their presence assertions live above.
     for (const name of ['chat.v1', 'coder.v1', 'full.v1', 'pm.v1', 'reviewer.v1']) {
         const profile = Profiles.get(name);
         assert.ok(profile, `${name} must resolve`);

@@ -17,6 +17,17 @@
  * No standalone `citation_lookup` tool exists today; reserved for a
  * follow-up slice.
  *
+ * **2.8.0 — picker promotion via `systemPrompt` addendum.** Phase 2 shipped
+ * as `SYNTHETIC_ENTRIES` lookup-only at 2.6.0 because the declared overrides
+ * referenced runtime infrastructure that didn't exist; picking kb.v1 then
+ * would have behaved indistinguishably from chat.v1. The `KB_SYSTEM_PROMPT`
+ * addendum below is the load-bearing lift — it makes choosing kb.v1 a
+ * user-observable behavior change (model refuses to write code, cites
+ * line ranges, declines to answer outside attached docs) without depending
+ * on unbuilt infrastructure. Pattern mirrors `plugin-dev.v1`'s precedent
+ * (1.23.x). Consumer site is `js/prompts.js:286-288` — already wired to
+ * append `profile.systemPrompt` to the base prompt.
+ *
  * @module profiles/kb-v1
  */
 
@@ -25,8 +36,30 @@
  */
 
 /**
+ * KB-mode constraint addendum. Appended to the editor's base systemPrompt
+ * when kb.v1 is the active profile. Short by design — verbose addenda burn
+ * cache against the 200+ line base prompt.
+ *
+ * @type {string}
+ */
+export const KB_SYSTEM_PROMPT = `
+=== KB MODE ===
+
+You are answering from a knowledge base. Constraints:
+
+- Answer ONLY from content in the user's attached documents. If the answer
+  is not in the attached documents, say "not found in attached docs" — do
+  not generalize from training-data knowledge.
+- Cite every claim with the source path and line range, e.g.
+  \`(docs/handbook.md:42-58)\`. Multiple citations welcome.
+- Do NOT propose edits, run tools that mutate state, or generate code.
+  Read-only consultation only.
+`.trim();
+
+/**
  * KB overrides on top of `chat.v1`. Disables compression and task-ledger
  * subsystems entirely; narrows retrieval to `kb_documents`; drops memory.
+ * Carries the `KB_SYSTEM_PROMPT` addendum (2.8.0).
  *
  * @type {Profile}
  */
@@ -80,4 +113,6 @@ export const KB_V1 = {
         // pattern doesn't benefit"*.
         enabled: false,
     },
+
+    systemPrompt: KB_SYSTEM_PROMPT,
 };

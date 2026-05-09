@@ -31,7 +31,7 @@
 import { State, EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 import { Profiles } from '../profiles/registry.js';
-import { getActiveProfileName } from '../profiles/resolve.js';
+import { ConversationManager } from '../chat/conversations.js';
 
 /**
  * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
@@ -163,7 +163,9 @@ export const ToolRegistry = {
             return { allowed: true };
         }
 
-        const profileName = getActiveProfileName(State.settings);
+        // 2.8.0 — `ConversationManager.getEffectiveProfileName()` lets
+        // a per-chat profile binding win over `State.settings.profile`.
+        const profileName = ConversationManager.getEffectiveProfileName();
         const filtered = Profiles.filterTools([def], profileName);
         if (filtered.length === 1) {
             return { allowed: true };
@@ -174,7 +176,7 @@ export const ToolRegistry = {
             allowed: false,
             reason: `Profile '${profileName}' is not permitted to use tool '${name}'. ` +
                     `Tool requires one of: ${toolRoles.join(', ') || '(none declared)'}. ` +
-                    `Switch profile in Settings or use a different tool.`
+                    `Switch profile via the new-chat picker or in Settings.`
         };
     },
     
@@ -189,7 +191,7 @@ export const ToolRegistry = {
         // === ROLE ENFORCEMENT (server-side gate) ===
         const access = this.checkRoleAccess(name);
         if (!access.allowed) {
-            console.warn(`[ToolRegistry] 🚫 Profile violation: ${name} blocked for profile '${getActiveProfileName(State.settings)}'`);
+            console.warn(`[ToolRegistry] 🚫 Profile violation: ${name} blocked for profile '${ConversationManager.getEffectiveProfileName()}'`);
             return { error: access.reason };
         }
         
@@ -244,9 +246,11 @@ export const ToolRegistry = {
      * **2.0.0 — slice 3 flip.** Was `getToolsForRole(roleId)` pre-2.0.0;
      * now keyed on profile name with the body delegating to
      * `Profiles.filterTools`. Caller-supplied profileName is honored;
-     * default reads `getActiveProfileName(State.settings)`. The legacy
-     * name `_registeredRoles` on tool defs is preserved — those values
-     * are admission tags consumed by `Profile.tools.allowed_groups`.
+     * default reads `ConversationManager.getEffectiveProfileName()` so
+     * per-chat profile bindings win over `State.settings.profile`
+     * (2.8.0). The legacy name `_registeredRoles` on tool defs is
+     * preserved — those values are admission tags consumed by
+     * `Profile.tools.allowed_groups`.
      *
      * Renamed from `getToolsForRole`; the legacy alias is preserved
      * below for any plugin-side caller that still imports the old
@@ -256,7 +260,7 @@ export const ToolRegistry = {
      * @returns {ToolDefinition[]}
      */
     getToolsForProfile(profileName) {
-        const name = profileName || getActiveProfileName(State.settings);
+        const name = profileName || ConversationManager.getEffectiveProfileName();
         return Profiles.filterTools(this.definitions, name);
     },
 

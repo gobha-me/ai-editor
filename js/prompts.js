@@ -12,7 +12,7 @@
 
 import { State } from './core.js';
 import { Profiles } from './profiles/index.js';
-import { getActiveProfileName } from './profiles/resolve.js';
+import { ConversationManager } from './chat/conversations.js';
 import { buildScratchpadPrompt } from './tools/scratchpad-tools.js';
 import { buildTodoPrompt } from './tools/todo-tools.js';
 import { RetrievalManager } from './intelligence/retrieval/manager.js';
@@ -279,10 +279,15 @@ function buildSystemPrompt(opts = {}) {
     // text injection retires alongside the role grid; the `profile.systemPrompt`
     // injection (slice-2 1.24.0 wire-up) is the load-bearing surface — the
     // picker UI surfaces the active profile in Settings, no need for in-prompt
-    // redundancy. `plugin-dev.v1` carries `PLUGIN_DEV_SYSTEM_PROMPT` as its
-    // `systemPrompt`; other profiles have none, so the block is a no-op for
-    // them.
-    const profile = Profiles.get(getActiveProfileName(State.settings));
+    // redundancy. `plugin-dev.v1` (1.23.x) and `kb.v1` (2.8.0) carry
+    // systemPrompt addenda; other profiles leave the field absent, so the
+    // block is a no-op for them.
+    //
+    // 2.8.0 — `getEffectiveProfileName()` consults the active conversation's
+    // per-chat profile binding first, then falls back to settings. The
+    // chip selector in `.chat-welcome` is the surface that writes the
+    // per-chat binding (`ConversationManager.setActiveProfile`).
+    const profile = Profiles.get(ConversationManager.getEffectiveProfileName());
     if (profile && profile.systemPrompt) {
         prompt += `\n\n${profile.systemPrompt}`;
     }

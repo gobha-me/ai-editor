@@ -98,6 +98,34 @@ export function getActiveProfileName(settings) {
 }
 
 /**
+ * Pick the active profile name for system-prompt assembly given a
+ * per-conversation override and the workspace settings default.
+ *
+ * **2.8.0 — per-chat profile binding.** Conversations now carry an
+ * optional `profile` field set via the new-chat chip selector in
+ * `.chat-welcome` (one profile for the life of a chat per Decision §2's
+ * lifetime contract). Resolution order:
+ *
+ *   1. Active conversation's `profile` (if set and registered)
+ *   2. `settings.profile` via `getActiveProfileName`
+ *   3. `'chat.v1'` (the lowest-config baseline)
+ *
+ * Pure function — `ConversationManager.getActiveProfile()` is the
+ * normal source for the first arg, but this helper takes it explicitly
+ * so callers in browser code and Node tests share one truth-table.
+ *
+ * @param {string|null|undefined} conversationProfile  Per-chat binding (null when unset).
+ * @param {{ profile?: string|null } | null | undefined} settings        Workspace default.
+ * @returns {string}                                                       Resolved profile name.
+ */
+export function pickProfileName(conversationProfile, settings) {
+    if (typeof conversationProfile === 'string' && Profiles.has(conversationProfile)) {
+        return conversationProfile;
+    }
+    return getActiveProfileName(settings);
+}
+
+/**
  * Resolve compression configuration for a given profile. Returns the
  * exact shape `Compactor.compress()` consumes for `rules` +
  * `preserve_recent` (the caller still supplies `history`,
@@ -313,7 +341,7 @@ export function resolveDefaultRememberScope(settings) {
  * circuit; everything else (including the four synthetic profiles)
  * falls through to `CHAT_V1`'s defaults.
  *
- * @param {string|null|undefined} profileName  e.g. from `getActiveProfileName(State.settings)`.
+ * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
  * @returns {{ enabled: boolean, timeout_ms: number, max_output_bytes: number, profileName: string }}
  */
 export function resolveScriptAutomationConfig(profileName) {
@@ -340,7 +368,7 @@ export function resolveScriptAutomationConfig(profileName) {
  * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0; profile-keyed
  * now.
  *
- * @param {string|null|undefined} profileName  e.g. from `getActiveProfileName(State.settings)`.
+ * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
  * @returns {{ enabled: boolean, profileName: string }}
  */
 export function resolvePreviewConfig(profileName) {

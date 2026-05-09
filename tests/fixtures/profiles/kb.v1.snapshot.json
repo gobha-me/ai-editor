@@ -64,7 +64,8 @@
     },
     "preview": {
       "enabled": false
-    }
+    },
+    "systemPrompt": "=== KB MODE ===\n\nYou are answering from a knowledge base. Constraints:\n\n- Answer ONLY from content in the user's attached documents. If the answer\n  is not in the attached documents, say \"not found in attached docs\" — do\n  not generalize from training-data knowledge.\n- Cite every claim with the source path and line range, e.g.\n  `(docs/handbook.md:42-58)`. Multiple citations welcome.\n- Do NOT propose edits, run tools that mutate state, or generate code.\n  Read-only consultation only."
   },
   "subsystem_dispatch": {
     "compression": {

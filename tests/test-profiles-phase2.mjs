@@ -35,20 +35,21 @@ test('Phase 2 — three new profiles are registered and resolvable', () => {
     assert.equal(Profiles.has('kb.v1'), true);
 });
 
-test('Phase 2 — three new profiles are intentionally hidden from the picker', () => {
+test('Phase 2 — chat_multi.v1 / rp.v1 stay hidden until they earn systemPrompt addenda; kb.v1 promoted at 2.8.0', () => {
     // Promotion gate: per-profile systemPrompt addenda (mirroring
     // plugin-dev.v1's 1.23.x precedent) need to land before these become
-    // user-visible options. Until then their declared overrides reference
-    // runtime infrastructure that doesn't exist (chunker metadata, Rule 4,
-    // voice-preserving Rule 5), so picking one would behave like chat.v1
-    // and confuse users. See SYNTHETIC_ENTRIES rationale in
-    // `js/profiles/registry.js` and ROADMAP §"After 2.0.0".
+    // user-visible options. `kb.v1` graduated at 2.8.0 carrying its KB-mode
+    // addendum (*"answer only from attached docs, cite line ranges, no
+    // edits"*). `chat_multi.v1` and `rp.v1` stay in SYNTHETIC_ENTRIES until
+    // each earns its own addendum — granular promotion is fine. See
+    // SYNTHETIC_ENTRIES rationale in `js/profiles/registry.js` and ROADMAP
+    // §"After 2.0.0" → "Profiles Phase 2 picker promotion".
     const names = Profiles.list().map(e => e.name);
     assert.equal(names.includes('chat_multi.v1'), false);
     assert.equal(names.includes('rp.v1'), false);
-    assert.equal(names.includes('kb.v1'), false);
-    // Picker stays at chat + coder.
-    assert.deepEqual(names, ['chat.v1', 'coder.v1']);
+    assert.equal(names.includes('kb.v1'), true);
+    // Picker = chat + coder + kb after 2.8.0.
+    assert.deepEqual(names, ['chat.v1', 'coder.v1', 'kb.v1']);
 });
 
 test('all three Phase 2 profiles declare base: chat.v1', () => {

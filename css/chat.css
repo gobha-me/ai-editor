@@ -359,6 +359,62 @@
     margin-top: 1rem;
 }
 
+/* 2.8.0 — empty-state profile picker (one profile for the life of a chat). */
+.welcome-profile-picker {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.welcome-profile-picker-label {
+    font-size: var(--chat-sm);
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.welcome-profile-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+}
+
+.welcome-profile-chip {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: var(--chat-sm);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.welcome-profile-chip:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.welcome-profile-chip.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-primary);
+}
+
+.welcome-profile-chip:focus-visible {
+    outline: 2px solid var(--focus-ring, var(--accent));
+    outline-offset: 2px;
+}
+
+.welcome-profile-chip-desc {
+    margin-top: 0.6rem;
+    font-size: var(--chat-sm);
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 .chat-message {
     margin-bottom: 1rem;
     animation: fadeIn 0.2s ease;

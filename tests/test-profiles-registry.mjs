@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { Profiles, get, has, list } from '../js/profiles/registry.js';
 import { CHAT_V1 } from '../js/profiles/chat-v1.js';
 import { CODER_V1 } from '../js/profiles/coder-v1.js';
+import { KB_V1 } from '../js/profiles/kb-v1.js';
 
 // ============================================
 // get / has — exact-name lookup
@@ -31,6 +32,10 @@ test("Profiles.get('coder.v1') returns CODER_V1", () => {
     assert.equal(Profiles.get('coder.v1'), CODER_V1);
 });
 
+test("Profiles.get('kb.v1') returns KB_V1", () => {
+    assert.equal(Profiles.get('kb.v1'), KB_V1);
+});
+
 test("Profiles.get('unknown.profile') returns null (no throw)", () => {
     assert.equal(Profiles.get('unknown.profile'), null);
 });
@@ -41,6 +46,10 @@ test("Profiles.has('chat.v1') === true", () => {
 
 test("Profiles.has('coder.v1') === true", () => {
     assert.equal(Profiles.has('coder.v1'), true);
+});
+
+test("Profiles.has('kb.v1') === true", () => {
+    assert.equal(Profiles.has('kb.v1'), true);
 });
 
 test("Profiles.has('unknown.profile') === false", () => {
@@ -62,16 +71,18 @@ test("Profiles.has('constructor') === false (prototype-pollution safety)", () =>
 // list — picker-shape
 // ============================================
 
-test("Profiles.list() returns chat.v1 + coder.v1 (Phase 2 profiles ship lookup-only)", () => {
-    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 land as data + harness coverage
-    // but stay excluded from the picker until they earn user-visible weight
-    // (per-profile systemPrompt addenda). See SYNTHETIC_ENTRIES rationale
-    // in `js/profiles/registry.js` and ROADMAP §"After 2.0.0".
+test("Profiles.list() returns chat.v1 + coder.v1 + kb.v1 (kb.v1 promoted at 2.8.0; chat_multi.v1 / rp.v1 still lookup-only)", () => {
+    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 landed as lookup-only synthetics.
+    // 2.8.0 — kb.v1 graduates to ENTRIES carrying its systemPrompt addendum
+    // (the cheapest first lever per ROADMAP §"After 2.0.0" → "Profiles
+    // Phase 2 picker promotion"); chat_multi.v1 / rp.v1 stay in
+    // SYNTHETIC_ENTRIES until each earns its own addendum.
     const entries = Profiles.list();
-    assert.equal(entries.length, 2);
+    assert.equal(entries.length, 3);
     const names = entries.map(e => e.name);
     assert.ok(names.includes('chat.v1'));
     assert.ok(names.includes('coder.v1'));
+    assert.ok(names.includes('kb.v1'));
 });
 
 test("Profiles.list() returns chat.v1 first (the inheritance base)", () => {
@@ -81,6 +92,19 @@ test("Profiles.list() returns chat.v1 first (the inheritance base)", () => {
     const entries = Profiles.list();
     assert.equal(entries[0].name, 'chat.v1');
     assert.equal(entries[1].name, 'coder.v1');
+    assert.equal(entries[2].name, 'kb.v1');
+});
+
+test("kb.v1 carries the KB-mode systemPrompt addendum (the 2.8.0 promotion gate)", () => {
+    // The picker promotion is gated specifically on kb.v1 carrying a
+    // systemPrompt that produces user-observable behavior change. Mirror of
+    // the plugin-dev.v1 systemPrompt assertion in test-profile-filter-tools.
+    const profile = Profiles.get('kb.v1');
+    assert.ok(profile, 'kb.v1 must resolve');
+    assert.equal(typeof profile.systemPrompt, 'string');
+    assert.ok(profile.systemPrompt.includes('KB MODE'));
+    assert.ok(profile.systemPrompt.includes('attached doc'));
+    assert.ok(profile.systemPrompt.toLowerCase().includes('cite'));
 });
 
 test("Profiles.list() entries have { name, label, description } shape", () => {

@@ -34,7 +34,8 @@
  */
 
 import { State } from '../core.js';
-import { resolveCompressionConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveCompressionConfig } from '../profiles/resolve.js';
+import { ConversationManager } from './conversations.js';
 import {
     Compactor,
     chatHistoryToTurns,
@@ -98,12 +99,15 @@ export async function getCompressedContextMessages() {
 
     try {
         // 1.21.0 — picker-aware: read active profile name through
-        // `getActiveProfileName(State.settings)` so a user-set picker
-        // wins over the role selector. When the picker is untouched
-        // (`settings.profile === undefined`), this falls through to
-        // `roleToProfileName(role)` byte-identically — pre-1.21.0
-        // behavior.
-        const config = resolveCompressionConfig(getActiveProfileName(State?.settings));
+        // settings so a user-set picker wins over the role selector.
+        //
+        // 2.8.0 — `getEffectiveProfileName()` consults the active
+        // conversation's per-chat profile binding first, then falls
+        // back to settings. This keeps compression rules consistent
+        // with the systemPrompt + tool admission for the same
+        // conversation (chat picks KB → compression rules become
+        // empty for that chat, even if global settings is coder.v1).
+        const config = resolveCompressionConfig(ConversationManager.getEffectiveProfileName());
 
         const turns = chatHistoryToTurns(State.chatHistory);
         const result = await Compactor.compress({

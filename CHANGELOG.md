@@ -4,6 +4,110 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-05-09
+
+### Feature — Profiles Phase 2: `kb.v1` picker promotion + per-chat profile binding
+
+Two coupled changes that finally make profile choice a *per-conversation*
+decision the user controls at the moment they start a chat — not a
+global setting hidden in Settings → Roles.
+
+**1. `kb.v1` graduates from lookup-only to picker-visible.** Phase 2
+profiles (`chat_multi.v1`, `rp.v1`, `kb.v1`) shipped as
+`SYNTHETIC_ENTRIES` at 2.6.0 — registered for `Profiles.get` /
+`Profiles.has` lookup but excluded from the picker because picking one
+behaved indistinguishably from `chat.v1`. The promotion gate was always
+*"per-profile `systemPrompt` addenda mirroring 1.23.x's `plugin-dev.v1`
+precedent"* (see ROADMAP §"After 2.0.0" → "Profiles Phase 2 picker
+promotion"). `kb.v1` now carries `KB_SYSTEM_PROMPT`:
+
+> *"Answer ONLY from content in the user's attached documents… cite every
+> claim with the source path and line range, e.g. `(docs/handbook.md:42-58)`…
+> do NOT propose edits, run tools that mutate state, or generate code."*
+
+That makes choosing `kb.v1` user-observable: the model refuses code
+generation, declines to answer outside the attached doc set, and emits
+line-range citations. `chat_multi.v1` and `rp.v1` stay in
+`SYNTHETIC_ENTRIES` until each earns its own addendum — granular
+promotion is the design.
+
+**2. Per-chat profile binding via the new-chat chip selector.** Decision
+§2 has always pinned *"one profile for the life of a chat"*, but the
+only configuration surface was the global `State.settings.profile` knob
+in Settings → Roles — inconvenient and wrong-shaped (the global default
+shouldn't override a deliberate per-chat choice). The empty-state
+[`.chat-welcome`](js/chat/messages.js) banner now hosts a chip row —
+"Profile for this chat" — populated from `Profiles.list()`. Click a chip
+to bind that profile to the active conversation; the binding persists
+on the index entry (mirrors the `synced` flag's per-conversation
+opt-in). The chip row auto-unmounts on first message (the welcome
+template is replaced by the message virtualizer).
+
+`ConversationManager.getEffectiveProfileName()` is the new canonical
+read — consults the per-chat binding first, falls back to
+`State.settings.profile`, falls back to `chat.v1`. Six call sites flip
+from `getActiveProfileName(State.settings)` to consult this helper so
+the lifetime contract holds across all subsystems, not just the
+systemPrompt addendum:
+
+| File | Subsystem affected |
+|---|---|
+| [`js/prompts.js:285`](js/prompts.js) | `profile.systemPrompt` injection |
+| [`js/tools/registry.js:166, 192, 259`](js/tools/registry.js) | Tool admission + violation messaging + `getToolsForProfile` default |
+| [`js/chat/handlers.js:802`](js/chat/handlers.js) | `coder.v1` task-ledger gate |
+| [`js/chat/compactor-integration.js:106`](js/chat/compactor-integration.js) | Compression rule resolution |
+| [`js/model-manager.js:73`](js/model-manager.js) | Status-bar profile badge |
+
+Pure logic — `pickProfileName(conversationProfile, settings)` — exported
+from [`js/profiles/resolve.js`](js/profiles/resolve.js) so Node tests
+hit the resolution order without depending on `ConversationManager`'s
+browser-side Storage. New test pins the cross-product:
+[`tests/test-pick-profile-name.mjs`](tests/test-pick-profile-name.mjs).
+
+### Files
+
+- **NEW** [`tests/test-pick-profile-name.mjs`](tests/test-pick-profile-name.mjs)
+  — pins precedence (per-chat → settings → `chat.v1`) across both
+  registered and synthetic profile names.
+- [`js/profiles/kb-v1.js`](js/profiles/kb-v1.js) — exports `KB_SYSTEM_PROMPT`;
+  `KB_V1` carries `systemPrompt: KB_SYSTEM_PROMPT`.
+- [`js/profiles/registry.js`](js/profiles/registry.js) — `KB_V1` moved
+  from `SYNTHETIC_ENTRIES` to `ENTRIES` with `label: 'KB'` and the
+  citation-mode description.
+- [`js/profiles/resolve.js`](js/profiles/resolve.js) — new
+  `pickProfileName(conversationProfile, settings)` export.
+- [`js/chat/conversations.js`](js/chat/conversations.js) — new
+  `ConversationManager.getActiveProfile()` /
+  `setActiveProfile(profileName)` /
+  `getEffectiveProfileName()`. New `conversation:profileLocked` event.
+- [`js/chat/messages.js`](js/chat/messages.js) — empty-state welcome
+  banner gains a chip-row picker; click handlers wire to
+  `setActiveProfile`.
+- [`css/chat.css`](css/chat.css) — `.welcome-profile-picker` styles
+  (radiogroup chips with `is-active` highlight, accent-themed).
+- [`js/prompts.js`](js/prompts.js), [`js/tools/registry.js`](js/tools/registry.js),
+  [`js/chat/handlers.js`](js/chat/handlers.js),
+  [`js/chat/compactor-integration.js`](js/chat/compactor-integration.js),
+  [`js/model-manager.js`](js/model-manager.js) — read-site flips.
+- [`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs),
+  [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs)
+  — picker-list assertions: 2 → 3 entries (chat.v1 + coder.v1 + kb.v1);
+  `kb.v1` systemPrompt presence pinned in both files.
+
+### Out of scope (deliberate)
+
+- `chat_multi.v1` and `rp.v1` stay in `SYNTHETIC_ENTRIES` — granular
+  promotion per the ROADMAP gate; they graduate when each earns its own
+  systemPrompt addendum.
+- No `kb_documents` retrieval-side wiring — `kb.v1` falls back to the
+  user's currently-attached docs surface (which already exists). The
+  deeper "real `kb_documents` collection" remains a follow-up.
+- No standalone `citation_lookup` tool — reserved per
+  [`js/profiles/kb-v1.js`](js/profiles/kb-v1.js).
+- Status-bar badge does not auto-update on chip click within the same
+  render — first message rebuilds it. A `profile:changed` event is
+  emitted for any future subscriber.
+
 ## [2.7.0] - 2026-05-09
 
 ### Feature — In-editor preview Tier 2: console + error capture

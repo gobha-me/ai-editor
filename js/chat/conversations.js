@@ -21,6 +21,7 @@ import { State, Storage, EventBus } from '../core.js';
 import { ChatSummarizer } from './summarizer.js';
 import { ChatHistoryStore } from './history-store.js';
 import { removeConvCost } from '../intelligence/cost/cost-store.js';
+import { pickProfileName } from '../profiles/resolve.js';
 
 /** Max conversations kept in the index */
 const MAX_CONVERSATIONS = 50;
@@ -150,6 +151,67 @@ const ConversationManager = {
     list() {
         const index = _getIndex();
         return index.sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+
+    /**
+     * Get the profile bound to the active conversation, or `null` when
+     * the conversation has no per-chat binding (legacy conversations or
+     * fresh-blank ones the user hasn't picked for yet). Callers must
+     * fall back to `State.settings.profile` when this returns null —
+     * see `pickProfileName` in `js/profiles/resolve.js`.
+     *
+     * **2.8.0** — added alongside the new-chat picker chip in
+     * `.chat-welcome`. Per-conversation `profile` field mirrors the
+     * `synced` flag's per-conversation opt-in pattern (1.3.2).
+     *
+     * @returns {string|null}
+     */
+    getActiveProfile() {
+        const id = this.getActiveId();
+        if (!id) return null;
+        const index = _getIndex();
+        const entry = index.find(c => c.id === id);
+        return (entry && typeof entry.profile === 'string') ? entry.profile : null;
+    },
+
+    /**
+     * Bind a profile to the active conversation for its life. Idempotent
+     * after first message — but the chip selector only renders on the
+     * empty-chat welcome surface, so the natural lock is "before the
+     * first message is sent". Profile rebinds via this method are
+     * permitted (a deliberate user action via the chip) and don't
+     * retroactively rewrite past turns.
+     *
+     * @param {string} profileName  Must be a registered profile name; the
+     *   caller is responsible for validating against `Profiles.has()`.
+     */
+    setActiveProfile(profileName) {
+        const id = this.getActiveId();
+        if (!id) return;
+        const index = _getIndex();
+        const entry = index.find(c => c.id === id);
+        if (!entry) return;
+        entry.profile = profileName;
+        entry.updatedAt = Date.now();
+        _setIndex(index);
+        EventBus.emit('conversation:profileLocked', { id, profile: profileName });
+    },
+
+    /**
+     * Resolve the profile name in effect for the active conversation —
+     * the per-chat binding wins over `State.settings.profile`. This is
+     * the canonical read for system-prompt assembly, tool admission,
+     * compression config, and the model status-bar badge.
+     *
+     * **2.8.0 — load-bearing across the chat surface.** Six call sites
+     * flipped to consult this helper so the lifetime contract ("one
+     * profile for the life of a chat") holds across all subsystems —
+     * not just the systemPrompt addendum.
+     *
+     * @returns {string}
+     */
+    getEffectiveProfileName() {
+        return pickProfileName(this.getActiveProfile(), State.settings);
     },
 
     /**

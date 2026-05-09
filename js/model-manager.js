@@ -4,7 +4,7 @@
 
 import { State, Storage, EventBus, ProviderRegistry, Plugins } from './core.js';
 import { Profiles } from './profiles/registry.js';
-import { getActiveProfileName } from './profiles/resolve.js';
+import { ConversationManager } from './chat/conversations.js';
 import { applyModelOverrides } from './providers/registry.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
 import { LLM } from './llm.js';
@@ -70,7 +70,11 @@ export function updateModelStatusBar() {
     // shows the picker label for any non-default profile (chat.v1 is
     // the new "implicit" baseline, equivalent to the pre-2.0.0 'full'
     // hide-when-default treatment).
-    const profileName = getActiveProfileName(State.settings);
+    //
+    // 2.8.0 — `getEffectiveProfileName()` reflects the per-chat profile
+    // binding (chip-selector pick) so the badge matches what the model
+    // actually receives, not just the workspace default.
+    const profileName = ConversationManager.getEffectiveProfileName();
     const profileEntry = Profiles.list().find(e => e.name === profileName);
 
     const badges = [];

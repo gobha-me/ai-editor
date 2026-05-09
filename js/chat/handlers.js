@@ -45,7 +45,7 @@ import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { getRefusalHint } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
-import { resolveTools, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveTools } from '../profiles/resolve.js';
 
 /**
  * Main entry point for user input
@@ -799,7 +799,11 @@ export async function handleGeneralRequest(input) {
                     //
                     // 2.0.0 — slice 3: was `State.settings.role === 'coder'`
                     // pre-2.0.0; flips to the picker-mapped profile name.
-                    if (getActiveProfileName(State.settings) === 'coder.v1') {
+                    // 2.8.0 — `getEffectiveProfileName()` consults per-chat
+                    // profile binding first; the ledger now records under
+                    // the effective profile (matches systemPrompt + tool
+                    // admission for the same conversation).
+                    if (ConversationManager.getEffectiveProfileName() === 'coder.v1') {
                         const tools = resolveTools('coder.v1');
                         const td = Catalog.getByName(toolName);
                         recordToolInvocation({
