@@ -6,6 +6,7 @@ import { VERSION_DISPLAY } from './version.js';
 import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
+import { mountLeftPaneRail } from './ui/left-pane-rail.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
@@ -283,156 +284,11 @@ function toggleLineNumbers() {
     showToast(State.settings.showLineNumbers ? 'Line numbers shown' : 'Line numbers hidden', 'success');
 }
 
-function initSidebarCollapse() {
-    document.querySelectorAll('.sidebar-header-collapsible').forEach(header => {
-        const targetId = header.dataset.collapse;
-        const body = document.getElementById(targetId);
-        if (!body) return;
-
-        // Find parent resizable section
-        const section = header.closest('.sidebar-section-resizable');
-
-        const toggle = () => {
-            const isCollapsed = body.classList.toggle('collapsed');
-            header.setAttribute('aria-expanded', String(!isCollapsed));
-            const label = header.querySelector('span');
-            if (label) {
-                const text = label.textContent.replace(/^[▾▸]\s*/, '');
-                label.textContent = (isCollapsed ? '▸ ' : '▾ ') + text;
-            }
-            // When collapsed, remove flex-grow so section shrinks to header only
-            if (section) {
-                section.classList.toggle('section-collapsed', isCollapsed);
-                // Clear any inline flex overrides from drag resize
-                if (isCollapsed) {
-                    section.style.flexBasis = '';
-                    section.style.flexGrow = '';
-                }
-            }
-            // Reflow: let expanded sections reclaim space & hide orphan handles
-            _reflowSidebarSections();
-        };
-
-        header.addEventListener('click', toggle);
-
-        // Keyboard: Enter/Space toggles, same as a button
-        header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggle();
-            }
-        });
-    });
-}
-
-/**
- * After collapse/expand, redistribute flex space and hide resize handles
- * adjacent to collapsed sections so expanded sections fill available space.
- */
-function _reflowSidebarSections() {
-    const container = document.getElementById('sidebarSections');
-    if (!container) return;
-
-    const sections = container.querySelectorAll('.sidebar-section-resizable');
-    const handles = container.querySelectorAll('.sidebar-resize-handle');
-
-    // Count expanded sections
-    const expanded = [...sections].filter(s => !s.classList.contains('section-collapsed'));
-
-    // Reset expanded sections to equal flex if their inline styles were cleared
-    expanded.forEach(s => {
-        if (!s.style.flexBasis) {
-            s.style.flexGrow = '';  // let CSS flex rule take over
-        }
-    });
-
-    // If only one section is expanded, let it take all space
-    if (expanded.length === 1) {
-        expanded[0].style.flexGrow = '1';
-        expanded[0].style.flexBasis = '';
-    }
-
-    // Hide handles where either neighbor is collapsed
-    handles.forEach(h => {
-        const aboveEl = document.getElementById(h.dataset.above);
-        const belowEl = document.getElementById(h.dataset.below);
-        const hide = aboveEl?.classList.contains('section-collapsed') ||
-                     belowEl?.classList.contains('section-collapsed');
-        h.style.display = hide ? 'none' : '';
-    });
-}
-
-/**
- * Sidebar vertical section resize.
- * Drag handles between Files ↔ Issues ↔ PRs to redistribute vertical space.
- */
-function initSidebarSectionResize() {
-    const handles = document.querySelectorAll('.sidebar-resize-handle');
-    if (!handles.length) return;
-
-    handles.forEach(handle => {
-        const aboveId = handle.dataset.above;
-        const belowId = handle.dataset.below;
-        const aboveEl = document.getElementById(aboveId);
-        const belowEl = document.getElementById(belowId);
-        if (!aboveEl || !belowEl) return;
-
-        let startY = 0;
-        let startAboveH = 0;
-        let startBelowH = 0;
-
-        const onMouseMove = (e) => {
-            e.preventDefault();
-            const delta = e.clientY - startY;
-            const newAbove = Math.max(32, startAboveH + delta);   // min = header height
-            const newBelow = Math.max(32, startBelowH - delta);
-            aboveEl.style.flexBasis = newAbove + 'px';
-            aboveEl.style.flexGrow = '0';
-            belowEl.style.flexBasis = newBelow + 'px';
-            belowEl.style.flexGrow = '0';
-        };
-
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-
-            // Save proportions
-            const saved = {};
-            document.querySelectorAll('.sidebar-section-resizable').forEach(s => {
-                const key = s.dataset.section;
-                if (key && s.style.flexBasis) {
-                    saved[key] = s.style.flexBasis;
-                }
-            });
-            Storage.set('sidebarSectionSizes', saved);
-        };
-
-        handle.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            startY = e.clientY;
-            startAboveH = aboveEl.getBoundingClientRect().height;
-            startBelowH = belowEl.getBoundingClientRect().height;
-            document.body.style.cursor = 'row-resize';
-            document.body.style.userSelect = 'none';
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        });
-    });
-
-    // Restore saved sizes
-    const saved = Storage.get('sidebarSectionSizes');
-    if (saved) {
-        Object.entries(saved).forEach(([key, basis]) => {
-            const el = document.querySelector(`.sidebar-section-resizable[data-section="${key}"]`);
-            if (el) {
-                el.style.flexBasis = basis;
-                el.style.flexGrow = '0';
-            }
-        });
-    }
-}
+// Sidebar layout — Touch 3 Rail v2 (2.11.0). The legacy stacked
+// `.sidebar-section-resizable` chassis (collapse-on-click headers + drag
+// handles between Files / Issues / PRs) was retired with the rail
+// conversion. The rail's mount + click delegation lives in
+// `js/ui/left-pane-rail.js#mountLeftPaneRail()`, called from `init()` below.
 
 // Expose LLMTools reference for role tool list display
 function exposeLLMTools() {
@@ -939,8 +795,7 @@ async function init() {
         };
     }
     initSessionListeners();
-    initSidebarCollapse();
-    initSidebarSectionResize();
+    mountLeftPaneRail();
     initHelpSlideOut();
 
     // ── Parallel init: git + LLM + editor load concurrently ──

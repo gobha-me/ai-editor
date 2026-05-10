@@ -1,6 +1,9 @@
 /**
  * AI Editor - Sidebar Styles
- * File tree, issues panel, pull requests, branch selector
+ * Touch 3 Rail v2 layout (2.11.0): icon rail + single-content view replaces
+ * the legacy stacked / resizable-section layout. Component styles below
+ * (branch panel, file tree, issues, PRs) are unchanged from earlier minors;
+ * only the chassis above them flipped.
  */
 
 /* ============================================
@@ -17,92 +20,10 @@
     overflow: hidden;
 }
 
-.sidebar-section {
+/* Project selector section — sits above the rail body. */
+.sidebar-section--project {
     border-bottom: 1px solid var(--border);
-}
-
-/* ── Resizable sections container ── */
-.sidebar-sections-resizable {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-
-/* Each resizable section: files, issues, PRs */
-.sidebar-section-resizable {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    flex: 1 1 auto;             /* All share space equally by default */
-    border-bottom: none;        /* Resize handles provide visual separation */
-}
-
-/* Files gets extra default share */
-.sidebar-section-resizable[data-section="files"] {
-    flex: 3 1 auto;
-}
-
-/* When collapsed via ▸ toggle, section shrinks to header only */
-.sidebar-section-resizable.section-collapsed {
-    flex: 0 0 auto !important;
-    min-height: auto;
-    overflow: visible;
-}
-
-/* Old classes kept for backward compat — no longer used in HTML */
-.sidebar-section-flex {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.sidebar-section-bottom {
     flex-shrink: 0;
-}
-
-.sidebar-section-bottom .issues-panel,
-.sidebar-section-bottom .prs-panel {
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-/* ── Horizontal resize handles between sections ── */
-.sidebar-resize-handle {
-    height: 4px;
-    background: var(--border);
-    cursor: row-resize;
-    flex-shrink: 0;
-    position: relative;
-    transition: background 0.15s;
-}
-
-.sidebar-resize-handle:hover,
-.sidebar-resize-handle:active {
-    background: var(--accent, #58a6ff);
-}
-
-/* Larger hit area */
-.sidebar-resize-handle::before {
-    content: '';
-    position: absolute;
-    top: -3px;
-    bottom: -3px;
-    left: 0;
-    right: 0;
-}
-
-/* PRs panel — flex inside resizable section */
-.prs-panel {
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--bg-hover) transparent;
 }
 
 .sidebar-header {
@@ -116,31 +37,6 @@
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
-}
-
-.sidebar-header-collapsible {
-    cursor: pointer;
-    user-select: none;
-}
-
-.sidebar-header-collapsible:hover {
-    background: var(--bg-hover);
-}
-
-.sidebar-header-collapsible.collapsed span::first-letter {
-    /* Chevron rotates via text replacement in JS */
-}
-
-.sidebar-collapse-body {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    flex: 1;
-    min-height: 0;
-}
-
-.sidebar-collapse-body.collapsed {
-    display: none;
 }
 
 .sidebar-header button {
@@ -183,35 +79,182 @@
     border-color: var(--accent);
 }
 
-.branch-selector {
-    padding: 0 0.5rem 0.5rem;
+/* ============================================
+   RAIL LAYOUT (Touch 3 — 2.11.0)
+   ============================================ */
+
+/* Rail body — flex row holding the icon column + view content area. */
+.lp__rail-body {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Icon column on the left edge of the sidebar. */
+.lp__rail {
+    width: 44px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-}
-
-.branch-selector__toolbar {
-    display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    padding: 6px 0;
+    background: var(--bg-tertiary);
+    border-right: 1px solid var(--border);
 }
 
-.branch-selector__title {
-    font-size: var(--font-xs, 0.75rem);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+.lp__rail-btn {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 2px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--tk-radius-sm, 3px);
+    display: grid;
+    place-items: center;
     color: var(--text-muted);
 }
 
-.branch-selector__toolbar-actions {
+.lp__rail-btn .icn {
+    width: 17px;
+    height: 17px;
+}
+
+.lp__rail-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.lp__rail-btn--active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.lp__rail-btn--active::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+.lp__rail-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.lp__rail-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-family: var(--font-mono, monospace);
+    font-size: 9px;
+    background: var(--accent);
+    color: var(--accent-fg, #fff);
+    padding: 0 4px;
+    border-radius: 8px;
+    line-height: 1.4;
+    min-width: 14px;
+    text-align: center;
+}
+
+/* Content column — single view visible at a time (others have [hidden]). */
+.lp__rail-content {
+    flex: 1;
     display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.lp__rail-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.lp__rail-view[hidden] {
+    display: none;
+}
+
+/* View pane variant inside the rail content area. */
+.lp__pane--rail {
+    padding: 0;
+}
+
+/* View header — title row + action-button cluster. */
+.lp2__pane-h {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 36px;
+}
+
+.lp2__pane-title {
+    flex: 1;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.lp2__pane-h-actions {
+    display: inline-flex;
     gap: 2px;
     align-items: center;
 }
 
-.branch-selector__toolbar-actions button {
-    flex-shrink: 0;
+.lp2__pane-h-actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 3px;
+    min-width: 28px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lp2__pane-h-actions button:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* Scrollable body region inside each rail view. */
+.lp__rail-view-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Branches view shows the branch panel with comfortable padding. */
+.lp__rail-view[data-rail-view-container="branches"] .lp__rail-view-body {
+    padding: 0.5rem;
+    overflow-y: auto;
+}
+
+/* Inside the rail's Branches view, the panel fills available height
+ * (the parent body handles scroll, no inner cap needed). */
+.lp__rail-view[data-rail-view-container="branches"] .branch-panel {
+    max-height: none;
+    overflow: visible;
 }
 
 /* ---- Branch Panel (1.12.0 — Touch 3 extraction A) ---- */
@@ -483,6 +526,28 @@
 }
 
 .issues-panel::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 3px;
+}
+
+/* PRs panel — same scroll shape as issues. */
+.prs-panel {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-hover) transparent;
+}
+
+.prs-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.prs-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.prs-panel::-webkit-scrollbar-thumb {
     background: var(--bg-hover);
     border-radius: 3px;
 }

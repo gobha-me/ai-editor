@@ -4,6 +4,28 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-05-10
+
+### Feature — Touch 3 Rail v2 sidebar layout (Files / Issues / PRs / Branches)
+
+Closes the **first visible chrome change** from the [`docs/design/touch-3-left-pane-and-window/`](docs/design/touch-3-left-pane-and-window/) bundle. Touch 3 was tagged "dominantly post-2.0" in the roadmap; the load-bearing prerequisite for Window v2 / Sessions (the production rate-limit pacer) cleared at [§2.9.0](#290---2026-05-09), and two pre-conversion extractions had already landed against the legacy chrome — branch panel at [§1.12.0](#1120---2026-05-08) (extraction A) and inline `▶ Start` at [§1.13.0](#1130---2026-05-08) (extraction B). 2.11.0 ships the full layout shift those extractions paved toward.
+
+The legacy stacked, resizable sidebar (Files / Issues / PRs in three vertically-resizable panes with drag handles between them) is replaced by a vertical icon rail on the left edge plus a single-content area to its right. Four rail verbs — Files, Issues, Pull Requests, Branches — swap the content area when clicked. The active verb persists across reloads in `localStorage` under `leftPaneRail.activeView`. Branches moves out of its always-visible top-of-sidebar slot into its own rail view; the Project selector stays at the top.
+
+Per the user's chat2.md priority (the rail layout is pain point #1 — *"crowded, three stacked sections"*) this slice is **layout-only**. Tasks and Releases rail items are deferred (each requires new backend state — agent-task tracking + AI release-notes draft); Search is deferred (lives in `Cmd+P` modal today); Window v2 / Sessions chrome is deferred. Design-token migration to `--tk-*` is also deferred — the slice uses the existing `--accent` / `--bg-secondary` / `--text-muted` palette, matching the [§1.13.0](#1130---2026-05-08) note that those tokens *"land with Window v2 / Sessions, post-2.0."*
+
+**New module.** [`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js) — pattern mirrors [`js/ui/branch-panel.js`](js/ui/branch-panel.js) (extraction A) and [`js/ui/issue-list.js`](js/ui/issue-list.js) (extraction B): a pure `renderRailButtonsHtml({ activeView, badges })` (HTML in / HTML out, no DOM) plus a `mountLeftPaneRail()` that wires click delegation, view-visibility toggling, badge refresh on `issues:refresh` / `prs:refresh` events, and a one-time `Storage.remove('sidebarSectionSizes')` migration to clean up the now-obsolete drag-resize persistence. Inline Lucide-shape SVG icons (24×24, round caps/joins) match the rest of the codebase.
+
+**Markup.** [`html/sidebar.html`](html/sidebar.html) replaces `.sidebar-sections-resizable` (three `[data-section]` blocks separated by `.sidebar-resize-handle`) with `<div class="lp__rail-body">` containing the icon column (`#leftPaneRailButtons`, populated at mount) and the four rail-view containers keyed on `data-rail-view-container="{files|issues|prs|branches}"`. Existing component mount-point ids are preserved verbatim (`#fileTree`, `#issuesPanel`, `#prsPanel`, `#branchPanel`) so the renderers that target them (`renderIssues`, `renderBranchPanel`, the file-tree builder, the PR list renderer) keep working unchanged.
+
+**Styles.** [`css/sidebar.css`](css/sidebar.css) drops the stacked-section rule families (`.sidebar-section-resizable*`, `.sidebar-sections-resizable`, `.sidebar-resize-handle*`, `.sidebar-section-flex`, `.sidebar-section-bottom`, `.sidebar-header-collapsible*`, `.sidebar-collapse-body*`, `.branch-selector*`) and adds rail rules (`.lp__rail`, `.lp__rail-btn`, `.lp__rail-btn--active`, `.lp__rail-badge`, `.lp__rail-content`, `.lp__rail-view`, `.lp__rail-view-body`, `.lp__pane--rail`, `.lp2__pane-h`, `.lp2__pane-title`, `.lp2__pane-h-actions`). The active-button modifier uses `color-mix(in srgb, var(--accent) 15%, transparent)` for the soft accent fill since no legacy alias for the design canvas's `--tk-accent-soft` exists yet — the alias lands when the token migration does.
+
+**Wire-up.** [`js/app.js`](js/app.js) replaces `initSidebarCollapse()` + `initSidebarSectionResize()` + `_reflowSidebarSections()` (~150 LOC of drag-resize and collapse-toggle logic) with a single `mountLeftPaneRail()` call.
+
+**Tests.** New [`tests/test-left-pane-rail.mjs`](tests/test-left-pane-rail.mjs) — pure renderer assertions (button order, active-class flip, badge gating on count > 0, HTML escaping in badges, `readActiveView` default + invalid-stored-value fallback, `computeBadges` array-length math).
+
+**What this does NOT do.** No design-token introduction, no Lucide font/package import, no font migration, no top-bar / settings / chat / debug panel changes, no Sessions or Window v2, no Tasks / Releases / Search rail views.
+
 ## [2.10.0] - 2026-05-10
 
 ### Feature — In-editor preview Tier 3a: driveable preview (selector-shaped tools)
