@@ -294,7 +294,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 |---|---|---|---|
 | ~~**A. Branch switcher upgrade**~~ *(✅ shipped 1.12.0)* | *shipped — see [CHANGELOG §1.12.0](../CHANGELOG.md)* | `left-pane-v2.jsx` "branches" view | Out — shipped. |
 | ~~**B. ▶ Start prominence on issues**~~ *(✅ shipped 1.13.0)* | *shipped — see [CHANGELOG §1.13.0](../CHANGELOG.md)* | `left-pane-v2.jsx` "issues" view | Out — shipped. |
-| **C. Files "Now strip"** | Tiny indicator above the file tree showing changes count + active agent activity | `left-pane-v2.jsx` "files" view | Surfaces existing scratchpad / TodoWrite / queued-input data (all shipped). Read-only; no new state. ~1 small patch. |
+| ~~**C. Files "Now strip"**~~ *(✅ shipped 2.17.0)* | *shipped — see [CHANGELOG §2.17.0](../CHANGELOG.md)* | `left-pane-v2.jsx` "files" view | Out — shipped. |
 
 ### Other deferred
 

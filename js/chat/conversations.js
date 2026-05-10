@@ -332,6 +332,7 @@ const ConversationManager = {
 
         // Restore todo list (github#26)
         State.todo = Array.isArray(payload.todos) ? payload.todos : [];
+        EventBus.emit('todo:changed', { action: 'restored' });
 
         // Restore scratchpad (1.11.0 — per-conversation persistence).
         // Pre-1.11.0 payloads have no `scratchpad` field; treat as empty.
@@ -369,6 +370,7 @@ const ConversationManager = {
         Storage.remove('chatPruneStash');
         ChatSummarizer.clear();
         EventBus.emit('scratchpad:changed', { action: 'cleared' });
+        EventBus.emit('todo:changed', { action: 'cleared' });
 
         // Add to index (will get real title on first message)
         const index = _getIndex();
@@ -421,6 +423,7 @@ const ConversationManager = {
                 Storage.remove('chatPruneStash');
                 ChatSummarizer.clear();
                 EventBus.emit('scratchpad:changed', { action: 'cleared' });
+                EventBus.emit('todo:changed', { action: 'cleared' });
                 EventBus.emit('conversation:loaded', { id: null });
             }
         }

@@ -7,6 +7,7 @@ import { FaviconManager } from './favicon-manager.js';
 import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { mountLeftPaneRail } from './ui/left-pane-rail.js';
+import { mountNowStrip } from './ui/now-strip.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
@@ -806,6 +807,7 @@ async function init() {
     }
     initSessionListeners();
     mountLeftPaneRail();
+    mountNowStrip();
     initHelpSlideOut();
 
     // ── Parallel init: git + LLM + editor load concurrently ──

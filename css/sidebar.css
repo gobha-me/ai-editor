@@ -671,3 +671,61 @@
 }
 
 /* ============================================
+   Files "Now strip" — Touch 3 1.x candidate C (2.17.0).
+   Read-only indicator above #fileTree. Mirrors
+   docs/design/touch-3-left-pane-and-window/project/facelift-v3-extras.css
+   (.lp2__now*) using canonical token names.
+   ============================================ */
+.lp2__now {
+    margin: 0 6px 8px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+}
+.lp2__now-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 3px 0;
+}
+.lp2__now-label {
+    font-family: var(--font-mono, monospace);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    width: 56px;
+    flex-shrink: 0;
+}
+.lp2__now-val {
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lp2__now-val--run {
+    color: var(--success);
+    flex-shrink: 0;
+}
+.lp2__now-link {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+.lp2__now-link:hover {
+    text-decoration: underline;
+}
+.lp2__now-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 2px;
+}

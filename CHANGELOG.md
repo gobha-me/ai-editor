@@ -4,6 +4,39 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-05-10
+
+### Feature — Touch 3 1.x candidate C: Files "Now strip"
+
+Closes the third and final 1.x extraction candidate from the [Touch 3 deliverables list in `docs/ROADMAP.md`](docs/ROADMAP.md). Candidate **A** (branch switcher) shipped 1.12.0; candidate **B** (▶ Start on issues) shipped 1.13.0; candidate **C** stayed parked through six minors. The 1.13.1 entry called out *"hidden complexity around event-bus events that don't yet exist"* as the reason — re-examination shows the dirty-state transitions are already observable through the existing tab/editor signals (`tab:switched`, `tab:closed`, `tab:contentChanged`, `file:opened`, `file:reverted`, `editor:change`), so no mutation-site refactor is needed. Only the todo-state mutation requires a new emit, and that mirrors the existing scratchpad pattern at four sites — small enough to fit the "~1 small patch" sizing.
+
+A read-only indicator now sits above the file tree in the Rail v2 Files view ([`html/sidebar.html`](html/sidebar.html) `#filesNowStrip`), surfacing two rows:
+
+```
+CHANGES  4 files            Stage…
+AGENT    ● 2 notes, 1 todo
+```
+
+The **Changes** row counts dirty tabs (`State.openTabs.filter(t => t.dirty).length`) and shows the existing [`window.openCommitModal()`](js/ui/commit.js) flow as a "Stage…" link when the count is non-zero (`clean` with no link otherwise). The **Agent** row joins the non-zero buckets among `Object.keys(State.scratchpad).length` (notes), `State.todo.filter(s => s.status === 'pending' || s.status === 'in_progress').length` (todos), and [`getUserMessageQueueLength()`](js/chat/state.js) (queued user inputs); the green dot appears whenever any bucket is non-zero, and the row collapses to `idle` when all three are empty. The design's mocked "● 2 running / View tasks" maps to multi-agent fiction (Tasks view doesn't exist in 2.X), so the right-side action is dropped from that row — the brief explicitly remapped the row to the three already-shipped signals.
+
+**New module — [`js/ui/now-strip.js`](js/ui/now-strip.js)** (~110 LOC). Mirrors [`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js) (2.11.0): four pure helpers (HTML-in / HTML-out, no DOM) plus an idempotent `mountNowStrip()` that no-ops on missing host. Subscribes to `scratchpad:changed`, `todo:changed` (newly emitted), `chat:queueChanged`, `tab:switched`, `tab:closed`, `tab:contentChanged`, `file:opened`, `file:reverted`, and a 250 ms-debounced `editor:change` so per-keystroke dirty flips don't trigger a re-render storm. No polling. No new tracked state.
+
+**`todo:changed` emits — same shape as `scratchpad:changed`:**
+
+- [`js/tools/todo-tools.js`](js/tools/todo-tools.js) — emits `{ action: 'set', total }` after the `State.todo = validated` write in `todo_write`.
+- [`js/chat/conversations.js`](js/chat/conversations.js) — emits at the three full-replace sites in `load` (`{ action: 'restored' }`), `create` (`{ action: 'cleared' }`), and `delete`-when-empty (`{ action: 'cleared' }`). Identical pattern to the surrounding `scratchpad:changed` calls — no behavioral coupling.
+
+**CSS — [`css/sidebar.css`](css/sidebar.css)** appends a `.lp2__now*` block adapted from the design's [`docs/design/touch-3-left-pane-and-window/project/facelift-v3-extras.css`](docs/design/touch-3-left-pane-and-window/project/facelift-v3-extras.css) using the canonical token names (`--bg-tertiary`, `--border`, `--text-primary`, `--text-muted`, `--accent`, `--success`, `--font-mono`). Theme-token-only — no hardcoded colors. Drive-by fix: closed an unterminated `/* ====` comment that has been hanging off the end of the file since the 2.11.0 Rail v2 conversion.
+
+**Tests** — [`tests/test-now-strip.mjs`](tests/test-now-strip.mjs), 19 cases:
+
+- `computeNowSummary` — empty / null state → all zeros; mixed dirty flags → correct count; scratchpad keys counted; todos filter to pending + in_progress (completed and malformed-no-status excluded); queue length passes through with `Number.isFinite` guard for `NaN` / `undefined`.
+- `formatChangesText` — `0 → "clean"`, `1 → "1 file"`, `N → "N files"`.
+- `formatAgentText` — all-zero → `"idle"` (no dot); single non-zero bucket → singular/plural label; multi-bucket → `", "` joined; per-bucket singular/plural correct.
+- `renderNowStripHtml` — both rows present; `Stage…` link present iff `dirtyCount > 0`; `lp2__now-val--run` dot present iff any agent bucket non-zero; defensive HTML escape verified by absence of injectable script in the rendered output.
+
+**Removability.** One new module + one new test file + ten edited lines across five existing files (sidebar.html slot, sidebar.css block, app.js mount call + import, todo-tools/conversations emits, version.js, ROADMAP row, CHANGELOG entry). Reverts in one diff. No persisted state, no migration, no new dependencies.
+
 ## [2.16.0] - 2026-05-10
 
 ### Feature — MCP discovery Phase 2 slice 2: auto-test on add ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2 slice 2)

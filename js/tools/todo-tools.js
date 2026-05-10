@@ -15,7 +15,7 @@
  * model's context budget regardless of mode.
  */
 
-import { State } from '../core.js';
+import { State, EventBus } from '../core.js';
 
 const MAX_ITEMS = 20;
 const MAX_CONTENT_LEN = 200;
@@ -99,6 +99,7 @@ export function registerTodoTools(registry) {
         }
 
         State.todo = validated;
+        try { EventBus.emit('todo:changed', { action: 'set', total: validated.length }); } catch { /* best-effort */ }
         const sum = _summarize(validated);
         return {
             success: true,
