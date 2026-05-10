@@ -20,7 +20,9 @@ import {
     renderRailButtonsHtml,
     readActiveView,
     computeBadges,
+    mountLeftPaneRail,
 } from '../js/ui/left-pane-rail.js';
+import { State, EventBus } from '../js/core.js';
 
 // ============================================
 // Rail-button shape
@@ -149,4 +151,108 @@ test('computeBadges yields 0s for missing arrays', () => {
     assert.deepEqual(computeBadges({}), { issues: 0, prs: 0 });
     assert.deepEqual(computeBadges({ issues: 'not-an-array' }), { issues: 0, prs: 0 });
     assert.deepEqual(computeBadges(null), { issues: 0, prs: 0 });
+});
+
+// ============================================
+// Mount: badge re-paints on post-fetch render channels (race regression)
+// ============================================
+//
+// 2.13.1 — `PrMergeControls` emits `prs:refresh`. Two listeners:
+//   (a) the rail (sync) — reads State synchronously
+//   (b) `refreshPullRequests` (async) — fetches, mutates State, then renders
+// (a) ran first against stale State, so the badge stayed at the pre-merge
+// count until reload. The fix: rail also subscribes to `prs:render` /
+// `issues:render` (the post-fetch broadcast). These tests pin that wiring
+// so the regression cannot return silently.
+
+/**
+ * Build a fake DOM (`document.getElementById` / `querySelectorAll`) just
+ * for `mountLeftPaneRail`. Returns the fake rail-host element so tests
+ * can read its `innerHTML` after each emit. Restores the original document
+ * via the returned `restore()`.
+ */
+function _withFakeRailDom() {
+    const railHost = {
+        innerHTML: '',
+        contains: () => false,
+        addEventListener: () => {},
+    };
+    // Patch only the two members `mountLeftPaneRail` reaches for; keep the
+    // shim's `createElement` (escapeHtml uses it via textContent escape).
+    const origGetById = globalThis.document.getElementById;
+    const origQSA = globalThis.document.querySelectorAll;
+    globalThis.document.getElementById = (id) =>
+        (id === 'leftPaneRailButtons' ? railHost : null);
+    globalThis.document.querySelectorAll = () => [];
+    return {
+        railHost,
+        restore: () => {
+            globalThis.document.getElementById = origGetById;
+            globalThis.document.querySelectorAll = origQSA;
+        },
+    };
+}
+
+/** Drop any listeners the previous mount registered. */
+function _clearRailListeners() {
+    for (const ch of ['issues:refresh', 'prs:refresh', 'issues:render', 'prs:render']) {
+        EventBus._listeners[ch] = [];
+    }
+}
+
+test('rail badge updates on prs:render (post-fetch fresh State)', () => {
+    _clearRailListeners();
+    State.issues = [];
+    State.pullRequests = [{ number: 1 }, { number: 2 }];
+    const { railHost, restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        // Initial render reflects State at mount time: 2 PRs.
+        assert.match(railHost.innerHTML, /data-rail-btn="prs"[^>]*>[\s\S]*?<span class="lp__rail-badge">2<\/span>/);
+
+        // Simulate the post-merge async path: a network refresh has just
+        // landed, State is fresh (one PR removed), and the project-manager
+        // fires `prs:render`. The rail must re-paint with the new count.
+        State.pullRequests = [{ number: 1 }];
+        EventBus.emit('prs:render');
+        assert.match(railHost.innerHTML, /data-rail-btn="prs"[^>]*>[\s\S]*?<span class="lp__rail-badge">1<\/span>/);
+    } finally {
+        restore();
+    }
+});
+
+test('rail badge updates on issues:render (same race shape)', () => {
+    _clearRailListeners();
+    State.issues = [{ number: 1 }, { number: 2 }, { number: 3 }];
+    State.pullRequests = [];
+    const { railHost, restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        assert.match(railHost.innerHTML, /data-rail-btn="issues"[^>]*>[\s\S]*?<span class="lp__rail-badge">3<\/span>/);
+
+        State.issues = [{ number: 1 }];
+        EventBus.emit('issues:render');
+        assert.match(railHost.innerHTML, /data-rail-btn="issues"[^>]*>[\s\S]*?<span class="lp__rail-badge">1<\/span>/);
+    } finally {
+        restore();
+    }
+});
+
+test('prs:refresh still re-paints (covers paths that mutate State synchronously)', () => {
+    _clearRailListeners();
+    State.issues = [];
+    State.pullRequests = [{ number: 1 }, { number: 2 }, { number: 3 }];
+    const { railHost, restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        assert.match(railHost.innerHTML, /<span class="lp__rail-badge">3<\/span>/);
+
+        // A caller that already mutated State before emitting `prs:refresh`
+        // (e.g. a future hot-update path) must still see the badge update.
+        State.pullRequests = [{ number: 1 }];
+        EventBus.emit('prs:refresh');
+        assert.match(railHost.innerHTML, /<span class="lp__rail-badge">1<\/span>/);
+    } finally {
+        restore();
+    }
 });

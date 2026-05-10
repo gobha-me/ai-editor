@@ -11,7 +11,13 @@
  *
  * The active view persists across reloads in `localStorage` under
  * `leftPaneRail.activeView`. The badge counts on the Issues / PRs rail
- * buttons refresh on `issues:refresh` / `prs:refresh` events.
+ * buttons refresh on both `issues:refresh` / `prs:refresh` (immediate,
+ * may read stale State) and `issues:render` / `prs:render` (post-fetch,
+ * fresh) — the second pair closes the count-drain race the merge button
+ * exposed: the synchronous refresh listener fires before
+ * `refreshPullRequests` finishes its async fetch + State mutation, so
+ * the badge needs a second paint after State settles. The double-fire
+ * is harmless because `computeBadges` + the renderer are pure + cheap.
  *
  * Pattern mirrors `js/ui/branch-panel.js` (1.12.0 extraction A) and
  * `js/ui/issue-list.js` (1.13.0 extraction B): pure renderer
@@ -143,6 +149,12 @@ export function mountLeftPaneRail() {
     };
     EventBus.on('issues:refresh', refresh);
     EventBus.on('prs:refresh', refresh);
+    // Also listen on the post-fetch render channels — `*:refresh` runs
+    // synchronously before `refreshIssues`/`refreshPullRequests` settles
+    // their network fetch + State mutation, so the badge would otherwise
+    // stay stale (e.g. count not decrementing after a PR merge).
+    EventBus.on('issues:render', refresh);
+    EventBus.on('prs:render', refresh);
 
     // One-time migration: clear the now-obsolete `sidebarSectionSizes`
     // localStorage entry so we don't leak storage across releases.

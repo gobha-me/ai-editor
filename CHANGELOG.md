@@ -4,6 +4,27 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.13.1] - 2026-05-10
+
+### Fix — Touch 3 Rail badge count-drain after PR merge
+
+The PRs badge in the Touch 3 left-rail did not decrement after merging a PR through the [`PrMergeControls`](js/pr-review/PrMergeControls.js) dock that shipped in [§2.13.0](#2130---2026-05-10). It stayed stale until a manual reload or branch switch — the user-visible symptom of a synchronous-listener race in the rail's badge wiring.
+
+**Root cause.** `PrMergeControls.handleClick` (and every other action site) emits `EventBus.emit('prs:refresh')` on success. Two listeners subscribed to that channel:
+
+1. The [rail in `js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js): synchronous — `refresh()` → `computeBadges(State)` → reads `State.pullRequests.length`.
+2. The async refetch in [`refreshPullRequests` in `js/project-manager.js`](js/project-manager.js): `await Git.listMergeRequests(...)` → mutate `State.pullRequests` → `renderPullRequests()`.
+
+The rail listener ran first, *before* the async fetch settled, so `computeBadges` read the pre-merge array and re-painted the same count. The post-fetch State update never reached the rail. Same shape in `issues:refresh` (e.g. comment / accept / deny in `js/issue-detail.js`).
+
+**Fix.** [`refreshIssues` and `refreshPullRequests`](js/project-manager.js) now emit `issues:render` / `prs:render` after the State mutation + direct render. Those channels were already the established "data is fresh, re-render listeners" signal (see [`js/git.js`](js/git.js) lines 671 / 679 / 690 inside `loadProject`). [`mountLeftPaneRail`](js/ui/left-pane-rail.js) subscribes its `refresh` to **both** `*:refresh` (immediate, may read stale State — kept for paths that mutate State synchronously before emitting) and `*:render` (post-fetch fresh — closes the race). Double-fire is harmless; `computeBadges` + `renderRailButtonsHtml` are pure + cheap.
+
+Verified end-to-end against the running editor on `:8765`: opened a real Gitea PR via `window.openPrReview(N)`, observed the badge count, merged via the dock's Merge button (squash + delete-branch), confirmed the rail decrements without a reload. The same path validates the create-PR flow ([`submitCreatePR`](js/project-manager.js)) — `await refreshPullRequests()` now also emits `prs:render`, so the badge increments on create through the same seam.
+
+**Tests.** [`tests/test-left-pane-rail.mjs`](tests/test-left-pane-rail.mjs) extended with three regression tests pinning the wiring: `prs:render` re-paints the badge after a State mutation; `issues:render` does the same; `prs:refresh` continues to re-paint for paths that mutate State synchronously. Full Node CI suite passes.
+
+**Class-of-bug.** Per `project_edit_file_stale_cache_deadlock.md`: this is the third instance in this codebase of a sync-listener-vs-async-mutation race firing in the wrong order. The rail's `*:render` subscription is the antibody — any future surface that depends on State.issues / State.pullRequests can subscribe to the same channels and inherit the post-fetch broadcast for free.
+
 ## [2.13.0] - 2026-05-10
 
 ### Feature — Touch 3 PR Review surface (slice 2: review submission + dock; merge moves into the dock with load-on-click)

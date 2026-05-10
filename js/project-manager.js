@@ -471,7 +471,7 @@ export function renderIssues() {
 
 export async function refreshIssues() {
     if (!State.currentProject) return;
-    
+
     const { owner, repo } = State.currentProject;
     try {
         State.issues = await Git.listIssues(owner, repo);
@@ -480,6 +480,9 @@ export async function refreshIssues() {
         // Keep existing issues in state rather than wiping them
     }
     renderIssues();
+    // Post-fetch broadcast so listeners that ran synchronously on
+    // `issues:refresh` (rail badge) can re-read State now that it's fresh.
+    EventBus.emit('issues:render');
 }
 
 // CI_ICONS — inlined here in 2.13.0 when pr-detail.js was deleted.
@@ -544,6 +547,9 @@ export async function refreshPullRequests() {
         const prs = await Git.listMergeRequests(owner, repo, 'open');
         State.pullRequests = prs.map(pr => ({ ...pr, ciState: 'pending', ciStatuses: [] }));
         renderPullRequests();
+        // Post-fetch broadcast so listeners that ran synchronously on
+        // `prs:refresh` (rail badge) can re-read State now that it's fresh.
+        EventBus.emit('prs:render');
 
         // Phase 2: Backfill CI status in parallel, then re-render
         State.pullRequests = await Promise.all(prs.map(async (pr) => {
@@ -555,10 +561,12 @@ export async function refreshPullRequests() {
             }
         }));
         renderPullRequests();
+        EventBus.emit('prs:render');
     } catch (e) {
         console.warn('[PRs] Failed to refresh:', e.message);
         State.pullRequests = [];
         renderPullRequests();
+        EventBus.emit('prs:render');
     }
 }
 
