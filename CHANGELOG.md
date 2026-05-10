@@ -4,6 +4,17 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — Roadmap + memory cleanup pass (post-2.9.1 coherence)
+
+Brings `docs/ROADMAP.md` and the auto-memory store into coherence with shipped state. No code changes; no version bump.
+
+- **`docs/ROADMAP.md` "Now / Next / Later" table** rewritten — was 8 versions stale (still pinning 2.1.0 Plugin Discoverability and 2.0.0 role retirement as `Now` rows). The `Next` row's *"cheapest first lever is `kb.v1`"* framing is gone — `kb.v1` picker promotion shipped at 2.8.0. The track entry for `chat_multi.v1` / `rp.v1` picker promotion is now explicitly **deprioritized for ai-editor** (those profiles target consumers — multi-user shared chat, role-play personas — that don't exist in this product; promotion needs a different consumer to earn user-observable weight).
+- **github#38 row moved from "Open" to "Closed"** in §"Known open issues". Fix shipped at 2.1.1 / [PR #343](https://github.com/gobha-me/ai-editor/pull/343); the open-list reference and the now-obsolete `project_approval_card_visibility.md` memory entry are removed.
+- **github#27 row updated** to reflect Phase 1 (curated MCP server catalog, shipped 2.3.0) and that Phase 2 (settings UI for discovery + per-server config) is what remains open.
+- **`window.AIEditor.Roles` shim retirement clarified** — the stale 2.2.0 line is removed; the shim retired at 2.0.0 (see [`js/core.js:1582`](js/core.js) throw and CHANGELOG §2.0.0 *"Breaking — `window.AIEditor.Roles` deprecation shim"*).
+- **After-2.0.0 picker-promotion row tightened** — kb.v1 already shipped; `chat_multi.v1` / `rp.v1` parked behind a different consumer (Phase 4 authoring API path).
+- **Memory cleanup.** `project_phase2_profiles_lookup_only.md` updated to reflect kb.v1 shipped + chat_multi/rp deprioritized. `project_approval_card_visibility.md` deleted (gap closed at 2.1.1; lesson is implicit in the shipped pattern). New `feedback_chat_multi_rp_no_utility_in_aieditor.md` captures Jeff's instruction that those two profiles have no real utility in this product, so a future session won't re-propose the track.
+
 ## [2.9.1] - 2026-05-09
 
 ### Fix — Anti-loop refusal envelope: concrete recovery candidates at streak ≥ 3
