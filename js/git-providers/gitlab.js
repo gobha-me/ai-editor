@@ -1140,6 +1140,29 @@ const gitlabProvider = {
         return response.blob();
     },
 
+    /**
+     * Capability matrix override.
+     *
+     * Slice 2 (2.19.0) flips `mergeConflictResolution` on for GitLab.
+     * The base-class default `getMergeConflicts` works against any
+     * provider that implements `getPullRequest` + `getPullRequestFiles`
+     * + `getFile`, all of which GitLab does. The resolver's commit step
+     * routes through `Git.batchCommitFilesOnBranch` → `batchCommitFiles`
+     * which GitLab implements via the atomic Commits API.
+     *
+     * Other capability fields (reviewSubmission, threadResolve, merge,
+     * rerunCi, viewedFiles) are intentionally NOT declared here — they
+     * stay default-undefined (read as `false` via `?.` checks at the
+     * call sites) until each one gets its own slice with live testing.
+     *
+     * @since 2.19.0 (Touch 3 Merge Conflict Resolver — slice 2)
+     */
+    get capabilities() {
+        return {
+            mergeConflictResolution: true,
+        };
+    },
+
     // ========================================
     // UI EXTENSIONS
     // ========================================

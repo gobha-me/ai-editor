@@ -21,6 +21,8 @@
  * resolves).
  *
  * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
+ *   - 2.19.0 (slice 2): Take both action, ResolvedPane both branch,
+ *     scroll-anchored hunk ids feeding the new Minimap component.
  * @module merge-conflict/MergeConflictSurface
  */
 
@@ -29,6 +31,7 @@ import { Git } from '../git.js';
 import { getPreact } from '../utils/preact-mount.js';
 import { extractHunks } from './hunks.js';
 import { applyResolutions } from './resolve.js';
+import { Minimap } from './Minimap.js';
 
 const { html, useState, useLayoutEffect, useMemo } = await getPreact();
 
@@ -47,7 +50,7 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
         files: /** @type {Array<{path:string, base:string, head:string, headSha:string|null, status:string|null, hunks: any[]}>} */ ([]),
     });
     const [activeIdx, setActiveIdx] = useState(0);
-    /** @type {[Object<string, Object<number, 'theirs'|'ours'>>, Function]} */
+    /** @type {[Object<string, Object<number, 'theirs'|'ours'|'both'>>, Function]} */
     const [resolutions, setResolutions] = useState({});
     const [pushing, setPushing] = useState(false);
     const [pushError, setPushError] = useState(/** @type {string|null} */ (null));
@@ -117,6 +120,16 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
             ...prev,
             [filePath]: { ...(prev[filePath] || {}), [hunkId]: choice },
         }));
+    }
+
+    /**
+     * Scroll a hunk into view inside the main hunk list. Called from the
+     * Minimap when the user clicks a band. Lookup by id is stable across
+     * renders because each `mc__hunk` carries `id="mc-hunk-${h.id}"`.
+     */
+    function jumpToHunk(hunkId) {
+        const el = document.getElementById('mc-hunk-' + hunkId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     async function handlePush() {
@@ -234,6 +247,10 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
                             onPick=${(c) => pickHunk(activeFile.path, h.id, c)} />
                     `)}
                 </div>
+                <${Minimap}
+                    hunks=${activeFile?.hunks || []}
+                    fileResolutions=${activeFile ? resolutions[activeFile.path] : null}
+                    onJump=${jumpToHunk} />
             </div>
         </div>
     `;
@@ -310,8 +327,15 @@ function HunkRow({ hunk, idx, choice, onPick }) {
     const stateClass = choice
         ? `mc__hunk--resolved-${choice}`
         : 'mc__hunk--unresolved';
+    const resolvedLines = choice === 'theirs'
+        ? hunk.theirs
+        : choice === 'ours'
+            ? hunk.ours
+            : choice === 'both'
+                ? [...hunk.theirs, ...hunk.ours]
+                : null;
     return html`
-        <div class=${`mc__hunk ${stateClass}`}>
+        <div class=${`mc__hunk ${stateClass}`} id=${'mc-hunk-' + hunk.id}>
             <div class="mc__hunk-head">
                 <span class="mc__hunk-num">Conflict ${idx + 1}</span>
                 <span class="mc__hunk-line">L${hunk.lineNo}</span>
@@ -323,6 +347,11 @@ function HunkRow({ hunk, idx, choice, onPick }) {
                         class=${'mc__act mc__act--theirs' + (choice === 'theirs' ? ' mc__act--picked' : '')}
                         onClick=${() => onPick('theirs')}>
                         ← Take theirs
+                    </button>
+                    <button type="button"
+                        class=${'mc__act mc__act--both' + (choice === 'both' ? ' mc__act--picked' : '')}
+                        onClick=${() => onPick('both')}>
+                        ↕ Take both
                     </button>
                     <button type="button"
                         class=${'mc__act mc__act--ours' + (choice === 'ours' ? ' mc__act--picked' : '')}
@@ -339,7 +368,7 @@ function HunkRow({ hunk, idx, choice, onPick }) {
                     lines=${hunk.theirs} />
                 <${ResolvedPane}
                     lineNo=${hunk.lineNo}
-                    lines=${choice === 'theirs' ? hunk.theirs : choice === 'ours' ? hunk.ours : null} />
+                    lines=${resolvedLines} />
                 <${CodePane}
                     side="ours"
                     label="Current"

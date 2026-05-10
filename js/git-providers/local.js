@@ -259,6 +259,14 @@ const LOCAL_PROVIDER = {
     // ========================================
     // ISSUES / PRs — not supported
     // ========================================
+    //
+    // Slice 2 of Touch 3 Merge Conflict Resolver (2.19.0) deliberately
+    // does NOT advertise `mergeConflictResolution` for Local: the
+    // resolver's entry point lives on the PR Review surface, and Local
+    // has no PR concept (`listMergeRequests` returns []). The capability
+    // flag would never be reached, so leaving it default-undefined is
+    // correct — flipping it on would suggest a code path that does not
+    // exist.
 
     async listIssues() { return []; },
     async listMergeRequests() { return []; },

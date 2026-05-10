@@ -4,6 +4,49 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-05-10
+
+### Feature — Touch 3 Merge Conflict Resolver (slice 2)
+
+Continues the slice 1 bundle that shipped earlier today (2.18.0). Per the [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Touch 3 deliverables" → Merge Conflict Resolver row, slice 2 covers **Take both + conflict minimap + GitLab/Local capability flag**. AI resolve per hunk remains slice 3 (~2.20.0).
+
+**Take both — [`js/merge-conflict/resolve.js`](js/merge-conflict/resolve.js).** `applyResolutions` accepts `'both'` alongside `'theirs'` and `'ours'`. Implementation refactor: the inner per-hunk loop now gathers `theirsLines` and `oursLines` once, then emits per the chosen strategy — `'theirs'` pushes theirs only, `'ours'` pushes ours only, `'both'` pushes theirs followed by ours with no separator. Order matches the design canvas convention; conflict-marker (`<<<<<<<`) preservation is intentionally out of scope until dogfood asks for it. The unknown-choice error message and the `Incomplete resolutions` guard are unchanged. The `ResolutionChoice` typedef widens accordingly.
+
+**Take both — surface.** A new `↕ Take both` button sits between the existing `← Take theirs` and `Take ours →` buttons in `HunkRow` ([`js/merge-conflict/MergeConflictSurface.js`](js/merge-conflict/MergeConflictSurface.js)). The Resolved pane renders `[...hunk.theirs, ...hunk.ours]` when the choice is `'both'`. The hunk's `mc__hunk--resolved-both` modifier picks up the same green `--success` border the other resolved states already use.
+
+**Conflict minimap — [`js/merge-conflict/Minimap.js`](js/merge-conflict/Minimap.js)** (new ~57 LOC). Vertical strip on the right edge of the body, one band per hunk in the active file. Color-coded against the existing palette: unresolved bands use `--warning`; any of the three resolved states use `--success`. Click a band → `surface.jumpToHunk(id)` → `document.getElementById('mc-hunk-' + id).scrollIntoView({behavior: 'smooth', block: 'start'})`. Each `HunkRow` now carries `id="mc-hunk-${hunk.id}"` so the lookup is stable across renders. Bands are flex-distributed — equally spaced rather than proportionally sized against `mc__main` scroll height; that graduation is gated on dogfood evidence that the equal-spacing model surprises users on long files.
+
+**GitLab capability flip — [`js/git-providers/gitlab.js`](js/git-providers/gitlab.js).** Adds a minimal `get capabilities()` returning `{mergeConflictResolution: true}`. The base-class default `getMergeConflicts` ([`js/git-providers/base.js:510`](js/git-providers/base.js)) already works against any provider that implements `getPullRequest` + `getPullRequestFiles` + `getFile` — all of which GitLab does. The resolver's commit step routes through `Git.batchCommitFilesOnBranch` → `provider.batchCommitFiles`, which GitLab implements via its atomic Commits API. Other capability fields (reviewSubmission, threadResolve, merge, rerunCi, viewedFiles) intentionally stay default-undefined and continue to read as `false` via the existing `?.` checks at the call sites — flipping them is each its own slice with its own live testing.
+
+**Local stays default-false (documented) — [`js/git-providers/local.js`](js/git-providers/local.js).** Local has no PR concept (`listMergeRequests()` returns `[]`) and the resolver's entry point lives on the PR Review surface, so the capability flag would never be reached. A code comment in the `// ISSUES / PRs — not supported` section now states this explicitly so a future reader doesn't mistake the missing override for an oversight.
+
+**CSS — [`css/merge-conflict.css`](css/merge-conflict.css).** Three additions: `.mc__hunk--resolved-both` joins the existing `--resolved-theirs` / `--resolved-ours` border rule; `.mc__act--both` gets the symmetric double-accent border (matches the `↕` glyph and visually distinguishes the new action); `.mc__minimap` + `.mc__minimap-band` + the three state modifiers cover the new strip. Theme-token-only — no hardcoded colors. Mobile fallback (≤768px) hides the minimap so the stacked layout keeps full width.
+
+**Anchor color baseline — [`css/base.css`](css/base.css).** Bundled into this slice from a dogfood-discovered UX papercut: bare `<a>` elements with no component-scoped override were falling through to the browser UA-stylesheet link blue, which reads as harsh under both the `refined` and `editorial` themes. New baseline `a { color: var(--accent); } a:hover { color: var(--accent-hover); }` routes them through the theme's accent token. The rule lives at the same level as the existing browser-default overrides for `body` and form elements; component-scoped rules (`.preview-markdown a`, `.message-content a`, `.help__article a`, etc.) win on specificity and continue to set their own decoration / state styles, so no surface that already styled its own anchors changes appearance.
+
+**Tests — [`tests/test-merge-conflict-resolve.mjs`](tests/test-merge-conflict-resolve.mjs)**, 6 new cases bringing the file from 11 → 17 (32 total across the two merge-conflict test files):
+
+- `'both'` on a single edited hunk emits theirs then ours.
+- `'both'` on a multi-line edited hunk concatenates without separator.
+- `'both'` on a pure-insert hunk emits only the inserted ours lines (theirs is empty).
+- `'both'` on a pure-delete hunk emits only the deleted theirs lines (ours is empty).
+- Mixed `theirs` / `ours` / `both` across four hunks in one file each pick correctly.
+- `'both'` is a superset: re-extracting the resolved file vs the head yields one residual hunk whose theirs side is the preserved theirs content.
+
+The pre-existing `applyResolutions throws on unknown choice value` test continues to reject `'mine'` — the validation widening accepts only the three documented choices.
+
+**Removability.** One new module file (`Minimap.js`), six new test cases, three CSS additions, two existing-file edits in `MergeConflictSurface.js` (Take both button + Minimap mount + jumpToHunk handler), one existing-file edit in `resolve.js` (validation + emit branch), one new capabilities getter on `gitlab.js`, one comment in `local.js`. No persisted state, no migration, no new dependencies. Reverts cleanly: drop `Minimap.js`, remove the `'both'` branch from `applyResolutions` + the `'both'` button + the minimap mount + the GitLab capabilities getter.
+
+**Deferred to slice 3 (~2.20.0):**
+
+- **AI resolve per hunk** — wires the LLM in-the-loop for ambiguous hunks; reuses existing chat / edit-proposal infrastructure.
+
+**Deferred to follow-up patches (no slot yet):**
+
+- **Editing the Resolved pane directly** — design canvas's "Edit" toggle. Independent of the AI resolve work.
+- **Proportionally-sized minimap bands** — gated on dogfood evidence that equal-spacing surprises users on long files.
+- **Conflict-marker preservation in Take both output** — gated on dogfood evidence that callers want `<<<<<<<` markers in the resolved file.
+
 ## [2.18.0] - 2026-05-10
 
 ### Feature — Touch 3 Merge Conflict Resolver (slice 1)

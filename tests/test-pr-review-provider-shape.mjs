@@ -48,12 +48,26 @@ test('GitHub: capabilities advertises reviewSubmission + merge, not threadResolv
     assert.equal(caps.viewedFiles, false);
 });
 
-test('Base / GitLab: capabilities default to all false (no review submission)', () => {
+test('Base: capabilities default to all false (no review submission)', () => {
     const baseCaps = BASE_GIT_PROVIDER.capabilities;
     assert.equal(baseCaps.reviewSubmission, false);
     assert.equal(baseCaps.merge, false);
-    // GitLab does not override capabilities — falls through to base default.
-    assert.equal(typeof gitlabProvider.capabilities, 'undefined');
+});
+
+test('GitLab: capabilities override declares only mergeConflictResolution; review/merge still default-falsy at call sites', () => {
+    // Slice 2 (2.19.0) added a minimal `capabilities` getter to GitLab
+    // flipping `mergeConflictResolution` on. The PR-Review-track
+    // capabilities (reviewSubmission, merge, threadResolve, viewedFiles)
+    // are intentionally NOT declared — each one is its own future slice.
+    const caps = gitlabProvider.capabilities;
+    assert.equal(caps.mergeConflictResolution, true);
+    // Strict-equality `=== true` checks at the call sites read undefined
+    // as falsy, preserving the pre-2.19.0 behaviour for the unrelated
+    // capabilities.
+    assert.notEqual(caps.reviewSubmission, true);
+    assert.notEqual(caps.merge, true);
+    assert.notEqual(caps.threadResolve, true);
+    assert.notEqual(caps.viewedFiles, true);
 });
 
 // ============================================

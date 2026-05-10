@@ -16,14 +16,20 @@
  * caller hands stale hunks against fresh content.
  *
  * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
+ *   - 2.19.0 (slice 2): adds `'both'` choice to `applyResolutions`.
  * @module merge-conflict/resolve
  */
 
 import { splitLines, joinLines, extractHunks } from './hunks.js';
 
 /**
- * @typedef {'theirs'|'ours'} ResolutionChoice
+ * @typedef {'theirs'|'ours'|'both'} ResolutionChoice
  * @typedef {Object.<number, ResolutionChoice>} Resolutions  Keys are hunk ids.
+ *
+ * `'both'` (added 2.19.0 — slice 2) emits the theirs lines first, then the
+ * ours lines, with no separator. Order matches the design canvas
+ * convention; conflict-marker preservation is intentionally out of scope
+ * until dogfood asks for it.
  */
 
 /**
@@ -89,8 +95,8 @@ function _back(trace, a, b, d) {
  *
  * Throws when:
  *   - `resolutions` is missing an entry for any hunk id (`Incomplete resolutions`).
- *   - A resolution value is not the literal string `'theirs'` or `'ours'`
- *     (`Unknown resolution choice`).
+ *   - A resolution value is not the literal string `'theirs'`, `'ours'`,
+ *     or `'both'` (`Unknown resolution choice`).
  *
  * @param {string} baseContent
  * @param {string} headContent
@@ -111,7 +117,7 @@ export function applyResolutions(baseContent, headContent, resolutions) {
             throw new Error(`Incomplete resolutions: missing id ${h.id}`);
         }
         const v = resolutions[h.id];
-        if (v !== 'theirs' && v !== 'ours') {
+        if (v !== 'theirs' && v !== 'ours' && v !== 'both') {
             throw new Error(`Unknown resolution choice for id ${h.id}: ${v}`);
         }
     }
@@ -128,18 +134,25 @@ export function applyResolutions(baseContent, headContent, resolutions) {
             i++;
             continue;
         }
-        // Hunk run.
+        // Hunk run — gather both sides, then emit per the chosen strategy.
         const choice = resolutions[hunkIdx];
         const start = i;
         while (i < changes.length && changes[i].type !== 'equal') i++;
+        /** @type {string[]} */
+        const theirsLines = [];
+        /** @type {string[]} */
+        const oursLines = [];
         for (let j = start; j < i; j++) {
             const cj = changes[j];
-            if (choice === 'theirs' && cj.type === 'delete') {
-                out.push(baseLines[/** @type {number} */(cj.oldLine)]);
-            } else if (choice === 'ours' && cj.type === 'insert') {
-                out.push(headLines[/** @type {number} */(cj.newLine)]);
+            if (cj.type === 'delete') {
+                theirsLines.push(baseLines[/** @type {number} */(cj.oldLine)]);
+            } else if (cj.type === 'insert') {
+                oursLines.push(headLines[/** @type {number} */(cj.newLine)]);
             }
         }
+        if (choice === 'theirs') out.push(...theirsLines);
+        else if (choice === 'ours') out.push(...oursLines);
+        else if (choice === 'both') out.push(...theirsLines, ...oursLines);
         hunkIdx++;
     }
 

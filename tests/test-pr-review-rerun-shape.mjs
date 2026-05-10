@@ -40,11 +40,18 @@ test('GitHub: capabilities advertises rerunCi', () => {
     assert.equal(githubProvider.capabilities.rerunCi, true);
 });
 
-test('Base / GitLab: capabilities default rerunCi to false', () => {
+test('Base: capabilities default rerunCi to false', () => {
     const baseCaps = BASE_GIT_PROVIDER.capabilities;
     assert.equal(baseCaps.rerunCi, false);
-    // GitLab does not override capabilities — falls through to base default.
-    assert.equal(typeof gitlabProvider.capabilities, 'undefined');
+});
+
+test('GitLab: capabilities override does NOT advertise rerunCi (kept default-falsy at call sites)', () => {
+    // Slice 2 (2.19.0) of Touch 3 Merge Conflict Resolver added a
+    // minimal `capabilities` getter to GitLab declaring only
+    // `mergeConflictResolution`. The rerun-failed CI track for GitLab
+    // remains its own future slice with its own live testing.
+    const caps = gitlabProvider.capabilities;
+    assert.notEqual(caps.rerunCi, true);
 });
 
 // ============================================

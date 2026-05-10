@@ -1,6 +1,7 @@
 /**
  * Pure-helper tests for js/merge-conflict/resolve.js — Touch 3 Merge
- * Conflict Resolver slice 1 (2.18.0).
+ * Conflict Resolver slice 1 (2.18.0); extended with `'both'` cases in
+ * slice 2 (2.19.0).
  *
  * Browser-free — no _node-shim.mjs needed.
  */
@@ -122,6 +123,66 @@ test('applyResolutions throws on unknown choice value', () => {
         () => applyResolutions(base, head, { 0: 'mine' }),
         /Unknown resolution choice/,
     );
+});
+
+// ============================================
+// applyResolutions — 'both' (slice 2 / 2.19.0)
+// ============================================
+
+test('applyResolutions take-both on a single edited hunk emits theirs then ours', () => {
+    const base = 'a\nb\nc';
+    const head = 'a\nB\nc';
+    const r = { 0: 'both' };
+    assert.equal(applyResolutions(base, head, r), 'a\nb\nB\nc');
+});
+
+test('applyResolutions take-both on a multi-line edited hunk concatenates without separator', () => {
+    const base = 'a\nb\nc\nd';
+    const head = 'a\nX\nY\nd';
+    const hunks = extractHunks(base, head);
+    const r = uniformResolutions(hunks, 'both');
+    assert.equal(applyResolutions(base, head, r), 'a\nb\nc\nX\nY\nd');
+});
+
+test('applyResolutions take-both on a pure-insert hunk emits only the inserted ours lines', () => {
+    const base = 'a\nb';
+    const head = 'a\nb\nNEW1\nNEW2';
+    const r = { 0: 'both' };
+    assert.equal(applyResolutions(base, head, r), 'a\nb\nNEW1\nNEW2');
+});
+
+test('applyResolutions take-both on a pure-delete hunk emits only the deleted theirs lines', () => {
+    const base = 'a\nDEL1\nDEL2\nb';
+    const head = 'a\nb';
+    const r = { 0: 'both' };
+    assert.equal(applyResolutions(base, head, r), 'a\nDEL1\nDEL2\nb');
+});
+
+test('applyResolutions respects mixed theirs / ours / both across hunks in one file', () => {
+    // Three hunks: keep first as theirs, take ours on second, both on third.
+    const base = 'a\nb\nc\nd\ne\nf\ng\nh\ni';
+    const head = 'a\nB\nc\nD\ne\nF\ng\nH\ni';
+    const hunks = extractHunks(base, head);
+    assert.equal(hunks.length, 4);
+    // h0 → theirs (keep b), h1 → ours (take D), h2 → both (f then F), h3 → both (h then H)
+    const r = { 0: 'theirs', 1: 'ours', 2: 'both', 3: 'both' };
+    assert.equal(
+        applyResolutions(base, head, r),
+        'a\nb\nc\nD\ne\nf\nF\ng\nh\nH\ni',
+    );
+});
+
+test('applyResolutions take-both is a superset: result re-extracted vs head yields only the theirs lines as new hunks', () => {
+    const base = 'a\nb\nc';
+    const head = 'a\nB\nc';
+    const resolved = applyResolutions(base, head, { 0: 'both' });
+    assert.equal(resolved, 'a\nb\nB\nc');
+    // The resolved file vs head differs only by the extra `b` line — confirms
+    // both-mode preserved the theirs content rather than dropping it.
+    const followup = extractHunks(resolved, head);
+    assert.equal(followup.length, 1);
+    assert.deepEqual(followup[0].theirs, ['b']);
+    assert.deepEqual(followup[0].ours, []);
 });
 
 // ============================================

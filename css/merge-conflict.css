@@ -249,7 +249,8 @@ body.merge-conflict-active #editorSplit {
     box-shadow: 0 0 0 1px color-mix(in oklch, var(--warning) 20%, transparent);
 }
 .mc__hunk--resolved-theirs,
-.mc__hunk--resolved-ours {
+.mc__hunk--resolved-ours,
+.mc__hunk--resolved-both {
     border-color: var(--success);
 }
 
@@ -310,6 +311,10 @@ body.merge-conflict-active #editorSplit {
 }
 .mc__act--theirs {
     border-left: 2px solid var(--accent);
+}
+.mc__act--both {
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
 }
 .mc__act--ours {
     border-right: 2px solid var(--accent);
@@ -432,6 +437,59 @@ body.merge-conflict-active #editorSplit {
     font-size: var(--font-sm);
 }
 
+/* ── Minimap (right strip — slice 2 / 2.19.0) ──
+ *
+ * Equally-spaced bands per hunk in the active file. Click a band to
+ * scroll the matching `mc__hunk` (id="mc-hunk-${id}") into view inside
+ * the scrollable mc__main column.
+ */
+.mc__minimap {
+    width: 28px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 8px 4px;
+    gap: 3px;
+    overflow-y: auto;
+}
+.mc__minimap-band {
+    flex: 1;
+    min-height: 14px;
+    max-height: 36px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+}
+.mc__minimap-band:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.mc__minimap-band--unresolved {
+    background: color-mix(in oklch, var(--warning) 26%, transparent);
+    border-color: var(--warning);
+    color: var(--text-primary);
+}
+.mc__minimap-band--resolved-theirs,
+.mc__minimap-band--resolved-ours,
+.mc__minimap-band--resolved-both {
+    background: color-mix(in oklch, var(--success) 22%, transparent);
+    border-color: var(--success);
+    color: var(--text-primary);
+}
+.mc__minimap-band-label {
+    pointer-events: none;
+}
+
 /* ── Mobile fallback (≤768px): collapse three-pane to stacked ── */
 @media (max-width: 768px) {
     .mc__three {
@@ -446,5 +504,8 @@ body.merge-conflict-active #editorSplit {
     }
     .mc__filepane {
         width: 180px;
+    }
+    .mc__minimap {
+        display: none;
     }
 }

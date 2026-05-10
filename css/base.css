@@ -103,6 +103,20 @@ body {
     color: var(--text-primary);
 }
 
+/* Anchor color baseline (2.19.0). Route bare links through the theme's
+ * accent token so they pick up theme-aware muting instead of falling
+ * through to the browser UA-stylesheet link blue, which reads as harsh
+ * under both `refined` and `editorial`. Component-scoped overrides
+ * (`.preview-markdown a`, `.message-content a`, `.help__article a`,
+ * etc.) win on specificity and continue to set their own decoration /
+ * state styles. */
+a {
+    color: var(--accent);
+}
+a:hover {
+    color: var(--accent-hover);
+}
+
 /* Form elements don't inherit font-family from <body> by default in any
  * browser (UA stylesheet sets `-apple-system-body` / Arial / etc.). With
  * named self-hosted fonts (1.3.12+), that fall-through is visible — a
