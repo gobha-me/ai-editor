@@ -4,6 +4,78 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-05-09
+
+### Fix — Anti-loop refusal envelope: concrete recovery candidates at streak ≥ 3
+
+Follow-up to the qwen-3-6-plus loop on `list_tools_by_category
+category=code.project` observed during the 2.9.0 ai-editor dogfood
+(2026-05-09). The cross-request anti-loop fired correctly — `[TOOL-LOOP]
+Cross-request duplicate detected: ...` followed by `[TOOL-LOOP] Refusing
+duplicate ... (streak=N)` at streak 3 and 4 — but the model re-emitted the
+same call regardless, because the REFUSED envelope's recovery guidance was
+soft text only:
+
+> *"…If it was empty/uninformative, a precondition is likely missing — pick
+> a different tool to set it up rather than re-firing this one."*
+
+The model read "pick a different tool" and didn't know *which*. The 1.8.2
+`getRefusalHint(toolName)` supplied tool-aware text but no candidate names.
+The fix supplies candidates.
+
+**`buildRefusalPayload` (new export in
+[`js/chat/refusal-hints.js`](js/chat/refusal-hints.js)).** At `streak >= 3`
+the refusal envelope gains a `suggestions: string[]` field — up to 5 tool
+names sampled from categories *distinct* from the offender's. Imperative
+wording replaces the soft message:
+
+> *"STOP. You have called list_tools_by_category 3 consecutive times with
+> identical args — the registry is REFUSING to execute it. Try one of:
+> [commit_files, create_pull_request, list_projects, memory_remember,
+> scratchpad_write]. Or respond to the user with what you already have. Do
+> not call list_tools_by_category again with these arguments."*
+
+The catalog data is local — the same `Catalog.listAll()` snapshot that
+powers `list_tools_by_category` itself, so no new bookkeeping. Suggestions
+are seeded by tool name (FNV-1a + LCG indexer) so the same loop produces
+the same advice across retries — the model sees stable steering, not a
+fresh shuffle on every refusal.
+
+**Optional `last_user_message` echo.** The strong refusal also surfaces
+the most recent user-role message verbatim (string content, or the first
+text part of a multimodal array). Reminds the model what the original ask
+was — narration drift in the dogfood trace ("Let me get the project
+tree…") suggested the model had lost track of it.
+
+**Below threshold unchanged.** `streak < 3` still returns the legacy
+`{error, _refused: true}` shape with `getRefusalHint(toolName)` — the
+soft path is preserved verbatim. No change to `DUP_REFUSE_THRESHOLD`
+itself; lowering it would break legitimate retry patterns.
+
+**Wiring.** [`js/chat/handlers.js:667`](js/chat/handlers.js):667 — the
+existing refusal branch swaps the inline `error` string construction for
+a single `buildRefusalPayload(toolName, streak, {catalog, lastUserMessage})`
+call. Catalog snapshot is built once per refusal; `Catalog.listAll()`
+errors fall through to an empty catalog (suggestions omitted, imperative
+wording still present).
+
+**Tests.** New
+[`tests/test-tool-loop-suggestions.mjs`](tests/test-tool-loop-suggestions.mjs)
+pins the contract: (1) below threshold, no `suggestions` field; (2) at
+threshold, `suggestions` length ≥ 5, none from the offender's category,
+all valid registered names; (3) determinism — calls 3 and 4 of an
+identical-args streak return the same suggestion list; (4) edge cases —
+empty catalog, offender absent from catalog, empty `lastUserMessage`. The
+existing [`tests/test-refusal-hints.mjs`](tests/test-refusal-hints.mjs)
+stays green — `getRefusalHint` is unchanged and called internally by the
+soft branch.
+
+**Out of scope.** LLM-as-judge intent-mismatch detection (overkill for
+the failure mode); narration-vs-tool drift class (prompt-engineering
+territory, separate concern); per-model tuning of the streak threshold
+(config knob deferred until we see real data); embedding-ranked
+suggestions (random-from-other-category is enough for what this targets).
+
 ## [2.9.0] - 2026-05-09
 
 ### Feature — Provider rate-limit pacer (Touch 3 Window v2 / Sessions prerequisite)

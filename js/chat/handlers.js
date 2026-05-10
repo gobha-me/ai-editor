@@ -42,7 +42,7 @@ import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
 import { invalidateCachesForPath, invalidateCachesForPreviewMutation } from './cache-invalidation.js';
 import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
-import { getRefusalHint } from './refusal-hints.js';
+import { buildRefusalPayload } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { resolveTools } from '../profiles/resolve.js';
@@ -666,11 +666,42 @@ export async function handleGeneralRequest(input) {
                     let toolResult;
                     if (isDup && streak >= DUP_REFUSE_THRESHOLD) {
                         console.warn(`[TOOL-LOOP] Refusing duplicate ${toolName} (streak=${streak})`);
-                        const hint = getRefusalHint(toolName);
-                        toolResult = {
-                            error: `REFUSED: ${toolName} called ${streak} consecutive times with identical args. ${hint}`,
-                            _refused: true
-                        };
+                        // 2.9.1 — qwen-3-6-plus on Venice ignored the soft
+                        // "pick a different tool" steering and re-emitted
+                        // `list_tools_by_category` 4× in a row. The strong
+                        // payload names 5 candidates from a different
+                        // category and (when available) echoes the user's
+                        // last message verbatim so the model sees both the
+                        // recovery surface and the original ask. Catalog is
+                        // local — same metadata that powers
+                        // `list_tools_by_category`. Dogfood 2026-05-09.
+                        const _catalogList = (() => {
+                            try {
+                                return Catalog.listAll().map(td => ({
+                                    name: td.name,
+                                    category: td.category,
+                                }));
+                            } catch (_) {
+                                return [];
+                            }
+                        })();
+                        const _lastUserMsg = (() => {
+                            for (let i = messages.length - 1; i >= 0; i--) {
+                                const m = messages[i];
+                                if (!m || m.role !== 'user') continue;
+                                if (typeof m.content === 'string') return m.content;
+                                if (Array.isArray(m.content)) {
+                                    const part = m.content.find(p => p && p.type === 'text' && typeof p.text === 'string');
+                                    if (part) return part.text;
+                                }
+                                return '';
+                            }
+                            return '';
+                        })();
+                        toolResult = buildRefusalPayload(toolName, streak, {
+                            catalog: _catalogList,
+                            lastUserMessage: _lastUserMsg,
+                        });
                     } else if (crossRequestDuplicate) {
                         // Return a synthetic result telling the AI it already did this
                         const lastEntry = State.toolActionLog.slice(-30).reverse().find(e => e.tool === toolName && e.success);
