@@ -728,7 +728,9 @@
         </div>
     </div>
 
-    <!-- MCP Catalog Picker (hidden by default, shown on Browse Catalog). 2.3.0 — github#27 Phase 1. -->
+    <!-- MCP Catalog Picker (hidden by default, shown on Browse Catalog).
+         2.3.0 — github#27 Phase 1 (curated bundled catalog).
+         2.15.0 — github#27 Phase 2 slice 1 (+ Smithery remote registry, search, source-filter chips). -->
     <div id="mcpCatalogPanel" class="connection-editor" style="display: none;">
         <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.75rem;">
             <h4 style="margin: 0; font-size: var(--font-base); font-weight: 600;">Browse MCP Server Catalog</h4>
@@ -737,8 +739,15 @@
         <p style="margin: 0 0 0.75rem 0; color: var(--text-secondary); font-size: var(--font-sm);">
             Pick a server to pre-fill the form. You'll add your own credentials and review before saving.
         </p>
+        <div class="catalog-filter-row">
+            <input type="search" id="mcpCatalogSearch" class="catalog-search-input" placeholder="Search catalog…" autocomplete="off">
+            <div id="mcpCatalogChips" class="catalog-chips" role="group" aria-label="Filter catalog by source">
+                <!-- Populated by js/settings/mcp-servers-tab.js#renderCatalogChips -->
+            </div>
+        </div>
+        <div id="mcpCatalogStatus" class="catalog-status" style="display: none;"></div>
         <div id="mcpCatalogList">
-            <!-- Populated by js/settings/mcp-servers-tab.js -->
+            <!-- Populated by js/settings/mcp-servers-tab.js#renderCatalogList -->
         </div>
     </div>
 

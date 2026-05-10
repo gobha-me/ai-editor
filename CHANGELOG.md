@@ -4,6 +4,46 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-05-10
+
+### Feature — MCP discovery Phase 2 slice 1: dynamic catalog (Smithery) + search/filter ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2)
+
+Closes the deferral noted at the bottom of [§2.3.0](#230---2026-04-29) — *"Deferred from this slice: fetched registry (Glama / smithery / modelcontextprotocol-servers — pull entries dynamically) + search/filter in picker (deferred until >15 entries) + auto-test on add + OAuth flows (Phase 1.5)."* This slice ships the first three of those four. OAuth stays parked at "1.5".
+
+The Browse Catalog panel still paints the bundled 8 curated entries instantly — same first-frame as 2.3.0. After that frame, [`getRemoteCatalog`](js/mcp/catalog-fetch.js) fetches up to 100 remote-only servers from the Smithery public registry and merges them in. The picker now shows roughly 100 entries instead of 8; the search input + source-filter chips (All / Curated / Smithery) keep it scannable.
+
+**Why Smithery, not the originally-considered `modelcontextprotocol/servers` README.** Investigation during the slice showed that README's entries are mostly stdio with relative `src/<name>` paths (`- **[Filesystem](src/filesystem)**`) — the bridge ([`js/mcp/protocol.js`](js/mcp/protocol.js)) only speaks HTTP/SSE, so ~95% of parsed entries would be filtered out, leaving the picker barely larger than the bundled 8. Smithery's `https://registry.smithery.ai/servers?q=is:remote` returns structured JSON with the exact `remote: true` flag we need, plus `useCount` (popularity sort), `verified`, `displayName`, and `description`. The list endpoint omits the connection URL, so a per-server detail fetch (`https://registry.smithery.ai/servers/{qualifiedName}` → `connections[].deploymentUrl`) is issued lazily on "Use this server" click.
+
+**Three new modules — pure parsers + IO orchestrator separated for `node --test` coverage:**
+
+- [`js/mcp/catalog-source.js`](js/mcp/catalog-source.js) — Smithery API adapter. `parseSmitheryListResponse` + `parseSmitheryDetailResponse` are pure (no IO, no globals, defensive on malformed input). `fetchRemoteList({fetchImpl, pageSize, maxEntries})` and `fetchRemoteDetail(qualifiedName, {fetchImpl})` accept an injected `fetchImpl` so the test suite drives the network without spinning up a server. List entries are sorted by `useCount` desc and capped at 100.
+- [`js/mcp/catalog-fetch.js`](js/mcp/catalog-fetch.js) — IO orchestrator with IDB cache. `getRemoteCatalog({fetchImpl, ttlMs, idb, now})` walks a 3-tier fallback: cache fresh (within 24h soft TTL) → fetch fresh + write cache → fetch fail + stale cache → bundled-only. Never throws — IDB and network errors degrade with `console.warn` and the `source: 'fresh'|'cache'|'bundled'` field tells callers what tier they got. Cache lives in the existing `kv` IDB store ([`js/storage/idb.js`](js/storage/idb.js)) under two keys (`mcp_catalog_remote_v1` for entries, `mcp_catalog_remote_meta_v1` for `{fetchedAt}`) so meta updates don't re-serialize the entry array.
+- [`js/mcp/catalog-merge.js`](js/mcp/catalog-merge.js) — pure. `mergeCatalogs(bundled, remote)` returns a frozen array with bundled entries first (curated `tokenHint` / `authNote` strings outrank parsed values), then non-overlapping remote. Collisions match on `id` (hard) AND on case-insensitive `name` (soft — catches the bundled `linear` vs. remote `displayName: 'Linear'` case).
+
+**Settings tab integration** — [`js/settings/mcp-servers-tab.js`](js/settings/mcp-servers-tab.js):
+
+- `openCatalogBrowser` is now async. It paints the bundled-first frame instantly so the panel never looks empty during the remote fetch, then awaits `getRemoteCatalog` and re-renders. Filter state (`_filterQuery`, `_filterSource`) resets on each open so the picker starts clean.
+- `renderCatalogList` reads from a module-scoped `_lastMergedCatalog` so the search input + chip clicks re-render without refetching. Filtering is O(N) over ≤108 entries — cheap enough not to need a worker.
+- New `renderCatalogChips` (All / Curated / Smithery) and `renderCatalogStatus` (one-liner reporting tier + entry counts; "cached Nh ago" when the cache hit). Status hides while loading.
+- `onCatalogPick` is now async. Bundled entries pre-fill synchronously (existing 2.3.0 path). Remote entries call `fetchRemoteDetail(entry.qualifiedName)` first — toast surfaces "Fetching connection details for X…" during the await — then enriches the entry with `{url, transport}` from the connection, then pre-fills via `catalogEntryToStarter` (unchanged from Phase 1). Servers with no usable HTTP/SSE connection in the registry get a clear warning toast rather than a broken pre-fill.
+- Source-filter chips reuse a small new `.catalog-chip[aria-pressed="true"]` styling block in [`css/modals.css`](css/modals.css) sitting alongside the existing `.connection-card` block. Theme tokens only — no hardcoded colors.
+
+**Tests** (CI auto-globs `node --test tests/test-*.mjs`) — 51 new node tests across three files:
+
+- [`tests/test-mcp-catalog-source.mjs`](tests/test-mcp-catalog-source.mjs) — list parser filters out `remote: false` entries; every emitted entry has `transport ∈ {streamable-http, sse}` (regression guard against stdio leaking to a non-supporting bridge); list URL is empty (deferred to detail fetch); detail parser picks first usable HTTP/SSE connection; defensive on null/empty/malformed input across both parsers; injected-fetch IO functions emit the `is:remote` query param and encode `qualifiedName` correctly.
+- [`tests/test-mcp-catalog-fetch.mjs`](tests/test-mcp-catalog-fetch.mjs) — fresh cache short-circuits without calling fetch (asserted via call counter); stale cache triggers refetch; fetch failure with stale cache → `source: 'cache'`; fetch failure with empty cache → `source: 'bundled'`; IDB read/write failures don't crash; non-2xx HTTP treated like a thrown error; empty/non-array cache treated as miss (defensive against schema drift).
+- [`tests/test-mcp-catalog-merge.mjs`](tests/test-mcp-catalog-merge.mjs) — bundled `linear` wins on `id` collision (curated `tokenHint` preserved); case-insensitive name collision also defers to bundled; bundled order preserved; result frozen; malformed entries (missing id/name) dropped; round-trip with the real `MCP_CATALOG` confirms all 8 bundled entries land first.
+
+**Removability.** Three new modules + one Settings-tab edit + the HTML/CSS additions revert in one PR. The bundled `MCP_CATALOG` in [`js/mcp/catalog.js`](js/mcp/catalog.js) and the existing `catalogEntryToStarter` / `MCPServerRegistry.testConnection` paths are untouched, so the slice cleanly degrades to the 2.3.0 behavior on revert.
+
+**Deferred from this slice (parked under MCP discovery polish):**
+
+- **Auto-test on add** — automatically run `MCPServerRegistry.testConnection` after Save and surface the result. Held back because it changes the add-form latency contract (a slow-or-broken test would block the Save toast); deserves its own focused review.
+- **OAuth flows** — still parked at "Phase 1.5" per [§2.3.0](#230---2026-04-29). Several Smithery entries advertise OAuth-only auth in their `tokenHint` strings, so the bearer-token field would silently fail; current behavior surfaces the auth note and the user picks a different server.
+- **Custom catalog sources** — enterprise / internal MCP-server lists. Drags in CSP, signed-URL, and trust-model questions. The Smithery URL is parameterised in [`catalog-source.js`](js/mcp/catalog-source.js) so swapping or adding sources later is a one-line policy change.
+- **Refresh-catalog button** — the export `clearRemoteCatalogCache` exists; surface is deferred to keep slice 1 narrow.
+- **Phase 3** — self-hosted server templates (Docker Compose, install scripts) per the original [issue#27](https://github.com/gobha-me/ai-editor/issues/27) framing.
+
 ## [2.14.0] - 2026-05-10
 
 ### Feature — Touch 3 PR Review slice 5: Diagnose & fix from failed CI logs

@@ -470,6 +470,88 @@ tr.model-edit-active td {
     color: var(--danger);
 }
 
+/* ============================================
+   2.15.0 — MCP catalog filter row + chips + source badges.
+   github#27 Phase 2 slice 1.
+   ============================================ */
+
+.catalog-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.catalog-search-input {
+    flex: 1 1 200px;
+    min-width: 160px;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: var(--font-sm);
+}
+
+.catalog-search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.catalog-chips {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.catalog-chip {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: var(--font-xs);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.catalog-chip:hover {
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
+.catalog-chip[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.catalog-status {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.connection-card-badge {
+    display: inline-block;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: var(--font-xs);
+    font-weight: 400;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.connection-card-badge--curated {
+    background: var(--bg-tertiary, var(--bg-primary));
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
 .connection-editor {
     margin-top: 1rem;
     padding: 1rem;

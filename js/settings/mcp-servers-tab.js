@@ -12,9 +12,20 @@
 import { EventBus } from '../core.js';
 import { MCPServerRegistry } from '../mcp/registry.js';
 import { MCP_CATALOG, categoryIcon, catalogEntryToStarter } from '../mcp/catalog.js';
+import { getRemoteCatalog } from '../mcp/catalog-fetch.js';
+import { mergeCatalogs } from '../mcp/catalog-merge.js';
+import { fetchRemoteDetail } from '../mcp/catalog-source.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 let _editingServerId = null;
+
+// 2.15.0 — Browse Catalog state. Module-scoped so the search input + chips
+// can re-render the list without refetching the remote registry. Reset
+// each time the picker is opened (cache hit makes that cheap).
+let _lastMergedCatalog = /** @type {ReadonlyArray<Object>} */ ([]);
+let _filterQuery = '';
+let _filterSource = /** @type {'all'|'curated'|'remote'} */ ('all');
+let _searchInputDebounce = null;
 
 function statusFor(server) {
     if (!server.enabled) return { kind: 'disabled', label: 'disabled' };
@@ -82,6 +93,30 @@ export function initMCPServersTab() {
             const action = ev.target.closest('[data-mcp-catalog-id]');
             if (!action) return;
             onCatalogPick(action.dataset.mcpCatalogId);
+        });
+    }
+
+    // 2.15.0 — search input + source-filter chips wiring.
+    const search = document.getElementById('mcpCatalogSearch');
+    if (search) {
+        search.addEventListener('input', () => {
+            if (_searchInputDebounce) clearTimeout(_searchInputDebounce);
+            _searchInputDebounce = setTimeout(() => {
+                _filterQuery = search.value || '';
+                renderCatalogList(_lastMergedCatalog);
+            }, 150);
+        });
+    }
+    const chips = document.getElementById('mcpCatalogChips');
+    if (chips) {
+        chips.addEventListener('click', (ev) => {
+            const chip = ev.target.closest('[data-mcp-chip]');
+            if (!chip) return;
+            const value = chip.dataset.mcpChip;
+            if (value !== 'all' && value !== 'curated' && value !== 'remote') return;
+            _filterSource = value;
+            renderCatalogChips();
+            renderCatalogList(_lastMergedCatalog);
         });
     }
 }
@@ -304,14 +339,50 @@ async function removeServer(serverId) {
 
 // ============================================
 // 2.3.0 — github#27 Phase 1: Curated MCP catalog picker.
+// 2.15.0 — github#27 Phase 2 slice 1: + Smithery remote registry,
+// search input, source-filter chips, lazy detail fetch on pick.
 // ============================================
 
-function openCatalogBrowser() {
+async function openCatalogBrowser() {
     const panel = document.getElementById('mcpCatalogPanel');
     if (!panel) return;
     hideServerEditor();
-    renderCatalogList();
     panel.style.display = 'block';
+
+    // Reset filter state on each open so the picker starts in a clean view.
+    _filterQuery = '';
+    _filterSource = 'all';
+    const searchEl = document.getElementById('mcpCatalogSearch');
+    if (searchEl) searchEl.value = '';
+
+    // Paint the bundled-only catalog instantly so the panel never looks
+    // empty while the remote fetch is in flight (cache hit makes this
+    // moot, but a cold cache + slow network would otherwise show a
+    // perceptible blank panel).
+    _lastMergedCatalog = mergeCatalogs(MCP_CATALOG, []);
+    renderCatalogChips();
+    renderCatalogList(_lastMergedCatalog);
+    renderCatalogStatus({ loading: true });
+
+    // Fetch remote in the background; reconcile on resolve.
+    let result;
+    try {
+        result = await getRemoteCatalog({});
+    } catch (err) {
+        // getRemoteCatalog is no-throw — this branch should be unreachable.
+        // Defensive: still render the bundled-only state and surface a hint.
+        console.warn('[mcp-catalog] getRemoteCatalog rejected unexpectedly:', err);
+        renderCatalogStatus({ source: 'bundled', remoteCount: 0 });
+        return;
+    }
+
+    _lastMergedCatalog = mergeCatalogs(MCP_CATALOG, result.entries);
+    renderCatalogList(_lastMergedCatalog);
+    renderCatalogStatus({
+        source: result.source,
+        remoteCount: result.entries.length,
+        fetchedAt: result.fetchedAt,
+    });
 }
 
 function closeCatalogBrowser() {
@@ -319,40 +390,132 @@ function closeCatalogBrowser() {
     if (panel) panel.style.display = 'none';
 }
 
-function renderCatalogList() {
+/**
+ * Render the catalog rows. Reads `_filterQuery` + `_filterSource` for
+ * client-side filtering; both are cheap (O(N) over ≤108 entries).
+ *
+ * @param {ReadonlyArray<Object>} catalog
+ */
+function renderCatalogList(catalog) {
     const container = document.getElementById('mcpCatalogList');
     if (!container) return;
 
-    container.innerHTML = MCP_CATALOG.map(entry => {
-        const alreadyAdded = !!MCPServerRegistry.getServer(entry.id);
-        const tokenBadge = entry.requiresToken
-            ? '<span title="Requires a bearer token or API key">🔑 token required</span>'
-            : '<span title="No authentication needed">🔓 no token</span>';
-        const docsLink = `<a href="${escapeAttr(entry.docsUrl)}" target="_blank" rel="noopener noreferrer">Docs ↗</a>`;
-        const action = alreadyAdded
-            ? `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="Edit existing server">Already added</button>`
-            : `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="Pre-fill the add-server form">Use this server</button>`;
+    const list = Array.isArray(catalog) ? catalog : [];
+    const q = _filterQuery.trim().toLowerCase();
+    const filtered = list.filter(entry => {
+        if (_filterSource === 'curated' && entry.source !== 'bundled') return false;
+        if (_filterSource === 'remote' && entry.source !== 'remote') return false;
+        if (!q) return true;
+        const hay = `${entry.name || ''} ${entry.description || ''} ${entry.qualifiedName || ''}`.toLowerCase();
+        return hay.includes(q);
+    });
 
-        return `
-            <div class="connection-card">
-                <div class="connection-card-icon">${categoryIcon(entry.category)}</div>
-                <div class="connection-card-info">
-                    <div class="connection-card-label">${escapeHtml(entry.name)}</div>
-                    <div class="connection-card-meta">${escapeHtml(entry.description)}</div>
-                    <div class="connection-card-meta">
-                        ${escapeHtml(entry.category)} · ${escapeHtml(entry.transport)} · ${tokenBadge} · ${docsLink}
-                    </div>
-                </div>
-                <div class="connection-card-actions">
-                    ${action}
-                </div>
-            </div>
-        `;
-    }).join('');
+    if (filtered.length === 0) {
+        const reason = q ? `no matches for "${escapeHtml(q)}"` : 'no entries in this filter';
+        container.innerHTML = `<div class="conn__empty">${reason}.</div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(renderCatalogRow).join('');
 }
 
-function onCatalogPick(entryId) {
-    const entry = MCP_CATALOG.find(e => e.id === entryId);
+function renderCatalogRow(entry) {
+    const isRemote = entry.source === 'remote';
+    const alreadyAdded = !!MCPServerRegistry.getServer(entry.id);
+
+    const tokenBadge = entry.requiresToken
+        ? '<span title="Requires a bearer token or API key">🔑 token required</span>'
+        : '<span title="No authentication needed">🔓 no token</span>';
+
+    const sourceBadge = isRemote
+        ? `<span class="connection-card-badge" title="Discovered via the Smithery public registry. Curated entries take precedence on collisions.">Smithery</span>`
+        : `<span class="connection-card-badge connection-card-badge--curated" title="Hand-curated by the editor team. Ships with full credential hints.">Curated</span>`;
+
+    const verifiedBadge = isRemote && entry.verified
+        ? `<span class="connection-card-badge" title="Marked as verified by the registry">✓ verified</span>`
+        : '';
+
+    const popularityMeta = isRemote && entry.useCount > 0
+        ? ` · <span title="Reported usage count from the registry">${formatUseCount(entry.useCount)} uses</span>`
+        : '';
+
+    const docsLink = entry.docsUrl
+        ? ` · <a href="${escapeAttr(entry.docsUrl)}" target="_blank" rel="noopener noreferrer">Docs ↗</a>`
+        : '';
+
+    const transportMeta = isRemote
+        ? '' // Unknown until detail fetch — don't show a misleading default.
+        : ` · ${escapeHtml(entry.transport || 'streamable-http')}`;
+
+    const action = alreadyAdded
+        ? `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="Edit existing server">Already added</button>`
+        : `<button type="button" data-mcp-catalog-id="${escapeAttr(entry.id)}" title="${isRemote ? 'Fetch connection details and pre-fill the add-server form' : 'Pre-fill the add-server form'}">Use this server</button>`;
+
+    return `
+        <div class="connection-card">
+            <div class="connection-card-icon">${categoryIcon(entry.category)}</div>
+            <div class="connection-card-info">
+                <div class="connection-card-label">${escapeHtml(entry.name)} ${sourceBadge}${verifiedBadge}</div>
+                <div class="connection-card-meta">${escapeHtml(entry.description || '—')}</div>
+                <div class="connection-card-meta">
+                    ${escapeHtml(entry.category || 'integration')}${transportMeta} · ${tokenBadge}${popularityMeta}${docsLink}
+                </div>
+            </div>
+            <div class="connection-card-actions">
+                ${action}
+            </div>
+        </div>
+    `;
+}
+
+function renderCatalogChips() {
+    const container = document.getElementById('mcpCatalogChips');
+    if (!container) return;
+    const chips = [
+        { v: 'all', label: 'All' },
+        { v: 'curated', label: 'Curated' },
+        { v: 'remote', label: 'Smithery' },
+    ];
+    container.innerHTML = chips.map(c =>
+        `<button type="button" data-mcp-chip="${c.v}" class="catalog-chip" aria-pressed="${_filterSource === c.v}">${escapeHtml(c.label)}</button>`
+    ).join('');
+}
+
+/**
+ * Render the small status line under the picker — "loading…" while the
+ * remote fetch is in flight, then a one-liner reporting how many remote
+ * entries landed and from what tier (`fresh`, `cache`, `bundled`).
+ *
+ * @param {{loading?: boolean, source?: 'fresh'|'cache'|'bundled', remoteCount?: number, fetchedAt?: number}} state
+ */
+function renderCatalogStatus(state) {
+    const el = document.getElementById('mcpCatalogStatus');
+    if (!el) return;
+    if (state.loading) {
+        el.textContent = 'Loading remote registry…';
+        el.style.display = 'block';
+        return;
+    }
+    if (state.source === 'fresh') {
+        el.textContent = `Showing ${MCP_CATALOG.length} curated + ${state.remoteCount} from Smithery (just fetched).`;
+    } else if (state.source === 'cache') {
+        const ageHrs = state.fetchedAt ? Math.round((Date.now() - state.fetchedAt) / 3600000) : null;
+        const ageStr = ageHrs == null ? '' : ` · cached ${ageHrs}h ago`;
+        el.textContent = `Showing ${MCP_CATALOG.length} curated + ${state.remoteCount} from Smithery${ageStr}.`;
+    } else {
+        el.textContent = `Showing ${MCP_CATALOG.length} curated entries (remote registry unavailable).`;
+    }
+    el.style.display = 'block';
+}
+
+function formatUseCount(n) {
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    return String(n);
+}
+
+async function onCatalogPick(entryId) {
+    const entry = _lastMergedCatalog.find(e => e.id === entryId)
+        || MCP_CATALOG.find(e => e.id === entryId);
     if (!entry) return;
 
     closeCatalogBrowser();
@@ -367,22 +530,58 @@ function onCatalogPick(entryId) {
         return;
     }
 
-    showServerEditor(null, catalogEntryToStarter(entry));
-
-    // Surface tokenHint / authNote into the existing test-result strip — already
-    // styled, already in DOM, no new UI needed.
-    if (entry.tokenHint || entry.authNote) {
-        const resultEl = document.getElementById('mcpServerTestResult');
-        if (resultEl) {
-            resultEl.style.display = 'block';
-            resultEl.style.color = 'var(--tk-text-muted)';
-            resultEl.textContent = [entry.tokenHint, entry.authNote].filter(Boolean).join(' · ');
-        }
+    // Bundled entries already have URL + transport; pre-fill is synchronous.
+    if (entry.source !== 'remote') {
+        showServerEditor(null, catalogEntryToStarter(entry));
+        surfaceCatalogHints(entry);
+        return;
     }
+
+    // Remote (Smithery) entry — fetch detail to resolve the connection URL.
+    if (window.showToast) window.showToast(`Fetching connection details for "${entry.name}"…`, 'info');
+
+    let detail;
+    try {
+        detail = await fetchRemoteDetail(entry.qualifiedName || entry.id);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (window.showToast) window.showToast(`Couldn't fetch details for "${entry.name}": ${msg}`, 'error');
+        return;
+    }
+
+    if (!detail || !detail.url) {
+        if (window.showToast) {
+            window.showToast(`"${entry.name}" has no usable HTTP/SSE connection in the registry.`, 'warning');
+        }
+        return;
+    }
+
+    const enrichedEntry = { ...entry, url: detail.url, transport: detail.transport };
+    showServerEditor(null, catalogEntryToStarter(enrichedEntry));
+    surfaceCatalogHints(enrichedEntry);
 }
 
-// Test seam.
+/**
+ * Render the entry's tokenHint / authNote into the editor's test-result
+ * strip — already styled, already in DOM. Called from `onCatalogPick`
+ * for both bundled and remote entries.
+ */
+function surfaceCatalogHints(entry) {
+    if (!entry.tokenHint && !entry.authNote) return;
+    const resultEl = document.getElementById('mcpServerTestResult');
+    if (!resultEl) return;
+    resultEl.style.display = 'block';
+    resultEl.style.color = 'var(--text-muted)';
+    resultEl.textContent = [entry.tokenHint, entry.authNote].filter(Boolean).join(' · ');
+}
+
+// Test seams.
 export const __test_renderMCPServersList = renderMCPServersList;
 export const __test_showServerEditor = showServerEditor;
 export const __test_renderCatalogList = renderCatalogList;
 export const __test_onCatalogPick = onCatalogPick;
+export const __test_renderCatalogChips = renderCatalogChips;
+export const __test_setFilter = (q, source) => {
+    _filterQuery = q || '';
+    if (source === 'all' || source === 'curated' || source === 'remote') _filterSource = source;
+};
