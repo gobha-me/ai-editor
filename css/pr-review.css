@@ -813,6 +813,35 @@ body.pr-review-active #editorSplit {
     font-size: var(--font-xs, 11px);
 }
 
+/* Diagnose & fix (2.14.0) — sibling to rerun. Sits in the same dock
+ * stack and is gated by `supportsDiagnose` (failed CI on open PR). */
+.pr-dock__diagnose {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent, #61afef) 8%, transparent);
+}
+.pr-dock__diagnose-error {
+    color: var(--danger, #c0392b);
+    font-size: var(--font-xs, 11px);
+}
+.pr-dock__diagnose-card {
+    margin: 0;
+}
+.pr-dock__diagnose-rationale {
+    color: var(--text-primary, inherit);
+    font-size: var(--font-sm, 12px);
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.pr-dock__diagnose-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+
 .pr-dock__submit {
     display: flex;
     flex-direction: column;

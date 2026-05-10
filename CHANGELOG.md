@@ -4,6 +4,66 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-05-10
+
+### Feature — Touch 3 PR Review slice 5: Diagnose & fix from failed CI logs
+
+Closes the deferral noted at the bottom of [§2.13.2](#2132---2026-05-10): *"Diagnose & fix is deferred. The original task scoped a third action — pull failed-job logs + LLM-generate a patch + surface as an inline edit-proposal card via `buildEditProposalCard`."* This slice ships that action as a sibling to the existing Re-run failed jobs button on the PR Review dock.
+
+The action: when CI is in `failure` state on an open PR, click **🔧 Diagnose & fix** → the dock fetches the failed-job logs, asks the LLM for a single-file patch, and renders the proposal as an inline approve/reject card. **Apply** drops the patch into the editor buffer (mirrors the chat-surface `applyPendingEdit` flow exactly); the user reviews in CodeMirror and commits via the normal flow; the existing 2.13.2 polling picks up the rerun on push. **Reject** clears the dock state and returns the surface to idle.
+
+**Resolved the dock-vs-chat surface tension** (the hedge in [§2.13.2](#2132---2026-05-10)) by *not refactoring chat at all*. The dock-local card is a preact component that reuses chat's CSS classes (`chat-message`, `tool-call`, `tool-call-details`, `tool-call-summary`, `tool-call-body`, `edit-proposal`) — styling is shared, JS is independent. Extracting [`buildEditProposalCard` in `js/chat/messages.js`](js/chat/messages.js) into a shared renderer would have required either teaching it preact or porting chat to preact; both out-of-scope when only one consumer exists. If a third consumer surfaces, the extraction lands then.
+
+**State separation.** Diagnose proposals live in a new [`js/pr-review/diagnose-state.js`](js/pr-review/diagnose-state.js) module (per-PR `Map<number, payload>`), not in chat's `pendingEdit` (`js/chat/state.js`) and not in `review-state.js`. Rationale: `pendingDiagnoseFix` is transient in-flight UI state, not per-PR persisted state — `review-state.js` carries drafts/viewed-set/resolvedLocal, which survive across reloads; diagnose proposals are session-only.
+
+**Provider gate — none new.** All three providers ship `listWorkflowJobs` + `getJobLog` (verified [github.js:1131/1151](js/git-providers/github.js), [gitea.js:1096/1129](js/git-providers/gitea.js), [gitlab.js:1096/1116](js/git-providers/gitlab.js)). Unlike `rerunCi` (which has a flag because GitLab doesn't support rerun), logs work everywhere. Gate on `ci?.state === 'failure' && pr?.state === 'open' && !pr?.merged && !!pr?.headSha` only.
+
+**Pure helper modules** — same shape as 2.13.2's `poll-cadence.js` (browser-free, node-test friendly):
+
+- [`js/pr-review/diagnose-logs.js`](js/pr-review/diagnose-logs.js) — `concatJobLogs(jobs)` deterministic sort + `=== job: <name> ===` separators; `tailTruncate(text, capBytes)` keeps the tail because CI failures cluster at the end, prepends `[... N bytes truncated from head ...]` marker on truncation. Cap defaults to **256 KB** (not the 10 MB cap in [`js/intelligence/test-loop/log-cache.js`](js/intelligence/test-loop/log-cache.js) which exists because that data feeds `read_lines`/`scan_file`; here bytes go straight to the model — 10 MB context is unworkable).
+- [`js/pr-review/diagnose-prompt.js`](js/pr-review/diagnose-prompt.js) — `buildDiagnoseFixMessages({logs, fileContent, filePath, projectTree, prTitle, logTotalBytes, logTruncatedAtCap})` returns `[{role:'system'},{role:'user'}]`. System prompt locks two contracts: JSON-only output (no commentary, no fences) and **exactly one file change** (multi-file is a v2 concern).
+- [`js/pr-review/diagnose-parse.js`](js/pr-review/diagnose-parse.js) — `parsePatchResponse(rawText)` returns `{ok:true, path, newContent, rationale} | {ok:false, error}`. Tolerant: strips ``` / ```json fences, skips leading/trailing prose by extracting the first balanced `{...}` block (handles nested braces in stringified content via in-string-aware depth counter), validates required fields.
+- [`js/pr-review/diagnose-state.js`](js/pr-review/diagnose-state.js) — `getPending(prNumber)`, `setPending(prNumber, payload)`, `clearPending(prNumber)`, `_resetForTests()`. Map keyed by PR number — multiple PRs in one session can each have an independent pending proposal.
+
+**Dock integration** in [`js/pr-review/PrReviewDock.js`](js/pr-review/PrReviewDock.js). New `supportsDiagnose` gate constant alongside `supportsRerun`. New `handleDiagnoseFix` async handler:
+
+1. `Git.listWorkflowRuns(owner, repo)` → match by `pr.headSha` (same pattern as `handleRerunCi`).
+2. `Git.listWorkflowJobs(owner, repo, runId)` → filter to `conclusion === 'failure'`.
+3. `Promise.all` over `Git.getJobLog(owner, repo, jobId)` per failed job.
+4. `concatJobLogs` → `tailTruncate(256 * 1024)`.
+5. **Target-file heuristic.** Sort `State.fileTree` paths by length descending so longer paths win over their prefixes (e.g. `src/x/main.js` over `main.js`); pick the first whose string appears in the truncated logs. If none match, pass `filePath: null` and let the model pick from the project tree.
+6. `Git.getFile(owner, repo, targetPath, pr.head)` → unwrap `{...content}` shape (provider returns an object with `.content`).
+7. `LLM.chat(buildDiagnoseFixMessages(...), {stream: false, temperature: 0.2})`.
+8. `parsePatchResponse(result.content)`. If the model picked a different path than the heuristic, refetch the original content for the diff baseline (best-effort).
+9. `setPending(prNumber, payload)`.
+
+Approve handler (`handleDiagnoseApprove`): `await loadFile(path)` → `applyEdit(newContent)` → `clearPending` → `window.showToast('Patch applied to editor — review and save.', 'success')`. **Precondition note:** `applyEdit` early-returns if `editorInstance` is null ([`js/editor/instance.js:771`](js/editor/instance.js)), so `loadFile` must run first to populate `State.currentFile` + `editorInstance`. This is why we don't go via `Git.saveFile` — that would commit without the user seeing the patch in CodeMirror, violating the editor's review-before-save invariant.
+
+Reject handler (`handleDiagnoseReject`): `clearPending` only; no editor mutation.
+
+**`detectIntent` bypass.** The new flow calls `LLM.chat` directly from the dock — never funnels through `js/chat/handlers.js#detectIntent`, which has a known false-positive on the `'change'` keyword that mis-routes commit-and-PR prompts into the legacy edit path (flagged in [§2.1.1](#211---2026-05-04)). Pattern matches `js/llm/api.js#generateCommitMessage` — direct `LLM.chat` call from a non-chat surface.
+
+**CSS** in [`css/pr-review.css`](css/pr-review.css). New `.pr-dock__diagnose` block sits in the dock's column flow, picks up the existing `chat-message tool-call` chrome for the card body via class composition. All colors via `var(--*)` tokens (theme-token lint compliant — fallbacks live inside `var(...)` calls).
+
+**Tests** (CI auto-globs `node --test tests/test-*.mjs`):
+
+- [`tests/test-pr-review-diagnose-logs.mjs`](tests/test-pr-review-diagnose-logs.mjs) — `concatJobLogs` deterministic across input shuffles; separator format; skips empty/null jobs; defensive on non-array inputs. `tailTruncate` keeps tail; under-cap → no truncation; defensive on non-string and zero/NaN/Infinity caps.
+- [`tests/test-pr-review-diagnose-prompt.mjs`](tests/test-pr-review-diagnose-prompt.mjs) — well-formed `[system, user]` array; system prompt mentions "exactly one file" + JSON schema (`path`/`newContent`/`rationale`); user prompt includes file path and project tree; truncation note appears only when log was capped; no token/api-key leakage.
+- [`tests/test-pr-review-diagnose-parse.mjs`](tests/test-pr-review-diagnose-parse.mjs) — happy JSON; ```json fence; bare ``` fence; leading prose; trailing prose; nested braces in `newContent`; missing `path`/`newContent` → `{ok:false}`; non-string `newContent` → `{ok:false}`; rationale defaults to empty string when missing; defensive on null / "" / non-string raw.
+- [`tests/test-pr-review-diagnose-state.mjs`](tests/test-pr-review-diagnose-state.mjs) — set/get/clear isolation across PR numbers; `_resetForTests` zeroes the map; defensive on non-number PR numbers.
+
+End-to-end against a real Gitea PR with failing CI verified the full flow: button appears → log fetch (network shows N×`getJobLog` for failed jobs only) → LLM POST (`stream:false`) → card renders with rationale + proposed contents → Apply switches the editor to the target file with a dirty buffer → save via the existing commit modal → push → polling picks up the rerun.
+
+**Removability.** Single coherent revert — drop the dock additions + the four pure modules + their tests in one PR. Provider/git/chat code untouched throughout, so revert is bounded to the 8 new files + the dock edit + version bump + CHANGELOG/ROADMAP entries. No capability matrix changes to unwind.
+
+**Deferred from this slice (parked under PR Review polish in [`docs/ROADMAP.md`](docs/ROADMAP.md)):**
+
+- **Agentic Diagnose mode** — let the LLM use `read_lines` / `scan_file` to investigate before proposing. Gated on v1 quality data: if single-shot output is consistently wrong on the target file pick, escalate.
+- **Multi-file patches** — natural follow-up alongside agentic mode. v1 system prompt explicitly constrains to one file.
+- **Dock-vs-chat card extraction** — extract `buildEditProposalCard`'s diff-render core into a shared `renderEditProposalDiff` helper. Gated on a third consumer surfacing; with one consumer (chat) plus this dock-local component, the duplication is ~40 LOC of preact wrapper, not worth a chat refactor.
+- **GitLab `rerunCi`** — separate from this slice; would re-fire the existing 2.13.2 capability matrix discussion.
+- **"Diagnose without CI failure"** — entry-point for PRs with no CI but red review feedback. Speculative.
+
 ## [2.13.2] - 2026-05-10
 
 ### Feature — PR Review CI polling + Re-run failed jobs
