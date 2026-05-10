@@ -512,8 +512,8 @@ export function renderPullRequests() {
 
         return `
             <div class="issue-item" role="listitem" tabindex="0"
-                 onclick="window.openPRDetailModal(${pr.number})"
-                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPRDetailModal(${pr.number})}"
+                 onclick="window.openPrReview(${pr.number})"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPrReview(${pr.number})}"
                  title="${ciTitle}" style="cursor: pointer;"
                  aria-label="Pull request #${pr.number}: ${escapeAttr(pr.title)}, CI ${pr.ciState || 'unknown'}">
                 <div class="issue-number">
@@ -659,8 +659,13 @@ export async function submitCreatePR() {
         const pr = await Git.createMergeRequest(owner, repo, title, body, head, base);
         closeCreatePRModal();
         await refreshPullRequests();
-        // Open the newly created PR
-        openPRDetailModal(pr.number);
+        // Open the newly created PR in the new takeover surface (2.12.0).
+        // Falls back to the legacy modal if pr-review isn't wired (rollback path).
+        if (typeof window.openPrReview === 'function') {
+            window.openPrReview(pr.number);
+        } else {
+            openPRDetailModal(pr.number);
+        }
     } catch (e) {
         errorEl.textContent = `Failed: ${e.message}`;
         errorEl.style.display = '';

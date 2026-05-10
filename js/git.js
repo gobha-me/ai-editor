@@ -417,6 +417,17 @@ const Git = {
         return provider.getPullRequestFiles(connection, owner, repo, number);
     },
 
+    /**
+     * Fetch raw unified diff for a PR/MR, parsed to a Map<filename, patch>.
+     * Used by the PR Review surface as the always-works fallback when
+     * the structured /files endpoint omits per-file `patch`.
+     * @since 2.12.0
+     */
+    async getPullRequestDiff(owner, repo, number) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getPullRequestDiff(connection, owner, repo, number);
+    },
+
     async getPullRequestComments(owner, repo, number) {
         const { provider, connection } = resolveCurrentConnection();
         return provider.getPullRequestComments(connection, owner, repo, number);

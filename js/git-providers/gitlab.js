@@ -774,16 +774,23 @@ const gitlabProvider = {
 
         return (notes || [])
             .filter(n => !n.system)  // Exclude system-generated notes
-            .map(n => ({
-                id: n.id,
-                body: n.body,
-                user: n.author?.username,
-                createdAt: n.created_at,
-                // GitLab inline notes have position data
-                path: n.position?.new_path || n.position?.old_path || null,
-                line: n.position?.new_line || n.position?.old_line || null,
-                type: n.position ? 'review' : 'general'
-            }));
+            .map(n => {
+                // 2.12.0 — `side` lets the PR Review side-by-side renderer
+                // anchor the thread to the correct cell. GitLab anchors
+                // a note via `position.new_line` (RIGHT) or `position.old_line`
+                // (LEFT) — exactly one is set per inline note.
+                const onLeft = n.position && n.position.old_line && !n.position.new_line;
+                return {
+                    id: n.id,
+                    body: n.body,
+                    user: n.author?.username,
+                    createdAt: n.created_at,
+                    path: n.position?.new_path || n.position?.old_path || null,
+                    line: n.position?.new_line || n.position?.old_line || null,
+                    side: onLeft ? 'LEFT' : 'RIGHT',
+                    type: n.position ? 'review' : 'general'
+                };
+            });
     },
 
     async addPullRequestComment(connection, owner, repo, number, body) {

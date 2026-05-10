@@ -14,6 +14,7 @@ import { EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
 import { buildLanguageEntries } from '../intelligence/retrieval/language-extensions.js';
+import { splitUnifiedDiffByFile } from '../pr-review/diff-parse.js';
 
 // ============================================
 // ENCODING UTILITIES (shared)
@@ -570,20 +571,50 @@ const giteaProvider = {
         }));
     },
 
+    /**
+     * Fetch the raw unified diff for a PR via /pulls/{n}.diff and parse
+     * it into a Map<filename, {status, additions, deletions, patch}>.
+     * Used by the PR Review surface as the always-works fallback when
+     * the structured endpoints omit patch text. Reuses _parseUnifiedDiff
+     * already in use by getCommitDiff.
+     *
+     * @since 2.12.0
+     */
+    async getPullRequestDiff(connection, owner, repo, number) {
+        const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/pulls/${number}.diff`;
+        const resp = await fetch(url, {
+            headers: this.getHeaders(connection),
+            signal: AbortSignal.timeout(this.WRITE_TIMEOUT)
+        });
+        if (!resp.ok) {
+            throw new Error(`PR diff fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        const rawDiff = await resp.text();
+        return splitUnifiedDiffByFile(rawDiff);
+    },
+
     async getPullRequestComments(connection, owner, repo, number) {
         // Fetch review comments and general comments in parallel
         const [reviewComments, generalComments] = await Promise.all([
             this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/pulls/${number}/comments`
-            ).then(comments => (comments || []).map(c => ({
-                id: c.id,
-                body: c.body,
-                user: c.user.login,
-                createdAt: c.created_at,
-                path: c.path,
-                line: c.line || c.old_position,
-                type: 'review'
-            }))).catch(() => []),
+            ).then(comments => (comments || []).map(c => {
+                // 2.12.0 — `side` lets the PR Review side-by-side renderer
+                // anchor the thread to the correct cell. Gitea anchors to
+                // exactly one side: `old_position` set without `line` ==
+                // LEFT (deleted/old line); otherwise RIGHT (new line).
+                const onLeft = c.old_position && !c.line;
+                return {
+                    id: c.id,
+                    body: c.body,
+                    user: c.user.login,
+                    createdAt: c.created_at,
+                    path: c.path,
+                    line: c.line || c.old_position,
+                    side: onLeft ? 'LEFT' : 'RIGHT',
+                    type: 'review'
+                };
+            })).catch(() => []),
 
             this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/issues/${number}/comments`

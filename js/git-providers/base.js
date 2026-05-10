@@ -436,6 +436,23 @@ const BASE_GIT_PROVIDER = {
     },
 
     /**
+     * Fetch the raw unified diff for a PR/MR and return per-file patches.
+     * Used as a final fallback when both `getPullRequestFiles` and
+     * `compareRefs` fail to populate per-file `patch` (Gitea quirk:
+     * its /pulls/{n}/files and /compare endpoints sometimes return
+     * empty patches for larger PRs while /pulls/{n}.diff always works).
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @returns {Promise<Map<string, {status: string, additions: number, deletions: number, patch: string}>>}
+     */
+    async getPullRequestDiff(connection, owner, repo, number) {
+        notSupported(this.name, 'getPullRequestDiff');
+    },
+
+    /**
      * Get review comments on a PR/MR.
      * Returns: [{ id, body, user, createdAt, path?, line? }]
      */

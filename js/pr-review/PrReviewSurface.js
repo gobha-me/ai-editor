@@ -1,0 +1,577 @@
+// @ts-check
+/**
+ * PR Review surface — Preact + htm root.
+ *
+ * Read-only middle-pane takeover for inspecting a pull request:
+ * Conversation / Files / Commits / Checks tabs with side-by-side diff
+ * and inline comment threads anchored to lines.
+ *
+ * Slice 1 is read-only — no comment posting, no review submission,
+ * no AI summary. Those land in 2.13.0 (dock + submission) and 2.14.0
+ * (AI summary). The bottom-of-conversation banner tells the user
+ * where to find submission in the meantime.
+ *
+ * Mirrors the lifecycle pattern in
+ * [`js/chat/scratchpad-panel/ScratchpadPanel.js`]: async `getPreact()`
+ * at module top, `useLayoutEffect` for EventBus subscriptions
+ * (`useEffect` queues until next render in the vendor-bundle env and
+ * misses any emit fired before the second render).
+ *
+ * @since 2.12.0 (Touch 3 PR Review surface — slice 1)
+ * @module pr-review/PrReviewSurface
+ */
+
+import { State, EventBus } from '../core.js';
+import { Git } from '../git.js';
+import { renderMarkdown } from '../secondary-pane.js';
+import { getPreact } from '../utils/preact-mount.js';
+import { parsePatch, pairSideBySide, truncateRows, countChanges } from './diff-parse.js';
+
+const { html, useState, useLayoutEffect, useMemo } = await getPreact();
+
+const FILE_STATUS_MARK = {
+    added: { mark: 'A', cls: 'pr__filemark--add', label: 'Added' },
+    removed: { mark: 'D', cls: 'pr__filemark--del', label: 'Deleted' },
+    modified: { mark: 'M', cls: 'pr__filemark--mod', label: 'Modified' },
+    renamed: { mark: 'R', cls: 'pr__filemark--ren', label: 'Renamed' },
+    copied: { mark: 'C', cls: 'pr__filemark--ren', label: 'Copied' }
+};
+
+const CI_STATE_LABEL = {
+    success: { label: '✅ passing', cls: 'pr__ci-badge--ok' },
+    pending: { label: '🔄 running', cls: 'pr__ci-badge--pending' },
+    failure: { label: '❌ failing', cls: 'pr__ci-badge--fail' },
+    error: { label: '❌ error', cls: 'pr__ci-badge--fail' },
+    unknown: { label: '⚪ no checks', cls: 'pr__ci-badge--unknown' }
+};
+
+const STATE_BADGE = {
+    open: { text: 'Open', cls: 'pr__state-badge--open' },
+    closed: { text: 'Closed', cls: 'pr__state-badge--closed' },
+    merged: { text: 'Merged', cls: 'pr__state-badge--merged' }
+};
+
+/**
+ * Group comments by file path for the file-tree thread-count badge.
+ * @param {Array<Object>} comments
+ * @returns {Map<string, number>}
+ */
+function _commentCountsByPath(comments) {
+    const counts = new Map();
+    for (const c of comments) {
+        if (!c.path) continue;
+        counts.set(c.path, (counts.get(c.path) || 0) + 1);
+    }
+    return counts;
+}
+
+/**
+ * Group comments by `(path, line, side)` so the diff renderer can
+ * render thread rows anchored to the right cell.
+ *
+ * @param {Array<Object>} comments
+ * @returns {Map<string, Array<Object>>}  key = `${path}::${side}::${line}`
+ */
+function _commentsByAnchor(comments) {
+    const map = new Map();
+    for (const c of comments) {
+        if (!c.path || !c.line) continue;
+        const side = c.side === 'LEFT' ? 'LEFT' : 'RIGHT';
+        const key = `${c.path}::${side}::${c.line}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(c);
+    }
+    return map;
+}
+
+/**
+ * Root surface. Owns its own data fetch; the mount module just
+ * supplies `{ owner, repo, prNumber, onClose }`.
+ *
+ * @param {{owner:string, repo:string, prNumber:number, onClose:Function}} props
+ */
+export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
+    const [data, setData] = useState({
+        pr: null,
+        files: [],
+        comments: [],
+        commits: [],
+        ci: { state: 'unknown', statuses: [] },
+        loading: true,
+        error: null
+    });
+    const [tab, setTab] = useState('files');
+    const [activePath, setActivePath] = useState(null);
+    const [diffMode, setDiffMode] = useState(/** @type {'split'|'unified'} */ ('split'));
+    const [filter, setFilter] = useState('');
+
+    useLayoutEffect(() => {
+        let cancelled = false;
+        async function load() {
+            setData(d => ({ ...d, loading: true, error: null }));
+            try {
+                const pr = await Git.getPullRequest(owner, repo, prNumber);
+                if (cancelled) return;
+                // Render header immediately
+                setData(d => ({ ...d, pr, loading: false }));
+
+                // `compareRefs(base, head)` is the source of truth for the
+                // PR-scoped commits AND a reliable fallback for per-file
+                // patches: Gitea's /pulls/{n}/files endpoint omits `patch`
+                // for many real-world PRs (size-dependent quirk), while the
+                // /compare endpoint includes it. Doing one extra round-trip
+                // is the right trade vs. silently-empty diffs.
+                const [files, comments, ci, compare] = await Promise.all([
+                    Git.getPullRequestFiles(owner, repo, prNumber).catch(() => []),
+                    Git.getPullRequestComments(owner, repo, prNumber).catch(() => []),
+                    Git.getCommitStatus(owner, repo, pr.head).catch(() => ({ state: 'unknown', statuses: [] })),
+                    Git.compareRefs(owner, repo, pr.base, pr.head).catch(() => ({ commits: [], files: [] }))
+                ]);
+                if (cancelled) return;
+
+                // Backfill missing patches from compare.files keyed on filename.
+                const patchByPath = new Map();
+                for (const f of (compare.files || [])) {
+                    if (f.filename && f.patch) patchByPath.set(f.filename, f.patch);
+                }
+                let filesWithPatches = files.map(f =>
+                    f.patch ? f : { ...f, patch: patchByPath.get(f.filename) || null }
+                );
+                const commits = compare.commits || [];
+
+                setData(d => ({ ...d, files: filesWithPatches, comments, ci, commits }));
+                if (filesWithPatches.length > 0) {
+                    setActivePath(p => p || filesWithPatches[0].filename);
+                }
+
+                // Third fallback: Gitea returns null per-file `patch` for
+                // many real-world PRs on BOTH /files and /compare. Fetch
+                // the raw .diff endpoint (always works) and backfill any
+                // file still missing a patch. Only triggered when needed
+                // — the round-trip has real cost on large PRs.
+                const stillMissing = filesWithPatches.some(f => !f.patch);
+                if (stillMissing) {
+                    try {
+                        const rawDiffMap = await Git.getPullRequestDiff(owner, repo, prNumber);
+                        if (cancelled) return;
+                        if (rawDiffMap && rawDiffMap.size > 0) {
+                            filesWithPatches = filesWithPatches.map(f =>
+                                f.patch ? f : { ...f, patch: rawDiffMap.get(f.filename) || null }
+                            );
+                            setData(d => ({ ...d, files: filesWithPatches }));
+                        }
+                    } catch (e) {
+                        // Non-fatal — surface still works without patches,
+                        // empty-diff message tells the user which file lacks one.
+                        console.warn('[pr-review] raw .diff fallback failed:', e.message);
+                    }
+                }
+            } catch (e) {
+                if (cancelled) return;
+                setData(d => ({ ...d, loading: false, error: e.message || String(e) }));
+            }
+        }
+        load();
+        const off = EventBus.on('prs:refresh', load);
+        return () => {
+            cancelled = true;
+            off();
+        };
+    }, [owner, repo, prNumber]);
+
+    const commentCounts = useMemo(() => _commentCountsByPath(data.comments), [data.comments]);
+    const commentsByAnchor = useMemo(() => _commentsByAnchor(data.comments), [data.comments]);
+
+    if (data.loading && !data.pr) {
+        return html`
+            <div class="pr-review">
+                <${PrTopBar} pr=${null} onClose=${onClose} loading=${true} />
+                <div class="pr-review__loading">Loading PR #${prNumber}…</div>
+            </div>
+        `;
+    }
+    if (data.error) {
+        return html`
+            <div class="pr-review">
+                <${PrTopBar} pr=${null} onClose=${onClose} loading=${false} />
+                <div class="pr-review__error">Failed to load PR #${prNumber}: ${data.error}</div>
+            </div>
+        `;
+    }
+
+    return html`
+        <div class="pr-review">
+            <${PrTopBar} pr=${data.pr} ci=${data.ci} onClose=${onClose} loading=${false} />
+            <${PrTabs}
+                active=${tab}
+                onSelect=${setTab}
+                counts=${{
+                    conversation: data.comments.filter(c => !c.path).length,
+                    files: data.files.length,
+                    commits: data.commits.length,
+                    checks: (data.ci.statuses && data.ci.statuses.length) || 0
+                }}
+            />
+            <div class="pr-review__body">
+                ${tab === 'files' && html`
+                    <${PrFilesView}
+                        files=${data.files}
+                        commentCounts=${commentCounts}
+                        commentsByAnchor=${commentsByAnchor}
+                        activePath=${activePath}
+                        onSelectPath=${setActivePath}
+                        diffMode=${diffMode}
+                        onDiffModeChange=${setDiffMode}
+                        filter=${filter}
+                        onFilterChange=${setFilter}
+                    />
+                `}
+                ${tab === 'conversation' && html`
+                    <${PrConversationView} pr=${data.pr} comments=${data.comments} />
+                `}
+                ${tab === 'commits' && html`
+                    <${PrCommitsView} commits=${data.commits} />
+                `}
+                ${tab === 'checks' && html`
+                    <${PrChecksView} ci=${data.ci} />
+                `}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================
+// Top bar
+// ============================================
+
+function PrTopBar({ pr, ci, onClose, loading }) {
+    const stateKey = pr ? (pr.merged ? 'merged' : pr.state) : 'open';
+    const state = STATE_BADGE[stateKey] || STATE_BADGE.open;
+    const ciInfo = (ci && CI_STATE_LABEL[ci.state]) || CI_STATE_LABEL.unknown;
+    return html`
+        <div class="pr-review__topbar">
+            <button type="button" class="pr__btn pr__btn--ghost pr__back" onClick=${onClose} title="Back to editor (Esc)" aria-label="Back to editor">
+                <span aria-hidden="true">←</span><span class="pr__back-label">Back</span>
+            </button>
+            ${loading
+                ? html`<span class="pr__title pr__title--loading">Loading…</span>`
+                : html`
+                    <span class=${'pr__state-badge ' + state.cls}>${state.text}</span>
+                    <span class="pr__title">
+                        <span class="pr__num">#${pr.number}</span>
+                        <span class="pr__title-text">${pr.title}</span>
+                    </span>
+                    <span class="pr__branches" title=${pr.head + ' → ' + pr.base}>
+                        <code>${pr.head}</code>
+                        <span class="pr__branch-arrow" aria-hidden="true">→</span>
+                        <code>${pr.base}</code>
+                    </span>
+                    ${ci && html`<span class=${'pr__ci-badge ' + ciInfo.cls} title=${'CI: ' + ci.state}>${ciInfo.label}</span>`}
+                    ${pr.url && html`
+                        <a class="pr__btn pr__btn--ghost pr__ext" href=${pr.url} target="_blank" rel="noopener" title="Open in browser">
+                            <span aria-hidden="true">↗</span>
+                        </a>
+                    `}
+                `}
+        </div>
+    `;
+}
+
+// ============================================
+// Tabs
+// ============================================
+
+function PrTabs({ active, onSelect, counts }) {
+    const tabs = [
+        { id: 'conversation', label: 'Conversation', count: counts.conversation },
+        { id: 'files', label: 'Files', count: counts.files },
+        { id: 'commits', label: 'Commits', count: counts.commits },
+        { id: 'checks', label: 'Checks', count: counts.checks }
+    ];
+    return html`
+        <div class="pr-review__tabs" role="tablist" aria-label="Pull request sections">
+            ${tabs.map(t => html`
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected=${active === t.id}
+                    class=${'pr__tab ' + (active === t.id ? 'pr__tab--active' : '')}
+                    onClick=${() => onSelect(t.id)}
+                    key=${t.id}>
+                    <span class="pr__tab-label">${t.label}</span>
+                    ${t.count > 0 && html`<span class="pr__tab-count">${t.count}</span>`}
+                </button>
+            `)}
+        </div>
+    `;
+}
+
+// ============================================
+// Files view (file tree + diff pane)
+// ============================================
+
+function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSelectPath, diffMode, onDiffModeChange, filter, onFilterChange }) {
+    const filtered = useMemo(() => {
+        const q = filter.trim().toLowerCase();
+        if (!q) return files;
+        return files.filter(f =>
+            f.filename.toLowerCase().includes(q) ||
+            (f.previousFilename && f.previousFilename.toLowerCase().includes(q))
+        );
+    }, [files, filter]);
+
+    const active = files.find(f => f.filename === activePath) || null;
+
+    if (files.length === 0) {
+        return html`<div class="pr-review__empty">No changed files.</div>`;
+    }
+
+    return html`
+        <div class="pr__files">
+            <aside class="pr__filetree" aria-label="Changed files">
+                <div class="pr__filetree-h">
+                    <input
+                        type="search"
+                        class="pr__filter"
+                        placeholder=${`Filter ${files.length} files…`}
+                        value=${filter}
+                        onInput=${(e) => onFilterChange(e.target.value)}
+                        aria-label="Filter files" />
+                </div>
+                <ul class="pr__filelist" role="list">
+                    ${filtered.map(f => {
+                        const status = FILE_STATUS_MARK[f.status] || FILE_STATUS_MARK.modified;
+                        const threadCount = commentCounts.get(f.filename) || 0;
+                        const isActive = f.filename === activePath;
+                        return html`
+                            <li class=${'pr__filerow ' + (isActive ? 'pr__filerow--active' : '')} key=${f.filename}>
+                                <button type="button" class="pr__filebtn" onClick=${() => onSelectPath(f.filename)} title=${f.filename} aria-current=${isActive}>
+                                    <span class=${'pr__filemark ' + status.cls} aria-label=${status.label}>${status.mark}</span>
+                                    <span class="pr__filepath">${f.filename}</span>
+                                    ${threadCount > 0 && html`
+                                        <span class="pr__threadcount" title=${threadCount + ' comments'}>${'💬 ' + threadCount}</span>
+                                    `}
+                                    <span class="pr__filestats">
+                                        <span class="pr__add">+${f.additions || 0}</span>
+                                        <span class="pr__del">−${f.deletions || 0}</span>
+                                    </span>
+                                </button>
+                            </li>
+                        `;
+                    })}
+                </ul>
+            </aside>
+            <section class="pr__diffpane" aria-label="Diff for selected file">
+                ${active
+                    ? html`<${PrFileDiff} file=${active} mode=${diffMode} onModeChange=${onDiffModeChange} commentsByAnchor=${commentsByAnchor} />`
+                    : html`<div class="pr-review__empty">Select a file to view its diff.</div>`}
+            </section>
+        </div>
+    `;
+}
+
+// ============================================
+// File diff (a single file's hunks)
+// ============================================
+
+function PrFileDiff({ file, mode, onModeChange, commentsByAnchor }) {
+    const parsed = useMemo(() => parsePatch(file.patch), [file.patch]);
+
+    return html`
+        <div class="pr__file">
+            <div class="pr__file-h">
+                <span class="pr__file-h-path">${file.filename}</span>
+                ${file.previousFilename && html`
+                    <span class="pr__file-h-prev" title=${'renamed from ' + file.previousFilename}>← ${file.previousFilename}</span>
+                `}
+                <span class="pr__file-h-spacer"></span>
+                <div class="pr__file-h-modes" role="tablist" aria-label="Diff view mode">
+                    <button type="button" class=${'pr__mode ' + (mode === 'split' ? 'pr__mode--active' : '')} onClick=${() => onModeChange('split')} aria-selected=${mode === 'split'}>Split</button>
+                    <button type="button" class=${'pr__mode ' + (mode === 'unified' ? 'pr__mode--active' : '')} onClick=${() => onModeChange('unified')} aria-selected=${mode === 'unified'}>Unified</button>
+                </div>
+            </div>
+            ${parsed.hunks.length === 0
+                ? html`<div class="pr-review__empty">${file.patch ? 'Empty patch.' : 'No textual diff (binary or unchanged).'}</div>`
+                : parsed.hunks.map((h, idx) => html`
+                    <${PrHunk} hunk=${h} mode=${mode} path=${file.filename} commentsByAnchor=${commentsByAnchor} key=${idx} />
+                `)}
+        </div>
+    `;
+}
+
+function PrHunk({ hunk, mode, path, commentsByAnchor }) {
+    const { rows, truncated } = truncateRows(hunk.rows);
+    return html`
+        <div class="pr__hunk">
+            <div class="pr__hunk-h" title=${hunk.header}>${hunk.header}</div>
+            ${mode === 'split'
+                ? html`<${PrHunkSplit} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} />`
+                : html`<${PrHunkUnified} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} />`}
+            ${truncated > 0 && html`
+                <div class="pr__hunk-truncated">… ${truncated} more rows hidden (open in browser to view full diff)</div>
+            `}
+        </div>
+    `;
+}
+
+function PrHunkUnified({ rows, path, commentsByAnchor }) {
+    return html`
+        <div class="pr__diff pr__diff--unified" role="table" aria-label="Unified diff">
+            ${rows.map((r, i) => {
+                const lineKey = r.r != null
+                    ? `${path}::RIGHT::${r.r}`
+                    : (r.l != null ? `${path}::LEFT::${r.l}` : null);
+                const threads = lineKey ? commentsByAnchor.get(lineKey) : null;
+                return html`
+                    <div class=${'pr__row pr__row--' + r.kind} role="row" key=${i}>
+                        <span class="pr__ln pr__ln--l" aria-hidden="true">${r.l ?? ''}</span>
+                        <span class="pr__ln pr__ln--r" aria-hidden="true">${r.r ?? ''}</span>
+                        <span class="pr__code">${_signFor(r.kind)}${r.code}</span>
+                    </div>
+                    ${threads && html`<${PrThreadRow} threads=${threads} colspan=${3} />`}
+                `;
+            })}
+        </div>
+    `;
+}
+
+function PrHunkSplit({ rows, path, commentsByAnchor }) {
+    const paired = useMemo(() => pairSideBySide(rows), [rows]);
+    return html`
+        <div class="pr__diff pr__diff--split" role="table" aria-label="Side-by-side diff">
+            ${paired.map((p, i) => {
+                const leftKey = p.left && p.left.l != null ? `${path}::LEFT::${p.left.l}` : null;
+                const rightKey = p.right && p.right.r != null ? `${path}::RIGHT::${p.right.r}` : null;
+                const leftThreads = leftKey ? commentsByAnchor.get(leftKey) : null;
+                const rightThreads = rightKey ? commentsByAnchor.get(rightKey) : null;
+                return html`
+                    <div class="pr__row-split" role="row" key=${i}>
+                        <span class=${'pr__cell-ln ' + (p.left ? 'pr__cell--' + p.left.kind : 'pr__cell--blank')}>${p.left ? p.left.l : ''}</span>
+                        <span class=${'pr__cell-code ' + (p.left ? 'pr__cell--' + p.left.kind : 'pr__cell--blank')}>${p.left ? p.left.code : ''}</span>
+                        <span class=${'pr__cell-ln ' + (p.right ? 'pr__cell--' + p.right.kind : 'pr__cell--blank')}>${p.right ? p.right.r : ''}</span>
+                        <span class=${'pr__cell-code ' + (p.right ? 'pr__cell--' + p.right.kind : 'pr__cell--blank')}>${p.right ? p.right.code : ''}</span>
+                    </div>
+                    ${(leftThreads || rightThreads) && html`
+                        <div class="pr__thread-split-row" role="row">
+                            <div class="pr__thread-side">
+                                ${leftThreads && html`<${PrThreadRow} threads=${leftThreads} colspan=${1} />`}
+                            </div>
+                            <div class="pr__thread-side">
+                                ${rightThreads && html`<${PrThreadRow} threads=${rightThreads} colspan=${1} />`}
+                            </div>
+                        </div>
+                    `}
+                `;
+            })}
+        </div>
+    `;
+}
+
+function _signFor(kind) {
+    if (kind === 'add') return '+';
+    if (kind === 'del') return '−';
+    return ' ';
+}
+
+function PrThreadRow({ threads }) {
+    return html`
+        <div class="pr__threads" role="row">
+            ${threads.map(c => html`
+                <div class="pr__thread" key=${c.id}>
+                    <div class="pr__thread-h">
+                        <strong>${c.user || 'unknown'}</strong>
+                        ${c.createdAt && html`<span class="pr__thread-when"> · ${_formatDate(c.createdAt)}</span>`}
+                    </div>
+                    <div class="pr__thread-body" dangerouslySetInnerHTML=${{ __html: renderMarkdown(c.body || '') }}></div>
+                </div>
+            `)}
+        </div>
+    `;
+}
+
+function _formatDate(iso) {
+    try {
+        return new Date(iso).toLocaleDateString();
+    } catch {
+        return '';
+    }
+}
+
+// ============================================
+// Conversation view
+// ============================================
+
+function PrConversationView({ pr, comments }) {
+    const general = comments.filter(c => !c.path);
+    return html`
+        <div class="pr__conversation">
+            ${pr && pr.body && html`
+                <div class="pr__convo-body">
+                    <div class="pr__convo-h">
+                        <strong>${pr.user || 'unknown'}</strong>
+                        ${pr.createdAt && html`<span class="pr__thread-when"> · ${_formatDate(pr.createdAt)}</span>`}
+                    </div>
+                    <div class="pr__convo-md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(pr.body) }}></div>
+                </div>
+            `}
+            ${general.length === 0
+                ? html`<div class="pr-review__empty pr__convo-empty">No discussion yet.</div>`
+                : general.map(c => html`
+                    <div class="pr__convo-comment" key=${c.id}>
+                        <div class="pr__convo-h">
+                            <strong>${c.user || 'unknown'}</strong>
+                            ${c.createdAt && html`<span class="pr__thread-when"> · ${_formatDate(c.createdAt)}</span>`}
+                        </div>
+                        <div class="pr__convo-md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(c.body || '') }}></div>
+                    </div>
+                `)}
+            <div class="pr__readonly-banner" role="note">
+                Read-only review surface. Posting comments and submitting reviews ship in 2.13.0 — for now, comment via chat or the external link above.
+            </div>
+        </div>
+    `;
+}
+
+// ============================================
+// Commits view
+// ============================================
+
+function PrCommitsView({ commits }) {
+    if (!commits || commits.length === 0) {
+        return html`<div class="pr-review__empty">No commit history available.</div>`;
+    }
+    return html`
+        <ul class="pr__commits" role="list">
+            ${commits.map(c => html`
+                <li class="pr__commit" key=${c.sha}>
+                    <code class="pr__commit-sha">${c.shortSha || (c.sha || '').slice(0, 7)}</code>
+                    <span class="pr__commit-msg">${c.subject || (c.message || '').split('\n')[0]}</span>
+                    <span class="pr__commit-author">${c.author || 'unknown'}</span>
+                    <span class="pr__commit-date">${_formatDate(c.date)}</span>
+                </li>
+            `)}
+        </ul>
+    `;
+}
+
+// ============================================
+// Checks view
+// ============================================
+
+function PrChecksView({ ci }) {
+    if (!ci || !ci.statuses || ci.statuses.length === 0) {
+        return html`<div class="pr-review__empty">No CI checks reported.</div>`;
+    }
+    return html`
+        <ul class="pr__checks" role="list">
+            ${ci.statuses.map((s, i) => html`
+                <li class=${'pr__check pr__check--' + (s.state || 'unknown')} key=${i}>
+                    <span class="pr__check-state">${(CI_STATE_LABEL[s.state] || CI_STATE_LABEL.unknown).label}</span>
+                    <span class="pr__check-context">${s.context || s.name || 'check'}</span>
+                    ${s.description && html`<span class="pr__check-desc">${s.description}</span>`}
+                    ${s.target_url && html`<a href=${s.target_url} target="_blank" rel="noopener" class="pr__check-link">details ↗</a>`}
+                </li>
+            `)}
+        </ul>
+    `;
+}

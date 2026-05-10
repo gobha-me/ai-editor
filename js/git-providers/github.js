@@ -19,6 +19,7 @@
 import { EventBus } from '../core.js';
 import { circuitBreakerGuard, markReachable, markUnreachable, healthProbe } from './base.js';
 import { buildLanguageEntries } from '../intelligence/retrieval/language-extensions.js';
+import { splitUnifiedDiffByFile } from '../pr-review/diff-parse.js';
 
 // ============================================
 // ENCODING UTILITIES
@@ -689,18 +690,45 @@ const githubProvider = {
         }));
     },
 
+    /**
+     * Fetch the raw unified diff for a PR via the .diff media type and
+     * parse it into a Map<filename, {status, additions, deletions, patch}>.
+     * Used by the PR Review surface as the always-works fallback when
+     * the structured endpoints omit patch text.
+     *
+     * @since 2.12.0
+     */
+    async getPullRequestDiff(connection, owner, repo, number) {
+        const url = `${this.getBaseUrl(connection)}/repos/${owner}/${repo}/pulls/${number}`;
+        const headers = { ...this.getHeaders(connection), Accept: 'application/vnd.github.v3.diff' };
+        const resp = await fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(this.WRITE_TIMEOUT)
+        });
+        if (!resp.ok) {
+            throw new Error(`PR diff fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        const rawDiff = await resp.text();
+        return splitUnifiedDiffByFile(rawDiff);
+    },
+
     async getPullRequestComments(connection, owner, repo, number) {
         // Fetch review comments and general comments in parallel
         const [reviewComments, generalComments] = await Promise.all([
             this.request(connection, 'GET',
                 `/repos/${owner}/${repo}/pulls/${number}/comments?per_page=100`
             ).then(comments => (comments || []).map(c => ({
+                // 2.12.0 — `side` lets the PR Review side-by-side renderer
+                // anchor the thread to the correct cell. GitHub exposes
+                // `side` directly ('LEFT'|'RIGHT'); default to RIGHT
+                // when missing (covers older comments).
                 id: c.id,
                 body: c.body,
                 user: c.user.login,
                 createdAt: c.created_at,
                 path: c.path,
                 line: c.line || c.original_line,
+                side: c.side === 'LEFT' ? 'LEFT' : 'RIGHT',
                 type: 'review'
             }))).catch(() => []),
 

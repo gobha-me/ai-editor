@@ -21,6 +21,7 @@ import { applyVisualSettings, applyLineNumbersVisibility } from './utils/apply-v
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
 import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
+import { openPrReview, closePrReview, isPrReviewActive } from './pr-review/pr-review-mount.js';
 import { initDebugSlideOut, openDebugSlideOut, closeDebugSlideOut, copyDiagnosticBundle } from './debug-slideout.js';
 import { initHelpSlideOut, openHelpSlideOut, closeHelpSlideOut } from './help/index.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
@@ -231,6 +232,11 @@ window.closeCreatePRModal = closeCreatePRModal;
 window.submitCreatePR = submitCreatePR;
 window.openPRDetailModal = openPRDetailModal;
 window.closePRDetailModal = closePRDetailModal;
+// 2.12.0 — Touch 3 PR Review takeover. The legacy `openPRDetailModal`
+// stays exported for the rollback path (project-manager.js calls it
+// when `window.openPrReview` is missing).
+window.openPrReview = openPrReview;
+window.closePrReview = closePrReview;
 window.submitMergePR = submitMergePR;
 window.generatePRComment = generatePRComment;
 window.submitPRComment = submitPRComment;
@@ -447,7 +453,7 @@ function setupKeyboardShortcuts() {
 
         // Escape - Close modals
         if (e.key === 'Escape') {
-            // Close in priority order: search panel → quick open → modals
+            // Close in priority order: search panel → quick open → PR review → modals
             const searchPanel = document.getElementById('searchPanel');
             if (searchPanel?.classList.contains('active')) {
                 closeSearchPanel();
@@ -458,7 +464,21 @@ function setupKeyboardShortcuts() {
                 QuickOpen.close();
                 return;
             }
+            if (isPrReviewActive()) {
+                closePrReview();
+                return;
+            }
             closeAllModals();
+        }
+    });
+
+    // 2.12.0 — popstate: browser-back closes the PR Review takeover
+    // (matches the Esc behavior). The mount's pushState set
+    // `history.state.prReview = n`; back-nav fires popstate with the
+    // *prior* entry, where `prReview` is unset.
+    window.addEventListener('popstate', () => {
+        if (isPrReviewActive()) {
+            closePrReview({ popstate: true });
         }
     });
 }

@@ -4,6 +4,39 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-05-10
+
+### Feature — Touch 3 PR Review surface (slice 1: read-only middle-pane takeover)
+
+Closes the **inspection half** of the user's #1 cited Touch 3 pain point from [`docs/design/touch-3-left-pane-and-window/chat2.md`](docs/design/touch-3-left-pane-and-window/chat2.md): *"today, real review means leaving for the repo BE."* PR detail moves from a click-through modal into a full middle-pane stage takeover with a file tree of changes, side-by-side diff, inline comment threads anchored to lines, and Conversation / Files / Commits / Checks tabs. Submission (post-comment / Approve / Request changes / Submit) and the AI summary banner are deferred — slice 2 (2.13.0) and slice 3 (2.14.0) per the slice plan in the [PR description / plan file](.claude/plans/review-the-roadmap-memory-squishy-lampson.md).
+
+The Rail v2 PRs tab from [§2.11.0](#2110---2026-05-10) provides the entry point; the legacy [`js/pr-detail.js#openPRDetailModal`](js/pr-detail.js) stays exported for one cycle as the rollback escape hatch and is removed in slice 2 once the dock proves out.
+
+**Stage seam — the load-bearing decision.** New peer `<div id="prReviewMount">` lives inside `#editorSplit` next to `#editorContainer` in [`html/editor-panel.html`](html/editor-panel.html). `openPrReview(n)` sets `body.pr-review-active` (CSS hides `.editor-tabs-bar` + `.editor-status` + `#secondaryPane`); `closePrReview()` reverses it. The CodeMirror instance is **untouched** — no destroy, no re-create, no scroll-state loss when the user comes back. `try/finally` in the mount + `console.error` recovery path ensures the body class clears even if Preact render throws — the stage-seam state-leak antibody. Mirrors the pattern the `#secondaryPane` already uses inside `#editorSplit` — peer regions, body class for chrome takeover.
+
+**New module tree** under [`js/pr-review/`](js/pr-review/):
+
+- [`diff-parse.js`](js/pr-review/diff-parse.js) — pure unified-diff parser. `parsePatch(patch)` → `{hunks:[{header, oldStart, newStart, rows:[{kind:'context'|'add'|'del', l, r, code}]}]}`; `pairSideBySide(rows)` aligns adjacent del/add runs cell-by-cell for the split view (excess on either side fills against `null`); `truncateRows(rows, max)` hard-caps per-hunk visible rows at 500 (huge-file main-thread guard) and reports the trimmed remainder; `countChanges(parsed)` for any callsite the provider doesn't separate `additions`/`deletions`. The existing [`js/editor/diff.js#computeSimpleDiff`](js/editor/diff.js) is **not** retrofitted — it's a different shape (line-by-line, no hunks, single-file) tuned for in-chat edit proposals.
+- [`PrReviewSurface.js`](js/pr-review/PrReviewSurface.js) — Preact + htm root. Mirrors the lifecycle in [`js/chat/scratchpad-panel/ScratchpadPanel.js`](js/chat/scratchpad-panel/ScratchpadPanel.js) (async `getPreact()` at module top; `useLayoutEffect` for the `prs:refresh` subscription so the listener registers before the second render — `useEffect` queues until next render in the vendor-bundle env). Subcomponents inline: `PrTopBar`, `PrTabs`, `PrFilesView` (file tree + diff pane), `PrFileDiff`, `PrHunk`, `PrHunkSplit`, `PrHunkUnified`, `PrThreadRow`, `PrConversationView`, `PrCommitsView`, `PrChecksView`. Conversation tab shows a read-only banner pointing at slice 2 for submission. Memoized `commentsByAnchor` map keyed `${path}::${side}::${line}` powers thread anchoring.
+- [`pr-review-mount.js`](js/pr-review/pr-review-mount.js) — vanilla mount/unmount + history wiring. `openPrReview(n)` is idempotent (same number → noop, different number → swap); pushes `history.state.prReview = n` so browser-back closes through the same path as Esc. `closePrReview({popstate?})` is also idempotent and skips the `history.back()` when called from the popstate handler (otherwise it loops). `isPrReviewActive()` + `getActivePrNumber()` exported for the Esc/popstate code in [`js/app.js`](js/app.js).
+
+**Provider normalization.** [`js/git-providers/gitea.js`](js/git-providers/gitea.js), [`js/git-providers/github.js`](js/git-providers/github.js), and [`js/git-providers/gitlab.js`](js/git-providers/gitlab.js) `getPullRequestComments()` returns now include `side: 'LEFT'|'RIGHT'`. Gitea: `old_position && !line` → LEFT, else RIGHT. GitHub: passes through `c.side`, defaulting to RIGHT. GitLab: `position.old_line && !position.new_line` → LEFT, else RIGHT. Threads anchor to the correct cell of the side-by-side diff.
+
+**Wire-up.**
+
+- [`js/project-manager.js:515`](js/project-manager.js): PR row click + keydown re-route from `window.openPRDetailModal` → `window.openPrReview`. Click-through to a freshly-created PR (line 663) calls `window.openPrReview` when present, falling back to the legacy modal otherwise (rollback path).
+- [`js/app.js`](js/app.js): import `openPrReview` / `closePrReview` / `isPrReviewActive`; expose `window.openPrReview` and `window.closePrReview`; insert PR Review check into the existing Esc-key handler before the `closeAllModals()` fallback; new `popstate` listener calls `closePrReview({popstate:true})` when active.
+- [`html/editor-panel.html`](html/editor-panel.html): add `<div id="prReviewMount" hidden>` peer to `#editorContainer`.
+- [`index.html`](index.html): add `<link rel="stylesheet" href="./css/pr-review.css">`.
+
+**Styles.** [`css/pr-review.css`](css/pr-review.css). Palette downgrade pattern from [§2.11.0](#2110---2026-05-10): the design canvas's `--tk-*` tokens are rewritten against existing `--accent` / `--bg-secondary` / `--text-muted` / `--success` / `--danger` / `--warning`. `body.pr-review-active` rule hides the editor's tab strip + status bar + secondary pane while the surface is mounted. Mobile-fallback (≤768px) collapses split view to unified and hides the file tree.
+
+**Tests.** New [`tests/test-pr-review-diff-parse.mjs`](tests/test-pr-review-diff-parse.mjs) (CI auto-globbed) covers parser shape, hunk-header variants, `\\ No newline at end of file` skip, additions-only / deletions-only edge cases, side-by-side pairing for matched and mismatched run lengths, pure-add and pure-del runs, truncation cap, and `countChanges` aggregation. 19 tests, all passing.
+
+**Removability check (§Decisions 7).** Reverting [`js/project-manager.js:515`](js/project-manager.js) back to `window.openPRDetailModal` falls back to the legacy modal; the existing surface keeps working. The Preact root has no module singletons beyond the `_activePrNumber` guard inside [`pr-review-mount.js`](js/pr-review/pr-review-mount.js); unmounting clears it.
+
+**What this does NOT do.** No comment posting; no Approve / Request changes / Submit dock; no AI review summary banner; no per-file viewed-state tracking; no thread-resolve action; no Suggest-fix inline action. All deferred to 2.13.0 / 2.14.0 per the slice plan. No new provider methods (slice 1 is read-only — the existing `getPullRequest` / `getPullRequestFiles` / `getPullRequestComments` / `getCommitStatus` / `getCommits` covers everything).
+
 ## [2.11.0] - 2026-05-10
 
 ### Feature — Touch 3 Rail v2 sidebar layout (Files / Issues / PRs / Branches)
