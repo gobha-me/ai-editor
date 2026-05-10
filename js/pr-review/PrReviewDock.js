@@ -440,6 +440,7 @@ export function PrReviewDock({ prNumber, pr, ci, capabilities, threadsTotal, thr
                         <${PrMergeControls}
                             prNumber=${prNumber}
                             pr=${pr}
+                            capabilities=${capabilities}
                             onError=${(msg) => setError(msg)} />
                     `}
                 `}

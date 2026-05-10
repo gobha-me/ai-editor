@@ -951,6 +951,7 @@ const giteaProvider = {
             viewedFiles: false,
             merge: true,
             rerunCi: true,
+            mergeConflictResolution: true,
         };
     },
 

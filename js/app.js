@@ -23,6 +23,7 @@ import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, 
 import { escapeHtml } from './utils/html.js';
 import { openLLMDebug, closeLLMDebug, clearLLMDebug, copyLLMDebug, exportLLMDebug, initLLMDebugAutoRefresh } from './llm-debug-modal.js';
 import { openPrReview, closePrReview, isPrReviewActive } from './pr-review/pr-review-mount.js';
+import { closeMergeConflict, isMergeConflictActive } from './merge-conflict/merge-conflict-mount.js';
 import { initDebugSlideOut, openDebugSlideOut, closeDebugSlideOut, copyDiagnosticBundle } from './debug-slideout.js';
 import { initHelpSlideOut, openHelpSlideOut, closeHelpSlideOut } from './help/index.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
@@ -455,6 +456,12 @@ function setupKeyboardShortcuts() {
                 QuickOpen.close();
                 return;
             }
+            // Merge Conflict resolver opens *on top* of PR Review, so
+            // close it first if active.
+            if (isMergeConflictActive()) {
+                closeMergeConflict();
+                return;
+            }
             if (isPrReviewActive()) {
                 closePrReview();
                 return;
@@ -463,11 +470,16 @@ function setupKeyboardShortcuts() {
         }
     });
 
-    // 2.12.0 — popstate: browser-back closes the PR Review takeover
-    // (matches the Esc behavior). The mount's pushState set
-    // `history.state.prReview = n`; back-nav fires popstate with the
-    // *prior* entry, where `prReview` is unset.
+    // popstate: browser-back closes whichever stage is on top.
+    // Merge Conflict resolver layers above PR Review, so close it first.
+    // The mount modules push `history.state.{prReview, mergeConflict}`;
+    // back-nav fires popstate with the prior entry where the relevant
+    // key is unset.
     window.addEventListener('popstate', () => {
+        if (isMergeConflictActive()) {
+            closeMergeConflict({ popstate: true });
+            return;
+        }
         if (isPrReviewActive()) {
             closePrReview({ popstate: true });
         }

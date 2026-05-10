@@ -914,6 +914,7 @@ const githubProvider = {
             viewedFiles: false,
             merge: true,
             rerunCi: true,
+            mergeConflictResolution: true,
         };
     },
 

@@ -4,6 +4,65 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-05-10
+
+### Feature — Touch 3 Merge Conflict Resolver (slice 1)
+
+Closes the second-to-last open Touch 3 deliverable on [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Touch 3 deliverables" — the only remaining surface-sized one (Window v2 / Sessions stays post-2.0). Designer confirmed pure-browser feasibility; the design canvas at [`docs/design/touch-3-left-pane-and-window/project/merge-conflict.jsx`](docs/design/touch-3-left-pane-and-window/project/merge-conflict.jsx) (229 lines) specifies three-pane Theirs / Resolved / Ours, per-hunk Take theirs / Take both / Take ours / AI resolve, plus a conflict minimap.
+
+Slice 1 ships **detect + three-pane viewer + Take theirs / Take ours + push resolved** — the resolution path that covers ~70% of real conflicts. Take both, AI resolve, and the conflict minimap are intentional follow-up slices (mirrors PR Review's 2.12.0 → 2.14.0 cadence). Sizing: a single PR carrying everything would be 800–1K LOC; this slice lands ~700.
+
+**Entry point.** When a PR's provider reports `mergeable: false` AND the active provider advertises the new `mergeConflictResolution` capability, the PR Review surface's merge controls ([`js/pr-review/PrMergeControls.js`](js/pr-review/PrMergeControls.js)) gain a **"⚠️ Resolve conflicts"** button to the left of the merge action. Click swaps in the resolver via the same stage-seam pattern PR Review uses (peer `<div id="mergeConflictMount">` next to `#prReviewMount` inside `#editorSplit`; `body.merge-conflict-active` hides the editor chrome + PR Review while it's mounted).
+
+**v1 trade-off — 2-way diff, not diff3.** This slice runs a Myers diff between the file's content on the base branch and the file's content on the head branch and presents the divergent regions as conflict hunks. It does NOT consult the merge-base ref — a future slice graduates this to true 3-way merge so cases where head diverged AFTER base picked up an upstream change can be detected as conflicts the user would otherwise silently overwrite. The "Theirs"/"Ours" labels are honest: theirs = base branch content, ours = head branch content. The user's resolution is committed to the head branch; the PR's next mergeability check then either succeeds (the chosen resolution merges cleanly) or surfaces remaining conflicts.
+
+**New module tree — `js/merge-conflict/`:**
+
+- [`hunks.js`](js/merge-conflict/hunks.js) — pure `extractHunks(baseContent, headContent) → ConflictHunk[]`. Inlines a minimal Myers diff (same algorithm as [`js/diff-viewer.js`](js/diff-viewer.js)) so the module is browser-free and runs under `node --test` without `_node-shim.mjs`. Pure-insert / pure-delete / CRLF / empty-file edge cases all covered. `splitLines` / `joinLines` round-trip preserves trailing-newline distinction.
+- [`resolve.js`](js/merge-conflict/resolve.js) — pure `applyResolutions(baseContent, headContent, resolutions) → string`. Walks the diff and splices in the chosen side per hunk. Throws on missing or unknown resolutions. `uniformResolutions(hunks, choice)` helper produces a "Take all theirs / ours" map (slice-2 candidate; helper costs nothing now).
+- [`MergeConflictSurface.js`](js/merge-conflict/MergeConflictSurface.js) — Preact + htm root mirroring [`js/pr-review/PrReviewSurface.js`](js/pr-review/PrReviewSurface.js). Top bar (warn glyph + branches + progress + Abort + Push), file pane (left, with N/M resolution count per file), main hunk list (three-pane Theirs / Resolved / Ours per hunk with Take theirs / Take ours buttons). Component-local state for `{activeIdx, resolutions}` — no `State.*` mutation, no persistence (resolution is a one-shot live flow).
+- [`merge-conflict-mount.js`](js/merge-conflict/merge-conflict-mount.js) — vanilla mount/unmount + history stage seam. `openMergeConflict(prNumber)` / `closeMergeConflict({popstate?})` mirror the PR Review pattern verbatim. `body.merge-conflict-active` class + `#mergeConflictMount` peer element inside `#editorSplit`.
+
+**Provider API extension.** [`js/git-providers/base.js`](js/git-providers/base.js) gains `getMergeConflicts(connection, owner, repo, number)` with a working default that uses `this.getPullRequest` + `this.getPullRequestFiles` + `this.getFile`. Returns `{supported: true, files: [{path, base, head, headSha, status}], baseRef, headRef}`. Each per-ref content fetch tolerates a 404 (file added on one side only) by falling back to an empty string. `js/git-providers/{gitea,github}.js` opt-in via the new `mergeConflictResolution: true` capability flag; GitLab and Local leave it `false` (their conflict semantics need separate live testing — slice-1 budget excludes them). The capability gate is read in `PrMergeControls` so the button is hidden where the resolver isn't ready.
+
+[`js/git.js`](js/git.js) gains two facade methods:
+
+- `Git.getMergeConflicts(owner, repo, number)` — straight pass-through to the provider.
+- `Git.batchCommitFilesOnBranch(owner, repo, branch, files, message)` — commits to a *specific* branch (not the current project branch) without the tab-state side effects of `batchSaveFiles`. Used by the resolver to push resolved content to the PR's head branch without disturbing the user's current branch state.
+
+**Commit path.** "Push resolved to {headRef}" enables only when every hunk has a resolution. Click runs `applyResolutions` per file → builds a `[{path, content, sha?}]` payload → calls `Git.batchCommitFilesOnBranch` (one commit, multiple files — atomic-batch semantics preserved by the underlying `provider.batchCommitFiles`). Emits `mergeConflict:resolved` + `prs:refresh` on success and closes the surface; the PR Review surface then re-fetches and the `mergeable: false → true` transition flows through the existing merge controls.
+
+The resolver does NOT route through [`js/ui/commit.js#openCommitModal`](js/ui/commit.js) — that modal expects dirty tabs in `State.openTabs` and is bound to the current branch. The resolver's commit primitive is the same `provider.batchCommitFiles` the modal eventually reaches; the modal layer is a UI wrapper, not the atomicity boundary.
+
+**Stage seam coexistence.** Two takeover surfaces now share `#editorSplit` (PR Review + Merge Conflict). Esc closes the topmost first (resolver before PR Review); popstate routes to whichever is active, resolver-first. [`js/app.js`](js/app.js) imports `closeMergeConflict` + `isMergeConflictActive` and adds the early-return branches.
+
+**CSS — [`css/merge-conflict.css`](css/merge-conflict.css)** (~340 LOC) — `mc__` class hierarchy adapted from the design canvas's [`docs/design/touch-3-left-pane-and-window/project/facelift-v3.css`](docs/design/touch-3-left-pane-and-window/project/facelift-v3.css) §`.mc` block. Same palette downgrade pattern as Rail v2 (2.11.0) and PR Review (2.12.0): `--tk-*` tokens rewritten against the existing `--accent` / `--bg-*` / `--text-*` / `--success` / `--warning` / `--danger` / `--font-mono`. Theme-token-only — no hardcoded colors. Mobile fallback (≤768px) collapses the three-pane to stacked + narrows the file pane.
+
+**HTML — [`html/editor-panel.html`](html/editor-panel.html)** gains one peer mount element next to `#prReviewMount`.
+
+**Tests** (CI auto-globs `node --test tests/test-*.mjs`) — 41 new node tests:
+
+- [`tests/test-merge-conflict-hunks.mjs`](tests/test-merge-conflict-hunks.mjs), 15 cases: round-trip `splitLines`/`joinLines` (empty, single line, trailing newline, CRLF, null/undefined); `extractHunks` clean-file `[]`, single-line edit, multi-line hunk, multiple hunks with stable ids, pure-insert with anchor lineNo, pure-delete, insert-at-file-start, CRLF preservation.
+- [`tests/test-merge-conflict-resolve.mjs`](tests/test-merge-conflict-resolve.mjs), 11 cases: `applyResolutions` no-change passthrough, take-theirs reproduces base, take-ours reproduces head, mixed per-hunk picks, pure-insert+take-theirs drops the inserted lines, pure-delete+take-ours drops the deleted lines, CRLF preservation, idempotence (`apply(apply(x)) === apply(x)`), throws on missing resolution, throws on unknown choice; `uniformResolutions` covers all hunk ids + handles empty input.
+
+**Removability.** Four new module files + one new CSS file + two new test files + targeted edits across the existing provider files (each adds one method behind a base-class default) + a single new entry-point button in `PrMergeControls`. No persisted state, no migration, no new dependencies. Reverts cleanly: drop the four new modules, the CSS file, the two test files, the new `getMergeConflicts` + `Git.batchCommitFilesOnBranch` methods, the `mergeConflictResolution` capability flag, and the `#mergeConflictMount` host element.
+
+**Deferred to slice 2 (~2.19.0):**
+
+- **Take both** — interleave UI; needs careful hunk state for the case where the user mixes both sides.
+- **Conflict minimap** — right-side scrubber from the design canvas; pure UX polish.
+- **GitLab + Local capability flag** — needs live testing of GitLab's MR `merge_status: 'cannot_be_merged'` shape against the resolver's expectations.
+- **Editing the Resolved pane directly** — design's "Edit" toggle.
+
+**Deferred to slice 3 (~2.20.0):**
+
+- **AI resolve per hunk** — wires the LLM in-the-loop for ambiguous hunks; reuses existing chat / edit-proposal infrastructure.
+
+**Deferred indefinitely:**
+
+- **Conflict resolution outside a PR context** (e.g., a bare `git pull` conflict). PR-merge entry point is the only one for v1.
+- **True 3-way diff with merge-base** — the v1 trade-off above. Graduation criterion: a real conflict where the 2-way "Take ours" silently overwrites a base-side update head should have picked up. Surface from dogfood, then graduate.
+
 ## [2.17.1] - 2026-05-10
 
 ### Security — Tool-return invisible-Unicode scanning

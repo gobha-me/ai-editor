@@ -444,6 +444,39 @@ const Git = {
     },
 
     /**
+     * Fetch base + head content for every file changed in a PR/MR so the
+     * Merge Conflict Resolver surface can run a 2-way diff client-side.
+     * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
+     */
+    async getMergeConflicts(owner, repo, number) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.getMergeConflicts(connection, owner, repo, number);
+    },
+
+    /**
+     * Commit a batch of files to a *specific* branch (not the current
+     * project branch). Used by the Merge Conflict Resolver to push
+     * resolved file content to the PR's head branch without disturbing
+     * the user's current branch state.
+     *
+     * Bypasses the tab-state side effects of `batchSaveFiles`; callers
+     * are responsible for refreshing any UI that mirrors the affected
+     * files.
+     *
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} branch
+     * @param {Array<{path: string, content: string, sha?: string}>} files
+     * @param {string} message
+     * @returns {Promise<{results: any[], errors: any[]}>}
+     * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
+     */
+    async batchCommitFilesOnBranch(owner, repo, branch, files, message) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.batchCommitFiles(connection, owner, repo, files, message, branch);
+    },
+
+    /**
      * Submit a PR review (line-anchored draft comments + an event).
      * @since 2.13.0
      */

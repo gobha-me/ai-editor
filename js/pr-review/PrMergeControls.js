@@ -22,6 +22,7 @@
 import { State, EventBus } from '../core.js';
 import { Git } from '../git.js';
 import { getPreact } from '../utils/preact-mount.js';
+import { openMergeConflict } from '../merge-conflict/merge-conflict-mount.js';
 
 const { html, useState, useRef, useEffect } = await getPreact();
 
@@ -31,15 +32,30 @@ const CONFIRM_TIMEOUT_MS = 3000;
  * @param {{
  *   prNumber: number,
  *   pr: any,
+ *   capabilities?: any,
  *   onError: (msg:string) => void
  * }} props
  */
-export function PrMergeControls({ prNumber, pr, onError }) {
+export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
     const [strategy, setStrategy] = useState('squash');
     const [deleteBranch, setDeleteBranch] = useState(true);
     const [confirming, setConfirming] = useState(false);
     const [merging, setMerging] = useState(false);
     const confirmTimerRef = useRef(null);
+
+    // Show "Resolve conflicts" when the PR is unmergeable AND the
+    // active provider supports the resolver. Falls back gracefully on
+    // GitLab + Local where the capability flag is false.
+    const showResolve = pr && pr.mergeable === false && capabilities?.mergeConflictResolution === true;
+
+    function handleResolveClick() {
+        try {
+            openMergeConflict(prNumber);
+        } catch (e) {
+            console.error('[pr-review] open merge-conflict failed:', e);
+            onError(`Could not open conflict resolver: ${e?.message || String(e)}`);
+        }
+    }
 
     // Reset the confirm flag if the user takes too long.
     useEffect(() => {
@@ -102,6 +118,16 @@ export function PrMergeControls({ prNumber, pr, onError }) {
 
     return html`
         <div class="pr-dock__merge" role="group" aria-label="Merge controls">
+            ${showResolve && html`
+                <button
+                    type="button"
+                    class="pr__btn pr__btn--ghost"
+                    onClick=${handleResolveClick}
+                    disabled=${merging}
+                    title="Conflicts must be resolved before this PR can merge">
+                    ⚠️ Resolve conflicts
+                </button>
+            `}
             <select
                 class="pr-dock__select"
                 value=${strategy}

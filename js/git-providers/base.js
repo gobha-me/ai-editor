@@ -483,6 +483,59 @@ const BASE_GIT_PROVIDER = {
     },
 
     /**
+     * Fetch base + head content for every file changed in a PR/MR so the
+     * client can run a 2-way diff and present conflict hunks for the
+     * Touch 3 Merge Conflict Resolver surface.
+     *
+     * Default impl works for any provider that implements `getPullRequest`,
+     * `getPullRequestFiles`, and `getFile` (Gitea, GitHub, GitLab). Each
+     * file's per-ref content fetch tolerates a 404 (file added on one side
+     * only) by falling back to an empty string. Providers gate this through
+     * the `mergeConflictResolution` capability flag — false providers
+     * (Local + currently GitLab pending live testing) hide the resolver
+     * button in the surface.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @returns {Promise<{
+     *   supported: boolean,
+     *   files?: Array<{path: string, base: string, head: string, status?: string}>,
+     *   baseRef?: string,
+     *   headRef?: string,
+     * }>}
+     * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
+     */
+    async getMergeConflicts(connection, owner, repo, number) {
+        const pr = await this.getPullRequest(connection, owner, repo, number);
+        const files = await this.getPullRequestFiles(connection, owner, repo, number);
+        const baseRef = pr.base;
+        const headRef = pr.head;
+
+        const results = await Promise.all((files || []).map(async (f) => {
+            const path = f.filename;
+            const [baseR, headR] = await Promise.all([
+                this.getFile(connection, owner, repo, path, baseRef).catch(() => null),
+                this.getFile(connection, owner, repo, path, headRef).catch(() => null),
+            ]);
+            return {
+                path,
+                base: baseR?.content ?? '',
+                head: headR?.content ?? '',
+                status: f.status,
+            };
+        }));
+
+        return {
+            supported: true,
+            files: results,
+            baseRef,
+            headRef,
+        };
+    },
+
+    /**
      * Submit a pull request review (line-anchored comments + an event).
      *
      * Slice 2 of the Touch 3 PR Review surface (2.13.0). Implemented by
@@ -546,7 +599,7 @@ const BASE_GIT_PROVIDER = {
      * the provider implements `mergePullRequest`; providers without
      * merge override to false.
      *
-     * @returns {{reviewSubmission:boolean, threadResolve:boolean, viewedFiles:boolean, merge:boolean, rerunCi:boolean}}
+     * @returns {{reviewSubmission:boolean, threadResolve:boolean, viewedFiles:boolean, merge:boolean, rerunCi:boolean, mergeConflictResolution:boolean}}
      */
     get capabilities() {
         return {
@@ -555,6 +608,7 @@ const BASE_GIT_PROVIDER = {
             viewedFiles: false,
             merge: false,
             rerunCi: false,
+            mergeConflictResolution: false,
         };
     },
 
