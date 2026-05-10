@@ -4,6 +4,51 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-05-10
+
+### Feature — MCP discovery Phase 2 slice 2: auto-test on add ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2 slice 2)
+
+Closes the deferral noted at the bottom of [§2.15.0](#2150---2026-05-10) — *"Auto-test on add — automatically run `MCPServerRegistry.testConnection` after Save and surface the result. Held back because it changes the add-form latency contract (a slow-or-broken test would block the Save toast); deserves its own focused review."* This slice ships that action.
+
+The user's workflow before this slice: fill out the add-server form → Save → panel closes → status badge in the row updates *eventually* (the bundled [`plugins/mcp-bridge.js`](plugins/mcp-bridge.js) listens for `mcp:serversChanged` and runs `disconnectAll()` + `bootstrapAllServers()` in the background, which writes `_unreachable` / `_toolCount` via [`bridge.connect`](js/mcp/bridge.js)) — but with no toast tying the outcome to the Save the user just clicked. Slice 2 ties the loop closed with an explicit "MCP server saved — testing connection…" toast followed by either ✅ or ⚠️ once the probe lands.
+
+**Solving the latency-contract concern.** The Save toast itself fires synchronously and the panel closes immediately — same first frame as before. The `testConnection` probe runs **after** the existing `mcp:serversChanged` emit + `hideServerEditor` + `renderMCPServersList`, so a slow or broken probe never blocks the form. The result lands as a follow-up toast whenever it resolves. Acceptable cost: one duplicate `initialize` + `tools/list` round-trip per Save (the bridge's reconnect runs the same handshake to register tools). The alternative — emitting a per-server completion event from the bridge so the tab could read its connect result — coupled the Settings tab to the bridge plugin's lifecycle for one toast, which the slice budget wouldn't justify.
+
+**Skip policy** — pure decision lives in [`js/mcp/auto-test.js`](js/mcp/auto-test.js):
+
+- **Add of an enabled server** → test.
+- **Add of a disabled server** → skip (user explicitly opted out of using it).
+- **Edit changing url / token / transport on an enabled server** → test.
+- **Edit toggling disabled → enabled** → test (re-test on re-enable).
+- **Edit changing only the label** (or roles) on an enabled server → skip (no protocol-relevant change).
+- **Edit leaving the server disabled** → skip.
+
+Default `transport` is `'streamable-http'` on both sides of the comparison so a record stored without an explicit transport doesn't false-positive against one with the default written in.
+
+**New pure module** — same parser-vs-IO split that landed at 2.15.0 ([`catalog-source.js`](js/mcp/catalog-source.js) + [`catalog-merge.js`](js/mcp/catalog-merge.js)):
+
+- [`js/mcp/auto-test.js`](js/mcp/auto-test.js) — exports `shouldAutoTest({preSave, postSave})` (the policy above) and `formatTestResultToast({label, result})` (returns `{message, kind}` for `window.showToast`). Both browser-free, both `node --test` covered.
+
+**Settings tab integration** — [`js/settings/mcp-servers-tab.js`](js/settings/mcp-servers-tab.js):
+
+- New module-scoped `_preSaveSnapshot` captured in [`showServerEditor`](js/settings/mcp-servers-tab.js) for edit mode (shallow-copy of the registry record); set to `null` on add and on `hideServerEditor`. Read once in `saveServerFromEditor` to drive the change-detection branch of `shouldAutoTest`.
+- `saveServerFromEditor` now branches on `shouldAutoTest({preSave, postSave})`. Test branch surfaces the info toast, then calls a new `runAutoTest(cfg)` async helper that awaits `MCPServerRegistry.testConnection`, formats via `formatTestResultToast`, surfaces the result toast, and re-renders the list (so any `_unreachable` / `_toolCount` mutations the bridge wrote in parallel are reflected).
+- Skip branch keeps the existing `'MCP server added'` / `'MCP server updated'` success toast unchanged — same UX for label-only edits and disabled-server saves.
+
+**Tests** (CI auto-globs `node --test tests/test-*.mjs`) — 21 new node tests in [`tests/test-mcp-auto-test.mjs`](tests/test-mcp-auto-test.mjs):
+
+- `shouldAutoTest` — 14 cases covering: enabled/disabled adds, empty url, undefined preSave, label-only edit, url change, token change, transport change, default-transport equivalence (no false positive when one side is undefined), disabled→enabled toggle, enabled→disabled toggle, leave-disabled, token undefined-vs-"" defensive, malformed postSave defensive.
+- `formatTestResultToast` — 7 cases covering: success with N tools, success singular pluralization, success with missing toolCount (defaults to 0), failure with explicit error, failure with missing error (defaults to `'Connection failed'`), missing label (defaults to `'MCP server'`), null result envelope (warning path).
+
+**Removability.** One new module + one new test file + four edits to `mcp-servers-tab.js` (import, `_preSaveSnapshot` declaration, two `showServerEditor` lines, two `hideServerEditor` lines, the `saveServerFromEditor` rewrite + new `runAutoTest` helper) + version bump + CHANGELOG/ROADMAP entries. Reverts cleanly.
+
+**Deferred from this slice (parked under MCP discovery polish):**
+
+- **OAuth flows** — still parked at "Phase 1.5" per [§2.3.0](#230---2026-04-29). Several Smithery entries advertise OAuth-only auth in their `tokenHint` strings; auto-test surfaces the failure but the user still has to wire OAuth manually.
+- **Refresh-catalog button** — the export `clearRemoteCatalogCache` exists; surface is deferred to keep slice 2 narrow.
+- **Auto-test result visible in the row, not just the toast** — could surface a transient "🧪 testing…" badge on the just-saved row. Deferred because the toast already ties outcome to the user's Save action and the row's existing `ready` / `unreachable` badge picks up the bridge's parallel reconnect within the same window.
+- **Custom catalog sources + Phase 3** — unchanged from [§2.15.0](#2150---2026-05-10).
+
 ## [2.15.1] - 2026-05-10
 
 ### Fix — `read_lines` numeric-coercion guard (chat-export trap)

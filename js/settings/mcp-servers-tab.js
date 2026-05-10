@@ -15,9 +15,15 @@ import { MCP_CATALOG, categoryIcon, catalogEntryToStarter } from '../mcp/catalog
 import { getRemoteCatalog } from '../mcp/catalog-fetch.js';
 import { mergeCatalogs } from '../mcp/catalog-merge.js';
 import { fetchRemoteDetail } from '../mcp/catalog-source.js';
+import { shouldAutoTest, formatTestResultToast } from '../mcp/auto-test.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 
 let _editingServerId = null;
+// 2.16.0 — pre-save snapshot used by the auto-test policy. Captured in
+// `showServerEditor` for edit mode (null on add); cleared on
+// `hideServerEditor`. Read once in `saveServerFromEditor` to decide
+// whether a label-only edit can skip the connection probe.
+let _preSaveSnapshot = null;
 
 // 2.15.0 — Browse Catalog state. Module-scoped so the search input + chips
 // can re-render the list without refetching the remote registry. Reset
@@ -189,6 +195,7 @@ function showServerEditor(serverId, starter) {
         document.getElementById('mcpEditTransport').value = server.transport || 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = server.enabled !== false;
         setRolesCheckboxes(server.roles);
+        _preSaveSnapshot = { ...server };
     } else {
         if (title) title.textContent = 'New MCP Server';
         document.getElementById('mcpEditLabel').value = starter?.label ?? '';
@@ -197,6 +204,7 @@ function showServerEditor(serverId, starter) {
         document.getElementById('mcpEditTransport').value = starter?.transport ?? 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = starter?.enabled !== false;
         setRolesCheckboxes(starter?.roles ?? 'all');
+        _preSaveSnapshot = null;
     }
     if (result) result.style.display = 'none';
     editor.style.display = 'block';
@@ -206,6 +214,7 @@ function hideServerEditor() {
     const editor = document.getElementById('mcpServerEditor');
     if (editor) editor.style.display = 'none';
     _editingServerId = null;
+    _preSaveSnapshot = null;
 }
 
 /**
@@ -256,24 +265,67 @@ function saveServerFromEditor() {
         return;
     }
 
-    if (_editingServerId) {
+    const wasEdit = !!_editingServerId;
+    let serverId = _editingServerId;
+
+    if (wasEdit) {
         MCPServerRegistry.updateServer(_editingServerId, { label, url, token, transport, enabled, roles });
-        window.showToast('MCP server updated', 'success');
     } else {
         let id = slugifyLabel(label) || `mcp-${Date.now()}`;
         if (MCPServerRegistry.getServer(id)) id += `-${Date.now()}`;
         try {
             MCPServerRegistry.addServer({ id, label, url, token, transport, enabled, roles });
-            window.showToast('MCP server added', 'success');
+            serverId = id;
         } catch (err) {
             window.showToast(err.message || 'Failed to add server', 'error');
             return;
         }
     }
 
+    // Capture pre-save snapshot before `hideServerEditor` clears it. The
+    // snapshot was set in `showServerEditor` for edit mode (null on add).
+    const preSave = _preSaveSnapshot;
+    const postSave = { id: serverId, label, url, token, transport, enabled, roles };
+
     hideServerEditor();
     renderMCPServersList();
     EventBus.emit('mcp:serversChanged', {});
+
+    // 2.16.0 — github#27 Phase 2 slice 2. Auto-test on add or on a
+    // url/token/transport change; surface result via toast. Skip for
+    // disabled servers and label-only edits — see `mcp/auto-test.js`.
+    if (shouldAutoTest({ preSave, postSave })) {
+        window.showToast('MCP server saved — testing connection…', 'info');
+        runAutoTest(postSave);
+    } else {
+        window.showToast(wasEdit ? 'MCP server updated' : 'MCP server added', 'success');
+    }
+}
+
+/**
+ * Probe the just-saved server and surface the outcome via a follow-up
+ * toast. Runs in parallel with the bridge plugin's own reconnect (which
+ * registers tools); cost is one extra `initialize` + `tools/list`
+ * round-trip in exchange for an action-tied acknowledgement.
+ *
+ * @param {{label: string, url: string, token?: string, transport?: string}} cfg
+ */
+async function runAutoTest(cfg) {
+    let result;
+    try {
+        result = await MCPServerRegistry.testConnection({
+            url: cfg.url,
+            token: cfg.token || '',
+            transport: cfg.transport,
+        });
+    } catch (err) {
+        result = { ok: false, error: err && err.message ? err.message : String(err) };
+    }
+    const toast = formatTestResultToast({ label: cfg.label, result });
+    if (window.showToast) window.showToast(toast.message, toast.kind);
+    // Re-render in case the bridge's parallel reconnect mutated
+    // `_unreachable` / `_toolCount` between Save and now.
+    renderMCPServersList();
 }
 
 async function testServerFromEditor() {
