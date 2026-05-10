@@ -482,6 +482,81 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'mergePullRequest');
     },
 
+    /**
+     * Submit a pull request review (line-anchored comments + an event).
+     *
+     * Slice 2 of the Touch 3 PR Review surface (2.13.0). Implemented by
+     * Gitea + GitHub; GitLab inherits this `notSupported` and ships in
+     * 2.13.1.
+     *
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @param {{event:'COMMENT'|'APPROVE'|'REQUEST_CHANGES', body?:string, comments?:Array<{path:string, line:number, side:'LEFT'|'RIGHT', body:string}>}} payload
+     * @returns {Promise<{id:number, state:string, submittedAt:string, url?:string}>}
+     */
+    async submitPullRequestReview(connection, owner, repo, number, payload) {
+        notSupported(this.name, 'submitPullRequestReview');
+    },
+
+    /**
+     * Create a single review comment — either line-anchored or a reply
+     * to an existing review comment.
+     *
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @param {{body:string, path?:string, line?:number, side?:'LEFT'|'RIGHT', commitSha?:string, in_reply_to?:number}} payload
+     * @returns {Promise<{id:number, body:string, user:string, createdAt:string, path?:string, line?:number, side?:'LEFT'|'RIGHT', type:'review'}>}
+     */
+    async createReviewComment(connection, owner, repo, number, payload) {
+        notSupported(this.name, 'createReviewComment');
+    },
+
+    /**
+     * Resolve (or unresolve via opts.resolve === false) a review thread.
+     *
+     * Neither Gitea nor GitHub REST exposes this — Gitea has no first-
+     * class thread state, GitHub requires GraphQL. Both providers leave
+     * `capabilities.threadResolve === false` so the dock hides the
+     * Resolve button and falls back to local UX-hide via
+     * `review-state.markResolvedLocal()`.
+     *
+     * @param {Object} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {number} number
+     * @param {string|number} threadId
+     * @param {{resolve?:boolean}} [opts]
+     * @returns {Promise<{threadId:string|number, resolved:boolean}>}
+     */
+    async resolveReviewThread(connection, owner, repo, number, threadId, opts = {}) {
+        notSupported(this.name, 'resolveReviewThread');
+    },
+
+    /**
+     * Capability matrix for the PR Review dock. Providers override to
+     * advertise what their implementations support; the dock reads this
+     * to enable / disable + render explanatory notices.
+     *
+     * Default = nothing supported (matches the `notSupported` defaults
+     * above). The base value for `merge` is true on the assumption that
+     * the provider implements `mergePullRequest`; providers without
+     * merge override to false.
+     *
+     * @returns {{reviewSubmission:boolean, threadResolve:boolean, viewedFiles:boolean, merge:boolean}}
+     */
+    get capabilities() {
+        return {
+            reviewSubmission: false,
+            threadResolve: false,
+            viewedFiles: false,
+            merge: false,
+        };
+    },
+
     // ========================================
     // CI/CD STATUS
     // ========================================

@@ -870,6 +870,87 @@ const giteaProvider = {
         };
     },
 
+    /**
+     * Submit a Gitea PR review. Endpoint:
+     *   POST /repos/{owner}/{repo}/pulls/{number}/reviews
+     *
+     * Gitea event enum maps `'APPROVE' → 'APPROVED'`; the other two pass
+     * through unchanged. Comment side mapping per `_mapDraftToGiteaReviewComment`.
+     *
+     * @since 2.13.0
+     */
+    async submitPullRequestReview(connection, owner, repo, number, { event, body, comments } = {}) {
+        const payload = {
+            event: _mapEventEnum(event),
+        };
+        if (body) payload.body = body;
+        if (Array.isArray(comments) && comments.length > 0) {
+            payload.comments = comments.map(_mapDraftToGiteaReviewComment);
+        }
+        const result = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/pulls/${number}/reviews`, payload
+        );
+        EventBus.emit('git:prReviewSubmitted', { connectionId: connection.id, owner, repo, number });
+        return {
+            id: result?.id ?? 0,
+            state: result?.state ?? event,
+            submittedAt: result?.submitted_at || result?.created_at || new Date().toISOString(),
+            url: result?.html_url,
+        };
+    },
+
+    /**
+     * Create a review comment. Two shapes:
+     *   - Reply to an existing comment: wraps a single review under
+     *     `POST /repos/{owner}/{repo}/pulls/{number}/reviews` with
+     *     event=COMMENT and `comments:[{reply: in_reply_to, body}]`
+     *     since Gitea has no standalone reply endpoint.
+     *   - Line-anchored standalone: same wrapper with the line/path
+     *     comment so it lives inside a one-comment review.
+     *
+     * @since 2.13.0
+     */
+    async createReviewComment(connection, owner, repo, number, { body, path, line, side, in_reply_to } = {}) {
+        let comment;
+        if (in_reply_to) {
+            comment = { body, reply: in_reply_to };
+        } else if (path && line) {
+            comment = _mapDraftToGiteaReviewComment({ path, line, side: side || 'RIGHT', body });
+        } else {
+            throw new Error('createReviewComment: either in_reply_to or (path + line) is required');
+        }
+        const payload = { event: 'COMMENT', comments: [comment] };
+        const result = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/pulls/${number}/reviews`, payload
+        );
+        EventBus.emit('git:prReviewSubmitted', { connectionId: connection.id, owner, repo, number });
+        return {
+            id: result?.id ?? 0,
+            body,
+            user: result?.user?.login || '',
+            createdAt: result?.created_at || result?.submitted_at || new Date().toISOString(),
+            path,
+            line,
+            side: side || 'RIGHT',
+            type: 'review',
+        };
+    },
+
+    /**
+     * Capabilities — Gitea supports review submission + merge; thread
+     * resolve and viewed-files are not exposed by the REST API.
+     *
+     * @since 2.13.0
+     */
+    get capabilities() {
+        return {
+            reviewSubmission: true,
+            threadResolve: false,
+            viewedFiles: false,
+            merge: true,
+        };
+    },
+
     // ========================================
     // TAGS & RELEASES
     // ========================================
@@ -1120,5 +1201,38 @@ const giteaProvider = {
     }
 };
 
+// ============================================
+// PURE MAPPERS (exported for tests/test-pr-review-submit-payload.mjs)
+// ============================================
+
+/**
+ * Map a draft comment to Gitea's review-comment shape.
+ * Gitea anchors via `old_position` (LEFT) or `new_position` (RIGHT).
+ *
+ * @param {{path:string, line:number, side:'LEFT'|'RIGHT', body:string}} d
+ * @returns {{path:string, body:string, old_position?:number, new_position?:number}}
+ */
+function _mapDraftToGiteaReviewComment(d) {
+    const out = { path: d.path, body: d.body };
+    if (d.side === 'LEFT') {
+        out.old_position = d.line;
+    } else {
+        out.new_position = d.line;
+    }
+    return out;
+}
+
+/**
+ * Map UI event enum (`COMMENT`/`APPROVE`/`REQUEST_CHANGES`) to Gitea's.
+ * `APPROVE → APPROVED`; others passthrough.
+ *
+ * @param {string} event
+ * @returns {string}
+ */
+function _mapEventEnum(event) {
+    if (event === 'APPROVE') return 'APPROVED';
+    return event || 'COMMENT';
+}
+
 export default giteaProvider;
-export { utf8ToBase64, base64ToUtf8 };
+export { utf8ToBase64, base64ToUtf8, _mapDraftToGiteaReviewComment, _mapEventEnum };

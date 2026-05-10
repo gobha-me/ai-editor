@@ -367,83 +367,8 @@
     </div>
 </div>
 
-<!-- PR Detail Modal -->
-<div class="modal-overlay" id="prDetailModal" role="dialog" aria-modal="true" aria-labelledby="prDetailTitle">
-    <div class="modal modal-resizable" style="width: 780px; height: 600px;">
-        <div class="modal-header">
-            <h2 id="prDetailTitle">Pull Request</h2>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <a id="prDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">
-                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
-                </a>
-                <button type="button" class="modal-close" onclick="window.closePRDetailModal()" aria-label="Close PR details">×</button>
-            </div>
-        </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.6rem;">
-            <!-- Meta row: state, CI, mergeable, stats -->
-            <div id="prDetailMeta" class="modal-meta-row"></div>
-
-            <!-- Branch info -->
-            <div id="prDetailBranches" class="pr-detail-branches"></div>
-
-            <!-- Body (markdown) -->
-            <div id="prDetailBody" class="pr-detail-body preview-markdown"></div>
-
-            <!-- Changed files -->
-            <details id="prDetailFilesSection" class="pr-detail-section" open>
-                <summary class="modal-section-header">
-                    <span class="section-chevron">▶</span>
-                    Changed Files <span id="prDetailFileCount" class="section-count"></span>
-                </summary>
-                <div id="prDetailFiles" style="margin-top: 0.4rem; max-height: 250px; overflow-y: auto;"></div>
-            </details>
-
-            <!-- Comments -->
-            <details id="prDetailCommentsSection" class="pr-detail-section">
-                <summary class="modal-section-header">
-                    <span class="section-chevron">▶</span>
-                    Comments <span id="prDetailCommentCount" class="section-count"></span>
-                </summary>
-                <div id="prDetailComments" style="margin-top: 0.4rem; max-height: 200px; overflow-y: auto;"></div>
-            </details>
-
-            <!-- Add Comment -->
-            <div id="prDetailAddComment" class="pr-add-comment" style="display: none;">
-                <label>Add Comment</label>
-                <textarea id="prCommentText" rows="3" placeholder="Write a review comment…" class="textarea-mono"></textarea>
-                <div class="comment-actions">
-                    <button type="button" class="btn btn-secondary" onclick="window.generatePRComment()" id="btnGeneratePRComment" style="flex: 1;">
-                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
-                        <span>Generate with AI</span>
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="window.submitPRComment()" id="btnPostPRComment">
-                        <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
-                        <span>Post</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer modal-footer-split">
-            <div class="modal-footer-left">
-                <button type="button" class="btn btn-secondary" onclick="window.closePRDetailModal()">Close</button>
-            </div>
-            <div id="prDetailMergeControls" class="modal-footer-right" style="display: none;">
-                <select id="prMergeStrategy" class="select-inline">
-                    <option value="squash">Squash</option>
-                    <option value="merge">Merge</option>
-                    <option value="rebase">Rebase</option>
-                </select>
-                <label class="label-inline-check">
-                    <input type="checkbox" id="prDeleteBranch" checked> Delete branch
-                </label>
-                <button type="button" class="btn btn-primary" id="btnMergePR" onclick="window.submitMergePR()">
-                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
-                    <span>Merge</span>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- 2.13.0: #prDetailModal removed — Touch 3 PR Review surface owns
+     PR inspection + submission + merge in `js/pr-review/`. -->
 
 <!-- Zip Upload Modal -->
 <div class="modal-overlay" id="zipUploadModal" role="dialog" aria-modal="true" aria-labelledby="zipUploadTitle">

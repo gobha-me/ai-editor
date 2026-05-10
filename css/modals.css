@@ -994,10 +994,8 @@ tr.model-edit-active td {
 #issueDetailComments .preview-markdown pre,
 .modal-comment-item .comment-body.preview-markdown pre { padding: 0.5rem; margin: 0.4rem 0; }
 
-/* ── PR Detail file items ── */
-.pr-file-item > div:first-child:hover {
-    background: var(--bg-hover);
-}
+/* 2.13.0: `.pr-file-item` rule removed alongside the legacy PR detail
+   modal — see js/pr-review/PrReviewSurface.js for the takeover surface. */
 
 /* ============================================
    ISSUE & PR DETAIL MODAL POLISH
@@ -1177,98 +1175,9 @@ details[open] > .modal-section-header .section-chevron {
     color: var(--success);
 }
 
-/* ── PR detail specific ── */
-.pr-detail-body {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem;
-    background: var(--bg-primary);
-    min-height: 40px;
-    max-height: 30%;
-    overflow-y: auto;
-    font-size: var(--font-base);
-    line-height: 1.6;
-}
-
-.pr-detail-branches {
-    font-size: var(--font-sm);
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.pr-detail-branches code {
-    background: var(--bg-primary);
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    font-family: var(--font-mono);
-    font-size: var(--font-sm);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-}
-
-.pr-detail-branches .branch-arrow {
-    color: var(--text-muted);
-    font-size: var(--font-sm);
-}
-
-/* PR sections */
-.pr-detail-section {
-    border-top: 1px solid var(--border);
-    padding-top: 0.5rem;
-}
-
-.pr-detail-section > summary {
-    list-style: none;
-}
-
-.pr-detail-section > summary::-webkit-details-marker { display: none; }
-
-/* PR comment add section */
-.pr-add-comment {
-    border-top: 1px solid var(--border);
-    padding-top: 0.6rem;
-}
-
-.pr-add-comment label {
-    font-size: var(--font-md);
-    font-weight: 600;
-    color: var(--text-secondary);
-    display: block;
-    margin-bottom: 0.35rem;
-}
-
-.pr-add-comment .comment-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.4rem;
-}
-
-.pr-add-comment .comment-actions .btn {
-    font-size: var(--font-sm);
-}
-
-/* PR merge controls (footer) */
-.pr-merge-controls {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-/* ── PR file diff improvements ── */
-.pr-file-diff pre {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.5rem;
-    overflow-x: auto;
-    font-size: var(--font-xs);
-    line-height: 1.5;
-    max-height: 300px;
-    overflow-y: auto;
-    margin: 0;
-}
+/* 2.13.0: legacy `.pr-detail-*`, `.pr-add-comment`, `.pr-merge-controls`,
+   `.pr-file-diff` rules removed alongside the deleted PR detail modal.
+   The Touch 3 PR Review surface owns these styles in `css/pr-review.css`. */
 
 /* ── Modal footer improvements ── */
 .modal-footer-split {

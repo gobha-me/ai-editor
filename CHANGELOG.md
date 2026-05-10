@@ -4,6 +4,56 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-05-10
+
+### Feature — Touch 3 PR Review surface (slice 2: review submission + dock; merge moves into the dock with load-on-click)
+
+Closes the **submission half** of the user's #1 cited Touch 3 pain point — slice 1 ([§2.12.0](#2120---2026-05-10)) shipped read-only inspection; slice 2 ships the action surface. Sticky `PrReviewDock` at the bottom of the takeover with a three-way event radio (Comment / Request changes / Approve), optional review-summary textarea, and a per-line `+` button that queues line-anchored draft comments into a per-PR queue. **Merge controls move into the dock** alongside Submit (extracted from the deleted `js/pr-detail.js#submitMergePR`), and Submit + Merge both fire `EventBus.emit('prs:refresh')` on success — the surface already subscribed to that channel in slice 1, so post-action state refresh is automatic with no separate Refresh button (the load-on-click pattern). The user found a missing-refresh-after-merge bug while dogfooding slice 1 before this slice was scoped; this slice fixes that for free by extracting merge into the dock and reusing the existing post-action refetch seam.
+
+The legacy [`js/pr-detail.js`](js/pr-detail.js) modal is **deleted** in this slice — it was kept exported in 2.12.0 as the rollback escape hatch *"for one cycle"* per the changelog note; the cycle has closed. Rolling back below 2.13.0 is now the only path back to the legacy modal.
+
+**New module tree** under [`js/pr-review/`](js/pr-review/):
+
+- [`PrReviewDock.js`](js/pr-review/PrReviewDock.js) — sticky bottom-of-surface dock (Preact + htm). Renders: pending-draft list with per-row remove `✕`, three-way event radio, optional summary textarea, **Submit review** button, optional **Merge controls** below (when `pr.state === 'open'` and provider supports merge). Drafts list pulls from `review-state.getDrafts(prNumber)`; cross-component updates listen on `pr-review:drafts-changed` via `useLayoutEffect` (slice-1 pattern — `useEffect` queues until next render in the vendor-bundle env). On Submit success: `clearDrafts()`, emit `prs:refresh`, transient "Review submitted ✓" flash; on failure, drafts are preserved + inline error chip + `window.showToast` escalation so the user notices if scrolled away. When `capabilities.reviewSubmission` is false (GitLab — see *Provider methods*), Submit hides and an inline notice points at 2.13.1.
+- [`PrCommentComposer.js`](js/pr-review/PrCommentComposer.js) — small reusable Preact + htm composer. Markdown textarea + Save/Cancel + busy spinner + inline error chip. Cmd/Ctrl+Enter submits, Esc cancels. Reused by per-line `+` (queues a draft) and per-thread Reply (posts immediately via `Git.createReviewComment`). The dock-level summary uses a plain inline `<textarea>` because it has no Save/Cancel — the dock's Submit button is the commit.
+- [`PrMergeControls.js`](js/pr-review/PrMergeControls.js) — extracted byte-for-byte from `pr-detail.js#submitMergePR`'s logic with the same merge-strategy select + delete-branch checkbox + two-click confirm pattern. Calls `Git.mergePullRequest(...)` then emits `context:prMerged`, `project:refreshAfterMerge`, **and `prs:refresh`** — the third event is the load-on-click fix that closes the missing-refresh gap dogfooded in slice 1.
+- [`review-state.js`](js/pr-review/review-state.js) — per-PR `Map<prNumber, {drafts, viewed, resolvedLocal}>`. Drafts and viewed-set persist to `localStorage` under `pr-review.drafts.${prNumber}` / `pr-review.viewed.${prNumber}`; resolved-local is in-memory only (next `prs:refresh` is the source of truth). Pure helpers `groupDraftsByThread` + `draftAnchorKey` exported for tests; key shape `${path}::${side}::${line}` matches slice-1's `_commentsByAnchor` keying so dock counts and diff-row thread renders agree by construction. Per `feedback_security_lint_return_raw.md`: JSON helpers are named `serialized` / `parsed` — never `raw`.
+
+**Provider methods.** New base contract in [`js/git-providers/base.js`](js/git-providers/base.js):
+
+- `submitPullRequestReview(connection, owner, repo, number, {event, body, comments})`
+- `createReviewComment(connection, owner, repo, number, {body, path?, line?, side?, commitSha?, in_reply_to?})`
+- `resolveReviewThread(connection, owner, repo, number, threadId, opts)`
+- `get capabilities() → {reviewSubmission, threadResolve, viewedFiles, merge}` — defaults to all `false`.
+
+[`gitea.js`](js/git-providers/gitea.js) implements `submit` + `create` against `POST /repos/{o}/{r}/pulls/{n}/reviews`, with `_mapDraftToGiteaReviewComment` mapping `LEFT → old_position` / `RIGHT → new_position` and `_mapEventEnum` translating `APPROVE → APPROVED`. `createReviewComment` for Gitea wraps both line-anchored and reply shapes inside a single-comment `event: COMMENT` review (Gitea has no standalone reply endpoint). `capabilities`: `{reviewSubmission: true, threadResolve: false, viewedFiles: false, merge: true}`.
+
+[`github.js`](js/git-providers/github.js) implements `submit` against `POST /repos/{o}/{r}/pulls/{n}/reviews` with passthrough payload. `createReviewComment` splits: replies → `POST .../comments/{id}/replies {body}`; line-anchored → `POST .../comments {body, commit_id, path, line, side}` — `commit_id` resolved from `data.pr.headSha` threaded through the surface. `capabilities`: same matrix as Gitea.
+
+[`gitlab.js`](js/git-providers/gitlab.js) does **not** implement the new methods — falls through to base's `notSupported` + default `capabilities` (all `false`). The dock detects this via `capabilities.reviewSubmission === false` and renders an inline notice: *"Review submission lands for this provider in 2.13.1."* Merge still works on GitLab (already implemented).
+
+[`js/git.js`](js/git.js) adds three pass-through facade methods + a `capabilities` getter that the dock reads through.
+
+**Wire-up.** [`PrReviewSurface.js`](js/pr-review/PrReviewSurface.js) wires the dock at the surface root after `.pr-review__body`; the slice-1 read-only banner inside `PrConversationView` is removed (the dock supersedes it). New props thread through the chain: `prNumber`, `pr` (for `headSha`), and `capabilities` flow `PrFilesView → PrFileDiff → PrHunk → PrHunkSplit/PrHunkUnified → PrAddCommentButton`. `PrThreadRow` gains a Reply button + inline `<PrCommentComposer>` expansion; reply Save calls `Git.createReviewComment(..., {in_reply_to: thread[0].id, commitSha})` then emits `prs:refresh`. `PrFilesView` row gains a per-file Viewed checkbox (local-only; `capabilities.viewedFiles` is false on every provider in 2.13.0). The new `PrAddCommentButton` is hover-revealed on each diff row; click expands the inline composer; Save calls `addDraft(prNumber, ...)` + emits `pr-review:drafts-changed` so the dock count and the surface re-render.
+
+**Cleanup.** [`js/pr-detail.js`](js/pr-detail.js) deleted. [`js/app.js`](js/app.js) removes `openPRDetailModal` / `closePRDetailModal` / `submitMergePR` / `generatePRComment` / `submitPRComment` imports + `window.*` exports; the slice-1 rollback comment is replaced with a 2.13.0 note. [`js/project-manager.js`](js/project-manager.js) inlines the 7-line `CI_ICONS` map (was imported from the deleted module), drops the `pr-detail.js` re-export block (lines 678-688 + 902-908), and the rollback fallback in `submitCreatePR` becomes a direct `window.openPrReview(pr.number)` call. [`html/modals.html`](html/modals.html) deletes the `#prDetailModal` block (~76 lines). [`css/modals.css`](css/modals.css) drops `.pr-detail-body` / `.pr-detail-branches` / `.pr-detail-section` / `.pr-add-comment` / `.pr-merge-controls` / `.pr-file-diff` / `.pr-file-item` rules. [`css/mobile.css`](css/mobile.css) drops `#prDetailModal .modal-resizable`. [`css/pr-review.css`](css/pr-review.css) gains the new `.pr-dock*`, `.pr-composer*`, `.pr-row__add-btn`, `.pr__filerow-viewed`, and `.pr__btn` rules — all reuse `--accent` / `--bg-secondary` / `--text-muted` / `--success` / `--danger` per the slice-1 token-downgrade pattern.
+
+**Tests.** Three new `.mjs` files (CI auto-globbed):
+
+- [`tests/test-pr-review-state.mjs`](tests/test-pr-review-state.mjs) — `addDraft` / `removeDraft` / `clearDrafts` per-PR isolation; `localStorage` round-trip for drafts + viewed (drafts persist; resolved-local does not); `toggleViewed` / `markResolvedLocal` flow; pure helpers `draftAnchorKey` + `groupDraftsByThread`.
+- [`tests/test-pr-review-submit-payload.mjs`](tests/test-pr-review-submit-payload.mjs) — Gitea side-mapping (`LEFT → old_position`, `RIGHT → new_position`) and event-enum mapping (`APPROVE → APPROVED`); GitHub passthrough mappers.
+- [`tests/test-pr-review-provider-shape.mjs`](tests/test-pr-review-provider-shape.mjs) — capability matrix per provider; Gitea + GitHub `submitPullRequestReview` POST endpoints + body shape via stubbed `request()`; GitHub `createReviewComment` line-anchored vs. reply endpoint split (and the `commitSha` requirement); Gitea reply wraps as a single-comment review (no standalone endpoint); GitLab inherits `notSupported` for all three new methods (assert `code === ErrorCode.GIT_NOT_SUPPORTED`).
+
+30 new tests, all passing. The full Node CI suite (`node --test tests/test-*.mjs`) reports **2582 pass / 0 fail / 1 skipped**.
+
+**Removability check (§Decisions 7).** Three independent revert paths:
+
+1. **Dock revert** — revert the commit that adds `<PrReviewDock>` to `PrReviewSurface.js`. The composer + provider methods can stay (used by the per-line and per-thread flows); re-render the read-only banner conditionally on `capabilities.reviewSubmission === false`.
+2. **Provider revert** — the three new methods are additive + isolated. Removing them re-throws `notSupported`; dock auto-disables via the capability check.
+3. **`pr-detail.js` deletion is the burned bridge.** Rolling back below 2.13.0 is the only path back to the legacy modal — slice 3 (AI summary, 2.14.0) builds on top of the dock and relies on the modal being gone.
+
+**What this does NOT do.** No AI review summary banner; no per-thread Resolve button (capability is false on Gitea + GitHub-via-REST; GitHub would need GraphQL, deferred); no GitHub mark-viewed API call (preview API + path-encoding push it out of scope; viewed checkbox writes to `localStorage` only); no GitLab `submit`/`create` (ships in 2.13.1 alongside the GitLab review API mapping); no `Suggest fix` inline action; no draft autosave indicator beyond the persisted localStorage round-trip.
+
 ## [2.12.0] - 2026-05-10
 
 ### Feature — Touch 3 PR Review surface (slice 1: read-only middle-pane takeover)

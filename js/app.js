@@ -63,11 +63,6 @@ import {
     openCreatePRModal,
     closeCreatePRModal,
     submitCreatePR,
-    openPRDetailModal,
-    closePRDetailModal,
-    submitMergePR,
-    generatePRComment,
-    submitPRComment,
     focusIssue,
     unfocusIssue,
     startWorkOnIssue,
@@ -230,16 +225,11 @@ window.closeIssueDetailModal = closeIssueDetailModal;
 window.openCreatePRModal = openCreatePRModal;
 window.closeCreatePRModal = closeCreatePRModal;
 window.submitCreatePR = submitCreatePR;
-window.openPRDetailModal = openPRDetailModal;
-window.closePRDetailModal = closePRDetailModal;
-// 2.12.0 — Touch 3 PR Review takeover. The legacy `openPRDetailModal`
-// stays exported for the rollback path (project-manager.js calls it
-// when `window.openPrReview` is missing).
+// 2.13.0 — Touch 3 PR Review surface owns PR inspection AND submission +
+// merge. The legacy `openPRDetailModal` modal was deleted; the dock at
+// the bottom of the surface is the only surface for review actions now.
 window.openPrReview = openPrReview;
 window.closePrReview = closePrReview;
-window.submitMergePR = submitMergePR;
-window.generatePRComment = generatePRComment;
-window.submitPRComment = submitPRComment;
 
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;

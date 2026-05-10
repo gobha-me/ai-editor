@@ -26,6 +26,14 @@ import { Git } from '../git.js';
 import { renderMarkdown } from '../secondary-pane.js';
 import { getPreact } from '../utils/preact-mount.js';
 import { parsePatch, pairSideBySide, truncateRows, countChanges } from './diff-parse.js';
+import { PrReviewDock } from './PrReviewDock.js';
+import { PrCommentComposer } from './PrCommentComposer.js';
+import {
+    addDraft,
+    getResolvedLocal,
+    isFileViewed,
+    toggleViewed,
+} from './review-state.js';
 
 const { html, useState, useLayoutEffect, useMemo } = await getPreact();
 
@@ -182,6 +190,28 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
     const commentCounts = useMemo(() => _commentCountsByPath(data.comments), [data.comments]);
     const commentsByAnchor = useMemo(() => _commentsByAnchor(data.comments), [data.comments]);
 
+    // Slice 2 — capabilities are read once per render from the active
+    // provider; the dock decides what to enable based on these flags.
+    // Falls back to empty `{}` when no project is loaded so the UI
+    // degrades to "everything disabled" instead of throwing.
+    const capabilities = useMemo(() => {
+        try { return Git.capabilities || {}; } catch { return {}; }
+    }, [data.pr]);
+
+    // Force-re-render seam for cross-component review-state updates
+    // (e.g. user clicks `+` on a diff line → addDraft → dock count
+    // updates AND the row's already-drafted indicator updates here).
+    const [stateBump, setStateBump] = useState(0);
+    useLayoutEffect(() => {
+        const off = EventBus.on('pr-review:drafts-changed', () => setStateBump(n => n + 1));
+        return off;
+    }, []);
+
+    const threadsResolvedLocal = useMemo(
+        () => getResolvedLocal(prNumber).size,
+        [prNumber, stateBump]
+    );
+
     if (data.loading && !data.pr) {
         return html`
             <div class="pr-review">
@@ -198,6 +228,9 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
             </div>
         `;
     }
+
+    const headSha = data.pr?.headSha || '';
+    const threadsTotal = commentsByAnchor.size;
 
     return html`
         <div class="pr-review">
@@ -224,6 +257,10 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
                         onDiffModeChange=${setDiffMode}
                         filter=${filter}
                         onFilterChange=${setFilter}
+                        prNumber=${prNumber}
+                        headSha=${headSha}
+                        capabilities=${capabilities}
+                        viewedBump=${stateBump}
                     />
                 `}
                 ${tab === 'conversation' && html`
@@ -236,6 +273,13 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
                     <${PrChecksView} ci=${data.ci} />
                 `}
             </div>
+            <${PrReviewDock}
+                prNumber=${prNumber}
+                pr=${data.pr}
+                capabilities=${capabilities}
+                threadsTotal=${threadsTotal}
+                threadsResolvedLocal=${threadsResolvedLocal}
+            />
         </div>
     `;
 }
@@ -310,7 +354,7 @@ function PrTabs({ active, onSelect, counts }) {
 // Files view (file tree + diff pane)
 // ============================================
 
-function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSelectPath, diffMode, onDiffModeChange, filter, onFilterChange }) {
+function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSelectPath, diffMode, onDiffModeChange, filter, onFilterChange, prNumber, headSha, capabilities, viewedBump }) {
     const filtered = useMemo(() => {
         const q = filter.trim().toLowerCase();
         if (!q) return files;
@@ -343,8 +387,12 @@ function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSel
                         const status = FILE_STATUS_MARK[f.status] || FILE_STATUS_MARK.modified;
                         const threadCount = commentCounts.get(f.filename) || 0;
                         const isActive = f.filename === activePath;
+                        const viewed = isFileViewed(prNumber, f.filename);
+                        const cls = 'pr__filerow'
+                            + (isActive ? ' pr__filerow--active' : '')
+                            + (viewed ? ' pr__filerow--viewed' : '');
                         return html`
-                            <li class=${'pr__filerow ' + (isActive ? 'pr__filerow--active' : '')} key=${f.filename}>
+                            <li class=${cls} key=${f.filename}>
                                 <button type="button" class="pr__filebtn" onClick=${() => onSelectPath(f.filename)} title=${f.filename} aria-current=${isActive}>
                                     <span class=${'pr__filemark ' + status.cls} aria-label=${status.label}>${status.mark}</span>
                                     <span class="pr__filepath">${f.filename}</span>
@@ -356,6 +404,17 @@ function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSel
                                         <span class="pr__del">−${f.deletions || 0}</span>
                                     </span>
                                 </button>
+                                <label class="pr__filerow-viewed" title=${viewed ? 'Mark unviewed' : 'Mark viewed'} onClick=${(e) => e.stopPropagation()}>
+                                    <input
+                                        type="checkbox"
+                                        checked=${viewed}
+                                        onChange=${() => {
+                                            toggleViewed(prNumber, f.filename);
+                                            EventBus.emit('pr-review:drafts-changed', { prNumber });
+                                        }}
+                                        aria-label=${'Mark ' + f.filename + (viewed ? ' unviewed' : ' viewed')} />
+                                    <span class="pr__filerow-viewed-label">Viewed</span>
+                                </label>
                             </li>
                         `;
                     })}
@@ -363,7 +422,14 @@ function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSel
             </aside>
             <section class="pr__diffpane" aria-label="Diff for selected file">
                 ${active
-                    ? html`<${PrFileDiff} file=${active} mode=${diffMode} onModeChange=${onDiffModeChange} commentsByAnchor=${commentsByAnchor} />`
+                    ? html`<${PrFileDiff}
+                            file=${active}
+                            mode=${diffMode}
+                            onModeChange=${onDiffModeChange}
+                            commentsByAnchor=${commentsByAnchor}
+                            prNumber=${prNumber}
+                            headSha=${headSha}
+                            capabilities=${capabilities} />`
                     : html`<div class="pr-review__empty">Select a file to view its diff.</div>`}
             </section>
         </div>
@@ -374,7 +440,7 @@ function PrFilesView({ files, commentCounts, commentsByAnchor, activePath, onSel
 // File diff (a single file's hunks)
 // ============================================
 
-function PrFileDiff({ file, mode, onModeChange, commentsByAnchor }) {
+function PrFileDiff({ file, mode, onModeChange, commentsByAnchor, prNumber, headSha, capabilities }) {
     const parsed = useMemo(() => parsePatch(file.patch), [file.patch]);
 
     return html`
@@ -393,20 +459,20 @@ function PrFileDiff({ file, mode, onModeChange, commentsByAnchor }) {
             ${parsed.hunks.length === 0
                 ? html`<div class="pr-review__empty">${file.patch ? 'Empty patch.' : 'No textual diff (binary or unchanged).'}</div>`
                 : parsed.hunks.map((h, idx) => html`
-                    <${PrHunk} hunk=${h} mode=${mode} path=${file.filename} commentsByAnchor=${commentsByAnchor} key=${idx} />
+                    <${PrHunk} hunk=${h} mode=${mode} path=${file.filename} commentsByAnchor=${commentsByAnchor} prNumber=${prNumber} headSha=${headSha} capabilities=${capabilities} key=${idx} />
                 `)}
         </div>
     `;
 }
 
-function PrHunk({ hunk, mode, path, commentsByAnchor }) {
+function PrHunk({ hunk, mode, path, commentsByAnchor, prNumber, headSha, capabilities }) {
     const { rows, truncated } = truncateRows(hunk.rows);
     return html`
         <div class="pr__hunk">
             <div class="pr__hunk-h" title=${hunk.header}>${hunk.header}</div>
             ${mode === 'split'
-                ? html`<${PrHunkSplit} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} />`
-                : html`<${PrHunkUnified} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} />`}
+                ? html`<${PrHunkSplit} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} prNumber=${prNumber} headSha=${headSha} capabilities=${capabilities} />`
+                : html`<${PrHunkUnified} rows=${rows} path=${path} commentsByAnchor=${commentsByAnchor} prNumber=${prNumber} headSha=${headSha} capabilities=${capabilities} />`}
             ${truncated > 0 && html`
                 <div class="pr__hunk-truncated">… ${truncated} more rows hidden (open in browser to view full diff)</div>
             `}
@@ -414,28 +480,32 @@ function PrHunk({ hunk, mode, path, commentsByAnchor }) {
     `;
 }
 
-function PrHunkUnified({ rows, path, commentsByAnchor }) {
+function PrHunkUnified({ rows, path, commentsByAnchor, prNumber, headSha, capabilities }) {
     return html`
         <div class="pr__diff pr__diff--unified" role="table" aria-label="Unified diff">
             ${rows.map((r, i) => {
-                const lineKey = r.r != null
-                    ? `${path}::RIGHT::${r.r}`
-                    : (r.l != null ? `${path}::LEFT::${r.l}` : null);
+                const side = r.r != null ? 'RIGHT' : (r.l != null ? 'LEFT' : null);
+                const lineNo = side === 'RIGHT' ? r.r : (side === 'LEFT' ? r.l : null);
+                const lineKey = side && lineNo != null ? `${path}::${side}::${lineNo}` : null;
                 const threads = lineKey ? commentsByAnchor.get(lineKey) : null;
+                const canAddComment = side && lineNo != null && capabilities?.reviewSubmission;
                 return html`
                     <div class=${'pr__row pr__row--' + r.kind} role="row" key=${i}>
                         <span class="pr__ln pr__ln--l" aria-hidden="true">${r.l ?? ''}</span>
                         <span class="pr__ln pr__ln--r" aria-hidden="true">${r.r ?? ''}</span>
                         <span class="pr__code">${_signFor(r.kind)}${r.code}</span>
+                        ${canAddComment && html`
+                            <${PrAddCommentButton} prNumber=${prNumber} path=${path} line=${lineNo} side=${side} headSha=${headSha} />
+                        `}
                     </div>
-                    ${threads && html`<${PrThreadRow} threads=${threads} colspan=${3} />`}
+                    ${threads && html`<${PrThreadRow} threads=${threads} prNumber=${prNumber} path=${path} side=${side} headSha=${headSha} capabilities=${capabilities} colspan=${3} />`}
                 `;
             })}
         </div>
     `;
 }
 
-function PrHunkSplit({ rows, path, commentsByAnchor }) {
+function PrHunkSplit({ rows, path, commentsByAnchor, prNumber, headSha, capabilities }) {
     const paired = useMemo(() => pairSideBySide(rows), [rows]);
     return html`
         <div class="pr__diff pr__diff--split" role="table" aria-label="Side-by-side diff">
@@ -444,25 +514,72 @@ function PrHunkSplit({ rows, path, commentsByAnchor }) {
                 const rightKey = p.right && p.right.r != null ? `${path}::RIGHT::${p.right.r}` : null;
                 const leftThreads = leftKey ? commentsByAnchor.get(leftKey) : null;
                 const rightThreads = rightKey ? commentsByAnchor.get(rightKey) : null;
+                const canAddLeft = p.left && p.left.l != null && capabilities?.reviewSubmission;
+                const canAddRight = p.right && p.right.r != null && capabilities?.reviewSubmission;
                 return html`
                     <div class="pr__row-split" role="row" key=${i}>
                         <span class=${'pr__cell-ln ' + (p.left ? 'pr__cell--' + p.left.kind : 'pr__cell--blank')}>${p.left ? p.left.l : ''}</span>
-                        <span class=${'pr__cell-code ' + (p.left ? 'pr__cell--' + p.left.kind : 'pr__cell--blank')}>${p.left ? p.left.code : ''}</span>
+                        <span class=${'pr__cell-code ' + (p.left ? 'pr__cell--' + p.left.kind : 'pr__cell--blank')}>
+                            ${p.left ? p.left.code : ''}
+                            ${canAddLeft && html`
+                                <${PrAddCommentButton} prNumber=${prNumber} path=${path} line=${p.left.l} side="LEFT" headSha=${headSha} />
+                            `}
+                        </span>
                         <span class=${'pr__cell-ln ' + (p.right ? 'pr__cell--' + p.right.kind : 'pr__cell--blank')}>${p.right ? p.right.r : ''}</span>
-                        <span class=${'pr__cell-code ' + (p.right ? 'pr__cell--' + p.right.kind : 'pr__cell--blank')}>${p.right ? p.right.code : ''}</span>
+                        <span class=${'pr__cell-code ' + (p.right ? 'pr__cell--' + p.right.kind : 'pr__cell--blank')}>
+                            ${p.right ? p.right.code : ''}
+                            ${canAddRight && html`
+                                <${PrAddCommentButton} prNumber=${prNumber} path=${path} line=${p.right.r} side="RIGHT" headSha=${headSha} />
+                            `}
+                        </span>
                     </div>
                     ${(leftThreads || rightThreads) && html`
                         <div class="pr__thread-split-row" role="row">
                             <div class="pr__thread-side">
-                                ${leftThreads && html`<${PrThreadRow} threads=${leftThreads} colspan=${1} />`}
+                                ${leftThreads && html`<${PrThreadRow} threads=${leftThreads} prNumber=${prNumber} path=${path} side="LEFT" headSha=${headSha} capabilities=${capabilities} colspan=${1} />`}
                             </div>
                             <div class="pr__thread-side">
-                                ${rightThreads && html`<${PrThreadRow} threads=${rightThreads} colspan=${1} />`}
+                                ${rightThreads && html`<${PrThreadRow} threads=${rightThreads} prNumber=${prNumber} path=${path} side="RIGHT" headSha=${headSha} capabilities=${capabilities} colspan=${1} />`}
                             </div>
                         </div>
                     `}
                 `;
             })}
+        </div>
+    `;
+}
+
+/**
+ * Per-line `+` button. Hover-revealed via CSS; click expands the
+ * inline composer below the row. Saves draft into review-state and
+ * fires the cross-component `pr-review:drafts-changed` event so the
+ * dock count and any sibling subscribers re-render.
+ */
+function PrAddCommentButton({ prNumber, path, line, side, headSha }) {
+    const [open, setOpen] = useState(false);
+    if (!open) {
+        return html`
+            <button
+                type="button"
+                class="pr-row__add-btn"
+                onClick=${(e) => { e.stopPropagation(); setOpen(true); }}
+                aria-label=${'Add comment on ' + path + ' line ' + line + ' (' + side + ')'}
+                title="Add comment on this line">
+                +
+            </button>
+        `;
+    }
+    return html`
+        <div class="pr-row__composer" onClick=${(e) => e.stopPropagation()}>
+            <${PrCommentComposer}
+                placeholder=${'Comment on ' + path + ':' + line}
+                submitLabel="Add to review"
+                onSave=${({ body }) => {
+                    addDraft(prNumber, { path, line, side, body, commitSha: headSha });
+                    EventBus.emit('pr-review:drafts-changed', { prNumber });
+                    setOpen(false);
+                }}
+                onCancel=${() => setOpen(false)} />
         </div>
     `;
 }
@@ -473,7 +590,36 @@ function _signFor(kind) {
     return ' ';
 }
 
-function PrThreadRow({ threads }) {
+function PrThreadRow({ threads, prNumber, path, side, headSha, capabilities }) {
+    const [replying, setReplying] = useState(false);
+    const [replyBusy, setReplyBusy] = useState(false);
+    const [replyError, setReplyError] = useState(/** @type {string|null} */ (null));
+    const canReply = capabilities?.reviewSubmission && threads && threads.length > 0;
+
+    async function handleReplySave({ body }) {
+        if (replyBusy) return;
+        setReplyBusy(true);
+        setReplyError(null);
+        try {
+            if (!State.currentProject) throw new Error('No project loaded');
+            const { owner, repo } = State.currentProject;
+            await Git.createReviewComment(owner, repo, prNumber, {
+                body,
+                in_reply_to: threads[0].id,
+                commitSha: headSha,
+                path,
+                line: threads[0].line,
+                side,
+            });
+            setReplying(false);
+            EventBus.emit('prs:refresh');
+        } catch (e) {
+            setReplyError(e?.message || String(e));
+        } finally {
+            setReplyBusy(false);
+        }
+    }
+
     return html`
         <div class="pr__threads" role="row">
             ${threads.map(c => html`
@@ -485,6 +631,27 @@ function PrThreadRow({ threads }) {
                     <div class="pr__thread-body" dangerouslySetInnerHTML=${{ __html: renderMarkdown(c.body || '') }}></div>
                 </div>
             `)}
+            ${canReply && !replying && html`
+                <div class="pr__thread-actions">
+                    <button
+                        type="button"
+                        class="pr__btn pr__btn--ghost pr__btn--xs"
+                        onClick=${() => setReplying(true)}>
+                        ↩ Reply
+                    </button>
+                </div>
+            `}
+            ${replying && html`
+                <div class="pr__thread-composer">
+                    <${PrCommentComposer}
+                        placeholder="Reply…"
+                        submitLabel="Post reply"
+                        busy=${replyBusy}
+                        error=${replyError}
+                        onSave=${handleReplySave}
+                        onCancel=${() => { setReplying(false); setReplyError(null); }} />
+                </div>
+            `}
         </div>
     `;
 }
@@ -525,9 +692,6 @@ function PrConversationView({ pr, comments }) {
                         <div class="pr__convo-md" dangerouslySetInnerHTML=${{ __html: renderMarkdown(c.body || '') }}></div>
                     </div>
                 `)}
-            <div class="pr__readonly-banner" role="note">
-                Read-only review surface. Posting comments and submitting reviews ship in 2.13.0 — for now, comment via chat or the external link above.
-            </div>
         </div>
     `;
 }

@@ -443,6 +443,52 @@ const Git = {
         return provider.mergePullRequest(connection, owner, repo, number, opts);
     },
 
+    /**
+     * Submit a PR review (line-anchored draft comments + an event).
+     * @since 2.13.0
+     */
+    async submitPullRequestReview(owner, repo, number, payload) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.submitPullRequestReview(connection, owner, repo, number, payload);
+    },
+
+    /**
+     * Create a single review comment — line-anchored or a reply.
+     * @since 2.13.0
+     */
+    async createReviewComment(owner, repo, number, payload) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.createReviewComment(connection, owner, repo, number, payload);
+    },
+
+    /**
+     * Resolve (or unresolve) a review thread on the active provider.
+     * Unsupported on Gitea + GitHub-via-REST in 2.13.0; the dock hides
+     * the button and falls back to local UX-hide via `review-state`.
+     * @since 2.13.0
+     */
+    async resolveReviewThread(owner, repo, number, threadId, opts = {}) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.resolveReviewThread(connection, owner, repo, number, threadId, opts);
+    },
+
+    /**
+     * Capabilities advertised by the active provider. Read by the
+     * PR Review dock to enable / disable + render explanatory notices.
+     *
+     * Returns an empty `{}` when no project is loaded so callers can
+     * safely chain `Git.capabilities?.reviewSubmission` without guards.
+     * @since 2.13.0
+     */
+    get capabilities() {
+        try {
+            const { provider } = resolveCurrentConnection();
+            return provider.capabilities || {};
+        } catch {
+            return {};
+        }
+    },
+
     // ========================================
     // COMMIT DIFF
     // ========================================

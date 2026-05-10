@@ -482,8 +482,15 @@ export async function refreshIssues() {
     renderIssues();
 }
 
-// CI_ICONS moved to pr-detail.js (shared constant)
-import { CI_ICONS } from './pr-detail.js';
+// CI_ICONS — inlined here in 2.13.0 when pr-detail.js was deleted.
+// Used by `renderPullRequests` for the per-row CI badge in the rail.
+const CI_ICONS = {
+    success: '✅',
+    pending: '🔄',
+    failure: '❌',
+    error: '❌',
+    unknown: '⚪'
+};
 
 export function renderPullRequests() {
     const container = document.getElementById('prsPanel');
@@ -659,13 +666,10 @@ export async function submitCreatePR() {
         const pr = await Git.createMergeRequest(owner, repo, title, body, head, base);
         closeCreatePRModal();
         await refreshPullRequests();
-        // Open the newly created PR in the new takeover surface (2.12.0).
-        // Falls back to the legacy modal if pr-review isn't wired (rollback path).
-        if (typeof window.openPrReview === 'function') {
-            window.openPrReview(pr.number);
-        } else {
-            openPRDetailModal(pr.number);
-        }
+        // 2.13.0 — open the freshly-created PR in the takeover surface.
+        // The legacy modal rollback path was removed when pr-detail.js
+        // was deleted; the surface is the only inspector now.
+        window.openPrReview(pr.number);
     } catch (e) {
         errorEl.textContent = `Failed: ${e.message}`;
         errorEl.style.display = '';
@@ -674,18 +678,6 @@ export async function submitCreatePR() {
     }
 }
 
-
-// ============================================
-// PR DETAIL (extracted to pr-detail.js)
-// ============================================
-
-import {
-    openPRDetailModal,
-    closePRDetailModal,
-    submitMergePR,
-    generatePRComment,
-    submitPRComment
-} from './pr-detail.js';
 
 // ============================================
 // ISSUE DETAIL (extracted to issue-detail.js)
@@ -900,12 +892,6 @@ export function initProjectListeners() {
 // ============================================
 
 export {
-    // PR detail (from pr-detail.js)
-    openPRDetailModal,
-    closePRDetailModal,
-    submitMergePR,
-    generatePRComment,
-    submitPRComment,
     // Issue detail (from issue-detail.js)
     openIssueTab,
     openIssueDetailModal,

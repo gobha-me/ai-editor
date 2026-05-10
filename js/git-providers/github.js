@@ -822,6 +822,99 @@ const githubProvider = {
         };
     },
 
+    /**
+     * Submit a GitHub PR review. Endpoint:
+     *   POST /repos/{owner}/{repo}/pulls/{number}/reviews
+     *
+     * GitHub's enum is the canonical one (`APPROVE`/`COMMENT`/`REQUEST_CHANGES`)
+     * — passthrough via `_mapEventEnumGitHub`. Comment shape matches the
+     * UI draft 1:1; mapper kept for symmetry with Gitea + tests.
+     *
+     * @since 2.13.0
+     */
+    async submitPullRequestReview(connection, owner, repo, number, { event, body, comments } = {}) {
+        const payload = {
+            event: _mapEventEnumGitHub(event),
+        };
+        if (body) payload.body = body;
+        if (Array.isArray(comments) && comments.length > 0) {
+            payload.comments = comments.map(_mapDraftToGitHubReviewComment);
+        }
+        const result = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/pulls/${number}/reviews`, payload
+        );
+        EventBus.emit('git:prReviewSubmitted', { connectionId: connection.id, owner, repo, number });
+        return {
+            id: result?.id ?? 0,
+            state: result?.state ?? event,
+            submittedAt: result?.submitted_at || new Date().toISOString(),
+            url: result?.html_url,
+        };
+    },
+
+    /**
+     * Create a single review comment. Two endpoints:
+     *   - Reply: POST /repos/{o}/{r}/pulls/{n}/comments/{id}/replies {body}
+     *   - Line-anchored: POST /repos/{o}/{r}/pulls/{n}/comments
+     *     {body, commit_id, path, line, side}
+     *
+     * `commit_id` is required for line-anchored comments — the caller
+     * passes `commitSha` resolved from the PR's head SHA.
+     *
+     * @since 2.13.0
+     */
+    async createReviewComment(connection, owner, repo, number, { body, path, line, side, commitSha, in_reply_to } = {}) {
+        if (in_reply_to) {
+            const result = await this.request(connection, 'POST',
+                `/repos/${owner}/${repo}/pulls/${number}/comments/${in_reply_to}/replies`,
+                { body }
+            );
+            return {
+                id: result?.id ?? 0,
+                body: result?.body || body,
+                user: result?.user?.login || '',
+                createdAt: result?.created_at || new Date().toISOString(),
+                type: 'review',
+            };
+        }
+        if (!path || !line) {
+            throw new Error('createReviewComment: either in_reply_to or (path + line) is required');
+        }
+        if (!commitSha) {
+            throw new Error('createReviewComment: commitSha is required for line-anchored comments on GitHub');
+        }
+        const result = await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/pulls/${number}/comments`,
+            { body, commit_id: commitSha, path, line, side: side || 'RIGHT' }
+        );
+        return {
+            id: result?.id ?? 0,
+            body: result?.body || body,
+            user: result?.user?.login || '',
+            createdAt: result?.created_at || new Date().toISOString(),
+            path,
+            line,
+            side: side || 'RIGHT',
+            type: 'review',
+        };
+    },
+
+    /**
+     * Capabilities — GitHub supports review submission + merge; thread
+     * resolve requires GraphQL (deferred), viewed-files requires the
+     * preview API (deferred to a follow-up).
+     *
+     * @since 2.13.0
+     */
+    get capabilities() {
+        return {
+            reviewSubmission: true,
+            threadResolve: false,
+            viewedFiles: false,
+            merge: true,
+        };
+    },
+
     // ========================================
     // TAGS & RELEASES
     // ========================================
@@ -1126,5 +1219,32 @@ const githubProvider = {
     }
 };
 
+// ============================================
+// PURE MAPPERS (exported for tests/test-pr-review-submit-payload.mjs)
+// ============================================
+
+/**
+ * Map a draft comment to GitHub's review-comment shape.
+ * GitHub's shape matches the UI draft 1:1 — `{path, line, side, body}`.
+ *
+ * @param {{path:string, line:number, side:'LEFT'|'RIGHT', body:string}} d
+ * @returns {{path:string, line:number, side:'LEFT'|'RIGHT', body:string}}
+ */
+function _mapDraftToGitHubReviewComment(d) {
+    return { path: d.path, line: d.line, side: d.side, body: d.body };
+}
+
+/**
+ * Map UI event enum to GitHub's. GitHub uses the same enum the UI
+ * does — passthrough — but the mapper keeps the call site symmetric
+ * with Gitea (`_mapEventEnum`) and gives tests something to grip.
+ *
+ * @param {string} event
+ * @returns {string}
+ */
+function _mapEventEnumGitHub(event) {
+    return event || 'COMMENT';
+}
+
 export default githubProvider;
-export { utf8ToBase64, base64ToUtf8 };
+export { utf8ToBase64, base64ToUtf8, _mapDraftToGitHubReviewComment, _mapEventEnumGitHub };

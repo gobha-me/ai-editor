@@ -394,9 +394,10 @@
         font-size: 16px;       /* ≥16px prevents iOS auto-zoom */
     }
 
-    /* Issue/PR detail modals: full-width on mobile */
-    #issueDetailModal .modal-resizable,
-    #prDetailModal .modal-resizable {
+    /* Issue detail modal: full-width on mobile.
+       2.13.0: `#prDetailModal` selector dropped — PR review uses the
+       middle-pane takeover surface, not a modal. */
+    #issueDetailModal .modal-resizable {
         width: 95vw !important;
         height: 80vh !important;
         max-width: 95vw;
