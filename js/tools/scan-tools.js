@@ -514,40 +514,51 @@ export function registerScanTools(registry) {
             return { error: 'No project is currently loaded' };
         }
 
+        // 2.15.1 — coerce at boundary. Some models JSON-encode ints as strings
+        // ("85" rather than 85); without this, `end_line < start_line` does
+        // lexicographic comparison ("105" < "85" → true) and traps the model
+        // in a shrinking-range loop that no value can escape.
+        const start_num = Number(start_line);
+        const end_num   = Number(end_line);
+        const ctx_num   = Number(context_lines);
+        if (!Number.isFinite(start_num) || !Number.isFinite(end_num) || !Number.isFinite(ctx_num)) {
+            return { error: `start_line, end_line, and context_lines must be numbers (got start=${JSON.stringify(start_line)}, end=${JSON.stringify(end_line)}, ctx=${JSON.stringify(context_lines)})` };
+        }
+
         const branch = State.currentBranch || 'main';
 
         try {
             // 1.6.8 follow-up — buffer-aware read; see _file-content.js docstring.
             const { content, source } = await resolveFileContent(path);
-            
+
             const lines = content.split('\n');
-            
+
             // Validate line numbers
-            const start = Math.max(1, start_line - context_lines);
-            const end = Math.min(lines.length, end_line + context_lines);
-            
-            if (start_line < 1 || start_line > lines.length) {
-                return { error: `Invalid start_line: ${start_line} (file has ${lines.length} lines)` };
+            const start = Math.max(1, start_num - ctx_num);
+            const end = Math.min(lines.length, end_num + ctx_num);
+
+            if (start_num < 1 || start_num > lines.length) {
+                return { error: `Invalid start_line: ${start_num} (file has ${lines.length} lines)` };
             }
-            
-            if (end_line < start_line || end_line > lines.length) {
-                return { error: `Invalid end_line: ${end_line} (must be between ${start_line} and ${lines.length})` };
+
+            if (end_num < start_num || end_num > lines.length) {
+                return { error: `Invalid end_line: ${end_num} (must be between ${start_num} and ${lines.length})` };
             }
-            
+
             // Extract lines (convert to 0-indexed)
             const extractedLines = lines.slice(start - 1, end);
             const resultContent = extractedLines.join('\n');
-            
+
             // Track this read for drift detection
             EditTracker.recordRead(path, start, end, lines.length);
-            
+
             return {
                 path,
                 start_line: start,
                 end_line: end,
-                requested_start: start_line,
-                requested_end: end_line,
-                context_lines,
+                requested_start: start_num,
+                requested_end: end_num,
+                context_lines: ctx_num,
                 line_count: lines.length,
                 content: resultContent,
                 source  // 'editor' | 'tab' | 'remote' — helps debug state issues

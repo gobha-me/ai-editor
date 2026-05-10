@@ -153,7 +153,7 @@ export function registerMultiFileTools(registry) {
         const wrongShape = _detectWrongShape(args);
         if (wrongShape) return wrongShape;
 
-        const { path, operation, start_line, end_line, after_line, new_content } = args || {};
+        let { path, operation, start_line, end_line, after_line, new_content } = args || {};
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
@@ -169,6 +169,10 @@ export function registerMultiFileTools(registry) {
             if (start_line == null || end_line == null || new_content == null) {
                 return { error: 'replace requires start_line, end_line, and new_content' };
             }
+
+            // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+            start_line = Number(start_line);
+            end_line = Number(end_line);
 
             // Stale check
             const staleCheck = EditTracker.checkStale(path, start_line, end_line);
@@ -201,7 +205,9 @@ export function registerMultiFileTools(registry) {
             };
 
         } else if (op === 'insert') {
-            const insertAfter = after_line ?? start_line ?? 0;
+            // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+            let insertAfter = after_line ?? start_line ?? 0;
+            insertAfter = Number(insertAfter);
             if (new_content == null) {
                 return { error: 'insert requires new_content (and after_line or start_line)' };
             }
@@ -237,6 +243,10 @@ export function registerMultiFileTools(registry) {
             if (start_line == null || end_line == null) {
                 return { error: 'delete requires start_line and end_line' };
             }
+
+            // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+            start_line = Number(start_line);
+            end_line = Number(end_line);
 
             const staleCheck = EditTracker.checkStale(path, start_line, end_line);
             if (staleCheck.stale) {

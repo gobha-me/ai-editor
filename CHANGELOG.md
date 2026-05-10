@@ -4,6 +4,26 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.15.1] - 2026-05-10
+
+### Fix — `read_lines` numeric-coercion guard (chat-export trap)
+
+Some models JSON-encode integer tool args as strings (`"85"` rather than `85`). The pre-2.15.1 [`read_lines`](js/tools/scan-tools.js) validator's `end_line < start_line` check then did **lexicographic** comparison: `"105" < "85"` is `true` (`'1'` < `'8'`), `"342" < "85"` is also `true`. Once `start_line` was string-shaped, no `end_line` value could pass the check — the model kept shrinking the range thinking that was the problem, and the spurious `must be between 85 and 342` error told it exactly the wrong thing (`105` IS in `[85, 342]` numerically). Two adjacent traps fired silently alongside it: `end_line + context_lines` string-concatenated (`"105" + 0 → "1050"`) and clamped to EOF, and `start_line - context_lines` happened to coerce-via-arithmetic and worked by accident.
+
+Observed in a chat-export shared 2026-05-10: Sonnet 4.6 (the current paid-tier default) burned **~9 min / 2.3M tokens / $1.84** in a `read_lines` loop on HTML-Games issue#88 before the session ran out. Any model that string-encodes ints in tool args is exposed.
+
+**Patch.** Coerce all three line-number args (`start_line`, `end_line`, `context_lines`) at the [registry boundary](js/tools/scan-tools.js) with `Number()` and a `Number.isFinite` NaN guard; subsequent comparisons, arithmetic, and validator messages use the parsed `_num` locals so the error reflects the numeric value the rest of the body works on. Same coercion-at-boundary pattern applied prophylactically to the other line-number arg sites that route through `EditTracker.recordEdit` / `checkStale` (which compare across calls — symmetric string-vs-string is the trap shape): [`replace_lines`](js/tools/edit-tools.js), [`insert_lines`](js/tools/edit-tools.js), [`delete_lines`](js/tools/edit-tools.js), and the `replace` / `insert` / `delete` branches of [`edit_file`](js/tools/multifile-tools.js). [`peek_read_lines`](js/tools/xref-tools.js) is left alone — its `Math.max` / `Math.min` calls actively coerce, and its only comparison is against numeric `total`, so the trap shape doesn't apply.
+
+**Tests** — [`tests/test-read-lines-numeric-coercion.mjs`](tests/test-read-lines-numeric-coercion.mjs):
+
+- string-encoded `start_line: "85", end_line: "105"` returns the lines, not the spurious `end < start` rejection (the trap regression).
+- numeric `start_line: 85, end_line: 105` returns the same result (backward-compat regression guard).
+- `start_line: "abc"` surfaces the new `must be numbers` error.
+- *real* end < start (`200 → 100`) still surfaces `Invalid end_line: 100`, both for numeric and string-encoded inputs.
+- `context_lines: "3"` expands by 3 (not string-concatenated to `"1003"` and clamped to EOF).
+
+**Removability.** One coercion block per handler + one new test file. Reverts cleanly in one diff.
+
 ## [2.15.0] - 2026-05-10
 
 ### Feature — MCP discovery Phase 2 slice 1: dynamic catalog (Smithery) + search/filter ([github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2)

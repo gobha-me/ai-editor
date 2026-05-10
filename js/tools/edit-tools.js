@@ -56,7 +56,11 @@ export function registerEditTools(registry) {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
-        
+
+        // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+        start_line = Number(start_line);
+        end_line = Number(end_line);
+
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
         if (staleCheck.stale) {
@@ -131,7 +135,10 @@ export function registerEditTools(registry) {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file, then use insert_lines.' };
         }
-        
+
+        // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+        after_line = Number(after_line);
+
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, after_line);
         if (staleCheck.stale) {
@@ -197,7 +204,11 @@ export function registerEditTools(registry) {
         if (!State.currentFile) {
             return { error: 'No file is currently open in the editor. Use open_file first to open the target file.' };
         }
-        
+
+        // 2.15.1 — coerce at boundary; see read_lines for the same trap.
+        start_line = Number(start_line);
+        end_line = Number(end_line);
+
         // CHECK FOR STALE LINE NUMBERS
         const staleCheck = EditTracker.checkStale(State.currentFile.path, start_line, end_line);
         if (staleCheck.stale) {
