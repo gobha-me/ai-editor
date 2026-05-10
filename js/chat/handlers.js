@@ -40,7 +40,7 @@ import { validateAndCleanHistory } from './history-validator.js';
 import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
-import { invalidateCachesForPath, invalidateCachesForPreviewMutation } from './cache-invalidation.js';
+import { invalidateCachesForPath, invalidateCachesForPreviewMutation, findMatchingCrossRequestEntry } from './cache-invalidation.js';
 import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
 import { buildRefusalPayload } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
@@ -703,8 +703,20 @@ export async function handleGeneralRequest(input) {
                             lastUserMessage: _lastUserMsg,
                         });
                     } else if (crossRequestDuplicate) {
-                        // Return a synthetic result telling the AI it already did this
-                        const lastEntry = State.toolActionLog.slice(-30).reverse().find(e => e.tool === toolName && e.success);
+                        // Return a synthetic result telling the AI it already did this.
+                        // Match by (tool, args) — the cross-request CHECK above
+                        // already proved an args-equivalent entry exists. The
+                        // pre-2.10.1 implementation used latest-by-name and
+                        // picked up the wrong previous result when the same
+                        // tool was called with multiple arg shapes (e.g.
+                        // `preview_start path=index.html` followed by
+                        // `preview_start path=tetris/index.html`). Surfaced
+                        // by 2026-05-10 qwen-3-6-plus dogfood.
+                        const lastEntry = findMatchingCrossRequestEntry({
+                            toolActionLog: State.toolActionLog,
+                            toolName,
+                            args,
+                        });
                         const summary = lastEntry?.resultSummary || 'unknown';
                         toolResult = {
                             _cached: true,

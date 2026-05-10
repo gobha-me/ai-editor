@@ -23,7 +23,7 @@ import { previewList, _resetForTests } from '../js/preview/preview-host.js';
 // Tool registration shape
 // ============================================
 
-test('registerPreviewTools registers seven tools (Tier 1 + Tier 2)', () => {
+test('registerPreviewTools registers twelve tools (Tier 1 + Tier 2 + Tier 3a)', () => {
     const captured = [];
     const stub = {
         register(name, handler, definition) {
@@ -31,17 +31,19 @@ test('registerPreviewTools registers seven tools (Tier 1 + Tier 2)', () => {
         },
     };
     registerPreviewTools(stub);
-    assert.equal(captured.length, 7);
+    assert.equal(captured.length, 12);
     const names = captured.map(c => c.name).sort();
     assert.deepEqual(names, [
         // Tier 1 (1.22.0)
         'preview_list', 'preview_start', 'preview_stop',
         // Tier 2 (2.7.0)
         'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
+        // Tier 3a (2.10.0)
+        'preview_snapshot', 'preview_click', 'preview_fill', 'preview_inspect', 'preview_resize',
     ].sort());
 });
 
-test('all seven preview tools are readOnly + roles all', () => {
+test('all twelve preview tools are readOnly + roles all', () => {
     const captured = [];
     const stub = { register(name, handler, definition) { captured.push({ name, definition }); } };
     registerPreviewTools(stub);

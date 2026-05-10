@@ -220,6 +220,12 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'preview_errors',
         'preview_logs',
         'preview_network',
+        // 2.10.0 — Tier 3a driveable preview (selector-shaped tools).
+        'preview_snapshot',
+        'preview_click',
+        'preview_fill',
+        'preview_inspect',
+        'preview_resize',
         'read_file',
         'read_lines',
         'scan_file',

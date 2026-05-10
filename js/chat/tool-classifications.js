@@ -74,6 +74,23 @@ export const FILE_MUTATING_TOOLS = Object.freeze([
  * second instance of the recurring cache-invalidation-on-mutation pattern
  * (gitea#301 / 1.7.1 was the first, on `edit_file` / `read_lines`).
  *
+ * 2.10.0 — Tier 3a expansion. The driving tools (`preview_click`,
+ * `preview_fill`, `preview_resize`) all mutate state visible to subsequent
+ * reads: click triggers handlers that may rewrite the DOM; fill changes
+ * input values + dispatches input/change events; resize changes the
+ * iframe element's CSS dimensions, which moves every `bbox` in a
+ * subsequent snapshot/inspect. **Without these in the mutator set, the
+ * canonical workflow `preview_snapshot → preview_click → preview_snapshot`
+ * returns the cached pre-click snapshot on the second call** — exactly
+ * the github#39 wedge surfaced again. Validated by 2026-05-10
+ * qwen-3-6-plus dogfood on HTML-Games (Sokoban, Tetris).
+ *
+ * `preview_inspect` and `preview_snapshot` themselves are NOT mutators
+ * even though snapshot writes `data-preview-uid` attributes — the
+ * uids are stable across calls (deterministic by document order) and
+ * adding snapshot to mutators would invalidate its own cache entry,
+ * defeating the dup-refusal guard for legitimate same-args probes.
+ *
  * Session-keyed (not path-keyed) — see `invalidateCachesForPreviewMutation`
  * in `./cache-invalidation.js`. Drops *all* PREVIEW_READ_TOOLS entries
  * regardless of args; coarser than path-keyed, but the active server set is
@@ -81,15 +98,24 @@ export const FILE_MUTATING_TOOLS = Object.freeze([
  *
  * @type {readonly string[]}
  */
-export const PREVIEW_MUTATING_TOOLS = Object.freeze(['preview_stop']);
+export const PREVIEW_MUTATING_TOOLS = Object.freeze([
+    'preview_stop',
+    // 2.10.0 — Tier 3a driving tools mutate iframe state (DOM / input
+    // values / iframe dimensions); subsequent snapshot/inspect reads
+    // become stale.
+    'preview_click',
+    'preview_fill',
+    'preview_resize',
+]);
 
 /**
  * Cached preview reads invalidated by any PREVIEW_MUTATING_TOOLS call.
  * Tier 1 (1.22.0) shipped `preview_start` + `preview_list`. Tier 2
- * (2.7.0) added the four capture readers below; same invalidation
- * semantics apply — once the server is torn down, prior buffered
- * console / error / route / network entries no longer correspond to a
- * live preview, so dup-cache hits would mislead the model.
+ * (2.7.0) added four capture readers. Tier 3a (2.10.0) added five
+ * selector-shaped drivers — same invalidation semantics apply: once
+ * the server is torn down, prior buffered logs / snapshot uids /
+ * inspected styles no longer correspond to a live preview, so dup-
+ * cache hits would mislead the model.
  *
  * @type {readonly string[]}
  */
@@ -103,6 +129,14 @@ export const PREVIEW_READ_TOOLS = Object.freeze([
     'preview_errors',
     'preview_logs',
     'preview_network',
+    // Tier 3a (2.10.0) — driveable tools. Snapshot uids and inspected
+    // styles refer to a live DOM that no longer exists post-stop;
+    // re-driving stale uids is exactly the github#39 deadlock shape.
+    'preview_snapshot',
+    'preview_click',
+    'preview_fill',
+    'preview_inspect',
+    'preview_resize',
 ]);
 
 /**

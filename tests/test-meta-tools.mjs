@@ -84,6 +84,13 @@ function registerStaticFixture() {
     reg('preview_errors',       'Read captured uncaught errors from a preview.',   { type: 'object', properties: { serverId: { type: 'string' } } });
     reg('preview_logs',         'Read SW route stages for a preview.',             { type: 'object', properties: { serverId: { type: 'string' } } });
     reg('preview_network',      'List finished workspace fetches for a preview.',  { type: 'object', properties: { serverId: { type: 'string' } } });
+    // 2.10.0 — Tier 3a driveable preview tools joined the coder static set;
+    // same compression-survival rationale.
+    reg('preview_snapshot', 'Snapshot the live DOM in a preview.',  { type: 'object', properties: { serverId: { type: 'string' } } });
+    reg('preview_click',    'Click an element in a preview.',       { type: 'object', properties: { serverId: { type: 'string' }, selector: { type: 'string' } } });
+    reg('preview_fill',     'Fill a form field in a preview.',      { type: 'object', properties: { serverId: { type: 'string' }, selector: { type: 'string' }, value: { type: 'string' } } });
+    reg('preview_inspect',  'Inspect computed style of an element.', { type: 'object', properties: { serverId: { type: 'string' }, selector: { type: 'string' } } });
+    reg('preview_resize',   'Resize the preview iframe element.',   { type: 'object', properties: { serverId: { type: 'string' } } });
 }
 
 // ============================================

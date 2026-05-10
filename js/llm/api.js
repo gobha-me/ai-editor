@@ -1095,6 +1095,8 @@ export const LLMTools = {
             'preview_start', 'preview_stop', 'preview_list',
             // Tier 2 (2.7.0)
             'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
+            // Tier 3a (2.10.0)
+            'preview_snapshot', 'preview_click', 'preview_fill', 'preview_inspect', 'preview_resize',
         ]);
         const applyPreviewToolFilter = (toolList) => {
             if (previewEnabled) return toolList;

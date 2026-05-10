@@ -22,6 +22,7 @@ import {
     FILE_MUTATING_TOOLS,
     PREVIEW_MUTATING_TOOLS,
     PREVIEW_READ_TOOLS,
+    canonicalArgsKey,
 } from './tool-classifications.js';
 
 /**
@@ -102,6 +103,42 @@ export function invalidateCachesForPath({
     }
 
     return { evictedCache, evictedLog };
+}
+
+/**
+ * Find the most-recent successful tool-action-log entry that matches a
+ * `(toolName, args)` pair. Returns the entry or `undefined`.
+ *
+ * Used by the cross-request dup-cache path in `handlers.js` to build the
+ * `_cache_note` envelope. **2.10.1 fix:** the previous implementation was
+ * `find(e => e.tool === toolName && e.success)` — which picked up the
+ * latest entry of the same tool name regardless of args. When the same
+ * tool was called with different arg shapes earlier in the conversation
+ * (e.g. `preview_start path=index.html` followed by
+ * `preview_start path=tetris/index.html`), re-issuing the first arg shape
+ * would surface the second entry's result in the cache_note. Surfaced by
+ * the 2026-05-10 qwen-3-6-plus dogfood on HTML-Games (`xcaliber/HTML-Games`).
+ *
+ * Pure: no module-level state, no globals.
+ *
+ * @param {object} params
+ * @param {Array<{tool:string, args:object, success:boolean, resultSummary?:string}>} params.toolActionLog
+ * @param {string} params.toolName
+ * @param {object} params.args
+ * @param {number} [params.lookback=30]  Most-recent N entries to scan; mirrors handlers.js.
+ * @returns {object|undefined}
+ */
+export function findMatchingCrossRequestEntry({ toolActionLog, toolName, args, lookback = 30 }) {
+    if (!Array.isArray(toolActionLog) || toolActionLog.length === 0) return undefined;
+    const argsStr = canonicalArgsKey(args || {});
+    const slice = toolActionLog.slice(-lookback);
+    for (let i = slice.length - 1; i >= 0; i--) {
+        const e = slice[i];
+        if (e && e.tool === toolName && e.success && canonicalArgsKey(e.args || {}) === argsStr) {
+            return e;
+        }
+    }
+    return undefined;
 }
 
 /**

@@ -4,6 +4,174 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-05-10
+
+### Feature — In-editor preview Tier 3a: driveable preview (selector-shaped tools)
+
+Closes the **integration-shape bug class** on non-build-step projects.
+Tier 1 (1.22.0) catches "did the page render at all"; Tier 2 (2.7.0)
+catches the Sokoban class — boot-time TypeErrors. Tier 3a ships the
+layer that catches *"does pressing arrow-up move the player?"* — the
+class where the page boots clean, no errors fire, but a click handler
+isn't bound or the wrong selector wins. The agent gets five new tools
+that drive the existing iframe via a bidirectional `postMessage`
+extension to the existing shim, no sidecar required.
+
+Per [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md) §"Phased
+Delivery" → Phase 3, split into Tier 3a (this minor — selector-shaped
+tools, iframe-driven, no infra) and Tier 3b (deferred — Playwright
+sidecar + build-step support, Cogfall-shaped projects). The
+`preview_eval` decision is settled: **does not ship.** Selector-shaped
+tools cover the agent's actual probes; arbitrary-JS injection inverts
+trust in the same way `submit_script_for_approval`'s `source` does and
+the equivalent gate is not justified by anything Tier 1+2 surfaced.
+
+**New tools** (all `readOnly: true`, `roles: 'all'`, registered in
+[`js/tools/preview-tools.js`](js/tools/preview-tools.js)):
+
+| Tool | Returns |
+|---|---|
+| `preview_snapshot({serverId, visibleOnly?})` | `{ok, elements: [{uid, tag, role, name, text, visible, bbox, …}], truncated, url, title}` |
+| `preview_click({serverId, selector, doubleClick?})` | `{ok, clicked, tag}` or `{ok: false, error, message}` |
+| `preview_fill({serverId, selector, value})` | `{ok, filled, value}` |
+| `preview_inspect({serverId, selector, styles?})` | `{ok, tagName, id, className, textContent, computedStyle, boundingBox}` |
+| `preview_resize({serverId, preset?, width?, height?})` | `{resized, width, height, preset}` |
+
+`preview_snapshot` walks the live DOM in document order (depth-first,
+500-element cap, `truncated: true` flag on overflow), writes
+`data-preview-uid="u_N"` directly onto each emitted element, and
+returns an accessibility-shaped tree. Subsequent
+`preview_click({selector: '[data-preview-uid="u_5"]'})` calls resolve
+robustly even after the page mutates — uids are mutation-stable
+because they're written into the DOM, not held in shim memory. The
+default `visibleOnly: true` skips elements whose
+`display: none` / `visibility: hidden` / `opacity: 0` parents make
+them invisible.
+
+**Bidirectional protocol on the existing window message channel.** The
+shim's outbound capture envelopes (`{__preview: true, type: 'console',
+…}`) stay byte-identical; new traffic adds a `dir` discriminator —
+`dir: 'req'` for host→iframe driving requests, `dir: 'res'` for the
+correlated reply. Each request carries a `requestId`
+(`req_<base36-time>_<base36-counter>`); the host's pending-request
+`Map<requestId, {resolve, timer, serverId}>` resolves on receipt and
+the source is validated against the registered iframe's
+`contentWindow` before satisfying the promise — defense against a
+misrouted reply from a different iframe. 5-second per-request timeout
+falls into a `preview_timeout` envelope with a recovery hint matching
+the §1.8.2 / preview-host.js:601 precedent.
+
+**Reference-sealed DOM primitives.** The shim captures
+`Document.prototype.querySelector`, `window.getComputedStyle`,
+`Object.getOwnPropertyDescriptor`, and `window.addEventListener` into
+local `var`s at IIFE init — *before* workspace JS runs. Workspace JS
+that later overrides `Element.prototype.querySelector` (rare but
+possible) cannot poison the driving path; the shim's captured
+references are not affected by reassignment. `preview_fill` uses the
+prototype's native `value` setter (via
+`Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, …)`) so
+React/Preact controlled inputs fire their listeners — plain
+`el.value = x` skips them, the well-known
+[React-controlled-input gotcha](https://github.com/facebook/react/issues/10135).
+
+**Wire-up.** The 5 names join three existing admission / cache /
+filter sites:
+
+| File | Change |
+|---|---|
+| [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js) | New names appended to `tools.static`. Coder admits Tier 3a; chat.v1 / kb.v1 do not. |
+| [`js/chat/tool-classifications.js`](js/chat/tool-classifications.js) | New names appended to `PREVIEW_READ_TOOLS` so `preview_stop` invalidates their dup-cache entries — github#39 cache-invalidation pattern auto-extends. |
+| [`js/llm/api.js:1094-1098`](js/llm/api.js) | New names join `PREVIEW_TOOL_NAMES` so `State.settings.preview.enabled === false` strips them at runtime alongside the Tier 1 + 2 set. |
+
+**`preview_resize` is host-only.** No iframe round-trip — adjusts the
+iframe element's CSS `style.width` / `style.height`. Three canonical
+presets (`mobile` 390×844, `tablet` 820×1180, `desktop` 1280×800);
+explicit `width`/`height` override when no preset is given. The
+`colorScheme` /
+[`prefers-color-scheme`](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme)
+shim is deliberately **out of v1** — adds ~15 LOC to the shim for an
+unclear payoff (no HTML-Games project we've measured uses dark-mode
+CSS). Re-evaluate if dogfood surfaces a probe selectors can't serve.
+
+**Tests.** New
+[`tests/test-preview-tier3.mjs`](tests/test-preview-tier3.mjs) pins:
+(1) registration shape — five tools, all `readOnly`, all `roles: 'all'`,
+required-params per tool; (2) handler argument validation rejects
+missing serverId / selector; (3) protocol correlation — request
+`requestId` matches the response's; (4) two concurrent requests get
+distinct ids and resolve independently in any order; (5) error envelope
+passes through verbatim from the shim's `{ok: false, error}` reply;
+(6) source validation — a response from a different iframe doesn't
+satisfy a request meant for another; (7) `previewResize` preset and
+explicit width/height arms; (8) `_resetForTests` clears outstanding
+pending entries (no timer leaks across tests). Browser test in
+`tests/index.html` exercises the in-iframe handlers (click / fill /
+inspect / snapshot DOM walk) which Node cannot mount.
+
+**Out of scope (deliberate, document in DESIGN-preview.md update):**
+
+- `preview_screenshot` — needs html2canvas-class lift; not v1.
+- `preview_eval` — selector-shaped tools cover the surface; trust
+  delta unjustified by anything measured.
+- Sidecar / build-step support (Tier 3b) — Cogfall stays on
+  `requires_build_step: true`. Deferred until dogfood produces a build-
+  step probe that requires it.
+- `MessageChannel`-based protocol — efficient but adds shim
+  complexity (port distribution, lifecycle); the existing
+  `window.message` channel with `dir` discriminator suffices.
+
+**Adjacent work (not in this PR).** The 9 tests that broke on the
+five-name expansion of coder.v1.tools.static were updated in lockstep
+(test-profiles.mjs, test-tools-composer.mjs, test-meta-tools.mjs,
+test-profile-resolution.mjs); the profile snapshot fixtures were
+regenerated via `tests/update-profile-fixtures.mjs`.
+
+**Dogfood-driven fixes (2026-05-10, qwen-3-6-plus on HTML-Games — same
+PR).** The cheap-tier model drove all 5 Tier 3a tools first try
+(snapshot/click/fill/resize/error envelopes worked; uid selectors
+resolved as designed; double-click and explicit-dimensions arms
+worked). Two real cache-invalidation bugs surfaced and ship as part
+of this minor:
+
+- **`PREVIEW_MUTATING_TOOLS` was missing the Tier 3a drivers.** Only
+  `preview_stop` invalidated the snapshot/inspect cache. The canonical
+  workflow `preview_snapshot → preview_click → preview_snapshot`
+  returned the cached pre-click snapshot on the second call — exact
+  github#39 / gitea#301 cache-invalidation-on-mutation pattern repeat.
+  [`PREVIEW_MUTATING_TOOLS`](js/chat/tool-classifications.js:84) now
+  includes `preview_click`, `preview_fill`, `preview_resize`. Click
+  mutates DOM via handlers; fill changes input value + dispatches
+  events; resize changes the iframe element's CSS dimensions, which
+  moves every `bbox` in subsequent snapshots/inspects. `preview_inspect`
+  and `preview_snapshot` themselves remain reads — snapshot writes
+  `data-preview-uid` attributes but uids are deterministic across
+  calls, and listing snapshot as a mutator would invalidate its own
+  cache and defeat the dup-refusal guard for legitimate same-args
+  probes.
+
+- **Cross-request `_cache_note` was synthing the wrong "previous
+  result"** when the same tool was called with multiple arg shapes.
+  `preview_start path=index.html` followed later by
+  `preview_start path=tetris/index.html` followed later by re-issuing
+  `path=index.html` would correctly fire the cross-request dup check
+  (args match an earlier `index.html` log entry) but the result-builder
+  used `find(e => e.tool === toolName && e.success)` which picked up
+  the *latest-by-name* (the tetris result) — so the cache_note told
+  the model "you called this earlier and got `srv_X/tetris/index.html`"
+  when it had actually gotten `srv_Y/index.html`. The lookup is
+  hoisted to a new pure helper
+  [`findMatchingCrossRequestEntry`](js/chat/cache-invalidation.js)
+  that matches by (tool, args) — pinned by 6 new tests in
+  [`tests/test-handlers-cache-invalidation.mjs`](tests/test-handlers-cache-invalidation.mjs).
+
+Five new regression tests in `tests/test-handlers-cache-invalidation.mjs`
+pin: (a) `preview_click` invalidates cached `preview_snapshot`;
+(b) `preview_fill` invalidates both `preview_snapshot` and
+`preview_inspect`; (c) `preview_resize` invalidates `preview_snapshot`
+(bbox-stale concern); (d) `preview_inspect` is a pure read and does
+NOT invalidate; (e) `preview_snapshot` is a pure read and does NOT
+invalidate its own cache. Total: 2511 tests pass, 1 skip.
+
 ### Docs — Roadmap + memory cleanup pass (post-2.9.1 coherence)
 
 Brings `docs/ROADMAP.md` and the auto-memory store into coherence with shipped state. No code changes; no version bump.

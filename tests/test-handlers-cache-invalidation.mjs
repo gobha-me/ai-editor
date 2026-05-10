@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {
     invalidateCachesForPath,
     invalidateCachesForPreviewMutation,
+    findMatchingCrossRequestEntry,
 } from '../js/chat/cache-invalidation.js';
 
 const WRITE_TOOLS = [
@@ -321,4 +322,207 @@ test('preview helper preserves toolActionLog reference (in-place mutation)', () 
     // reference all over handlers.js; the helper must mutate in place.
     assert.strictEqual(toolActionLog, ref, 'array identity preserved');
     assert.equal(toolActionLog.length, 0, 'array contents updated');
+});
+
+// ============================================================================
+// Tier 3a (2.10.0) — driving tools mutate iframe state; subsequent
+// snapshot/inspect reads become stale. Same github#39 pattern as
+// preview_stop above. Surfaced by 2026-05-10 qwen-3-6-plus dogfood on
+// HTML-Games: snapshot → click → snapshot returned the cached pre-click
+// snapshot, breaking the canonical drive-then-verify workflow.
+// ============================================================================
+
+test('preview_click invalidates cached preview_snapshot (Tier 3a — drive-then-verify workflow)', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [];
+
+    // Pre-click: model snapshotted the page.
+    toolCallCache.set(keyFor('preview_snapshot', { serverId: 'srv_X' }), {
+        ok: true, elements: [{ uid: 'u_5', tag: 'button', text: '0' }],
+    });
+    toolActionLog.push({
+        tool: 'preview_snapshot',
+        args: { serverId: 'srv_X' },
+        resultSummary: '74 elements',
+        success: true,
+    });
+
+    // Click — the dogfood-surfaced workflow. After this, a re-call to
+    // preview_snapshot must NOT return the cached pre-click result.
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_click',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 1, 'pre-click snapshot evicted from same-request cache');
+    assert.equal(r.evictedLog, 1, 'pre-click snapshot evicted from cross-request log');
+    assert.equal(toolCallCache.size, 0);
+    assert.equal(toolActionLog.length, 0);
+});
+
+test('preview_fill invalidates cached preview_snapshot + preview_inspect', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'preview_snapshot', args: { serverId: 'srv_F' }, success: true },
+        { tool: 'preview_inspect',  args: { serverId: 'srv_F', selector: '#name' }, success: true },
+    ];
+    toolCallCache.set(keyFor('preview_snapshot', { serverId: 'srv_F' }), { elements: [] });
+    toolCallCache.set(keyFor('preview_inspect', { serverId: 'srv_F', selector: '#name' }), { textContent: 'old' });
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_fill',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 2);
+    assert.equal(r.evictedLog, 2);
+    assert.equal(toolCallCache.size, 0);
+    assert.equal(toolActionLog.length, 0);
+});
+
+test('preview_resize invalidates cached preview_snapshot (bbox values change with iframe size)', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'preview_snapshot', args: { serverId: 'srv_R' }, success: true },
+    ];
+    toolCallCache.set(keyFor('preview_snapshot', { serverId: 'srv_R' }), { elements: [{ bbox: { w: 1280 } }] });
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_resize',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 1);
+    assert.equal(r.evictedLog, 1);
+});
+
+test('preview_inspect is NOT a mutator — does not invalidate cached snapshots', () => {
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'preview_snapshot', args: { serverId: 'srv_I' }, success: true },
+    ];
+    toolCallCache.set(keyFor('preview_snapshot', { serverId: 'srv_I' }), { elements: [] });
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_inspect',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 0, 'inspect is a pure read');
+    assert.equal(r.evictedLog, 0);
+    assert.equal(toolCallCache.size, 1);
+    assert.equal(toolActionLog.length, 1);
+});
+
+test('preview_snapshot is NOT a mutator — does not invalidate its own cache (would defeat dup-refusal)', () => {
+    const toolCallCache = new Map();
+    toolCallCache.set(keyFor('preview_snapshot', { serverId: 'srv_S' }), { elements: [] });
+    const toolActionLog = [
+        { tool: 'preview_snapshot', args: { serverId: 'srv_S' }, success: true },
+    ];
+
+    const r = invalidateCachesForPreviewMutation({
+        toolName: 'preview_snapshot',
+        toolCallCache,
+        toolActionLog,
+    });
+
+    assert.equal(r.evictedCache, 0);
+    assert.equal(r.evictedLog, 0);
+    assert.equal(toolCallCache.size, 1);
+});
+
+// ============================================================================
+// findMatchingCrossRequestEntry — fix for the dogfood-surfaced
+// cache_note-shows-wrong-previous-result bug. Same tool, different args
+// across the conversation; the synth must point at the matching-args
+// entry, not the latest-by-name.
+// ============================================================================
+
+test('findMatchingCrossRequestEntry returns the matching-args entry (not latest-by-name)', () => {
+    const toolActionLog = [
+        { tool: 'preview_start', args: { path: 'index.html' },         resultSummary: 'srv_A started', success: true },
+        { tool: 'preview_start', args: { path: 'sokoban/index.html' }, resultSummary: 'srv_B started', success: true },
+        { tool: 'preview_start', args: { path: 'tetris/index.html' },  resultSummary: 'srv_C started', success: true },
+    ];
+    const e = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_start',
+        args: { path: 'index.html' },
+    });
+    assert.ok(e, 'matching entry found');
+    assert.equal(e.resultSummary, 'srv_A started', 'returns the matching-args entry, not the latest');
+});
+
+test('findMatchingCrossRequestEntry returns the most-recent matching entry when args repeat', () => {
+    const toolActionLog = [
+        { tool: 'preview_snapshot', args: { serverId: 'srv_X' }, resultSummary: 'first call',  success: true },
+        { tool: 'preview_click',    args: { serverId: 'srv_X', selector: '#a' }, success: true },
+        { tool: 'preview_snapshot', args: { serverId: 'srv_X' }, resultSummary: 'second call', success: true },
+    ];
+    const e = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_snapshot',
+        args: { serverId: 'srv_X' },
+    });
+    assert.equal(e.resultSummary, 'second call', 'most-recent matching entry wins');
+});
+
+test('findMatchingCrossRequestEntry skips failed entries', () => {
+    const toolActionLog = [
+        { tool: 'preview_start', args: { path: 'index.html' }, resultSummary: 'failed',    success: false },
+        { tool: 'preview_start', args: { path: 'index.html' }, resultSummary: 'succeeded', success: true },
+    ];
+    const e = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_start',
+        args: { path: 'index.html' },
+    });
+    assert.equal(e.resultSummary, 'succeeded');
+});
+
+test('findMatchingCrossRequestEntry returns undefined when no match exists', () => {
+    const toolActionLog = [
+        { tool: 'preview_start', args: { path: 'index.html' }, success: true },
+    ];
+    const e = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_start',
+        args: { path: 'sokoban/index.html' },
+    });
+    assert.equal(e, undefined);
+});
+
+test('findMatchingCrossRequestEntry handles empty / non-array toolActionLog', () => {
+    assert.equal(findMatchingCrossRequestEntry({ toolActionLog: [], toolName: 'x', args: {} }), undefined);
+    assert.equal(findMatchingCrossRequestEntry({ toolActionLog: null, toolName: 'x', args: {} }), undefined);
+    assert.equal(findMatchingCrossRequestEntry({ toolName: 'x', args: {} }), undefined);
+});
+
+test('findMatchingCrossRequestEntry honors the lookback window', () => {
+    const toolActionLog = [];
+    // 35 entries with the matching args; only the most-recent 30 should be searched
+    for (let i = 0; i < 35; i++) {
+        toolActionLog.push({ tool: 'preview_start', args: { path: 'a.html', n: i }, resultSummary: 'r' + i, success: true });
+    }
+    // Entry index 4 has args {n:4}; with lookback=30, the slice is entries 5..34, so n:4 is OUT
+    const e = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_start',
+        args: { path: 'a.html', n: 4 },
+        lookback: 30,
+    });
+    assert.equal(e, undefined, 'entry outside lookback window not returned');
+    // Entry at the edge of the window (n:5) should be found
+    const e2 = findMatchingCrossRequestEntry({
+        toolActionLog,
+        toolName: 'preview_start',
+        args: { path: 'a.html', n: 5 },
+        lookback: 30,
+    });
+    assert.equal(e2.resultSummary, 'r5');
 });

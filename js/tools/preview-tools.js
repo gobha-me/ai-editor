@@ -1,19 +1,25 @@
 // @ts-check
 /**
- * AI Editor — In-editor preview & verify Tier 1 (1.22.0).
+ * AI Editor — In-editor preview & verify (Tier 1 / 2 / 3a — 1.22.0 / 2.7.0 / 2.10.0).
  *
- * Three tools that let the LLM render the active workspace inside a
- * sandboxed iframe and observe whether it boots. Closes the platform-level
- * gap that the 2026-05-08 Sokoban dogfood incident on HTML-Games made
- * load-bearing: the agent edited a game whose `bindEvents()` never ran
- * because `updateUI()` threw on a missing `#level-display`, and had no
- * surface to load the page and see the failure.
+ * Twelve tools that let the LLM render the active workspace inside a
+ * sandboxed iframe, observe whether it boots, read its captured logs,
+ * and now (Tier 3a) drive the page via selector-shaped click / fill /
+ * inspect / snapshot / resize. Closes the platform-level gap that the
+ * 2026-05-08 Sokoban dogfood incident on HTML-Games made load-bearing.
  *
- * Per `docs/DESIGN-preview.md` §"First-Ship Scope":
- *   - Tier 1 only — static iframe + 3 tools. Tier 2 (console / error
- *     capture, the surface that catches the Sokoban class specifically)
- *     is its own minor; Tier 3 (driveable preview, sidecar) is gated on
- *     dogfood signal.
+ * Per `docs/DESIGN-preview.md` §Phased Delivery:
+ *   - Tier 1 (1.22.0) — static iframe + 3 lifecycle tools. Catches "did
+ *     anything render at all."
+ *   - Tier 2 (2.7.0) — console / error / route / network capture
+ *     readers. Catches the Sokoban class (boot-time TypeErrors).
+ *   - Tier 3a (2.10.0) — driveable preview via selector-shaped tools
+ *     (`preview_snapshot`, `preview_click`, `preview_fill`,
+ *     `preview_inspect`, `preview_resize`). Catches integration-shape
+ *     bugs ("does pressing arrow-up move the player?"). `preview_eval`
+ *     is deliberately NOT shipped — selector-shaped tools cover the
+ *     agent's actual probes; arbitrary-JS injection inverts trust.
+ *   - Tier 3b (sidecar / build-step support) — separate minor.
  *   - Iframe sandbox is the trust boundary. `sandbox="allow-scripts"`
  *     (no `allow-same-origin`) on the editor's own origin; the iframe's
  *     effective origin is `null`, so it cannot reach `window.parent.State`,
@@ -54,6 +60,11 @@ import {
     getErrors,
     getRouteLogs,
     getNetwork,
+    previewClick,
+    previewFill,
+    previewInspect,
+    previewSnapshot,
+    previewResize,
 } from '../preview/preview-host.js';
 
 /**
@@ -271,6 +282,197 @@ export function registerPreviewTools(registry) {
                         type: 'string',
                         enum: ['all', 'failed'],
                         description: 'Filter the result set. `all` (default) returns every finished request; `failed` returns only requests that didn\'t resolve OK.',
+                    },
+                },
+                required: ['serverId'],
+            },
+        },
+        roles: 'all',
+        readOnly: true,
+    });
+
+    // Tier 3a (2.10.0) — driveable preview. Selector-shaped tools that
+    // round-trip a request envelope through the iframe shim and return
+    // the iframe's reply. Closes the integration-shape bug class on
+    // non-build-step projects (Sokoban, Snake, Forge-Defense — vanilla-
+    // JS HTML-Games corpus). `preview_eval` is deliberately NOT shipped
+    // (DESIGN-preview.md §"Three-Tier Delivery Shape" → "may never
+    // ship"); selector-shaped tools cover the agent's actual probes.
+    // Sidecar / build-step support (Tier 3b) is its own minor.
+
+    registry.register('preview_snapshot', async (args) => {
+        const argObj = (args && typeof args === 'object') ? args : {};
+        const serverId = typeof argObj.serverId === 'string' ? argObj.serverId.trim() : '';
+        if (!serverId) {
+            return { error: 'preview_snapshot requires a non-empty "serverId" string (returned from a prior preview_start call).' };
+        }
+        const visibleOnly = argObj.visibleOnly !== false;  // default true
+        return previewSnapshot({ serverId, visibleOnly });
+    }, {
+        type: 'function',
+        function: {
+            name: 'preview_snapshot',
+            description: 'Walk the live DOM in the running preview and return an accessibility-shaped tree of up to 500 elements. **The preferred verifier — cheaper and more deterministic than screenshots.** Each emitted element gets a `data-preview-uid="u_N"` attribute written onto the live DOM, so a follow-up `preview_click({selector: \'[data-preview-uid="u_5"]\'})` resolves robustly even if the page mutated since the snapshot.\n\nReturns `{ok: true, elements: [{uid, tag, role, name, text, visible, bbox, ...}], truncated, url, title}`. `truncated: true` means the page exceeded the 500-element cap (newest elements dropped; capture is depth-first document order). For inputs/buttons/anchors, the entry includes `value`/`type`/`disabled`/`href` as applicable.\n\nProvide `serverId` (from `preview_start`). Optional `visibleOnly` (default `true`) skips elements whose `display: none` / `visibility: hidden` / `opacity: 0` parents make them invisible — set `false` only when you specifically need to probe collapsed UI.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    serverId: {
+                        type: 'string',
+                        description: 'The `serverId` returned from a prior `preview_start` call.',
+                    },
+                    visibleOnly: {
+                        type: 'boolean',
+                        description: 'When true (default), only emit visible elements. Set false to include hidden subtrees (e.g. collapsed dialogs).',
+                    },
+                },
+                required: ['serverId'],
+            },
+        },
+        roles: 'all',
+        readOnly: true,
+    });
+
+    registry.register('preview_click', async (args) => {
+        const argObj = (args && typeof args === 'object') ? args : {};
+        const serverId = typeof argObj.serverId === 'string' ? argObj.serverId.trim() : '';
+        const selector = typeof argObj.selector === 'string' ? argObj.selector : '';
+        if (!serverId) return { error: 'preview_click requires a non-empty "serverId".' };
+        if (!selector) return { error: 'preview_click requires a non-empty "selector" (CSS selector).' };
+        const doubleClick = !!argObj.doubleClick;
+        return previewClick({ serverId, selector, doubleClick });
+    }, {
+        type: 'function',
+        function: {
+            name: 'preview_click',
+            description: 'Dispatch a click on the first element matching the CSS `selector` inside the running preview. Use uid selectors from `preview_snapshot` (`[data-preview-uid="u_N"]`) for mutation-robust targeting, or any other valid selector. The call returns once the click handler synchronously returns; subsequent observation should use `preview_snapshot` / `preview_inspect` / `preview_console_logs` to verify the side effect.\n\nReturns `{ok: true, clicked: true, tag}` on success or `{ok: false, error, message}` on failure (`not_found` if the selector matched nothing, `click_failed` if the dispatch threw, `preview_timeout` if the iframe didn\'t respond in 5s).\n\nProvide `serverId` and `selector`. Optional `doubleClick: true` dispatches click + dblclick.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    serverId: {
+                        type: 'string',
+                        description: 'The `serverId` returned from a prior `preview_start` call.',
+                    },
+                    selector: {
+                        type: 'string',
+                        description: 'CSS selector identifying the click target. Prefer `[data-preview-uid="u_N"]` uids from `preview_snapshot` for stability.',
+                    },
+                    doubleClick: {
+                        type: 'boolean',
+                        description: 'When true, dispatch both `click` and `dblclick` events. Default false.',
+                    },
+                },
+                required: ['serverId', 'selector'],
+            },
+        },
+        roles: 'all',
+        readOnly: true,
+    });
+
+    registry.register('preview_fill', async (args) => {
+        const argObj = (args && typeof args === 'object') ? args : {};
+        const serverId = typeof argObj.serverId === 'string' ? argObj.serverId.trim() : '';
+        const selector = typeof argObj.selector === 'string' ? argObj.selector : '';
+        if (!serverId) return { error: 'preview_fill requires a non-empty "serverId".' };
+        if (!selector) return { error: 'preview_fill requires a non-empty "selector" (CSS selector).' };
+        const value = argObj.value === undefined || argObj.value === null ? '' : String(argObj.value);
+        return previewFill({ serverId, selector, value });
+    }, {
+        type: 'function',
+        function: {
+            name: 'preview_fill',
+            description: 'Set the `value` on a form element matching `selector` and dispatch `input` + `change` events. Targets `<input>`, `<textarea>`, `<select>` — anything with a `.value` property; non-fillable elements return `not_fillable`. Uses the prototype\'s native `value` setter so React/Preact controlled inputs fire their listeners (plain `el.value = x` skips them).\n\nReturns `{ok: true, filled: true, value}` on success or `{ok: false, error, message}` on failure.\n\nProvide `serverId`, `selector`, and `value` (string).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    serverId: {
+                        type: 'string',
+                        description: 'The `serverId` returned from a prior `preview_start` call.',
+                    },
+                    selector: {
+                        type: 'string',
+                        description: 'CSS selector identifying the form field.',
+                    },
+                    value: {
+                        type: 'string',
+                        description: 'Value to set. Coerced to string.',
+                    },
+                },
+                required: ['serverId', 'selector', 'value'],
+            },
+        },
+        roles: 'all',
+        readOnly: true,
+    });
+
+    registry.register('preview_inspect', async (args) => {
+        const argObj = (args && typeof args === 'object') ? args : {};
+        const serverId = typeof argObj.serverId === 'string' ? argObj.serverId.trim() : '';
+        const selector = typeof argObj.selector === 'string' ? argObj.selector : '';
+        if (!serverId) return { error: 'preview_inspect requires a non-empty "serverId".' };
+        if (!selector) return { error: 'preview_inspect requires a non-empty "selector" (CSS selector).' };
+        const styles = Array.isArray(argObj.styles) ? argObj.styles.filter(s => typeof s === 'string') : undefined;
+        return previewInspect({ serverId, selector, styles });
+    }, {
+        type: 'function',
+        function: {
+            name: 'preview_inspect',
+            description: 'Return computed style + text + bounding box for a single element matching `selector`. **The right tool for verifying visual properties** — structured output beats pixel-grading a screenshot. Defaults to the most-asked styles (`display`, `visibility`, `opacity`, `color`, `backgroundColor`, `fontSize`, `fontFamily`); pass an explicit `styles` array to read others.\n\nReturns `{ok: true, tagName, id, className, textContent, computedStyle, boundingBox: {x,y,w,h}}` on success or `{ok: false, error, message}` on failure.\n\nProvide `serverId` and `selector`. Optionally `styles` — array of CSS property names to read (camelCase, e.g. `["marginTop", "borderRadius"]`).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    serverId: {
+                        type: 'string',
+                        description: 'The `serverId` returned from a prior `preview_start` call.',
+                    },
+                    selector: {
+                        type: 'string',
+                        description: 'CSS selector identifying the element to inspect.',
+                    },
+                    styles: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional list of computed-style property names to read (camelCase). Defaults to common visual properties.',
+                    },
+                },
+                required: ['serverId', 'selector'],
+            },
+        },
+        roles: 'all',
+        readOnly: true,
+    });
+
+    registry.register('preview_resize', async (args) => {
+        const argObj = (args && typeof args === 'object') ? args : {};
+        const serverId = typeof argObj.serverId === 'string' ? argObj.serverId.trim() : '';
+        if (!serverId) return { error: 'preview_resize requires a non-empty "serverId".' };
+        const preset = typeof argObj.preset === 'string' ? argObj.preset : undefined;
+        const width = typeof argObj.width === 'number' ? argObj.width : undefined;
+        const height = typeof argObj.height === 'number' ? argObj.height : undefined;
+        return previewResize({ serverId, preset, width, height });
+    }, {
+        type: 'function',
+        function: {
+            name: 'preview_resize',
+            description: 'Resize the preview iframe element. Use `preset: "mobile"|"tablet"|"desktop"` for canonical viewport sizes (390×844, 820×1180, 1280×800), or pass explicit `width`/`height` in pixels. Adjusts the iframe element\'s CSS dimensions only — `prefers-color-scheme` / device-emulation are out of v1.\n\nReturns `{resized: true, width, height, preset}` on success.\n\nProvide `serverId` and either a `preset` or `width`/`height`.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    serverId: {
+                        type: 'string',
+                        description: 'The `serverId` returned from a prior `preview_start` call.',
+                    },
+                    preset: {
+                        type: 'string',
+                        enum: ['mobile', 'tablet', 'desktop'],
+                        description: 'Canonical viewport preset. `mobile`=390×844, `tablet`=820×1180, `desktop`=1280×800.',
+                    },
+                    width: {
+                        type: 'number',
+                        description: 'Explicit width in pixels. Ignored if `preset` is set.',
+                    },
+                    height: {
+                        type: 'number',
+                        description: 'Explicit height in pixels. Ignored if `preset` is set.',
                     },
                 },
                 required: ['serverId'],

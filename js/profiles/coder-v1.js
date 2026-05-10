@@ -214,6 +214,18 @@ export const CODER_V1 = {
             'preview_errors',
             'preview_logs',
             'preview_network',
+            // Tier 3a (2.10.0) — driveable preview. Bidirectional protocol
+            // on the same postMessage channel (`dir: 'req'` / `dir: 'res'`
+            // correlated by `requestId`). Selector-shaped — `preview_eval`
+            // deliberately NOT shipped (DESIGN-preview.md §"Three-Tier
+            // Delivery Shape" → "may never ship"). Closes integration-
+            // shape bugs ("does the click handler actually fire?") on
+            // non-build-step projects.
+            'preview_snapshot',
+            'preview_click',
+            'preview_fill',
+            'preview_inspect',
+            'preview_resize',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',

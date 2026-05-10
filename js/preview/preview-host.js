@@ -80,6 +80,26 @@ const BUFFER_CAP = 200;
 let _captureListenersAttached = false;
 
 /**
+ * Tier 3a (2.10.0) — pending-request map for the bidirectional driving
+ * protocol. Each entry tracks the resolver, the timeout timer, and the
+ * `serverId` the request was dispatched to (validated against
+ * `event.source` on the response so a misrouted reply from a different
+ * iframe can't satisfy a pending request meant for another).
+ *
+ * @type {Map<string, {resolve: (v: object) => void, timer: any, serverId: string}>}
+ */
+const _pendingRequests = new Map();
+
+/** Default timeout for a single drive request — long enough that a
+ * snapshot of a 500-element page comfortably finishes, short enough
+ * that a stuck iframe surfaces as a timeout in the same turn. */
+const DRIVE_TIMEOUT_MS = 5000;
+
+/** Monotonic counter — combined with `Date.now().toString(36)` for human-
+ * legible request ids in trace logs. */
+let _requestCounter = 0;
+
+/**
  * Generate a short, URL-safe server id. Shape: `srv_<8 hex>`.
  * Using `crypto.getRandomValues` if available, falling back to
  * `Math.random` — collision risk is irrelevant given the in-memory
@@ -190,6 +210,28 @@ function _attachCaptureListeners() {
     window.addEventListener('message', (event) => {
         const data = event.data;
         if (!data || typeof data !== 'object' || data.__preview !== true) return;
+
+        // Tier 3a (2.10.0) — driving response routing. Replies don't go
+        // into the per-`serverId` ring buffers; they resolve a pending
+        // promise. Source attribution is still validated: only the iframe
+        // the request was dispatched to may satisfy it (defense against a
+        // misrouted reply from a different mounted preview).
+        if (data.dir === 'res' && typeof data.requestId === 'string') {
+            const pending = _pendingRequests.get(data.requestId);
+            if (!pending) return;
+            const replyServerId = _resolveServerIdFromSource(/** @type {WindowProxy} */ (event.source));
+            if (replyServerId !== pending.serverId) return;
+            clearTimeout(pending.timer);
+            _pendingRequests.delete(data.requestId);
+            const result = {};
+            for (const k of Object.keys(data)) {
+                if (k === '__preview' || k === 'dir' || k === 'requestId') continue;
+                result[k] = data[k];
+            }
+            pending.resolve(result);
+            return;
+        }
+
         const serverId = _resolveServerIdFromSource(/** @type {WindowProxy} */ (event.source));
         if (!serverId) return;
         if (data.type === 'console') {
@@ -660,6 +702,222 @@ export function previewList() {
     return { servers };
 }
 
+/* ===========================================================
+ * Tier 3a (2.10.0) — driveable preview
+ * ===========================================================
+ *
+ * Five new exported lifecycle helpers. Four (`previewClick`,
+ * `previewFill`, `previewInspect`, `previewSnapshot`) round-trip a
+ * `dir: 'req'` envelope through the iframe's shim and await a matching
+ * `dir: 'res'` reply on the existing window message channel; the fifth
+ * (`previewResize`) is host-only — adjusts the iframe element's CSS
+ * dimensions and never reaches into the iframe document.
+ *
+ * The protocol envelope:
+ *   request:  { __preview: true, dir: 'req', requestId, type, ...args }
+ *   response: { __preview: true, dir: 'res', requestId, ok, ...payload }
+ *
+ * Correlated by `requestId`. Source attribution at receive time
+ * (`_resolveServerIdFromSource(event.source)` must match the pending
+ * entry's `serverId`) prevents a misrouted reply from satisfying a
+ * request meant for a different iframe.
+ *
+ * Per `docs/DESIGN-preview.md` §"Three-Tier Delivery Shape" Tier 3 row,
+ * the eval-vs-selectors decision is settled — `preview_eval` does not
+ * ship; selector-shaped tools are the surface. Tier 3b (sidecar /
+ * build-step support) is a separate minor.
+ */
+
+function _generateRequestId() {
+    _requestCounter = (_requestCounter + 1) & 0x7fffffff;
+    return 'req_' + Date.now().toString(36) + '_' + _requestCounter.toString(36);
+}
+
+/**
+ * Look up the iframe element for a given `serverId`. Returns the element
+ * if it's mounted in the slide-over, `null` otherwise.
+ *
+ * @param {string} serverId
+ * @returns {HTMLIFrameElement|null}
+ */
+function _resolveIframeFor(serverId) {
+    if (typeof document === 'undefined') return null;
+    const iframes = document.querySelectorAll(`iframe[data-preview-server-id="${serverId}"]`);
+    for (const el of iframes) {
+        const iframe = /** @type {HTMLIFrameElement} */ (el);
+        if (iframe.contentWindow) return iframe;
+    }
+    return null;
+}
+
+/**
+ * Send a drive request to a preview iframe and await its reply.
+ *
+ * @param {string} serverId
+ * @param {string} type
+ * @param {Record<string, any>} payload
+ * @param {{timeoutMs?: number}} [options]
+ * @returns {Promise<Object>}
+ */
+function _sendDriveRequest(serverId, type, payload, options) {
+    // Ensure the message listener is attached. Capture listeners are lazily
+    // installed by `_ensureServiceWorker`, but a Tier 3a drive request can
+    // happen *before* the SW is registered (e.g. test harness, or first-
+    // ever drive call before preview_start completes). Without this guard
+    // the host would post the request, the iframe would reply, and the
+    // reply would land on a window with no `message` listener — every
+    // request would silently time out.
+    _attachCaptureListeners();
+    if (!_servers.has(serverId)) {
+        return Promise.resolve({
+            error: `unknown_server: no preview server with serverId="${serverId}"`,
+            code: 'unknown_server',
+            recoveryHint: 'Call preview_list to enumerate active servers, or preview_start to launch one.',
+        });
+    }
+    const iframe = _resolveIframeFor(serverId);
+    if (!iframe || !iframe.contentWindow) {
+        return Promise.resolve({
+            error: 'preview iframe is not mounted; the slide-over may have been closed',
+            code: 'iframe_unavailable',
+            recoveryHint: 'Call preview_start with the same path to remount the iframe, then retry.',
+        });
+    }
+    const timeoutMs = (options && typeof options.timeoutMs === 'number') ? options.timeoutMs : DRIVE_TIMEOUT_MS;
+    const requestId = _generateRequestId();
+    const promise = new Promise((resolve) => {
+        const timer = setTimeout(() => {
+            if (!_pendingRequests.has(requestId)) return;
+            _pendingRequests.delete(requestId);
+            resolve({
+                error: `preview_${type} did not respond within ${timeoutMs}ms`,
+                code: 'preview_timeout',
+                recoveryHint: 'The iframe may be busy with a long-running script or stuck in a tight loop. Check preview_console_logs / preview_errors for clues, or preview_stop and preview_start to recover.',
+            });
+        }, timeoutMs);
+        _pendingRequests.set(requestId, { resolve, timer, serverId });
+    });
+    try {
+        iframe.contentWindow.postMessage({
+            __preview: true, dir: 'req', requestId, type, ...payload,
+        }, '*');
+    } catch (err) {
+        const entry = _pendingRequests.get(requestId);
+        if (entry) {
+            clearTimeout(entry.timer);
+            _pendingRequests.delete(requestId);
+        }
+        return Promise.resolve({
+            error: `Failed to dispatch preview ${type}: ${err && err.message ? err.message : String(err)}`,
+            code: 'post_failed',
+        });
+    }
+    return promise;
+}
+
+/**
+ * `preview_click` — dispatch a click against an element matching `selector`
+ * inside the preview iframe.
+ *
+ * @param {{serverId: string, selector: string, doubleClick?: boolean}} args
+ * @returns {Promise<Object>}
+ */
+export async function previewClick({ serverId, selector, doubleClick }) {
+    if (!serverId || typeof serverId !== 'string') return { error: 'preview_click requires a non-empty serverId.' };
+    if (!selector || typeof selector !== 'string') return { error: 'preview_click requires a non-empty selector.' };
+    return _sendDriveRequest(serverId, 'click', { selector, doubleClick: !!doubleClick });
+}
+
+/**
+ * `preview_fill` — set `.value` on a form element + dispatch input/change.
+ *
+ * @param {{serverId: string, selector: string, value: string}} args
+ * @returns {Promise<Object>}
+ */
+export async function previewFill({ serverId, selector, value }) {
+    if (!serverId || typeof serverId !== 'string') return { error: 'preview_fill requires a non-empty serverId.' };
+    if (!selector || typeof selector !== 'string') return { error: 'preview_fill requires a non-empty selector.' };
+    return _sendDriveRequest(serverId, 'fill', { selector, value: value === undefined || value === null ? '' : String(value) });
+}
+
+/**
+ * `preview_inspect` — return computed style + bounding box for one element.
+ *
+ * @param {{serverId: string, selector: string, styles?: string[]}} args
+ * @returns {Promise<Object>}
+ */
+export async function previewInspect({ serverId, selector, styles }) {
+    if (!serverId || typeof serverId !== 'string') return { error: 'preview_inspect requires a non-empty serverId.' };
+    if (!selector || typeof selector !== 'string') return { error: 'preview_inspect requires a non-empty selector.' };
+    const stylesArr = Array.isArray(styles) ? styles.filter(s => typeof s === 'string') : undefined;
+    return _sendDriveRequest(serverId, 'inspect', { selector, styles: stylesArr });
+}
+
+/**
+ * `preview_snapshot` — accessibility-shaped tree of the live DOM.
+ * Writes `data-preview-uid="u_N"` onto each emitted element so a follow-
+ * up `preview_click({selector: '[data-preview-uid="u_5"]'})` resolves
+ * robustly without shim-side state.
+ *
+ * @param {{serverId: string, visibleOnly?: boolean}} args
+ * @returns {Promise<Object>}
+ */
+export async function previewSnapshot({ serverId, visibleOnly }) {
+    if (!serverId || typeof serverId !== 'string') return { error: 'preview_snapshot requires a non-empty serverId.' };
+    return _sendDriveRequest(serverId, 'snapshot', { visibleOnly: visibleOnly === false ? false : true });
+}
+
+/** @type {{[k: string]: {w: number, h: number}}} */
+const _RESIZE_PRESETS = {
+    mobile: { w: 390, h: 844 },
+    tablet: { w: 820, h: 1180 },
+    desktop: { w: 1280, h: 800 },
+};
+
+/**
+ * `preview_resize` — adjust the iframe element's CSS dimensions. Host-
+ * only; no shim round-trip.
+ *
+ * @param {{serverId: string, preset?: string, width?: number, height?: number}} args
+ * @returns {Promise<Object>}
+ */
+export async function previewResize({ serverId, preset, width, height }) {
+    if (!serverId || typeof serverId !== 'string') return { error: 'preview_resize requires a non-empty serverId.' };
+    if (!_servers.has(serverId)) {
+        return {
+            error: `unknown_server: no preview server with serverId="${serverId}"`,
+            code: 'unknown_server',
+            recoveryHint: 'Call preview_list to enumerate active servers, or preview_start to launch one.',
+        };
+    }
+    const iframe = _resolveIframeFor(serverId);
+    if (!iframe) {
+        return {
+            error: 'preview iframe is not mounted; the slide-over may have been closed',
+            code: 'iframe_unavailable',
+            recoveryHint: 'Call preview_start with the same path to remount the iframe, then retry.',
+        };
+    }
+    let w = null;
+    let h = null;
+    if (typeof preset === 'string' && _RESIZE_PRESETS[preset]) {
+        w = _RESIZE_PRESETS[preset].w;
+        h = _RESIZE_PRESETS[preset].h;
+    } else {
+        if (typeof width === 'number' && Number.isFinite(width) && width > 0) w = Math.floor(width);
+        if (typeof height === 'number' && Number.isFinite(height) && height > 0) h = Math.floor(height);
+    }
+    if (w === null && h === null) {
+        return {
+            error: 'preview_resize requires either a preset (mobile|tablet|desktop) or explicit width/height.',
+            code: 'invalid_args',
+        };
+    }
+    if (w !== null) iframe.style.width = w + 'px';
+    if (h !== null) iframe.style.height = h + 'px';
+    return { resized: true, width: w, height: h, preset: typeof preset === 'string' ? preset : null };
+}
+
 /**
  * Test seam — clears the in-memory registry. Used by
  * `tests/test-preview-tools.mjs` to isolate test cases.
@@ -672,10 +930,68 @@ export function _resetForTests() {
     _errorBuffers.clear();
     _routeBuffers.clear();
     _networkBuffers.clear();
+    for (const entry of _pendingRequests.values()) clearTimeout(entry.timer);
+    _pendingRequests.clear();
+    _requestCounter = 0;
     _swRegistration = null;
     _swPending = null;
     _slideOutWired = false;
     _captureListenersAttached = false;
+}
+
+/**
+ * Test seam — register a synthetic server entry without touching the SW
+ * or DOM. Lets `tests/test-preview-tier3.mjs` exercise driving without
+ * mounting a real iframe.
+ *
+ * @param {string} serverId
+ * @param {string} [path]
+ * @returns {void}
+ */
+export function _registerServerForTests(serverId, path) {
+    _servers.set(serverId, {
+        serverId,
+        path: path || 'index.html',
+        url: `/preview/${serverId}/`,
+        createdAt: Date.now(),
+    });
+}
+
+/**
+ * Test seam — return the current pending-request ids. Lets the protocol
+ * test inspect what's outstanding without poking at module internals.
+ *
+ * @returns {string[]}
+ */
+export function _getPendingRequestIdsForTests() {
+    return Array.from(_pendingRequests.keys());
+}
+
+/**
+ * Test seam — directly resolve a pending request as if a `dir: 'res'`
+ * envelope had arrived. Returns `true` if a pending request matched and
+ * was satisfied; `false` otherwise (unknown id OR source mismatch when
+ * `source` is provided).
+ *
+ * @param {string} requestId
+ * @param {object} response
+ * @param {WindowProxy} [source] Optional — when provided, the source is
+ *     validated against the registered iframe for the pending entry's
+ *     `serverId`. Mirrors the real message-listener's defense against
+ *     a misrouted reply from another iframe.
+ * @returns {boolean}
+ */
+export function _pushResponseForTests(requestId, response, source) {
+    const pending = _pendingRequests.get(requestId);
+    if (!pending) return false;
+    if (source !== undefined) {
+        const replyServerId = _resolveServerIdFromSource(/** @type {WindowProxy} */ (source));
+        if (replyServerId !== pending.serverId) return false;
+    }
+    clearTimeout(pending.timer);
+    _pendingRequests.delete(requestId);
+    pending.resolve(response || {});
+    return true;
 }
 
 /**

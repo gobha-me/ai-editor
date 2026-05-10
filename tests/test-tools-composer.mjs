@@ -256,7 +256,7 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 //  set without changing what this fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 21 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 26 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -285,6 +285,9 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 21 unresolve
         'preview_start', 'preview_stop', 'preview_list',
         // 2.7.0 — Tier 2 capture readers, same fixture-absent pattern.
         'preview_console_logs', 'preview_errors', 'preview_logs', 'preview_network',
+        // 2.10.0 — Tier 3a driveable tools (DESIGN-preview.md Tier 3a),
+        // same fixture-absent pattern.
+        'preview_snapshot', 'preview_click', 'preview_fill', 'preview_inspect', 'preview_resize',
         'get_ci_status', 'wait_for_ci', 'get_ci_logs',
     ]);
 });

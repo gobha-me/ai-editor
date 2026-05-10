@@ -106,6 +106,12 @@ const CODER_V1_PRE_TRIM = {
             'preview_errors',
             'preview_logs',
             'preview_network',
+            // 2.10.0 — Tier 3a driveable preview.
+            'preview_snapshot',
+            'preview_click',
+            'preview_fill',
+            'preview_inspect',
+            'preview_resize',
             'read_file',
             'read_lines',
             'scan_file',
