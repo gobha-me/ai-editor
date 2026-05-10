@@ -84,6 +84,18 @@ test('applyResolutions preserves CRLF terminators', () => {
     assert.equal(applyResolutions(base, head, r), head);
 });
 
+test('applyResolutions preserves CRLF on equal-line runs around an AI-choice hunk', () => {
+    // Slice-3 supplementary: the AI emit branch must compose with the
+    // existing CRLF-preserving equal-line copy so a single AI hunk inside
+    // a CRLF file does not mangle untouched CRLF terminators above/below.
+    const base = 'a\r\nb\r\nc\r\nd';
+    const head = 'a\r\nb\r\nC\r\nd';
+    const hunks = extractHunks(base, head);
+    assert.equal(hunks.length, 1);
+    const r = { 0: { choice: 'ai', content: ['MERGED'] } };
+    assert.equal(applyResolutions(base, head, r), 'a\r\nb\r\nMERGED\r\nd');
+});
+
 // ============================================
 // applyResolutions — idempotence
 // ============================================
@@ -97,6 +109,25 @@ test('applyResolutions is idempotent: applying once vs reapplying after re-extra
     // Resolved vs head — re-extracting should yield only hunks where the
     // original chose theirs, and re-applying take-theirs reproduces the
     // resolved file unchanged.
+    const hunks2 = extractHunks(resolved, head);
+    const r2 = uniformResolutions(hunks2, 'theirs');
+    assert.equal(applyResolutions(resolved, head, r2), resolved);
+});
+
+test('applyResolutions idempotence with mixed string + AI choices', () => {
+    // Slice-3 supplementary: re-extracting the resolved file vs head
+    // and re-applying take-theirs must round-trip even when one hunk
+    // chose AI content that diverges from both sides.
+    const base = 'a\nb\nc\nd\ne\nf\ng';
+    const head = 'a\nB\nc\nD\ne\nF\ng';
+    const hunks = extractHunks(base, head);
+    assert.equal(hunks.length, 3);
+    const r = {
+        0: 'theirs',
+        1: { choice: 'ai', content: ['AI-D'] },
+        2: 'ours',
+    };
+    const resolved = applyResolutions(base, head, r);
     const hunks2 = extractHunks(resolved, head);
     const r2 = uniformResolutions(hunks2, 'theirs');
     assert.equal(applyResolutions(resolved, head, r2), resolved);

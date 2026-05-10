@@ -17,19 +17,27 @@
  *
  * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
  *   - 2.19.0 (slice 2): adds `'both'` choice to `applyResolutions`.
+ *   - 2.21.0 (slice 3): adds `{choice:'ai', content:string[]}` object form.
  * @module merge-conflict/resolve
  */
 
 import { splitLines, joinLines, extractHunks } from './hunks.js';
 
 /**
- * @typedef {'theirs'|'ours'|'both'} ResolutionChoice
+ * @typedef {{choice:'ai', content:string[]}} AiResolutionChoice
+ * @typedef {'theirs'|'ours'|'both'|AiResolutionChoice} ResolutionChoice
  * @typedef {Object.<number, ResolutionChoice>} Resolutions  Keys are hunk ids.
  *
  * `'both'` (added 2.19.0 — slice 2) emits the theirs lines first, then the
  * ours lines, with no separator. Order matches the design canvas
  * convention; conflict-marker preservation is intentionally out of scope
  * until dogfood asks for it.
+ *
+ * `{choice:'ai', content:string[]}` (added 2.21.0 — slice 3) emits an
+ * arbitrary line array produced by an LLM proposal that the user
+ * approved. The surface normalizes equality with the three string
+ * choices on approve, so this form only lands when AI output diverges
+ * from `theirs` / `ours` / `[...theirs, ...ours]`.
  */
 
 /**
@@ -96,7 +104,8 @@ function _back(trace, a, b, d) {
  * Throws when:
  *   - `resolutions` is missing an entry for any hunk id (`Incomplete resolutions`).
  *   - A resolution value is not the literal string `'theirs'`, `'ours'`,
- *     or `'both'` (`Unknown resolution choice`).
+ *     `'both'`, or the object form `{choice:'ai', content:string[]}`
+ *     (`Unknown resolution choice`).
  *
  * @param {string} baseContent
  * @param {string} headContent
@@ -110,6 +119,14 @@ export function applyResolutions(baseContent, headContent, resolutions) {
     const headLines = splitLines(headContent);
     const changes = _myers(baseLines, headLines);
 
+    // CRLF coercion for AI-emitted content. The Myers + splitLines/
+    // joinLines pipeline carries `\r` through equal-run lines verbatim,
+    // but AI content from the LLM arrives as bare strings. Coerce so a
+    // CRLF file stays CRLF after an AI splice. Detection is permissive
+    // (any CRLF in base or head). The rare "AI hunk at EOF of CRLF file
+    // without trailing newline" edge case adds a benign CR at EOF.
+    const isCrlf = /\r\n/.test(baseContent) || /\r\n/.test(headContent);
+
     // Hunk id assignment must match `extractHunks`: id = run index.
     const hunks = extractHunks(baseContent, headContent);
     for (const h of hunks) {
@@ -117,8 +134,8 @@ export function applyResolutions(baseContent, headContent, resolutions) {
             throw new Error(`Incomplete resolutions: missing id ${h.id}`);
         }
         const v = resolutions[h.id];
-        if (v !== 'theirs' && v !== 'ours' && v !== 'both') {
-            throw new Error(`Unknown resolution choice for id ${h.id}: ${v}`);
+        if (!_isValidChoice(v)) {
+            throw new Error(`Unknown resolution choice for id ${h.id}: ${JSON.stringify(v)}`);
         }
     }
 
@@ -153,10 +170,34 @@ export function applyResolutions(baseContent, headContent, resolutions) {
         if (choice === 'theirs') out.push(...theirsLines);
         else if (choice === 'ours') out.push(...oursLines);
         else if (choice === 'both') out.push(...theirsLines, ...oursLines);
+        else if (typeof choice === 'object' && choice && choice.choice === 'ai') {
+            if (isCrlf) {
+                for (const l of choice.content) {
+                    out.push(l.endsWith('\r') ? l : l + '\r');
+                }
+            } else {
+                out.push(...choice.content);
+            }
+        }
         hunkIdx++;
     }
 
     return joinLines(out);
+}
+
+/**
+ * @param {*} v
+ * @returns {boolean}
+ */
+function _isValidChoice(v) {
+    if (v === 'theirs' || v === 'ours' || v === 'both') return true;
+    if (typeof v !== 'object' || v === null) return false;
+    if (v.choice !== 'ai') return false;
+    if (!Array.isArray(v.content)) return false;
+    for (const line of v.content) {
+        if (typeof line !== 'string') return false;
+    }
+    return true;
 }
 
 /**

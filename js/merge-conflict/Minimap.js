@@ -14,6 +14,7 @@
  * number, matching the `Conflict N` heading in the main pane.
  *
  * @since 2.19.0 (Touch 3 Merge Conflict Resolver — slice 2)
+ *   - 2.21.0 (slice 3): handles the `{choice:'ai', content}` object form.
  * @module merge-conflict/Minimap
  */
 
@@ -24,7 +25,7 @@ const { html } = await getPreact();
 /**
  * @param {{
  *   hunks: Array<{id:number, lineNo:number, theirs:string[], ours:string[]}>,
- *   fileResolutions: Object<number, 'theirs'|'ours'|'both'>|null|undefined,
+ *   fileResolutions: Object<number, import('./resolve.js').ResolutionChoice>|null|undefined,
  *   onJump: (hunkId:number) => void,
  * }} props
  */
@@ -33,11 +34,14 @@ export function Minimap({ hunks, fileResolutions, onJump }) {
     return html`
         <div class="mc__minimap" role="navigation" aria-label="Conflict navigation">
             ${hunks.map(h => {
-                const choice = fileResolutions?.[h.id] || null;
-                const status = choice ? 'resolved-' + choice : 'unresolved';
+                const raw = fileResolutions?.[h.id] || null;
+                const choiceKey = typeof raw === 'string'
+                    ? raw
+                    : (raw && typeof raw === 'object' && raw.choice === 'ai' ? 'ai' : null);
+                const status = choiceKey ? 'resolved-' + choiceKey : 'unresolved';
                 const cls = `mc__minimap-band mc__minimap-band--${status}`;
-                const title = choice
-                    ? `Conflict ${h.id + 1} — resolved (took ${choice})`
+                const title = choiceKey
+                    ? `Conflict ${h.id + 1} — resolved (took ${choiceKey})`
                     : `Conflict ${h.id + 1} — unresolved (line ${h.lineNo})`;
                 return html`
                     <button type="button"

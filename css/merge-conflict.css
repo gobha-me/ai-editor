@@ -250,8 +250,13 @@ body.merge-conflict-active #editorSplit {
 }
 .mc__hunk--resolved-theirs,
 .mc__hunk--resolved-ours,
-.mc__hunk--resolved-both {
+.mc__hunk--resolved-both,
+.mc__hunk--resolved-ai {
     border-color: var(--success);
+}
+.mc__hunk--pending-ai {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent);
 }
 
 .mc__hunk-head {
@@ -319,10 +324,47 @@ body.merge-conflict-active #editorSplit {
 .mc__act--ours {
     border-right: 2px solid var(--accent);
 }
+.mc__act--ai {
+    border-top: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+}
 .mc__act--picked {
     background: color-mix(in oklch, var(--success) 16%, transparent);
     color: var(--success);
     border-color: var(--success);
+}
+.mc__act:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+/* ── AI resolve: in-row proposal card + error band ── */
+.mc__ai-card {
+    margin: 8px 12px 12px 12px;
+}
+.mc__ai-rationale {
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+}
+.mc__ai-actions {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+}
+.mc__ai-error {
+    margin: 8px 12px 12px 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    background: color-mix(in oklch, var(--danger) 12%, transparent);
+    color: var(--danger);
+    font-size: var(--font-sm);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
 }
 
 /* ── Three-pane code area ── */
@@ -481,7 +523,8 @@ body.merge-conflict-active #editorSplit {
 }
 .mc__minimap-band--resolved-theirs,
 .mc__minimap-band--resolved-ours,
-.mc__minimap-band--resolved-both {
+.mc__minimap-band--resolved-both,
+.mc__minimap-band--resolved-ai {
     background: color-mix(in oklch, var(--success) 22%, transparent);
     border-color: var(--success);
     color: var(--text-primary);

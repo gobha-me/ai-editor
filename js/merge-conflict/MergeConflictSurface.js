@@ -23,15 +23,20 @@
  * @since 2.18.0 (Touch 3 Merge Conflict Resolver — slice 1)
  *   - 2.19.0 (slice 2): Take both action, ResolvedPane both branch,
  *     scroll-anchored hunk ids feeding the new Minimap component.
+ *   - 2.21.0 (slice 3): per-hunk AI resolve action + inline approval
+ *     card. Mirrors the v2.14.0 PR Review Diagnose & fix lifecycle.
  * @module merge-conflict/MergeConflictSurface
  */
 
 import { EventBus } from '../core.js';
 import { Git } from '../git.js';
+import { LLM } from '../llm/api.js';
 import { getPreact } from '../utils/preact-mount.js';
-import { extractHunks } from './hunks.js';
+import { extractHunks, splitLines } from './hunks.js';
 import { applyResolutions } from './resolve.js';
 import { Minimap } from './Minimap.js';
+import { buildAiResolveMessages } from './ai-resolve-prompt.js';
+import { parseAiResolveResponse } from './ai-resolve-parse.js';
 
 const { html, useState, useLayoutEffect, useMemo } = await getPreact();
 
@@ -50,10 +55,21 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
         files: /** @type {Array<{path:string, base:string, head:string, headSha:string|null, status:string|null, hunks: any[]}>} */ ([]),
     });
     const [activeIdx, setActiveIdx] = useState(0);
-    /** @type {[Object<string, Object<number, 'theirs'|'ours'|'both'>>, Function]} */
+    /** @type {[Object<string, Object<number, import('./resolve.js').ResolutionChoice>>, Function]} */
     const [resolutions, setResolutions] = useState({});
     const [pushing, setPushing] = useState(false);
     const [pushError, setPushError] = useState(/** @type {string|null} */ (null));
+
+    /**
+     * Per-hunk AI proposal state. Keyed `${path}:${hunkId}`.
+     * `token` is a race-marker — when the user picks a string side
+     * mid-flight, `pickHunk` clears the entry; the resolved Promise
+     * checks the token at write time and drops the result if it's
+     * stale or missing.
+     *
+     * @type {[Object<string, {status:'running'|'proposed'|'error', token:number, content?:string[], rationale?:string, error?:string}>, Function]}
+     */
+    const [pendingAi, setPendingAi] = useState({});
 
     useLayoutEffect(() => {
         let cancelled = false;
@@ -120,6 +136,113 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
             ...prev,
             [filePath]: { ...(prev[filePath] || {}), [hunkId]: choice },
         }));
+        // Clear any in-flight or proposed AI state for this hunk — the
+        // string pick wins and the AI Promise (if running) will see a
+        // missing/changed token at write time and drop its result.
+        const key = filePath + ':' + hunkId;
+        setPendingAi(prev => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    }
+
+    /**
+     * Slice 5 lines of unchanged context from the base file around a
+     * hunk. Clipped at file edges; the prompt builder substitutes
+     * explicit edge markers when an array is empty.
+     *
+     * @param {{path:string, base:string, hunks:Array<{id:number, lineNo:number, theirs:string[]}>}} file
+     * @param {{id:number, lineNo:number, theirs:string[]}} hunk
+     * @returns {{contextBefore:string[], contextAfter:string[]}}
+     */
+    function getHunkContext(file, hunk) {
+        const baseLines = splitLines(file.base || '');
+        const start0 = Math.max(0, hunk.lineNo - 1);
+        const end0 = Math.min(baseLines.length, start0 + (hunk.theirs?.length || 0));
+        const beforeStart = Math.max(0, start0 - 5);
+        const afterEnd = Math.min(baseLines.length, end0 + 5);
+        return {
+            contextBefore: baseLines.slice(beforeStart, start0),
+            contextAfter: baseLines.slice(end0, afterEnd),
+        };
+    }
+
+    async function handleAiResolve(filePath, hunk) {
+        const key = filePath + ':' + hunk.id;
+        const token = Date.now() + Math.random();
+        setPendingAi(prev => ({ ...prev, [key]: { status: 'running', token } }));
+        EventBus.emit('mergeConflict:aiResolve:start', { prNumber, path: filePath, hunkId: hunk.id });
+
+        const file = data.files.find(f => f.path === filePath);
+        if (!file) {
+            setPendingAi(prev => {
+                if (prev[key]?.token !== token) return prev;
+                return { ...prev, [key]: { status: 'error', token, error: 'File not found in surface state.' } };
+            });
+            return;
+        }
+        const { contextBefore, contextAfter } = getHunkContext(file, hunk);
+        const messages = buildAiResolveMessages({
+            filePath,
+            theirs: hunk.theirs || [],
+            ours: hunk.ours || [],
+            contextBefore,
+            contextAfter,
+        });
+
+        try {
+            const result = await LLM.chat(messages, { stream: false, temperature: 0.2 });
+            const parsed = parseAiResolveResponse(result?.content || '');
+            // Race-token check: a `pickHunk` mid-flight (or another AI
+            // resolve on the same hunk) clears or replaces the entry.
+            // Drop our result silently in either case.
+            setPendingAi(prev => {
+                if (prev[key]?.token !== token) return prev;
+                if (!parsed.ok) {
+                    EventBus.emit('mergeConflict:aiResolve:error', { prNumber, path: filePath, hunkId: hunk.id, error: parsed.error });
+                    return { ...prev, [key]: { status: 'error', token, error: parsed.error } };
+                }
+                EventBus.emit('mergeConflict:aiResolve:success', { prNumber, path: filePath, hunkId: hunk.id });
+                return { ...prev, [key]: { status: 'proposed', token, content: parsed.resolvedLines, rationale: parsed.rationale } };
+            });
+        } catch (e) {
+            const msg = e?.message || String(e);
+            setPendingAi(prev => {
+                if (prev[key]?.token !== token) return prev;
+                EventBus.emit('mergeConflict:aiResolve:error', { prNumber, path: filePath, hunkId: hunk.id, error: msg });
+                return { ...prev, [key]: { status: 'error', token, error: msg } };
+            });
+        }
+    }
+
+    function handleAiApprove(filePath, hunk) {
+        const key = filePath + ':' + hunk.id;
+        const entry = pendingAi[key];
+        if (!entry || entry.status !== 'proposed' || !Array.isArray(entry.content)) return;
+        // Normalize: collapse no-op AI output into the existing string
+        // choice so the CSS / minimap state matches user intent.
+        const content = entry.content;
+        const eqArray = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+        let normalized;
+        if (eqArray(content, hunk.theirs || [])) normalized = 'theirs';
+        else if (eqArray(content, hunk.ours || [])) normalized = 'ours';
+        else if (eqArray(content, [...(hunk.theirs || []), ...(hunk.ours || [])])) normalized = 'both';
+        else normalized = { choice: 'ai', content };
+        // Re-use pickHunk for the write — but pickHunk also clears the
+        // AI entry, which is what we want.
+        pickHunk(filePath, hunk.id, normalized);
+    }
+
+    function handleAiReject(filePath, hunkId) {
+        const key = filePath + ':' + hunkId;
+        setPendingAi(prev => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     }
 
     /**
@@ -238,14 +361,21 @@ export function MergeConflictSurface({ owner, repo, prNumber, onClose }) {
                     activeIdx=${activeIdx}
                     onSelect=${setActiveIdx} />
                 <div class="mc__main">
-                    ${activeFile && activeFile.hunks.map((h, i) => html`
-                        <${HunkRow}
-                            key=${activeFile.path + ':' + h.id}
-                            hunk=${h}
-                            idx=${i}
-                            choice=${resolutions[activeFile.path]?.[h.id] || null}
-                            onPick=${(c) => pickHunk(activeFile.path, h.id, c)} />
-                    `)}
+                    ${activeFile && activeFile.hunks.map((h, i) => {
+                        const key = activeFile.path + ':' + h.id;
+                        return html`
+                            <${HunkRow}
+                                key=${key}
+                                hunk=${h}
+                                idx=${i}
+                                choice=${resolutions[activeFile.path]?.[h.id] || null}
+                                aiState=${pendingAi[key] || null}
+                                onPick=${(c) => pickHunk(activeFile.path, h.id, c)}
+                                onAiResolve=${() => handleAiResolve(activeFile.path, h)}
+                                onAiApprove=${() => handleAiApprove(activeFile.path, h)}
+                                onAiReject=${() => handleAiReject(activeFile.path, h.id)} />
+                        `;
+                    })}
                 </div>
                 <${Minimap}
                     hunks=${activeFile?.hunks || []}
@@ -323,40 +453,58 @@ function FilePane({ files, resolutions, activeIdx, onSelect }) {
 // Hunk row (three-pane)
 // ============================================
 
-function HunkRow({ hunk, idx, choice, onPick }) {
-    const stateClass = choice
-        ? `mc__hunk--resolved-${choice}`
-        : 'mc__hunk--unresolved';
+function HunkRow({ hunk, idx, choice, aiState, onPick, onAiResolve, onAiApprove, onAiReject }) {
+    const isAiChoice = typeof choice === 'object' && choice !== null && choice.choice === 'ai';
+    const choiceKey = isAiChoice ? 'ai' : (typeof choice === 'string' ? choice : null);
+    const aiRunning = aiState?.status === 'running';
+    const aiProposed = aiState?.status === 'proposed';
+    const aiError = aiState?.status === 'error';
+
+    let stateClass;
+    if (choiceKey) stateClass = `mc__hunk--resolved-${choiceKey}`;
+    else if (aiRunning) stateClass = 'mc__hunk--unresolved mc__hunk--pending-ai';
+    else stateClass = 'mc__hunk--unresolved';
+
     const resolvedLines = choice === 'theirs'
         ? hunk.theirs
         : choice === 'ours'
             ? hunk.ours
             : choice === 'both'
                 ? [...hunk.theirs, ...hunk.ours]
-                : null;
+                : isAiChoice
+                    ? choice.content
+                    : null;
+
     return html`
         <div class=${`mc__hunk ${stateClass}`} id=${'mc-hunk-' + hunk.id}>
             <div class="mc__hunk-head">
                 <span class="mc__hunk-num">Conflict ${idx + 1}</span>
                 <span class="mc__hunk-line">L${hunk.lineNo}</span>
-                ${choice
-                    ? html`<span class="mc__hunk-state mc__hunk-state--resolved">Resolved (took ${choice})</span>`
+                ${choiceKey
+                    ? html`<span class="mc__hunk-state mc__hunk-state--resolved">Resolved (took ${choiceKey})</span>`
                     : html`<span class="mc__hunk-state mc__hunk-state--unresolved">Unresolved</span>`}
                 <div class="mc__hunk-actions">
                     <button type="button"
-                        class=${'mc__act mc__act--theirs' + (choice === 'theirs' ? ' mc__act--picked' : '')}
+                        class=${'mc__act mc__act--theirs' + (choiceKey === 'theirs' ? ' mc__act--picked' : '')}
                         onClick=${() => onPick('theirs')}>
                         ← Take theirs
                     </button>
                     <button type="button"
-                        class=${'mc__act mc__act--both' + (choice === 'both' ? ' mc__act--picked' : '')}
+                        class=${'mc__act mc__act--both' + (choiceKey === 'both' ? ' mc__act--picked' : '')}
                         onClick=${() => onPick('both')}>
                         ↕ Take both
                     </button>
                     <button type="button"
-                        class=${'mc__act mc__act--ours' + (choice === 'ours' ? ' mc__act--picked' : '')}
+                        class=${'mc__act mc__act--ours' + (choiceKey === 'ours' ? ' mc__act--picked' : '')}
                         onClick=${() => onPick('ours')}>
                         Take ours →
+                    </button>
+                    <button type="button"
+                        class=${'mc__act mc__act--ai' + (choiceKey === 'ai' ? ' mc__act--picked' : '')}
+                        onClick=${onAiResolve}
+                        disabled=${aiRunning}
+                        title="Ask the LLM to propose a resolution for this hunk">
+                        ${aiRunning ? '⏳ Resolving…' : '🤖 AI resolve'}
                     </button>
                 </div>
             </div>
@@ -375,6 +523,45 @@ function HunkRow({ hunk, idx, choice, onPick }) {
                     lineNo=${hunk.lineNo}
                     lines=${hunk.ours} />
             </div>
+            ${aiProposed && html`
+                <div class="mc__ai-card chat-message tool-call tool-success edit-proposal">
+                    <details class="tool-call-details" open>
+                        <summary class="tool-call-summary">
+                            <span class="tool-call-icon">🤖</span>
+                            <span class="tool-call-name">AI resolve proposal</span>
+                            <span class="tool-call-args-summary">Conflict ${idx + 1}</span>
+                        </summary>
+                        <div class="tool-call-body">
+                            ${aiState.rationale && html`
+                                <div class="tool-call-section">
+                                    <div class="tool-call-section-label">Rationale</div>
+                                    <div class="mc__ai-rationale">${aiState.rationale}</div>
+                                </div>
+                            `}
+                            <div class="tool-call-section">
+                                <div class="tool-call-section-label">Proposed resolved lines</div>
+                                <pre class="tool-call-json">${(aiState.content || []).join('\n')}</pre>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="mc__ai-actions">
+                        <button type="button" class="mc__btn mc__btn--primary" onClick=${onAiApprove}>
+                            Approve
+                        </button>
+                        <button type="button" class="mc__btn" onClick=${onAiReject}>
+                            Reject
+                        </button>
+                    </div>
+                </div>
+            `}
+            ${aiError && html`
+                <div class="mc__ai-error" role="alert">
+                    AI resolve failed: ${aiState.error}
+                    <button type="button" class="mc__btn mc__btn--ghost" onClick=${() => onAiReject()}>
+                        Dismiss
+                    </button>
+                </div>
+            `}
         </div>
     `;
 }
