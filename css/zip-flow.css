@@ -1,0 +1,183 @@
+/* =====================================================
+   Touch 3 Zip-Flow — 2.20.0
+   Project switcher popover, segmented Destination control,
+   window-wide drop overlay, Branches-rail Export button.
+   Theme-token-only — no hardcoded colors.
+   ===================================================== */
+
+/* ---------- Project switcher popover ---------- */
+/* Anchored to #btnProjectActions in the sidebar header; absolutely positioned
+   inside .project-selector so it floats below the kebab. */
+.project-selector {
+    position: relative;
+}
+
+.zip-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 240px;
+    max-width: 340px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    padding: 6px 0;
+    z-index: 100;
+    font-size: var(--font-sm, 11px);
+}
+
+.zip-menu__sec + .zip-menu__sec {
+    border-top: 1px solid var(--border-light);
+    margin-top: 4px;
+    padding-top: 4px;
+}
+
+.zip-menu__head {
+    padding: 4px 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--font-xs, 10px);
+}
+
+.zip-menu__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+}
+
+.zip-menu__row:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+
+.zip-menu__row:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.zip-menu__label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.zip-menu__meta {
+    color: var(--text-muted);
+    font-size: var(--font-xs, 10px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+}
+
+/* ---------- Segmented Destination control ---------- */
+.zip-seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.zip-seg__btn {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 0;
+    padding: 4px 12px;
+    font: inherit;
+    font-size: var(--font-sm, 11px);
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.zip-seg__btn + .zip-seg__btn {
+    border-left: 1px solid var(--border);
+}
+
+.zip-seg__btn:hover:not(:disabled):not(.zip-seg__btn--on) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.zip-seg__btn--on {
+    background: var(--accent);
+    color: var(--bg-primary);
+}
+
+.zip-seg__btn:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* ---------- Window-wide drop overlay ---------- */
+.zip-drop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    backdrop-filter: blur(2px);
+}
+
+.zip-drop[hidden] {
+    display: none;
+}
+
+.zip-drop__card {
+    pointer-events: none;
+    border: 2px dashed var(--accent);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 32px 48px;
+    border-radius: var(--radius-md, 8px);
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.30);
+}
+
+.zip-drop__title {
+    font-size: var(--font-lg, 14px);
+    font-weight: 600;
+    margin-top: 8px;
+}
+
+.zip-drop__sub {
+    color: var(--text-muted);
+    font-size: var(--font-sm, 11px);
+    margin-top: 4px;
+}
+
+/* ---------- Branches rail — Export per-row button ---------- */
+.branch-panel__btn--export {
+    color: var(--text-muted);
+}
+
+.branch-panel__btn--export:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+/* ---------- Mobile fallback ---------- */
+@media (max-width: 768px) {
+    .zip-menu {
+        max-width: 280px;
+    }
+    .zip-drop__card {
+        padding: 24px 32px;
+    }
+}

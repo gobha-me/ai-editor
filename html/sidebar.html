@@ -19,6 +19,9 @@
                 <button type="button" id="btnClearProject" title="Clear Project" aria-label="Clear current project">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
+                <button type="button" id="btnProjectActions" title="Project actions: import / export" aria-label="Project actions" aria-haspopup="menu" aria-expanded="false">
+                    <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
             </div>
         </div>
         <div class="project-selector">
@@ -26,6 +29,8 @@
             <select id="projectSelect" aria-label="Select project">
                 <option value="">Select a project...</option>
             </select>
+            <!-- Touch 3 zip-flow popover (2.20.0). Rendered hidden by default; toggled by #btnProjectActions. -->
+            <div id="projectActionsMenu" class="zip-menu" role="menu" aria-labelledby="btnProjectActions" hidden></div>
         </div>
     </div>
 

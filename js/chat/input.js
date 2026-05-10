@@ -215,6 +215,12 @@ export function setupInputHandlers(inputElement, handleUserInputFn) {
     inputElement.addEventListener('drop', (e) => {
         inputElement.classList.remove('drag-over');
         const file = e.dataTransfer?.files?.[0];
+        // .zip files are handled by the window-wide drop listener (Touch 3
+        // zip-flow, 2.20.0) — explicitly skip them here so the import modal
+        // wins over chat-input attachment.
+        if (file && typeof file.name === 'string' && file.name.toLowerCase().endsWith('.zip')) {
+            return;
+        }
         if (file && (_isImageFile(file) || _isTextFile(file))) {
             e.preventDefault();
             _processFile(file);

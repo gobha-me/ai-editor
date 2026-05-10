@@ -29,6 +29,7 @@ import { escapeHtml, escapeAttr } from './utils/html.js';
 let extractedFiles = [];   // [{ path, content, isBinary, size, selected, diffStatus }]
 let isUploading = false;
 let currentZipName = '';
+let destSegment = 'newBranch'; // 'current' | 'newBranch' | 'newSession' — segmented control state
 
 // Extensions that are text but not auto-selected by default
 const DEFAULT_OFF_EXTENSIONS = new Set(['svg', 'xml', 'csv', 'tsv']);
@@ -40,6 +41,118 @@ const WEB_ASSET_EXTENSIONS = new Set([
     // Fonts
     'woff', 'woff2', 'ttf', 'eot', 'otf',
 ]);
+
+// ============================================
+// PURE HELPERS — destination branch resolution
+// ============================================
+
+/**
+ * Sanitize a string into a valid Git branch segment — letters, digits,
+ * dot/underscore/hyphen/slash only; collapse runs of unsafe chars to `-`;
+ * trim leading/trailing hyphens. Empty inputs collapse to ''.
+ *
+ * Exported for testing.
+ */
+export function sanitizeBranchSegment(input) {
+    return String(input || '')
+        .replace(/[^a-zA-Z0-9._\-/]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+/**
+ * Build the default new-branch name from a zip filename and date.
+ *   `ai-editor-main.zip` + 2026-05-10  →  `import/ai-editor-main-2026-05-10`
+ *
+ * Exported for testing.
+ */
+export function defaultNewBranchName(zipFilename, date = new Date()) {
+    const base = sanitizeBranchSegment(String(zipFilename || '').replace(/\.zip$/i, ''));
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    return base ? `import/${base}-${dateStr}` : `import/upload-${dateStr}`;
+}
+
+/**
+ * Resolve the destination branch from the segmented control state.
+ *
+ *   segment = 'current'    → { branch: currentBranch, mustCreate: false }
+ *   segment = 'newBranch'  → { branch: sanitize(newBranchName), mustCreate: true } — throws if empty
+ *   segment = 'newSession' → throws (not supported in 2.20.0 — see Touch 3 Sessions, post-2.0)
+ *
+ * Pure function exported for testing. Does not touch the DOM.
+ *
+ * @param {Object} opts
+ * @param {'current'|'newBranch'|'newSession'} opts.segment
+ * @param {string} opts.currentBranch
+ * @param {string} [opts.newBranchName]
+ * @returns {{ branch: string, mustCreate: boolean }}
+ */
+/**
+ * Discriminator: does this DataTransfer look like a .zip-file drag?
+ *
+ * Used by the window-wide drop listener (Touch 3 zip-flow). Tolerates browser
+ * quirks:
+ *   - During `dragover`, `dataTransfer.files` is often empty (Chromium); we
+ *     fall back to `items[i].kind === 'file'` + (optional) MIME match.
+ *   - Firefox sometimes leaves `items[i].type` empty during dragover; the
+ *     mode-permissive check matches on the presence of any file kind.
+ *   - On the `drop` event itself, `files[i].name` is populated; we use the
+ *     `.zip` suffix as the authoritative check.
+ *
+ * Pass `mode: 'strict'` (default) for use in the `drop` handler — requires a
+ * filename match. Pass `mode: 'permissive'` for `dragover` — allows the
+ * overlay to paint without a filename when only `items` is available.
+ *
+ * Pure function — exported for testing.
+ *
+ * @param {Object} dt — DataTransfer-shaped: { types?, items?, files? }
+ * @param {{mode?: 'strict'|'permissive'}} [opts]
+ * @returns {boolean}
+ */
+export function isZipDrop(dt, { mode = 'strict' } = {}) {
+    if (!dt) return false;
+    const types = Array.isArray(dt.types) ? dt.types : (dt.types ? Array.from(dt.types) : []);
+    if (!types.includes('Files')) return false;
+
+    // Strict mode: check actual filename. This is the `drop` event path.
+    const files = dt.files ? Array.from(dt.files) : [];
+    if (files.length > 0) {
+        return files.some(f => f && typeof f.name === 'string' && f.name.toLowerCase().endsWith('.zip'));
+    }
+
+    // Permissive mode: allow the dragover overlay to paint when we can only
+    // see items but not filenames. Match on MIME if available; otherwise allow.
+    if (mode === 'permissive') {
+        const items = dt.items ? Array.from(dt.items) : [];
+        if (items.length === 0) return true; // Firefox sometimes hides items
+        const fileItems = items.filter(i => i && i.kind === 'file');
+        if (fileItems.length === 0) return false;
+        const mimeKnown = fileItems.some(i => i.type === 'application/zip' || i.type === 'application/x-zip-compressed');
+        const mimeMissing = fileItems.every(i => !i.type);
+        return mimeKnown || mimeMissing;
+    }
+
+    return false;
+}
+
+export function resolveTargetBranch({ segment, currentBranch, newBranchName } = {}) {
+    if (segment === 'current') {
+        if (!currentBranch) throw new Error('No current branch set');
+        return { branch: currentBranch, mustCreate: false };
+    }
+    if (segment === 'newBranch') {
+        const sanitized = sanitizeBranchSegment(newBranchName);
+        if (!sanitized) throw new Error('New branch name is required');
+        return { branch: sanitized, mustCreate: true };
+    }
+    if (segment === 'newSession') {
+        throw new Error('New session destination is not available yet — ships with Sessions');
+    }
+    throw new Error(`Unknown destination segment: ${segment}`);
+}
 
 // ============================================
 // MODAL LIFECYCLE
@@ -72,7 +185,7 @@ export function openZipUpload() {
     const isLocalMode = !State.currentProject;
     const gitControls = modal.querySelectorAll('.zip-git-only');
     gitControls.forEach(el => el.style.display = isLocalMode ? 'none' : '');
-    
+
     // Update upload button text — keep the inline icon (set in modals.html)
     // and swap only the trailing label span.
     if (btn) {
@@ -84,7 +197,10 @@ export function openZipUpload() {
             btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg><span>' + label + '</span>';
         }
     }
-    
+
+    // Initialize Destination segmented control + branch name input (Touch 3 zip-flow, 2.20.0).
+    _initDestSegmentedControl();
+
     modal.classList.add('active');
 }
 
@@ -216,10 +332,100 @@ function _resetDropZone() {
         <div class="zip-drop-icon">📦</div>
         <div class="zip-drop-text">Drop a .zip file here</div>
         <div class="zip-drop-hint">or click to browse</div>
-        <input type="file" id="zipFileInput" accept=".zip" 
+        <input type="file" id="zipFileInput" accept=".zip"
                onchange="window.handleZipFileSelect(event)" hidden>
     `;
     dropZone.style.display = '';
+}
+
+// ============================================
+// DESTINATION SEGMENTED CONTROL (Touch 3 zip-flow, 2.20.0)
+// ============================================
+
+/**
+ * Reset the segmented control state and wire its click handlers once per
+ * modal-open. Default selection: "new branch" (safer than overwriting the
+ * current branch by accident). The "newBranch" option is hidden on Local
+ * because Local has no remote-branch concept (Git.createBranch throws).
+ */
+function _initDestSegmentedControl() {
+    destSegment = 'newBranch';
+
+    const seg = document.getElementById('zipDestSeg');
+    const currentLabel = document.getElementById('zipDestCurrentLabel');
+    const newBranchInput = document.getElementById('zipNewBranchName');
+    const note = document.getElementById('zipDestNote');
+    if (!seg || !currentLabel || !newBranchInput || !note) return;
+
+    const currentBranch = State.currentBranch || 'main';
+    const isLocal = State.currentProject?.connectionId === '__local__';
+
+    // Show the actual current-branch name as the "current" segment label.
+    currentLabel.textContent = currentBranch;
+
+    // On Local: hide "new branch" + "new session" (Local has only main), force "current".
+    const newBranchBtn = seg.querySelector('[data-zip-target="newBranch"]');
+    const newSessionBtn = seg.querySelector('[data-zip-target="newSession"]');
+    if (isLocal) {
+        if (newBranchBtn) newBranchBtn.style.display = 'none';
+        if (newSessionBtn) newSessionBtn.style.display = 'none';
+        destSegment = 'current';
+    } else {
+        if (newBranchBtn) newBranchBtn.style.display = '';
+        if (newSessionBtn) newSessionBtn.style.display = '';
+    }
+
+    // Pre-fill branch name from the zip filename (if a zip is already loaded).
+    newBranchInput.value = defaultNewBranchName(currentZipName || 'upload');
+
+    _renderDestSegmentedControl();
+
+    // Wire click delegation idempotently — the segmented control is replaced
+    // on every modal open, but the listener attaches to the stable parent.
+    if (!seg.dataset.wired) {
+        seg.dataset.wired = '1';
+        seg.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-zip-target]');
+            if (!btn || btn.disabled || btn.style.display === 'none') return;
+            destSegment = btn.getAttribute('data-zip-target');
+            _renderDestSegmentedControl();
+        });
+        newBranchInput.addEventListener('input', () => {
+            if (destSegment === 'newBranch') _renderDestSegmentedControl();
+        });
+    }
+}
+
+function _renderDestSegmentedControl() {
+    const seg = document.getElementById('zipDestSeg');
+    const newBranchInput = document.getElementById('zipNewBranchName');
+    const note = document.getElementById('zipDestNote');
+    if (!seg || !newBranchInput || !note) return;
+
+    // Toggle aria-checked + visual on each button.
+    seg.querySelectorAll('[data-zip-target]').forEach((btn) => {
+        const isOn = btn.getAttribute('data-zip-target') === destSegment;
+        btn.classList.toggle('zip-seg__btn--on', isOn);
+        btn.setAttribute('aria-checked', String(isOn));
+    });
+
+    // Show branch-name input only when "newBranch" is selected.
+    newBranchInput.style.display = destSegment === 'newBranch' ? '' : 'none';
+
+    // Inline note copy reflects the destination.
+    const currentBranch = State.currentBranch || 'main';
+    if (destSegment === 'current') {
+        note.textContent = `Commits land on the current branch (${currentBranch}).`;
+    } else if (destSegment === 'newBranch') {
+        const name = sanitizeBranchSegment(newBranchInput.value);
+        note.textContent = name
+            ? `Will create branch "${name}" from "${currentBranch}" before committing.`
+            : `Enter a branch name to continue.`;
+    } else if (destSegment === 'newSession') {
+        note.textContent = 'Sessions ship in a later release.';
+    } else {
+        note.textContent = '';
+    }
 }
 
 // ============================================
@@ -251,14 +457,21 @@ function _renderFilePreview(zipName) {
     stats.innerHTML = statsHtml;
     
     _renderFileList();
-    
+
     // Auto-generate commit message
     const commitMsg = document.getElementById('zipCommitMessage');
     if (commitMsg && !commitMsg.value) {
         const selectedCount = extractedFiles.filter(f => f.selected).length;
         commitMsg.value = `Upload ${selectedCount} files from ${zipName}`;
     }
-    
+
+    // Refresh the new-branch default from the zip filename (Touch 3 zip-flow).
+    const newBranchInput = document.getElementById('zipNewBranchName');
+    if (newBranchInput && (!newBranchInput.value || newBranchInput.value.startsWith('import/upload-'))) {
+        newBranchInput.value = defaultNewBranchName(zipName);
+        _renderDestSegmentedControl();
+    }
+
     _updateUploadButton();
 }
 
@@ -435,28 +648,67 @@ export async function uploadExtractedFiles() {
     const targetDir = (document.getElementById('zipTargetDir').value || '').trim().replace(/^\/+|\/+$/g, '');
     const commitMsg = (document.getElementById('zipCommitMessage').value || '').trim()
         || `Upload ${selected.length} files`;
-    
+
+    // Resolve destination branch from the segmented control. Touch 3 zip-flow:
+    // "current" → State.currentBranch; "newBranch" → create then commit.
+    const newBranchInputValue = (document.getElementById('zipNewBranchName')?.value || '').trim();
+    let resolved;
+    try {
+        resolved = resolveTargetBranch({
+            segment: destSegment,
+            currentBranch: State.currentBranch || 'main',
+            newBranchName: newBranchInputValue,
+        });
+    } catch (err) {
+        window.showToast(err.message, 'warning');
+        return;
+    }
+
     isUploading = true;
     const btn = document.getElementById('btnZipUpload');
     if (btn) {
         btn.disabled = true;
         btn.textContent = `⏳ Committing ${selected.length} files...`;
     }
-    
+
     const progressBar = document.getElementById('zipProgress');
     const progressFill = document.getElementById('zipProgressFill');
     const progressText = document.getElementById('zipProgressText');
     if (progressBar) progressBar.style.display = '';
-    if (progressFill) progressFill.style.width = '50%';
+    if (progressFill) progressFill.style.width = '20%';
     if (progressText) progressText.textContent = `Preparing ${selected.length} files...`;
-    
-    // Build a lookup of existing files for create vs update detection
+
+    // Build a lookup of existing files for create vs update detection. When
+    // committing to the current branch, State.fileTree is accurate; when
+    // creating a new branch off the current one, the new branch starts as a
+    // copy so the same SHAs apply.
     const existingFiles = new Map();
     (State.fileTree || []).forEach(f => {
         existingFiles.set(f.path, f.sha);
     });
-    
-    const { provider, connection, owner, repo, branch } = resolveContext();
+
+    const { provider, connection, owner, repo } = resolveContext();
+    let branch = resolved.branch;
+
+    // Create the new branch first, off the current branch as base.
+    if (resolved.mustCreate) {
+        if (progressText) progressText.textContent = `Creating branch "${branch}"…`;
+        try {
+            await Git.createBranch(owner, repo, branch, State.currentBranch || 'main');
+        } catch (err) {
+            isUploading = false;
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '📤 Upload';
+            }
+            if (progressFill) progressFill.style.width = '0%';
+            if (progressText) progressText.textContent = `Branch creation failed: ${err.message}`;
+            window.showToast(`Failed to create branch "${branch}": ${err.message || err}`, 'error');
+            return;
+        }
+    }
+
+    if (progressFill) progressFill.style.width = '50%';
     
     // Build batch payload — single commit for ALL files
     const batchFiles = selected.map(file => {

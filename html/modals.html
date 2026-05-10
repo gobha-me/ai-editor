@@ -410,6 +410,20 @@
                 <!-- File List -->
                 <div class="zip-file-list" id="zipFileList"></div>
 
+                <!-- Touch 3 zip-flow Destination control (2.20.0) — choose where the commit lands. -->
+                <div class="zip-field zip-git-only">
+                    <label>Destination</label>
+                    <div class="zip-seg" id="zipDestSeg" role="radiogroup" aria-label="Destination branch">
+                        <button type="button" class="zip-seg__btn" role="radio" aria-checked="false" data-zip-target="current">
+                            <span id="zipDestCurrentLabel">current</span>
+                        </button>
+                        <button type="button" class="zip-seg__btn zip-seg__btn--on" role="radio" aria-checked="true" data-zip-target="newBranch">new branch</button>
+                        <button type="button" class="zip-seg__btn" role="radio" aria-checked="false" data-zip-target="newSession" disabled title="Sessions ship in a later release">new session</button>
+                    </div>
+                    <input type="text" id="zipNewBranchName" placeholder="import/…" spellcheck="false" autocomplete="off">
+                    <div id="zipDestNote" class="zip-field-hint"></div>
+                </div>
+
                 <!-- Target Directory -->
                 <div class="zip-field zip-git-only">
                     <label for="zipTargetDir">Target directory <span class="zip-field-hint">(leave empty for repo root)</span></label>

@@ -822,6 +822,31 @@ export function initProjectListeners() {
             // the panel's Cut release button only renders on the current row.
             window.openReleaseModal?.();
         },
+        onExportZip: async (name) => {
+            if (!State.currentProject) return;
+            const { owner, repo } = State.currentProject;
+            const { exportBranchAsZip } = await import('./zip-export.js');
+            const { showConfirm } = await import('./ui/dialogs.js');
+            window.showToast?.(`Exporting branch "${name}"…`, 'info');
+            try {
+                const result = await exportBranchAsZip({
+                    owner, repo, branch: name,
+                    confirm: async ({ fileCount, totalBytes }) => {
+                        const mb = (totalBytes / (1024 * 1024)).toFixed(1);
+                        return showConfirm(
+                            `Export ${fileCount} files (${mb} MB) — this may take a moment. Continue?`,
+                            { title: 'Large export', okLabel: 'Export', cancelLabel: 'Cancel' }
+                        );
+                    },
+                });
+                if (result) {
+                    window.showToast?.(`Downloaded ${result.filename}`, 'success');
+                }
+            } catch (err) {
+                console.error('[Branches] Export zip failed:', err);
+                window.showToast?.(`Export failed: ${err.message || err}`, 'error');
+            }
+        },
     });
 
     EventBus.on('project:loaded', () => {

@@ -8,6 +8,7 @@ import { buildAppLayout } from './template-loader.js';
 import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { mountLeftPaneRail } from './ui/left-pane-rail.js';
 import { mountNowStrip } from './ui/now-strip.js';
+import { mountSwitcherMenu } from './projects/switcher-menu.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
@@ -113,10 +114,10 @@ import {
     getActiveWorkspaceId as sessionsActiveWorkspaceId,
 } from './chat/sessions-sync.js';
 import { installReplay } from './chat/replay.js';
-import { 
-    openZipUpload, closeZipUpload, 
+import {
+    openZipUpload, closeZipUpload,
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
-    uploadExtractedFiles, initZipDragDrop
+    uploadExtractedFiles, initZipDragDrop, handleZipFile, isZipDrop,
 } from './zip-upload.js';
 
 // Import tool modules (loaded before chat.js to ensure registry is ready)
@@ -537,6 +538,90 @@ function closePluginModal() {
  * Renders the current branch name in `#tbBranchName`. Ahead/behind counts
  * (`#tbBranchCounts`) ship in §1.3.6.1 once provider compare endpoints land.
  */
+/**
+ * Window-wide .zip drop listener — Touch 3 zip-flow (2.20.0).
+ *
+ * Materializes a full-window overlay on .zip drag, opens the upload modal on
+ * drop. The discriminator (`isZipDrop`) discounts text/image drops so chat
+ * input + replay drop zones keep working as before — they were scoped to
+ * their own elements anyway, but this guard keeps the overlay from painting
+ * during unrelated drags.
+ */
+function initWindowZipDrop() {
+    let overlay = null;
+    let dragCounter = 0; // dragenter/leave nest correctly even across child elements
+
+    const ensureOverlay = () => {
+        if (overlay) return overlay;
+        overlay = document.createElement('div');
+        overlay.id = 'windowZipDrop';
+        overlay.className = 'zip-drop';
+        overlay.hidden = true;
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML =
+            '<div class="zip-drop__card">' +
+                '<svg class="icn icn--hero" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>' +
+                '<div class="zip-drop__title">Drop .zip to import</div>' +
+                '<div class="zip-drop__sub">Lands in a new branch by default</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        return overlay;
+    };
+
+    const showOverlay = () => {
+        const el = ensureOverlay();
+        el.hidden = false;
+        el.setAttribute('aria-hidden', 'false');
+    };
+    const hideOverlay = () => {
+        if (!overlay) return;
+        overlay.hidden = true;
+        overlay.setAttribute('aria-hidden', 'true');
+    };
+
+    document.addEventListener('dragenter', (e) => {
+        if (!isZipDrop(e.dataTransfer, { mode: 'permissive' })) return;
+        dragCounter++;
+        showOverlay();
+    });
+    document.addEventListener('dragover', (e) => {
+        if (!isZipDrop(e.dataTransfer, { mode: 'permissive' })) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    document.addEventListener('dragleave', (e) => {
+        // Only count drag-leaves crossing the window boundary (clientX/Y at 0
+        // when leaving the window). This avoids flicker as the cursor moves
+        // over nested elements.
+        if (e.target !== document && e.clientX !== 0 && e.clientY !== 0) return;
+        dragCounter = Math.max(0, dragCounter - 1);
+        if (dragCounter === 0) hideOverlay();
+    });
+    document.addEventListener('drop', async (e) => {
+        if (!isZipDrop(e.dataTransfer, { mode: 'strict' })) {
+            // Not a .zip — let other handlers (chat input, etc.) take over.
+            dragCounter = 0;
+            hideOverlay();
+            return;
+        }
+        e.preventDefault();
+        dragCounter = 0;
+        hideOverlay();
+
+        const file = Array.from(e.dataTransfer.files || []).find(
+            f => f && typeof f.name === 'string' && f.name.toLowerCase().endsWith('.zip')
+        );
+        if (!file) return;
+
+        // Open the modal first so the segmented control + branch input are
+        // mounted, then hand the file to handleZipFile. The modal init
+        // defaults the segmented control to "new branch", matching the
+        // canvas's "drops always become new branches" convention.
+        openZipUpload();
+        await handleZipFile(file);
+    });
+}
+
 function initBranchIndicator() {
     const wrap = document.getElementById('tbBranchIndicator');
     const nameEl = document.getElementById('tbBranchName');
@@ -820,7 +905,9 @@ async function init() {
     initSessionListeners();
     mountLeftPaneRail();
     mountNowStrip();
+    mountSwitcherMenu();
     initHelpSlideOut();
+    initWindowZipDrop();
 
     // ── Parallel init: git + LLM + editor load concurrently ──
     // Git provider outage must NOT block LLM or editor loading.

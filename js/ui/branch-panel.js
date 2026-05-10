@@ -28,6 +28,7 @@ const NAME_ATTR = 'data-branch-name';
 const SVG_SWITCH = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 3 4 4-4 4"/><path d="M3 7h18"/><path d="m7 21-4-4 4-4"/><path d="M21 17H3"/></svg>';
 const SVG_RELEASE = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>';
 const SVG_DELETE = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+const SVG_EXPORT = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6 9 6 6 6-6"/><path d="M3 21h18"/></svg>';
 
 /**
  * Render the branch panel as an HTML string.
@@ -40,7 +41,7 @@ const SVG_DELETE = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" str
  * @param {Object<string, {ahead: number|null, behind: number|null}>} [opts.metadata]
  * @returns {string}
  */
-export function renderBranchPanelHtml({ branches, currentBranch, metadata = {} }) {
+export function renderBranchPanelHtml({ branches, currentBranch, metadata = {}, showExport = false }) {
     if (!branches || branches.length === 0) {
         return '<div class="branch-panel__empty">No branches yet</div>';
     }
@@ -62,6 +63,14 @@ export function renderBranchPanelHtml({ branches, currentBranch, metadata = {} }
         }
 
         const actions = [];
+        if (showExport) {
+            actions.push(
+                `<button type="button" class="branch-panel__btn branch-panel__btn--export" ` +
+                `${ACTION_ATTR}="exportZip" ${NAME_ATTR}="${escapeAttr(b.name)}" ` +
+                `title="Export ${escapeAttr(b.name)} as .zip" ` +
+                `aria-label="Export branch ${escapeAttr(b.name)} as .zip">${SVG_EXPORT}</button>`
+            );
+        }
         if (isCurrent) {
             actions.push(
                 `<button type="button" class="branch-panel__btn branch-panel__btn--release" ` +
@@ -185,10 +194,12 @@ export function renderBranchPanel() {
         return;
     }
 
+    const isLocal = State.currentProject?.connectionId === '__local__';
     el.innerHTML = renderBranchPanelHtml({
         branches: State.branches,
         currentBranch: State.currentBranch,
         metadata: State.branchMetadata || {},
+        showExport: !isLocal,
     });
 }
 
@@ -196,7 +207,7 @@ export function renderBranchPanel() {
  * Bind delegated click handlers + EventBus subscriptions. Idempotent.
  */
 let _wired = false;
-export function mountBranchPanel({ onSwitch, onDelete, onCutRelease } = {}) {
+export function mountBranchPanel({ onSwitch, onDelete, onCutRelease, onExportZip } = {}) {
     if (_wired) return;
     const el = document.getElementById(PANEL_ID);
     if (!el) return;
@@ -213,6 +224,8 @@ export function mountBranchPanel({ onSwitch, onDelete, onCutRelease } = {}) {
             await onDelete(name);
         } else if (action === 'cutRelease' && typeof onCutRelease === 'function') {
             await onCutRelease(name);
+        } else if (action === 'exportZip' && typeof onExportZip === 'function') {
+            await onExportZip(name);
         }
     });
 

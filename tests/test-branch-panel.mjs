@@ -111,6 +111,38 @@ test('protected branch renders the protected tag', () => {
 });
 
 // ============================================
+// Export-zip action (Touch 3 zip-flow, 2.20.0)
+// ============================================
+
+test('Export action is hidden by default (showExport unset)', () => {
+    const html = renderBranchPanelHtml({
+        branches: [{ name: 'main' }, { name: 'feature-x' }],
+        currentBranch: 'main',
+    });
+    assert.doesNotMatch(html, /data-branch-action="exportZip"/);
+    assert.doesNotMatch(html, /branch-panel__btn--export/);
+});
+
+test('Export action renders on every row when showExport is true', () => {
+    const html = renderBranchPanelHtml({
+        branches: [{ name: 'main' }, { name: 'feature-x' }, { name: 'fix/foo' }],
+        currentBranch: 'main',
+        showExport: true,
+    });
+    const matches = html.match(/data-branch-action="exportZip"/g) || [];
+    assert.equal(matches.length, 3);
+});
+
+test('Export action carries data-branch-name attribute for delegation', () => {
+    const html = renderBranchPanelHtml({
+        branches: [{ name: 'feature-x' }],
+        currentBranch: 'main',
+        showExport: true,
+    });
+    assert.match(html, /data-branch-action="exportZip"[^>]*data-branch-name="feature-x"/);
+});
+
+// ============================================
 // Ahead/behind counts
 // ============================================
 
