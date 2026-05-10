@@ -619,6 +619,41 @@ export function addToolCallMessage(toolName, args, result) {
         ? resultJson.substring(0, 2000) + '\n... (truncated, expand to see full result)'
         : resultJson;
 
+    // Invisible-Unicode warning band — surfaces the `_security.invisibleUnicode`
+    // attached by `ToolRegistry.execute()` (registry-level scan, 2.17.1) and by
+    // the issue/PR tools (1.6.12). Render-side fallback so visibility doesn't
+    // depend on the model honoring the system-prompt rule that re-feeds the
+    // warning on the next turn.
+    //
+    // Shape note: issue/PR tools attach an ARRAY of per-source scan results
+    // (PR body + each comment scanned independently); the registry attaches
+    // a single scan result over the whole envelope. Normalizing here lets one
+    // band render both — and reading both shapes is preferable to changing
+    // either attachment site.
+    const invisibleUnicode = result?._security?.invisibleUnicode;
+    const invisibleScans = Array.isArray(invisibleUnicode)
+        ? invisibleUnicode
+        : (invisibleUnicode ? [invisibleUnicode] : []);
+    let invisibleCount = 0;
+    const invisibleFamilies = new Set();
+    for (const scanEntry of invisibleScans) {
+        if (!scanEntry) continue;
+        if (typeof scanEntry.count === 'number') invisibleCount += scanEntry.count;
+        if (Array.isArray(scanEntry.families)) {
+            for (const fam of scanEntry.families) invisibleFamilies.add(fam);
+        }
+    }
+    let securityWarningHtml = '';
+    if (invisibleCount > 0) {
+        const familiesText = invisibleFamilies.size > 0
+            ? Array.from(invisibleFamilies).join(', ')
+            : '(unspecified)';
+        securityWarningHtml = `
+                <div class="tool-call-security-warning">
+                    ⚠ Invisible Unicode detected (${invisibleCount}): ${escapeHtml(familiesText)}
+                </div>`;
+    }
+
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message tool-call ${isError ? 'tool-error' : 'tool-success'}`;
     messageEl.innerHTML = `
@@ -629,7 +664,7 @@ export function addToolCallMessage(toolName, args, result) {
                 <span class="tool-call-args-summary">${escapeHtml(argSummary)}</span>
                 <span class="tool-call-status">${statusIcon} ${escapeHtml(resultSummary)}</span>
             </summary>
-            <div class="tool-call-body">
+            <div class="tool-call-body">${securityWarningHtml}
                 <div class="tool-call-section">
                     <div class="tool-call-label">Arguments</div>
                     <pre class="tool-call-json">${escapeHtml(argsJson)}</pre>

@@ -770,6 +770,20 @@
     border-left: 2px solid var(--error);
 }
 
+/* Invisible-Unicode warning band (2.17.1) — surfaces findings attached
+   by ToolRegistry.execute()'s scan or by the issue/PR tools (1.6.12)
+   into the tool-call card. Reuses the card's typography + token palette;
+   no new design vocabulary. */
+.tool-call-security-warning {
+    font-size: var(--chat-xs);
+    color: var(--warning);
+    background: var(--bg-secondary);
+    border-left: 2px solid var(--warning);
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-radius: 3px;
+}
+
 /* Reasoning bubble (1.3.1) — collapsed-by-default <details> above the
    assistant response showing captured <think>/<thinking> content.
    Reuses the tool-call-details typography and chrome so reasoning slots

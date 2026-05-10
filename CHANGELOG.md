@@ -4,6 +4,33 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-05-10
+
+### Security — Tool-return invisible-Unicode scanning
+
+Closes the residual gap noted in PR #296 / 1.6.12, where invisible-Unicode scanning of externally-sourced text was wired into [`read_issue`](js/tools/issue-tools.js) and [`read_pull_request`](js/tools/pr-tools.js) only. A malicious MCP server, a poisoned `read_file` payload, or a hostile `web_fetch` response could carry zero-width, bidi-override (Trojan Source), or tags-block (Glassworm) characters into the model's context with nothing in the chat warning that anything was off.
+
+The scan now runs on **every** tool dispatch via a new `scanToolReturn(name, result)` helper called inside [`ToolRegistry.execute()`](js/tools/registry.js) right after the handler resolves. Findings attach to `result._security.invisibleUnicode` in the same `{ source, count, families, firstFindings }` shape the issue/PR tools already populate, so one render branch covers both — and a tool that did its own narrower scan (issue/PR) is detected and not clobbered.
+
+A 10 MB soft size cap on the stringified payload skips the scan (with a `console.warn`) for pathological MCP returns; circular-ref or non-serializable returns are caught and logged so a tool's own bug never breaks dispatch.
+
+**Render visibility — [`js/chat/messages.js`](js/chat/messages.js).** `addToolCallMessage()` now renders a small `.tool-call-security-warning` band inside the tool-call card whenever `_security.invisibleUnicode` is set, showing the finding count and family names. The model-mediated `_security` re-feed (next-turn surfacing via the system-prompt rule from PR #296) is preserved alongside the DOM band — visibility no longer depends on the model honoring that rule.
+
+**CSS — [`css/chat.css`](css/chat.css).** One new rule reusing the existing `--warning` / `--bg-secondary` / `--chat-xs` token vocabulary; no new design tokens.
+
+**Tests — [`tests/test-tool-return-invisible-unicode.mjs`](tests/test-tool-return-invisible-unicode.mjs)**, 8 cases:
+
+- Clean ASCII payload → no `_security` attached.
+- `U+202E` (RLO bidi-override) flagged → `firstFindings[0].codepoint === 'U+202E'`.
+- `U+200B` (zero-width) inside a **nested** field flagged via the stringification path.
+- `U+E0041` (Glassworm tags-block carrier) flagged.
+- Pre-attached `_security.invisibleUnicode` (mimicking issue/PR tools) preserved verbatim — registry does not clobber.
+- 5 MB clean payload completes well under 2 s (smoke-checks no pathological hang).
+- 11 MB payload exceeds the soft cap — scan skipped, size-warning console.warn captured.
+- Successful detection emits the expected `console.warn` for dev visibility.
+
+**Roadmap.** [`docs/ROADMAP.md`](docs/ROADMAP.md) parking-lot row "Untrusted issue/PR content delimiter wrapping" annotated — its third sub-item ("extend `js/security/invisible-unicode.js` to scan tool returns") shipped with this entry. The broader Glassworm bundle (CI lint already shipped, editor decoration extension to fetched files, plugin-install warning band, `docs/SECURITY.md` authoring) stays parked separately.
+
 ## [2.17.0] - 2026-05-10
 
 ### Feature — Touch 3 1.x candidate C: Files "Now strip"

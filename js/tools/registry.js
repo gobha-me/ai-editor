@@ -32,6 +32,14 @@ import { State, EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 import { Profiles } from '../profiles/registry.js';
 import { ConversationManager } from '../chat/conversations.js';
+import { scanForInvisible } from '../security/untrusted-wrap.js';
+
+// 10 MB soft cap — any larger payload (pathological MCP return, oversized
+// read_file) skips the invisible-Unicode scan to avoid blocking the main
+// thread. The lint inside `js/security/invisible-unicode.js` is a single
+// regex sweep + line-index pass, so 10 MB clean text completes well under
+// a second; 100 MB would not.
+const TOOL_RETURN_SCAN_MAX_BYTES = 10_000_000;
 
 /**
  * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
@@ -205,6 +213,14 @@ export const ToolRegistry = {
             if (result === null || result === undefined) {
                 return { error: `Tool '${name}' returned no result. This is a bug — please try a different approach.` };
             }
+            // Invisible-Unicode scan on every tool return (PR #296 / 1.6.12
+            // covered only `read_issue` / `read_pull_request`). Mirrors the
+            // `_security.invisibleUnicode` shape those tools attach so the
+            // chat layer surfaces both with the same render path. Skipped
+            // when the tool already populated the field — issue/PR's
+            // narrower scan of just the untrusted span has better
+            // signal-to-noise than a re-scan over the whole envelope.
+            scanToolReturn(name, result);
             return result;
         } catch (error) {
             // Structured errors — use .code + .recoveryHint when available
@@ -318,3 +334,37 @@ export const ToolRegistry = {
         console.log('[ToolRegistry] Cleared all tools');
     }
 };
+
+/**
+ * Scan a tool's return payload for invisible Unicode and attach findings
+ * to `result._security.invisibleUnicode` in-place. Mutating the result
+ * mirrors the issue/PR pattern (see `js/tools/issue-tools.js`,
+ * `js/tools/pr-tools.js`) — a single render path then surfaces the
+ * warning consistently regardless of which tool produced it.
+ *
+ * Exported for the test harness; not part of the registry's public API.
+ *
+ * @param {string} name
+ * @param {Object} result
+ * @returns {void}
+ */
+export function scanToolReturn(name, result) {
+    try {
+        if (result?._security?.invisibleUnicode) return;
+        const serialized = JSON.stringify(result);
+        if (typeof serialized !== 'string') return;
+        if (serialized.length > TOOL_RETURN_SCAN_MAX_BYTES) {
+            console.warn(`[security] invisible-unicode scan skipped — tool '${name}' return exceeds ${TOOL_RETURN_SCAN_MAX_BYTES} bytes (${serialized.length})`);
+            return;
+        }
+        const scanResult = scanForInvisible(serialized, name);
+        if (!scanResult) return;
+        if (!result._security) result._security = {};
+        result._security.invisibleUnicode = scanResult;
+        console.warn(`[security] invisible-unicode in tool return '${name}':`, scanResult);
+    } catch (err) {
+        // Circular references or non-serializable returns shouldn't break
+        // tool execution — log and proceed with the unscanned result.
+        console.warn(`[security] invisible-unicode scan failed for tool '${name}':`, err);
+    }
+}
