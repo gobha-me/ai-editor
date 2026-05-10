@@ -792,6 +792,27 @@ body.pr-review-active #editorSplit {
     font-size: var(--font-sm, 12px);
 }
 
+.pr-dock__rerun {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--danger, #c0392b) 12%, transparent);
+    color: var(--text-primary, inherit);
+    font-size: var(--font-sm, 12px);
+}
+.pr-dock__rerun-msg {
+    flex: 1;
+    min-width: 0;
+}
+.pr-dock__rerun-error {
+    flex-basis: 100%;
+    color: var(--danger, #c0392b);
+    font-size: var(--font-xs, 11px);
+}
+
 .pr-dock__submit {
     display: flex;
     flex-direction: column;

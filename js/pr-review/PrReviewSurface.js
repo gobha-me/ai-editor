@@ -28,6 +28,7 @@ import { getPreact } from '../utils/preact-mount.js';
 import { parsePatch, pairSideBySide, truncateRows, countChanges } from './diff-parse.js';
 import { PrReviewDock } from './PrReviewDock.js';
 import { PrCommentComposer } from './PrCommentComposer.js';
+import { nextPollDelay, shouldPoll } from './poll-cadence.js';
 import {
     addDraft,
     getResolvedLocal,
@@ -212,6 +213,62 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
         [prNumber, stateBump]
     );
 
+    // Per-surface CI polling. 10s for the first 2 minutes, 30s after,
+    // via recursive setTimeout so each next-tick is computed against
+    // wall-clock elapsed time (not the previous tick's start). Cleanup
+    // on unmount cancels the pending timeout — must be airtight so we
+    // don't poll for a closed dock.
+    //
+    // Re-run resets the cadence: it sets ci.state back to `pending`,
+    // the dep changes, the effect re-runs with a fresh `startTime`.
+    //
+    // The poll updates only `data.ci` — never emits `prs:refresh`,
+    // which would kick a full reload + the rail PR panel refetch. That
+    // is the load-bearing scope discipline for this slice.
+    useLayoutEffect(() => {
+        if (!shouldPoll(data.pr, data.ci)) return;
+        let cancelled = false;
+        let timeoutId = null;
+        const startTime = Date.now();
+
+        const schedule = () => {
+            if (cancelled) return;
+            const delay = nextPollDelay(Date.now() - startTime);
+            timeoutId = setTimeout(tick, delay);
+        };
+
+        async function tick() {
+            if (cancelled) return;
+            try {
+                const ci = await Git.getCommitStatus(owner, repo, data.pr.head);
+                if (cancelled) return;
+                setData(d => ({ ...d, ci }));
+                if (ci?.state === 'pending') schedule();
+            } catch (err) {
+                if (cancelled) return;
+                console.warn('[pr-review] CI poll failed:', err.message);
+                schedule();
+            }
+        }
+
+        schedule();
+        return () => {
+            cancelled = true;
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [data.ci?.state, data.pr?.state, data.pr?.merged, data.pr?.head, owner, repo]);
+
+    /**
+     * Reset CI back to `pending` so the polling effect re-fires.
+     * Called by the dock's Re-run handler on success.
+     */
+    const handleCiPollReset = () => {
+        setData(d => ({
+            ...d,
+            ci: { ...(d.ci || {}), state: 'pending' }
+        }));
+    };
+
     if (data.loading && !data.pr) {
         return html`
             <div class="pr-review">
@@ -276,9 +333,11 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
             <${PrReviewDock}
                 prNumber=${prNumber}
                 pr=${data.pr}
+                ci=${data.ci}
                 capabilities=${capabilities}
                 threadsTotal=${threadsTotal}
                 threadsResolvedLocal=${threadsResolvedLocal}
+                onCiPollReset=${handleCiPollReset}
             />
         </div>
     `;

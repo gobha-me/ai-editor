@@ -4,6 +4,50 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.13.2] - 2026-05-10
+
+### Feature — PR Review CI polling + Re-run failed jobs
+
+The PR Review dock from [§2.13.0](#2130---2026-05-10) showed CI state at load time only — once the user opened a PR, a pending CI run could finish, fail, or recover and the dock would never update without a manual `prs:refresh`. The legacy `js/pr-detail.js#_startCiPolling` had been deleted in slice 2 and not re-added. This slice closes that gap with a per-surface poll plus a provider-side recovery action for the failure case.
+
+**Per-surface CI polling** in [`js/pr-review/PrReviewSurface.js`](js/pr-review/PrReviewSurface.js). New `useLayoutEffect` tied to `data.ci.state` + `data.pr.{state,merged,head}`: when the trigger contract holds (`pr.state === 'open' && !pr.merged && ci.state === 'pending'`) the effect arms a recursive `setTimeout`. Cadence is **10s for the first 2 minutes, then 30s** — computed every tick against wall-clock elapsed time (not the previous tick's start), so a slow network response doesn't drift the schedule. Cleanup on unmount cancels the pending timeout, so closing the surface (or opening a different PR) kills the loop deterministically.
+
+The poll updates only `data.ci` — it does **not** emit `prs:refresh`. That was a deliberate scope call: `prs:refresh` would kick a full PR reload + the rail PRs panel refetch, which is the wrong scope for a thin per-surface concern. The slice-1 topbar CI badge already re-renders from `data.ci`, so updating local state is enough.
+
+The cadence math is extracted into [`js/pr-review/poll-cadence.js`](js/pr-review/poll-cadence.js) — a pure module exporting `nextPollDelay(elapsedMs)`, `shouldPoll(pr, ci)`, and `isTerminal(state)`. The live surface uses these helpers; tests pin the contract against them without spinning up a renderer (the surface has top-level `await getPreact()` and is browser-only).
+
+**Re-run failed jobs** action via a new provider method on the active provider's capability matrix:
+
+- [`js/git-providers/base.js`](js/git-providers/base.js) — `rerunWorkflowJobs(connection, owner, repo, runId)` defaults to `notSupported`. The `capabilities` getter gains `rerunCi: false` so the dock can feature-detect.
+- [`js/git-providers/gitea.js`](js/git-providers/gitea.js) — `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed` (Gitea Actions; shipped in 1.21+, mirrored by Forgejo). `capabilities.rerunCi: true`.
+- [`js/git-providers/github.js`](js/git-providers/github.js) — `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs` (note the trailing `-jobs`, distinct from Gitea's path). Returns 201 with no body. `capabilities.rerunCi: true`.
+- [`js/git-providers/gitlab.js`](js/git-providers/gitlab.js) — does **not** override; falls through to base's `notSupported` and inherits `rerunCi: false`.
+- [`js/git.js`](js/git.js) — pass-through facade method.
+
+**Dock UI.** [`PrReviewDock.js`](js/pr-review/PrReviewDock.js) takes two new props (`ci` + `onCiPollReset`) and renders an inline "Re-run failed jobs" section above Submit/Merge when `capabilities.rerunCi === true && ci.state === 'failure' && pr.state === 'open' && !pr.merged && pr.headSha`. The click handler:
+
+1. Calls `Git.listWorkflowRuns(owner, repo)` (no `head_sha` filter on either provider's endpoint, so we filter client-side).
+2. Picks the latest run whose `headSha` matches `pr.headSha`.
+3. Calls `Git.rerunWorkflowJobs(owner, repo, run.id)`.
+4. Calls `onCiPollReset()` — surface flips `ci.state` back to `'pending'`, the polling effect's deps change, and the loop re-arms with a fresh 10s cadence window.
+
+Inline error chip on failure (no toast — matches the dock's existing `pr-dock__error` pattern). Per-surface, per-PR polling at 10s burst → 30s steady is well within rate-limit budget for one open PR; the existing pacer in [`js/llm/pacer.js`](js/llm/pacer.js) covers higher-traffic paths.
+
+**Diagnose & fix is deferred.** The original task scoped a third action — pull failed-job logs + LLM-generate a patch + surface as an inline edit-proposal card via `buildEditProposalCard`. That overlap with the chat surface's edit-proposal flow is heavier than fits in 2.13.2 and was explicitly listed as splittable. It ships separately in 2.13.3 or 2.14.0 alongside any chat-surface refactoring needed for the dock-vs-chat surface tension.
+
+**Tests.** Two new files (CI auto-globs `node --test tests/test-*.mjs`):
+
+- [`tests/test-pr-review-rerun-shape.mjs`](tests/test-pr-review-rerun-shape.mjs) — capability matrix per provider; Gitea + GitHub `rerunWorkflowJobs` POST endpoints (asserting the trailing `-jobs` differentiates GitHub from Gitea); GitLab inherits `notSupported`; request errors propagate instead of being swallowed.
+- [`tests/test-pr-review-poll-lifecycle.mjs`](tests/test-pr-review-poll-lifecycle.mjs) — pure cadence math: `nextPollDelay` 10s/30s split at the 2-minute boundary; `shouldPoll` trigger contract (open + not merged + pending only); `isTerminal` stop conditions; defensive handling of NaN/negative/Infinity inputs; lifecycle walk crossing the fast→slow cadence boundary.
+
+End-to-end against a real Gitea PR (xcaliber repo with CI configured) verified the poll picks up pending → failure → rerun → pending → success transitions and stops on `closePrReview()`. No `getCommitStatus` cost concern — it's a thin status fetch, not embedded.
+
+**Removability.** Three independent revert paths:
+
+1. **Polling revert** — revert the `useLayoutEffect` block in `PrReviewSurface.js`. The dock continues to work read-only on slice-1 + slice-2 surfaces; CI badge stays at load-time-only state.
+2. **Re-run revert** — drop the `rerunCi` capability + the new `rerunWorkflowJobs` methods. The dock auto-hides the button via the capability check.
+3. **Provider methods are additive + isolated** — removing them re-throws `notSupported`; the dock's render gate already covers the missing-capability case.
+
 ## [2.13.1] - 2026-05-10
 
 ### Fix — Touch 3 Rail badge count-drain after PR merge

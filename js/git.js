@@ -553,6 +553,16 @@ const Git = {
         return provider.getJobLog(connection, owner, repo, jobId);
     },
 
+    /**
+     * Re-run failed jobs of a workflow run. Pass-through to the active
+     * provider; only enabled when `capabilities.rerunCi === true`.
+     * @since 2.13.2
+     */
+    async rerunWorkflowJobs(owner, repo, runId) {
+        const { provider, connection } = resolveCurrentConnection();
+        return provider.rerunWorkflowJobs(connection, owner, repo, runId);
+    },
+
     // ========================================
     // TAGS & RELEASES
     // ========================================

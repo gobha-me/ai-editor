@@ -939,8 +939,10 @@ const giteaProvider = {
     /**
      * Capabilities — Gitea supports review submission + merge; thread
      * resolve and viewed-files are not exposed by the REST API.
+     * `rerunCi` covers the Gitea Actions rerun-failed endpoint added in
+     * Gitea 1.21+ (also supported by Forgejo).
      *
-     * @since 2.13.0
+     * @since 2.13.0 (extended in 2.13.2 with rerunCi)
      */
     get capabilities() {
         return {
@@ -948,6 +950,7 @@ const giteaProvider = {
             threadResolve: false,
             viewedFiles: false,
             merge: true,
+            rerunCi: true,
         };
     },
 
@@ -1138,6 +1141,20 @@ const giteaProvider = {
             console.warn(`[Gitea] Could not fetch job ${jobId} logs:`, e.message);
             return null;
         }
+    },
+
+    /**
+     * Re-run only the failed jobs in a Gitea Actions workflow run.
+     * Endpoint shipped in Gitea 1.21+; Forgejo mirrors it.
+     *
+     * @since 2.13.2
+     */
+    async rerunWorkflowJobs(connection, owner, repo, runId) {
+        await this.request(connection, 'POST',
+            `/repos/${owner}/${repo}/actions/runs/${runId}/rerun-failed`
+        );
+        EventBus.emit('git:ciRerun', { connectionId: connection.id, owner, repo, runId });
+        return { ok: true, runId };
     },
 
     async downloadArchive(connection, owner, repo, ref = 'main') {

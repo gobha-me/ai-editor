@@ -38,18 +38,22 @@ const SUBMITTED_TOAST_MS = 2000;
  * @param {{
  *   prNumber: number,
  *   pr: any,
- *   capabilities: {reviewSubmission?:boolean, threadResolve?:boolean, viewedFiles?:boolean, merge?:boolean},
+ *   ci?: {state?:string, statuses?:Array}|null,
+ *   capabilities: {reviewSubmission?:boolean, threadResolve?:boolean, viewedFiles?:boolean, merge?:boolean, rerunCi?:boolean},
  *   threadsTotal: number,
- *   threadsResolvedLocal: number
+ *   threadsResolvedLocal: number,
+ *   onCiPollReset?: () => void
  * }} props
  */
-export function PrReviewDock({ prNumber, pr, capabilities, threadsTotal, threadsResolvedLocal }) {
+export function PrReviewDock({ prNumber, pr, ci, capabilities, threadsTotal, threadsResolvedLocal, onCiPollReset }) {
     const [drafts, setDrafts] = useState(() => getDrafts(prNumber));
     const [event, setEvent] = useState(/** @type {'COMMENT'|'APPROVE'|'REQUEST_CHANGES'} */ ('COMMENT'));
     const [summary, setSummary] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string|null} */ (null));
     const [submittedFlash, setSubmittedFlash] = useState(false);
+    const [rerunBusy, setRerunBusy] = useState(false);
+    const [rerunError, setRerunError] = useState(/** @type {string|null} */ (null));
 
     // Re-pull drafts on the cross-component change event AND when the
     // active PR number changes (e.g. user opened a different PR without
@@ -74,6 +78,8 @@ export function PrReviewDock({ prNumber, pr, capabilities, threadsTotal, threads
     const draftCount = drafts.length;
     const supportsReview = capabilities?.reviewSubmission === true;
     const supportsMerge = capabilities?.merge === true && pr?.state === 'open' && !pr?.merged;
+    const supportsRerun = capabilities?.rerunCi === true && ci?.state === 'failure'
+        && pr?.state === 'open' && !pr?.merged && !!pr?.headSha;
     const prClosed = pr?.state !== 'open' || pr?.merged;
 
     async function handleSubmit() {
@@ -131,6 +137,30 @@ export function PrReviewDock({ prNumber, pr, capabilities, threadsTotal, threads
         EventBus.emit('pr-review:drafts-changed', { prNumber });
     }
 
+    async function handleRerunCi() {
+        if (rerunBusy) return;
+        setRerunBusy(true);
+        setRerunError(null);
+        try {
+            if (!State.currentProject) throw new Error('No project loaded');
+            const { owner, repo } = State.currentProject;
+            // No `head_sha` filter on the listWorkflowRuns endpoint — fetch the
+            // recent page (per-provider limit ~20) and pick the latest run for
+            // the PR's head commit. Both providers return runs sorted desc.
+            const runs = await Git.listWorkflowRuns(owner, repo);
+            const matching = (runs || []).find(r => r.headSha === pr.headSha);
+            if (!matching) {
+                throw new Error('No workflow run found for this PR head commit.');
+            }
+            await Git.rerunWorkflowJobs(owner, repo, matching.id);
+            if (typeof onCiPollReset === 'function') onCiPollReset();
+        } catch (e) {
+            setRerunError(e?.message || String(e));
+        } finally {
+            setRerunBusy(false);
+        }
+    }
+
     return html`
         <div class="pr-dock" role="region" aria-label="Pull request review actions">
             ${draftCount > 0 && html`
@@ -162,6 +192,23 @@ export function PrReviewDock({ prNumber, pr, capabilities, threadsTotal, threads
             ${!supportsReview && !prClosed && html`
                 <div class="pr-dock__notice" role="note">
                     Review submission lands for this provider in 2.13.1. Merge controls remain available below.
+                </div>
+            `}
+
+            ${supportsRerun && html`
+                <div class="pr-dock__rerun" role="region" aria-label="CI failure recovery">
+                    <span class="pr-dock__rerun-msg">
+                        ❌ CI failed on this commit.
+                    </span>
+                    <button
+                        type="button"
+                        class="pr__btn pr__btn--ghost"
+                        onClick=${handleRerunCi}
+                        disabled=${rerunBusy}
+                        title="Re-run only the failed jobs of the latest workflow run for this PR's head commit">
+                        ${rerunBusy ? '⏳ Re-running…' : '↻ Re-run failed jobs'}
+                    </button>
+                    ${rerunError && html`<span class="pr-dock__rerun-error" role="alert">${rerunError}</span>`}
                 </div>
             `}
 

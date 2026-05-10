@@ -546,7 +546,7 @@ const BASE_GIT_PROVIDER = {
      * the provider implements `mergePullRequest`; providers without
      * merge override to false.
      *
-     * @returns {{reviewSubmission:boolean, threadResolve:boolean, viewedFiles:boolean, merge:boolean}}
+     * @returns {{reviewSubmission:boolean, threadResolve:boolean, viewedFiles:boolean, merge:boolean, rerunCi:boolean}}
      */
     get capabilities() {
         return {
@@ -554,6 +554,7 @@ const BASE_GIT_PROVIDER = {
             threadResolve: false,
             viewedFiles: false,
             merge: false,
+            rerunCi: false,
         };
     },
 
@@ -741,6 +742,24 @@ const BASE_GIT_PROVIDER = {
      */
     async getJobLog(connection, owner, repo, jobId) {
         return null;
+    },
+
+    /**
+     * Re-run only the failed jobs of a workflow run on the active provider.
+     *
+     * Implemented by Gitea (1.21+) and GitHub via near-identical Actions
+     * endpoints; GitLab inherits `notSupported`. The PR Review dock uses
+     * `capabilities.rerunCi` to decide whether to render the button.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string|number} runId
+     * @returns {Promise<{ok:boolean, runId:string|number}>}
+     * @since 2.13.2
+     */
+    async rerunWorkflowJobs(connection, owner, repo, runId) {
+        notSupported(this.name, 'rerunWorkflowJobs');
     },
 
     // ========================================
