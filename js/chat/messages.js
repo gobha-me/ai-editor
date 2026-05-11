@@ -9,7 +9,7 @@ import { getChatContainer, getPendingEdit } from './state.js';
 import { renderUnifiedView } from '../diff-viewer.js';
 import { ChatSummarizer } from './summarizer.js';
 import { ChatHistoryStore } from './history-store.js';
-import { escapeHtml } from '../utils/html.js';
+import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { mountConsentCard, unmountAll as unmountAllConsentCards } from './consent-card.js';
 import { consentList } from '../intelligence/memory/index.js';
 import { Profiles } from '../profiles/registry.js';
@@ -340,14 +340,14 @@ export function finalizeStreamingMessage(content, meta = {}) {
                 messageEl.appendChild(proposalEl);
             }
             actionsEl.innerHTML = `
-                <button class="btn-apply" onclick="window.Chat.applyPendingEdit()">✅ Apply to Editor</button>
-                <button class="btn-reject" onclick="window.Chat.rejectPendingEdit()">❌ Reject</button>
+                <button class="btn-apply" data-action="applyPendingEdit">✅ Apply to Editor</button>
+                <button class="btn-reject" data-action="rejectPendingEdit">❌ Reject</button>
             `;
         } else {
             // Standard assistant message buttons (continue/copy)
             actionsEl.innerHTML = `
-                <button class="btn-action btn-continue" onclick="window.Chat.continueResponse()" title="Continue generating">🔄 Continue</button>
-                <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
+                <button class="btn-action btn-continue" data-action="continueResponse" title="Continue generating">🔄 Continue</button>
+                <button class="btn-action btn-copy" data-action="copyMessage" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
             `;
         }
         
@@ -468,7 +468,7 @@ export function renderMessage(message, isLastUserMessage = false) {
     // Build image HTML for multimodal messages
     const imageHtml = messageImages.length > 0
         ? `<div class="message-images">${messageImages.map(url =>
-            `<img src="${url}" alt="Attached image" class="message-image" onclick="window.Chat.previewImage(this.src)">`
+            `<img src="${escapeAttr(url)}" alt="Attached image" class="message-image" data-action="previewImage" data-src="${escapeAttr(url)}">`
           ).join('')}</div>`
         : '';
 
@@ -499,7 +499,7 @@ export function renderMessage(message, isLastUserMessage = false) {
         const actionsEl = document.createElement('div');
         actionsEl.className = 'message-actions';
         actionsEl.innerHTML = `
-            <button class="btn-action btn-copy" onclick="window.Chat.copyMessage(this)" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
+            <button class="btn-action btn-copy" data-action="copyMessage" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
         `;
         messageEl.appendChild(actionsEl);
     } else if (message.role === 'user' && isLastUserMessage) {
@@ -507,8 +507,8 @@ export function renderMessage(message, isLastUserMessage = false) {
         const actionsEl = document.createElement('div');
         actionsEl.className = 'message-actions';
         actionsEl.innerHTML = `
-            <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>
-            <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg> Retry</button>
+            <button class="btn-action btn-edit" data-action="editMessage" title="Edit and resend"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>
+            <button class="btn-action btn-retry" data-action="retryLastMessage" title="Retry this request"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg> Retry</button>
         `;
         messageEl.appendChild(actionsEl);
     }
@@ -1016,13 +1016,13 @@ export function renderSummaryNotification(info, showUndo = true) {
     const el = document.createElement('div');
     el.className = 'chat-summary-notification';
     el.innerHTML = `
-        <div class="summary-bar" onclick="document.getElementById('${id}').classList.toggle('expanded')">
+        <div class="summary-bar" data-action="toggleExpanded" data-target="${escapeAttr(id)}">
             <span class="summary-icon">📋</span>
             <span class="summary-label">Context compressed — ${info.compressedMessages} messages → summary (${info.keptMessages} kept)</span>
             ${showUndo ? '<button type="button" class="btn-summary-undo" title="Restore original messages (available until next query)">↩ Undo</button>' : ''}
             <span class="summary-chevron">▸</span>
         </div>
-        <div class="summary-detail" id="${id}">
+        <div class="summary-detail" id="${escapeAttr(id)}">
             <div class="summary-text">${escapeHtml(info.summary)}</div>
         </div>
     `;
@@ -1061,8 +1061,8 @@ function _injectUserEditButtons() {
     const actionsEl = document.createElement('div');
     actionsEl.className = 'message-actions';
     actionsEl.innerHTML = `
-        <button class="btn-action btn-edit" onclick="window.Chat.editMessage(this)" title="Edit and resend">✏️ Edit</button>
-        <button class="btn-action btn-retry" onclick="window.Chat.retryLastMessage()" title="Retry this request">🔁 Retry</button>
+        <button class="btn-action btn-edit" data-action="editMessage" title="Edit and resend">✏️ Edit</button>
+        <button class="btn-action btn-retry" data-action="retryLastMessage" title="Retry this request">🔁 Retry</button>
     `;
     lastUserEl.appendChild(actionsEl);
 }
@@ -1087,8 +1087,8 @@ export function editMessage(buttonEl) {
     contentEl.innerHTML = `
         <textarea class="edit-message-input">${escapeHtml(originalText)}</textarea>
         <div class="edit-message-actions">
-            <button class="btn-action btn-edit-save" onclick="window.Chat.commitEdit(this)">💾 Send</button>
-            <button class="btn-action btn-edit-cancel" onclick="window.Chat.cancelEdit(this)">✖ Cancel</button>
+            <button class="btn-action btn-edit-save" data-action="commitEdit">💾 Send</button>
+            <button class="btn-action btn-edit-cancel" data-action="cancelEdit">✖ Cancel</button>
         </div>
     `;
 
@@ -1134,4 +1134,89 @@ export function commitEdit(buttonEl) {
 
     // Emit event — index.js handles the history truncation and resend
     EventBus.emit('chat:editAndResend', { newContent: newText });
+}
+
+/**
+ * Bind a delegated click handler for chat-message action buttons —
+ * Phase 3b of the inline-handlers migration
+ * (docs/DESIGN-html-inline-handlers-migration.md). Scoped to
+ * `#chatMessages` (the persistent message container declared in
+ * `html/chat-panel.html`); `renderMessages()` rewrites the panel's
+ * innerHTML on every refresh and the virtualizer recycles message
+ * nodes, so the document-level listener survives both.
+ *
+ * Routes 9 callback actions plus an internal DOM-only `toggleExpanded`
+ * (per Decision 5 — `classList.toggle` doesn't deserve a callback).
+ * The five `this`-passing call sites (`copyMessage`, `editMessage`,
+ * `retryLastMessage` — though the latter takes no arg — `commitEdit`,
+ * `cancelEdit`) receive the matched button element so the existing
+ * `buttonEl.closest('.chat-message')` traversals in
+ * `editMessage`/`commitEdit`/etc. keep working unchanged.
+ *
+ * `previewImage` receives the URL string read from `data-src` so the
+ * old `this.src` access on the `<img>` survives translation.
+ */
+let _chatMessagesWired = false;
+export function mountChatMessages({
+    onApplyPendingEdit,
+    onRejectPendingEdit,
+    onContinueResponse,
+    onCopyMessage,
+    onEditMessage,
+    onRetryLastMessage,
+    onCommitEdit,
+    onCancelEdit,
+    onPreviewImage,
+} = {}) {
+    if (_chatMessagesWired) return;
+    _chatMessagesWired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#chatMessages')) return;
+        const action = btn.getAttribute('data-action');
+        switch (action) {
+            case 'applyPendingEdit':
+                if (typeof onApplyPendingEdit === 'function') onApplyPendingEdit();
+                break;
+            case 'rejectPendingEdit':
+                if (typeof onRejectPendingEdit === 'function') onRejectPendingEdit();
+                break;
+            case 'continueResponse':
+                if (typeof onContinueResponse === 'function') onContinueResponse();
+                break;
+            case 'copyMessage':
+                if (typeof onCopyMessage === 'function') onCopyMessage(btn);
+                break;
+            case 'editMessage':
+                if (typeof onEditMessage === 'function') onEditMessage(btn);
+                break;
+            case 'retryLastMessage':
+                if (typeof onRetryLastMessage === 'function') onRetryLastMessage();
+                break;
+            case 'commitEdit':
+                if (typeof onCommitEdit === 'function') onCommitEdit(btn);
+                break;
+            case 'cancelEdit':
+                if (typeof onCancelEdit === 'function') onCancelEdit(btn);
+                break;
+            case 'previewImage':
+                if (typeof onPreviewImage === 'function') {
+                    onPreviewImage(btn.getAttribute('data-src'));
+                }
+                break;
+            case 'toggleExpanded': {
+                const target = btn.getAttribute('data-target');
+                if (target) document.getElementById(target)?.classList.toggle('expanded');
+                break;
+            }
+            default:
+                // Unknown data-action — ignore. Other chat-internal
+                // surfaces (consent card, ask-user card, queued-input
+                // panel) own their own data-action namespaces and
+                // mount their own dispatchers.
+                break;
+        }
+    });
 }

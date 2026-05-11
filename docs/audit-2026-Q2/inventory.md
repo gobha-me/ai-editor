@@ -263,17 +263,19 @@
 
 ### html-shell
 
-#### [ST] [L] [likely] 53 inline `onclick="window.foo()"` calls across `html/*.html`
+#### [ST] [L] [likely] 53 inline `onclick="window.foo()"` calls across `html/*.html` *(HTML side ✅ closed at 2.31.0; Phase 4 `window.*` cleanup pending)*
 - **What:** `grep -rn 'onclick="' html/` returns 53 matches. The modals (commit, revert, branch, file-create, rename, issue-detail, create-PR, zip-upload, settings) wire their close/submit buttons via inline `onclick="window.closeXxx()"` / `onclick="window.submitXxx()"`. These rely on `window.*` global assignments in `js/app.js:154-267`.
 - **Why it's load-bearing:** Every modal-extracted module has to add to the `window.*` exposure block in `app.js`. The pattern is brittle (rename a function → break the inline string, no compile guard) and CSP-unfriendly (inline event handlers trip strict CSP). The hardcoded `window.openIssueTab(${issueNumber})` strings in `js/ui/issue-list.js:87` etc. add row count to the audit.
 - **Suggested fix shape:** Convert each modal to event delegation on a single delegation root (`#app` or `body`), with `data-action="closeCommitModal"` attributes. The pattern is already established in `js/projects/switcher-menu.js`.
 - **Touch points:** `html/modals.html`, `js/app.js:154-267`, every modal-related module.
+- **Resolution:** Designed at [`docs/DESIGN-html-inline-handlers-migration.md`](../DESIGN-html-inline-handlers-migration.md); 4-phase rollout shipped 2.27.0 → 2.31.0. Phase 1 (pilot commit modal, 2.27.0), Phase 2a (8 modals, 2.28.0), Phase 2b (3 remaining modals + app-shell, 2.29.0), Phase 3a (7 JS renderers — diff-viewer / file-tree / issue-list / tab-manager / chat-input / pr-list / issue-detail, 2.30.0), Phase 3b (`js/chat/messages.js` — 13 handlers including `this`-passing copy/edit and the Decision-5 `classList.toggle`, 2.31.0). HTML side complete; `onclick=` count is at residual (2 `onkeydown=` strings in issue-list / pr-list retained — Phase 3 scope was `onclick=` only). **Phase 4** retires the `window.*` exposure block in `js/app.js`; tracked at the design-doc Phase 4 row (still planned).
 
-#### [ST] [S] [likely] Inline `onclick=` strings inside `js/ui/issue-list.js` / `pr-list.js` / `file-tree.js`
+#### ~~[ST] [S] [likely] Inline `onclick=` strings inside `js/ui/issue-list.js` / `pr-list.js` / `file-tree.js`~~ *(✅ closed — shipped 2.30.0 + 2.31.0)*
 - **What:** The pure renderers in `js/ui/issue-list.js:45,82,87`, `js/ui/pr-list.js:92,93`, `js/file-tree.js:113,114`, `js/tab-manager.js:207,213` build `onclick="window.foo(${arg})"` strings.
 - **Why it's load-bearing:** The pure-renderer extraction pattern (1.12.0 branch-panel, 1.13.0 issue-list, 2.23.0 pr-list per the project notes) is supposed to be HTML-in / HTML-out. Inline onclick attaches a coupling to `window.*` globals that the "pure" idea wanted to decouple. The current pattern still mounts via innerHTML, so delegation requires the same DOM owner — `mountBranchPanel` already does the click delegation for the branch panel.
 - **Suggested fix shape:** Move from `onclick="window.foo(${id})"` to `data-action="foo" data-id="${id}"` + a delegated click listener in the mount fn. Already the pattern for branch-panel; replicate for issue-list, pr-list, file-tree, tab-manager.
 - **Touch points:** `js/ui/issue-list.js:45,82,87`, `js/ui/pr-list.js:92,93`, `js/file-tree.js:108,113,114`, `js/tab-manager.js:207,213`, `js/ui/branch-panel.js` (model implementation).
+- **Resolution:** Phase 3a (2.30.0) migrated the 7 simpler renderers — `mountFileTree` / `mountIssueList` / `mountPrList` / `mountTabManager` / `mountChatInput` / `mountDiffViewer` / `mountIssueTab` follow the `mountBranchPanel` shape. Phase 3b (2.31.0) closed the largest density-cluster — `mountChatMessages` for `js/chat/messages.js` (13 handlers).
 
 ---
 

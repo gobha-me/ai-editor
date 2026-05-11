@@ -21,6 +21,7 @@ import { SlotManager, applyProviderContributions } from './slot-manager.js';
 import { IgnoreManager } from './ignore.js';
 import { initProjectConventions } from './intelligence/project-conventions.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
+import { mountChatMessages } from './chat/messages.js';
 import { loadCodeMirror, setKeybindingMode, setInvisibleUnicodeEnabled } from './editor.js';
 import { applyVisualSettings, applyLineNumbersVisibility } from './utils/apply-visual-settings.js';
 import { ErrorLogger, openErrorLog, closeErrorLog, clearErrorLog, copyErrorLog, exportErrorLog } from './error-logger.js';
@@ -910,6 +911,22 @@ async function init() {
     mountTabManager({ onSwitchTab: switchToTab, onCloseTab: closeTab });
     mountChatInput({ onRemoveImage: (i) => window.Chat?.removeImage(i) });
     mountIssueTab({ onOpenIssueTab: (issueNumber) => openIssueTab(issueNumber) });
+    // Phase 3b — js/chat/messages.js renderer (final HTML-side slice). All
+    // 9 callbacks already live on the `window.Chat.*` namespace assigned
+    // at js/chat/index.js module-load time; we route through it rather
+    // than re-importing the individual functions to mirror the
+    // mountChatInput pattern above.
+    mountChatMessages({
+        onApplyPendingEdit: () => window.Chat?.applyPendingEdit?.(),
+        onRejectPendingEdit: () => window.Chat?.rejectPendingEdit?.(),
+        onContinueResponse: () => window.Chat?.continueResponse?.(),
+        onCopyMessage: (btn) => window.Chat?.copyMessage?.(btn),
+        onEditMessage: (btn) => window.Chat?.editMessage?.(btn),
+        onRetryLastMessage: () => window.Chat?.retryLastMessage?.(),
+        onCommitEdit: (btn) => window.Chat?.commitEdit?.(btn),
+        onCancelEdit: (btn) => window.Chat?.cancelEdit?.(btn),
+        onPreviewImage: (url) => window.Chat?.previewImage?.(url),
+    });
     initHelpSlideOut();
     initWindowZipDrop();
 

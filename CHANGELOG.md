@@ -4,6 +4,43 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.31.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 3b** (`js/chat/messages.js` — 13 onclick → data-action)
+
+Final HTML-side slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md). With Phases 1 + 2a + 2b + 3a shipped at 2.27 → 2.30 the modal and simpler-renderer surfaces were done; Phase 3b closes the largest single density-cluster — [`js/chat/messages.js`](js/chat/messages.js), 13 handlers including the `this`-passing copy/edit/commitEdit/cancelEdit shapes, an image `this.src` pass-through, and the Decision 5 DOM-only `classList.toggle`. **HTML side of the migration is now complete**; Phase 4 (`window.*` exposure block cleanup) is unblocked.
+
+**New `mountChatMessages({ ... })` in [`js/chat/messages.js`](js/chat/messages.js).** Replicates the Phase 3a dispatcher shape ([`js/ui/issue-list.js`](js/ui/issue-list.js)) byte-for-byte: idempotent (`_chatMessagesWired` guard) document-level click listener filtered by `e.target.closest('[data-action]')` + `btn.closest('#chatMessages')` and routed by `data-action` via a `switch` to nine typed callbacks plus the Decision-5 generic `toggleExpanded`.
+
+| # | Action | Shape | Payload |
+|---|---|---|---|
+| 1 | `applyPendingEdit` | simple | — |
+| 2 | `rejectPendingEdit` | simple | — |
+| 3 | `continueResponse` | simple | — |
+| 4 | `copyMessage` | this-passing button | matched `btn` element |
+| 5 | `editMessage` | this-passing button | matched `btn` element |
+| 6 | `retryLastMessage` | simple | — |
+| 7 | `commitEdit` | this-passing button | matched `btn` element |
+| 8 | `cancelEdit` | this-passing button | matched `btn` element |
+| 9 | `previewImage` | data-src string | URL from `data-src` (was `this.src` on `<img>`) |
+| 10 | `toggleExpanded` | internal (no callback) | reads `data-target`, calls `document.getElementById(target)?.classList.toggle('expanded')` — Decision 5 |
+
+**`this`-passing translation.** The 6 buttons that previously passed `this` now receive the matched `btn` element (the result of `e.target.closest('[data-action]')`) — the existing `copyMessage(btn)` / `editMessage(btn)` / `commitEdit(btn)` / `cancelEdit(btn)` signatures already accept an element argument and rely on `buttonEl.closest('.chat-message')` traversals, so no internal change. `retryLastMessage` and `continueResponse` take no arg either before or after.
+
+**`previewImage` — `this.src` → `data-src`.** The inline `<img ... onclick="window.Chat.previewImage(this.src)">` becomes `<img ... data-action="previewImage" data-src="${escapeAttr(url)}">`. Dispatcher reads `btn.getAttribute('data-src')` and calls `onPreviewImage(src)`. URLs escaped via `escapeAttr` to defend against `"`/`<`/`>` in user-pasted image URLs.
+
+**Decision 5 generic `toggleExpanded`.** The single DOM-only inline `onclick="document.getElementById('${id}').classList.toggle('expanded')"` at the summary-notification bar migrates to `data-action="toggleExpanded" data-target="${escapeAttr(id)}"`. The handler is *internal* to `mountChatMessages` — no callback — and is the prototype for any future DOM-only toggle pattern. The adjacent undo button keeps its existing `addEventListener` + `e.stopPropagation()` so it doesn't bubble up to the toggle bar.
+
+**Scope chosen: `#chatMessages`.** The persistent message-container ID declared in [`html/chat-panel.html`](html/chat-panel.html). `renderMessages()` rewrites the panel's `innerHTML` on every refresh; the message virtualizer ([`js/chat/message-virtualizer.js`](js/chat/message-virtualizer.js)) recycles message nodes. By scoping to the container that **persists across both**, the document-level listener survives both surfaces. No conflict with the only other `data-action` consumer reachable from chat ([`js/chat/input.js`](js/chat/input.js)'s `removeImage` is scoped to `#imagePreviewStrip`, a separate ancestor outside `#chatMessages`).
+
+**Init wire — [`js/app.js`](js/app.js).** New top-level import `mountChatMessages` from `./chat/messages.js`. One new mount call in `init()` adjacent to the existing Phase 3a mounts. The 9 callbacks route through `window.Chat?.*` (the namespace already assigned at module-load time by [`js/chat/index.js`](js/chat/index.js)) — mirrors the existing `mountChatInput({ onRemoveImage: (i) => window.Chat?.removeImage(i) })` pattern and avoids re-importing the individually-exported functions across module boundaries.
+
+**`window.Chat.*` aliases stay intact.** Per Decision 6, the `window.Chat.applyPendingEdit` / `rejectPendingEdit` / `continueResponse` / `copyMessage` / `editMessage` / `retryLastMessage` / `commitEdit` / `cancelEdit` / `previewImage` aliases all remain reachable from [`js/chat/index.js:782-804`](js/chat/index.js). Phase 4 retires the now-unreferenced ones.
+
+**Tests — 1 new dispatcher test in [`tests/`](tests/) (16 cases).** [`tests/test-chat-messages-dispatch.mjs`](tests/test-chat-messages-dispatch.mjs) lifted from the Phase 3a [`tests/test-issue-list-dispatch.mjs`](tests/test-issue-list-dispatch.mjs) template. Asserts: exactly one document listener installs; each of the 9 callback actions routes; the 4 `this`-passing actions receive the button element by identity; `previewImage` receives `data-src` as a string; `toggleExpanded` calls `getElementById(target).classList.toggle('expanded')`; missing-target toggle is a safe no-op; out-of-scope `data-action` filtered; missing `[data-action]` ancestor filtered; unknown action value filtered; double-mount is idempotent (`_chatMessagesWired` guard). Pure-logic — no JSDOM, runs under the existing [`tests/_node-shim.mjs`](tests/_node-shim.mjs) `document`-stub.
+
+**Removability.** Revert the PR → 13 inline `onclick=` strings restore in [`js/chat/messages.js`](js/chat/messages.js) (with `window.Chat.copyMessage(this)` / `previewImage(this.src)` / `document.getElementById(...).classList.toggle('expanded')` etc.), `mountChatMessages` + the `escapeAttr` import addition delete, the import + mount-call additions in [`js/app.js`](js/app.js) revert, the new test file deletes, version + CHANGELOG revert, design-doc + ROADMAP + inventory rows revert. The `window.Chat.*` aliases were untouched, so HTML restores to a working state. Main returns to 2.30.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
 ## [2.30.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 3a** (7 JS renderers, 16 onclick → data-action)
