@@ -41,18 +41,20 @@ import { mountIssueList } from './ui/issue-list.js';
 import { mountPrList } from './ui/pr-list.js';
 import { mountChatInput } from './chat/input.js';
 import { togglePreviewPane, toggleDiffPane, toggleBlamePane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
-import { 
-    toggleSidebar, 
-    toggleChat, 
-    updateStatusBar, 
-    showToast, 
+import {
+    toggleSidebar,
+    toggleChat,
+    updateStatusBar,
+    showToast,
     closeAllModals,
+    closeAllModalOverlays,
     updateCommitButton,
     updateRevertButton,
     clearAllDrafts,
     clearProjectDrafts,
     initStatusBarListener
 } from './ui-helpers.js';
+import { registerOverlay, closeTopmostOverlay } from './ui/modal-registry.js';
 import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush, mountCommitModal } from './ui/commit.js';
 import { openNewBranchModal, closeNewBranchModal, createNewBranch, mountNewBranchModal } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile, mountNewFileModal } from './ui/file-create.js';
@@ -269,6 +271,55 @@ function exposeLLMTools() {
 }
 
 // ============================================
+// MODAL REGISTRY — 2.33.0
+// ============================================
+
+/**
+ * Register the 5 core overlay surfaces with the ModalRegistry. Esc /
+ * popstate dispatch through `closeTopmostOverlay` per
+ * `js/ui/modal-registry.js`. Priorities mirror the pre-2.33.0 Esc-chain
+ * order; the merge-conflict-above-pr-review stacking invariant lives in
+ * the priority numbers (80 > 70).
+ */
+function registerCoreOverlays() {
+    registerOverlay({
+        id: 'searchPanel',
+        priority: 100,
+        poppable: false,
+        isActive: () => !!document.getElementById('searchPanel')?.classList.contains('active'),
+        close: () => closeSearchPanel(),
+    });
+    registerOverlay({
+        id: 'quickOpen',
+        priority: 90,
+        poppable: false,
+        isActive: () => !!document.getElementById('quickOpenOverlay')?.classList.contains('active'),
+        close: () => QuickOpen.close(),
+    });
+    registerOverlay({
+        id: 'mergeConflict',
+        priority: 80,
+        poppable: true,
+        isActive: isMergeConflictActive,
+        close: (opts) => closeMergeConflict(opts),
+    });
+    registerOverlay({
+        id: 'prReview',
+        priority: 70,
+        poppable: true,
+        isActive: isPrReviewActive,
+        close: (opts) => closePrReview(opts),
+    });
+    registerOverlay({
+        id: 'modalOverlays',
+        priority: 50,
+        poppable: false,
+        isActive: () => !!document.querySelector('.modal-overlay.active'),
+        close: () => closeAllModalOverlays(),
+    });
+}
+
+// ============================================
 // KEYBOARD SHORTCUTS
 // ============================================
 
@@ -414,46 +465,20 @@ function setupKeyboardShortcuts() {
             document.getElementById('chatInput')?.focus();
         }
 
-        // Escape - Close modals
+        // Escape - close topmost overlay. Priority + stacking (e.g.
+        // merge-conflict layers above pr-review) lives in
+        // js/ui/modal-registry.js, not as a chain here.
         if (e.key === 'Escape') {
-            // Close in priority order: search panel → quick open → PR review → modals
-            const searchPanel = document.getElementById('searchPanel');
-            if (searchPanel?.classList.contains('active')) {
-                closeSearchPanel();
-                return;
-            }
-            const quickOpen = document.getElementById('quickOpenOverlay');
-            if (quickOpen?.classList.contains('active')) {
-                QuickOpen.close();
-                return;
-            }
-            // Merge Conflict resolver opens *on top* of PR Review, so
-            // close it first if active.
-            if (isMergeConflictActive()) {
-                closeMergeConflict();
-                return;
-            }
-            if (isPrReviewActive()) {
-                closePrReview();
-                return;
-            }
-            closeAllModals();
+            closeTopmostOverlay();
         }
     });
 
-    // popstate: browser-back closes whichever stage is on top.
-    // Merge Conflict resolver layers above PR Review, so close it first.
-    // The mount modules push `history.state.{prReview, mergeConflict}`;
-    // back-nav fires popstate with the prior entry where the relevant
-    // key is unset.
+    // popstate: browser-back closes whichever poppable overlay is on top.
+    // Mount modules push `history.state.{prReview, mergeConflict}`; the
+    // registry's `poppable: true` flag scopes this to overlays that
+    // pushed a history entry.
     window.addEventListener('popstate', () => {
-        if (isMergeConflictActive()) {
-            closeMergeConflict({ popstate: true });
-            return;
-        }
-        if (isPrReviewActive()) {
-            closePrReview({ popstate: true });
-        }
+        closeTopmostOverlay({ popstate: true });
     });
 }
 
@@ -768,6 +793,7 @@ async function init() {
 
     // Setup event listeners
     setupEventListeners();
+    registerCoreOverlays();
     setupKeyboardShortcuts();
     setupSettingsSavedListener();
     

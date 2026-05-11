@@ -37,11 +37,12 @@
 
 ### sidebar/rail
 
-#### [HC] [S] [likely] `closeAllModals` enumerates magic selectors instead of registry
+#### ~~[HC] [S] [likely] `closeAllModals` enumerates magic selectors instead of registry~~ *(✅ closed — shipped 2.33.0)*
 - **What:** `js/ui-helpers.js:87-91` walks `.modal-overlay` plus two known IDs (`quickOpenOverlay`, `searchPanel`) by hand. Each new modal layer (Merge Conflict, PR Review) needs an explicit `.active` toggle elsewhere.
 - **Why it's load-bearing:** Modal layering already escaped the `closeAllModals` net once (`isMergeConflictActive`/`isPrReviewActive` are checked separately in `js/app.js:463-471`). The next overlay class will silently drop out of Esc-to-close.
 - **Suggested fix shape:** Either a `ModalRegistry` (overlays register their close fn + z-priority) or extend `closeAllModals` to delegate to subscribers via an event channel.
 - **Touch points:** `js/app.js:445-472` (popstate + Esc handler also hardcodes the layering), `js/pr-review/pr-review-mount.js`, `js/merge-conflict/merge-conflict-mount.js`.
+- **Resolution:** 2.33.0 added `js/ui/modal-registry.js` with `registerOverlay` / `closeTopmostOverlay` / `listOverlays`. Esc handler collapses to one line; popstate handler collapses to one line. 5 core overlays registered at boot in `registerCoreOverlays()` with priorities 100/90/80/70/50 — the merge-conflict-above-pr-review stacking invariant is now `80 > 70` in priority numbers, not a hand-coded chain in two places. `closeAllModals` becomes a thin alias for the new `closeAllModalOverlays`. New `tests/test-modal-registry.mjs` covers default values, priority ordering, popstate filter, options pass-through, and snapshot immutability. See [CHANGELOG §2.33.0](../../CHANGELOG.md).
 
 #### [REG] [M] [likely] Git-provider `panels` manifest still flat-slot, not rail-views
 - **What:** Every git provider (`js/git-providers/gitea.js:1177-1197`, `github.js:1199-1219`, `gitlab.js:~1170`) declares `panels: [{slot: 'sidebar-panels', ...}]` with no `render` and no `view:` shape. `local.js:278` has empty arrays.
@@ -364,7 +365,7 @@ For agents that want to pick a quick win without re-reading the full inventory:
 | ~~`tabs:render` orphan~~ | ~~`js/tools/commit-tools.js`~~ | ~~83~~ *(✅ 2.24.1)* |
 | `LEGAL_GROUP_TAGS` registry | `js/tools/registry.js` | 53 |
 | ~~`glyphFor` provider extension~~ | ~~`js/settings/connections-tab.js`~~ | ~~18-21~~ *(✅ 2.26.0)* |
-| `closeAllModals` selectors | `js/ui-helpers.js` | 87-91 |
+| ~~`closeAllModals` selectors~~ | ~~`js/ui-helpers.js`~~ | ~~87-91~~ *(✅ 2.33.0)* |
 | ~~`BUILTIN_PRIORITY` constant~~ | ~~`js/ui/left-pane-rail.js`~~ | ~~76-121~~ *(✅ 2.26.0)* |
 | ~~`safeAdd('btnHelp', openHelpModal)`~~ | ~~`js/app.js`~~ | ~~664~~ *(✅ 2.26.0)* |
 | Settings hotkey-registry consolidation | `js/app.js` + `js/help/hotkey-registry.js` | 306-489 / 33+ |

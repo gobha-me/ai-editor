@@ -84,11 +84,21 @@ export function showToast(message, type = 'success') {
     setTimeout(() => toast.remove(), 4000);
 }
 
-export function closeAllModals() {
+/**
+ * Close every active `.modal-overlay`. Used as the priority-50 fallback
+ * entry in the 2.33.0 ModalRegistry (see `js/ui/modal-registry.js`); also
+ * kept as the body of `closeAllModals` for any direct consumer.
+ *
+ * `quickOpenOverlay` + `searchPanel` were swept here pre-2.33.0; the
+ * registry now owns them as their own entries (priorities 90 / 100), so
+ * this helper is the catchall for the 14 `.modal-overlay` instances in
+ * `html/modals.html`.
+ */
+export function closeAllModalOverlays() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
-    document.getElementById('quickOpenOverlay')?.classList.remove('active');
-    document.getElementById('searchPanel')?.classList.remove('active');
 }
+
+export const closeAllModals = closeAllModalOverlays;
 
 // ============================================
 // DRAFT MANAGEMENT

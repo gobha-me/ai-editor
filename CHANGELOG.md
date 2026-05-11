@@ -4,6 +4,43 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.33.0] - 2026-05-11
+
+### Feature — `ModalRegistry` (2026-Q2 audit sweep)
+
+Closes the [`[HC] [S] [likely] closeAllModals enumerates magic selectors instead of registry`](docs/audit-2026-Q2/inventory.md) entry from the sidebar/rail section of the [2026-Q2 audit + sweep](docs/ROADMAP.md) track. Thematic continuation of the 2.27.0 → 2.32.0 inline-handlers arc — the prior 4-phase work consolidated *click-routing*; this consolidates *Esc/popstate-routing*.
+
+**Why it's load-bearing.** Pre-2.33.0 `js/ui-helpers.js#closeAllModals` walked `.modal-overlay` + two known IDs (`quickOpenOverlay`, `searchPanel`) by hand. Merge-Conflict (2.18.0) and PR Review (2.12.0) introduced overlays with their own `body.SURFACE-active` state machinery, escaping the `.modal-overlay` net entirely — `js/app.js`'s Esc handler had to grow a 5-step `if (isXxxActive()) { closeXxx(); return; }` chain to compensate, and the popstate handler grew a parallel 2-step chain. The next overlay class (Sessions, Touch 3 post-2.0) would silently drop out again.
+
+**New [`js/ui/modal-registry.js`](js/ui/modal-registry.js).** Flat module-scope array sorted descending by priority on insert. Exports:
+
+- `registerOverlay({ id, isActive, close, priority = 50, poppable = false })` — one-shot at boot.
+- `closeTopmostOverlay(opts = {})` — finds highest-priority active entry, calls its `close(opts)`, returns boolean. With `{popstate: true}` filters to `poppable: true` first.
+- `listOverlays()` — snapshot for diagnostics.
+- `_resetForTests()` — pure-test affordance.
+
+**5 core overlays registered at boot** in [`js/app.js#registerCoreOverlays`](js/app.js), called from `init()` between `setupEventListeners()` and `setupKeyboardShortcuts()`. Priorities mirror the pre-2.33.0 Esc-chain order byte-for-byte:
+
+| Priority | id              | poppable | `close` |
+|---:|---|:---:|---|
+| 100 | `searchPanel`    | no       | `closeSearchPanel()` |
+| 90  | `quickOpen`      | no       | `QuickOpen.close()` |
+| 80  | `mergeConflict`  | **yes**  | `closeMergeConflict(opts)` |
+| 70  | `prReview`       | **yes**  | `closePrReview(opts)` |
+| 50  | `modalOverlays`  | no       | `closeAllModalOverlays()` (loop over `.modal-overlay.active`) |
+
+The merge-conflict-layers-on-top-of-pr-review invariant (previously a comment at [`js/app.js:430-431`](js/app.js)) lives as `80 > 70` in the registry rather than as a hand-coded chain in two places (Esc + popstate).
+
+**Esc + popstate collapse.** [`js/app.js`](js/app.js):
+- Esc handler: 5-step chain (~24 lines) → `closeTopmostOverlay()` (1 line).
+- popstate handler: 2-step chain (~9 lines) → `closeTopmostOverlay({ popstate: true })` (1 line).
+
+**`closeAllModals` becomes a thin alias.** [`js/ui-helpers.js`](js/ui-helpers.js): renamed body to `closeAllModalOverlays()` (clearer scope — the helper no longer touches `quickOpen` / `searchPanel`, both of which are now their own registry entries). `closeAllModals` re-exported as an alias for any external/plugin consumer.
+
+**Tests — [`tests/test-modal-registry.mjs`](tests/test-modal-registry.mjs) (8 cases).** Pure-logic, no JSDOM, runs under [`tests/_node-shim.mjs`](tests/_node-shim.mjs). Asserts: defaults (`priority: 50`, `poppable: false`); highest-priority active wins; `{popstate:true}` filters to `poppable: true`; returns `false` when nothing active and no `close` fires; close receives full `opts` verbatim; `listOverlays` returns a sort-descending snapshot, mutation-safe. CI auto-globs `tests/test-*.mjs` per `reference_testing_ci.md`, so the test wires in by name.
+
+**Removability.** Revert the PR → `js/ui/modal-registry.js` + `tests/test-modal-registry.mjs` delete; `js/app.js` restores the 5-step Esc chain + 2-step popstate chain + the `registerCoreOverlays()` function + its `init()` call line; `js/ui-helpers.js#closeAllModals` restores its 3-line magic-selector body; version + CHANGELOG + inventory revert. No persisted state, no migration, no new dependencies. Main returns to 2.32.0 byte-equivalent.
+
 ## [2.32.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 4** (`window.*` exposure block cleanup)
