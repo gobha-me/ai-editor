@@ -12,6 +12,7 @@ import {
     populateBranchMetadata,
 } from './ui/branch-panel.js';
 import { renderIssueRowsHtml } from './ui/issue-list.js';
+import { renderPrRowsHtml } from './ui/pr-list.js';
 
 export async function refreshProjects() {
     try {
@@ -485,56 +486,15 @@ export async function refreshIssues() {
     EventBus.emit('issues:render');
 }
 
-// CI_ICONS — inlined here in 2.13.0 when pr-detail.js was deleted.
-// Used by `renderPullRequests` for the per-row CI badge in the rail.
-const CI_ICONS = {
-    success: '✅',
-    pending: '🔄',
-    failure: '❌',
-    error: '❌',
-    unknown: '⚪'
-};
-
 export function renderPullRequests() {
     const container = document.getElementById('prsPanel');
     if (!container) return;
 
-    // Branch-contextual filtering:
-    // On default branch → show all open PRs
-    // On feature branch → show only PRs where head matches current branch
-    const defaultBranch = State.currentProject?.defaultBranch || 'main';
-    const onDefault = State.currentBranch === defaultBranch;
-
-    const filtered = onDefault
-        ? State.pullRequests
-        : State.pullRequests.filter(pr => pr.head === State.currentBranch);
-
-    if (filtered.length === 0) {
-        const context = onDefault ? 'No open pull requests' : `No PRs for branch "${State.currentBranch}"`;
-        container.innerHTML = `<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">${context}</div>`;
-        return;
-    }
-
-    container.innerHTML = filtered.map(pr => {
-        const ciIcon = CI_ICONS[pr.ciState] || '⚪';
-        const ciTitle = pr.ciState === 'unknown' ? 'No CI status' : `CI: ${pr.ciState}`;
-        const branchInfo = onDefault ? `<span style="color: var(--text-muted);">${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span>` : '';
-
-        return `
-            <div class="issue-item" role="listitem" tabindex="0"
-                 onclick="window.openPrReview(${pr.number})"
-                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openPrReview(${pr.number})}"
-                 title="${ciTitle}" style="cursor: pointer;"
-                 aria-label="Pull request #${pr.number}: ${escapeAttr(pr.title)}, CI ${pr.ciState || 'unknown'}">
-                <div class="issue-number">
-                    <span class="pr-ci-badge" title="${ciTitle}" aria-hidden="true">${ciIcon}</span>
-                    #${pr.number}
-                </div>
-                <div class="issue-title">${escapeHtml(pr.title)}</div>
-                ${branchInfo ? `<div style="font-size: var(--font-sm); margin-top: 2px;">${branchInfo}</div>` : ''}
-            </div>
-        `;
-    }).join('');
+    container.innerHTML = renderPrRowsHtml({
+        pullRequests: State.pullRequests,
+        currentBranch: State.currentBranch,
+        defaultBranch: State.currentProject?.defaultBranch || 'main',
+    });
 }
 
 export async function refreshPullRequests() {

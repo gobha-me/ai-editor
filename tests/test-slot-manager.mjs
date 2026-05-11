@@ -309,3 +309,223 @@ test('applyProviderContributions() registers panels with render functions and si
         SlotManager.removeByPlugin('slot-test-prov');
     }
 });
+
+/* ============================================================ */
+/* rail-views — structured slot (Decision 1, 2026-05-11)       */
+/* ============================================================ */
+
+function makeRailView(overrides = {}) {
+    return {
+        pluginId: overrides.pluginId ?? 'rv-test',
+        slot: 'rail-views',
+        view: {
+            id: overrides.viewId ?? 'rv-test-id',
+            label: overrides.label ?? 'Test view',
+            icon: overrides.icon ?? '<svg/>',
+            ...(overrides.badge !== undefined ? { badge: overrides.badge } : {}),
+            ...(overrides.priority !== undefined ? { priority: overrides.priority } : {}),
+        },
+        render: overrides.render ?? (() => {}),
+        ...(overrides.refreshEvent ? { refreshEvent: overrides.refreshEvent } : {}),
+    };
+}
+
+test('rail-views accepts a well-formed structured contribution', () => {
+    const rv = makeRailView({ pluginId: 'rv1', viewId: 'rv1' });
+    SlotManager.contribute('rail-views', rv);
+    try {
+        const entries = SlotManager.getContributions('rail-views').filter(c => c.pluginId === 'rv1');
+        assert.equal(entries.length, 1);
+        assert.equal(entries[0].view.id, 'rv1');
+        assert.equal(entries[0].view.label, 'Test view');
+        assert.equal(typeof entries[0].render, 'function');
+    } finally {
+        SlotManager.removeByPlugin('rv1');
+    }
+});
+
+test('rail-views rejects contributions missing the view shape', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', {
+            pluginId: 'rv-bad',
+            slot: 'rail-views',
+            render: () => {},
+        });
+    });
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0][0], '[SlotManager] invalid structured contribution');
+    assert.match(warns[0][1].reason, /missing view shape/);
+    assert.equal(SlotManager.getContributions('rail-views').filter(c => c.pluginId === 'rv-bad').length, 0);
+});
+
+test('rail-views rejects contributions missing render(container)', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', {
+            pluginId: 'rv-norender',
+            slot: 'rail-views',
+            view: { id: 'rv-norender', label: 'L', icon: '<svg/>' },
+        });
+    });
+    assert.equal(warns.length, 1);
+    assert.match(warns[0][1].reason, /render\(container\) must be a function/);
+});
+
+test('rail-views rejects empty view.id / view.label', () => {
+    const warnsId = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailView({ pluginId: 'rv-empty-id', viewId: '' }));
+    });
+    assert.match(warnsId[0][1].reason, /view\.id/);
+
+    const warnsLabel = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailView({ pluginId: 'rv-empty-label', viewId: 'has-id', label: '' }));
+    });
+    assert.match(warnsLabel[0][1].reason, /view\.label/);
+});
+
+test('rail-views rejects non-function view.badge', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailView({
+            pluginId: 'rv-badge',
+            viewId: 'rv-badge',
+            badge: 5,
+        }));
+    });
+    assert.match(warns[0][1].reason, /view\.badge/);
+});
+
+test('rail-views collision: second contribution with same view.id is skipped + warned', () => {
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'rv-c1', viewId: 'dup' }));
+    try {
+        const warns = captureWarn(() => {
+            SlotManager.contribute('rail-views', makeRailView({ pluginId: 'rv-c2', viewId: 'dup' }));
+        });
+        assert.equal(warns.length, 1);
+        assert.equal(warns[0][0], '[SlotManager] rail-views id collision');
+        const all = SlotManager.getContributions('rail-views').filter(c => c.view?.id === 'dup');
+        assert.equal(all.length, 1, 'only the first contribution survived');
+        assert.equal(all[0].pluginId, 'rv-c1');
+    } finally {
+        SlotManager.removeByPlugin('rv-c1');
+        SlotManager.removeByPlugin('rv-c2');
+    }
+});
+
+test('rail-views sorts by view.priority (lower first; default 50; insertion-stable on ties)', () => {
+    // Insertion order: B(50), A(10), C(50)
+    // Expected order : A(10), B(50), C(50)
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'p-b', viewId: 'vb', priority: 50, label: 'B' }));
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'p-a', viewId: 'va', priority: 10, label: 'A' }));
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'p-c', viewId: 'vc', priority: 50, label: 'C' }));
+    try {
+        const ids = SlotManager.getContributions('rail-views')
+            .filter(c => ['va', 'vb', 'vc'].includes(c.view.id))
+            .map(c => c.view.id);
+        assert.deepEqual(ids, ['va', 'vb', 'vc']);
+    } finally {
+        SlotManager.removeByPlugin('p-a');
+        SlotManager.removeByPlugin('p-b');
+        SlotManager.removeByPlugin('p-c');
+    }
+});
+
+test('hasViewId reflects current rail-views state', () => {
+    assert.equal(SlotManager.hasViewId('hvi-ghost'), false);
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'hvi', viewId: 'hvi-present' }));
+    try {
+        assert.equal(SlotManager.hasViewId('hvi-present'), true);
+        assert.equal(SlotManager.hasViewId('hvi-absent'), false);
+    } finally {
+        SlotManager.removeByPlugin('hvi');
+    }
+    assert.equal(SlotManager.hasViewId('hvi-present'), false, 'removeByPlugin frees the id');
+});
+
+test('rail-views renderSlot emits slot:rail-views:changed and does not touch DOM', () => {
+    let emitted = 0;
+    const off = EventBus.on('slot:rail-views:changed', () => { emitted += 1; });
+    // Stub querySelector to fail loudly if SlotManager ever touched the DOM
+    // for a structured slot.
+    const originalQuery = document.querySelector;
+    document.querySelector = (sel) => {
+        if (sel === '[data-slot="rail-views"]') {
+            throw new Error('rail-views must not be DOM-mounted by SlotManager');
+        }
+        return originalQuery.call(document, sel);
+    };
+    try {
+        SlotManager.contribute('rail-views', makeRailView({ pluginId: 'rv-evt', viewId: 'rv-evt' }));
+        // contribute -> renderSlot -> emits the event (at minimum once)
+        assert.ok(emitted >= 1, `expected at least one slot:rail-views:changed emission, got ${emitted}`);
+    } finally {
+        document.querySelector = originalQuery;
+        off();
+        SlotManager.removeByPlugin('rv-evt');
+    }
+});
+
+test('rail-views: refreshEvent triggers slot:rail-views:changed', () => {
+    let emitted = 0;
+    const off = EventBus.on('slot:rail-views:changed', () => { emitted += 1; });
+    SlotManager.contribute('rail-views', makeRailView({
+        pluginId: 'rv-rf',
+        viewId: 'rv-rf',
+        refreshEvent: 'rv-rf:refresh',
+    }));
+    try {
+        const baseline = emitted;
+        EventBus.emit('rv-rf:refresh');
+        assert.ok(emitted > baseline, 'refreshEvent should re-emit slot:rail-views:changed');
+    } finally {
+        off();
+        SlotManager.removeByPlugin('rv-rf');
+    }
+});
+
+test('rail-views: applyProviderContributions wires structured panels from provider manifests', () => {
+    GitProviderRegistry.register({
+        id: 'rv-prov',
+        name: 'Rail v2 Provider',
+        contributes: {
+            panels: [
+                {
+                    id: 'rv-prov-issues',
+                    slot: 'rail-views',
+                    view: { id: 'rv-prov-issues', label: 'Issues (P)', icon: '<svg/>', priority: 20 },
+                    render: () => {},
+                    refreshEvent: 'issues:refresh',
+                },
+            ],
+            tools: [],
+            settings: [],
+            menuItems: [],
+        },
+    });
+    try {
+        applyProviderContributions();
+        const entry = SlotManager.getContributions('rail-views')
+            .find(c => c.pluginId === 'rv-prov');
+        assert.ok(entry, 'provider rail-views contribution wired');
+        assert.equal(entry.view.id, 'rv-prov-issues');
+    } finally {
+        SlotManager.removeByPlugin('rv-prov');
+    }
+});
+
+test('getContributions returns a shallow copy (caller mutations do not affect store)', () => {
+    SlotManager.contribute('rail-views', makeRailView({ pluginId: 'gc-1', viewId: 'gc-1' }));
+    try {
+        const copy = SlotManager.getContributions('rail-views');
+        const initialLen = copy.length;
+        copy.push({ pluginId: 'phantom' });
+        const reread = SlotManager.getContributions('rail-views');
+        assert.equal(reread.length, initialLen, 'internal store unchanged');
+        assert.equal(reread.some(c => c.pluginId === 'phantom'), false);
+    } finally {
+        SlotManager.removeByPlugin('gc-1');
+    }
+});
+
+test('getContributions for an empty slot returns an empty array', () => {
+    const result = SlotManager.getContributions('rail-views-does-not-exist');
+    assert.deepEqual(result, []);
+});
