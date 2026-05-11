@@ -45,6 +45,7 @@ const giteaProvider = {
     id: 'gitea',
     name: 'Gitea',
     icon: '🍵',
+    glyph: 'GT',
     description: 'Self-hosted Gitea / Forgejo instance',
     fixedUrl: null,  // User configures their instance URL
 

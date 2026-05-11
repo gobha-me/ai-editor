@@ -39,6 +39,7 @@ const LOCAL_PROVIDER = {
     id: 'local',
     name: 'Local (in-memory)',
     icon: '💾',
+    glyph: 'ZP',
     description: 'In-memory filesystem for zip uploads. No network required.',
     fixedUrl: 'local://',
     hidden: true,  // Don't show in connection settings dropdown

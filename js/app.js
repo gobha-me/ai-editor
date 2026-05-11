@@ -657,7 +657,7 @@ function setupEventListeners() {
     safeAdd('btnCommit', 'click', openCommitModal);
     safeAdd('btnRevert', 'click', revertCurrentFile);  // now in editor toolbar
     safeAdd('btnSettings', 'click', openSettings);
-    safeAdd('btnHelp', 'click', openHelpModal);
+    safeAdd('btnHelp', 'click', openHelpSlideOut);
     safeAdd('tbCmdK', 'click', () => QuickOpen.open());
 
     // Panel collapse buttons (inside panel headers)

@@ -14,10 +14,12 @@ import { escapeHtml, escapeAttr } from '../utils/html.js';
 /** Currently editing connection ID (null = new) */
 let _editingConnectionId = null;
 
-/** 2-letter glyph per provider id; falls back to first 2 chars uppercased. */
+/** 2-letter glyph per provider id; sourced from the provider's manifest
+ *  (`provider.glyph`). Falls back to first 2 chars uppercased so a freshly
+ *  registered provider that forgot to declare a glyph still renders. */
 function glyphFor(providerId) {
-    const map = { github: 'GH', gitea: 'GT', gitlab: 'GL', bitbucket: 'BB', local: 'ZP' };
-    return map[providerId] || (providerId || '?').slice(0, 2).toUpperCase();
+    const provider = GitProviderRegistry.get(providerId);
+    return provider?.glyph || (providerId || '?').slice(0, 2).toUpperCase();
 }
 
 /**

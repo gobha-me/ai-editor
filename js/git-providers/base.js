@@ -119,6 +119,12 @@ const BASE_GIT_PROVIDER = {
     id: 'generic',
     name: 'Generic Git',
     icon: '📦',
+    // Two-character glyph for connection-row badges in Settings →
+    // Connections. The consumer (`js/settings/connections-tab.js#glyphFor`)
+    // falls back to the first two characters of the provider id
+    // uppercased when this is absent — so the field is informally optional
+    // for new providers but every shipping registered provider declares it.
+    glyph: 'GE',
     description: 'Base git provider interface',
 
     // null = URL is user-configurable in connection settings

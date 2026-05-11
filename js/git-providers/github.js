@@ -50,6 +50,7 @@ const githubProvider = {
     id: 'github',
     name: 'GitHub',
     icon: '🐙',
+    glyph: 'GH',
     description: 'GitHub.com or GitHub Enterprise',
     fixedUrl: 'https://api.github.com',  // Override for GHE via connection URL
 

@@ -146,17 +146,19 @@
 
 ### git-providers
 
-#### [HC] [S] [likely] `glyphFor` in `connections-tab.js` hardcodes provider→glyph map
+#### ~~[HC] [S] [likely] `glyphFor` in `connections-tab.js` hardcodes provider→glyph map~~ *(✅ closed — shipped 2.26.0)*
 - **What:** `js/settings/connections-tab.js:18-21` defines `glyphFor(providerId)` with `{github: 'GH', gitea: 'GT', gitlab: 'GL', bitbucket: 'BB', local: 'ZP'}`. Falls back to first-2-chars-uppercased.
 - **Why it's load-bearing:** Adding a new provider (e.g. azure-devops, codeberg as a separate provider) requires editing this file. The provider manifest in `js/git-providers/base.js` already has an `icon` field — the glyph is a separate axis.
 - **Suggested fix shape:** Add `provider.glyph` (or `provider.shortLabel`) to the manifest in `BASE_GIT_PROVIDER`. Each provider declares its own 2-letter code; `glyphFor` consults the registry.
 - **Touch points:** `js/settings/connections-tab.js:18-21`, `js/git-providers/base.js:850`, `js/git-providers/{gitea,github,gitlab,local}.js`.
+- **Resolution:** 2.26.0 added `glyph: string` to the `BASE_GIT_PROVIDER` manifest shape and to each registered provider (gitea=GT, github=GH, gitlab=GL, local=ZP). `glyphFor(providerId)` becomes `GitProviderRegistry.get(providerId)?.glyph || first-2-chars-uppercased`. New `tests/test-provider-manifest-glyph.mjs` covers manifest shape + registry round-trip + fallback path. See [CHANGELOG §2.26.0](../../CHANGELOG.md).
 
-#### [REG] [S] [needs-investigation] `bitbucket` listed in glyphFor but no `bitbucketProvider` registered
+#### ~~[REG] [S] [needs-investigation] `bitbucket` listed in glyphFor but no `bitbucketProvider` registered~~ *(✅ closed — shipped 2.26.0)*
 - **What:** `glyphFor` includes `bitbucket: 'BB'` but `js/git-providers/index.js` only registers gitea/github/gitlab/local.
 - **Why it's load-bearing:** Either intentional future-proofing (a placeholder) or stale dead code. Either way, the registry-mirroring constant is out of sync with the registry.
 - **Suggested fix shape:** Delete the bitbucket entry, OR add a stub provider, OR document the placeholder.
 - **Touch points:** `js/settings/connections-tab.js:19`, `js/git-providers/index.js`.
+- **Resolution:** Closed alongside the parent `glyphFor` entry above. The `bitbucket: 'BB'` row deletes with the rest of the hardcoded map; the first-2-chars-uppercased fallback would render `'BI'` if a `bitbucket` provider were registered without declaring `glyph`, which is the correct forward-compat behavior. No stub provider added — when bitbucket support actually ships, it declares its own `glyph: 'BB'` per the new manifest convention.
 
 ---
 
@@ -228,11 +230,12 @@
 - **Suggested fix shape:** Use event delegation on `document` keyed by `data-action="commit"`-style attributes (already used in `js/projects/switcher-menu.js`). Or migrate to a `registerAction(id, handler)` API that handles late binding.
 - **Touch points:** `js/app.js:649-777`, `js/project-manager.js:746-880` (also uses a `safeClick` helper).
 
-#### [ST] [S] [likely] `safeAdd('btnHelp', 'click', openHelpModal)` references undefined `openHelpModal`
+#### ~~[ST] [S] [likely] `safeAdd('btnHelp', 'click', openHelpModal)` references undefined `openHelpModal`~~ *(✅ closed — shipped 2.26.0)*
 - **What:** `js/app.js:664` references the bareword `openHelpModal` which is NOT imported. The reference resolves only because `js/help/index.js:146` sets `window.openHelpModal = openHelpSlideOut` as a module-load side effect, and module-scope bare names resolve via window in non-strict mode.
 - **Why it's load-bearing:** Either `'use strict'` will eventually be enabled (it should be — every other module is implicit-strict via ES modules) or the help/index.js load order shifts, and this breaks silently. The fix is one-line.
 - **Suggested fix shape:** `import { openHelpSlideOut } from './help/index.js'` and call `openHelpSlideOut`, or use `window.openHelpModal`. ES modules are strict-by-default, so this likely already throws in some browsers — verify.
 - **Touch points:** `js/app.js:664`, `js/help/index.js:146`.
+- **Resolution:** 2.26.0 replaced the bareword reference with the already-imported `openHelpSlideOut` from `./help/index.js` (line 30 import was already in place; line 660 swapped to it). The `window.openHelpModal` global side-effect at `js/help/index.js:146` stays for any external consumer. See [CHANGELOG §2.26.0](../../CHANGELOG.md).
 
 #### [HC] [S] [likely] Keyboard-shortcut handlers in `setupKeyboardShortcuts` mirror `hotkey-registry.js`
 - **What:** `js/app.js:306-489` lists 18 key bindings (Ctrl+S, Ctrl+P, F1, F2, Esc, etc.) inline. `js/help/hotkey-registry.js:33+` lists the same 18+ bindings declaratively for the Help page display.
@@ -304,11 +307,12 @@
 
 ### Misc
 
-#### [HC] [S] [maybe-intentional] `BUILTIN_VIEWS` priority spacing (10/20/30/40) is magic
+#### ~~[HC] [S] [maybe-intentional] `BUILTIN_VIEWS` priority spacing (10/20/30/40) is magic~~ *(✅ closed — shipped 2.26.0)*
 - **What:** `js/ui/left-pane-rail.js:76-121` uses priorities 10, 20, 30, 40 for files/issues/prs/branches. Provider contributions slot via `priority` per SlotManager's sort, default 50.
 - **Why it's load-bearing:** A provider that wants to render BETWEEN issues and prs needs to pick 25 — guessable from the file but not declared. A `BUILTIN_PRIORITY = { files: 10, issues: 20, prs: 30, branches: 40 }` constant would name it.
 - **Suggested fix shape:** Optional — promote the priorities to named constants or document the spacing convention near the slot contract in `docs/DESIGN-git-providers-and-ui-extensions.md`.
 - **Touch points:** `js/ui/left-pane-rail.js`, `docs/DESIGN-git-providers-and-ui-extensions.md`.
+- **Resolution:** 2.26.0 exported `BUILTIN_PRIORITY = Object.freeze({ files: 10, issues: 20, prs: 30, branches: 40 })` from `js/ui/left-pane-rail.js`. Each `BUILTIN_VIEWS` entry's `priority` reads from the constant. New tests in `tests/test-left-pane-rail.mjs` assert the frozen shape, ascending order, and ≥10 spacing (the provider-insertion-room invariant). See [CHANGELOG §2.26.0](../../CHANGELOG.md).
 
 #### [ST] [S] [maybe-intentional] `js/managers/` has only `search-manager.js`
 - **What:** The `managers/` directory contains a single file. Other manager-shaped modules (StorageManager, CostManager, ConversationManager) live in `core.js` / `intelligence/cost/` / `chat/conversations.js`. Inconsistent placement.
@@ -357,8 +361,8 @@ For agents that want to pick a quick win without re-reading the full inventory:
 | ~~`WRITE_TOOLS` rename~~ | ~~`js/chat/turn-enrich.js`~~ | ~~35-40~~ *(✅ 2.25.0)* |
 | ~~`tabs:render` orphan~~ | ~~`js/tools/commit-tools.js`~~ | ~~83~~ *(✅ 2.24.1)* |
 | `LEGAL_GROUP_TAGS` registry | `js/tools/registry.js` | 53 |
-| `glyphFor` provider extension | `js/settings/connections-tab.js` | 18-21 |
+| ~~`glyphFor` provider extension~~ | ~~`js/settings/connections-tab.js`~~ | ~~18-21~~ *(✅ 2.26.0)* |
 | `closeAllModals` selectors | `js/ui-helpers.js` | 87-91 |
-| `BUILTIN_PRIORITY` constant | `js/ui/left-pane-rail.js` | 76-121 |
-| `safeAdd('btnHelp', openHelpModal)` | `js/app.js` | 664 |
+| ~~`BUILTIN_PRIORITY` constant~~ | ~~`js/ui/left-pane-rail.js`~~ | ~~76-121~~ *(✅ 2.26.0)* |
+| ~~`safeAdd('btnHelp', openHelpModal)`~~ | ~~`js/app.js`~~ | ~~664~~ *(✅ 2.26.0)* |
 | Settings hotkey-registry consolidation | `js/app.js` + `js/help/hotkey-registry.js` | 306-489 / 33+ |

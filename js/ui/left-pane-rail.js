@@ -124,6 +124,24 @@ const BRANCHES_BODY_HTML =
     '</div>';
 
 /**
+ * Built-in priority anchors for the four core rail views. Exported so a
+ * provider contribution can declare a priority *relative to* a built-in
+ * (e.g. between Issues=20 and PRs=30 picks 25) instead of guessing
+ * from a magic-number table. SlotManager sorts ascending; the spacing
+ * (10 between built-ins, 50+ default for new contributions) leaves room
+ * for provider-shipped views to slot anywhere in the order.
+ *
+ * Cross-references: `docs/DESIGN-git-providers-and-ui-extensions.md` §4
+ * (slot priorities).
+ */
+export const BUILTIN_PRIORITY = Object.freeze({
+    files: 10,
+    issues: 20,
+    prs: 30,
+    branches: 40,
+});
+
+/**
  * Built-in rail views. Registered as `rail-views` contributions in
  * `mountLeftPaneRail()`; opting out per-id when a provider has already
  * claimed the same `view.id` (per Decision 1's override path).
@@ -133,6 +151,9 @@ const BRANCHES_BODY_HTML =
  * post-render) and delegates to the imperative renderer for the data
  * pass. `view.headerActions` declares the per-view header buttons —
  * delegated clicks routed by `data-rail-header-action="${viewId}:${actionId}"`.
+ *
+ * Priorities are read from `BUILTIN_PRIORITY` so a future renumbering
+ * touches the named anchor, not four scattered call sites.
  */
 const BUILTIN_VIEWS = [
     {
@@ -141,7 +162,7 @@ const BUILTIN_VIEWS = [
             id: 'files',
             label: 'Files',
             icon: SVG_FILES,
-            priority: 10,
+            priority: BUILTIN_PRIORITY.files,
             headerActions: [
                 {
                     id: 'refresh',
@@ -187,7 +208,7 @@ const BUILTIN_VIEWS = [
             label: 'Issues',
             icon: SVG_ISSUES,
             badge: () => Array.isArray(State.issues) ? State.issues.length : 0,
-            priority: 20,
+            priority: BUILTIN_PRIORITY.issues,
             headerActions: [
                 {
                     id: 'refresh',
@@ -213,7 +234,7 @@ const BUILTIN_VIEWS = [
             label: 'Pull Requests',
             icon: SVG_PRS,
             badge: () => Array.isArray(State.pullRequests) ? State.pullRequests.length : 0,
-            priority: 30,
+            priority: BUILTIN_PRIORITY.prs,
             headerActions: [
                 {
                     id: 'newPr',
@@ -245,7 +266,7 @@ const BUILTIN_VIEWS = [
             id: 'branches',
             label: 'Branches',
             icon: SVG_BRANCHES,
-            priority: 40,
+            priority: BUILTIN_PRIORITY.branches,
             headerActions: [
                 {
                     id: 'newBranch',

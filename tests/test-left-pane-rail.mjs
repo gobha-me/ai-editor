@@ -39,6 +39,7 @@ import {
     setActiveView,
     mountLeftPaneRail,
     renderHeaderActionHtml,
+    BUILTIN_PRIORITY,
 } from '../js/ui/left-pane-rail.js';
 import { State, EventBus } from '../js/core.js';
 import { SlotManager } from '../js/slot-manager.js';
@@ -431,6 +432,57 @@ test('renderHeaderActionHtml escapes attributes against injection', () => {
 // ============================================
 // BUILTIN_VIEWS shape — each registers with the expected headerActions
 // ============================================
+
+// ============================================
+// BUILTIN_PRIORITY — named anchors instead of magic numbers (2.26.0)
+// ============================================
+
+test('BUILTIN_PRIORITY is a frozen object with the four built-in keys', () => {
+    assert.equal(typeof BUILTIN_PRIORITY, 'object');
+    assert.ok(Object.isFrozen(BUILTIN_PRIORITY), 'BUILTIN_PRIORITY must be frozen so consumers cannot mutate the shared map');
+    assert.deepEqual(Object.keys(BUILTIN_PRIORITY).sort(), ['branches', 'files', 'issues', 'prs']);
+});
+
+test('BUILTIN_PRIORITY values are strictly ascending with ≥10 spacing (room for provider insertion)', () => {
+    // The spacing convention argued in `docs/audit-2026-Q2/inventory.md`
+    // (`[HC] [S] [maybe-intentional] BUILTIN_VIEWS priority spacing`):
+    // gaps of 10 leave room for a provider contribution to slot between
+    // built-ins by picking an in-between priority (e.g. 25 between Issues
+    // and PRs). If this assertion ever fires, either the spacing
+    // tightened (think hard before allowing) or a built-in was added.
+    const ordered = [
+        BUILTIN_PRIORITY.files,
+        BUILTIN_PRIORITY.issues,
+        BUILTIN_PRIORITY.prs,
+        BUILTIN_PRIORITY.branches,
+    ];
+    for (let i = 1; i < ordered.length; i++) {
+        assert.ok(
+            ordered[i] - ordered[i - 1] >= 10,
+            `gap between priorities ${ordered[i - 1]} and ${ordered[i]} must be ≥ 10 for provider insertion`,
+        );
+    }
+});
+
+test('BUILTIN_VIEWS at mount time read their priority from BUILTIN_PRIORITY', () => {
+    clearRailContributions();
+    clearRailListeners();
+    const { restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        const contribs = SlotManager.getContributions('rail-views');
+        const byId = Object.fromEntries(contribs.map(c => [c.view.id, c]));
+
+        assert.equal(byId.files.view.priority, BUILTIN_PRIORITY.files);
+        assert.equal(byId.issues.view.priority, BUILTIN_PRIORITY.issues);
+        assert.equal(byId.prs.view.priority, BUILTIN_PRIORITY.prs);
+        assert.equal(byId.branches.view.priority, BUILTIN_PRIORITY.branches);
+    } finally {
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
 
 test('BUILTIN_VIEWS at mount time carry the expected headerActions per view', () => {
     clearRailContributions();

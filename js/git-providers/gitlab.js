@@ -68,6 +68,7 @@ const gitlabProvider = {
     id: 'gitlab',
     name: 'GitLab',
     icon: '🦊',
+    glyph: 'GL',
     description: 'GitLab.com or self-hosted GitLab',
 
     // ========================================

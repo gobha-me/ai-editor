@@ -4,7 +4,28 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-## [2.25.0] - 2026-05-11
+## [2.26.0] - 2026-05-11
+
+### Refactor — audit sweep batch 2: registry-derivation hygiene
+
+Closes three 2026-Q2 audit entries at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) under one theme: **knowledge about extensibility points belongs in a registry, not in a consumer's hardcoded table**. All three are sized `[S]`; bundling them mirrors the 2.25.0 pattern (3 audit entries closed under one tool-classification theme).
+
+**Entry 1 — `BUILTIN_PRIORITY` named constants ([`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js)).** The four built-in rail views (Files / Issues / PRs / Branches) previously declared `priority: 10/20/30/40` as inline magic numbers. 2.26.0 hoists them to a frozen `BUILTIN_PRIORITY = Object.freeze({ files: 10, issues: 20, prs: 30, branches: 40 })` export. Each `BUILTIN_VIEWS` entry's `priority` field reads from the constant, and provider contributions that want to slot *between* built-ins (e.g. a Workflows view between Issues=20 and PRs=30) pick a relative anchor (`BUILTIN_PRIORITY.issues + 5`) instead of guessing from a magic-number table. Closes audit entry `[HC] [S] [maybe-intentional]` (§"Misc").
+
+**Entry 2 — `glyph` manifest field on every registered git provider** ([`js/git-providers/base.js`](js/git-providers/base.js), [`gitea.js`](js/git-providers/gitea.js), [`github.js`](js/git-providers/github.js), [`gitlab.js`](js/git-providers/gitlab.js), [`local.js`](js/git-providers/local.js), [`js/settings/connections-tab.js`](js/settings/connections-tab.js)). Pre-2.26.0 [`connections-tab.js:18-21`](js/settings/connections-tab.js) carried a 5-entry `glyphFor` map (`{ github: 'GH', gitea: 'GT', gitlab: 'GL', bitbucket: 'BB', local: 'ZP' }`) — a stale stand-in for *"what 2-letter code goes on the connection-row badge."* The `bitbucket: 'BB'` row was a placeholder for a provider that was never registered (audit entry `[REG] [S] [needs-investigation]`). 2.26.0 moves the per-provider 2-letter code into each provider's own manifest as a new `glyph: string` field (`gitea`=GT, `github`=GH, `gitlab`=GL, `local`=ZP), and `glyphFor(providerId)` collapses to `GitProviderRegistry.get(providerId)?.glyph || (providerId || '?').slice(0, 2).toUpperCase()`. Adding a new provider (e.g. `azure-devops`, `bitbucket` when its provider lands) becomes a single declaration in that provider's manifest — no editing the connections tab. Closes `[HC] [S] [likely] glyphFor in connections-tab.js hardcodes provider→glyph map` AND the sibling `[REG] [S] [needs-investigation] bitbucket listed in glyphFor but no bitbucketProvider registered` (§"git-providers").
+
+**Entry 3 — strict-mode boot fragility at `safeAdd('btnHelp', openHelpModal)`** ([`js/app.js:660`](js/app.js)). Pre-2.26.0 the line read `safeAdd('btnHelp', 'click', openHelpModal)` — a bareword `openHelpModal` that resolved only because [`js/help/index.js:146`](js/help/index.js) sets `window.openHelpModal = openHelpSlideOut` as a module-load side effect. ES modules are strict-by-default, so the bareword was technically a `ReferenceError` papered over by global-scope resolution — exactly the kind of silent-fallback that fires under strict-mode tooling or a help-module load-order shift. The fix is one line: `openHelpSlideOut` was already imported at [`js/app.js:30`](js/app.js) alongside `initHelpSlideOut` / `closeHelpSlideOut`; the `safeAdd` call now passes it directly. The `window.openHelpModal` global side-effect stays intact for any external caller; only the internal reference cleans up. Closes audit entry `[ST] [S] [likely]` (§"app-boot").
+
+**Tests.**
+
+- [`tests/test-left-pane-rail.mjs`](tests/test-left-pane-rail.mjs) — `+3` cases (31 total). Coverage: `BUILTIN_PRIORITY` is a frozen object with the four built-in keys; ascending order with `≥ 10` spacing (the provider-insertion-room invariant); each `BUILTIN_VIEWS` entry at mount time reads its priority from `BUILTIN_PRIORITY`.
+- [`tests/test-provider-manifest-glyph.mjs`](tests/test-provider-manifest-glyph.mjs) — new file (4 cases). Coverage: every registered provider exposes a 2-character uppercase `glyph` string; the four built-in glyphs match the pre-2.26.0 connections-tab map (gitea=GT, github=GH, gitlab=GL, local=ZP); `GitProviderRegistry.get(id)?.glyph` round-trips post-`index.js` import; unregistered ids (`bitbucket`, `does-not-exist`) produce falsy lookups so the fallback path fires correctly.
+
+No new dedicated test for the `safeAdd('btnHelp')` fix — it's a reference-correctness fix; the rest of the test suite continuing to load `app.js` without error is the regression guard.
+
+**Removability.** Revert `BUILTIN_PRIORITY` to inline `priority: 10/20/30/40` in [`BUILTIN_VIEWS`](js/ui/left-pane-rail.js); delete the export. Restore the hardcoded `glyphFor` map (including the stale `bitbucket: 'BB'` row) in [`js/settings/connections-tab.js`](js/settings/connections-tab.js); revert each provider's `glyph` field (gitea/github/gitlab/local) + the `BASE_GIT_PROVIDER` field documentation. Restore the bareword `safeAdd('btnHelp', 'click', openHelpModal)` reference in [`js/app.js`](js/app.js). Revert the version bump and test additions. Main returns to 2.25.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
+
 
 ### Refactor — tool-classification consolidation (matrix-scan convention)
 
