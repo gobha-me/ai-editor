@@ -599,6 +599,31 @@ export function closeCreatePRModal() {
     if (modal) modal.classList.remove('active');
 }
 
+/**
+ * Bind a delegated click handler for the create-PR modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2b of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
+ */
+let _createPRModalWired = false;
+export function mountCreatePRModal({ onClose, onSubmit } = {}) {
+    if (_createPRModalWired) return;
+    _createPRModalWired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#createPRModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeCreatePRModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'submitCreatePR' && typeof onSubmit === 'function') {
+            onSubmit();
+        }
+    });
+}
+
 export async function submitCreatePR() {
     const title = document.getElementById('prCreateTitle').value.trim();
     const body = document.getElementById('prCreateBody').value.trim();

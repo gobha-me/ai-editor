@@ -44,11 +44,11 @@
                     </h2>
                     <p style="margin-bottom: 1rem;">Select a project from the sidebar, or upload a zip to start editing.</p>
                     <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                        <button type="button" class="btn btn-primary" onclick="window.openSettings()">
+                        <button type="button" class="btn btn-primary" data-action="openSettings">
                             <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1 1.7 1.7 0 0 0 .3 1.8M3 11a2 2 0 1 0 0 4h.1a1.7 1.7 0 0 1 1.5 1M5.6 5.6a2 2 0 0 0 0 2.8M11 3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5"/></svg>
                             <span>Settings</span>
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="window.openZipUpload && window.openZipUpload()">
+                        <button type="button" class="btn btn-secondary" data-action="openZipUpload">
                             <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
                             <span>Upload Zip</span>
                         </button>
@@ -74,10 +74,10 @@
             <div class="secondary-pane-header">
                 <span id="secondaryPaneTitle">Preview</span>
                 <div class="secondary-pane-actions">
-                    <button type="button" class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" onclick="window.toggleSecondaryFullscreen()" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">
+                    <button type="button" class="btn btn-secondary btn-toolbar" id="btnSecondaryFullscreen" data-action="toggleSecondaryFullscreen" title="Toggle Fullscreen" aria-label="Toggle preview fullscreen">
                         <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V4h4M21 8V4h-4M3 16v4h4M21 16v4h-4"/></svg>
                     </button>
-                    <button type="button" class="btn btn-secondary btn-toolbar" onclick="window.closeSecondaryPane()" title="Close" aria-label="Close preview pane">
+                    <button type="button" class="btn btn-secondary btn-toolbar" data-action="closeSecondaryPane" title="Close" aria-label="Close preview pane">
                         <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                 </div>

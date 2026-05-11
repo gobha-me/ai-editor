@@ -9,6 +9,8 @@ import { State, EventBus, Storage, Plugins, loadSettings } from './core.js';
 import { mountLeftPaneRail } from './ui/left-pane-rail.js';
 import { mountNowStrip } from './ui/now-strip.js';
 import { mountSwitcherMenu } from './projects/switcher-menu.js';
+import { openPluginModal, closePluginModal, mountPluginModal } from './plugin-modal.js';
+import { mountAppShellActions } from './ui/app-shell-actions.js';
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { loadUserPlugins } from './plugin-editor.js';
 import { checkOnboarding } from './onboarding.js';
@@ -30,7 +32,7 @@ import { initDebugSlideOut, openDebugSlideOut, closeDebugSlideOut, copyDiagnosti
 import { initHelpSlideOut, openHelpSlideOut, closeHelpSlideOut } from './help/index.js';
 import { QuickOpen, initQuickOpen } from './quick-open.js';
 import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
-import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings } from './settings-manager.js';
+import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings, mountSettingsModal, exportSettings, importSettings } from './settings-manager.js';
 import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
 import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile, deleteFolder } from './file-tree.js';
 import { togglePreviewPane, toggleDiffPane, toggleBlamePane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
@@ -64,6 +66,7 @@ import {
     openCreatePRModal,
     closeCreatePRModal,
     submitCreatePR,
+    mountCreatePRModal,
     focusIssue,
     unfocusIssue,
     startWorkOnIssue,
@@ -114,6 +117,7 @@ import {
 import {
     installReplay,
     mountReplayModal,
+    openReplayModal,
     closeReplayModal,
     prev as replayPrev,
     next as replayNext,
@@ -497,35 +501,10 @@ function setupKeyboardShortcuts() {
 // ============================================
 
 // ============================================
-// PLUGIN MODAL & TOOLBAR
+// TOOLBAR (Debug + others)
 // ============================================
-
-function openPluginModal(modalId) {
-    const overlay = document.getElementById('pluginModal');
-    const def = Plugins.getModal(modalId);
-    if (!overlay || !def) return;
-
-    document.getElementById('pluginModalTitle').textContent = def.title || 'Plugin';
-    const content = document.getElementById('pluginModalContent');
-    if (def.width && content) {
-        content.style.maxWidth = def.width;
-    }
-
-    const body = document.getElementById('pluginModalBody');
-    body.innerHTML = '';
-
-    if (def.render) {
-        const result = def.render(body);
-        if (typeof result === 'string') body.innerHTML = result;
-    }
-
-    overlay.classList.add('active');
-}
-
-function closePluginModal() {
-    const overlay = document.getElementById('pluginModal');
-    if (overlay) overlay.classList.remove('active');
-}
+// Plugin modal owner moved to js/plugin-modal.js (2.29.0 — Phase 2b
+// of the inline-handlers migration).
 
 /**
  * Initialize the top-bar Debug dropdown (1.3.6).
@@ -889,6 +868,23 @@ async function init() {
     mountZipUpload({ onClose: closeZipUpload, onSelectAll: zipSelectAll, onScanDiffs: scanForDiffs, onUpload: uploadExtractedFiles });
     mountReleaseModal({ onClose: closeReleaseModal, onGenerate: generateReleaseNotes, onCreate: createGitRelease });
     mountReplayModal({ onClose: closeReplayModal, onPrev: replayPrev, onNext: replayNext });
+    mountSettingsModal({
+        onClose: closeSettings,
+        onSave: saveSettings,
+        onExport: exportSettings,
+        onImport: importSettings,
+        onFetchModels: fetchModelsForSettings,
+        onFetchEmbedModels: fetchEmbeddingModelsForSettings,
+    });
+    mountCreatePRModal({ onClose: closeCreatePRModal, onSubmit: submitCreatePR });
+    mountPluginModal({ onClose: closePluginModal });
+    mountAppShellActions({
+        onOpenSettings: openSettings,
+        onOpenZipUpload: openZipUpload,
+        onToggleSecondaryFullscreen: toggleSecondaryFullscreen,
+        onCloseSecondaryPane: closeSecondaryPane,
+        onOpenReplayModal: openReplayModal,
+    });
     initHelpSlideOut();
     initWindowZipDrop();
 

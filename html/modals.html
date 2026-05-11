@@ -15,7 +15,7 @@
                        autocomplete="off" spellcheck="false">
                 <kbd class="settings-modal__search-kbd" aria-hidden="true">Ctrl K</kbd>
             </div>
-            <button type="button" class="modal-close" onclick="window.closeSettings()" aria-label="Close settings">×</button>
+            <button type="button" class="modal-close" data-action="closeSettings" aria-label="Close settings">×</button>
         </div>
 
         <div class="settings-shell">
@@ -58,18 +58,18 @@
 
         <div class="modal-footer" style="justify-content: space-between;">
             <div style="display: flex; gap: 0.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="window.exportSettings()" title="Export settings to JSON file">
+                <button type="button" class="btn btn-secondary" data-action="exportSettings" title="Export settings to JSON file">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
                     <span>Export</span>
                 </button>
-                <button type="button" class="btn btn-secondary" onclick="window.importSettings()" title="Import settings from JSON file">
+                <button type="button" class="btn btn-secondary" data-action="importSettings" title="Import settings from JSON file">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
                     <span>Import</span>
                 </button>
             </div>
             <div style="display: flex; gap: 0.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="window.closeSettings()">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="window.saveSettings()">
+                <button type="button" class="btn btn-secondary" data-action="closeSettings">Cancel</button>
+                <button type="button" class="btn btn-primary" data-action="saveSettings">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
                     <span>Save</span>
                 </button>
@@ -333,7 +333,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 8v8M11 6h3a4 4 0 0 1 4 4v6"/></svg>
                 <span>Create Pull Request</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeCreatePRModal()" aria-label="Close create PR">×</button>
+            <button type="button" class="modal-close" data-action="closeCreatePRModal" aria-label="Close create PR">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -358,8 +358,8 @@
             <div id="prCreateError" style="display: none; color: var(--danger); font-size: var(--font-sm); margin-top: 0.5rem;"></div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
-            <button type="button" class="btn btn-secondary" onclick="window.closeCreatePRModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnSubmitPR" onclick="window.submitCreatePR()">
+            <button type="button" class="btn btn-secondary" data-action="closeCreatePRModal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnSubmitPR" data-action="submitCreatePR">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
                 <span>Create Pull Request</span>
             </button>
@@ -460,7 +460,7 @@
     <div class="modal modal-resizable" id="pluginModalContent" style="width: 700px; height: 550px;">
         <div class="modal-header">
             <h3 id="pluginModalTitle">Plugin</h3>
-            <button type="button" class="modal-close" onclick="window.closePluginModal()" aria-label="Close plugin">&times;</button>
+            <button type="button" class="modal-close" data-action="closePluginModal" aria-label="Close plugin">&times;</button>
         </div>
         <div class="modal-body" id="pluginModalBody" style="flex: 1; overflow-y: auto;">
         </div>

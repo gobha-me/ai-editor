@@ -110,6 +110,46 @@ export function closeSettings() {
     document.getElementById('settingsModal').classList.remove('active');
 }
 
+/**
+ * Bind a delegated click handler for the settings modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2b of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
+ *
+ * Scope `#settingsModal` covers both the modal-body footer buttons (export,
+ * import, cancel, save) and the per-tab fetch buttons rendered inside
+ * `#settingsTabsContainer` (loaded from html/settings-tabs.html), because the
+ * tab container lives inside the modal.
+ */
+let _wired = false;
+export function mountSettingsModal({
+    onClose, onSave, onExport, onImport, onFetchModels, onFetchEmbedModels,
+} = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#settingsModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeSettings' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'saveSettings' && typeof onSave === 'function') {
+            onSave();
+        } else if (action === 'exportSettings' && typeof onExport === 'function') {
+            onExport();
+        } else if (action === 'importSettings' && typeof onImport === 'function') {
+            onImport();
+        } else if (action === 'fetchModelsForSettings' && typeof onFetchModels === 'function') {
+            onFetchModels();
+        } else if (action === 'fetchEmbeddingModelsForSettings' && typeof onFetchEmbedModels === 'function') {
+            onFetchEmbedModels();
+        }
+    });
+}
+
 // ── Save (collect from DOM → persist → close) ──
 
 export function saveSettings() {

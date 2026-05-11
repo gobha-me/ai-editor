@@ -4,6 +4,49 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 2b** (3 remaining modals + app-shell non-modal HTML)
+
+Third slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md). Phase 2b closes out the structural-prerequisite tail of Phase 2 — the three modals that 2.28.0 deferred because each needed an extraction or orchestrator-shape decision before its `mountXxxModal` could land, plus the **non-modal HTML in editor-panel and chat-panel** that the design enumerates alongside Phase 2. Closes the planned-status Phase 2b row in the design doc's [Implementation status](docs/DESIGN-html-inline-handlers-migration.md#implementation-status) table; advances the parent `[ST][L]` audit row at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) — the entire **HTML side** of the migration is now done. Only Phase 3 (JS-renderer inline `onclick=` strings — ~29 handlers across 7 files) remains before Phase 4's `window.*` cleanup can land.
+
+**New `mountXxxModal({ ... })` functions — three modals + one app-shell mount.** Each replicates the Phase 1 `mountCommitModal` ([`js/ui/commit.js`](js/ui/commit.js)) shape: idempotent (`_wired` guard) document-level click listener filtered by `e.target.closest('[data-action]')` + `btn.closest('<scope>')` and routed by `data-action` to a typed callback bag.
+
+| # | Module | Function | Scope | Actions |
+|---|---|---|---|---|
+| 1 | [`js/settings-manager.js`](js/settings-manager.js) | `mountSettingsModal({ onClose, onSave, onExport, onImport, onFetchModels, onFetchEmbedModels })` | `#settingsModal` | `closeSettings`, `saveSettings`, `exportSettings`, `importSettings`, `fetchModelsForSettings`, `fetchEmbeddingModelsForSettings` |
+| 2 | [`js/project-manager.js`](js/project-manager.js) | `mountCreatePRModal({ onClose, onSubmit })` | `#createPRModal` | `closeCreatePRModal`, `submitCreatePR` |
+| 3 | [`js/plugin-modal.js`](js/plugin-modal.js) *(new module)* | `mountPluginModal({ onClose })` | `#pluginModal` | `closePluginModal` |
+| 4 | [`js/ui/app-shell-actions.js`](js/ui/app-shell-actions.js) *(new module)* | `mountAppShellActions({ onOpenSettings, onOpenZipUpload, onToggleSecondaryFullscreen, onCloseSecondaryPane, onOpenReplayModal })` | `.editor-panel, .chat-panel` | `openSettings`, `openZipUpload`, `toggleSecondaryFullscreen`, `closeSecondaryPane`, `openReplayModal` |
+
+**Settings dispatcher scope — orchestrator + tab-distributed wiring.** The settings modal's scope (`#settingsModal`) wraps both the footer buttons in [`html/modals.html`](html/modals.html) (Export, Import, Cancel, Save, close ×) and the per-tab Fetch Models buttons rendered inside `#settingsTabsContainer` from [`html/settings-tabs.html`](html/settings-tabs.html). One dispatcher handles all seven handlers because `#settingsTabsContainer` is a descendant of `#settingsModal` — `.closest('#settingsModal')` matches both surfaces.
+
+**Plugin modal extraction — [`js/plugin-modal.js`](js/plugin-modal.js).** Both `openPluginModal(modalId)` and `closePluginModal()` move from [`js/app.js`](js/app.js) to the new module unchanged. The `window.openPluginModal` / `window.closePluginModal` aliases at [`js/app.js:250-251`](js/app.js) stay — per Decision 6, aliases retire in Phase 4. `app.js` imports both functions back to satisfy the aliases.
+
+**App-shell mount — [`js/ui/app-shell-actions.js`](js/ui/app-shell-actions.js).** Five non-modal app-shell buttons across two top-level panels — Settings (`openSettings`) and Upload Zip (`openZipUpload`) in the welcome view, ⛶ fullscreen (`toggleSecondaryFullscreen`) and × close (`closeSecondaryPane`) in the secondary-pane header, ▶ replay (`openReplayModal`) in the chat-panel header. The dispatcher scopes by `.closest('.editor-panel, .chat-panel')` since the two CSS classes wrap the only producers; no other surface emits these actions. Extracted to its own module so it's importable + testable without pulling [`js/app.js`](js/app.js) into the test process.
+
+**HTML migration — 11 inline `onclick=` strings cleared across 4 template files.**
+
+- [`html/modals.html`](html/modals.html) — 9 substitutions (5 settings: close × / Export / Import / Cancel / Save; 3 create-PR: close × / Cancel / Submit; 1 plugin: close ×).
+- [`html/settings-tabs.html`](html/settings-tabs.html) — 2 substitutions (Fetch Models on the LLM tab; Fetch API Models on the Embeddings tab).
+- [`html/editor-panel.html`](html/editor-panel.html) — 4 substitutions (welcome-view Settings + Upload Zip; secondary-pane fullscreen + close).
+- [`html/chat-panel.html`](html/chat-panel.html) — 1 substitution (replay header button).
+
+**`window.*` aliases stay intact.** Per Decision 6, the `window.closeSettings` / `window.saveSettings` / `window.exportSettings` / `window.importSettings` / `window.fetchModelsForSettings` / `window.fetchEmbeddingModelsForSettings` / `window.closeCreatePRModal` / `window.submitCreatePR` / `window.openPluginModal` / `window.closePluginModal` / `window.openSettings` / `window.openZipUpload` / `window.toggleSecondaryFullscreen` / `window.closeSecondaryPane` / `window.openReplayModal` aliases all remain through Phase 3. Phase 4 retires them.
+
+**Init wire — [`js/app.js`](js/app.js).** New imports: `mountSettingsModal`, `exportSettings`, `importSettings` from [`./settings-manager.js`](js/settings-manager.js); `mountCreatePRModal` from [`./project-manager.js`](js/project-manager.js); `openPluginModal`, `closePluginModal`, `mountPluginModal` from [`./plugin-modal.js`](js/plugin-modal.js) (replacing the in-file definitions that moved to the extracted module); `openReplayModal` from [`./chat/replay.js`](js/chat/replay.js); `mountAppShellActions` from [`./ui/app-shell-actions.js`](js/ui/app-shell-actions.js). Four new mount calls in `init()` immediately after `mountReplayModal({...})`.
+
+**Tests — 4 new dispatcher tests in [`tests/`](tests/).** One per surface, each lifted from the Phase 1 [`tests/test-commit-modal-dispatch.mjs`](tests/test-commit-modal-dispatch.mjs) template:
+
+- [`tests/test-settings-modal-dispatch.mjs`](tests/test-settings-modal-dispatch.mjs) (11 cases — 6 actions + scope/null/unknown filters + idempotent mount)
+- [`tests/test-create-pr-modal-dispatch.mjs`](tests/test-create-pr-modal-dispatch.mjs) (7 cases)
+- [`tests/test-plugin-modal-dispatch.mjs`](tests/test-plugin-modal-dispatch.mjs) (6 cases — single action only)
+- [`tests/test-app-shell-actions-dispatch.mjs`](tests/test-app-shell-actions-dispatch.mjs) (10 cases — 5 actions + scope/null/unknown filters + idempotent mount)
+
+Each asserts: exactly one document listener installs; every known action routes to its callback; out-of-scope `data-action` is filtered; missing `[data-action]` ancestor is filtered; unknown action value is filtered; double-mount is idempotent (`_wired` guard). Pure-logic — no JSDOM, runs under the existing [`tests/_node-shim.mjs`](tests/_node-shim.mjs) `document`-stub.
+
+**Removability.** Revert the PR → 11 HTML attributes restore to `onclick="window.foo()"`, 4 `mountXxx` functions delete from their owning modules, [`js/plugin-modal.js`](js/plugin-modal.js) and [`js/ui/app-shell-actions.js`](js/ui/app-shell-actions.js) delete, the in-file `openPluginModal` / `closePluginModal` definitions restore in [`js/app.js`](js/app.js), the imports + init calls delete, the 4 test files delete, version + CHANGELOG revert. The `window.*` aliases were untouched, so HTML restores to a working state. Main returns to 2.28.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
 ## [2.28.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 2a** (8 clean-cut modals)
