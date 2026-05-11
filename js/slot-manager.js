@@ -70,6 +70,16 @@ function _validateStructuredContribution(slotId, contribution) {
         if (typeof v.icon !== 'string') return 'view.icon must be a string (inline SVG)';
         if (v.badge != null && typeof v.badge !== 'function') return 'view.badge must be a function or omitted';
         if (v.priority != null && typeof v.priority !== 'number') return 'view.priority must be a number or omitted';
+        if (v.headerActions != null) {
+            if (!Array.isArray(v.headerActions)) return 'view.headerActions must be an array or omitted';
+            for (let i = 0; i < v.headerActions.length; i++) {
+                const a = v.headerActions[i];
+                if (!a || typeof a !== 'object') return `view.headerActions[${i}] must be an object`;
+                if (typeof a.id !== 'string' || a.id.length === 0) return `view.headerActions[${i}].id must be a non-empty string`;
+                if (typeof a.icon !== 'string') return `view.headerActions[${i}].icon must be a string`;
+                if (typeof a.onClick !== 'function') return `view.headerActions[${i}].onClick must be a function`;
+            }
+        }
         if (typeof contribution.render !== 'function') return 'render(container) must be a function for structured slots';
         return null;
     }

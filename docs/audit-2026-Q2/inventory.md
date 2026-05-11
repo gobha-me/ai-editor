@@ -49,17 +49,19 @@
 - **Suggested fix shape:** Change each provider's panels to `{slot: 'rail-views', view: {id, label, icon}, render}` and confirm `applyProviderContributions` in `js/slot-manager.js:238-256` already pipes them through. The current code path silently skips render-less entries.
 - **Touch points:** `js/slot-manager.js:243-246` (the `!isStructured && p.render == null` skip), `docs/DESIGN-git-providers-and-ui-extensions.md` §4 decisions table.
 
-#### [ST] [S] [likely] Sidebar uses static `[data-rail-view-container]` blocks while rail v2 wants dynamic
+#### ~~[ST] [S] [likely] Sidebar uses static `[data-rail-view-container]` blocks while rail v2 wants dynamic~~ *(✅ closed — shipped 2.24.0)*
 - **What:** `js/ui/left-pane-rail.js` Module-header documents the transitional state — static blocks in `html/sidebar.html` are preferred for the 4 built-ins (files / issues / prs / branches), the `render` callbacks are no-op stubs. Dynamic creation only runs for contributions without a static container.
 - **Why it's load-bearing:** This is the explicit "follow-on minor" callout. The mixed mode means a future provider rail contribution renders differently from a built-in. Once the four built-ins move to `render(body)` and the static blocks delete, the entire body path is dynamic and consistent.
 - **Suggested fix shape:** Move `renderFileTree`/`renderIssues`/`renderPullRequests`/`renderBranchPanel` into the `render(body)` callbacks of `BUILTIN_VIEWS` (`js/ui/left-pane-rail.js:76-121`); delete the four static blocks from `html/sidebar.html`.
 - **Touch points:** `js/file-tree.js`, `js/project-manager.js` (renderIssues/renderPullRequests), `js/ui/branch-panel.js`.
+- **Resolution:** 2.24.0 shipped end-to-end body migration. `view.headerActions` declarative shape extension covers per-view header buttons; four static blocks deleted from `html/sidebar.html`; `BUILTIN_VIEWS` `render(body)` invokes the imperative renderers. See [CHANGELOG §2.24.0](../../CHANGELOG.md).
 
-#### [EV] [S] [likely] Issues count badge: `issuesPanel` count text rebuilt in two places
+#### ~~[EV] [S] [likely] Issues count badge: `issuesPanel` count text rebuilt in two places~~ *(✅ closed — shipped 2.24.0)*
 - **What:** `js/project-manager.js:451-456` rebuilds the `▾ Issues (N)` text directly on `[data-collapse="issuesPanelBody"] span`. The new rail-views badge in `js/ui/left-pane-rail.js` calls `view.badge()` which reads `State.issues.length`. Both rerun on `issues:render`, but the inline header text bypasses the rail entirely.
 - **Why it's load-bearing:** The legacy stacked sidebar header still gets a count text update even though the rail is now the visible chrome. Dead pixels but the parallel update obscures the single source of truth.
 - **Suggested fix shape:** Either keep the legacy header as truly hidden (CSS hide; rail is the visible UI) or remove the count-text rebuild and let the rail-badge be authoritative.
 - **Touch points:** `js/ui/left-pane-rail.js`, `js/project-manager.js:447-471`.
+- **Resolution:** 2.24.0 dropped the parallel count-text rebuild from `renderIssues` — the legacy stacked-sidebar header element no longer exists after the static block deletes. Rail badge is the single source of truth.
 
 ---
 

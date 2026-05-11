@@ -529,3 +529,112 @@ test('getContributions for an empty slot returns an empty array', () => {
     const result = SlotManager.getContributions('rail-views-does-not-exist');
     assert.deepEqual(result, []);
 });
+
+/* ============================================================ */
+/* rail-views — view.headerActions (2.24.0 SlotManager body migration) */
+/* ============================================================ */
+
+function makeRailViewWithActions(viewId, actions, pluginId = `rv-ha-${viewId}`) {
+    return {
+        pluginId,
+        slot: 'rail-views',
+        view: {
+            id: viewId,
+            label: 'Test view',
+            icon: '<svg/>',
+            headerActions: actions,
+        },
+        render: () => {},
+    };
+}
+
+test('rail-views accepts a well-formed view.headerActions array', () => {
+    const rv = makeRailViewWithActions('ha-ok', [
+        { id: 'refresh', icon: '<svg/>', title: 'Refresh', ariaLabel: 'Refresh', onClick: () => {} },
+        { id: 'plus', icon: '<svg/>', onClick: () => {} },
+    ]);
+    SlotManager.contribute('rail-views', rv);
+    try {
+        const entry = SlotManager.getContributions('rail-views').find(c => c.view.id === 'ha-ok');
+        assert.ok(entry);
+        assert.equal(entry.view.headerActions.length, 2);
+        assert.equal(entry.view.headerActions[0].id, 'refresh');
+    } finally {
+        SlotManager.removeByPlugin('rv-ha-ha-ok');
+    }
+});
+
+test('rail-views accepts contributions without headerActions (forward-compat)', () => {
+    SlotManager.contribute('rail-views', {
+        pluginId: 'rv-no-ha',
+        slot: 'rail-views',
+        view: { id: 'no-ha', label: 'L', icon: '<svg/>' },
+        render: () => {},
+    });
+    try {
+        const entry = SlotManager.getContributions('rail-views').find(c => c.view.id === 'no-ha');
+        assert.ok(entry);
+        assert.equal(entry.view.headerActions, undefined);
+    } finally {
+        SlotManager.removeByPlugin('rv-no-ha');
+    }
+});
+
+test('rail-views rejects non-array view.headerActions', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', {
+            pluginId: 'rv-ha-bad',
+            slot: 'rail-views',
+            view: { id: 'ha-bad', label: 'L', icon: '<svg/>', headerActions: 'not-an-array' },
+            render: () => {},
+        });
+    });
+    assert.equal(warns.length, 1);
+    assert.match(warns[0][1].reason, /view\.headerActions must be an array/);
+    assert.equal(SlotManager.getContributions('rail-views').filter(c => c.view?.id === 'ha-bad').length, 0);
+});
+
+test('rail-views rejects view.headerActions entry missing id', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailViewWithActions('ha-noid', [
+            { icon: '<svg/>', onClick: () => {} },
+        ]));
+    });
+    assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.id/);
+});
+
+test('rail-views rejects view.headerActions entry missing icon', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailViewWithActions('ha-noicon', [
+            { id: 'x', onClick: () => {} },
+        ]));
+    });
+    assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.icon/);
+});
+
+test('rail-views rejects view.headerActions entry missing onClick', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailViewWithActions('ha-noclick', [
+            { id: 'x', icon: '<svg/>' },
+        ]));
+    });
+    assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.onClick/);
+});
+
+test('rail-views rejects view.headerActions entry with non-function onClick', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailViewWithActions('ha-funcclick', [
+            { id: 'x', icon: '<svg/>', onClick: 'not-a-fn' },
+        ]));
+    });
+    assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.onClick/);
+});
+
+test('rail-views rejects view.headerActions entry with empty id', () => {
+    const warns = captureWarn(() => {
+        SlotManager.contribute('rail-views', makeRailViewWithActions('ha-emptyid', [
+            { id: '', icon: '<svg/>', onClick: () => {} },
+        ]));
+    });
+    assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.id/);
+});

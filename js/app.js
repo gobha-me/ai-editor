@@ -52,14 +52,10 @@ import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-cr
 import { openRenameModal, closeRenameModal, submitRename } from './ui/file-rename.js';
 import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
 import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease } from './release-manager.js';
-import { 
-    refreshProjects, 
+import {
+    refreshProjects,
     onProjectChange,
-    onBranchChange, 
-    renderIssues, 
-    refreshIssues, 
-    renderPullRequests, 
-    refreshPullRequests,
+    onBranchChange,
     initProjectListeners,
     openIssueTab,
     openIssueDetailModal,
@@ -683,43 +679,10 @@ function setupEventListeners() {
     // Sidebar buttons
     safeAdd('btnRefreshProjects', 'click', refreshProjects);
     safeAdd('btnClearProject', 'click', clearProject);
-    safeAdd('btnNewBranch', 'click', openNewBranchModal);
-    safeAdd('btnDownloadZip', 'click', async () => {
-        if (!State.currentProject) {
-            showToast('No project loaded', 'warning');
-            return;
-        }
-        const { owner, repo } = State.currentProject;
-        const branch = State.currentBranch || 'main';
-        const btn = document.getElementById('btnDownloadZip');
-        try {
-            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
-            showToast(`Downloading ${owner}/${repo} @ ${branch}…`, 'info');
-            const blob = await Git.downloadArchive(owner, repo, branch);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${repo}-${branch}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
-            showToast('Download started', 'success');
-        } catch (err) {
-            console.error('[Download] Archive failed:', err);
-            showToast(`Download failed: ${err.message}`, 'error');
-        } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>'; }
-        }
-    });
-    safeAdd('btnRefreshFiles', 'click', () => {
-        EventBus.emit('tree:refresh');
-        EventBus.emit('branches:refresh');
-        window.showToast('Refreshing files & branches…', 'info');
-    });
-    safeAdd('btnNewFile', 'click', openNewFileModal);
-    safeAdd('btnRefreshIssues', 'click', refreshIssues);
-    safeAdd('btnRefreshPRs', 'click', refreshPullRequests);
+    // Per-view header buttons (Refresh files / New file / Refresh issues /
+    // Refresh PRs / New branch / Download zip / Release / New PR / Zip upload)
+    // are wired declaratively via `view.headerActions[].onClick` in
+    // `js/ui/left-pane-rail.js#BUILTIN_VIEWS` (2.24.0 SlotManager body migration).
 
     // Issue focus bar
     safeAdd('btnIssueFocusDismiss', 'click', unfocusIssue);

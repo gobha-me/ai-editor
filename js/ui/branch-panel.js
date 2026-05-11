@@ -185,8 +185,8 @@ export async function populateBranchMetadata(project, branches) {
  * Render the branch panel into its container in the DOM. No-op if the panel
  * element is absent (other surfaces, tests under Node, etc.).
  */
-export function renderBranchPanel() {
-    const el = document.getElementById(PANEL_ID);
+export function renderBranchPanel(container) {
+    const el = container || document.getElementById(PANEL_ID);
     if (!el) return;
 
     if (!State.currentProject || !State.branches || State.branches.length === 0) {
@@ -205,17 +205,22 @@ export function renderBranchPanel() {
 
 /**
  * Bind delegated click handlers + EventBus subscriptions. Idempotent.
+ *
+ * Click delegation lives on `document` so the wiring is decoupled from
+ * whether `#branchPanel` exists at mount time — the rail's `render(body)`
+ * creates `#branchPanel` lazily on rail rebuilds (2.24.0 SlotManager body
+ * migration), and the `.branch-panel` scope keeps the document-level
+ * listener from catching unrelated `[data-branch-action]` attrs elsewhere.
  */
 let _wired = false;
 export function mountBranchPanel({ onSwitch, onDelete, onCutRelease, onExportZip } = {}) {
     if (_wired) return;
-    const el = document.getElementById(PANEL_ID);
-    if (!el) return;
     _wired = true;
 
-    el.addEventListener('click', async (e) => {
+    document.addEventListener('click', async (e) => {
         const btn = e.target.closest(`[${ACTION_ATTR}]`);
         if (!btn) return;
+        if (!btn.closest('.branch-panel')) return;
         const action = btn.getAttribute(ACTION_ATTR);
         const name = btn.getAttribute(NAME_ATTR) || State.currentBranch;
         if (action === 'switch' && typeof onSwitch === 'function') {

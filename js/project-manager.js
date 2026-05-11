@@ -411,7 +411,7 @@ export async function clearProject() {
 
     const { renderEditorTabs } = await import('./tab-manager.js');
     renderEditorTabs();
-    renderFileTree([]);
+    renderFileTree();
 
     // Close secondary pane
     const { closeSecondaryPane } = await import('./secondary-pane.js');
@@ -444,17 +444,10 @@ export function initSessionListeners() {
 // ISSUES & WORKFLOWS
 // ============================================
 
-export function renderIssues() {
-    const container = document.getElementById('issuesPanel');
+export function renderIssues(container) {
+    if (!container) container = document.getElementById('issuesPanel');
+    if (!container) return;
 
-    // Update count in sidebar header
-    const header = document.querySelector('[data-collapse="issuesPanelBody"] span');
-    if (header) {
-        header.textContent = State.issues.length > 0
-            ? `▾ Issues (${State.issues.length})`
-            : '▾ Issues';
-    }
-    
     if (State.issues.length === 0) {
         container.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: var(--font-md);">No open issues</div>';
         return;
@@ -486,8 +479,8 @@ export async function refreshIssues() {
     EventBus.emit('issues:render');
 }
 
-export function renderPullRequests() {
-    const container = document.getElementById('prsPanel');
+export function renderPullRequests(container) {
+    if (!container) container = document.getElementById('prsPanel');
     if (!container) return;
 
     container.innerHTML = renderPrRowsHtml({

@@ -39,9 +39,10 @@ const FileOperationLock = {
     }
 };
 
-export function renderFileTree() {
-    const container = document.getElementById('fileTree');
-    
+export function renderFileTree(container) {
+    if (!container) container = document.getElementById('fileTree');
+    if (!container) return;
+
     if (State.fileTree.length === 0) {
         container.innerHTML = '<div style="padding: 1rem; color: var(--text-muted);">No files found</div>';
         return;

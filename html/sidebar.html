@@ -40,103 +40,13 @@
             <!-- Buttons rendered by js/ui/left-pane-rail.js#mountLeftPaneRail() -->
         </div>
 
-        <div class="lp__rail-content">
-            <!-- Files view -->
-            <div class="lp__rail-view lp__pane lp__pane--rail" data-rail-view-container="files" role="tabpanel" aria-label="Files">
-                <div class="lp2__pane-h">
-                    <span class="lp2__pane-title">Files</span>
-                    <span class="lp2__pane-h-actions">
-                        <button type="button" id="btnRefreshFiles" title="Refresh file tree" aria-label="Refresh file tree">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
-                        </button>
-                        <button type="button" id="btnZipUploadOpen" title="Upload Zip" aria-label="Upload zip file" onclick="window.openZipUpload()">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
-                        </button>
-                        <button type="button" id="btnNewFile" title="New File" aria-label="Create new file">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/></svg>
-                        </button>
-                        <button type="button" id="btnNewFolder" title="New Folder" aria-label="Create new folder">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M12 11v6M9 14h6"/></svg>
-                        </button>
-                    </span>
-                </div>
-                <div class="lp__rail-view-body" id="fileTreeBody" role="tree" aria-label="File tree">
-                    <!-- Now strip — Touch 3 1.x candidate C (2.17.0). Painted by js/ui/now-strip.js#mountNowStrip(). -->
-                    <div id="filesNowStrip" class="lp2__now" hidden></div>
-                    <div class="file-tree" id="fileTree">
-                        <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
-                            Select a project to browse files
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Issues view -->
-            <div class="lp__rail-view lp__pane lp__pane--rail" data-rail-view-container="issues" role="tabpanel" aria-label="Issues" hidden>
-                <div class="lp2__pane-h">
-                    <span class="lp2__pane-title">Issues</span>
-                    <span class="lp2__pane-h-actions">
-                        <button type="button" id="btnRefreshIssues" title="Refresh" aria-label="Refresh issues">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
-                        </button>
-                    </span>
-                </div>
-                <div class="lp__rail-view-body" id="issuesPanelBody">
-                    <div class="issues-panel" id="issuesPanel" role="list" aria-label="Issues">
-                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                            No issues loaded
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Pull Requests view -->
-            <div class="lp__rail-view lp__pane lp__pane--rail" data-rail-view-container="prs" role="tabpanel" aria-label="Pull requests" hidden>
-                <div class="lp2__pane-h">
-                    <span class="lp2__pane-title">Pull Requests</span>
-                    <span class="lp2__pane-h-actions">
-                        <button type="button" id="btnNewPR" title="Create Pull Request" aria-label="Create pull request" onclick="window.openCreatePRModal()">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                        </button>
-                        <button type="button" id="btnRefreshPRs" title="Refresh" aria-label="Refresh pull requests">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
-                        </button>
-                    </span>
-                </div>
-                <div class="lp__rail-view-body" id="prsPanelBody">
-                    <div class="prs-panel" id="prsPanel" role="list" aria-label="Pull requests">
-                        <div style="padding: 0.75rem; color: var(--text-muted); font-size: 12px;">
-                            No pull requests
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Branches view -->
-            <div class="lp__rail-view lp__pane lp__pane--rail" data-rail-view-container="branches" role="tabpanel" aria-label="Branches" hidden>
-                <div class="lp2__pane-h">
-                    <span class="lp2__pane-title">Branches</span>
-                    <span class="lp2__pane-h-actions">
-                        <button type="button" id="btnNewBranch" title="New Branch" aria-label="Create new branch">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                        </button>
-                        <button type="button" id="btnDownloadZip" title="Download project as zip" aria-label="Download project as zip">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
-                        </button>
-                        <button type="button" id="btnRelease" title="Release Manager" aria-label="Release manager" onclick="window.openReleaseModal()">
-                            <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
-                        </button>
-                    </span>
-                </div>
-                <div class="lp__rail-view-body">
-                    <div class="branch-panel" id="branchPanel" role="list" aria-label="Branches">
-                        <div class="branch-panel__empty" style="padding: 0.5rem 0.25rem; color: var(--text-muted); font-size: var(--font-xs, 0.75rem);">
-                            No project loaded
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Rail-view containers (header + body for Files / Issues / PRs / Branches)
+             are rendered declaratively by js/ui/left-pane-rail.js#rebuild() from
+             `view.headerActions` + `render(body)` on each `rail-views` contribution.
+             The four built-in views register at boot in BUILTIN_VIEWS; providers
+             can contribute additional views (2.22.0 SlotManager, 2.23.0 rail-views
+             slot kind, 2.24.0 body migration). -->
+        <div class="lp__rail-content"></div>
     </div>
 
     <!-- SlotManager mount (2.22.0) — additive surface for provider/plugin panels. -->

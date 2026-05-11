@@ -38,6 +38,7 @@ import {
     projectViewsForButtons,
     setActiveView,
     mountLeftPaneRail,
+    renderHeaderActionHtml,
 } from '../js/ui/left-pane-rail.js';
 import { State, EventBus } from '../js/core.js';
 import { SlotManager } from '../js/slot-manager.js';
@@ -382,6 +383,95 @@ test('setActiveView ignores unknown view ids', () => {
         setActiveView('not-a-view');
         const after = localStorage.getItem('leftPaneRail.activeView');
         assert.equal(after, before, 'localStorage unchanged for unknown id');
+    } finally {
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
+
+// ============================================
+// renderHeaderActionHtml — pure → HTML (2.24.0 SlotManager body migration)
+// ============================================
+
+test('renderHeaderActionHtml emits a button with data-rail-header-action key', () => {
+    const html = renderHeaderActionHtml('issues', {
+        id: 'refresh',
+        icon: '<svg-refresh/>',
+        title: 'Refresh',
+        ariaLabel: 'Refresh issues',
+        onClick: () => {},
+    });
+    assert.match(html, /data-rail-header-action="issues:refresh"/);
+    assert.match(html, /title="Refresh"/);
+    assert.match(html, /aria-label="Refresh issues"/);
+    assert.match(html, /<svg-refresh\/>/);
+});
+
+test('renderHeaderActionHtml defaults title and aria-label to action.id when omitted', () => {
+    const html = renderHeaderActionHtml('files', { id: 'plus', icon: '<svg/>', onClick: () => {} });
+    assert.match(html, /title="plus"/);
+    assert.match(html, /aria-label="plus"/);
+});
+
+test('renderHeaderActionHtml escapes attributes against injection', () => {
+    const html = renderHeaderActionHtml('files', {
+        id: 'evil"id',
+        icon: '<svg/>',
+        title: 'tip"&<x>',
+        ariaLabel: 'al"&<x>',
+        onClick: () => {},
+    });
+    // The dangerous chars become attribute-escaped (escapeAttr per utils/html.js).
+    assert.doesNotMatch(html, /data-rail-header-action="files:evil"id"/);
+    assert.match(html, /data-rail-header-action="files:evil&quot;id"/);
+    assert.match(html, /title="tip&quot;&amp;&lt;x&gt;"/);
+});
+
+// ============================================
+// BUILTIN_VIEWS shape — each registers with the expected headerActions
+// ============================================
+
+test('BUILTIN_VIEWS at mount time carry the expected headerActions per view', () => {
+    clearRailContributions();
+    clearRailListeners();
+    const { restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        const contribs = SlotManager.getContributions('rail-views');
+        const byId = Object.fromEntries(contribs.map(c => [c.view.id, c]));
+
+        // Files: 3 header actions (Refresh, Zip-upload, New-file). New-folder was
+        // a dead button in 2.23.0 — dropped at 2.24.0 (no handler ever wired).
+        assert.deepEqual(
+            (byId.files.view.headerActions || []).map(a => a.id),
+            ['refresh', 'zipUpload', 'newFile'],
+        );
+
+        // Issues: 1 action (Refresh).
+        assert.deepEqual(
+            (byId.issues.view.headerActions || []).map(a => a.id),
+            ['refresh'],
+        );
+
+        // PRs: 2 actions (New-PR, Refresh).
+        assert.deepEqual(
+            (byId.prs.view.headerActions || []).map(a => a.id),
+            ['newPr', 'refresh'],
+        );
+
+        // Branches: 3 actions (New-branch, Download-zip, Release).
+        assert.deepEqual(
+            (byId.branches.view.headerActions || []).map(a => a.id),
+            ['newBranch', 'downloadZip', 'release'],
+        );
+
+        // Every action has an onClick function.
+        for (const c of contribs) {
+            for (const a of (c.view.headerActions || [])) {
+                assert.equal(typeof a.onClick, 'function', `${c.view.id}:${a.id} onClick must be function`);
+            }
+        }
     } finally {
         restore();
         clearRailContributions();
