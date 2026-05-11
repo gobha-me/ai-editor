@@ -579,7 +579,10 @@ export function replaceRange(startLine, endLine, newContent) {
         newLineCount,
         totalLines: newTotalLines
     });
-    
+    if (State.currentFile?.path) {
+        EventBus.emit('tab:contentChanged', { path: State.currentFile.path });
+    }
+
     return {
         success: true,
         oldContent,
@@ -634,7 +637,10 @@ export function insertAtLine(afterLine, content) {
         insertedCount: insertedLines,
         totalLines: newTotalLines
     });
-    
+    if (State.currentFile?.path) {
+        EventBus.emit('tab:contentChanged', { path: State.currentFile.path });
+    }
+
     return {
         success: true,
         insertedAfter: afterLine,
@@ -703,6 +709,9 @@ export function replaceText(find, replacement) {
         newLineCount,
         totalLines: newTotalLines
     });
+    if (State.currentFile?.path) {
+        EventBus.emit('tab:contentChanged', { path: State.currentFile.path });
+    }
 
     return {
         success: true,
@@ -756,7 +765,10 @@ export function deleteRange(startLine, endLine) {
         deletedCount,
         totalLines: newTotalLines
     });
-    
+    if (State.currentFile?.path) {
+        EventBus.emit('tab:contentChanged', { path: State.currentFile.path });
+    }
+
     return {
         success: true,
         deletedCount,
@@ -770,12 +782,15 @@ export function deleteRange(startLine, endLine) {
 
 export function applyEdit(newContent) {
     if (!editorInstance) return;
-    
+
     const original = getContent();
     setContent(newContent, true);
-    
+
     State.editorDirty = true;
     EventBus.emit('editor:editApplied', { original, updated: newContent });
+    if (State.currentFile?.path) {
+        EventBus.emit('tab:contentChanged', { path: State.currentFile.path });
+    }
 }
 
 // ============================================

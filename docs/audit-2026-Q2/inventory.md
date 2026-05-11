@@ -85,17 +85,19 @@
 - **Suggested fix shape:** Make the legacy path call the same `renderToolEnumeration` against the full ToolRegistry definitions instead of a hardcoded string. The only reason it doesn't today is the "include tools the model can't invoke" risk — but the legacy path runs for chat-only profiles where the filter would still produce a coherent list.
 - **Touch points:** `js/prompts.js:217-230` (call site), `js/tools/registry.js`, `js/profiles/*.js`.
 
-#### [EV] [S] [likely] `tabs:render` emitted but no subscriber
+#### ~~[EV] [S] [likely] `tabs:render` emitted but no subscriber~~ *(✅ closed — shipped 2.24.1)*
 - **What:** `js/tools/commit-tools.js:83` emits `EventBus.emit('tabs:render')` after a commit. No `EventBus.on('tabs:render', ...)` anywhere in the codebase.
 - **Why it's load-bearing:** Authors thought there was a tab-rendering listener. The intended effect (re-render tabs to clear the dirty dot after commit) is achieved instead because `commitAndPush()` separately calls `renderEditorTabs()`. The orphan emit suggests the wrong wiring or a renamed channel.
 - **Suggested fix shape:** Either delete the emit or add a subscriber in `js/tab-manager.js` that calls `renderEditorTabs()`. Decide based on whether tools/commit-tools.js running from LLM-context can otherwise refresh the tabs.
 - **Touch points:** `js/tools/commit-tools.js:83`, `js/tab-manager.js`.
+- **Resolution:** 2.24.1 deleted the orphan emit. Post-commit tab re-render already runs via `git:batchSaved` → `js/ui-helpers.js` → `renderEditorTabs()`; Now-strip badge through new `tab:contentChanged` from `batchSaveFiles`. See [CHANGELOG §2.24.1](../../CHANGELOG.md).
 
-#### [EV] [S] [likely] `tab:contentChanged` emitted only by search-panel, not by edit tools
+#### ~~[EV] [S] [likely] `tab:contentChanged` emitted only by search-panel, not by edit tools~~ *(✅ closed — shipped 2.24.1)*
 - **What:** `js/search-panel.js:262` emits `tab:contentChanged` after a Search & Replace. Two subscribers (`js/ui/now-strip.js:185`, see also `js/chat/sessions-sync.js`). No emit from `js/tools/edit-tools.js` after `edit_file`/`replace_lines`/`insert_lines`/`delete_lines`.
 - **Why it's load-bearing:** Now Strip badge counts dirty tabs; it stales after LLM-driven edits until a different channel happens to fire. `tab:contentChanged` is the right channel — but the only producer is the global Find/Replace path.
 - **Suggested fix shape:** Add `EventBus.emit('tab:contentChanged', ...)` in `js/editor/instance.js` alongside the existing `editor:linesReplaced` emit (line ~575), or in `js/tools/edit-tools.js` per-tool after the apply.
 - **Touch points:** `js/search-panel.js:262`, `js/ui/now-strip.js:185`, `js/editor/instance.js:575/632/699/753`, `js/tools/edit-tools.js`.
+- **Resolution:** 2.24.1 added 8 new emit sites: 5 in `js/editor/instance.js` (alongside `editor:linesReplaced` ×2 / `editor:linesInserted` / `editor:linesDeleted` / `editor:editApplied`), 1 in `js/git.js#batchSaveFiles` per-result, 1 in `js/ui-helpers.js` after the `git:saved` flip, 1 in `js/ui/revert.js#revertAllFiles` per-tab. The audit's `js/chat/sessions-sync.js` subscriber reference was stale — Now-strip is the only subscriber today.
 
 #### [EV] [S] [maybe-intentional] `git:branchCreated` has 3 emitters, 0 subscribers
 - **What:** Emitted by every git provider (`js/git-providers/{gitea,github,gitlab}.js`) after a successful `createBranch()`. The parallel channel `branch:created` (singular emit in `js/ui/branch.js:63` + `js/issue-detail.js:693`) has 2 subscribers (`branch-panel.js`, retrieval manager).

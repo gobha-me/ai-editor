@@ -875,6 +875,9 @@ async function batchSaveFiles(commitMessage, tabs) {
             State.editorDirty = false;
         }
         Storage.clearDraft(owner, repo, branch, result.path);
+        // Notify Now-strip (and any other tab-dirty subscriber) that this
+        // tab's dirty state flipped. Mirrors search-panel.js's emit shape.
+        EventBus.emit('tab:contentChanged', { path: result.path });
     }
 
     if (errors.length > 0) {

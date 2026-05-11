@@ -215,11 +215,16 @@ export function initStatusBarListener() {
         updateCommitButton();
         updateRevertButton();
         if (State.activeTabIndex >= 0 && State.activeTabIndex < State.openTabs.length) {
-            State.openTabs[State.activeTabIndex].dirty = false;
-            State.openTabs[State.activeTabIndex].content = State.editorContent;
-            State.openTabs[State.activeTabIndex].originalContent = State.editorContent;
-            State.openTabs[State.activeTabIndex].sha = State.currentFile?.sha;
+            const tab = State.openTabs[State.activeTabIndex];
+            tab.dirty = false;
+            tab.content = State.editorContent;
+            tab.originalContent = State.editorContent;
+            tab.sha = State.currentFile?.sha;
             renderEditorTabs();
+            // Notify Now-strip — `git:saved` is the single-file save path
+            // (vs `git:batchSaved` which fires from batchSaveFiles); the
+            // tab.dirty flip otherwise has no Now-strip-visible signal.
+            EventBus.emit('tab:contentChanged', { path: tab.path });
         }
         showToast('File saved successfully', 'success');
     });

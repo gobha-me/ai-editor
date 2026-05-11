@@ -8,6 +8,29 @@ All notable changes to AI Editor are documented here.
 
 [`docs/ROADMAP.md`](docs/ROADMAP.md) gains a new section pointing at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) as the queue for the post-2.23.0 sweep track. Defines the sizing convention (S folds into in-track patches, M earns its own slot, L earns a design doc first), parks triage policy in the inventory itself, and cross-references the one known overlap with existing deferred work (SlotManager body migration ↔ `[ST][S]` sidebar static rail-view containers entry — now closed by §2.24.0 below). No version bump per `feedback_no_bump_for_measurement_only.md` — docs-only.
 
+## [2.24.1] - 2026-05-11
+
+### Fix — event-wiring pair: `tab:contentChanged` producer gap + `tabs:render` orphan
+
+Closes two 2026-Q2 audit `[EV][S][likely]` entries at [`docs/audit-2026-Q2/inventory.md:88-99`](docs/audit-2026-Q2/inventory.md). The Now-strip "Changes N files" dirty-count badge in the Files rail was staying stale after dirty-state flips that didn't happen to fire one of the narrow set of channels Now-strip subscribed to — specifically: LLM line edits via `editor/instance.js` dispatch (covered only by the 250 ms `editor:change` debounce), `commit_files` LLM tool, batch-save via `Git.batchSaveFiles`, single-file save (`git:saved`), and `revertAllFiles`. The Now-strip's `tab:contentChanged` subscriber is the right channel — but the only producer pre-2.24.1 was the Find/Replace path in `js/search-panel.js`. This patch routes every dirty-flip site through `tab:contentChanged` so the badge updates immediately. Independently, the orphan `EventBus.emit('tabs:render')` at [`js/tools/commit-tools.js:83`](js/tools/commit-tools.js) (no subscriber anywhere) deletes — the post-commit tab re-render already runs via `git:batchSaved` → [`js/ui-helpers.js`](js/ui-helpers.js) → `renderEditorTabs()`.
+
+**New emit sites (all with `{ path }` payload to mirror `js/search-panel.js:262`):**
+
+- [`js/editor/instance.js`](js/editor/instance.js) — 5 sites: alongside `editor:linesReplaced` (lines 575, 699 / `replaceRange` + `replaceText`), `editor:linesInserted` (632 / `insertAtLine`), `editor:linesDeleted` (753 / `deleteRange`), and `editor:editApplied` (778 / `applyEdit` whole-file). Guarded with `State.currentFile?.path` so a dispatch from a state without an open tab is a no-op. The `editor:change` listener that flips `tab.dirty=true` via [`js/tab-manager.js:222-233`](js/tab-manager.js) is unchanged — its 250 ms debounce stays intentional for per-keystroke flow; the new `tab:contentChanged` emit fires immediately on LLM tool edits so the badge updates without the debounce delay users would otherwise see.
+- [`js/git.js`](js/git.js) — inside the `for (const result of results)` loop of `batchSaveFiles` (~line 869), after `tab.dirty = false` + `Storage.clearDraft` per result. Covers both the manual commit-modal path AND the LLM `commit_files` tool (which routes through `batchSaveFiles`).
+- [`js/ui-helpers.js`](js/ui-helpers.js) — inside the `EventBus.on('git:saved', …)` handler (~line 218), after the active-tab `tab.dirty = false` flip. Covers the single-file save path.
+- [`js/ui/revert.js`](js/ui/revert.js) — inside the `for (const tab of dirtyTabs)` loop of `revertAllFiles` (~line 142), per reverted tab. The single-file revert at line 72 already emits `file:reverted` (Now-strip-visible); the batch path previously had no per-tab signal.
+
+**Deleted:** [`js/tools/commit-tools.js:83`](js/tools/commit-tools.js) — `EventBus.emit('tabs:render')`. Replaced with a one-line comment explaining the retirement (re-render now flows through `git:batchSaved`; Now-strip badge through `tab:contentChanged` from `batchSaveFiles`).
+
+**Why immediate vs debounced.** The `editor:change` channel coalesces 250 ms of typing to avoid per-keystroke re-renders; that's the right shape for human typing. But the same debounce delayed badge updates after LLM edits — a click on "AI: apply this change" should reflect in the badge instantly, not 250 ms later. `tab:contentChanged` is the always-immediate channel; the typing path keeps its debounce, the tool path gets the immediate signal.
+
+**Other audit entries this patch DOES NOT close.** The `[EV][M][maybe-intentional]` editor-event public-extension-API entry (line ~198), the `[EV][S][likely]` git-channel-orphans (line ~204), and the plugin-lifecycle entries (line ~192) all stay open — they're documented extension points whose disposition is a separate audit-cleanup PR. The `[EV][S][likely]` `editor` / `settings:loaded` subscribed-without-emitter entries (line ~186) also stay — separate slice.
+
+**Tests — [`tests/test-event-wiring.mjs`](tests/test-event-wiring.mjs)** (new, ~80 LOC). Pure-logic Node tests using the `_node-shim.mjs` + EventBus. Coverage: `tab:contentChanged` subscriber receives one event per emit (no batching surprises); `batchSaveFiles` emits one per result; `revertAllFiles` emits one per reverted tab; orphan-emit-deleted assertion (no `EventBus.on('tabs:render', …)` exists anywhere; no `EventBus.emit('tabs:render', …)` exists anywhere). Full `node --test tests/test-*.mjs` run: 2944 pass / 1 skipped / 0 fail (was 2935 pre-PR; +9 new cases).
+
+**Removability.** Restore `EventBus.emit('tabs:render')` in `commit-tools.js`; revert the 8 new `EventBus.emit('tab:contentChanged', { path })` lines across `editor/instance.js` (5), `git.js` (1), `ui-helpers.js` (1), `revert.js` (1); revert the test additions. Main returns to 2.24.0 byte-equivalent.
+
 ## [2.24.0] - 2026-05-11
 
 ### Feature — SlotManager body migration (Files / Issues / PRs / Branches)

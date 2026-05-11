@@ -79,8 +79,12 @@ async function commitFiles({ paths, message }) {
             }
         }
 
-        // Refresh UI
-        EventBus.emit('tabs:render');
+        // Refresh UI.
+        // Note: `tabs:render` retired at 2.24.1 — was an orphan emit with no
+        // subscribers. Tab re-render after a successful commit happens via
+        // `git:batchSaved` → ui-helpers.js → renderEditorTabs(); Now-strip's
+        // dirty-count badge gets a per-path `tab:contentChanged` from
+        // `js/git.js#batchSaveFiles` for each result.
         EventBus.emit('tree:refresh');
 
         const response = {

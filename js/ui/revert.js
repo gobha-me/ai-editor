@@ -131,11 +131,15 @@ export async function revertAllFiles() {
         if (tab.originalContent !== undefined && tab.originalContent !== null) {
             tab.content = tab.originalContent;
             tab.dirty = false;
-            
+
             if (State.currentProject) {
                 Storage.clearDraft(owner, repo, State.currentBranch, tab.path);
             }
-            
+
+            // Notify Now-strip per reverted tab — the single-tab revert path
+            // emits `file:reverted`, but the multi-tab loop has no other
+            // per-path signal so the dirty-count badge would otherwise lag.
+            EventBus.emit('tab:contentChanged', { path: tab.path });
             revertedCount++;
         }
     }
