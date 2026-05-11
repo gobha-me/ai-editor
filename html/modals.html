@@ -120,7 +120,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
                 <span>Commit Changes</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeCommitModal()" aria-label="Close commit dialog">×</button>
+            <button type="button" class="modal-close" data-action="closeCommitModal" aria-label="Close commit dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -142,7 +142,7 @@
                 <label for="commitMessage">Commit message:</label>
                 <textarea id="commitMessage" rows="4" placeholder="Describe your changes..."></textarea>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <button type="button" class="btn btn-secondary" onclick="window.generateCommitMsg()" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" data-action="generateCommitMsg" style="flex: 1;">
                         <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
                         <span>Generate with AI</span>
                     </button>
@@ -153,8 +153,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeCommitModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnDoCommit" onclick="window.commitAndPush()">
+            <button type="button" class="btn btn-secondary" data-action="closeCommitModal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnDoCommit" data-action="commitAndPush">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
                 <span>Commit</span>
             </button>

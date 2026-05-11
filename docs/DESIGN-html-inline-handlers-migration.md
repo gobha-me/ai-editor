@@ -480,7 +480,7 @@ The team updates this table as phases ship. Each row gets `planned` → `in flig
 
 | Phase | Scope | Status | Shipped | Notes |
 |---|---|---|---|---|
-| Phase 1 | Pilot — commit modal (~4 handlers) + dispatcher pattern | planned | — | Lifts shape from `mountBranchPanel`; documents pattern for Phases 2–3 |
+| Phase 1 | Pilot — commit modal (~4 handlers) + dispatcher pattern | shipped | 2.27.0 | `mountCommitModal` in [`js/ui/commit.js`](../js/ui/commit.js) replicates `mountBranchPanel` shape; [`tests/test-commit-modal-dispatch.mjs`](../tests/test-commit-modal-dispatch.mjs) covers the dispatcher contract. `window.*` aliases stay through Phase 3. |
 | Phase 2 | Remaining ~11 modals (~45 handlers) | planned | — | May split as 2a/2b for review bandwidth |
 | Phase 3 | JS renderers (~7 files, ~29 handlers) | planned | — | `chat/messages.js` density may earn its own PR |
 | Phase 4 | `window.*` block cleanup (~80 LOC deletion) + anti-regression coverage test | planned | — | Closes the parent audit row's "window.* exposure block" rationale |

@@ -99,6 +99,39 @@ export function closeCommitModal() {
     document.getElementById('commitModal').classList.remove('active');
 }
 
+/**
+ * Bind a delegated click handler for the commit modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 1 of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Pilot replicating the `mountBranchPanel` (js/ui/branch-panel.js:216) shape
+ * on the commit modal. The HTML carries `data-action="closeCommitModal"`,
+ * `"generateCommitMsg"`, `"commitAndPush"` instead of `onclick="window.foo()"`;
+ * this listener routes each action to the typed callback.
+ *
+ * The `window.*` aliases in js/app.js stay intact through Phase 3; they
+ * retire in Phase 4's cleanup pass.
+ */
+let _wired = false;
+export function mountCommitModal({ onClose, onCommit, onGenerate } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#commitModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeCommitModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'commitAndPush' && typeof onCommit === 'function') {
+            onCommit();
+        } else if (action === 'generateCommitMsg' && typeof onGenerate === 'function') {
+            onGenerate();
+        }
+    });
+}
+
 function _currentBranchIsProtected() {
     const branches = Array.isArray(State.branches) ? State.branches : [];
     const cur = branches.find((b) => b && b.name === State.currentBranch);

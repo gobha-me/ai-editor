@@ -4,6 +4,33 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.27.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 1** (pilot commit modal)
+
+First implementation slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md) (PR #378). Phase 1 pilots the dispatcher shape on the **commit modal** — the highest-traffic surface — to prove the pattern against the densest cluster before the remaining ~11 modals (Phase 2) and ~7 JS renderers (Phase 3) migrate against the same template. Closes the planned-status Phase 1 row in the design doc's [Implementation status](docs/DESIGN-html-inline-handlers-migration.md#implementation-status) table.
+
+**New `mountCommitModal({ onClose, onCommit, onGenerate })` — [`js/ui/commit.js`](js/ui/commit.js).** Idempotent (`_wired` guard) document-level click listener filtered by `e.target.closest('[data-action]')` + `btn.closest('#commitModal')`. Routes the three action names (`closeCommitModal`, `commitAndPush`, `generateCommitMsg`) to the typed callback. Replicates [`mountBranchPanel`](js/ui/branch-panel.js) (2.24.0) byte-for-byte in shape — same `_wired` flag pattern, same `document.addEventListener` seam, same `.closest(scope)` scoping, same typed callback bag. The only deviations: flat `data-action` attribute (the design's Decision 2 — no namespacing, per [`mountSwitcherMenu`](js/projects/switcher-menu.js)) and no EventBus subscriptions (the commit modal lifecycle is open/close, not data-driven re-render).
+
+**HTML migration — [`html/modals.html`](html/modals.html) (4 attribute swaps).**
+
+| Line | Before | After |
+|---|---|---|
+| 123 | `onclick="window.closeCommitModal()"` | `data-action="closeCommitModal"` |
+| 145 | `onclick="window.generateCommitMsg()"` | `data-action="generateCommitMsg"` |
+| 156 | `onclick="window.closeCommitModal()"` | `data-action="closeCommitModal"` |
+| 157 | `onclick="window.commitAndPush()"` | `data-action="commitAndPush"` |
+
+The `window.closeCommitModal` / `window.commitAndPush` / `window.generateCommitMsg` aliases at [`js/app.js:206-208`](js/app.js) **stay intact** through Phases 1–3 per the design's Decision 6 sequencing. They retire in Phase 4's `window.*` block cleanup; the per-phase rollback boundary stays clean.
+
+**Init wire — [`js/app.js`](js/app.js).** New `mountCommitModal` import alongside `closeCommitModal` / `commitAndPush` / `generateCommitMsg`; one new call in the existing init sequence next to `mountLeftPaneRail()` / `mountNowStrip()` / `mountSwitcherMenu()`: `mountCommitModal({ onClose: closeCommitModal, onCommit: commitAndPush, onGenerate: generateCommitMsg })`. The `_wired` guard makes re-invocation safe.
+
+**Tests — [`tests/test-commit-modal-dispatch.mjs`](tests/test-commit-modal-dispatch.mjs) (new, ~140 LOC, 8 cases).** Pure-logic dispatcher test: overrides `document.addEventListener` to capture the click handler, then synthesizes click events whose `target.closest()` + `getAttribute()` match the dispatcher's DOM contract. Coverage: exactly one listener installs (1 case); each of the three known actions routes to its typed callback (3 cases); out-of-scope `data-action` is filtered (1 case); missing `[data-action]` ancestor is filtered (1 case); unknown action value is filtered (1 case); double-mount is idempotent (1 case — count unchanged + original handler still routes correctly). No JSDOM dependency; runs under the existing [`tests/_node-shim.mjs`](tests/_node-shim.mjs) `document`-stub footprint per `reference_testing_ci.md`. Full `node --test tests/test-*.mjs` run: 2968 tests / 2967 pass / 1 skipped / 0 fail (was 2960 pre-PR; +8 new cases).
+
+**Why this Phase shape.** Phase 1 is intentionally small — one modal, one mount fn, one test file. The design doc commits to four phases each independently shippable (Decision 6 sequencing). Phase 1's job is *validating the dispatcher template* the remaining phases will replicate; Phase 2 (~11 modals × ~45 handlers) will copy this shape mechanically. The `[ST][L]` audit-inventory row at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §"html-shell" stays **open** — Phase 1 closes 4 of ~50 inline `onclick=` attributes in `html/*.html`; the row strikes through when Phase 2 ships.
+
+**Removability.** Revert the PR → 4 HTML attributes restore to `onclick="window.foo()"`, `mountCommitModal` deletes from [`js/ui/commit.js`](js/ui/commit.js), the import + init call delete from [`js/app.js`](js/app.js), the test file deletes, version + CHANGELOG revert. The `window.*` aliases were untouched, so HTML restores to a working state. Main returns to 2.26.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
 ## [2.26.0] - 2026-05-11
 
 ### Refactor — audit sweep batch 2: registry-derivation hygiene

@@ -46,7 +46,7 @@ import {
     clearProjectDrafts,
     initStatusBarListener
 } from './ui-helpers.js';
-import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush } from './ui/commit.js';
+import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush, mountCommitModal } from './ui/commit.js';
 import { openNewBranchModal, closeNewBranchModal, createNewBranch } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-create.js';
 import { openRenameModal, closeRenameModal, submitRename } from './ui/file-rename.js';
@@ -872,6 +872,7 @@ async function init() {
     mountLeftPaneRail();
     mountNowStrip();
     mountSwitcherMenu();
+    mountCommitModal({ onClose: closeCommitModal, onCommit: commitAndPush, onGenerate: generateCommitMsg });
     initHelpSlideOut();
     initWindowZipDrop();
 
