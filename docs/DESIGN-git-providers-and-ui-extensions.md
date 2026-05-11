@@ -193,13 +193,23 @@ const GitProviderRegistry = {
 ## 4. UI Extension System (Declarative Slots)
 
 > **Implementation status:** Contract locked in 1.1.0 (this section);
-> renderer (`js/slot-manager.js`) deferred to a 1.4.x patch per
-> [`docs/ROADMAP.md`](ROADMAP.md) §1.1.0. Today plugins inject UI only
-> via `Plugins.registerButton()` and `Plugins.registerModal()`. The
-> `contributes` manifest is already collected by
-> `js/git-providers/registry.js#getAllContributions()` but no consumer
-> renders it; that's what the 1.4.x SlotManager closes against the
-> contract below.
+> renderer (`js/slot-manager.js`) **shipped 2.22.0** against the contract
+> below. Five `<div data-slot="...">` mount points wired across the app
+> shell; `applyProviderContributions()` fires at boot. Existing
+> imperative renderers (`Plugins.registerButton()`, `Plugins.registerModal()`,
+> hardcoded sidebar issues/PRs panels, top-bar status pills, settings
+> connection cards) are unchanged — SlotManager is additive. Provider
+> manifests today declare panel metadata without `render` functions, so
+> the consumer skips them silently (forward-compat); migration of those
+> imperative renderers into declarative `render` functions is per-surface
+> follow-up work. See [CHANGELOG §2.22.0](../CHANGELOG.md).
+>
+> **Slot remap note (2.22.0).** The `status-bar` slot's "bottom of app
+> shell" wording in the catalog table below predates the 1.3.6 Touch 2
+> Restructure that consolidated status pills into the top-bar `.tb__right`.
+> The 2.22.0 mount point lives in `html/header.html` inside `nav.tb__right`,
+> matching the catalog's intent (compression / tool-count pills) even if
+> not the literal "bottom" position.
 
 The core layout defines named slots. Plugins/providers declare what they
 mount into those slots via their `contributes` manifest.

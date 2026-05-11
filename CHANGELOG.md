@@ -4,6 +4,51 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-05-11
+
+### Feature — Plugin SlotManager (rails)
+
+Closes the "designed but not built" gap flagged in [`docs/PLUGIN.md:437`](docs/PLUGIN.md) and parked in [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Other deferred". The contract has been locked in [`docs/DESIGN-git-providers-and-ui-extensions.md`](docs/DESIGN-git-providers-and-ui-extensions.md) §4 since 1.1.0; [`GitProviderRegistry.getAllContributions()`](js/git-providers/registry.js:248-258) already collects manifests but had no consumer to render them. This patch ships the consumer — `js/slot-manager.js` against the locked contract — and adds the 5 catalog `<div data-slot="...">` mount points across the app shell. Existing imperative renderers (sidebar issues/PRs, settings connection cards, top-bar pills) are unchanged; SlotManager is additive — the rails ship before the renderers.
+
+**New module — [`js/slot-manager.js`](js/slot-manager.js)** (~120 LOC). Ships the contract pseudocode from [`docs/DESIGN-git-providers-and-ui-extensions.md:222-283`](docs/DESIGN-git-providers-and-ui-extensions.md) verbatim, with hardening per the same §4's "Error semantics, security, and ordering" clause: `KNOWN_SLOTS` set rejects unknown slot IDs (warn + return); `KNOWN_VERSIONS` rejects schema versions other than `'1.1'` (warn + return; missing version defaults to `'1.1'` per the doc's backwards-compat note); `(a.priority ?? 50) - (b.priority ?? 50)` uses `??` not `||` so explicit `priority: 0` doesn't fall through to the default; per-contribution `try/catch` around `render() / appendChild / insertAdjacentHTML` logs `console.error('[SlotManager] render failed', {pluginId, slotId, error})` and continues to siblings; entries whose `render == null` are skipped silently (forward-compat with today's provider manifests that declare panel metadata without renderers). `removeByPlugin(pluginId)` detaches `refreshEvent` listeners via the unsubscribe handles stored at contribute time, then strips contributions from every slot and re-renders. `el instanceof HTMLElement` is gated behind `typeof HTMLElement !== 'undefined'` so the module loads under `node --test` for the pure-logic suite.
+
+**`refreshEvent` honored.** Contributions that declare `refreshEvent: 'foo:refresh'` get `EventBus.on(refreshEvent, () => SlotManager.renderSlot(slotId))` registered at contribute time. This keeps the manifest declarative — plugins don't need a per-call-site re-render call when the underlying data changes. The unsubscribe handle is tracked in `_subscriptions: Map<pluginId, off[]>` so `removeByPlugin` cleans up after itself.
+
+**`applyProviderContributions()` bridge — same module.** Iterates [`GitProviderRegistry.getAllContributions().panels`](js/git-providers/registry.js:248-258), filters out entries without a `render` function (every provider today declares metadata only; warning on each at boot would be 6+ noise lines), and forwards the rest to `SlotManager.contribute()`. Fires once during boot in [`js/app.js:838`](js/app.js) — immediately after [`initGitProviders()`](js/git.js) and before the plugin init loop, so plugins' own `init()` can also call `SlotManager.contribute()` directly.
+
+**HTML mount points — 5 catalog slots.** All five slot anchors added as additive children of their host elements; existing structure is unchanged:
+
+- `sidebar-panels` — [`html/sidebar.html`](html/sidebar.html), peer of `.lp__rail-body`, immediately before `</aside>`.
+- `settings-connections` — [`html/settings-tabs.html`](html/settings-tabs.html), sibling of `#connectionsGroups`. The legacy `#connectionsGroups` keeps owning imperative connection-card rendering at [`js/settings/connections-tab.js:71,97`](js/settings/connections-tab.js); the slot is the surface a future patch migrates the cards into.
+- `editor-toolbar` — [`html/editor-panel.html`](html/editor-panel.html), as the last child of `.editor-toolbar` after the Blame button.
+- `chat-input-row` — [`html/chat-panel.html`](html/chat-panel.html), inside `.chat-input-area` between `#memoryChipRoot` and `.chat-input-wrapper` — matches the established chip-row-above-textarea pattern.
+- `status-bar` — [`html/header.html`](html/header.html), inside `nav.tb__right` between `#costTrackerBar` and the divider. **Remap note:** the catalog's "bottom of app shell" wording predates the 1.3.6 Touch 2 Restructure that consolidated status pills into the top-bar `.tb__right`. The slot mounts where the pill row actually lives today; the contract's intent ("compression ratio / tool count pills" per the catalog row) is preserved. Documented in the DESIGN-doc update below.
+
+**Boot wiring — [`js/app.js`](js/app.js).** New import alongside `git.js`; `applyProviderContributions()` fires immediately after `initGitProviders()`; `window.AIEditor.SlotManager` exposed in the existing namespace block so devtools / dogfood plugins can probe.
+
+**Tests — [`tests/test-slot-manager.mjs`](tests/test-slot-manager.mjs)** (new file, 14 cases). Pure-logic Node tests via `_node-shim.mjs`. A `StubElement` class is installed as `globalThis.HTMLElement` before the module loads so the production `instanceof` check exercises the appendChild path; `document.querySelector` is monkey-patched per-test to return a recording stub container. Coverage: priority sort (ascending, `??` not `||`, stable on ties); slot-catalog gate; version gate (`'1.1'` accepted, missing defaults to `'1.1'`, `'9.9'` rejected); string mount via `insertAdjacentHTML`; HTMLElement mount via `appendChild`; render-null skip; per-contribution error containment with `console.error` payload assertion; `refreshEvent` re-render on `EventBus.emit`; `removeByPlugin` detaches listeners + strips entries; `renderAll` across slots; `applyProviderContributions` silent-skip of render-less entries.
+
+**Decisions locked.**
+
+- **Render-function arity = zero-arg `c.render()` per pseudocode.** The manifest example at DESIGN line 370 (`render: (connection, state) => ...`) is provider-richness outside the v1 contract. Provider bridges that need `(connection, state)` close over them when constructing the contribution; the slot seam stays plugin-agnostic.
+- **Silent-skip render-less entries** in `applyProviderContributions` — explained above.
+- **No `Plugins.contribute(...)` wrapper.** Plugins import `SlotManager` directly via `window.AIEditor.SlotManager`. A namespace wrapper ships if/when the first real plugin needs one.
+- **Full wipe + re-render on every `contribute()` call** per pseudocode at DESIGN line 250. Acceptable for v1: ≤5 contributions per slot realistically. Optimize only if dogfood surfaces flash/jank.
+- **No existing-code migration.** Sidebar issues/PRs panels, top-bar pills, connection cards, `Plugins.registerButton` / `Plugins.registerModal` callers — all unchanged. Migration to declarative slot contributions is per-surface follow-up work.
+
+**Doc updates.** [`docs/DESIGN-git-providers-and-ui-extensions.md`](docs/DESIGN-git-providers-and-ui-extensions.md) §4 status callout flips from "deferred to a 1.4.x patch" to "shipped 2.22.0"; documents the `status-bar` → top-bar remap. [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Other deferred" strikes through the SlotManager bullet. [`docs/PLUGIN.md`](docs/PLUGIN.md) moves the "DOM slot injection" row out of "Not Currently Possible".
+
+**Removability.** Delete [`js/slot-manager.js`](js/slot-manager.js) + [`tests/test-slot-manager.mjs`](tests/test-slot-manager.mjs); revert the `+`-only edits in [`js/app.js`](js/app.js) (import + `applyProviderContributions()` call + `window.AIEditor.SlotManager` line); delete one `<div data-slot="...">` line from each of the 5 HTML hosts; revert the doc updates. No persisted state, no migration, no new dependencies. Main returns to 2.21.0 byte-equivalent.
+
+**Deferred to follow-up patches:**
+
+- **Migrate sidebar issues / PRs panel rendering** from imperative path to declarative slot contributions. Today's git providers declare panel metadata without `render` functions; populating them flows naturally into this work and would turn the dormant `sidebar-panels` slot into a live consumer of the rails.
+- **Migrate Settings connection cards** from `#connectionsGroups` imperative population to declarative `settings-connections` contributions.
+- **Migrate status pills** (compression ratio, tool count, cost tracker) from hardcoded HTML to `status-bar` slot contributions; would let plugins add their own pills.
+- **`Plugins.contribute(...)` wrapper** — gated on the first plugin call site that needs a Plugins-namespace shortcut over the direct `SlotManager` import.
+- **Diff-mount optimization** for `renderSlot()` — only re-render changed entries instead of full innerHTML wipe. Gated on dogfood evidence of flash / jank on a slot with many contributions.
+- **Plugin manifest `contributes` field** — allow plugins (not just git providers) to declare contributions declaratively in their manifest at register time. Today plugins call `SlotManager.contribute()` imperatively from `init()`.
+
 ## [2.21.0] - 2026-05-10
 
 ### Feature — Touch 3 Merge Conflict Resolver (slice 3)

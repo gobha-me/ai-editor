@@ -428,13 +428,13 @@ What the plugin system **can do today** — and what it can't.
 | **Register LLM providers** | `Providers.register(provider)` — auto-listed in Settings → LLM provider dropdown via `Providers.list()` (settings-manager.js) | v1.x (UI), v0.9 (API) |
 | **Register git providers** | `GitProviderRegistry.register(provider)` — auto-listed in Settings → Connections via `GitProviderRegistry.list()` (connections-tab.js) | v1.x (UI), v1.0 (API) |
 | **Plugin-registered tools** | `Plugins.registerTool()` — listed in Settings → Plugins → "Plugin Tools" subsection with owning plugin id, description, and roles | v2.1.0 (UI), v1.0 (API) |
+| **DOM slot injection** | `SlotManager.contribute(slotId, {pluginId, render, priority, version, refreshEvent})` — declarative mount into one of 5 named slots (`sidebar-panels`, `settings-connections`, `editor-toolbar`, `chat-input-row`, `status-bar`) per the contract in [`docs/DESIGN-git-providers-and-ui-extensions.md`](DESIGN-git-providers-and-ui-extensions.md) §4. v1 plugins import `SlotManager` directly via `window.AIEditor.SlotManager`; a `Plugins.contribute(...)` namespace wrapper ships if/when needed. | v2.22.0 |
 
 ### ❌ Not Currently Possible
 
 | Capability | Why |
 |---|---|
 | **Settings panel tabs** | No slot for plugins to add custom tabs to the settings modal. |
-| **DOM slot injection** | `SlotManager` is referenced in docs but was never implemented. Plugins can only inject UI via modals and toolbar buttons. |
 | **Tool configuration UI** | Users can't enable/disable individual tools or assign tools to roles from the UI. |
 | **Modify editor (CodeMirror) behavior** | No hook into the CodeMirror instance. Plugins can't add keybindings, syntax highlighting, or editor extensions. |
 

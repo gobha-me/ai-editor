@@ -15,6 +15,7 @@ import { checkOnboarding } from './onboarding.js';
 import { openMarkdownModal, closeMarkdownModal } from './markdown-modal.js';
 import { initMobile } from './mobile.js';
 import { initGitProviders, GitProviderRegistry, Git } from './git.js';
+import { SlotManager, applyProviderContributions } from './slot-manager.js';
 import { IgnoreManager } from './ignore.js';
 import { initProjectConventions } from './intelligence/project-conventions.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
@@ -835,6 +836,7 @@ async function init() {
     // Load settings
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
+    applyProviderContributions();  // 2.22.0 — wire provider manifests to SlotManager. Render-less entries skipped silently.
     IgnoreManager.init(); // Must run after loadSettings — reads ignorePatterns from State.settings
     initProjectConventions(); // Subscribes to git:projectLoaded to fetch repo-root CLAUDE.md (github#37)
     applyVisualSettings();
@@ -901,6 +903,7 @@ async function init() {
             isEnabled: workspaceSettingsIsEnabled,
             getActiveWorkspaceId: workspaceSettingsActiveWorkspaceId,
         };
+        window.AIEditor.SlotManager = SlotManager;
     }
     initSessionListeners();
     mountLeftPaneRail();

@@ -33,6 +33,11 @@
             <span id="costTrackerText">0 tok</span>
         </div>
 
+        <!-- SlotManager mount (2.22.0) — additive surface for status pills (compression, tool count, etc.).
+             Catalog name is "status-bar"; remapped from "bottom of app shell" to the top-bar pill row
+             since the 1.3.6 Touch 2 Restructure consolidated status pills here. -->
+        <div data-slot="status-bar"></div>
+
         <div class="tb__divider" aria-hidden="true"></div>
 
         <button type="button" class="btn btn-commit" id="btnCommit"
