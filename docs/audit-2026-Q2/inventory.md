@@ -67,17 +67,19 @@
 
 ### chat
 
-#### [DUP] [M] [likely] `WRITE_TOOLS` exists twice with different memberships
+#### ~~[DUP] [M] [likely] `WRITE_TOOLS` exists twice with different memberships~~ *(✅ closed — shipped 2.25.0)*
 - **What:** `js/chat/tool-classifications.js:49-53` exports `WRITE_TOOLS` (9 tools — for dup-cache short-circuit). `js/chat/turn-enrich.js:35-40` defines a local module-level `WRITE_TOOLS` (4 tools — for FileOp metadata).
 - **Why it's load-bearing:** Same name, two completely different sets. A developer who edits one and thinks they covered both creates a silent classification drift. The semantics are distinct ("don't cache-skip" vs "wholesale-write FileOps") — the second should be renamed `WHOLE_FILE_WRITE_TOOLS` or moved into `tool-classifications.js` with its own export name.
 - **Suggested fix shape:** Rename `turn-enrich.js`'s set to `WHOLE_FILE_OPS` and import it from `tool-classifications.js`. Keep the per-axis frozen exports adjacent so future maintainers see the distinctions next to each other.
 - **Touch points:** `js/chat/tool-classifications.js`, `js/chat/turn-enrich.js:35-40`.
+- **Resolution:** 2.25.0 added `WHOLE_FILE_WRITE_TOOLS` to `tool-classifications.js` (frozen array, 4 members); `turn-enrich.js` imports it. Co-located JSDoc points at the WRITE_TOOLS adjacency so future maintainers see both. A new disjointness test asserts every WHOLE_FILE_WRITE_TOOLS member is classified in either WRITE_TOOLS (skip-cache) or MUTATING_TOOLS (envelope). See [CHANGELOG §2.25.0](../../CHANGELOG.md).
 
-#### [DUP] [M] [likely] Inline `MUTATING_TOOLS` / `STATEFUL_READ_TOOLS` in handlers.js fork the classification list
+#### ~~[DUP] [M] [likely] Inline `MUTATING_TOOLS` / `STATEFUL_READ_TOOLS` in handlers.js fork the classification list~~ *(✅ closed — shipped 2.25.0)*
 - **What:** `js/chat/handlers.js:609-637` declares two inline `new Set([...])` lists — `MUTATING_TOOLS` (10 tools, for refusal-envelope messaging) and `STATEFUL_READ_TOOLS` (2 tools, for cache-key skip). These live inside `executeToolLoop`, so they're recreated on every loop iteration and untouched by `tool-classifications.js`.
 - **Why it's load-bearing:** The header doc in `tool-classifications.js:31-37` says these were "deliberately NOT hoisted" because the axis is distinct. But that's load-bearing only if every new tool gets considered against ALL classification axes — and the inline location guarantees that future tool additions will miss one or two.
 - **Suggested fix shape:** Hoist all four sets to `tool-classifications.js` with separate names and clear axis-docs. Even if they don't share members, co-locating the lists makes the classification matrix scannable.
 - **Touch points:** `js/chat/handlers.js:609-637`, `js/chat/tool-classifications.js`.
+- **Resolution:** 2.25.0 hoisted both sets (+ LONG_RUNNING_TOOLS, USER_PAUSE_TOOLS — see entry below) as frozen-array exports with co-located axis JSDoc. The "deliberately NOT hoisted" rationale at `tool-classifications.js:31-37` was inverted: developer-scan cost beats axis-encapsulation when the inline location is the recurring source of "missed an axis" bugs (per `feedback_prompts_js_parallel_enumeration.md`). Disjointness asserted in `tests/test-tool-classifications.mjs` — `WRITE_TOOLS ∩ MUTATING_TOOLS = ∅`, `STATEFUL_READ_TOOLS ∩ WRITE_TOOLS = ∅`.
 
 #### [HC] [M] [likely] `LEGACY_TOOL_ENUMERATION` in `prompts.js` enumerates ~25 tool names
 - **What:** `js/prompts.js:33-56` is a string with ~25 bullet-formatted tool names + descriptions. Used when `?toolsCompose=off` or when the active profile has no Composer (per `feedback_prompts_js_parallel_enumeration.md`).
@@ -127,11 +129,12 @@
 - **Suggested fix shape:** Derive the legal set from `Profiles.list()` plus the special `'all'` group, OR add an explicit `Profiles.getKnownGroupTags()` API that the registry consults.
 - **Touch points:** `js/tools/registry.js:53/98/102`, `js/profiles/registry.js`, `js/profiles/migration.js:25-31`.
 
-#### [HC] [S] [maybe-intentional] `LONG_RUNNING_TOOLS` + `USER_PAUSE_TOOLS` inline in handlers.js
+#### ~~[HC] [S] [maybe-intentional] `LONG_RUNNING_TOOLS` + `USER_PAUSE_TOOLS` inline in handlers.js~~ *(✅ closed — shipped 2.25.0)*
 - **What:** `js/chat/handlers.js:746` `LONG_RUNNING_TOOLS = new Set(['wait_for_ci'])` and line 758 `USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval', 'submit_script_for_approval'])`.
 - **Why it's load-bearing:** Same problem as `MUTATING_TOOLS` — inline-set-in-function, hard to find when scanning tool classifications. Each new long-running or user-pause tool needs the developer to remember.
 - **Suggested fix shape:** Move to `tool-classifications.js` next to the other axes.
 - **Touch points:** `js/chat/handlers.js:746,758`, `js/chat/tool-classifications.js`.
+- **Resolution:** Bundled into the same 2.25.0 hoist as MUTATING_TOOLS + STATEFUL_READ_TOOLS. Each set now has its own axis-doc JSDoc (timeout axis: tool-loop scheduling) including the watchdog rationale that was previously at the inline call site.
 
 #### [HC] [M] [needs-investigation] Tool-name string-literals dotted around chat module
 - **What:** Beyond the classification sets, chat code does case dispatch on tool names: `js/chat/messages.js:725,775` (`case 'read_lines'`), `js/chat/turn-enrich.js:76,86`, `js/chat/tools.js:29` (`'read_lines': ['path', ...]` arg shape map). All consume tool-name strings as keys.
@@ -351,8 +354,8 @@ For agents that want to pick a quick win without re-reading the full inventory:
 
 | Entry | File | Lines |
 |------|------|------|
-| `WRITE_TOOLS` rename | `js/chat/turn-enrich.js` | 35-40 |
-| `tabs:render` orphan | `js/tools/commit-tools.js` | 83 |
+| ~~`WRITE_TOOLS` rename~~ | ~~`js/chat/turn-enrich.js`~~ | ~~35-40~~ *(✅ 2.25.0)* |
+| ~~`tabs:render` orphan~~ | ~~`js/tools/commit-tools.js`~~ | ~~83~~ *(✅ 2.24.1)* |
 | `LEGAL_GROUP_TAGS` registry | `js/tools/registry.js` | 53 |
 | `glyphFor` provider extension | `js/settings/connections-tab.js` | 18-21 |
 | `closeAllModals` selectors | `js/ui-helpers.js` | 87-91 |

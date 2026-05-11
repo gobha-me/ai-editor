@@ -41,7 +41,14 @@ import { withRetry } from '../retry.js';
 import { ConversationManager } from './conversations.js';
 import { recordInvocation as recordToolInvocation, recordDiscoveryAdmissions } from './task-state.js';
 import { invalidateCachesForPath, invalidateCachesForPreviewMutation, findMatchingCrossRequestEntry } from './cache-invalidation.js';
-import { WRITE_TOOLS, canonicalArgsKey } from './tool-classifications.js';
+import {
+    WRITE_TOOLS,
+    MUTATING_TOOLS,
+    STATEFUL_READ_TOOLS,
+    LONG_RUNNING_TOOLS,
+    USER_PAUSE_TOOLS,
+    canonicalArgsKey,
+} from './tool-classifications.js';
 import { buildRefusalPayload } from './refusal-hints.js';
 import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
@@ -593,49 +600,12 @@ export async function handleGeneralRequest(input) {
                     const cachedResult = toolCallCache.get(cacheKey);
                     
                     // === CROSS-REQUEST DUPLICATE DETECTION (Issue #17) ===
-                    // Check if this exact tool+args was already executed in a previous request
-                    // (before summarization evicted the results from context).
-                    // WRITE_TOOLS imported from ./tool-classifications.js (1.14.2 hoist).
-
-                    // Tools whose duplicate-call cache hit means "your prior mutation
-                    // already succeeded" — not "wait, did it actually go through?".
-                    // The qwen-3-6-plus PR #289 trace showed the model panicking on a
-                    // generic don't-retry note for commit_files and entering a 3-turn
-                    // confirmation loop. These tools stay OUT of WRITE_TOOLS on purpose
-                    // (so the cache prevents accidental double-commits / double-comments),
-                    // but get reassuring "prior call succeeded" messaging instead of the
-                    // generic don't-retry warning. Keep this in sync as new mutating
-                    // tools land. github#35
-                    const MUTATING_TOOLS = new Set([
-                        'commit_files',
-                        'create_issue',
-                        'create_pull_request',
-                        'merge_pull_request',
-                        'add_pr_review',
-                        'memory_remember',
-                        'memory_revise',
-                        'scratchpad_write',
-                        'scratchpad_clear',
-                        'write_plugin_source',
-                    ]);
-
-                    // Tools whose result depends on implicit State (not on args alone).
-                    // The dup-detection key is `(toolName, sortedArgs)`, so a stateful
-                    // read like read_current_file collides across calls when the active
-                    // file changes between them — the second call gets a stale-cache
-                    // hit pointing at the previous file's content. Bypass both the
-                    // cross-request and same-request caches for these. Found while
-                    // testing PR #293 against issue #23 (qwen-3-6-plus, 2026-05-06).
-                    const STATEFUL_READ_TOOLS = new Set([
-                        'read_current_file',
-                        // ask_user — the cross-request log would otherwise
-                        // synth a "you already asked this; here was the
-                        // answer" hit on identical args. The model may
-                        // legitimately want to re-ask after the conversation
-                        // moves on.
-                        'ask_user',
-                    ]);
-                    const skipCache = STATEFUL_READ_TOOLS.has(toolName);
+                    // Check if this exact tool+args was already executed in a previous
+                    // request (before summarization evicted the results from context).
+                    // WRITE_TOOLS / MUTATING_TOOLS / STATEFUL_READ_TOOLS imported from
+                    // ./tool-classifications.js (2.25.0 hoist consolidated the inline
+                    // forks; that module's JSDoc owns the per-axis rationale).
+                    const skipCache = STATEFUL_READ_TOOLS.includes(toolName);
 
                     let crossRequestDuplicate = false;
                     if (!skipCache && !WRITE_TOOLS.includes(toolName) && State.toolActionLog && State.toolActionLog.length > 0) {
@@ -720,7 +690,7 @@ export async function handleGeneralRequest(input) {
                         const summary = lastEntry?.resultSummary || 'unknown';
                         toolResult = {
                             _cached: true,
-                            _cache_note: MUTATING_TOOLS.has(toolName)
+                            _cache_note: MUTATING_TOOLS.includes(toolName)
                                 ? `[Your prior ${toolName} call already SUCCEEDED earlier in this conversation. Outcome: ${summary}. The mutation has happened — treat the prior result as authoritative and continue. Do not retry to confirm; that would re-attempt the mutation or loop on this same cache.]`
                                 : `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${summary}. Do NOT call this tool again with the same args.]`,
                             error: null
@@ -731,7 +701,7 @@ export async function handleGeneralRequest(input) {
                         toolResult = {
                             ...cachedResult,
                             _cached: true,
-                            _cache_note: MUTATING_TOOLS.has(toolName)
+                            _cache_note: MUTATING_TOOLS.includes(toolName)
                                 ? `[Your prior ${toolName} call already SUCCEEDED — the result above is from that call. The mutation has happened; do not retry to confirm.]`
                                 : `[Cached from earlier in this conversation — same ${toolName} call with identical arguments. Data is still current.]`
                         };
@@ -741,23 +711,13 @@ export async function handleGeneralRequest(input) {
                         // even if the tool errors. The model gets new info to
                         // react to either way.
                         madeProgressThisRound = true;
-                        // Execute with configurable timeout — long-running tools (wait_for_ci, etc.)
-                        // get a separate timeout to avoid being killed by the standard tool timeout.
-                        const LONG_RUNNING_TOOLS = new Set(['wait_for_ci']);
-                        // ask_user (github#33) and submit_plan_for_approval (github#25)
-                        // block on the user's response via an inline Preact card; the
-                        // chat loop's `isToolLoopCancelled` cancel path calls
-                        // `cancelUserResponse()` / `cancelPlanApproval()` to release
-                        // the awaited Promise. The user can sit with a question or
-                        // plan for as long as they want — but if the card fails to
-                        // mount (DOM error, Preact crash, race during conversation
-                        // switch) the user never sees a question and the Promise
-                        // hangs forever. The 1.14.2 watchdog floor (default 24h) is
-                        // a defensive last-resort: long enough that no real user
-                        // hits it, bounded so the loop can't deadlock indefinitely.
-                        const USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval', 'submit_script_for_approval']);
-                        const isUserPause = USER_PAUSE_TOOLS.has(toolName);
-                        const isLongRunning = LONG_RUNNING_TOOLS.has(toolName);
+                        // Execute with configurable timeout — LONG_RUNNING_TOOLS get
+                        // `settings.longRunningToolTimeout`; USER_PAUSE_TOOLS get the
+                        // 24h `settings.userPauseTimeout` watchdog floor. Both sets
+                        // imported from ./tool-classifications.js (2.25.0 hoist;
+                        // watchdog rationale + github# refs live on those exports).
+                        const isUserPause = USER_PAUSE_TOOLS.includes(toolName);
+                        const isLongRunning = LONG_RUNNING_TOOLS.includes(toolName);
                         const toolTimeout = isLongRunning
                             ? (State.settings.longRunningToolTimeout || 300000)
                             : (State.settings.toolTimeout || 30000);

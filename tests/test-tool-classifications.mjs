@@ -9,7 +9,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     WRITE_TOOLS,
+    WHOLE_FILE_WRITE_TOOLS,
     FILE_MUTATING_TOOLS,
+    MUTATING_TOOLS,
+    STATEFUL_READ_TOOLS,
+    LONG_RUNNING_TOOLS,
+    USER_PAUSE_TOOLS,
     canonicalArgsKey,
 } from '../js/chat/tool-classifications.js';
 
@@ -60,6 +65,113 @@ test('WRITE_TOOLS and FILE_MUTATING_TOOLS are frozen', () => {
         () => /** @type {string[]} */ (/** @type {unknown} */ (WRITE_TOOLS)).push('bogus'),
         TypeError,
     );
+});
+
+// ============================================================================
+// 2.25.0 hoist — newly co-located classification sets
+// ============================================================================
+
+test('WHOLE_FILE_WRITE_TOOLS lists the 4 whole-file write tools (FileOp metadata axis)', () => {
+    assert.deepEqual([...WHOLE_FILE_WRITE_TOOLS].sort(), [
+        'create_file',
+        'delete_file',
+        'write_file',
+        'write_plugin_source',
+    ]);
+});
+
+test('MUTATING_TOOLS lists the 10 remote/persistent mutations (envelope axis)', () => {
+    assert.deepEqual([...MUTATING_TOOLS].sort(), [
+        'add_pr_review',
+        'commit_files',
+        'create_issue',
+        'create_pull_request',
+        'memory_remember',
+        'memory_revise',
+        'merge_pull_request',
+        'scratchpad_clear',
+        'scratchpad_write',
+        'write_plugin_source',
+    ]);
+});
+
+test('STATEFUL_READ_TOOLS lists read_current_file + ask_user (hidden-State cache axis)', () => {
+    assert.deepEqual([...STATEFUL_READ_TOOLS].sort(), [
+        'ask_user',
+        'read_current_file',
+    ]);
+});
+
+test('LONG_RUNNING_TOOLS is the single-member wait_for_ci set', () => {
+    assert.deepEqual([...LONG_RUNNING_TOOLS], ['wait_for_ci']);
+});
+
+test('USER_PAUSE_TOOLS lists the 3 watchdog-floor user-pause tools', () => {
+    assert.deepEqual([...USER_PAUSE_TOOLS].sort(), [
+        'ask_user',
+        'submit_plan_for_approval',
+        'submit_script_for_approval',
+    ]);
+});
+
+test('Every 2.25.0-hoisted export is frozen', () => {
+    for (const [name, set] of [
+        ['WHOLE_FILE_WRITE_TOOLS', WHOLE_FILE_WRITE_TOOLS],
+        ['MUTATING_TOOLS', MUTATING_TOOLS],
+        ['STATEFUL_READ_TOOLS', STATEFUL_READ_TOOLS],
+        ['LONG_RUNNING_TOOLS', LONG_RUNNING_TOOLS],
+        ['USER_PAUSE_TOOLS', USER_PAUSE_TOOLS],
+    ]) {
+        assert.ok(Object.isFrozen(set), `${name} must be frozen`);
+        assert.throws(
+            () => /** @type {string[]} */ (/** @type {unknown} */ (set)).push('bogus'),
+            TypeError,
+            `${name}.push must throw on frozen array`,
+        );
+    }
+});
+
+// ============================================================================
+// Disjointness / subset asserts — the audit's "different-axis" load-bearing case
+// ============================================================================
+
+test('Every WHOLE_FILE_WRITE_TOOLS member is classified for cache (WRITE_TOOLS xor MUTATING_TOOLS)', () => {
+    // FileOp axis is independent of cache axis — a whole-file writer can
+    // either skip the cache (WRITE_TOOLS) or stay-with-envelope (MUTATING_TOOLS).
+    // It must do ONE of the two: every file-writer must have decided cache
+    // behavior or the dup-detection layer treats it as a default cached read.
+    // `write_plugin_source` is the off-diagonal case (whole-file write that
+    // gets the envelope, not skip-cache) and is intentional — plugin source
+    // is bulky enough that swallowing a re-call would be a real loss, but
+    // the model panics on the generic don't-retry warning per github#35.
+    for (const t of WHOLE_FILE_WRITE_TOOLS) {
+        const inWrite = WRITE_TOOLS.includes(t);
+        const inMutating = MUTATING_TOOLS.includes(t);
+        assert.ok(inWrite !== inMutating,
+            `${t} must be in exactly one of {WRITE_TOOLS, MUTATING_TOOLS} (in-write=${inWrite} in-mutating=${inMutating})`);
+    }
+});
+
+test('WRITE_TOOLS and MUTATING_TOOLS are disjoint (the audit\'s "different axis" point)', () => {
+    // The whole point of the 2.25.0 hoist is making these adjacent so a
+    // maintainer scanning the matrix sees they answer different questions:
+    // WRITE_TOOLS = "skip the dup-cache entirely"; MUTATING_TOOLS = "stay in
+    // cache, but rephrase the envelope". A tool in both is a contradiction.
+    for (const t of MUTATING_TOOLS) {
+        assert.ok(!WRITE_TOOLS.includes(t),
+            `${t} cannot be in both WRITE_TOOLS (skip-cache) and MUTATING_TOOLS (envelope-rephrase) — the axes contradict`);
+    }
+});
+
+test('STATEFUL_READ_TOOLS and WRITE_TOOLS are disjoint (different cache axes)', () => {
+    // STATEFUL_READ_TOOLS bypasses the cache entirely (hidden-state collisions).
+    // WRITE_TOOLS also bypasses the cache (fresh-mutation semantics). A tool
+    // in both is fine in principle but suggests confused classification —
+    // currently the sets don't overlap, and the assertion documents that.
+    for (const t of STATEFUL_READ_TOOLS) {
+        assert.ok(!WRITE_TOOLS.includes(t),
+            `${t} is in STATEFUL_READ_TOOLS — should not also be in WRITE_TOOLS`);
+    }
 });
 
 // ============================================================================

@@ -13,6 +13,8 @@
  * §Rule 2: "A write that fails ... does not invalidate prior reads."
  */
 
+import { WHOLE_FILE_WRITE_TOOLS } from './tool-classifications.js';
+
 const READ_TOOLS = new Set([
     'read_current_file',
     'read_file',
@@ -30,13 +32,6 @@ const EDIT_TOOLS = new Set([
     'insert_lines',
     'delete_lines',
     'edit_file',
-]);
-
-const WRITE_TOOLS = new Set([
-    'write_file',
-    'create_file',
-    'delete_file',
-    'write_plugin_source',
 ]);
 
 // Reads whose result contains multiple paths (one FileOp each).
@@ -126,7 +121,7 @@ export function extractFileOps(toolName, args, parsedResult) {
         return [{ path, op: 'edit', range: _editRange(toolName, a), content_hash: null }];
     }
 
-    if (WRITE_TOOLS.has(toolName)) {
+    if (WHOLE_FILE_WRITE_TOOLS.includes(toolName)) {
         const path = _resolvePath(a, parsedResult);
         if (!path) return [];
         return [{ path, op: 'write', range: null, content_hash: null }];

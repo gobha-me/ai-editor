@@ -1,40 +1,46 @@
 // @ts-check
 /**
- * Tool-classification sets used across the chat tool loop. Hoisted into one
- * module in 1.14.2 so the same membership doesn't drift across sites.
+ * Tool-classification sets used across the chat tool loop. Every
+ * classification axis lives here — co-located so a maintainer adding a new
+ * tool can scan all axes at once and decide which apply.
  *
- * The three axes are *not* the same question. Each set answers a different
- * one — keep that in mind before merging or deriving them from each other:
+ * Axes (each linked to the export defining it):
  *
- *   - {@link WRITE_TOOLS} — "should the dup-detection cache short-circuit a
- *     fresh call to this tool?" Answer: no, because a "your prior call
- *     already happened" envelope misrepresents semantics for fresh writes
- *     (the writer intends a new mutation; the cache would silently swallow
- *     it). Used at two sites in `handlers.js`: the cross-request dup-skip
- *     check and the same-request result-cache write.
+ *   Cache axis (dup-detection):
+ *   - {@link WRITE_TOOLS} — bypass the dup-cache short-circuit
+ *   - {@link STATEFUL_READ_TOOLS} — bypass both caches; result depends on
+ *     hidden State
  *
- *   - {@link FILE_MUTATING_TOOLS} — "does this tool's successful execution
- *     stale file-content reads in the caches?" Answer: yes for any tool
- *     that mutates a file on disk, AND for `open_file` (which doesn't
- *     mutate anything but changes which file `read_current_file` reads, so
- *     prior `read_current_file` results become stale). Used by
- *     `cache-invalidation.js`. NOT a side-effects axis — `open_file`
- *     is included for cache-key reasons, not because it has side effects.
+ *   Cache axis (invalidation on success):
+ *   - {@link FILE_MUTATING_TOOLS} — stales file-content reads
+ *   - {@link PREVIEW_MUTATING_TOOLS} — stales {@link PREVIEW_READ_TOOLS}
  *
- *   - {@link canonicalArgsKey} — stable JSON for cache-key purposes.
- *     `JSON.stringify(value, Object.keys(value).sort())` only orders
- *     top-level keys; nested object keys come out in insertion order, so
- *     `{q:{a:1,b:2}}` and `{q:{b:2,a:1}}` produce different keys despite
- *     being equivalent. Latent today (most tool args are flat); will bite
- *     the first nested-arg tool. Use this helper at every cache-key site.
+ *   Envelope axis (dup-cache hit messaging):
+ *   - {@link MUTATING_TOOLS} — remote/persistent mutations get
+ *     "prior call SUCCEEDED" envelope instead of the generic don't-retry
+ *     warning
  *
- * `MUTATING_TOOLS` and `STATEFUL_READ_TOOLS` (also in `handlers.js`) are
- * deliberately NOT hoisted here. `MUTATING_TOOLS` is a remote-mutation set
- * used only for refusal-envelope messaging; it's internally cohesive and
- * not duplicated. `STATEFUL_READ_TOOLS` is a cache-key axis (does the
- * result depend on hidden State?), structurally distinct from the
- * write/read axis above and won't migrate to a future `ToolDef.side_effects`
- * field. They stay where they are.
+ *   FileOp axis (Compression metadata):
+ *   - {@link WHOLE_FILE_WRITE_TOOLS} — strict subset of WRITE_TOOLS;
+ *     classifies FileOp `op: 'write'` vs `op: 'edit'`
+ *
+ *   Timeout axis (tool-loop scheduling):
+ *   - {@link LONG_RUNNING_TOOLS} — uses settings.longRunningToolTimeout
+ *   - {@link USER_PAUSE_TOOLS} — uses the 24h watchdog floor
+ *     (settings.userPauseTimeout)
+ *
+ *   Cache-key helper:
+ *   - {@link canonicalArgsKey} — deep-stable JSON for `(toolName, args)`
+ *     cache keys
+ *
+ * The 2.25.0 hoist reverses an earlier (1.14.2-era) decision to keep
+ * MUTATING_TOOLS / STATEFUL_READ_TOOLS / LONG_RUNNING_TOOLS /
+ * USER_PAUSE_TOOLS inline in `handlers.js`. That decision traded
+ * axis-encapsulation for developer-scan cost when adding a new tool. Per
+ * audit-2026-Q2 inventory entries [DUP] [M] (handlers.js inline forks)
+ * and feedback_prompts_js_parallel_enumeration.md, the inline location was
+ * the primary source of "missed an axis" bugs. The matrix-scan
+ * convention here is what 2.25.0 codified.
  */
 
 /**
@@ -50,6 +56,25 @@ export const WRITE_TOOLS = Object.freeze([
     'replace_lines', 'insert_lines', 'delete_lines',
     'create_file', 'edit_file', 'write_file', 'delete_file',
     'update_issue', 'add_issue_comment',
+]);
+
+/**
+ * Whole-file writes — a strict subset of {@link WRITE_TOOLS} containing
+ * only tools that REPLACE an entire file (vs. range-scoped edits like
+ * `replace_lines` / `edit_file`). Used by `turn-enrich.js#extractFileOps`
+ * to mint FileOp `op: 'write'` vs `op: 'edit'` for the Compression
+ * subsumption rule (DESIGN-compression §Rule 1).
+ *
+ * Distinct from {@link WRITE_TOOLS} even though every member also lives
+ * there — the questions are different ("does this fully replace prior
+ * file content?" vs. "should the dup-cache short-circuit a fresh call?").
+ * Hoisted from the inline `WRITE_TOOLS` shadow in `turn-enrich.js` at
+ * 2.25.0 (audit-2026-Q2 inventory entry [DUP] [M]).
+ *
+ * @type {readonly string[]}
+ */
+export const WHOLE_FILE_WRITE_TOOLS = Object.freeze([
+    'write_file', 'create_file', 'delete_file', 'write_plugin_source',
 ]);
 
 /**
@@ -137,6 +162,88 @@ export const PREVIEW_READ_TOOLS = Object.freeze([
     'preview_fill',
     'preview_inspect',
     'preview_resize',
+]);
+
+/**
+ * Remote/persistent mutations whose dup-cache hit gets a "your prior call
+ * SUCCEEDED" envelope instead of the generic don't-retry warning. These
+ * tools deliberately STAY in the cache (so accidental double-commits /
+ * double-comments are caught) — the envelope just reassures the model
+ * the prior mutation happened.
+ *
+ * The qwen-3-6-plus PR #289 trace showed the model panicking on the
+ * generic don't-retry note for `commit_files` and entering a 3-turn
+ * confirmation loop; the targeted envelope here resolved it. github#35.
+ *
+ * Keep this in sync as new mutating tools land — the matrix-scan
+ * convention is exactly what the 2.25.0 hoist was about.
+ *
+ * @type {readonly string[]}
+ */
+export const MUTATING_TOOLS = Object.freeze([
+    'commit_files',
+    'create_issue',
+    'create_pull_request',
+    'merge_pull_request',
+    'add_pr_review',
+    'memory_remember',
+    'memory_revise',
+    'scratchpad_write',
+    'scratchpad_clear',
+    'write_plugin_source',
+]);
+
+/**
+ * Tools whose result depends on implicit State (not on args alone). The
+ * dup-detection key is `(toolName, sortedArgs)`, so a stateful read like
+ * `read_current_file` collides across calls when the active file changes
+ * between them — the second call gets a stale-cache hit pointing at the
+ * previous file's content. Bypass both the cross-request and same-request
+ * caches for these.
+ *
+ * `ask_user` is included because the cross-request log would otherwise
+ * synth a "you already asked this; here was the answer" hit on identical
+ * args — but the model may legitimately want to re-ask after the
+ * conversation moves on.
+ *
+ * Surfaced 2026-05-06 testing PR #293 against issue #23 (qwen-3-6-plus).
+ *
+ * @type {readonly string[]}
+ */
+export const STATEFUL_READ_TOOLS = Object.freeze([
+    'read_current_file',
+    'ask_user',
+]);
+
+/**
+ * Tools that legitimately run longer than the standard tool timeout. The
+ * tool loop swaps in `settings.longRunningToolTimeout` (default 300s) for
+ * these, leaving the standard `settings.toolTimeout` (default 30s) for
+ * everything else.
+ *
+ * @type {readonly string[]}
+ */
+export const LONG_RUNNING_TOOLS = Object.freeze(['wait_for_ci']);
+
+/**
+ * Tools that block on the user's response via an inline Preact card. The
+ * chat loop's `isToolLoopCancelled` cancel path calls
+ * `cancelUserResponse()` / `cancelPlanApproval()` to release the awaited
+ * Promise. The user can sit with a question or plan for as long as they
+ * want — but if the card fails to mount (DOM error, Preact crash, race
+ * during conversation switch) the user never sees it and the Promise
+ * hangs forever. The 1.14.2 watchdog floor (`settings.userPauseTimeout`,
+ * default 24h) is a defensive last-resort: long enough that no real user
+ * hits it, bounded so the loop can't deadlock indefinitely.
+ *
+ * `ask_user` — github#33. `submit_plan_for_approval` — github#25.
+ *
+ * @type {readonly string[]}
+ */
+export const USER_PAUSE_TOOLS = Object.freeze([
+    'ask_user',
+    'submit_plan_for_approval',
+    'submit_script_for_approval',
 ]);
 
 /**
