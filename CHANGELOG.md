@@ -4,6 +4,10 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — surface 2026-Q2 audit + sweep track in ROADMAP
+
+[`docs/ROADMAP.md`](docs/ROADMAP.md) gains a new section pointing at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) as the queue for the post-2.23.0 sweep track. Defines the sizing convention (S folds into in-track patches, M earns its own slot, L earns a design doc first), parks triage policy in the inventory itself, and cross-references the one known overlap with existing deferred work (SlotManager body migration ↔ `[ST][S]` sidebar static rail-view containers entry). No version bump per `feedback_no_bump_for_measurement_only.md` — docs-only.
+
 ## [2.23.0] - 2026-05-11
 
 ### Feature — SlotManager `rail-views` slot kind + Rail v2 contribution consumer

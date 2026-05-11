@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-11 (post-2.22.0) · Current released: v2.22.0 · `main` HEAD: 2.22.0.
+> Last updated: 2026-05-11 (post-2.23.0) · Current released: v2.23.0 · `main` HEAD: 2.23.0 + [Unreleased].
 
 ## How to read this doc
 
@@ -9,6 +9,7 @@ Roadmap = where we're going. Shipped work and per-PR rationale live in [CHANGELO
 - **Now / Next / Later** — where we are at a glance.
 - **Active track** — in-flight work, sized to PRs.
 - **Later** — committed tracks queued behind the active one.
+- **2026-Q2 code audit + sweep** — sustained refactor-candidate burn-down running alongside surface tracks; queue lives at [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
 - **Deferred / unscheduled** — work that was planned, designed, or partially started but isn't currently scheduled. Triage owed.
 
 ## Now / Next / Later
@@ -240,6 +241,38 @@ All three get scoped post-2.0 against measured signal, not speculation.
 
 ---
 
+## 2026-Q2 code audit + sweep track
+
+> *Started 2026-05-11 post-2.23.0 SlotManager migration. Measurement-first sweep — read the codebase, catalog refactor candidates, burn them down at ~1 entry per spare slot.*
+
+The 2.22.0 / 2.23.0 SlotManager work surfaced enough deferred-but-known refactor candidates (hardcode walls, missing event wiring, duplicate implementations, should-be-registered-isn't, style drift) to justify a sustained sweep track alongside the surface tracks. Each candidate is small enough that none would individually earn a roadmap slot; collectively they're the kind of fragility that ages a codebase if left alone.
+
+### The queue
+
+Living inventory: [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md). Categories (**HC** hardcode wall · **EV** missing event wiring · **DUP** duplicate implementation · **REG** should-be-registered-isn't · **ST** style drift), system buckets (sidebar / chat / tools / git-providers / slot-manager / events / plumbing-storage / settings / app-boot / prompts / profiles / editor / preview / help / html-shell), confidence tags (likely / needs-investigation / maybe-intentional), and per-entry touch points all live there. Strike-through as entries ship; the queue closes when fewer than ~5 entries remain that survive triage.
+
+ROADMAP does **not** enumerate entries — that defeats the point of the separate inventory. ROADMAP surfaces the track; the inventory holds the queue.
+
+### Sizing — one entry per slot
+
+- **[S]** (single PR, <100 LOC) — folds into in-track patches; co-ship with whatever surface work is open.
+- **[M]** (multi-PR sequence, <500 LOC) — earns its own minor slot.
+- **[L]** (architectural, design doc + multi-minor) — earns a design doc first.
+
+### Triage policy
+
+Lives in the inventory under §"Triage policy." Confidence-tag rules (likely → ship, needs-investigation → audit-first, maybe-intentional → designate as public extension API or delete) and the §"Triage notes (additional candidates exist)" deferred-from-deferred list both stay in the inventory. ROADMAP only points.
+
+### Cross-references into the inventory
+
+Where a sweep entry is the same work as an item already on this roadmap, the existing roadmap row links into the inventory (single source of truth for refactor-candidate state):
+
+- **SlotManager body migration** — see *Other deferred* below; matched by the [`[ST][S] Sidebar uses static [data-rail-view-container] blocks while rail v2 wants dynamic`](audit-2026-Q2/inventory.md) entry.
+
+Other overlaps surface as the queue burns down.
+
+---
+
 ## Deferred / unscheduled (needs triage)
 
 > **Why this section exists.** Foundations (1.1.x) and Compression (1.2.x) were sequenced before Memory + Tools jumped ahead. Some items are gated on metrics from the cost dashboard (which has shipped — but its export affordance has not; see the Compression bucket). Some may be obsolete now that Tools shipped its own equivalents (e.g. the `TaskLedger` landed in 1.3.17). Sorting paused-vs-abandoned is owed.
@@ -307,7 +340,7 @@ All three get scoped post-2.0 against measured signal, not speculation.
 - ~~**`ChatHistoryStore` encapsulation**~~ *(✅ shipped 1.11.0)* — Single owner at [`js/chat/history-store.js`](../js/chat/history-store.js) exposes `append / splice / setLength / replace / clear`; sixteen direct mutations + persistence calls across `messages.js`, `handlers.js`, `summarizer.js`, `index.js`, `conversations.js`, `storage-metrics.js` consolidated to one. All methods mutate `State.chatHistory` in place to preserve any captured array reference. Tests in [`tests/test-history-store.mjs`](../tests/test-history-store.mjs). The quota-aware eviction strategy this unblocks (embeddings-first → old chats → never active) stays a separate slot.
 - **Chat panel facelift** — three Touch 2 variants (Polish, Restructure, Reskin); direction not locked. Will get a slot once a direction is picked or roll into 2.0 with the profile picker.
 - **Persona memory scope** — deferred indefinitely. Workspace + user scopes cover the demand seen so far.
-- ~~**Plugin SlotManager**~~ *(✅ rails shipped 2.22.0; contract for sidebar migration locked 2026-05-11 — see [`DESIGN §4`](DESIGN-git-providers-and-ui-extensions.md) Decision 1)* — `js/slot-manager.js` ships against the locked contract in [`docs/DESIGN-git-providers-and-ui-extensions.md`](DESIGN-git-providers-and-ui-extensions.md) §4; 5 catalog `<div data-slot="...">` mount points wired across the app shell; `applyProviderContributions()` fires at boot. Migration of existing imperative renderers (sidebar issues/PRs, settings connection cards, top-bar pills) into declarative slot contributions deferred to follow-up patches. **Sidebar migration path now defined** (DESIGN §4 Decision 1 + "Worked example"): new structured slot kind `rail-views` consumed by Rail v2's renderer; Issues/PRs migrate as `rail-views` contributions on the Gitea provider; Files/Branches as built-in plugin contributions; `sidebar-panels` tightened to additive panels below the rail-content area. Additive — schema stays at `version: '1.1'`. Sized as the next sidebar-migration minor; settings-connections and status-pill migrations remain deferred behind the sidebar slice. See [CHANGELOG §2.22.0](../CHANGELOG.md).
+- ~~**Plugin SlotManager**~~ *(✅ rails shipped 2.22.0; contract for sidebar migration locked 2026-05-11 — see [`DESIGN §4`](DESIGN-git-providers-and-ui-extensions.md) Decision 1)* — `js/slot-manager.js` ships against the locked contract in [`docs/DESIGN-git-providers-and-ui-extensions.md`](DESIGN-git-providers-and-ui-extensions.md) §4; 5 catalog `<div data-slot="...">` mount points wired across the app shell; `applyProviderContributions()` fires at boot. Migration of existing imperative renderers (sidebar issues/PRs, settings connection cards, top-bar pills) into declarative slot contributions deferred to follow-up patches. **Sidebar migration path now defined** (DESIGN §4 Decision 1 + "Worked example"): new structured slot kind `rail-views` consumed by Rail v2's renderer; Issues/PRs migrate as `rail-views` contributions on the Gitea provider; Files/Branches as built-in plugin contributions; `sidebar-panels` tightened to additive panels below the rail-content area. Additive — schema stays at `version: '1.1'`. Sized as the next sidebar-migration minor; settings-connections and status-pill migrations remain deferred behind the sidebar slice. See [CHANGELOG §2.22.0](../CHANGELOG.md). **Sidebar body migration** is tracked as the [`[ST][S] Sidebar uses static [data-rail-view-container] blocks`](audit-2026-Q2/inventory.md) entry in the [2026-Q2 audit + sweep](#2026-q2-code-audit--sweep-track) inventory.
 - **In-app help renderer** — sidebar pane instead of modal; would make `read_docs`-driven content far more useful. (`js/help/` exists today — modal-based; the deferred work is the sidebar variant.)
 - **Mobile secondary pane rework** — current ≤768px layout treats secondary pane as a fullscreen overlay; could be a slide-over.
 - **Issue/PR tab visual hierarchy** — long tabs feel busy; lo-pri.
