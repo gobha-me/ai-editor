@@ -41,17 +41,6 @@ import { scanForInvisible } from '../security/untrusted-wrap.js';
 // a second; 100 MB would not.
 const TOOL_RETURN_SCAN_MAX_BYTES = 10_000_000;
 
-/**
- * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
- * "role IDs"; post-2.0.0 they're consumed as group tags by
- * `Profile.tools.allowed_groups`. The `register()` validator below
- * rejects any other value at registration time so tool authors
- * surface the typo immediately.
- *
- * @type {string[]}
- */
-const LEGAL_GROUP_TAGS = ['all', 'coder', 'pm', 'reviewer', 'plugin-dev', 'full'];
-
 export const ToolRegistry = {
     /** @type {Map<string, ToolHandler>} */
     handlers: new Map(),
@@ -91,15 +80,20 @@ export const ToolRegistry = {
             );
         }
         
-        // 3. Validate group tags against the legacy 5-key tag list.
-        //    2.0.0 — slice 3: pre-2.0.0 this validated against `Roles.exists()`;
-        //    profile-keyed admission consumes the same tag vocabulary, so
-        //    the validator stays a flat allowlist of legal tags.
-        const invalidRoles = toolRoles.filter(r => !LEGAL_GROUP_TAGS.includes(r));
+        // 3. Validate group tags against the known set derived from profile
+        //    data. 2.34.0 — `Profiles.getKnownGroupTags()` unions every
+        //    profile's `tools.allowed_groups` plus the `'all'` / `'full'`
+        //    carve-outs (see profiles/registry.js). Pre-2.34.0 this was a
+        //    hardcoded `LEGAL_GROUP_TAGS` array that silently shadowed
+        //    profile-side additions; deriving from the registry means a
+        //    future profile declaring a new admission group auto-extends
+        //    this validator without a parallel edit.
+        const legalTags = Profiles.getKnownGroupTags();
+        const invalidRoles = toolRoles.filter(r => !legalTags.includes(r));
         if (invalidRoles.length > 0) {
             throw new Error(
                 `Tool "${name}" references invalid role(s): ${invalidRoles.join(', ')}. ` +
-                `Valid tags: ${LEGAL_GROUP_TAGS.join(', ')}`
+                `Valid tags: ${legalTags.join(', ')}`
             );
         }
         

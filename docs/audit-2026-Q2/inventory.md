@@ -124,11 +124,12 @@
 
 ### tools
 
-#### [HC] [S] [likely] `LEGAL_GROUP_TAGS` in `tools/registry.js:53` mirrors profile names
+#### ~~[HC] [S] [likely] `LEGAL_GROUP_TAGS` in `tools/registry.js:53` mirrors profile names~~ *(✅ closed — shipped 2.34.0)*
 - **What:** `js/tools/registry.js:53` declares `const LEGAL_GROUP_TAGS = ['all', 'coder', 'pm', 'reviewer', 'plugin-dev', 'full']`. Used to reject typos at tool-register time. The same 5 tags appear in `js/profiles/migration.js:25-31` `ROLE_TO_PROFILE` keys.
 - **Why it's load-bearing:** Adding a new profile (`kb` → kb.v1 in 2.8.0) didn't need a new admission tag because the kb profile inherits chat.v1's `allowed_groups`. But the moment a profile wants a tag-named admission group, the registry rejects it. Forces a code change at the wrong layer (tool registry, not profile registry).
 - **Suggested fix shape:** Derive the legal set from `Profiles.list()` plus the special `'all'` group, OR add an explicit `Profiles.getKnownGroupTags()` API that the registry consults.
 - **Touch points:** `js/tools/registry.js:53/98/102`, `js/profiles/registry.js`, `js/profiles/migration.js:25-31`.
+- **Resolution:** 2.34.0 added `Profiles.getKnownGroupTags()` to `js/profiles/registry.js` — walks `BY_NAME.values()` unioning every profile's `tools.allowed_groups` (excluding the `'*'` wildcard) and seeds two registration-layer carve-outs (`'all'`, `'full'`). `js/tools/registry.js` `register()` consults it at register-time; the hardcoded `LEGAL_GROUP_TAGS` constant deletes. `js/profiles/migration.js` `ROLE_TO_PROFILE` is unaffected (different axis — settings migration vs. tool-admission vocabulary). New `tests/test-tools-registry-legal-groups.mjs` covers snapshot, union property, carve-outs, rejection, and acceptance round-trip. See [CHANGELOG §2.34.0](../../CHANGELOG.md).
 
 #### ~~[HC] [S] [maybe-intentional] `LONG_RUNNING_TOOLS` + `USER_PAUSE_TOOLS` inline in handlers.js~~ *(✅ closed — shipped 2.25.0)*
 - **What:** `js/chat/handlers.js:746` `LONG_RUNNING_TOOLS = new Set(['wait_for_ci'])` and line 758 `USER_PAUSE_TOOLS = new Set(['ask_user', 'submit_plan_for_approval', 'submit_script_for_approval'])`.
@@ -363,7 +364,7 @@ For agents that want to pick a quick win without re-reading the full inventory:
 |------|------|------|
 | ~~`WRITE_TOOLS` rename~~ | ~~`js/chat/turn-enrich.js`~~ | ~~35-40~~ *(✅ 2.25.0)* |
 | ~~`tabs:render` orphan~~ | ~~`js/tools/commit-tools.js`~~ | ~~83~~ *(✅ 2.24.1)* |
-| `LEGAL_GROUP_TAGS` registry | `js/tools/registry.js` | 53 |
+| ~~`LEGAL_GROUP_TAGS` registry~~ | ~~`js/tools/registry.js`~~ | ~~53~~ *(✅ 2.34.0)* |
 | ~~`glyphFor` provider extension~~ | ~~`js/settings/connections-tab.js`~~ | ~~18-21~~ *(✅ 2.26.0)* |
 | ~~`closeAllModals` selectors~~ | ~~`js/ui-helpers.js`~~ | ~~87-91~~ *(✅ 2.33.0)* |
 | ~~`BUILTIN_PRIORITY` constant~~ | ~~`js/ui/left-pane-rail.js`~~ | ~~76-121~~ *(✅ 2.26.0)* |

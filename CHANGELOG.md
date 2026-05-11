@@ -4,6 +4,27 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-05-11
+
+### Feature — `Profiles.getKnownGroupTags()` derivation (2026-Q2 audit sweep)
+
+Closes the [`[HC] [S] [likely] LEGAL_GROUP_TAGS in tools/registry.js:53 mirrors profile names`](docs/audit-2026-Q2/inventory.md) entry from the §tools section of the [2026-Q2 audit + sweep](docs/ROADMAP.md) track. Continues the per-slot sweep cadence (2.33.0 ModalRegistry → 2.34.0 admission-tag derivation).
+
+**Why it's load-bearing.** Pre-2.34.0 [`js/tools/registry.js:53`](js/tools/registry.js) hardcoded `LEGAL_GROUP_TAGS = ['all', 'coder', 'pm', 'reviewer', 'plugin-dev', 'full']` — a flat array consulted by `register()` to reject typo'd `roles:` declarations. The list shadowed the actual source of truth (profile data in [`js/profiles/*-v1.js`](js/profiles/)). Adding a new profile with a tag-named admission group (e.g. a future `data.v1` declaring `allowed_groups: ['all', 'data']`) would silently reject any tool registered with `roles: ['data', ...]` until someone remembered to patch the second file — the same parallel-enumeration class as `feedback_prompts_js_parallel_enumeration.md` warns about for `LEGACY_TOOL_ENUMERATION` in `js/prompts.js`.
+
+**New [`Profiles.getKnownGroupTags()`](js/profiles/registry.js).** Walks `BY_NAME.values()` (which holds every registered profile — ENTRIES + SYNTHETIC_ENTRIES), unions every `profile.tools.allowed_groups`, filters out the `'*'` wildcard (it admits via short-circuit inside `filterTools`, not by tag), and seeds two carve-outs declared at the tool-registration layer rather than by any profile:
+
+- `'all'` — universal-default; admitted by every profile via the `_registeredRoles.includes('all')` short-circuit inside `filterTools`. Tool side only.
+- `'full'` — legacy bypass tag carried by tool registrations (e.g. [`js/tools/memory-tools.js`](js/tools/memory-tools.js), [`js/tools/doc-tools.js`](js/tools/doc-tools.js)). `full.v1` admits via `allowed_groups: ['*']` rather than naming `'full'`, so the tag never appears in profile data — but tools still tag with it, so the validator must keep it legal.
+
+Exported in the `Profiles = { get, has, list, filterTools, getKnownGroupTags }` namespace alongside the existing inspection methods.
+
+**Wire-up in [`js/tools/registry.js`](js/tools/registry.js).** `LEGAL_GROUP_TAGS` constant deleted. The `register()` typo-validator now reads `Profiles.getKnownGroupTags()` at register-time so any profile loaded before tool registration is honored. Error message interpolates the dynamic, sorted list so authors see the full vocabulary verbatim. `Profiles` was already imported at line 33 — no new import.
+
+**Tests — [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) (5 cases).** Pure-logic, runs under `tests/_node-shim.mjs`. Asserts: (1) **snapshot guard** — derived set matches the pre-2.34.0 6-tag array byte-for-byte (sorted); (2) **union property** — every registered profile's `allowed_groups` (minus `'*'`) is subsumed by the result, walked across the full 9-profile registry; (3) `'all'` + `'full'` carve-outs remain in the set even though no profile declares them; (4) **rejection still fires** — `register()` throws for a typo, and the error message lists every known legal tag; (5) **acceptance round-trip** — `register()` accepts every tag returned by `getKnownGroupTags()`, no false negatives. CI auto-globs `tests/test-*.mjs` per [`reference_testing_ci.md`](docs/) so the test wires in by name.
+
+**Removability.** Revert the PR → `tests/test-tools-registry-legal-groups.mjs` deletes; `js/profiles/registry.js` `getKnownGroupTags` export + body delete; `Profiles` namespace re-emits `{ get, has, list, filterTools }`; `js/tools/registry.js` restores the hardcoded `LEGAL_GROUP_TAGS` constant + the `LEGAL_GROUP_TAGS.join(', ')` error-message interpolation; version + CHANGELOG + inventory + ROADMAP revert. No persisted state, no migration. Main returns to 2.33.0 byte-equivalent.
+
 ## [2.33.0] - 2026-05-11
 
 ### Feature — `ModalRegistry` (2026-Q2 audit sweep)

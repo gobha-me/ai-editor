@@ -168,6 +168,44 @@ export function list() {
 }
 
 /**
+ * Returns the set of known tool-admission group tags — the union of every
+ * registered profile's `tools.allowed_groups` (excluding the `'*'`
+ * wildcard, which is a wholesale-bypass marker rather than a tag) plus
+ * two carve-outs that are admitted at the tool-registration layer but
+ * never declared by a profile today:
+ *
+ *   - `'all'` — universal-default. Tools tagged `roles: ['all']` are
+ *     admitted by every profile (short-circuited inside `filterTools`).
+ *     No profile declares `'all'` in `allowed_groups` because the check
+ *     is on the tool side.
+ *   - `'full'` — legacy bypass tag. `full.v1` admits via
+ *     `allowed_groups: ['*']`, which short-circuits to the full set; the
+ *     tag `'full'` itself never appears in any profile's allowed_groups.
+ *     Tool registrations (e.g. `js/tools/memory-tools.js`,
+ *     `js/tools/doc-tools.js`) still use `roles: ['full', ...]` to mark
+ *     admin-tier admission, so the tag must remain legal for register-time
+ *     typo validation.
+ *
+ * Consumed by `js/tools/registry.js` `register()` as the typo-rejection
+ * allowlist (replaces a previously-hardcoded `LEGAL_GROUP_TAGS` array
+ * inline there). Deriving from profile data means future profile
+ * additions declaring a new `allowed_groups` entry auto-extend the
+ * admission vocabulary without a parallel edit in two files.
+ *
+ * @returns {string[]} Sorted array of legal admission tags.
+ */
+export function getKnownGroupTags() {
+    const tags = new Set(['all', 'full']);
+    for (const profile of Object.values(BY_NAME)) {
+        const groups = (profile && profile.tools && profile.tools.allowed_groups) || [];
+        for (const g of groups) {
+            if (g !== '*') tags.add(g);
+        }
+    }
+    return Array.from(tags).sort();
+}
+
+/**
  * Filter tool definitions by the active profile's `tools.allowed_groups`.
  * Mirrors the legacy `Roles.filterTools` semantics in [`js/core.js`](../core.js):
  *
@@ -219,4 +257,4 @@ export function filterTools(defs, profileName) {
  * named imports — matches the established `Roles` / `Storage` / `State`
  * convention in `js/core.js`.
  */
-export const Profiles = { get, has, list, filterTools };
+export const Profiles = { get, has, list, filterTools, getKnownGroupTags };
