@@ -27,6 +27,30 @@ export function closeNewFileModal() {
     document.getElementById('newFileModal').classList.remove('active');
 }
 
+/**
+ * Bind a delegated click handler for the new-file modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ */
+let _wired = false;
+export function mountNewFileModal({ onClose, onCreate } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#newFileModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeNewFileModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'createNewFile' && typeof onCreate === 'function') {
+            onCreate();
+        }
+    });
+}
+
 export async function createNewFile() {
     const path = document.getElementById('newFileName').value.trim();
     

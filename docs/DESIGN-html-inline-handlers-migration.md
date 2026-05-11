@@ -481,7 +481,8 @@ The team updates this table as phases ship. Each row gets `planned` → `in flig
 | Phase | Scope | Status | Shipped | Notes |
 |---|---|---|---|---|
 | Phase 1 | Pilot — commit modal (~4 handlers) + dispatcher pattern | shipped | 2.27.0 | `mountCommitModal` in [`js/ui/commit.js`](../js/ui/commit.js) replicates `mountBranchPanel` shape; [`tests/test-commit-modal-dispatch.mjs`](../tests/test-commit-modal-dispatch.mjs) covers the dispatcher contract. `window.*` aliases stay through Phase 3. |
-| Phase 2 | Remaining ~11 modals (~45 handlers) | planned | — | May split as 2a/2b for review bandwidth |
+| Phase 2a | 8 clean-cut modals — revert, new branch, new file, rename, issue detail, zip upload, release, replay (~21 handlers) | shipped | 2.28.0 | Eight `mountXxxModal` fns in their existing owning modules; ~21 attrs migrated in [`html/modals.html`](../html/modals.html); 8 new dispatcher tests in [`tests/`](../tests/). `zipSelectAll` carries the only typed payload (`data-zip-select="all"/"none"`). `window.*` aliases stay. |
+| Phase 2b | Remaining 3 modals — plugin (extract from app.js), create-PR (project-manager.js, optional extract), settings (orchestrator + tabs); plus non-modal HTML in editor-panel / chat-panel / settings-tabs | planned | — | Structural prerequisites (extractions, tab-distributed wiring) make these distinct from 2a |
 | Phase 3 | JS renderers (~7 files, ~29 handlers) | planned | — | `chat/messages.js` density may earn its own PR |
 | Phase 4 | `window.*` block cleanup (~80 LOC deletion) + anti-regression coverage test | planned | — | Closes the parent audit row's "window.* exposure block" rationale |
 

@@ -160,6 +160,32 @@ export function closeReplayModal() {
 }
 
 /**
+ * Bind a delegated click handler for the replay modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ */
+let _wired = false;
+export function mountReplayModal({ onClose, onPrev, onNext } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#replayModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeReplayModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'replayPrev' && typeof onPrev === 'function') {
+            onPrev();
+        } else if (action === 'replayNext' && typeof onNext === 'function') {
+            onNext();
+        }
+    });
+}
+
+/**
  * Parse a session-archive File object and switch the modal into
  * stepper mode. Surfaces validation failures inline (drop-zone error
  * banner) rather than as toasts so the user sees the reason without

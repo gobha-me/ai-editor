@@ -47,11 +47,12 @@ import {
     initStatusBarListener
 } from './ui-helpers.js';
 import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush, mountCommitModal } from './ui/commit.js';
-import { openNewBranchModal, closeNewBranchModal, createNewBranch } from './ui/branch.js';
-import { openNewFileModal, closeNewFileModal, createNewFile } from './ui/file-create.js';
-import { openRenameModal, closeRenameModal, submitRename } from './ui/file-rename.js';
-import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile } from './ui/revert.js';
-import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease } from './release-manager.js';
+import { openNewBranchModal, closeNewBranchModal, createNewBranch, mountNewBranchModal } from './ui/branch.js';
+import { openNewFileModal, closeNewFileModal, createNewFile, mountNewFileModal } from './ui/file-create.js';
+import { openRenameModal, closeRenameModal, submitRename, mountRenameModal } from './ui/file-rename.js';
+import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile, mountRevertModal } from './ui/revert.js';
+import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease, mountReleaseModal } from './release-manager.js';
+import { mountIssueDetailModal } from './issue-detail.js';
 import {
     refreshProjects,
     onProjectChange,
@@ -110,11 +111,18 @@ import {
     isEnabled as sessionsIsEnabled,
     getActiveWorkspaceId as sessionsActiveWorkspaceId,
 } from './chat/sessions-sync.js';
-import { installReplay } from './chat/replay.js';
+import {
+    installReplay,
+    mountReplayModal,
+    closeReplayModal,
+    prev as replayPrev,
+    next as replayNext,
+} from './chat/replay.js';
 import {
     openZipUpload, closeZipUpload,
     handleZipFileSelect, zipToggleFile, zipSelectAll, scanForDiffs,
     uploadExtractedFiles, initZipDragDrop, handleZipFile, isZipDrop,
+    mountZipUpload,
 } from './zip-upload.js';
 
 // Import tool modules (loaded before chat.js to ensure registry is ready)
@@ -873,6 +881,14 @@ async function init() {
     mountNowStrip();
     mountSwitcherMenu();
     mountCommitModal({ onClose: closeCommitModal, onCommit: commitAndPush, onGenerate: generateCommitMsg });
+    mountRevertModal({ onClose: closeRevertModal, onRevertCurrent: revertOnlyCurrentFile, onRevertAll: revertAllFiles });
+    mountNewBranchModal({ onClose: closeNewBranchModal, onCreate: createNewBranch });
+    mountNewFileModal({ onClose: closeNewFileModal, onCreate: createNewFile });
+    mountRenameModal({ onClose: closeRenameModal, onSubmit: submitRename });
+    mountIssueDetailModal({ onClose: closeIssueDetailModal });
+    mountZipUpload({ onClose: closeZipUpload, onSelectAll: zipSelectAll, onScanDiffs: scanForDiffs, onUpload: uploadExtractedFiles });
+    mountReleaseModal({ onClose: closeReleaseModal, onGenerate: generateReleaseNotes, onCreate: createGitRelease });
+    mountReplayModal({ onClose: closeReplayModal, onPrev: replayPrev, onNext: replayNext });
     initHelpSlideOut();
     initWindowZipDrop();
 

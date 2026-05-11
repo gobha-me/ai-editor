@@ -209,13 +209,43 @@ export async function closeZipUpload() {
         const { showConfirm } = await import('./ui/dialogs.js');
         if (!await showConfirm('Upload in progress. Cancel?', { title: 'Cancel Upload', okLabel: 'Cancel Upload', variant: 'danger' })) return;
     }
-    
+
     const modal = document.getElementById('zipUploadModal');
     if (modal) modal.classList.remove('active');
-    
+
     extractedFiles = [];
     isUploading = false;
     currentZipName = '';
+}
+
+/**
+ * Bind a delegated click handler for the zip-upload modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * `zipSelectAll` carries a typed `data-zip-select="all"` / `"none"` payload
+ * per design Decision 3 (no JSON in attributes).
+ */
+let _wired = false;
+export function mountZipUpload({ onClose, onSelectAll, onScanDiffs, onUpload } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#zipUploadModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeZipUpload' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'zipSelectAll' && typeof onSelectAll === 'function') {
+            onSelectAll(btn.getAttribute('data-zip-select') === 'all');
+        } else if (action === 'scanForDiffs' && typeof onScanDiffs === 'function') {
+            onScanDiffs();
+        } else if (action === 'uploadExtractedFiles' && typeof onUpload === 'function') {
+            onUpload();
+        }
+    });
 }
 
 // ============================================

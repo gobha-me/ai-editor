@@ -4,6 +4,50 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 2a** (8 clean-cut modals)
+
+Second slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md) and piloted in 2.27.0 (PR #379). Phase 2a migrates **8 modals** whose owning modules are already established — `mountXxxModal` lands next to the existing close/submit functions with no extraction prerequisite. The remaining 3 modals from the design's Phase 2 inventory — plugin (lives in [`js/app.js`](js/app.js), needs extraction), create-PR (lives in [`js/project-manager.js`](js/project-manager.js), 890-line module), and settings (orchestrator + tab-distributed logic across [`js/settings-manager.js`](js/settings-manager.js), [`js/settings/persistence.js`](js/settings/persistence.js), [`js/settings/models-tab.js`](js/settings/models-tab.js)) — defer to Phase 2b. Closes the planned-status Phase 2a row in the design doc's [Implementation status](docs/DESIGN-html-inline-handlers-migration.md#implementation-status) table; advances the parent `[ST][L]` audit row at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) from 4-of-~50 → ~24-of-~50 inline `onclick=` attributes closed.
+
+**New `mountXxxModal({ ... })` functions — one per modal, each replicating the Phase 1 `mountCommitModal` ([`js/ui/commit.js`](js/ui/commit.js)) shape byte-for-byte.** Each is an idempotent (`_wired` guard) document-level click listener filtered by `e.target.closest('[data-action]')` + `btn.closest('#<modalId>')` and routed by `data-action` to a typed callback bag:
+
+| # | Module | Function | Scope | Actions |
+|---|---|---|---|---|
+| 1 | [`js/ui/revert.js`](js/ui/revert.js) | `mountRevertModal({ onClose, onRevertCurrent, onRevertAll })` | `#revertModal` | `closeRevertModal`, `revertOnlyCurrentFile`, `revertAllFiles` |
+| 2 | [`js/ui/branch.js`](js/ui/branch.js) | `mountNewBranchModal({ onClose, onCreate })` | `#newBranchModal` | `closeNewBranchModal`, `createNewBranch` |
+| 3 | [`js/ui/file-create.js`](js/ui/file-create.js) | `mountNewFileModal({ onClose, onCreate })` | `#newFileModal` | `closeNewFileModal`, `createNewFile` |
+| 4 | [`js/ui/file-rename.js`](js/ui/file-rename.js) | `mountRenameModal({ onClose, onSubmit })` | `#renameFileModal` | `closeRenameModal`, `submitRename` |
+| 5 | [`js/issue-detail.js`](js/issue-detail.js) | `mountIssueDetailModal({ onClose })` | `#issueDetailModal` | `closeIssueDetailModal` |
+| 6 | [`js/zip-upload.js`](js/zip-upload.js) | `mountZipUpload({ onClose, onSelectAll, onScanDiffs, onUpload })` | `#zipUploadModal` | `closeZipUpload`, `zipSelectAll` (payload), `scanForDiffs`, `uploadExtractedFiles` |
+| 7 | [`js/release-manager.js`](js/release-manager.js) | `mountReleaseModal({ onClose, onGenerate, onCreate })` | `#releaseModal` | `closeReleaseModal`, `generateReleaseNotes`, `createRelease` |
+| 8 | [`js/chat/replay.js`](js/chat/replay.js) | `mountReplayModal({ onClose, onPrev, onNext })` | `#replayModal` | `closeReplayModal`, `replayPrev`, `replayNext` |
+
+**Payload-arg case — `zipSelectAll`.** Per design Decision 3 (typed `data-*` attrs, no JSON in attributes), the previously inline `onclick="window.zipSelectAll(true)"` / `onclick="window.zipSelectAll(false)"` migrate to `data-action="zipSelectAll" data-zip-select="all"` / `data-zip-select="none"`. The dispatcher reads `btn.getAttribute('data-zip-select') === 'all'` and calls `onSelectAll(true|false)`. Boolean coercion lives in the dispatcher; the attribute stays string-typed.
+
+**HTML migration — [`html/modals.html`](html/modals.html) (~21 attribute swaps).** Eight modal blocks updated from `onclick="window.foo()"` → `data-action="foo"`. The lone `onclick="event.stopPropagation()"` on `#btnToggleAllComments` ([html/modals.html:307](html/modals.html)) is **removed**, not migrated — the JS click handler set in the comments-render path at [`js/issue-detail.js:605`](js/issue-detail.js) already calls `e.stopPropagation()`, so the inline attribute was redundant defense-in-depth that the dispatcher pattern cannot replicate at document level (the event has already bubbled by the time the document listener fires).
+
+**`window.*` aliases stay intact.** The `window.closeRevertModal` / `window.createNewBranch` / `window.zipSelectAll` / etc. lines in [`js/app.js`](js/app.js) remain through Phase 3 per the design's Decision 6 sequencing. They retire in Phase 4's `window.*` block cleanup; the per-phase rollback boundary stays clean.
+
+**Init wire — [`js/app.js`](js/app.js).** New `mountXxxModal` imports added to the existing 5 `'./ui/...'` import lines (`branch.js`, `file-create.js`, `file-rename.js`, `revert.js`, `release-manager.js`) plus a new direct import for `mountIssueDetailModal` from `./issue-detail.js`, an expanded `./chat/replay.js` import (`mountReplayModal`, `closeReplayModal`, `prev as replayPrev`, `next as replayNext` joining the existing `installReplay`), and `mountZipUpload` added to the `./zip-upload.js` import. Eight new calls in the existing init sequence immediately after `mountCommitModal({...})`.
+
+**Tests — 8 new dispatcher tests in [`tests/`](tests/) (~480 LOC total).** One per modal, each lifted from the Phase 1 [`tests/test-commit-modal-dispatch.mjs`](tests/test-commit-modal-dispatch.mjs) template:
+
+- [`tests/test-revert-modal-dispatch.mjs`](tests/test-revert-modal-dispatch.mjs) (8 cases)
+- [`tests/test-new-branch-modal-dispatch.mjs`](tests/test-new-branch-modal-dispatch.mjs) (7 cases)
+- [`tests/test-new-file-modal-dispatch.mjs`](tests/test-new-file-modal-dispatch.mjs) (7 cases)
+- [`tests/test-rename-modal-dispatch.mjs`](tests/test-rename-modal-dispatch.mjs) (7 cases)
+- [`tests/test-issue-detail-modal-dispatch.mjs`](tests/test-issue-detail-modal-dispatch.mjs) (6 cases — single action only)
+- [`tests/test-zip-upload-modal-dispatch.mjs`](tests/test-zip-upload-modal-dispatch.mjs) (12 cases — extra coverage for the `data-zip-select="all"`/`"none"`/missing payload routing)
+- [`tests/test-release-modal-dispatch.mjs`](tests/test-release-modal-dispatch.mjs) (8 cases)
+- [`tests/test-replay-modal-dispatch.mjs`](tests/test-replay-modal-dispatch.mjs) (8 cases)
+
+Each asserts: exactly one document listener installs; every known action routes to its callback; out-of-scope `data-action` is filtered; missing `[data-action]` ancestor is filtered; unknown action value is filtered; double-mount is idempotent (`_wired` guard). Pure-logic — no JSDOM, runs under the existing [`tests/_node-shim.mjs`](tests/_node-shim.mjs) `document`-stub.
+
+**Why this Phase shape.** Phase 2a is the *clean-cut subset* — every modal whose `mountXxxModal` lands in the same file as its existing close/submit functions, with no extraction prerequisite. The 3 deferred modals (plugin / create-PR / settings) each require a structural step before their mount fn lands. Splitting Phase 2 along this axis keeps each PR's review surface mechanical and reviewable; Phase 2b will handle the structural prerequisites alongside its mount-fn additions.
+
+**Removability.** Revert the PR → ~21 HTML attributes restore to `onclick="window.foo()"`, 8 `mountXxxModal` functions delete from their owning modules, the imports + init calls delete from [`js/app.js`](js/app.js), the 8 test files delete, version + CHANGELOG revert, the `event.stopPropagation()` attribute restores at [html/modals.html:307](html/modals.html). The `window.*` aliases were untouched, so HTML restores to a working state. Main returns to 2.27.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
 ## [2.27.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 1** (pilot commit modal)

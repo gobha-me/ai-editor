@@ -109,6 +109,33 @@ export function closeRevertModal() {
 }
 
 /**
+ * Bind a delegated click handler for the revert modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
+ */
+let _wired = false;
+export function mountRevertModal({ onClose, onRevertCurrent, onRevertAll } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#revertModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeRevertModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'revertOnlyCurrentFile' && typeof onRevertCurrent === 'function') {
+            onRevertCurrent();
+        } else if (action === 'revertAllFiles' && typeof onRevertAll === 'function') {
+            onRevertAll();
+        }
+    });
+}
+
+/**
  * Revert all dirty tabs to their original content
  */
 export async function revertAllFiles() {

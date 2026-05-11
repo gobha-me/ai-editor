@@ -61,6 +61,30 @@ export function closeRenameModal() {
     currentIsFolder = false;
 }
 
+/**
+ * Bind a delegated click handler for the rename modal's action buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ */
+let _wired = false;
+export function mountRenameModal({ onClose, onSubmit } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#renameFileModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeRenameModal' && typeof onClose === 'function') {
+            onClose();
+        } else if (action === 'submitRename' && typeof onSubmit === 'function') {
+            onSubmit();
+        }
+    });
+}
+
 export async function submitRename() {
     const newPath = document.getElementById('renameFilePath').value.trim();
 

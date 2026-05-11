@@ -86,7 +86,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>
                 <span>Revert Changes</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeRevertModal()" aria-label="Close revert dialog">×</button>
+            <button type="button" class="modal-close" data-action="closeRevertModal" aria-label="Close revert dialog">×</button>
         </div>
         <div class="modal-body">
             <p style="font-size: var(--font-base); color: var(--text-secondary); margin-bottom: 1rem;">
@@ -96,18 +96,18 @@
                 <!-- Populated dynamically -->
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <button type="button" class="btn btn-secondary" onclick="window.revertOnlyCurrentFile()" style="width: 100%;">
+                <button type="button" class="btn btn-secondary" data-action="revertOnlyCurrentFile" style="width: 100%;">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
                     <span>Revert Current File Only</span>
                 </button>
-                <button type="button" class="btn btn-danger" onclick="window.revertAllFiles()" style="width: 100%; background: var(--danger); color: white;">
+                <button type="button" class="btn btn-danger" data-action="revertAllFiles" style="width: 100%; background: var(--danger); color: white;">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v4M12 17h.01"/></svg>
                     <span>Revert ALL Files</span>
                 </button>
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeRevertModal()">Cancel</button>
+            <button type="button" class="btn btn-secondary" data-action="closeRevertModal">Cancel</button>
         </div>
     </div>
 </div>
@@ -170,7 +170,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="3" r="2"/><circle cx="6" cy="21" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 5v14M6 14a6 6 0 0 1 6-6h2a4 4 0 0 0 4-4"/></svg>
                 <span>Create New Branch</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeNewBranchModal()" aria-label="Close new branch dialog">×</button>
+            <button type="button" class="modal-close" data-action="closeNewBranchModal" aria-label="Close new branch dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -186,8 +186,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeNewBranchModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.createNewBranch()">
+            <button type="button" class="btn btn-secondary" data-action="closeNewBranchModal">Cancel</button>
+            <button type="button" class="btn btn-primary" data-action="createNewBranch">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
                 <span>Create Branch</span>
             </button>
@@ -203,7 +203,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/></svg>
                 <span>Create New File</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeNewFileModal()" aria-label="Close new file dialog">×</button>
+            <button type="button" class="modal-close" data-action="closeNewFileModal" aria-label="Close new file dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -213,8 +213,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeNewFileModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.createNewFile()">
+            <button type="button" class="btn btn-secondary" data-action="closeNewFileModal">Cancel</button>
+            <button type="button" class="btn btn-primary" data-action="createNewFile">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
                 <span>Create File</span>
             </button>
@@ -230,7 +230,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                 <span>Rename / Move File</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeRenameModal()" aria-label="Close rename dialog">×</button>
+            <button type="button" class="modal-close" data-action="closeRenameModal" aria-label="Close rename dialog">×</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -240,8 +240,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeRenameModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="window.submitRename()">
+            <button type="button" class="btn btn-secondary" data-action="closeRenameModal">Cancel</button>
+            <button type="button" class="btn btn-primary" data-action="submitRename">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg>
                 <span>Rename</span>
             </button>
@@ -279,7 +279,7 @@
                 <a id="issueDetailExternalLink" href="#" target="_blank" class="btn btn-secondary btn-xs" title="Open in browser" style="display: none; text-decoration: none;">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
                 </a>
-                <button type="button" class="modal-close" onclick="window.closeIssueDetailModal()" aria-label="Close issue details">×</button>
+                <button type="button" class="modal-close" data-action="closeIssueDetailModal" aria-label="Close issue details">×</button>
             </div>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.4rem;">
@@ -304,7 +304,7 @@
                     <span class="section-chevron">▶</span>
                     <span id="issueDetailCommentsTitle">Comments</span>
                     <span style="margin-left: auto;">
-                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary btn-xs" style="display: none;" onclick="event.stopPropagation()">
+                        <button type="button" id="btnToggleAllComments" class="btn btn-secondary btn-xs" style="display: none;">
                             Expand All
                         </button>
                     </span>
@@ -316,7 +316,7 @@
             <div id="issueDetailBranchInfo" class="issue-detail-branch-info"></div>
         </div>
         <div class="modal-footer modal-footer-split">
-            <button type="button" class="btn btn-secondary" onclick="window.closeIssueDetailModal()">Close</button>
+            <button type="button" class="btn btn-secondary" data-action="closeIssueDetailModal">Close</button>
             <button type="button" class="btn btn-primary" id="btnIssueStartWork" title="Create/switch to issue branch and start working">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                 <span>Start Work</span>
@@ -378,7 +378,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
                 <span>Upload Zip</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeZipUpload()" aria-label="Close zip upload">×</button>
+            <button type="button" class="modal-close" data-action="closeZipUpload" aria-label="Close zip upload">×</button>
         </div>
         <div class="modal-body">
             <!-- Drop Zone -->
@@ -399,9 +399,9 @@
                 
                 <!-- Select all / none / scan -->
                 <div class="zip-select-controls">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(true)">Select all</button>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="window.zipSelectAll(false)">Select none</button>
-                    <button type="button" class="btn btn-secondary btn-sm zip-git-only" id="btnZipScanDiffs" onclick="window.scanForDiffs()" title="Compare files against repo and select only new/modified">
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="zipSelectAll" data-zip-select="all">Select all</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="zipSelectAll" data-zip-select="none">Select none</button>
+                    <button type="button" class="btn btn-secondary btn-sm zip-git-only" id="btnZipScanDiffs" data-action="scanForDiffs" title="Compare files against repo and select only new/modified">
                         <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
                         <span>Scan for Diffs</span>
                     </button>
@@ -446,8 +446,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeZipUpload()">Cancel</button>
-            <button type="button" class="btn btn-primary" id="btnZipUpload" disabled onclick="window.uploadExtractedFiles()">
+            <button type="button" class="btn btn-secondary" data-action="closeZipUpload">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btnZipUpload" disabled data-action="uploadExtractedFiles">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
                 <span>Upload</span>
             </button>
@@ -681,7 +681,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
                 <span>Release Manager</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeReleaseModal()" aria-label="Close">×</button>
+            <button type="button" class="modal-close" data-action="closeReleaseModal" aria-label="Close">×</button>
         </div>
 
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem;">
@@ -700,7 +700,7 @@
                         <option value="">Loading…</option>
                     </select>
                 </div>
-                <button type="button" id="btnGenerateRelease" class="btn btn-primary" onclick="window.generateReleaseNotes()">
+                <button type="button" id="btnGenerateRelease" class="btn btn-primary" data-action="generateReleaseNotes">
                     <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2ZM19 3v4M21 5h-4M3 17v4M5 19H1"/></svg>
                     <span>Generate Notes</span>
                 </button>
@@ -739,8 +739,8 @@
         </div>
 
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="window.closeReleaseModal()">Close</button>
-            <button type="button" id="btnCreateRelease" class="btn btn-primary" onclick="window.createRelease()">
+            <button type="button" class="btn btn-secondary" data-action="closeReleaseModal">Close</button>
+            <button type="button" id="btnCreateRelease" class="btn btn-primary" data-action="createRelease">
                 <svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4ZM22 2 11 13"/></svg>
                 <span>Create Release</span>
             </button>
@@ -756,7 +756,7 @@
                 <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 14 9-14 9V3Z"/></svg>
                 <span>Session Replay</span>
             </h2>
-            <button type="button" class="modal-close" onclick="window.closeReplayModal()" aria-label="Close replay">×</button>
+            <button type="button" class="modal-close" data-action="closeReplayModal" aria-label="Close replay">×</button>
         </div>
         <div class="modal-body replay-body" id="replayBody">
             <!-- Empty state: drop zone for an .aieditor.session file. Replaced
@@ -779,11 +779,11 @@
         <div class="modal-footer replay-footer" id="replayFooter">
             <div class="replay-meta" id="replayMeta"></div>
             <div class="replay-nav">
-                <button type="button" class="btn btn-secondary" id="btnReplayPrev" onclick="window.replayPrev()" disabled>‹ Prev</button>
+                <button type="button" class="btn btn-secondary" id="btnReplayPrev" data-action="replayPrev" disabled>‹ Prev</button>
                 <span class="replay-pos" id="replayPos">—</span>
-                <button type="button" class="btn btn-secondary" id="btnReplayNext" onclick="window.replayNext()" disabled>Next ›</button>
+                <button type="button" class="btn btn-secondary" id="btnReplayNext" data-action="replayNext" disabled>Next ›</button>
             </div>
-            <button type="button" class="btn btn-secondary" onclick="window.closeReplayModal()">Close</button>
+            <button type="button" class="btn btn-secondary" data-action="closeReplayModal">Close</button>
         </div>
     </div>
 </div>

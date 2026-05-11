@@ -661,6 +661,33 @@ export function closeIssueDetailModal() {
 }
 
 /**
+ * Bind a delegated click handler for the issue-detail modal's close buttons.
+ * Idempotent — safe to call from `init()` multiple times.
+ *
+ * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Only `closeIssueDetailModal` migrates here — the `Start Work` button is
+ * wired directly via `btnIssueStartWork.onclick` in `openIssueDetailModal`,
+ * and the `Expand All` button's `event.stopPropagation()` is now handled
+ * by the JS click handler set in the comments-render path (it already
+ * calls `e.stopPropagation()`).
+ */
+let _wired = false;
+export function mountIssueDetailModal({ onClose } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#issueDetailModal')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'closeIssueDetailModal' && typeof onClose === 'function') {
+            onClose();
+        }
+    });
+}
+
+/**
  * Start work on an issue:
  * 1. Create branch if it doesn't exist, or switch to it
  * 2. Set State.currentIssue
