@@ -6,7 +6,9 @@
  * Asserts the inline-Start-button decisions documented in the 1.13.0 plan:
  *   - One button per row, three states: ▶ Start / 🔀 Switch & Start / ✅ Active.
  *   - Active state is disabled (so the row's openIssueTab is still the way in).
- *   - The button onclick suppresses propagation so it doesn't fire openIssueTab.
+ *   - The button + row use delegated `data-action` attributes (2.30.0, Phase 3a
+ *     of the inline-handlers migration); closest() naturally routes button
+ *     clicks to the inner action and not to the row's `openIssueTab`.
  *   - Issue title is HTML-escaped; aria labels are populated.
  *   - Active / focused row classes from the legacy renderer are preserved.
  */
@@ -101,23 +103,23 @@ test('✅ Active label + disabled when currently on the issue branch', () => {
 });
 
 // ============================================
-// Click delegation — bubbling guard
+// Click delegation — data-action shape (2.30.0, Phase 3a)
 // ============================================
 
-test('Start button onclick stops propagation (so row openIssueTab does NOT fire)', () => {
+test('Start button carries data-action="startWorkOnIssueFromList" + data-issue', () => {
     const html = renderIssueRowsHtml({
         ...baseCtx,
         issues: [{ number: 7, title: 'Fix bug', labels: [] }],
     });
-    assert.match(html, /event\.stopPropagation\(\); window\.startWorkOnIssueFromList\(7\)/);
+    assert.match(html, /data-action="startWorkOnIssueFromList" data-issue="7"/);
 });
 
-test('row click still wired to openIssueTab', () => {
+test('row carries data-action="openIssueTab" + data-issue', () => {
     const html = renderIssueRowsHtml({
         ...baseCtx,
         issues: [{ number: 7, title: 'Fix bug', labels: [] }],
     });
-    assert.match(html, /onclick="window\.openIssueTab\(7\)"/);
+    assert.match(html, /data-action="openIssueTab" data-issue="7"/);
 });
 
 // ============================================
@@ -192,7 +194,7 @@ test('active beats focused when both refer to the same issue', () => {
 // Dependencies — preserved from legacy renderer
 // ============================================
 
-test('dependencies row renders with click-stopping dep links', () => {
+test('dependencies row renders with delegated dep links', () => {
     const html = renderIssueRowsHtml({
         ...baseCtx,
         issues: [{ number: 1, title: 'A', labels: [], dependencies: [42, 7] }],
@@ -200,5 +202,8 @@ test('dependencies row renders with click-stopping dep links', () => {
     assert.match(html, /Depends on:/);
     assert.match(html, /#42/);
     assert.match(html, /#7/);
-    assert.match(html, /event\.stopPropagation/);
+    // Delegation: closest('[data-action]') resolves to the inner dep-link,
+    // not the row, so no event.stopPropagation is needed.
+    assert.match(html, /data-action="sendDepMessage" data-issue="42"/);
+    assert.match(html, /data-action="sendDepMessage" data-issue="7"/);
 });

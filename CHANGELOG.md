@@ -4,6 +4,52 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.30.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 3a** (7 JS renderers, 16 onclick → data-action)
+
+Fourth slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md). With Phases 1 + 2a + 2b shipped at 2.27 → 2.29 the **HTML side** is done; Phase 3 covers the **JS-renderer side** — inline `onclick="window.foo(${dynamic})"` strings embedded in template-literal renderers. Phase 3a takes the 7 simpler renderers in one slice (16 of Phase 3's 29 total handlers), mirroring the 2a/2b split. The largest single file — [`js/chat/messages.js`](js/chat/messages.js), 13 handlers including the `this`-passing copy/edit shapes and the DOM-only `classList.toggle` per Decision 5 — defers to **Phase 3b** so reviewer bandwidth stays focused on its non-trivial cases. Phase 4 (`window.*` exposure block cleanup) is blocked on 3b completing.
+
+**Shape difference from modals.** Where Phase 2 migrated static HTML in `html/*.html` (one fixed handler per button), Phase 3 migrates **per-row** handlers emitted from JS template literals. Each surface adds (a) `data-action="<name>"` + typed `data-*` payload attrs (`data-path`, `data-issue`, `data-index`, `data-mode`, `data-is-dir`) in the renderer output, and (b) an idempotent `mountXxx({ ... })` document-level dispatcher scoped by `.closest('<container>')` so the listener survives container re-creation across re-renders.
+
+**New `mountXxx({ ... })` functions — one per renderer.** Each replicates the Phase 2b dispatcher shape ([`js/ui/app-shell-actions.js`](js/ui/app-shell-actions.js)) byte-for-byte:
+
+| # | Module | Function | Scope | Actions |
+|---|---|---|---|---|
+| 1 | [`js/diff-viewer.js`](js/diff-viewer.js) | `mountDiffViewer({ onSetViewMode, onPreviousChange, onNextChange })` | `.diff-controls` | `setViewMode` (reads `data-mode`), `previousChange`, `nextChange` |
+| 2 | [`js/file-tree.js`](js/file-tree.js) | `mountFileTree({ onTreeClick, onRename, onDeleteFile, onDeleteFolder })` | `#fileTree` | `handleTreeClick` (event + `data-path` + `data-type`), `openRenameModal` (`data-path` + `data-is-dir`), `deleteFile` / `deleteFolder` (`data-path`) |
+| 3 | [`js/ui/issue-list.js`](js/ui/issue-list.js) | `mountIssueList({ onSendDepMessage, onStartWork, onOpenIssueTab })` | `#issuesPanel` | `sendDepMessage`, `startWorkOnIssueFromList`, `openIssueTab` (all read `data-issue` coerced to Number) |
+| 4 | [`js/tab-manager.js`](js/tab-manager.js) | `mountTabManager({ onSwitchTab, onCloseTab })` | `#editorTabs` | `switchToTab`, `closeTab` (both read `data-index` coerced to Number; `closeTab` is invoked with the click event so the existing `(index, event)` signature stays intact) |
+| 5 | [`js/chat/input.js`](js/chat/input.js) | `mountChatInput({ onRemoveImage })` | `#imagePreviewStrip` | `removeImage` (reads `data-index`) |
+| 6 | [`js/ui/pr-list.js`](js/ui/pr-list.js) | `mountPrList({ onOpenPrReview })` | `#prsPanel` | `openPrReview` (reads `data-number`) |
+| 7 | [`js/issue-detail.js`](js/issue-detail.js) | `mountIssueTab({ onOpenIssueTab })` | `.issue-tab-content` | `openIssueTab` (reads `data-issue-number`) — error-fallback Retry button |
+
+**Typed payload examples — Decision 3 (no JSON in attributes).** Boolean coercion lives at the dispatcher edge (`btn.dataset.isDir === 'true'`); numeric coercion is `Number(btn.getAttribute('data-issue'))`. The `event.stopPropagation()` calls on the previous inline handlers (Start button + dep-link + tree action buttons) **disappear** in the new shape — delegation's `e.target.closest('[data-action]')` naturally resolves to the deepest matching ancestor, so an inner button click never reaches the outer row's action.
+
+**Scope-by-container chosen over scope-by-class.** Each dispatcher scopes by the surface's owning DOM container ID (`#fileTree`, `#issuesPanel`, `#prsPanel`, `#editorTabs`, `#imagePreviewStrip`) rather than a button class. Renderers rewrite the container's `innerHTML` on every refresh — by scoping to the container that **persists across re-renders**, the document-level listener naturally survives container repaints.
+
+**Two onkeydown handlers left as inline strings.** [`js/ui/issue-list.js`](js/ui/issue-list.js) and [`js/ui/pr-list.js`](js/ui/pr-list.js) still emit `onkeydown="if(event.key==='Enter'||event.key===' '){...}"` on their rows for keyboard activation parity. Phase 3 scope is `onclick=` only per the design's grep target — keydown stays as-is (and the `window.openIssueTab` / `window.openPrReview` aliases remain live for both onclick-now-delegated and onkeydown-still-inline consumers until Phase 4 audits the full retirement list).
+
+**`window.*` aliases stay intact.** Per design Decision 6, no `window.*` block changes in this PR. All ~16 aliases that the migrated handlers previously called (`window.handleTreeClick`, `window.openRenameModal`, `window.deleteFile`, `window.deleteFolder`, `window.startWorkOnIssueFromList`, `window.openIssueTab`, `window.switchToTab`, `window.closeTab`, `window.openPrReview`, `window.Chat.sendMessage`, `window.Chat.removeImage`, `window.DiffViewer.{setViewMode,nextChange,previousChange}`) remain reachable. Phase 4 retires the now-unreferenced ones.
+
+**Init wire — [`js/app.js`](js/app.js).** New imports: `mountTabManager` joins [`./tab-manager.js`](js/tab-manager.js); `mountFileTree` joins [`./file-tree.js`](js/file-tree.js); new direct imports from [`./diff-viewer.js`](js/diff-viewer.js) (`setViewMode`, `previousChange`, `nextChange`, `mountDiffViewer`), [`./ui/issue-list.js`](js/ui/issue-list.js), [`./ui/pr-list.js`](js/ui/pr-list.js), and [`./chat/input.js`](js/chat/input.js); `mountIssueTab` joins the existing [`./issue-detail.js`](js/issue-detail.js) import. Seven new mount calls in `init()` immediately after `mountAppShellActions({...})`.
+
+**Tests — 7 new dispatcher tests in [`tests/`](tests/) (57 cases).** One per surface, each lifted from the Phase 2a/2b template:
+
+- [`tests/test-diff-viewer-dispatch.mjs`](tests/test-diff-viewer-dispatch.mjs) (9 cases — 3 actions + scope/null/unknown filters + idempotent mount)
+- [`tests/test-file-tree-dispatch.mjs`](tests/test-file-tree-dispatch.mjs) (10 cases — 4 actions including the `data-is-dir` boolean-coercion case)
+- [`tests/test-issue-list-dispatch.mjs`](tests/test-issue-list-dispatch.mjs) (9 cases — 3 actions + numeric-coercion assertion)
+- [`tests/test-tab-manager-dispatch.mjs`](tests/test-tab-manager-dispatch.mjs) (8 cases — 2 actions including event-passthrough for `onCloseTab(index, event)`)
+- [`tests/test-chat-input-dispatch.mjs`](tests/test-chat-input-dispatch.mjs) (7 cases)
+- [`tests/test-pr-list-dispatch.mjs`](tests/test-pr-list-dispatch.mjs) (7 cases)
+- [`tests/test-issue-tab-dispatch.mjs`](tests/test-issue-tab-dispatch.mjs) (7 cases)
+
+Each asserts: exactly one document listener installs; every known action routes to its callback with correctly-typed payload; out-of-scope `data-action` is filtered; missing `[data-action]` ancestor is filtered; unknown action value is filtered; double-mount is idempotent (`_wired` guard). Pure-logic — no JSDOM, runs under the existing [`tests/_node-shim.mjs`](tests/_node-shim.mjs) `document`-stub.
+
+**Renderer-test update — [`tests/test-issue-row-render.mjs`](tests/test-issue-row-render.mjs).** Three assertions that previously matched the inline `onclick="event.stopPropagation(); window.startWorkOnIssueFromList(7)"`, `onclick="window.openIssueTab(7)"`, and `event\.stopPropagation` strings update to the new `data-action="..." data-issue="..."` shape. Three assertions touched; the rest of the file (escaping, focused/active state, three-button-state semantics) untouched.
+
+**Removability.** Revert the PR → 16 inline `onclick=` strings restore in the 7 renderers, 7 `mountXxx` functions delete from their owning files, the import + mount-call additions in [`js/app.js`](js/app.js) revert, the 7 new test files delete, the 3-line update in [`tests/test-issue-row-render.mjs`](tests/test-issue-row-render.mjs) reverts, version + CHANGELOG revert. The `window.*` aliases were untouched, so HTML restores to a working state. Main returns to 2.29.0 byte-equivalent. No persisted state, no migration, no new dependencies.
+
 ## [2.29.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 2b** (3 remaining modals + app-shell non-modal HTML)

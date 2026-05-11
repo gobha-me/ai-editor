@@ -33,8 +33,12 @@ import { initHelpSlideOut, openHelpSlideOut, closeHelpSlideOut } from './help/in
 import { QuickOpen, initQuickOpen } from './quick-open.js';
 import { initSearchPanel, openSearchPanel, closeSearchPanel } from './search-panel.js';
 import { openSettings, closeSettings, saveSettings, fetchModelsForSettings, fetchEmbeddingModelsForSettings, mountSettingsModal, exportSettings, importSettings } from './settings-manager.js';
-import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener } from './tab-manager.js';
-import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile, deleteFolder } from './file-tree.js';
+import { switchToTab, closeTab, pinTab, renderEditorTabs, initTabChangeListener, mountTabManager } from './tab-manager.js';
+import { renderFileTree, handleTreeClick, onTreeItemClick, deleteFile, deleteFolder, mountFileTree } from './file-tree.js';
+import { setViewMode as diffSetViewMode, previousChange as diffPreviousChange, nextChange as diffNextChange, mountDiffViewer } from './diff-viewer.js';
+import { mountIssueList } from './ui/issue-list.js';
+import { mountPrList } from './ui/pr-list.js';
+import { mountChatInput } from './chat/input.js';
 import { togglePreviewPane, toggleDiffPane, toggleBlamePane, closeSecondaryPane, toggleSecondaryFullscreen, updateToolbarButtons, initSecondaryPaneAutoRefresh } from './secondary-pane.js';
 import { 
     toggleSidebar, 
@@ -54,7 +58,7 @@ import { openNewFileModal, closeNewFileModal, createNewFile, mountNewFileModal }
 import { openRenameModal, closeRenameModal, submitRename, mountRenameModal } from './ui/file-rename.js';
 import { revertCurrentFile, closeRevertModal, revertAllFiles, revertOnlyCurrentFile, mountRevertModal } from './ui/revert.js';
 import { openReleaseModal, closeReleaseModal, generateReleaseNotes, createRelease as createGitRelease, mountReleaseModal } from './release-manager.js';
-import { mountIssueDetailModal } from './issue-detail.js';
+import { mountIssueDetailModal, mountIssueTab } from './issue-detail.js';
 import {
     refreshProjects,
     onProjectChange,
@@ -885,6 +889,27 @@ async function init() {
         onCloseSecondaryPane: closeSecondaryPane,
         onOpenReplayModal: openReplayModal,
     });
+    // Phase 3a of inline-handlers migration — JS-renderer surfaces.
+    mountDiffViewer({
+        onSetViewMode: diffSetViewMode,
+        onPreviousChange: diffPreviousChange,
+        onNextChange: diffNextChange,
+    });
+    mountFileTree({
+        onTreeClick: handleTreeClick,
+        onRename: openRenameModal,
+        onDeleteFile: deleteFile,
+        onDeleteFolder: deleteFolder,
+    });
+    mountIssueList({
+        onSendDepMessage: (depNum) => window.Chat?.sendMessage(`Show me issue #${depNum}`),
+        onStartWork: (issueNumber) => window.startWorkOnIssueFromList(issueNumber),
+        onOpenIssueTab: (issueNumber) => openIssueTab(issueNumber),
+    });
+    mountPrList({ onOpenPrReview: (number) => openPrReview(number) });
+    mountTabManager({ onSwitchTab: switchToTab, onCloseTab: closeTab });
+    mountChatInput({ onRemoveImage: (i) => window.Chat?.removeImage(i) });
+    mountIssueTab({ onOpenIssueTab: (issueNumber) => openIssueTab(issueNumber) });
     initHelpSlideOut();
     initWindowZipDrop();
 

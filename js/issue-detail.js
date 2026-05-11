@@ -142,7 +142,7 @@ async function renderIssueTabContent(container, tab) {
             <div class="issue-tab-error">
                 <p>Failed to load issue #${issueNumber}</p>
                 <p style="color:var(--text-muted); font-size: var(--font-md);">${escapeHtml(err.message)}</p>
-                <button class="btn btn-secondary" onclick="window.openIssueTab(${issueNumber})">Retry</button>
+                <button class="btn btn-secondary" data-action="openIssueTab" data-issue-number="${issueNumber}">Retry</button>
             </div>
         `);
     }
@@ -683,6 +683,29 @@ export function mountIssueDetailModal({ onClose } = {}) {
         const action = btn.getAttribute('data-action');
         if (action === 'closeIssueDetailModal' && typeof onClose === 'function') {
             onClose();
+        }
+    });
+}
+
+/**
+ * Bind a delegated click handler for issue-tab content surfaces (currently
+ * just the error-fallback Retry button). Phase 3a of the inline-handlers
+ * migration (DESIGN-html-inline-handlers-migration.md). Scoped to
+ * `.issue-tab-content` — the tab body is rebuilt on each render, so the
+ * document-level listener survives container re-creation.
+ */
+let _tabWired = false;
+export function mountIssueTab({ onOpenIssueTab } = {}) {
+    if (_tabWired) return;
+    _tabWired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('.issue-tab-content')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'openIssueTab' && typeof onOpenIssueTab === 'function') {
+            onOpenIssueTab(Number(btn.getAttribute('data-issue-number')));
         }
     });
 }

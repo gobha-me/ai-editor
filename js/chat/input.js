@@ -344,7 +344,7 @@ export function renderImagePreview() {
                 <div class="image-preview-thumb text-file-badge" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
                     <span class="text-file-icon">📄</span>
                     <span class="text-file-name">${escapeAttr(img.name)}</span>
-                    <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
+                    <button class="image-preview-remove" data-action="removeImage" data-index="${i}"
                             title="Remove" aria-label="Remove file">✕</button>
                 </div>
             `;
@@ -353,11 +353,36 @@ export function renderImagePreview() {
         return `
             <div class="image-preview-thumb" title="${escapeAttr(img.name)} (${_fmtSize(img.size)})">
                 <img src="${img.dataUrl}" alt="Attached image ${i + 1}">
-                <button class="image-preview-remove" onclick="window.Chat.removeImage(${i})" 
+                <button class="image-preview-remove" data-action="removeImage" data-index="${i}"
                         title="Remove" aria-label="Remove image">✕</button>
             </div>
         `;
     }).join('');
+}
+
+/**
+ * Bind a delegated click handler for the image preview strip's remove
+ * buttons. Phase 3a of the inline-handlers migration
+ * (DESIGN-html-inline-handlers-migration.md). Scoped to
+ * `#imagePreviewStrip` — `renderImagePreview()` rewrites the strip's
+ * innerHTML on every attach/remove, so the document-level listener
+ * survives container re-creation (and even initial element creation,
+ * since the listener is on `document`, not the strip).
+ */
+let _wired = false;
+export function mountChatInput({ onRemoveImage } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#imagePreviewStrip')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'removeImage' && typeof onRemoveImage === 'function') {
+            onRemoveImage(Number(btn.getAttribute('data-index')));
+        }
+    });
 }
 
 function _fmtSize(bytes) {

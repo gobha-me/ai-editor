@@ -352,23 +352,23 @@ function renderDiffHeader(stats, originalLineCount, modifiedLineCount) {
                 <span class="diff-stat-info">${originalLineCount} → ${modifiedLineCount} lines</span>
             </div>
             <div class="diff-controls">
-                <button class="diff-btn ${currentViewMode === 'unified' ? 'active' : ''}" 
-                        onclick="window.DiffViewer.setViewMode('unified')" 
+                <button class="diff-btn ${currentViewMode === 'unified' ? 'active' : ''}"
+                        data-action="setViewMode" data-mode="unified"
                         title="Unified View">
                     Unified
                 </button>
-                <button class="diff-btn ${currentViewMode === 'side-by-side' ? 'active' : ''}" 
-                        onclick="window.DiffViewer.setViewMode('side-by-side')" 
+                <button class="diff-btn ${currentViewMode === 'side-by-side' ? 'active' : ''}"
+                        data-action="setViewMode" data-mode="side-by-side"
                         title="Side-by-Side View">
                     Side-by-Side
                 </button>
-                <button class="diff-btn" 
-                        onclick="window.DiffViewer.previousChange()" 
+                <button class="diff-btn"
+                        data-action="previousChange"
                         title="Previous Change (Alt+↑)">
                     ↑
                 </button>
-                <button class="diff-btn" 
-                        onclick="window.DiffViewer.nextChange()" 
+                <button class="diff-btn"
+                        data-action="nextChange"
                         title="Next Change (Alt+↓)">
                     ↓
                 </button>
@@ -521,6 +521,33 @@ window.DiffViewer = {
     previousChange,
     getViewMode,
 };
+
+/**
+ * Bind a delegated click handler for diff-viewer controls (view-mode toggle,
+ * prev/next navigation). Phase 3a of the inline-handlers migration
+ * (DESIGN-html-inline-handlers-migration.md). Scoped to `.diff-controls` —
+ * the header re-renders on every unified/side-by-side toggle, so the single
+ * document-level listener survives container re-creation.
+ */
+let _wired = false;
+export function mountDiffViewer({ onSetViewMode, onPreviousChange, onNextChange } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('.diff-controls')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'setViewMode' && typeof onSetViewMode === 'function') {
+            onSetViewMode(btn.getAttribute('data-mode'));
+        } else if (action === 'previousChange' && typeof onPreviousChange === 'function') {
+            onPreviousChange();
+        } else if (action === 'nextChange' && typeof onNextChange === 'function') {
+            onNextChange();
+        }
+    });
+}
 
 // ============================================
 // CHARACTER-LEVEL DIFF (for modified lines)

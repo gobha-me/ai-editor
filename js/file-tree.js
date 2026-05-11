@@ -93,26 +93,24 @@ function renderTreeNodes(nodes, depth) {
             const hasChildren = Object.keys(node.children).length > 0;
             const chevron = isDir ? '<span class="chevron">▶</span>' : '<span class="chevron-spacer"></span>';
             
-            // Use mousedown handler with click counting for proper single/double click detection
-            const clickHandler = `window.handleTreeClick(event, '${escapeAttr(node.path)}', '${escapeAttr(node.type)}')`;
             const itemId = `ti-${escapeAttr(node.path).replace(/[^a-zA-Z0-9]/g, '-')}`;
-            
+
             let html = `
-                <div class="tree-item ${isDir ? 'dir' : ''}" 
-                     data-depth="${depth}" 
+                <div class="tree-item ${isDir ? 'dir' : ''}"
+                     data-depth="${depth}"
                      data-path="${escapeAttr(node.path)}"
                      data-type="${escapeAttr(node.type)}"
                      role="treeitem"
                      tabindex="-1"
                      aria-labelledby="${itemId}"
                      ${isDir && hasChildren ? `aria-expanded="false"` : ''}
-                     onclick="${clickHandler}">
+                     data-action="handleTreeClick">
                     ${chevron}
                     <span class="icon" aria-hidden="true">${icon}</span>
                     <span class="name" id="${itemId}">${escapeHtml(node.name)}${isDir ? '<span class="sr-only">, folder</span>' : ''}</span>
                     <div class="actions">
-                        <button type="button" onclick="event.stopPropagation(); window.openRenameModal('${escapeAttr(node.path)}', ${isDir})" title="Rename / Move" aria-label="Rename ${escapeAttr(node.name)}">✏️</button>
-                        <button type="button" onclick="event.stopPropagation(); window.${isDir ? 'deleteFolder' : 'deleteFile'}('${escapeAttr(node.path)}')" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>
+                        <button type="button" data-action="openRenameModal" data-path="${escapeAttr(node.path)}" data-is-dir="${isDir}" title="Rename / Move" aria-label="Rename ${escapeAttr(node.name)}">✏️</button>
+                        <button type="button" data-action="${isDir ? 'deleteFolder' : 'deleteFile'}" data-path="${escapeAttr(node.path)}" title="Delete" aria-label="Delete ${escapeAttr(node.name)}">🗑</button>
                     </div>
                 </div>
             `;
@@ -378,6 +376,35 @@ export async function deleteFolder(folderPath) {
         console.error('Folder delete failed:', error);
         window.showToast(`Failed to delete folder: ${error.message}`, 'error');
     }
+}
+
+/**
+ * Bind a delegated click handler for tree rows + per-row rename/delete
+ * buttons. Phase 3a of the inline-handlers migration
+ * (DESIGN-html-inline-handlers-migration.md). Scoped to `#fileTree` —
+ * `renderFileTree` rebuilds the entire tree on each refresh, so the
+ * document-level listener survives container re-creation.
+ */
+let _wired = false;
+export function mountFileTree({ onTreeClick, onRename, onDeleteFile, onDeleteFolder } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#fileTree')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'handleTreeClick' && typeof onTreeClick === 'function') {
+            onTreeClick(e, btn.getAttribute('data-path'), btn.getAttribute('data-type'));
+        } else if (action === 'openRenameModal' && typeof onRename === 'function') {
+            onRename(btn.getAttribute('data-path'), btn.dataset.isDir === 'true');
+        } else if (action === 'deleteFile' && typeof onDeleteFile === 'function') {
+            onDeleteFile(btn.getAttribute('data-path'));
+        } else if (action === 'deleteFolder' && typeof onDeleteFolder === 'function') {
+            onDeleteFolder(btn.getAttribute('data-path'));
+        }
+    });
 }
 
 /** Close tab for a given path if open, adjusting active index */

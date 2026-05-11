@@ -204,16 +204,43 @@ export function renderEditorTabs() {
                  tabindex="${isActive ? '0' : '-1'}"
                  aria-selected="${isActive}"
                  aria-label="${escapeAttr(label)}${showDirty ? ', modified' : ''}${tab.isPreview ? ', preview' : ''}"
-                 onclick="window.switchToTab(${index})"
+                 data-action="switchToTab" data-index="${index}"
                  ondblclick="window.pinTab(${index})"
                  title="${escapeAttr(label)}">
                 ${icon ? `<span class="tab-icon" aria-hidden="true">${icon}</span>` : ''}
                 <span class="tab-name">${escapeHtml(label)}</span>
                 <span class="modified" aria-hidden="true" style="display: ${showDirty ? 'inline' : 'none'}">●</span>
-                <button class="close" onclick="window.closeTab(${index}, event)" title="Close" aria-label="Close ${escapeAttr(label)}">×</button>
+                <button class="close" data-action="closeTab" data-index="${index}" title="Close" aria-label="Close ${escapeAttr(label)}">×</button>
             </div>
         `;
     }).join('');
+}
+
+/**
+ * Bind a delegated click handler for editor tabs (switch + close). Phase 3a
+ * of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Scoped to `#editorTabs` — `renderEditorTabs()` rewrites the bar's innerHTML
+ * on every state change, so the document-level listener survives re-creation.
+ *
+ * The `ondblclick` pin-tab handler remains an inline handler — Phase 3
+ * covers `onclick` only.
+ */
+let _wired = false;
+export function mountTabManager({ onSwitchTab, onCloseTab } = {}) {
+    if (_wired) return;
+    _wired = true;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        if (!btn.closest('#editorTabs')) return;
+        const action = btn.getAttribute('data-action');
+        if (action === 'switchToTab' && typeof onSwitchTab === 'function') {
+            onSwitchTab(Number(btn.getAttribute('data-index')));
+        } else if (action === 'closeTab' && typeof onCloseTab === 'function') {
+            onCloseTab(Number(btn.getAttribute('data-index')), e);
+        }
+    });
 }
 
 // ── Editor change listener ────────────────────────────────
