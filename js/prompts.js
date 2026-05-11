@@ -20,40 +20,21 @@ import { getCursorContext } from './editor.js';
 import { isConnectionDown } from './offline-indicator.js';
 import { wrapUntrusted, UNTRUSTED_KINDS } from './security/untrusted-wrap.js';
 import { getPlanMode } from './chat/state.js';
+import { ToolRegistry } from './tools/registry.js';
 
 // ============================================
 // EDITOR-SPECIFIC PROMPTS
 // ============================================
 
-// Legacy tool enumeration — pre-1.3.14 behavior. Kept as the fallback
-// when the Composer is bypassed (`?toolsCompose=off`) or when the active
-// role has no profile registered (everything except `coder` in 1.3.15).
-// Coder sessions render a dynamic enumeration of *admitted* tools instead
-// — see `renderToolEnumeration()` and `buildSystemPrompt()` below.
-const LEGACY_TOOL_ENUMERATION = `- Read the current file open in the editor (read_current_file)
-- Read specific line ranges efficiently (read_lines) — PREFERRED for large files
-- Make surgical edits to specific lines (replace_lines, insert_lines, delete_lines)
-- Edit any file by path — auto-opens if needed (edit_file) — PREFERRED for multi-file line-based workflows
-- Write or create entire files (write_file) — for new files or complete rewrites
-- Query the project file tree (get_project_tree)
-- Open specific files in the editor (open_file) — needed before replace_lines/insert_lines/delete_lines
-- Read any file's content without opening it (read_file) — auto-truncates large files
-- List all open tabs (list_open_tabs)
-- Create new files in the repository (create_file)
-- Search for text patterns across the codebase (search_in_files)
-- Find semantically relevant files using AI embeddings (find_relevant_files) — PREFERRED for discovery
-- Create pull requests to submit work (create_pull_request)
-- List open pull requests (list_pull_requests)
-- Commit dirty editor files to Git (commit_files) — auto-generates commit message if not provided
-- Check which files have uncommitted changes (list_dirty_files)
-- List all available projects across connections (list_projects)
-- Switch the active project and branch (set_active_project) — refuses if dirty files exist
-- Browse another project's files WITHOUT switching (peek_project_tree) — cross-project reference
-- Read a file from another project WITHOUT switching (peek_project_file) — cross-project reference
-- Persist notes to a scratchpad that survives context compression (scratchpad_write, scratchpad_read, scratchpad_clear)
-- Maintain a structured per-conversation todo list that survives context compression (todo_write, todo_read)
-- Ask the user a structured question with optional choices, free-text, or both — pauses the chat loop until they answer (ask_user)
-- Run JavaScript for calculations, data transforms, or logic validation (run_code) — sandboxed, no DOM access`;
+// 2.35.0 — `LEGACY_TOOL_ENUMERATION` retired (2026-Q2 audit sweep). The
+// constant enumerated 24 hardcoded tools while the live registry grew to
+// ~75; tools added across 1.4.5 (CI), 1.5.x (`git_log`), 1.16.0 (script
+// automation, memory), and 2.10.0 (preview Tier 3a) were silently
+// invisible to the model on the non-Composer path. `buildSystemPrompt()`
+// now derives the enumeration from `Profiles.filterTools(ToolRegistry
+// .getDefinitions(), profileName)` on both paths, matching the API
+// tools-array that `getToolsForRole()` already publishes via the same
+// filter (`js/llm/api.js:1126`). See CHANGELOG §2.35.0.
 
 // Scratchpad instruction block — extracted from the systemPrompt body in
 // 1.3.15 so it can be conditionally injected only when `scratchpad_write`
@@ -206,35 +187,54 @@ Consider:
  * 1.3.15: when the Composer is active for the active role (today: coder),
  * the caller passes the admitted `ToolDef[]` and `composerActive: true`,
  * and the prompt's tool enumeration is rendered dynamically from the
- * admitted set. When called with no args (legacy callers, the
- * `?toolsCompose=off` kill-switch path, and non-coder roles), the prompt
- * falls back to the static legacy enumeration so the model continues to
- * have a coherent self-description.
+ * budget-applied admitted set.
+ *
+ * 2.35.0 — on every other path (Composer kill-switch, non-coder profiles,
+ * the `generateEdit`/commit-message callers below that pass no args), the
+ * function derives the admitted set from `Profiles.filterTools(
+ * ToolRegistry.getDefinitions(), profileName)`. Same filter
+ * `getToolsForRole()` already runs to build the API tools-array
+ * (`js/llm/api.js:1126`) — so the prompt enumeration and the API tools
+ * array describe the same set. Retires the static 24-tool
+ * `LEGACY_TOOL_ENUMERATION` that drifted as the registry grew.
  *
  * @param {{ admittedDefs?: Array<{name: string, description: string}>, composerActive?: boolean }} [opts]
  * @returns {string}
  */
 function buildSystemPrompt(opts = {}) {
-    const admittedDefs = opts.admittedDefs;
+    let admittedDefs = opts.admittedDefs;
     const composerActive = !!opts.composerActive;
-    const admittedNames = composerActive && admittedDefs
-        ? new Set(admittedDefs.map(td => td.name))
-        : null;
+
+    // 2.35.0 — non-Composer paths derive the admitted set from
+    // Profiles.filterTools. The registry stores OpenAI-tool-schema-shaped
+    // entries (`{ function: { name, description, ... }, _registeredRoles }`)
+    // while `renderToolEnumeration` expects the flat `{ name, description }`
+    // shape the Composer's `Catalog.getById` produces. Project to that
+    // shape inline so the two branches feed the renderer compatibly.
+    // Composer path trusts the caller's budget-applied set as-is.
+    if (!composerActive) {
+        const profileName = ConversationManager.getEffectiveProfileName();
+        const filteredDefs = Profiles.filterTools(ToolRegistry.getDefinitions(), profileName);
+        admittedDefs = filteredDefs.map(d => ({
+            name: (d && d.function && d.function.name) || '',
+            description: (d && d.function && d.function.description) || '',
+        }));
+    }
+
+    const admittedNames = new Set((admittedDefs || []).map(td => td.name));
 
     let prompt = EditorPrompts.systemPrompt;
+    prompt = prompt.replace('{{toolEnumeration}}', renderToolEnumeration(admittedDefs));
 
-    // Tool enumeration — dynamic when Composer is active, legacy otherwise.
-    const enumeration = composerActive
-        ? renderToolEnumeration(admittedDefs)
-        : LEGACY_TOOL_ENUMERATION;
-    prompt = prompt.replace('{{toolEnumeration}}', enumeration);
-
-    // Scratchpad instruction block — only render when scratchpad_write is
-    // admitted (or admittedNames is null, i.e., legacy fallback path). The
-    // pre-1.3.15 prompt always rendered the block even though scratchpad_*
-    // tools aren't in `coder.v1.tools.static` — telling the model to use a
-    // tool it couldn't invoke.
-    const renderScratchpadBlock = admittedNames === null || admittedNames.has('scratchpad_write');
+    // Scratchpad instruction block — render iff `scratchpad_write` is in the
+    // admitted set. Pre-2.35.0 the legacy/fallback path rendered the block
+    // unconditionally (`admittedNames === null` branch); now that path has a
+    // real Set too. `scratchpad_write` is tagged `roles: 'all'` so every
+    // profile admits it via the filterTools short-circuit — for every
+    // profile that exists today this is byte-equivalent to the pre-2.35.0
+    // behavior. A future profile that gates scratchpad away will see the
+    // block correctly drop.
+    const renderScratchpadBlock = admittedNames.has('scratchpad_write');
     prompt = prompt.replace('{{scratchpadInstructions}}', renderScratchpadBlock ? SCRATCHPAD_INSTRUCTIONS : '');
 
     // Project conventions block — verbatim contents of repo-root CLAUDE.md

@@ -82,11 +82,12 @@
 - **Touch points:** `js/chat/handlers.js:609-637`, `js/chat/tool-classifications.js`.
 - **Resolution:** 2.25.0 hoisted both sets (+ LONG_RUNNING_TOOLS, USER_PAUSE_TOOLS — see entry below) as frozen-array exports with co-located axis JSDoc. The "deliberately NOT hoisted" rationale at `tool-classifications.js:31-37` was inverted: developer-scan cost beats axis-encapsulation when the inline location is the recurring source of "missed an axis" bugs (per `feedback_prompts_js_parallel_enumeration.md`). Disjointness asserted in `tests/test-tool-classifications.mjs` — `WRITE_TOOLS ∩ MUTATING_TOOLS = ∅`, `STATEFUL_READ_TOOLS ∩ WRITE_TOOLS = ∅`.
 
-#### [HC] [M] [likely] `LEGACY_TOOL_ENUMERATION` in `prompts.js` enumerates ~25 tool names
+#### ~~[HC] [M] [likely] `LEGACY_TOOL_ENUMERATION` in `prompts.js` enumerates ~25 tool names~~ *(✅ closed — shipped 2.35.0)*
 - **What:** `js/prompts.js:33-56` is a string with ~25 bullet-formatted tool names + descriptions. Used when `?toolsCompose=off` or when the active profile has no Composer (per `feedback_prompts_js_parallel_enumeration.md`).
 - **Why it's load-bearing:** This is the explicit parallel enumeration the feedback note warns about. The Tier 3a preview tools (2.10.0), CI tools (1.4.5), git_log (1.5.x), and the LLM-authored automation (1.16.0) all added tools without updating this list, so the legacy path tells the model fewer capabilities exist than actually do.
 - **Suggested fix shape:** Make the legacy path call the same `renderToolEnumeration` against the full ToolRegistry definitions instead of a hardcoded string. The only reason it doesn't today is the "include tools the model can't invoke" risk — but the legacy path runs for chat-only profiles where the filter would still produce a coherent list.
 - **Touch points:** `js/prompts.js:217-230` (call site), `js/tools/registry.js`, `js/profiles/*.js`.
+- **Resolution:** 2.35.0 deleted the 24-bullet `LEGACY_TOOL_ENUMERATION` constant. `buildSystemPrompt()` now derives the non-Composer enumeration via `Profiles.filterTools(ToolRegistry.getDefinitions(), profileName).map(d => ({ name: d.function.name, description: d.function.description }))`, matching the API tools-array `getToolsForRole()` already publishes via the same filter (`js/llm/api.js:1126`). The flat-shape projection bridges the registry's OpenAI-tool-schema shape to the renderer's expected shape (the Composer path produces the flat shape via `Catalog.getById`). Scratchpad-block admission gate widened to apply on the non-Composer branch too — production-byte-equivalent (scratchpad_write `roles: 'all'` so every profile admits it). New tests in `tests/test-system-prompt-admission.mjs` (12 cases, +5 net) — empty-registry empty-state, profile-filtered enumeration, profile filtering respected, hardcoded-string non-leak, no-args derivation, scratchpad-block gate on both branches. See [CHANGELOG §2.35.0](../../CHANGELOG.md).
 
 #### ~~[EV] [S] [likely] `tabs:render` emitted but no subscriber~~ *(✅ closed — shipped 2.24.1)*
 - **What:** `js/tools/commit-tools.js:83` emits `EventBus.emit('tabs:render')` after a commit. No `EventBus.on('tabs:render', ...)` anywhere in the codebase.
@@ -369,4 +370,5 @@ For agents that want to pick a quick win without re-reading the full inventory:
 | ~~`closeAllModals` selectors~~ | ~~`js/ui-helpers.js`~~ | ~~87-91~~ *(✅ 2.33.0)* |
 | ~~`BUILTIN_PRIORITY` constant~~ | ~~`js/ui/left-pane-rail.js`~~ | ~~76-121~~ *(✅ 2.26.0)* |
 | ~~`safeAdd('btnHelp', openHelpModal)`~~ | ~~`js/app.js`~~ | ~~664~~ *(✅ 2.26.0)* |
+| ~~`LEGACY_TOOL_ENUMERATION` derivation~~ | ~~`js/prompts.js`~~ | ~~33-56 / 217-230~~ *(✅ 2.35.0)* |
 | Settings hotkey-registry consolidation | `js/app.js` + `js/help/hotkey-registry.js` | 306-489 / 33+ |

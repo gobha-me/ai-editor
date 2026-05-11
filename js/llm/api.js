@@ -1208,8 +1208,13 @@ export const LLMTools = {
      * tool silently — same contract as `renderForLLM`).
      *
      * Returns `{ admittedDefs: [], composerActive: false }` for non-coder
-     * roles or when the kill-switch is engaged. Callers should fall back
-     * to a static enumeration in that case.
+     * roles or when the kill-switch is engaged. **2.35.0 — `buildSystemPrompt()`
+     * no longer needs callers to fall back to a static enumeration on the
+     * non-Composer path; it derives `admittedDefs` from `Profiles.filterTools`
+     * itself when `composerActive: false`.** This contract preserved unchanged
+     * so the existing one caller (`js/chat/handlers.js:381`) keeps working
+     * — the empty admittedDefs simply gets ignored and recomputed by
+     * `buildSystemPrompt()` on the legacy path.
      *
      * @returns {{ admittedDefs: import('../intelligence/tools/contracts.js').ToolDef[], composerActive: boolean }}
      */

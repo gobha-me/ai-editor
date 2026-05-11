@@ -4,6 +4,40 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.35.0] - 2026-05-11
+
+### Feature — `LEGACY_TOOL_ENUMERATION` derivation (2026-Q2 audit sweep)
+
+Closes the [`[HC] [M] [likely] LEGACY_TOOL_ENUMERATION in prompts.js enumerates ~25 tool names`](docs/audit-2026-Q2/inventory.md) entry from the §chat section of the [2026-Q2 audit + sweep](docs/ROADMAP.md) track. Continues the per-slot sweep cadence (2.33.0 ModalRegistry → 2.34.0 admission-tag derivation → 2.35.0 system-prompt enumeration derivation).
+
+**Why it's load-bearing.** Pre-2.35.0 [`js/prompts.js:33-56`](js/prompts.js) held a 24-bullet hardcoded `LEGACY_TOOL_ENUMERATION` string rendered into the system prompt whenever the Composer was *not* active — three triggers: (a) `?toolsCompose=off` kill-switch, (b) any non-`coder.v1` profile (chat.v1, kb.v1, etc.), (c) defensive fallback if `coder.v1.tools.static` were empty. The live tool registry has grown to ~75 tools; the static list covered only 24 of them (~32%). Tools added after the 1.3.15 wiring — `git_log` (1.5.x), CI tools (1.4.5), `find_tool` / `scan_file` / `goto_line` / `find_references` / `read_function` / `read_docs` / `index_project` (the discovery surface), preview Tier 3a (`preview_snapshot` / `preview_click` / `preview_fill` / `preview_inspect` / `preview_resize`, 2.10.0), memory tools (1.16.0), LLM-authored automation (`submit_script_for_approval` / `submit_plan_for_approval`), and the issue/PR surface (`list_issues` / `read_issue` / `create_issue` / `read_pull_request` / `add_pr_review` / `merge_pull_request`) — were silently invisible to the model on the non-Composer path. Meanwhile [`getToolsForRole()`](js/llm/api.js) at line 1126 already calls `Profiles.filterTools(defs, profileName)` to populate the **API tools-array** that the model genuinely receives — the prompt enumeration and the API tools-array disagreed about what existed. Exactly the parallel-enumeration class [`feedback_prompts_js_parallel_enumeration.md`](docs/) warns about.
+
+**[`buildSystemPrompt()`](js/prompts.js) derives the enumeration in both modes.** Composer-active mode preserved byte-for-byte from 1.3.15 (budget-applied admittedDefs come from the caller). Non-Composer mode (kill-switch, non-coder profiles, no-arg callers like [`generateEdit`](js/llm/api.js)) now computes:
+
+```js
+const filteredDefs = Profiles.filterTools(ToolRegistry.getDefinitions(), profileName);
+admittedDefs = filteredDefs.map(d => ({
+    name: d.function.name,
+    description: d.function.description,
+}));
+```
+
+The map projects the registry's OpenAI-tool-schema shape (`{ function: { name, description }, _registeredRoles }`) into the flat shape `renderToolEnumeration` expects (which the Composer path produces via `Catalog.getById`). Same filter the API tools-array uses → enumeration and tools-array describe the same set.
+
+**Active-profile lookup.** `buildSystemPrompt` now reads `ConversationManager.getEffectiveProfileName()` on the non-Composer branch — same accessor the existing profile-addendum block at line 290 has used since 2.8.0 (per-chat profile binding wins over `State.settings.profile`). No new state seam; no new import beyond [`ToolRegistry`](js/tools/registry.js).
+
+**Scratchpad-block admission gate widened to the non-Composer branch.** Pre-2.35.0 the legacy fallback rendered the `SCRATCHPAD` instruction block unconditionally (`admittedNames === null` short-circuit at line 237). Post-2.35.0 the branch always populates `admittedNames`, so the block renders iff `scratchpad_write` is in the admitted set. Production-byte-equivalent for every profile that exists today: `scratchpad_write` is tagged `roles: 'all'` in [`js/tools/scratchpad-tools.js:107`](js/tools/scratchpad-tools.js) → admitted by every profile via the [`filterTools`](js/profiles/registry.js) `groups.includes('all')` short-circuit. A future profile that gates scratchpad away will see the block correctly drop.
+
+**[`getAdmittedTools()`](js/llm/api.js) contract preserved.** The one in-tree caller ([`js/chat/handlers.js:381`](js/chat/handlers.js)) still receives `{ admittedDefs: [], composerActive: false }` for non-coder profiles; `buildSystemPrompt` ignores that empty array and recomputes from the registry. Doc-comment at [`js/llm/api.js:1210-1217`](js/llm/api.js) updated to drop the *"Callers should fall back to a static enumeration"* line — no static enumeration exists anymore.
+
+**Wire-up in [`js/prompts.js`](js/prompts.js).** `LEGACY_TOOL_ENUMERATION` constant (24 bullets, lines 33-56 pre-2.35.0) deleted. New `import { ToolRegistry } from './tools/registry.js'`. The `composerActive ? renderToolEnumeration(admittedDefs) : LEGACY_TOOL_ENUMERATION` ternary collapses to a single `renderToolEnumeration(admittedDefs)` call. The function doc-comment at line 203-216 updated to reflect the unified path.
+
+**Tests — [`tests/test-system-prompt-admission.mjs`](tests/test-system-prompt-admission.mjs) (12 cases, +5 net).** Updated to cover both branches; pure-logic, runs under `tests/_node-shim.mjs`. Pre-2.35.0 the file covered: Composer-active dynamic enumeration, drift catch on the Composer branch, no-arg fallback assertions against the static string, dead-name removal. Post-2.35.0: same Composer-branch coverage (preserved), plus six new assertions on the non-Composer branch — (1) **empty-registry empty-state** — non-Composer mode renders the `"no tools currently admitted"` line when no defs are registered; (2) **profile-filtered registered set** — registering a `roles: 'all'` test tool surfaces it for chat.v1; (3) **profile filtering respected** — a `roles: ['coder']` test tool does NOT appear for chat.v1 while a `roles: ['pm']` tool DOES (chat.v1's `allowed_groups` includes both `'pm'` and `'reviewer'`); (4) **hardcoded-string non-leak** — the pre-2.35.0 distinctive phrase *"— PREFERRED for large files"* does not appear in any rendered prompt; (5) **no-args derivation path** — bare `buildSystemPrompt()` (the [`generateEdit`](js/llm/api.js) / commit-message callers) goes through the derivation; (6) **scratchpad-block gate** — block renders iff `scratchpad_write` is admitted, asserted on both branches. The two pre-2.35.0 tests that asserted specific hardcoded tool names from the static string (e.g. `find_relevant_files`, `peek_project_tree`) deleted — those assertions were anchored to the retired constant, not to a behavior worth preserving.
+
+**Removability.** Revert the PR → `tests/test-system-prompt-admission.mjs` restores the pre-2.35.0 assertions for the static legacy branch; `js/prompts.js` `LEGACY_TOOL_ENUMERATION` constant restores at lines 33-56 with the 24-bullet body; the `composerActive ? renderToolEnumeration(admittedDefs) : LEGACY_TOOL_ENUMERATION` ternary restores at line 227-230; the `ToolRegistry` import deletes; the scratchpad-block gate's `admittedNames === null` short-circuit restores; `js/llm/api.js` `getAdmittedTools()` doc-comment restores the *"Callers should fall back to a static enumeration"* line; version + CHANGELOG + inventory + ROADMAP revert. No persisted state, no migration. Main returns to 2.34.0 byte-equivalent for the Composer-active path (the dominant production code path), and to the pre-2.35.0 32%-coverage prompt for non-Composer users.
+
+**User-visible note.** For users on `chat.v1` / `kb.v1` (and `coder.v1` users with `?toolsCompose=off`), the system prompt's `{{toolEnumeration}}` block grows from the static 24 bullets to the full filterTools-admitted set — exactly the set the model could already invoke per the API tools-array. The change unblocks the model from reaching for capabilities it didn't know it had (e.g. the chat.v1-admitted memory tools, the discovery surface, the issue/PR triage tools). This is the intended effect of the audit-sweep entry; it is not a regression.
+
 ## [2.34.0] - 2026-05-11
 
 ### Feature — `Profiles.getKnownGroupTags()` derivation (2026-Q2 audit sweep)
