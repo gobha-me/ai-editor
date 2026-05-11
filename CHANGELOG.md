@@ -4,6 +4,69 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.32.0] - 2026-05-11
+
+### Feature — inline-handlers migration **Phase 4** (`window.*` exposure block cleanup)
+
+Closing slice of the 4-phase delegated-action rollout designed at [`docs/DESIGN-html-inline-handlers-migration.md`](docs/DESIGN-html-inline-handlers-migration.md). Phases 1 + 2a + 2b + 3a + 3b (shipped 2.27.0 → 2.31.0) moved every inline `onclick=` in `html/*.html` and every JS-rendered `onclick="window.foo(${dynamic})"` string to `data-action` + delegated mount listeners. With the migration HTML side complete, the [`js/app.js`](js/app.js) `window.*` exposure block — the architectural sin called out by [`docs/audit-2026-Q2/inventory.md:266`](docs/audit-2026-Q2/inventory.md) — is now mostly dead code. Phase 4 retires the dead aliases and adds an anti-regression coverage test so the migration stays migrated.
+
+**Audit-driven deletion list.** Each `window.X = Y` line in the pre-PR [`js/app.js:167-280`](js/app.js) block (71 aliases) was greppe'd against `js/`, `plugins/`, and `html/` for external `window.X` references. The triage rule (per design doc §Phase 4): zero hits outside the alias block → dead; hits in `html/` → migration regression (none found); hits in `js/` or `plugins/` outside the block → real consumer, keep.
+
+**56 aliases deleted** — every modal close/submit/cancel handler, every now-delegated renderer entry point, every error/LLM-debug/markdown-modal/debug-slide-out shim:
+
+- ErrorLog: `openErrorLog`, `closeErrorLog`, `clearErrorLog`, `copyErrorLog`, `exportErrorLog`
+- LLM Debug: `openLLMDebug`, `closeLLMDebug`, `clearLLMDebug`, `copyLLMDebug`, `exportLLMDebug`
+- Debug slide-out: `openDebugSlideOut`, `closeDebugSlideOut`, `copyDiagnosticBundle`
+- Markdown modal: `openMarkdownModal`, `closeMarkdownModal`
+- Settings: `saveSettings`, `fetchModelsForSettings`, `fetchEmbeddingModelsForSettings`
+- Tabs: `switchToTab`, `closeTab`
+- File tree: `handleTreeClick`, `deleteFile`, `deleteFolder`
+- Secondary pane: `closeSecondaryPane`, `toggleSecondaryFullscreen`
+- Commit modal: `closeCommitModal`, `generateCommitMsg`, `commitAndPush`
+- Branch modal: `openNewBranchModal`, `closeNewBranchModal`, `createNewBranch`
+- Issue handlers: `openIssueDetailModal`, `startWorkOnIssueFromList`, `focusIssue`, `unfocusIssue`, `closeIssueDetailModal`
+- Create-PR modal: `closeCreatePRModal`, `submitCreatePR`
+- PR Review: `closePrReview`
+- New file modal: `openNewFileModal`, `closeNewFileModal`, `createNewFile`
+- Rename modal: `openRenameModal`, `closeRenameModal`, `submitRename`
+- Plugin modal: `closePluginModal`
+- Revert: `revertCurrentFile`, `closeRevertModal`, `revertAllFiles`, `revertOnlyCurrentFile`
+- Zip upload: `closeZipUpload`, `zipSelectAll`, `scanForDiffs`, `uploadExtractedFiles`
+- Drafts: `clearAllDrafts`, `clearProjectDrafts`
+
+**15 aliases kept** — each with a documented consumer cited inline in [`js/app.js`](js/app.js):
+
+| Alias | Consumer |
+|---|---|
+| `window.ErrorLogger` | [`js/chat/tools.js:11`](js/chat/tools.js) decoupled-init bridge |
+| `window.QuickOpen` | DevTools probe surface |
+| `window.__AIE_DEBUG_METADATA` | dev flag, set in a block (not an alias) |
+| `window.openSettings` | [`js/onboarding.js:87`](js/onboarding.js) |
+| `window.closeSettings` | [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) (2 sites) |
+| `window.onTreeItemClick` | 11 external consumers in `tools/`, `ui/`, `search-panel`, `project-manager`, `quick-open` |
+| `window.pinTab` | [`js/tab-manager.js:208`](js/tab-manager.js) inline `ondblclick=` (Phase 3 scope was `onclick=` only) |
+| `window.showToast` | 174 references across `js/` + `plugins/` |
+| `window.openCommitModal` | [`js/editor/instance.js`](js/editor/instance.js) + [`js/ui/now-strip.js`](js/ui/now-strip.js) |
+| `window.openIssueTab` | [`js/ui/issue-list.js:90`](js/ui/issue-list.js) inline `onkeydown=` |
+| `window.openPrReview` | [`js/ui/pr-list.js:93`](js/ui/pr-list.js) inline `onkeydown=` + [`js/project-manager.js:658`](js/project-manager.js) |
+| `window.openCreatePRModal` | [`js/ui/left-pane-rail.js:244`](js/ui/left-pane-rail.js) header action |
+| `window.openPluginModal` | [`js/profiles/plugin-dev-v1.js`](js/profiles/plugin-dev-v1.js) (documented extension API) + 3 bundled plugins + [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) |
+| `window.openZipUpload` | [`js/projects/switcher-menu.js`](js/projects/switcher-menu.js) + [`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js) |
+| `window.handleZipFileSelect` | [`html/modals.html:392`](html/modals.html) inline `onchange=` + [`js/zip-upload.js`](js/zip-upload.js) renderer |
+| `window.zipToggleFile` | [`js/zip-upload.js:537`](js/zip-upload.js) renderer inline `onchange=` |
+
+**Why some `onclick=`-class aliases stayed.** The 5 aliases tied to non-`onclick` inline handlers (`pinTab` / `openIssueTab` / `openPrReview` / `handleZipFileSelect` / `zipToggleFile`) are deliberate. Phase 3 scope was strictly `onclick=`; `ondblclick=`, `onchange=`, and `onkeydown=` strings remain as residuals carried over from the original surface code. A future patch can convert each residual to delegated dispatch + retire its alias; per design doc §Removability, each is independently reversible.
+
+**New `tests/test-no-inline-onclick.mjs`** asserts:
+1. `html/*.html` contains no `onclick=` attributes (HTML-side regression guard).
+2. `js/**/*.js` JS-rendered HTML strings contain no `onclick=` attributes (renderer-side regression guard, comment-line exclusions).
+
+CI auto-globs `tests/test-*.mjs` per `reference_testing_ci.md`, so the test wires in by name. Failure message includes per-offender file:line trace + the migration design-doc pointer for a future contributor.
+
+**CSP unblock — not shipped here.** Per design doc §"CSP Implications": strict `script-src 'self'` (no `unsafe-inline`) was blocked by inline event handlers. Phase 4 closes that source. Shipping a CSP header still requires a separate audit of the CodeMirror bundle, the DOMPurify CDN load, and `Plugins.installFromUrl`'s `new Function()` path. CSP itself remains parked in [`docs/SECURITY.md`](docs/SECURITY.md) §"What does NOT ship."
+
+**Removability.** Revert the PR → 56 `window.X = Y` lines restore in [`js/app.js`](js/app.js) (harmless dead code), the new test file deletes, version + CHANGELOG revert, audit-inventory + roadmap rows revert. HTML still uses `data-action` (Phases 1–3b untouched) so there's no UX regression in either direction. Main returns to 2.31.0 byte-equivalent. The parent `[ST][L]` audit row at [`docs/audit-2026-Q2/inventory.md:266`](docs/audit-2026-Q2/inventory.md) **closes** with this PR.
+
 ## [2.31.0] - 2026-05-11
 
 ### Feature — inline-handlers migration **Phase 3b** (`js/chat/messages.js` — 13 onclick → data-action)

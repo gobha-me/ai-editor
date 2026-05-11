@@ -163,26 +163,21 @@ console.log(`Starting ${VERSION_DISPLAY}`);
 // ============================================
 // EXPOSE WINDOW FUNCTIONS
 // ============================================
+//
+// 2.32.0 (inline-handlers Phase 4): the bulk of this block was retired
+// after Phases 1–3b moved every inline `onclick=` to delegated `data-action`
+// dispatchers. What remains has a documented external consumer (plugin
+// extension API, cross-module call sites, or a residual non-`onclick`
+// inline handler — `ondblclick`, `onchange`, `onkeydown` — deliberately
+// out of Phase 3's scope). Each entry below cites who relies on it; if
+// the last consumer goes, the alias goes with it.
+// See docs/DESIGN-html-inline-handlers-migration.md §Phase 4.
 
+// Diagnostic console hooks — internal error path bridges window.ErrorLogger
+// at js/chat/tools.js:11 (decoupled init).
 window.ErrorLogger = ErrorLogger;
-window.openErrorLog = openErrorLog;
-window.closeErrorLog = closeErrorLog;
-window.clearErrorLog = clearErrorLog;
-window.copyErrorLog = copyErrorLog;
-window.exportErrorLog = exportErrorLog;
 
-window.openLLMDebug = openLLMDebug;
-window.closeLLMDebug = closeLLMDebug;
-window.clearLLMDebug = clearLLMDebug;
-window.copyLLMDebug = copyLLMDebug;
-window.exportLLMDebug = exportLLMDebug;
-
-// 1.3.9: Debug slide-out — single entry point that supersedes the
-// 1.3.6 dropdown bridge and the legacy error/LLM debug modals.
-window.openDebugSlideOut = openDebugSlideOut;
-window.closeDebugSlideOut = closeDebugSlideOut;
-window.copyDiagnosticBundle = copyDiagnosticBundle;
-
+// Quick-open palette — kept as a DevTools probe surface (window.QuickOpen.open()).
 window.QuickOpen = QuickOpen;
 
 // Dev-mode flag: ?debug=metadata enables the chat-history metadata-coverage
@@ -197,87 +192,48 @@ window.QuickOpen = QuickOpen;
 // `js/help/index.js` sets `window.openHelpModal` / `window.closeHelpModal`
 // as back-compat aliases so any inline `onclick=` references keep working.
 
-window.openMarkdownModal = openMarkdownModal;
-window.closeMarkdownModal = closeMarkdownModal;
-
+// Settings entry points used by js/onboarding.js (openSettings) and
+// js/settings/plugins-tab.js (closeSettings, called when plugin install
+// flips to a fresh settings view).
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
-window.saveSettings = saveSettings;
-window.fetchModelsForSettings = fetchModelsForSettings;
-window.fetchEmbeddingModelsForSettings = fetchEmbeddingModelsForSettings;
 
-window.switchToTab = switchToTab;
-window.closeTab = closeTab;
+// File-tree navigation — 11 external consumers in tools/, ui/, search-panel,
+// project-manager, quick-open. Pinning a tab via inline ondblclick in
+// js/tab-manager.js:208 still routes through window.pinTab (Phase 3 scope
+// was onclick= only; ondblclick is deferred).
+window.onTreeItemClick = onTreeItemClick;
 window.pinTab = pinTab;
 
-window.handleTreeClick = handleTreeClick;
-window.onTreeItemClick = onTreeItemClick;
-window.deleteFile = deleteFile;
-window.deleteFolder = deleteFolder;
-
-window.closeSecondaryPane = closeSecondaryPane;
-window.toggleSecondaryFullscreen = toggleSecondaryFullscreen;
-
+// Toast surface — 174 references across js/ + plugins/.
 window.showToast = showToast;
+
+// Commit modal entry point — js/editor/instance.js + js/ui/now-strip.js
+// open it when the user stages a save outside the file tree.
 window.openCommitModal = openCommitModal;
-window.closeCommitModal = closeCommitModal;
-window.generateCommitMsg = generateCommitMsg;
-window.commitAndPush = commitAndPush;
 
-window.openNewBranchModal = openNewBranchModal;
-window.closeNewBranchModal = closeNewBranchModal;
-window.createNewBranch = createNewBranch;
-
+// Issue/PR surfaces — Phase 3 left onkeydown="…window.openIssueTab(…)" and
+// onkeydown="…window.openPrReview(…)" in js/ui/issue-list.js + pr-list.js
+// (Enter/Space keyboard activation; out of `onclick=` scope). Also
+// openPrReview is called from js/project-manager.js:658.
 window.openIssueTab = openIssueTab;
-window.openIssueDetailModal = openIssueDetailModal;
-// 1.13.0 — Touch 3 extraction B: inline "Start" button on issue rows. Looks
-// up the issue by number from State.issues so the row HTML can stay numeric.
-window.startWorkOnIssueFromList = async (issueNumber) => {
-    const issue = State.issues.find(i => i.number === issueNumber);
-    if (issue) await startWorkOnIssue(issue);
-};
-window.focusIssue = focusIssue;
-window.unfocusIssue = unfocusIssue;
-window.closeIssueDetailModal = closeIssueDetailModal;
-window.openCreatePRModal = openCreatePRModal;
-window.closeCreatePRModal = closeCreatePRModal;
-window.submitCreatePR = submitCreatePR;
-// 2.13.0 — Touch 3 PR Review surface owns PR inspection AND submission +
-// merge. The legacy `openPRDetailModal` modal was deleted; the dock at
-// the bottom of the surface is the only surface for review actions now.
 window.openPrReview = openPrReview;
-window.closePrReview = closePrReview;
 
-window.openNewFileModal = openNewFileModal;
-window.closeNewFileModal = closeNewFileModal;
+// Create-PR entry point — js/ui/left-pane-rail.js header action.
+window.openCreatePRModal = openCreatePRModal;
 
-window.openRenameModal = openRenameModal;
-window.closeRenameModal = closeRenameModal;
-window.submitRename = submitRename;
-
-// Plugin modal
+// Plugin modal — load-bearing extension API. Referenced by
+// js/profiles/plugin-dev-v1.js (the documented contract) and three
+// bundled plugins (venice-billing, openrouter-billing, release-sync).
 window.openPluginModal = openPluginModal;
-window.closePluginModal = closePluginModal;
-window.createNewFile = createNewFile;
 
-// Revert functions
-window.revertCurrentFile = revertCurrentFile;
-window.closeRevertModal = closeRevertModal;
-window.revertAllFiles = revertAllFiles;
-window.revertOnlyCurrentFile = revertOnlyCurrentFile;
-
-// Zip upload functions
+// Zip upload — switcher-menu + left-pane-rail open it; the modal's file
+// input keeps an inline onchange="window.handleZipFileSelect(event)" and
+// each per-file checkbox an inline onchange="window.zipToggleFile(...)"
+// (both out of Phase 3 onclick= scope).
 window.openZipUpload = openZipUpload;
-window.closeZipUpload = closeZipUpload;
 window.handleZipFileSelect = handleZipFileSelect;
 window.zipToggleFile = zipToggleFile;
-window.zipSelectAll = zipSelectAll;
-window.scanForDiffs = scanForDiffs;
-window.uploadExtractedFiles = uploadExtractedFiles;
-
-// Draft management functions
-window.clearAllDrafts = clearAllDrafts;
-window.clearProjectDrafts = clearProjectDrafts;
 
 // ============================================
 // VISUAL SETTINGS — applyVisualSettings + applyLineNumbersVisibility live
