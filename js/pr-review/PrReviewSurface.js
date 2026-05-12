@@ -28,6 +28,7 @@ import { getPreact } from '../utils/preact-mount.js';
 import { parsePatch, pairSideBySide, truncateRows, countChanges } from './diff-parse.js';
 import { PrReviewDock } from './PrReviewDock.js';
 import { PrCommentComposer } from './PrCommentComposer.js';
+import { getCiStatusMeta } from '../ui/icons.js';
 import { nextPollDelay, shouldPoll } from './poll-cadence.js';
 import {
     addDraft,
@@ -44,14 +45,6 @@ const FILE_STATUS_MARK = {
     modified: { mark: 'M', cls: 'pr__filemark--mod', label: 'Modified' },
     renamed: { mark: 'R', cls: 'pr__filemark--ren', label: 'Renamed' },
     copied: { mark: 'C', cls: 'pr__filemark--ren', label: 'Copied' }
-};
-
-const CI_STATE_LABEL = {
-    success: { label: '✅ passing', cls: 'pr__ci-badge--ok' },
-    pending: { label: '🔄 running', cls: 'pr__ci-badge--pending' },
-    failure: { label: '❌ failing', cls: 'pr__ci-badge--fail' },
-    error: { label: '❌ error', cls: 'pr__ci-badge--fail' },
-    unknown: { label: '⚪ no checks', cls: 'pr__ci-badge--unknown' }
 };
 
 const STATE_BADGE = {
@@ -350,7 +343,8 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
 function PrTopBar({ pr, ci, onClose, loading }) {
     const stateKey = pr ? (pr.merged ? 'merged' : pr.state) : 'open';
     const state = STATE_BADGE[stateKey] || STATE_BADGE.open;
-    const ciInfo = (ci && CI_STATE_LABEL[ci.state]) || CI_STATE_LABEL.unknown;
+    const ciMeta = getCiStatusMeta(ci && ci.state);
+    const ciInfo = { label: `${ciMeta.emoji} ${ciMeta.text}`, cls: ciMeta.cls };
     return html`
         <div class="pr-review__topbar">
             <button type="button" class="pr__btn pr__btn--ghost pr__back" onClick=${onClose} title="Back to editor (Esc)" aria-label="Back to editor">
@@ -787,14 +781,18 @@ function PrChecksView({ ci }) {
     }
     return html`
         <ul class="pr__checks" role="list">
-            ${ci.statuses.map((s, i) => html`
-                <li class=${'pr__check pr__check--' + (s.state || 'unknown')} key=${i}>
-                    <span class="pr__check-state">${(CI_STATE_LABEL[s.state] || CI_STATE_LABEL.unknown).label}</span>
-                    <span class="pr__check-context">${s.context || s.name || 'check'}</span>
-                    ${s.description && html`<span class="pr__check-desc">${s.description}</span>`}
-                    ${s.target_url && html`<a href=${s.target_url} target="_blank" rel="noopener" class="pr__check-link">details ↗</a>`}
-                </li>
-            `)}
+            ${ci.statuses.map((s, i) => {
+                const m = getCiStatusMeta(s.state);
+                const label = `${m.emoji} ${m.text}`;
+                return html`
+                    <li class=${'pr__check pr__check--' + (s.state || 'unknown')} key=${i}>
+                        <span class="pr__check-state">${label}</span>
+                        <span class="pr__check-context">${s.context || s.name || 'check'}</span>
+                        ${s.description && html`<span class="pr__check-desc">${s.description}</span>`}
+                        ${s.target_url && html`<a href=${s.target_url} target="_blank" rel="noopener" class="pr__check-link">details ↗</a>`}
+                    </li>
+                `;
+            })}
         </ul>
     `;
 }

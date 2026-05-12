@@ -115,11 +115,12 @@
 - **Suggested fix shape:** Either route every toast through the event channel (add a subscriber in ui-helpers.js calling showToast), or replace the test-loop emit with a direct showToast call.
 - **Touch points:** `js/intelligence/test-loop/ui.js:137`, `js/ui-helpers.js:77-85`.
 
-#### [DUP] [S] [likely] CI status icons defined twice with different shapes
-- **What:** `js/ui/pr-list.js:18-24` defines a `CI_ICONS` map (`success/pending/failure/error/unknown` → emoji). `js/pr-review/PrReviewSurface.js:50-54` defines a different `CI_STATUS_*` map (with `{label, cls}` shape for badges).
+#### ~~[DUP] [S] [likely] CI status icons defined twice with different shapes~~ *(✅ closed — shipped 2.38.0)*
+- **What:** `js/ui/pr-list.js:18-24` defined a `CI_ICONS` map (`success/pending/failure/error/unknown` → emoji). `js/pr-review/PrReviewSurface.js:50-54` defined a different `CI_STATUS_*` map (with `{label, cls}` shape for badges).
 - **Why it's load-bearing:** Two representations of the same axis. Future status additions (e.g. `cancelled`) need to land in both places. CHANGELOG note for 2.13.0 referenced an inline duplication that was just consolidated into pr-list.js — this is the remaining sibling.
 - **Suggested fix shape:** Move to `js/ui/icons.js` as `CI_STATUS_META` with both emoji + class. Have both consumers project the field they need.
 - **Touch points:** `js/ui/pr-list.js:18-24`, `js/pr-review/PrReviewSurface.js:50-54`, `js/ui/icons.js`.
+- **Resolution:** 2.38.0 added `CI_STATUS_META = Object.freeze({ success: {emoji, text, cls}, pending, failure, error, unknown })` + `getCiStatusMeta(state)` (defaults to `unknown`) to `js/ui/icons.js`. `pr-list.js` now reads `.emoji`; `PrReviewSurface.js` composes `` `${emoji} ${text}` `` for the badge label and reads `.cls` for the pill class. Production rendering is byte-equivalent for the 5 pre-2.38.0 states; a future 6th surfaces in both surfaces the moment it lands in the registry. New `tests/test-ci-status-meta.mjs` (8 cases) pins shape, fallback behavior, and three byte-equivalence guards (`.emoji` vs legacy `CI_ICONS`; composed `${emoji} ${text}` vs legacy `CI_STATE_LABEL.label`; `.cls` vs legacy `CI_STATE_LABEL.cls`). See [CHANGELOG §2.38.0](../../CHANGELOG.md).
 
 ---
 

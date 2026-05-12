@@ -14,14 +14,7 @@
  */
 
 import { escapeHtml, escapeAttr } from '../utils/html.js';
-
-const CI_ICONS = {
-    success: '✅',
-    pending: '🔄',
-    failure: '❌',
-    error: '❌',
-    unknown: '⚪',
-};
+import { getCiStatusMeta } from './icons.js';
 
 /**
  * Filter the PR list by the active-branch context.
@@ -79,7 +72,7 @@ export function renderPrRowsHtml(ctx) {
     }
 
     return filtered.map(pr => {
-        const ciIcon = CI_ICONS[pr.ciState] || CI_ICONS.unknown;
+        const ciIcon = getCiStatusMeta(pr.ciState).emoji;
         const ciTitle = pr.ciState === 'unknown' || !pr.ciState
             ? 'No CI status'
             : `CI: ${pr.ciState}`;

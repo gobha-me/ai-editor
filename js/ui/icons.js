@@ -153,6 +153,43 @@ export function renderIcon(name, opts = {}) {
     return out;
 }
 
+/**
+ * Single source of truth for CI status visual + textual metadata.
+ *
+ * Pre-2.38.0 the same 5-key axis (`success / pending / failure / error /
+ * unknown`) lived in two independent maps: `CI_ICONS` in `js/ui/pr-list.js`
+ * (emoji-only, sidebar PR row) and `CI_STATE_LABEL` in
+ * `js/pr-review/PrReviewSurface.js` (`{label, cls}`, review-surface badge +
+ * checks list). Adding a new status (`cancelled`, etc.) had to land in both
+ * places; the audit inventory flagged the drift hazard.
+ *
+ * 2.38.0 (2026-Q2 audit sweep) — co-located here so each consumer projects
+ * the field it needs. `pr-list` reads `.emoji`; `pr-review` composes
+ * `` `${emoji} ${text}` `` for the badge label and reads `.cls` for the
+ * coloured pill class. The pre-2.38.0 strings reproduce byte-for-byte.
+ *
+ * @type {Readonly<Record<string, { emoji: string, text: string, cls: string }>>}
+ */
+export const CI_STATUS_META = Object.freeze({
+    success: { emoji: '✅', text: 'passing',    cls: 'pr__ci-badge--ok' },
+    pending: { emoji: '🔄', text: 'running',    cls: 'pr__ci-badge--pending' },
+    failure: { emoji: '❌', text: 'failing',    cls: 'pr__ci-badge--fail' },
+    error:   { emoji: '❌', text: 'error',      cls: 'pr__ci-badge--fail' },
+    unknown: { emoji: '⚪', text: 'no checks',  cls: 'pr__ci-badge--unknown' },
+});
+
+/**
+ * Look up the meta entry for a CI state, defaulting to `unknown` when the
+ * key is missing or unrecognized. Mirrors the `|| CI_*.unknown` fallback
+ * both pre-2.38.0 consumers carried inline.
+ *
+ * @param {string | null | undefined} state
+ * @returns {{ emoji: string, text: string, cls: string }}
+ */
+export function getCiStatusMeta(state) {
+    return CI_STATUS_META[state] || CI_STATUS_META.unknown;
+}
+
 // Make available on `window` for non-module callers (HTML partials, plugin
 // sandboxes that don't import).
 if (typeof window !== 'undefined') {

@@ -4,6 +4,40 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.38.0] - 2026-05-12
+
+### Feature — `CI_STATUS_META` single source for CI status visuals (2026-Q2 audit sweep)
+
+Closes the [`[DUP] [S] [likely] CI status icons defined twice with different shapes`](docs/audit-2026-Q2/inventory.md) entry from the §chat section of the [2026-Q2 audit + sweep](docs/ROADMAP.md) track. Continues the per-slot sweep cadence (2.33.0 ModalRegistry → 2.34.0 admission-tag derivation → 2.35.0 system-prompt enumeration derivation → 2.36.0 hotkey-binding registry → 2.37.0 UNTRUSTED-marker enumeration derivation → 2.38.0 CI status meta).
+
+**Why it's load-bearing.** Pre-2.38.0 the same 5-key axis (`success / pending / failure / error / unknown`) lived as two independent constants:
+
+- [`js/ui/pr-list.js:18-24`](js/ui/pr-list.js) — `CI_ICONS` (emoji-only) feeding the compact left-sidebar PR row.
+- [`js/pr-review/PrReviewSurface.js:49-55`](js/pr-review/PrReviewSurface.js) — `CI_STATE_LABEL` (`{label, cls}`) feeding the PR review surface top-bar badge and the Checks tab list.
+
+Adding a new status (`cancelled`, `skipped`, `action_required`, etc.) had to land in both places — same drift hazard the [2.13.0 PR Review consolidation note](CHANGELOG.md) flagged when it merged a similar inline duplication into `pr-list.js`. This is the surviving sibling.
+
+**New `CI_STATUS_META` + `getCiStatusMeta` at [`js/ui/icons.js`](js/ui/icons.js).** Co-located with the canonical UI-tokens module — same placement rule the 2.26.0 sweep used for `BUILTIN_PRIORITY`. Frozen `Record<string, { emoji, text, cls }>` projects the three orthogonal fields each consumer needs:
+
+- `pr-list.js` reads `.emoji` for the compact row glyph.
+- `PrReviewSurface.js` composes `` `${emoji} ${text}` `` for the badge label and reads `.cls` for the coloured pill class.
+
+`getCiStatusMeta(state)` defaults to the `unknown` entry when the key is missing or unrecognized — mirrors the `|| CI_ICONS.unknown` / `|| CI_STATE_LABEL.unknown` fallback both pre-2.38.0 consumers carried inline.
+
+**Production rendering is byte-equivalent.** Each pre-2.38.0 string reproduces character-for-character: the 5 emoji glyphs (`✅`, `🔄`, `❌`, `❌`, `⚪`), the 5 composed labels (`'✅ passing'`, `'🔄 running'`, `'❌ failing'`, `'❌ error'`, `'⚪ no checks'`), and the 5 CSS classes (`pr__ci-badge--ok` / `pr__ci-badge--pending` / `pr__ci-badge--fail` / `pr__ci-badge--fail` / `pr__ci-badge--unknown`). A future sixth status surfaces in both surfaces the moment it lands in `CI_STATUS_META`.
+
+**Touch points.**
+
+- [`js/ui/icons.js`](js/ui/icons.js) — `CI_STATUS_META` + `getCiStatusMeta` exports.
+- [`js/ui/pr-list.js`](js/ui/pr-list.js) — `CI_ICONS` deleted; `getCiStatusMeta` imported.
+- [`js/pr-review/PrReviewSurface.js`](js/pr-review/PrReviewSurface.js) — `CI_STATE_LABEL` deleted; `getCiStatusMeta` imported; two consumer call sites (top-bar `PrTopBar` and Checks tab `PrChecksView`) compose `{ label, cls }` at the use-site.
+
+**Tests — [`tests/test-ci-status-meta.mjs`](tests/test-ci-status-meta.mjs) (8 cases).** Pure-logic, runs under [`tests/_node-shim.mjs`](tests/_node-shim.mjs). Covers:
+
+- **Shape** — `Object.isFrozen`, the 5 expected keys, every entry has non-empty `{emoji, text, cls}` strings.
+- **`getCiStatusMeta` lookup** — known states return their own entry; unknown / `''` / `null` / `undefined` fall back to the `unknown` entry.
+- **Byte-equivalence guards** — for every state, `.emoji` matches the pre-2.38.0 `CI_ICONS` value verbatim, `` `${emoji} ${text}` `` matches the pre-2.38.0 `CI_STATE_LABEL.label` string verbatim, and `.cls` matches the pre-2.38.0 `CI_STATE_LABEL.cls` string verbatim.
+
 ## [2.37.0] - 2026-05-12
 
 ### Feature — `renderUntrustedMarkers` derivation (2026-Q2 audit sweep)
