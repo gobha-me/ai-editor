@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-12 (post-2.38.0; post-methodology-adoption). Current released: **v2.37.0** · `main` HEAD: 2.38.0 + [Unreleased]. Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). The 2026-Q2 audit-sweep wave (2.33.0–2.38.0) is the canonical X.Y.Z.N candidate going forward — see [`VERSIONING.md`](VERSIONING.md).
+> Last updated: 2026-05-12 (post-2.41.0; first re-eval slot under the methodology). Current released: **v2.41.0** · `main` HEAD: 2.42.0 + [Unreleased] (2.42.0 is the first re-eval slot — doc-only PR: ARCHITECTURE.md refresh + first ICD authoring). Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). Sweep waves develop in X.Y.Z.N space per [`VERSIONING.md`](VERSIONING.md); the 2.33.0–2.41.0 audit-sweep arc continues with `[needs-investigation]` + `[M] [likely]` entries from [`audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
 
 ## How to read this doc
 
@@ -32,9 +32,10 @@ Every pending milestone in this doc carries a commitment-band label per the meth
 
 | Phase | Track | Band |
 |---|---|---|
-| **Now** | **Touch 3 Window v2 / Sessions** is the only Touch 3 surface left and is gated post-2.0 by design (a Sessions tab inherits from a profile instance — building before profiles ship doubles rework risk). zip-flow Session zip + Clone-from-URL parked behind disabled placeholders in the 2.20.0 modal/popover. **2026-Q2 audit-sweep track** has spare-slot work continuing through the inventory — next sweep wave is the canonical X.Y.Z.N candidate. **github#27 OAuth flows** is the remaining MCP discovery slice. | `[strong]` (audit-sweep) · `[medium]` (OAuth flows pending ICD) |
-| **Next** | **Tier 3b in-editor preview** — sidecar + build-step support (Playwright per workspace, container isolation). Gated on a measured class of bug Tier 3a + Tier 2 + Tier 1 cannot serve, on a Vite/build-step project. **The gating mechanism (a probe that classifies "would have been served by Tier 3b") isn't operational yet** — that's a fuzzy-band block. Independent of the Profiles arc. | `[fuzzy]` (gating detection mechanism is undefined) |
-| **Later** | github#37 Phase 2 (re-scope from dogfood signal; see [`discussion/github-37-phase-2.md`](discussion/github-37-phase-2.md)); github#27 Phase 3 self-hosted templates; github#24 sub-agents Phase 1 (DESIGN shipped 2.37.0; gated on Phase 0 audit-sweep + post-2.0); github#18 cross-device sync (post-2.0 by design). | `[medium]` / `[fuzzy]` per row in §"Known open issues" |
+| **Now (in flight)** | **2.42.0 doc-only PR — first re-eval slot under the methodology.** Deliverables: ARCHITECTURE.md refresh to 2.41.0 sync; first ICD (`ICD-chat-handlers.md`) per §"Per-subsystem ICD backfill program"; paper-half roadmap drift fixes (header, gitea#392/393 close-out, panels-manifest promotion). | `[strong]` |
+| **Next (2.43.0)** | **Git-provider `panels` manifest → rail-views migration** — promoted to `[strong]` at the 2026-05-12 re-eval; concrete fix shape in `audit-2026-Q2/inventory.md` §sidebar/rail. ~100-200 LOC; first code minor post-re-eval. | `[strong]` |
+| **Next-after (2.44.0+)** | Continued audit-sweep waves on the remaining `[needs-investigation]` and `[M] [likely]` inventory entries (tool-name string-literals; `safeAdd` fragility; etc.). **Touch 3 Window v2 / Sessions** remains post-2.0 by design. **github#27 OAuth flows** remains pending its DESIGN doc. | `[strong]` (sweep) · `[medium]` (OAuth pending ICD) |
+| **Later** | **Tier 3b in-editor preview** — sidecar + build-step support (Playwright per workspace, container isolation); gating probe not operational. github#37 Phase 2 (re-scope from dogfood signal); github#27 Phase 3 self-hosted templates; github#24 sub-agents Phase 1 (DESIGN shipped 2.37.0); github#18 cross-device sync (post-2.0). | `[medium]` / `[fuzzy]` per row in §"Known open issues" |
 | **Deferred** | Foundations (was 1.1.x), Compression Rules 3–5, various UI items — see §"Deferred / parked" below. | `[fuzzy]` per row |
 
 ---
@@ -78,9 +79,11 @@ Per methodology §Phase 3, every 3 code minors past the next-N window get a re-e
 - **Paper half** — promote `[fuzzy]` content whose preconditions materialized; tighten `[medium]` content whose milestone window is approaching; demote or relocate content whose milestone slipped. Update milestone band labels to reflect dependency changes. Verify the Forward ICD presence check (§ below) for the next-3 `[strong]` window.
 - **Code-aware half** — read `js/` against the ARCHITECTURE.md claims; find architectural decisions embedded in code comments that should be promoted; find new interfaces in code that aren't in any DESIGN doc; find tests missing for `[strong]`-band claims. Produce a gap analysis that feeds back here.
 
-**First re-eval slot (post-methodology-adoption): `RE-EVAL following 2.41.0`** — chosen because the next 3 milestones after 2.38.0 are likely the next sweep-wave entries (or whichever forward work lands first). At this slot, the primary code-aware target is **ARCHITECTURE.md** itself (currently 1.9.1 sync; 30 minors behind on Touch 3 + SlotManager + inline-handlers arc + audit-sweep wave). The refresh of ARCHITECTURE.md to current `js/` is the first re-eval's main deliverable.
+**~~First re-eval slot: `RE-EVAL following 2.41.0`~~** — ✅ ran 2026-05-12 as the 2.42.0 doc-only PR. Deliverables shipped: (a) **ARCHITECTURE.md refresh** to 2.41.0 sync (was 1.9.1 sync — 32 minors behind) including new sections for Touch 3 surfaces, slot/event registries, audit-sweep wave outcomes, refreshed File Size Map, and a corrected Testing & CI section; (b) **first ICD** authored at [`ICD-chat-handlers.md`](ICD-chat-handlers.md) — chat tool-loop 5-axis classification contract per §"Per-subsystem ICD backfill program" target #1; (c) **paper-half roadmap drift fixes** below (header re-sync, gitea#392 / gitea#393 strikethrough, panels-manifest promotion to next-3 window).
 
-**Subsequent re-evals.** Inline as `RE-EVAL following 2.44.0`, `RE-EVAL following 2.47.0`, etc. — every 3 minors. Skip the code-aware half only when nothing meaningful has merged since the last pass (the methodology's "structural-only" exception). Default is run both.
+**Next re-eval slot: `RE-EVAL following 2.44.0`** — 3 minors out. Code-aware target per §"Per-subsystem ICD backfill program" line below: Intelligence-layer Composer seam (target #2). Paper half tightens any `[medium]` content whose milestone window has approached.
+
+**Subsequent re-evals.** Inline as `RE-EVAL following 2.47.0`, `RE-EVAL following 2.50.0`, etc. — every 3 minors. Skip the code-aware half only when nothing meaningful has merged since the last pass (the methodology's "structural-only" exception). Default is run both.
 
 ### Per-subsystem ICD backfill program
 
@@ -90,8 +93,8 @@ Existing code has accreted contracts that live as inline classification sets, re
 
 **Ordered backlog, highest-drift first** (each is `[medium]` until its re-eval slot opens it, then promotes to `[strong]`):
 
-1. **`chat/handlers.js` + classification axes** — 4 axes (WRITE / MUTATING / STATEFUL_READ / LONG_RUNNING) live across two files; 2.25.0 partial consolidation; first ICD candidate. Target: `RE-EVAL following 2.41.0`.
-2. **Intelligence-layer Composer seam** — `getAdmittedTools()` + `buildSystemPrompt()` Composer-vs-non-Composer path drift bit at 2.35.0; ICD prevents the next instance. Target: `RE-EVAL following 2.44.0`.
+1. ~~**`chat/handlers.js` + classification axes**~~ — ✅ shipped 2.42.0 at [`ICD-chat-handlers.md`](ICD-chat-handlers.md). Covers 5 axes (not 4 as originally scoped — the actual classification matrix is `WRITE` / `STATEFUL_READ` (cache-skip), `FILE_MUTATING` / `PREVIEW_MUTATING` (eviction), `MUTATING` (envelope messaging), `WHOLE_FILE_WRITE` (FileOp metadata), `LONG_RUNNING` / `USER_PAUSE` (timeout)) across 8 frozen exports; the +1 axis-count emerged from reading the code against the original scoping. Code-aware findings produced **zero subsequent `[strong]` rows** — the contract was already coherent. Updated 2026-05-12.
+2. **Intelligence-layer Composer seam** — `getAdmittedTools()` + `buildSystemPrompt()` Composer-vs-non-Composer path drift bit at 2.35.0; ICD prevents the next instance. The 2.42.0 chat-handlers ICD covers the cross-reference but not the seam in isolation. Target: `RE-EVAL following 2.44.0`.
 3. **Tool registry admission contract** — `LEGAL_GROUP_TAGS` derivation (2.34.0) opened the boundary; the `roles: 'all'` / `allowed_groups: '*'` carve-outs deserve one document. Target: `RE-EVAL following 2.47.0`.
 4. **`git-providers/base.js` 43-method base interface** — contract already exists in code; just needs writing up to be cite-able. Target: `RE-EVAL following 2.50.0`.
 5. **Remaining subsystems** — editor instance, retrieval manager, profiles registry, MCP bridge, plugin lifecycle. Named at the re-eval slot where each rises to the next-3 window.
@@ -106,11 +109,12 @@ Per methodology §3.1, every `[strong]` milestone in the next-N window must have
 
 | `[strong]` milestone in next-3 window | Contract | Status |
 |---|---|---|
-| 2026-Q2 audit-sweep next wave | `docs/audit-2026-Q2/inventory.md` is the running queue | ✅ present |
+| **2.43.0 — Git-provider `panels` manifest → rail-views migration** | `audit-2026-Q2/inventory.md` §sidebar/rail (`[REG] [M] [likely]`) + `DESIGN-git-providers-and-ui-extensions.md` §4 decisions table | ✅ present — promoted to `[strong]` at this re-eval |
+| Subsequent audit-sweep waves | `docs/audit-2026-Q2/inventory.md` is the running queue | ✅ present |
 | Touch 3 Window v2 / Sessions | None — `docs/DESIGN-sessions.md` will need authoring | ❌ missing — but milestone is `[strong]` only post-2.0; today it's `[medium]` (see below); not in next-3 window |
 | MCP discovery Phase 2 OAuth flows | None — `docs/DESIGN-mcp-oauth.md` will need authoring | ❌ missing — milestone demotes to `[medium]` until contract lands; ICD-authoring slot would be `X.Y.Z.N` ahead |
 
-Translation: **next-3 `[strong]` milestones are all audit-sweep entries** (the inventory is the contract). The two named near-term features (Window v2 / Sessions, MCP OAuth) carry `[medium]` because their contracts haven't been written yet. The first re-eval slot at `RE-EVAL following 2.41.0` is when these get tightened or demoted.
+Translation post-2.42.0 re-eval: **2.43.0's `[strong]` milestone (panels-manifest migration) has its contract present** in the inventory + DESIGN doc. Subsequent waves continue with `[needs-investigation]` and `[M] [likely]` inventory entries. The two named near-term features (Window v2 / Sessions, MCP OAuth) still carry `[medium]` because their contracts haven't been written; they're not in the next-3 window. Next re-eval `RE-EVAL following 2.44.0` is when these get tightened or demoted again.
 
 ---
 
@@ -233,14 +237,17 @@ User-facing gaps tracked as filed issues but not yet slotted into a track. **Iss
 
 | Issue | Summary | Band | Rationale |
 |---|---|---|---|
-| [gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392) | `[ui] Branch switcher: click switches branch but active highlight/overlay doesn't move` | `[strong]` | Sized; tactical UI bug; fits a patch-tier `X.Y.Z` directly |
-| [gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393) | `[ui] Left-panel rail views: clicking a group should trigger a refresh (Branches/PRs/Issues went stale until project re-load)` | `[strong]` | Sized; tactical UI bug; fits a patch-tier `X.Y.Z` directly |
 | [github#37 Phase 2](https://github.com/gobha-me/ai-editor/issues/37) | Re-scope CLAUDE.md analogue from dogfood signal | `[medium]` if dogfood signal arrives; `[fuzzy]` until then | Phase 1 may turn out to be the whole answer. 8 design questions parked at [`discussion/github-37-phase-2.md`](discussion/github-37-phase-2.md). |
 | [github#27 Phase 2 OAuth flows](https://github.com/gobha-me/ai-editor/issues/27) | MCP server OAuth | `[medium]` | Sized; no design doc yet — needs `docs/DESIGN-mcp-oauth.md` or an ICD slot ahead. Picker-list tests stay pinned. |
 | [github#24 Sub-agents Phase 1](https://github.com/gobha-me/ai-editor/issues/24) | Bounded child conversations | `[medium]` (DESIGN-sub-agents.md shipped 2.37.0; Phase 0 audit-sweep prereq + post-2.0 gating before promotion to `[strong]`) | 6-phase rollout defined; Phase 0 = audit-sweep PR extracting tool-loop core. |
 | [github#18 Cross-device sync](https://github.com/gobha-me/ai-editor/issues/18) | Settings sync via QR/P2P | `[fuzzy]` (designed in [`DESIGN-cross-device-sync.md`](DESIGN-cross-device-sync.md); post-2.0 by design) | "Cross-process / distributed state" is out of scope for 1.x→2.0; this is the design-on-paper edge. Revisit post-profile-contract. |
 
 **Closed:** see [CHANGELOG.md](../CHANGELOG.md) — every previously-listed closed issue is documented there. Removed from this doc on 2026-05-12 to drop ~70 lines of duplicated history (CHANGELOG remains authoritative).
+
+**Closed prior to 2.42.0 (recorded at this re-eval for paper-half drift fix):**
+
+- ~~[gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392)~~ — `[ui] Branch switcher: clicking a branch switches it but active highlight/overlay doesn't move`. Closed pre-2.42.0; no in-doc fix-PR ref captured. The 2.41.0 ROADMAP listed this as open `[strong]`; this re-eval's paper-half catches the drift.
+- ~~[gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393)~~ — `[ui] Left-panel rail views: clicking a group should trigger a refresh`. Closed pre-2.42.0 (resolved by the `view.onActivate(viewId)` shape extension noted in [`js/ui/left-pane-rail.js`](../js/ui/left-pane-rail.js) module header — *"Activation refresh (gitea#393, 2.38.1)"*). The 2.41.0 ROADMAP listed this as open `[strong]`; this re-eval's paper-half catches the drift.
 
 ---
 

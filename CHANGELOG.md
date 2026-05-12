@@ -4,6 +4,66 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.42.0] - 2026-05-12
+
+### RE-EVAL following 2.41.0 — first re-eval slot under the methodology adopted 2026-05-12
+
+Doc-only PR. First firing of the re-eval cadence introduced at the 2026-05-12 methodology adoption (see [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" and Decision §14). Tag-direct `X.Y.Z` per [`docs/VERSIONING.md`](docs/VERSIONING.md) line 35 — multi-file doc deliverable end-to-end testable on a single push; not an X.Y.Z.N sub-slice. No code changes in `js/` (only the version bump in `js/version.js`) — methodology rule per ROADMAP line 89: *"No code changes in the ICD session itself — drift fixes spawn as `[strong]`-band roadmap items in subsequent code minors."*
+
+**Why now.** The first re-eval slot was scheduled at `RE-EVAL following 2.41.0` per ROADMAP §"Re-evaluation cadence" lines 72-84; 2.41.0 just shipped. Per Decision §14, re-eval gates the next code minor — skipping it would be exactly the kind of decision Decision §14 was added to prevent. Code work resumes at 2.43.0 with the `[REG][M][likely]` panels-manifest entry promoted to `[strong]` in this re-eval's paper-half output.
+
+### ARCHITECTURE.md refresh — 1.9.1 sync → 2.41.0 sync
+
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) was at **1.9.1 sync** — 32 minors behind `main` — and carried a drift banner enumerating what hadn't folded back. This refresh strips the banner and writes the current shape against `js/` as it stands at 2.41.0. Sections updated:
+
+- **Layer Diagram** rewritten to show the 2.X structural shape: Touch 3 surfaces (pr-review/, merge-conflict/, preview/), the 4 audit-sweep registries (slot-manager, events/public-channels, ui/modal-registry, ui/hotkey-bindings), the expanded Chat Layer with cache-invalidation + tool-classifications + the Preact card modules, projects/, workers/, zip-upload, the 9-profile registry (3 picker-promoted, 6 synthetic).
+- **`prompts.js` section** updated for the 2.35.0 same-projection derivation (Composer-vs-non-Composer enumeration both reads `Profiles.filterTools()`) and the 2.37.0 `renderUntrustedMarkers` from `UNTRUSTED_KINDS` (closing the pre-1.6.12 untrusted-content gap).
+- **`tools/registry.js` section** updated for the 2.34.0 `Profiles.getKnownGroupTags()` derivation (was the hardcoded `LEGAL_GROUP_TAGS` constant) and the 2.0 profile-side admission flip.
+- **Intelligence Layer table** updated for the AST chunker (1.7.0 + 1.8.1), retrieval contracts.js, cost dashboard (1.2.1) + export (1.6.6).
+- **MCP Layer section** updated for 2.0 profile-side admission (no MCP-specific carve-out) and the github#27 catalog-vs-OAuth phase split.
+- **Touch 3 Surfaces** (new section) — pr-review (2.12.0-2.14.0), merge-conflict (2.18.0-2.21.0), preview Tier 1/2/3a (1.22.0/2.7.0/2.10.0), rail v2 (2.11.0 + 2.23.0 + 2.24.0).
+- **Slot & Event Registries** (new section) — `slot-manager.js` six-slot machinery, `PUBLIC_EVENT_CHANNELS` (2.39.0.0 + `forSlot` 2.41.0), `ModalRegistry` (2.33.0), `HotkeyBindings` (2.36.0), `tool-classifications.js` + `cache-invalidation.js` (2.25.0 hoist), inline-handler retirement (2.27.0-2.32.0).
+- **File Size Map** refreshed against `wc -l js/**/*.js` at 2.41.0 — 30 largest files with their current LOC, adding the post-1.9.1 entries (preview-host, PrReviewSurface, code-chunker, contracts.js, left-pane-rail) and updating the existing rows.
+- **Document hierarchy** gains an `ICD-*.md` row for the new ICD-backfill program.
+- **Testing & CI** corrected — the prior claim "CI does **not** execute tests" is wrong since the audit-sweep wave added `node --test tests/test-*.mjs` plus three lints (version coherence, security-innerHTML, security-invisible-Unicode, theme tokens) to `.gitea/workflows/ci.yaml`. The release-readiness gate (Decision §12) is documented inline.
+
+### First ICD shipped — `docs/ICD-chat-handlers.md`
+
+Per ROADMAP §"Per-subsystem ICD backfill program", target #1 (`chat/handlers.js` + classification axes) ships at this re-eval slot. New file [`docs/ICD-chat-handlers.md`](docs/ICD-chat-handlers.md) covers:
+
+- **5 classification axes** spanning 8 frozen exports — the ROADMAP-stated scope of "4 axes" expanded to 5 after reading the code; the matrix actually carries: Cache(dup) `WRITE_TOOLS` + `STATEFUL_READ_TOOLS`, Cache(invalidation) `FILE_MUTATING_TOOLS` + `PREVIEW_MUTATING_TOOLS` (paired with `PREVIEW_READ_TOOLS`), Envelope `MUTATING_TOOLS`, FileOp `WHOLE_FILE_WRITE_TOOLS`, Timeout `LONG_RUNNING_TOOLS` + `USER_PAUSE_TOOLS`.
+- **Per-export contract** — for each of the 8 frozen sets: members, trigger points (with line numbers in `handlers.js`), invariants, history anchors (gitea#301 / 1.7.1; 2.10.0 + github#39; 2.10.1; github#35; PR #289).
+- **Interaction matrix** — asserted disjointness (`WRITE ∩ MUTATING = ∅`, `WRITE ∩ STATEFUL_READ = ∅`, `WHOLE_FILE_WRITE ⊆ WRITE ∪ MUTATING`); intentional overlaps (`PREVIEW_MUTATING ∩ PREVIEW_READ`, `STATEFUL_READ ∩ USER_PAUSE`); open invariants not yet asserted.
+- **Composer-vs-non-Composer path drift** — 2.35.0 same-projection derivation; cross-references the next ICD slot (`RE-EVAL following 2.44.0`, target #2 — the Composer seam in isolation).
+- **Why these axes resist consolidation** — distinct trigger points; matrix-scan affordance from the 2.25.0 hoist; future-consolidation deferred until a third axis-drift bug surfaces.
+- **Forward-evolution rules** — top-to-bottom scan when adding a tool; disjointness-test gating; frozen-array `.push` errors at the accident site.
+
+Code-aware findings produced by authoring this ICD: **zero subsequent `[strong]`-band roadmap rows** — the contract was already coherent. The +1 axis-count emerged from the read (the ROADMAP-stated "4 axes" undercounted the actual 5).
+
+### Roadmap paper-half — drift fixes + band tightening
+
+In [`docs/ROADMAP.md`](docs/ROADMAP.md):
+
+- **Header re-sync** — line 3 was 4 minors stale (claimed "post-2.38.0; Current released: v2.37.0; HEAD: 2.38.0+[Unreleased]"). Updated to "post-2.41.0; Current released: v2.41.0; `main` HEAD: 2.42.0 + [Unreleased]".
+- **gitea#392 / gitea#393 strikethrough** — both issues filed 2026-05-12 during 2.38.0 review were already closed by the time of this re-eval, but the §"Known open issues" still listed them as open `[strong]` rows. Captured as resolution lines with the `view.onActivate(viewId)` reference to `js/ui/left-pane-rail.js` for #393's fix anchor (#392 had no in-doc fix-PR ref to capture).
+- **Forward ICD presence check** — added 2.43.0 panels-manifest as `[strong]` with contract present (inventory + DESIGN-git-providers-and-ui-extensions §4). Other rows unchanged.
+- **Now / Next / Later table** restructured — added "Now (in flight)" row for the 2.42.0 doc-only PR; "Next (2.43.0)" row for panels-manifest; "Next-after (2.44.0+)" continues the sweep.
+- **ICD-backfill program** — target #1 marked shipped with the +1 axis-count note; target #2 (Composer seam) becomes the next `RE-EVAL following 2.44.0` deliverable.
+- **Re-evaluation cadence** — `RE-EVAL following 2.41.0` slot recorded as completed with the three deliverable references; next-slot anchor `RE-EVAL following 2.44.0` is the forward target.
+
+### Tests
+
+No new tests in this PR. The plan's verification section runs the existing `node --test tests/test-*.mjs` suite as a "no regression" check (no `js/` code changed beyond the version constant). Doc-internal consistency:
+
+- `js/version.js` `VERSION = '2.42.0'` matches the `## [2.42.0]` heading above.
+- ROADMAP line 3 header version matches `js/version.js` ↔ `[Unreleased]` shape.
+- ARCHITECTURE.md `Last sync: **2.41.0** (2026-05-12)` matches the just-shipped tag-source state.
+- ICD doc cross-checks: every named export in `js/chat/tool-classifications.js` (8 `Object.freeze([...])` exports + 1 helper) appears in the ICD's matrix; every axis cites a canonical-location file path that grep confirms exists.
+
+### Versioning
+
+`js/version.js` reads **`2.42.0`** — tag-direct per the convention's "single-PR feature that's meaningfully usable on its own push" rule ([`docs/VERSIONING.md`](docs/VERSIONING.md) line 35). `## [Unreleased]` promotes to `## [2.42.0] - 2026-05-12`; a fresh empty `## [Unreleased]` opens above for the next arc. The release-readiness gate (per [ROADMAP Decision §12](docs/ROADMAP.md)) fires next on the `v2.42.0` tag push — Jeff's gate-firing operation.
+
 ## [2.41.0] - 2026-05-12
 
 ### Slot-channel naming hygiene — `forSlot(slotId)` helper
