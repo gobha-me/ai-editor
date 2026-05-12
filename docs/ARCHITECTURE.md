@@ -3,6 +3,10 @@
 > Module dependency map, layer boundaries, and key data flows.
 > Last sync: **1.9.1** (2026-05-07). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.); this doc tracks structural shape only.
 
+> **⚠ Doc-vs-code drift status (added 2026-05-12).** This document is at 1.9.1 sync; `main` is at 2.38.0+[Unreleased]. The following 2.X structural work has not been folded back: Touch 3 surfaces (Rail v2 2.11.0, PR Review 2.12.0–2.14.0, Merge Conflict Resolver 2.18.0–2.21.0, zip-flow 2.20.0); SlotManager rails + body migration (2.22.0–2.24.0); the 4-phase inline-handlers migration arc (2.27.0–2.32.0); the 2026-Q2 audit-sweep wave (2.33.0–2.38.0). A code-aware re-evaluation session is scheduled per [`ROADMAP.md`](ROADMAP.md) §"Re-evaluation cadence" to refresh this doc against current `js/`. Until then: treat the layer diagram and §"File Size Map" as 1.9.1-shaped, and the per-subsystem details as authoritative only where corroborated by a DESIGN-\*.md still in force.
+>
+> **Commitment bands.** Per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) and [`ROADMAP.md`](ROADMAP.md) §"How to read the bands"), unlabeled sections in this document are implicit `[strong]`-band commitments — load-bearing for the next ~3 milestones. The Intelligence Layer carries `[medium]` for Phase 2 picker promotion (`kb.v1` shipped 2.8.0; `chat_multi.v1` / `rp.v1` deprioritized for ai-editor) and `[fuzzy]` for Phase 3 operational maturity and Phase 4 extensibility. Per-section band labels are out of scope for this stale-banner pass; that's the refresh session's work.
+
 ## Design Constraints
 
 - **No build step.** Every `.js` file is a native ES module (`<script type="module">`).
@@ -327,6 +331,42 @@ under the same root).
 `strict: false`, `module: ES2022`). Core modules carry JSDoc annotations
 with `@typedef` blocks for shared shapes. VS Code shows inline type
 hints and red squiggles without a build step.
+
+## Document hierarchy
+
+Per the methodology adopted 2026-05-12, every artifact in `docs/` traces upward to this document. If the code contradicts a DESIGN doc, the code is wrong (or the DESIGN doc needs an architecture session). If a DESIGN doc contradicts this ARCHITECTURE doc, this doc takes precedence and the DESIGN doc needs an architecture session to update.
+
+```
+ARCHITECTURE.md (source of truth — what you're reading)
+│
+├── ROADMAP.md (sequenced plan; derived from this doc; band-labeled per §"How to read the bands")
+│
+├── VERSIONING.md (X.Y.Z.N convention for in-flight work; layered atop the existing release-readiness gate)
+│
+├── DESIGN-*.md (multi-version design docs — Scale-2 / Scale-3 arcs per methodology §Scales of Work)
+│   ├── DESIGN-profiles.md       — the load-bearing 1.X→2.0 flip
+│   ├── DESIGN-retrieval.md      — Composer + strategies
+│   ├── DESIGN-memory.md         — two-tier persistence
+│   ├── DESIGN-compression.md    — Rules 1-5
+│   ├── DESIGN-tools.md          — semantic admission
+│   ├── DESIGN-intelligence.md   — cross-subsystem narrative
+│   ├── DESIGN-preview.md        — Tier 1/2/3 phased delivery
+│   ├── DESIGN-llm-authored-automation.md — Tier 0 sandbox + phased graduation
+│   ├── DESIGN-cross-device-sync.md       — github#18, parked post-2.0
+│   ├── DESIGN-git-providers-and-ui-extensions.md — SlotManager contract
+│   ├── DESIGN-html-inline-handlers-migration.md  — closed 2.32.0
+│   └── DESIGN-sub-agents.md     — shipped 2.37.0; gated on Phase 0 audit-sweep + post-2.0
+│
+├── discussion/ (pre-architecture; not commitments — cited only as "see discussion/X.md for the thinking")
+│
+├── audit-2026-Q2/inventory.md (refactor-candidate queue; the §"2026-Q2 audit + sweep track" on ROADMAP works through this)
+│
+├── design/ (claude.ai/design touches 1-3 — third-party deliverables; the canonical reception of UX direction)
+│
+└── dogfood-battery/ (operational measurement; per-session traces are the artifact)
+```
+
+Implementation (code under `js/`) derives from DESIGN docs (or directly from a roadmap line for Scale-1 single-line items). Tests verify implementation against contracts. The reverse direction — code teaching the architecture — runs through the code-aware re-evaluation loop (see ROADMAP §"Re-evaluation cadence"), not through ad-hoc edits of this document during code sessions.
 
 ## Testing & CI
 

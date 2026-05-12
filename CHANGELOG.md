@@ -4,6 +4,37 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — Plinth methodology adoption (architecture session, no code path change)
+
+Docs-only restructure adopting the LLM-assisted-development methodology from `/config/Projects/plinth/docs/METHODOLOGY-llm-assisted-development.md`. Per [`feedback_no_bump_for_measurement_only.md`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) no version bump for this PR; entries accumulate in `[Unreleased]` until the next production-code-path change carries the release.
+
+**What changed:**
+
+- **New [`docs/VERSIONING.md`](docs/VERSIONING.md)** documents the X.Y.Z.N sub-patch convention. Multi-PR / multi-slice work develops in `X.Y.Z.N` space (sub-patch); the single `vX.Y.Z` tag fires when the feature is testable end-to-end. Composes with the three existing versioning feedback memories without superseding any. No retroactive renaming of `v2.33.0`–`v2.37.0`; the convention applies forward.
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md) restructure** (439 → ~270 lines):
+  - "Just shipped" 1800-word narrative cell collapsed to a one-line pointer to CHANGELOG.
+  - "Now / Next / Later" table gains band labels (`[strong]` / `[medium]` / `[fuzzy]`).
+  - 2.X path pinned-slice table (mostly shipped) collapsed into a one-paragraph CHANGELOG pointer + the still-open 2.0.x stabilization row.
+  - Parallel 1.X tracks (7 entries, all shipped) collapsed into a single status table.
+  - After-2.0.0 Phase 2/3/4 table banded.
+  - Deferred / unscheduled section restructured into three buckets per methodology: `[fuzzy]` parked-but-named, pre-architecture thinking → [`discussion/`](docs/discussion/), and deferred → `deferred/` (not bootstrapped — allocate when needed).
+  - "Known open issues" closed-issue history dropped (CHANGELOG is authoritative); two newly-filed Gitea issues added ([gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392), [gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393)).
+  - New §"How to read the bands" defines `[strong]` / `[medium]` / `[fuzzy]` for ai-editor and locks the re-eval cadence at **every 3 minors**.
+  - New §"Re-evaluation cadence" schedules `RE-EVAL following 2.41.0` as the first inline re-eval slot; primary target is refreshing ARCHITECTURE.md against current `js/`.
+  - New §"Per-subsystem ICD backfill program" (within §"Re-evaluation cadence") schedules one ICD per re-eval slot. First four targets named in order: `chat/handlers.js` + classification axes → Intelligence-layer Composer seam → Tool registry admission contract → `git-providers/base.js` 43-method base. Existing code has accreted contracts as inline sets / registry filters; the program backfills written ICDs without doing code in the architecture session.
+  - New §"Forward ICD presence check" surfaces that MCP OAuth and Window v2 / Sessions lack contracts → demoted from `[strong]` to `[medium]` until ICDs land.
+  - New Decision §14 makes re-evaluation a first-class roadmap entry per methodology.
+- **New [`docs/discussion/`](docs/discussion/) directory** (pre-architecture content per methodology §"`discussion/`"):
+  - [`README.md`](docs/discussion/README.md) — purpose, movement rules, citation rule.
+  - [`github-37-phase-2.md`](docs/discussion/github-37-phase-2.md) — the 8 deferred design questions for the CLAUDE.md analogue Phase 2, extracted verbatim from ROADMAP's closed-Phase-1 entry.
+  - [`pr-review-polish.md`](docs/discussion/pr-review-polish.md) — the 4 PR Review follow-ups parked behind usage signal.
+  - [`touch-3-window-v2-sessions.md`](docs/discussion/touch-3-window-v2-sessions.md) — load-bearing thinking on Window v2 / Sessions seams without claiming to be the design.
+- **New [`docs/dogfood-battery/README.md`](docs/dogfood-battery/README.md)** — relocated the 66-line dogfood-battery framing out of ROADMAP §"Track context"; per-session traces in the same directory remain the artifact.
+- **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) light touches** — stale-banner naming the 30-minor doc-vs-code gap (Touch 3 + SlotManager + inline-handlers arc + audit-sweep wave not folded back); commitment-bands note; new §"Document hierarchy" mirroring methodology §"Document Hierarchy"; pointer to VERSIONING.md. **Full refresh scheduled at `RE-EVAL following 2.41.0`** — not done in this session per methodology's role separation (architecture-session ≠ refresh-session).
+- **Memory write-back** at `/config/.claude/projects/-config-Projects-ai-editor/memory/project_methodology_adoption.md`; MEMORY.md index updated.
+
+**No production code path change.** `js/version.js` unchanged at 2.38.0. Tests unaffected. No CI behavior change.
+
 ## [2.38.0] - 2026-05-12
 
 ### Feature — `CI_STATUS_META` single source for CI status visuals (2026-Q2 audit sweep)
