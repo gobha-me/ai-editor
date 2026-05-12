@@ -4,6 +4,55 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.41.0] - 2026-05-12
+
+### Slot-channel naming hygiene — `forSlot(slotId)` helper
+
+Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §slot-manager entry (`[ST] [S] [maybe-intentional] slot:${slotId}:changed template-literal emit pattern`). Tag-direct `X.Y.Z` (no `X.Y.Z.N` sub-slice) per [`docs/VERSIONING.md`](docs/VERSIONING.md) — the change is end-to-end testable on a single push and folds cleanly into one PR.
+
+**Why now.** The inventory entry's precondition was "if we add an EVENT_CHANNELS constants file, promote dynamic channel names into a `forSlot(slotId)` helper." That precondition fired at 2.39.0.0 when the `PUBLIC_EVENT_CHANNELS` registry shipped at [`js/events/public-channels.js`](js/events/public-channels.js). Channel-finder tools that grep for `EventBus.emit('...')` (the audit's own diagnostic at `tests/test-public-event-channels.mjs:349`) miss template-literal emits by construction — the helper turns the dynamic name back into a grep-discoverable, validated surface.
+
+### `forSlot(slotId)` helper
+
+Added to [`js/events/public-channels.js`](js/events/public-channels.js) alongside `GROUP_LABELS` and `PUBLIC_EVENT_CHANNELS`. Signature:
+
+```js
+forSlot(slotId)  // returns `slot:${slotId}:changed`
+```
+
+Strict input validation rejects empty / non-string / colon-containing / whitespace-containing `slotId` — those silently produced malformed channel names under the old template literal (`forSlot('rail:views')` would have generated `slot:rail:views:changed`, which is exactly the foot-gun this helper exists to prevent). Throws `TypeError` at the helper boundary instead of letting the bad name reach the EventBus dispatcher.
+
+### Hybrid registry declaration
+
+`PUBLIC_EVENT_CHANNELS.slots` adds the **literal** `{ name: 'slot:rail-views:changed', payload: 'no payload — re-read via SlotManager.getContributions' }` — the one structured slot today per `STRUCTURED_SLOTS` in [`js/slot-manager.js`](js/slot-manager.js). `GROUP_LABELS.slots = 'Slots'` is appended in declaration order. The hybrid (literal in registry + separate helper) was chosen over a `dynamic: true` flag because the existing parity-guard's `literalPattern` regex at `tests/test-public-event-channels.mjs:349` already skips template-literal emits by construction — a flag would force every `entries.map(e => e.name)` iteration to special-case it. The literal pins what's emitted today for the parity guard; the helper documents the extension axis for plugin-registered slots that future contribution slots can use.
+
+### Call-site swaps
+
+| File | Line | Change |
+|---|---|---|
+| [`js/slot-manager.js`](js/slot-manager.js) | 170 | `EventBus.emit(\`slot:${slotId}:changed\`)` → `EventBus.emit(forSlot(slotId))` |
+| [`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js) | 568 | `EventBus.on('slot:rail-views:changed', rebuild)` → `EventBus.on(forSlot('rail-views'), rebuild)` |
+
+Behavior is byte-identical: `STRUCTURED_SLOTS` contains only `'rail-views'` today, and `forSlot('rail-views')` returns the same string the template literal expanded to. JSDoc blocks at `slot-manager.js:31` and `:49` updated to cite `forSlot()` as the canonical helper.
+
+### Tests
+
+[`tests/test-slot-channel-hygiene.mjs`](tests/test-slot-channel-hygiene.mjs) (new, 2 cases) is the anti-regression CI guard — mirrors the 2.40.0 `tests/test-no-raw-localstorage.mjs` shape. Globs `js/**/*.js`, strips line + block comments, fails if any file outside `js/events/public-channels.js` (the helper's home) constructs a raw `EventBus.emit/on(\`slot:${id}:changed\`)` template literal. Companion sanity-check pins the allowlisted file to actually export `forSlot` — a tripwire so the allowlist can't go stale.
+
+[`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) gains 4 cases: `forSlot` round-trip (`forSlot('rail-views') === 'slot:rail-views:changed'`); `forSlot` input rejection (empty/null/non-string/whitespace/colon-in-id, plus a positive sanity that `forSlot('my-plugin-slot')` returns the canonical name); helper/registry cross-check (the literal in `PUBLIC_EVENT_CHANNELS.slots` equals `forSlot('rail-views')`); `slots` group declared in `GROUP_LABELS` with non-empty label.
+
+### Inventory close — Issues panel header rebuild (already fixed by 2.24.0)
+
+Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §events entry (`[EV] [S] [likely] Issues panel header text rebuilt without an event`) as a pure inventory-bookkeeping close. The audit entry referenced a `▾ Issues (N)` header-text rebuild at `js/project-manager.js:451-456`; reading the file today (lines 447-464 — the current home of those line numbers after intervening sweeps) shows the current `renderIssues()` only handles the empty-state innerHTML and the call to `renderIssueRowsHtml(...)`. The legacy stacked-sidebar `[data-collapse="issuesPanelBody"]` element no longer exists (deleted by 2.24.0 when the rail-views Body migration retired the static blocks from `html/sidebar.html`); the rail badge at `js/ui/left-pane-rail.js:314-329` is the sole header surface and already subscribes to both `issues:refresh` (line 614) and `issues:render` (line 620). Zero code change for this entry.
+
+### Audit-sweep closure
+
+The 2.41.0 cut closes two inventory entries: §slot-manager (one code change) and §events Issues-header-text (pure bookkeeping). Wave continues against the remaining `[needs-investigation]` and `[M] [likely]` entries.
+
+### Versioning
+
+`js/version.js` reads **`2.41.0`** — tag-direct per the convention's "single-PR feature that's meaningfully usable on its own push" rule ([`docs/VERSIONING.md`](docs/VERSIONING.md) line 35). `## [Unreleased]` promotes to `## [2.41.0] - 2026-05-12`; a fresh empty `## [Unreleased]` opens above for the next arc.
+
 ## [2.40.0] - 2026-05-12
 
 ### Storage discipline — localStorage → Storage migration sweep

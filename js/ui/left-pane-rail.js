@@ -58,6 +58,7 @@
 import { State, EventBus, Storage } from '../core.js';
 import { escapeAttr, escapeHtml } from '../utils/html.js';
 import { SlotManager } from '../slot-manager.js';
+import { forSlot } from '../events/public-channels.js';
 import { renderFileTree } from '../file-tree.js';
 import {
     renderIssues,
@@ -564,7 +565,7 @@ export function mountLeftPaneRail() {
 
     // Re-render when contributions change (e.g. a provider adds a rail view
     // mid-session, or a plugin disables itself).
-    EventBus.on('slot:rail-views:changed', rebuild);
+    EventBus.on(forSlot('rail-views'), rebuild);
 
     // Click delegation on the rail host: switch active view on rail button.
     railHost.addEventListener('click', (e) => {

@@ -28,12 +28,13 @@
  *     SlotManager validates the structured shape (`view: {id, label, icon,
  *     badge?, priority?}` + `render(container)`) at `contribute` time,
  *     enforces `view.id` collision-skip, sorts by `view.priority ?? 50`,
- *     and emits `EventBus.emit('slot:rail-views:changed')` so the consumer
- *     can re-render. SlotManager does NOT touch the DOM for structured
- *     slots — the consumer owns the mount path.
+ *     and emits `forSlot(slotId)` (e.g. `'slot:rail-views:changed'`) so the
+ *     consumer can re-render. SlotManager does NOT touch the DOM for
+ *     structured slots — the consumer owns the mount path.
  */
 import { EventBus } from './core.js';
 import { GitProviderRegistry } from './git-providers/registry.js';
+import { forSlot } from './events/public-channels.js';
 
 const KNOWN_SLOTS = new Set([
     'sidebar-panels',
@@ -46,7 +47,8 @@ const KNOWN_SLOTS = new Set([
 
 /**
  * Structured slots delegate rendering to an owning consumer that reads
- * contributions via `getContributions()` and listens for `slot:<id>:changed`.
+ * contributions via `getContributions()` and listens for `forSlot(slotId)`
+ * (the canonical `slot:<id>:changed` name; see `js/events/public-channels.js`).
  * The contract per slot is checked by `_validateStructuredContribution`.
  */
 const STRUCTURED_SLOTS = new Set(['rail-views']);
@@ -166,7 +168,7 @@ export const SlotManager = {
     renderSlot(slotId) {
         // Structured slots: owner consumer handles rendering — notify and bail.
         if (STRUCTURED_SLOTS.has(slotId)) {
-            EventBus.emit(`slot:${slotId}:changed`);
+            EventBus.emit(forSlot(slotId));
             return;
         }
 

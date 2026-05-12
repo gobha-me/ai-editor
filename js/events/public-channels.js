@@ -59,6 +59,7 @@ export const GROUP_LABELS = Object.freeze({
     conversations: 'Conversations',
     ghostText: 'Ghost text',
     mergeConflict: 'Merge conflict',
+    slots: 'Slots',
 });
 
 /**
@@ -194,7 +195,44 @@ export const PUBLIC_EVENT_CHANNELS = Object.freeze({
         Object.freeze({ name: 'mergeConflict:aiResolve:success' }),
         Object.freeze({ name: 'mergeConflict:aiResolve:error' }),
     ]),
+    // 2.41.0 (slot-channel hygiene) — the `slot:<id>:changed` family is
+    // emitted by SlotManager whenever a structured slot's contributions
+    // change (mount / unmount / refresh). Plugin code subscribes via
+    // `EventBus.on(forSlot(slotId), handler)`. Today's only structured
+    // slot is `rail-views` (see `STRUCTURED_SLOTS` in `js/slot-manager.js`);
+    // future contribution slots get the same channel shape automatically.
+    // Declaring the one production literal here pins it for the parity
+    // guard; `forSlot(slotId)` is the discoverable extension axis.
+    slots: Object.freeze([
+        Object.freeze({ name: 'slot:rail-views:changed', payload: 'no payload — re-read via SlotManager.getContributions' }),
+    ]),
 });
+
+/**
+ * Canonical name for the structured-slot change notification. SlotManager
+ * emits `forSlot(slotId)` whenever a structured slot's contributions
+ * change; consumers subscribe to the same string. Centralizing the name
+ * here keeps the `slot:<id>:changed` axis grep-discoverable — bare
+ * template-literal emits/subscribes get caught by the
+ * `tests/test-slot-channel-hygiene.mjs` anti-regression guard.
+ *
+ * Strict validation rejects empty / non-string / colon-containing /
+ * whitespace-containing `slotId` — those would silently produce a
+ * malformed channel name (e.g. `forSlot('rail:views')` → `slot:rail:views:changed`,
+ * which is exactly the kind of foot-gun this helper exists to prevent).
+ *
+ * @param {string} slotId
+ * @returns {string}
+ */
+export function forSlot(slotId) {
+    if (typeof slotId !== 'string' || slotId.length === 0) {
+        throw new TypeError(`forSlot: slotId must be a non-empty string (got ${typeof slotId})`);
+    }
+    if (/[\s:]/.test(slotId)) {
+        throw new TypeError(`forSlot: slotId must not contain whitespace or ':' (got ${JSON.stringify(slotId)})`);
+    }
+    return `slot:${slotId}:changed`;
+}
 
 /**
  * Render `PUBLIC_EVENT_CHANNELS` as the `Heading: a, b, c` block used

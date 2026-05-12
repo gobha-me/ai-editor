@@ -170,11 +170,12 @@
 
 ### slot-manager
 
-#### [ST] [S] [maybe-intentional] `slot:${slotId}:changed` template-literal emit pattern
+#### ~~[ST] [S] [maybe-intentional] `slot:${slotId}:changed` template-literal emit pattern~~ *(✅ closed — shipped 2.41.0)*
 - **What:** `js/slot-manager.js:159` emits ``EventBus.emit(`slot:${slotId}:changed`)``. The static rail-views path uses the literal `'slot:rail-views:changed'`. Channel-finder tools that grep for `EventBus.emit('...')` (the audit's own diagnostic) miss the dynamic name.
 - **Why it's load-bearing:** Channel discovery is one of this audit's primary diagnostics. Template-literal channels evade grep. This is a small style hazard, not a bug — but it argues for an `EVENT_CHANNELS` constants file.
 - **Suggested fix shape:** Optional. If we add an `EVENT_CHANNELS` constants file (a likely future fix for orphan-emit hygiene), promote dynamic channel names into a `forSlot(slotId)` helper.
 - **Touch points:** `js/slot-manager.js:159`.
+- **Resolution:** 2.41.0 — precondition fired with 2.39.0.0's `PUBLIC_EVENT_CHANNELS` registry. Added `forSlot(slotId)` to [`js/events/public-channels.js`](../../js/events/public-channels.js) (strict input validation: rejects empty/non-string/colon-containing/whitespace-containing `slotId` — catches `forSlot('rail:views')` malformed-name foot-guns at the helper boundary instead of letting them silently produce `slot:rail:views:changed`). `js/slot-manager.js:169` emit site and `js/ui/left-pane-rail.js:567` subscriber both route through the helper. Hybrid registry declaration: the one production literal (`slot:rail-views:changed`) is pinned in `PUBLIC_EVENT_CHANNELS.slots` (so the existing parity guard catches it), and the helper documents the extension axis for plugin-registered slots that future contribution slots can use. New `tests/test-slot-channel-hygiene.mjs` (2 cases) is the anti-regression CI guard — globs `js/**/*.js`, strips comments, fails if any file outside `js/events/public-channels.js` constructs a raw `EventBus.emit/on(\`slot:${id}:changed\`)` template literal. Four new cases in `tests/test-public-event-channels.mjs` cover the helper round-trip, input rejection, registry/helper cross-check, and `slots`-in-`GROUP_LABELS` presence. See [CHANGELOG §2.41.0](../../CHANGELOG.md).
 
 ---
 
@@ -226,11 +227,12 @@
 - **Touch points:** `js/git.js:677-884`, `js/git-providers/*.js`.
 - **Resolution:** 2.39.0.1 — every flagged channel resolved to **public** (none deleted, none wired). The 7 provider-level channels (`git:repoCreated` / `git:issueCreated` / `git:issueCommented` / `git:mrCreated` / `git:prMerged` / `git:prReviewSubmitted` / `git:ciRerun`) plus `git:issueUpdated` (audit-miss) follow the documented "plugin SDK extension hook" pattern. The 4 `git.js` paired-start emits (`git:loadingFile` ↔ `git:fileLoaded`, `git:saving` ↔ already-subscribed `git:saved`, `git:batchSaving` ↔ already-subscribed `git:batchSaved`) form a start/completion symmetry — declaring the start-side public matches plugin demand for loading/saving indicators. The 2 wholesale-folder ops (`git:folderDeleted` / `git:folderRenamed`) declared public for parallel reasons. All 17 declarations are in `PUBLIC_EVENT_CHANNELS.git`; the codebase-parity guard in `tests/test-public-event-channels.mjs` pins every declared channel to a real emit site. See [CHANGELOG §2.39.0.1](../../CHANGELOG.md).
 
-#### [EV] [S] [likely] Issues panel header text rebuilt without an event
+#### ~~[EV] [S] [likely] Issues panel header text rebuilt without an event~~ *(✅ closed — already resolved by 2.24.0 side effect; inventory close 2.41.0)*
 - **What:** The header text update in `js/project-manager.js:451-456` (`▾ Issues (N)`) only runs when `renderIssues()` is called. `renderIssues()` is called from `refreshIssues()` AND from `EventBus.on('issues:render', renderIssues)` (`project-manager.js:835`). But anything that mutates `State.issues` without calling `renderIssues()` leaves the header stale.
 - **Why it's load-bearing:** This is the same "the rail badge bug we just fixed" pattern at a different surface. The rail badge re-renders on `issues:refresh` AND `issues:render`. The legacy header text only re-renders on `issues:render`.
 - **Suggested fix shape:** Either delete the legacy header text rebuild (rail badge is the surface now), or subscribe `renderIssues` to `issues:refresh` so both surfaces stay coherent.
 - **Touch points:** `js/project-manager.js:451-456,830`, `js/ui/left-pane-rail.js:314-329`.
+- **Resolution:** 2.41.0 inventory bookkeeping — already closed by side effect when 2.24.0 deleted the legacy stacked-sidebar `[data-collapse="issuesPanelBody"]` block from `html/sidebar.html`. The header text rebuild referenced in the entry no longer exists at the cited lines: current `renderIssues()` at `js/project-manager.js:447-464` only handles the empty-state innerHTML and the call to `renderIssueRowsHtml(...)`; no `▾ Issues (N)` text is computed anywhere. Rail badge (`js/ui/left-pane-rail.js:314-329`, derived from `view.badge()`) is the sole header surface, and it already subscribes to both `issues:refresh` and `issues:render` (`left-pane-rail.js:614,620`). Zero code change in 2.41.0 — pure inventory close.
 
 ---
 

@@ -37,6 +37,7 @@ import {
     PUBLIC_EVENT_CHANNELS,
     GROUP_LABELS,
     renderPublicEventChannels,
+    forSlot,
 } from '../js/events/public-channels.js';
 import { PLUGIN_DEV_SYSTEM_PROMPT } from '../js/profiles/plugin-dev-v1.js';
 
@@ -342,6 +343,12 @@ test('PLUGIN_DEV_SYSTEM_PROMPT — does not retain pre-2.39.0.0 stale claims', (
  * `EventBus.emit(\`slot:${id}:changed\`)` are skipped — those aren't
  * public channels (and aren't in the registry).
  *
+ * **2.41.0** — the slots group is covered separately by the
+ * "slots group covered via forSlot()" test below, because the dispatcher
+ * at `js/slot-manager.js` calls `forSlot(slotId)` with the slotId
+ * variable (not a literal), so the literal-pattern collector can't
+ * resolve it. Every other group still goes through this collector.
+ *
  * @returns {Set<string>}
  */
 function collectEmittedChannels() {
@@ -364,10 +371,15 @@ function collectEmittedChannels() {
     return emitted;
 }
 
+// Groups whose emit-site indirection isn't literal-pattern matchable. The
+// slots group is covered by its own dispatcher-aware test (below).
+const PARITY_EXEMPT_GROUPS = new Set(['slots']);
+
 test('every PUBLIC_EVENT_CHANNELS entry has at least one EventBus.emit(\'NAME\'…) call in js/', () => {
     const emitted = collectEmittedChannels();
     const missing = [];
     for (const [group, entries] of Object.entries(PUBLIC_EVENT_CHANNELS)) {
+        if (PARITY_EXEMPT_GROUPS.has(group)) continue;
         for (const entry of entries) {
             if (!emitted.has(entry.name)) {
                 missing.push(`${group}.${entry.name}`);
@@ -375,6 +387,39 @@ test('every PUBLIC_EVENT_CHANNELS entry has at least one EventBus.emit(\'NAME\'�
         }
     }
     assert.deepEqual(missing, [], `registry-vs-codebase drift: ${missing.join(', ')}`);
+});
+
+test('slots group covered via forSlot() dispatcher — every entry maps to a STRUCTURED_SLOTS member', () => {
+    // The slots group's emit-site indirection: SlotManager calls
+    // `EventBus.emit(forSlot(slotId))` for any `slotId` in STRUCTURED_SLOTS.
+    // This test pins (a) the dispatcher actually uses the helper, and
+    // (b) every literal entry in PUBLIC_EVENT_CHANNELS.slots resolves to
+    // a slotId that's a current STRUCTURED_SLOTS member — so a registry
+    // entry for a no-longer-structured slot trips here loudly.
+    const slotManagerSrc = readFileSync(join(JS_ROOT, 'slot-manager.js'), 'utf8');
+    assert.match(
+        slotManagerSrc,
+        /EventBus\.emit\(\s*forSlot\(/,
+        'js/slot-manager.js must use forSlot() to emit slot-changed channels',
+    );
+    // Pull STRUCTURED_SLOTS membership out of the source (no runtime import
+    // because the module touches browser DOM at top level).
+    const structuredMatch = slotManagerSrc.match(/const\s+STRUCTURED_SLOTS\s*=\s*new\s+Set\(\[([^\]]+)\]\)/);
+    assert.ok(structuredMatch, 'STRUCTURED_SLOTS declaration not found in slot-manager.js');
+    const structured = new Set(
+        structuredMatch[1]
+            .split(',')
+            .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+            .filter(Boolean),
+    );
+    for (const entry of PUBLIC_EVENT_CHANNELS.slots) {
+        const m = entry.name.match(/^slot:([^:]+):changed$/);
+        assert.ok(m, `${entry.name} must follow slot:<id>:changed shape`);
+        assert.ok(
+            structured.has(m[1]),
+            `${entry.name} declares slot id "${m[1]}" but STRUCTURED_SLOTS members are: ${[...structured].join(', ')}`,
+        );
+    }
 });
 
 // ============================================
@@ -436,4 +481,40 @@ test('fs:* payload-axis guard — every fs: entry documents a path axis', () => 
             `${entry.name} payload should document "path" or "oldPath/newPath"; got "${entry.payload}"`,
         );
     }
+});
+
+// ============================================
+// 2.41.0 slot-channel hygiene — forSlot() helper + slots group
+// ============================================
+
+test('forSlot — round-trips canonical name for a known structured slot', () => {
+    assert.equal(forSlot('rail-views'), 'slot:rail-views:changed');
+});
+
+test('forSlot — rejects empty / whitespace / non-string / colon-in-id', () => {
+    assert.throws(() => forSlot(''), /non-empty string/);
+    assert.throws(() => forSlot(undefined), /non-empty string/);
+    assert.throws(() => forSlot(null), /non-empty string/);
+    assert.throws(() => forSlot(123), /non-empty string/);
+    assert.throws(() => forSlot('rail views'), /whitespace or ':'/);
+    assert.throws(() => forSlot('rail-views\t'), /whitespace or ':'/);
+    assert.throws(() => forSlot('rail:views'), /whitespace or ':'/);
+    // Sanity: a well-formed novel slotId returns its canonical channel.
+    assert.equal(forSlot('my-plugin-slot'), 'slot:my-plugin-slot:changed');
+});
+
+test('forSlot(\'rail-views\') matches PUBLIC_EVENT_CHANNELS.slots literal entry', () => {
+    // Cross-check pin: the helper's output for the one production
+    // structured slot must equal the literal name we declare in the
+    // registry. Drift either way trips the case.
+    const literalEntry = PUBLIC_EVENT_CHANNELS.slots.find(e => e.name === 'slot:rail-views:changed');
+    assert.ok(literalEntry, 'expected slot:rail-views:changed literal in PUBLIC_EVENT_CHANNELS.slots');
+    assert.equal(forSlot('rail-views'), literalEntry.name);
+});
+
+test('slots group — declared in GROUP_LABELS with non-empty label', () => {
+    assert.equal(typeof GROUP_LABELS.slots, 'string');
+    assert.ok(GROUP_LABELS.slots.length > 0, 'GROUP_LABELS.slots must be a non-empty label');
+    assert.ok(Array.isArray(PUBLIC_EVENT_CHANNELS.slots));
+    assert.ok(PUBLIC_EVENT_CHANNELS.slots.length >= 1, 'slots group should declare at least the production literal');
 });
