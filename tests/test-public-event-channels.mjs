@@ -376,3 +376,64 @@ test('every PUBLIC_EVENT_CHANNELS entry has at least one EventBus.emit(\'NAME\'�
     }
     assert.deepEqual(missing, [], `registry-vs-codebase drift: ${missing.join(', ')}`);
 });
+
+// ============================================
+// 2.39.0 fs:* parity confirmation (sweep wave slice 4 — final)
+// ============================================
+
+test('fs:* payload descriptors present and shape-correct', () => {
+    // Shapes taken from the emit sites:
+    //   fs:created  → js/ui/file-create.js:67     → { path, branch }
+    //   fs:updated  → js/ui/commit.js:337         → { path, branch }
+    //   fs:deleted  → js/file-tree.js:328/367     → { path, branch, isFolder? }
+    //   fs:renamed  → js/ui/file-rename.js:150/192 → { oldPath, newPath, branch, isFolder? }
+    const expected = {
+        'fs:created': ['path', 'branch'],
+        'fs:updated': ['path', 'branch'],
+        'fs:deleted': ['path', 'branch', 'isFolder'],
+        'fs:renamed': ['oldPath', 'newPath', 'branch', 'isFolder'],
+    };
+    for (const [name, axes] of Object.entries(expected)) {
+        const entry = PUBLIC_EVENT_CHANNELS.files.find(e => e.name === name);
+        assert.ok(entry, `expected ${name} in files group`);
+        assert.ok(entry.payload, `${name} should carry a payload descriptor`);
+        for (const axis of axes) {
+            assert.ok(
+                entry.payload.includes(axis),
+                `${name} payload should document "${axis}"; got "${entry.payload}"`,
+            );
+        }
+    }
+});
+
+test('fs:* audit-miss check — every fs: emit in js/ is declared public', () => {
+    // Slice-4 parity-confirmation guard: if a 5th fs:* emit ever lands in
+    // js/ without a corresponding PUBLIC_EVENT_CHANNELS.files entry, this
+    // case lights up. Same shape as the slice-2 git:issueUpdated catch.
+    const emitted = collectEmittedChannels();
+    const fsEmitted = [...emitted].filter(n => n.startsWith('fs:'));
+    const fsRegistered = new Set(PUBLIC_EVENT_CHANNELS.files.map(e => e.name));
+    const undocumented = fsEmitted.filter(n => !fsRegistered.has(n));
+    assert.deepEqual(
+        undocumented,
+        [],
+        `fs:* emit-sites missing from registry: ${undocumented.join(', ')}`,
+    );
+});
+
+test('fs:* payload-axis guard — every fs: entry documents a path axis', () => {
+    // Pins the path-axis invariant: every fs:* descriptor must reference
+    // either `path` (single-file ops) or both `oldPath` and `newPath`
+    // (rename ops). Catches a future entry that forgets to name the file.
+    const fsEntries = PUBLIC_EVENT_CHANNELS.files.filter(e => e.name.startsWith('fs:'));
+    assert.ok(fsEntries.length >= 4, 'expected at least 4 fs:* entries');
+    for (const entry of fsEntries) {
+        assert.ok(entry.payload, `${entry.name} should carry a payload descriptor`);
+        const hasPath = entry.payload.includes('path');
+        const hasRenamePair = entry.payload.includes('oldPath') && entry.payload.includes('newPath');
+        assert.ok(
+            hasPath || hasRenamePair,
+            `${entry.name} payload should document "path" or "oldPath/newPath"; got "${entry.payload}"`,
+        );
+    }
+});

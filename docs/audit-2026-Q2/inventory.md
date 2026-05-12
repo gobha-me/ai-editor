@@ -334,11 +334,12 @@
 - **Suggested fix shape:** Either move SearchManager into `js/search-panel.js` (the only consumer) or punt.
 - **Touch points:** `js/managers/search-manager.js`, `js/search-panel.js`.
 
-#### [EV] [S] [needs-investigation] `fs:created`/`fs:updated`/`fs:deleted`/`fs:renamed` emitted with 0 subscribers
+#### ~~[EV] [S] [needs-investigation] `fs:created`/`fs:updated`/`fs:deleted`/`fs:renamed` emitted with 0 subscribers~~ *(✅ closed — shipped 2.39.0)*
 - **What:** From the orphan-emits list, these channels fire but nothing listens.
 - **Why it's load-bearing:** They're likely intended for retrieval index-maintenance or plugin extension. Need to confirm whether they're public extension points (then document) or dead wires (then delete).
 - **Suggested fix shape:** Read the emit sites + decide.
 - **Touch points:** Whatever module emits them — most likely git.js or edit-tools.js.
+- **Resolution:** Triaged in 2.39.0 (sweep wave slice 4 — final, wave complete). All four channels are genuine public-extension API — kept and documented, none deleted. Pre-slice-4 they sat in `PUBLIC_EVENT_CHANNELS.files` (shipped 2.39.0.0) as bare `{ name }` entries; slice 4 added `payload` descriptors to bring them to parity with the slice-2 `git:*` cluster. Shapes from emit-site read: `fs:created`/`fs:updated` → `{ path, branch }`; `fs:deleted` → `{ path, branch, isFolder? }` (file at `js/file-tree.js:328`, folder at `:367`); `fs:renamed` → `{ oldPath, newPath, branch, isFolder? }` (file at `js/ui/file-rename.js:150`, folder at `:192`). Three new tests in `tests/test-public-event-channels.mjs`: payload-shape per entry; fs:* audit-miss check (every `fs:*` emit in `js/` declared public — same shape as the slice-2 `git:issueUpdated` catch); path-axis guard (every entry documents `path` or `oldPath/newPath`). The bidirectional codebase-parity guard already covered `fs:*` since 2.39.0.0. The slice closes the wave; `js/version.js` drops the `.N` to `2.39.0`. See [CHANGELOG §2.39.0](../../CHANGELOG.md).
 
 #### ~~[EV] [S] [maybe-intentional] `ghostText:*` channels emit-only~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** `ghostText:requested`, `ghostText:received`, `ghostText:failed`, `ghostText:empty`, `ghostText:dismissed`, `ghostText:accepted` — six channels, all emit-only.

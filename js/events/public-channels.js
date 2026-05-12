@@ -101,10 +101,15 @@ export const PUBLIC_EVENT_CHANNELS = Object.freeze({
     ]),
     files: Object.freeze([
         Object.freeze({ name: 'file:opened' }),
-        Object.freeze({ name: 'fs:created' }),
-        Object.freeze({ name: 'fs:updated' }),
-        Object.freeze({ name: 'fs:deleted' }),
-        Object.freeze({ name: 'fs:renamed' }),
+        // 2.39.0 (sweep wave slice 4) — payload descriptors added to bring
+        // `fs:*` to parity with the slice-2 `git:*` cluster. Each shape is
+        // taken directly from the emit site; the trailing `isFolder?` /
+        // `branch?` axes denote optional fields the folder-op paths add
+        // (see `js/file-tree.js` / `js/ui/file-rename.js` folder branches).
+        Object.freeze({ name: 'fs:created', payload: '{ path, branch }' }),
+        Object.freeze({ name: 'fs:updated', payload: '{ path, branch }' }),
+        Object.freeze({ name: 'fs:deleted', payload: '{ path, branch, isFolder? }' }),
+        Object.freeze({ name: 'fs:renamed', payload: '{ oldPath, newPath, branch, isFolder? }' }),
         Object.freeze({ name: 'tab:switched' }),
         Object.freeze({ name: 'tab:closed' }),
     ]),

@@ -4,6 +4,40 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.39.0] - 2026-05-12
+
+### 2.39.0 (sweep wave slice 4 — final, wave complete) — `fs:*` parity confirmation
+
+Final sub-step of the 2026-Q2 audit-sweep wave. With this commit `js/version.js` drops the `.N` to `2.39.0` (the wave-complete trigger per [`docs/VERSIONING.md`](docs/VERSIONING.md) line 27); the `## [Unreleased]` heading promotes to `## [2.39.0] - 2026-05-12` containing all four slices' rationale; a fresh empty `## [Unreleased]` opens above for the next arc. Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entry **#337** (`fs:created`/`fs:updated`/`fs:deleted`/`fs:renamed` "0 subscribers" — the last [maybe-intentional]/[needs-investigation] entry the wave's triage covered). The next operation is the `v2.39.0` release tag push — gate-firing per [ROADMAP Decision 12](docs/ROADMAP.md) (10-turn dogfood); separate from this PR.
+
+**What.** The four `fs:*` channels (`fs:created`, `fs:updated`, `fs:deleted`, `fs:renamed`) were declared public at [2.39.0.0](#23900-sweep-wave-slice-1--public-eventbus-extension-channel-registry) — but **before** slice 2's `payload`-descriptor convention existed. Pre-slice-4 they sat in [`js/events/public-channels.js`](js/events/public-channels.js) as bare `{ name }` entries, while every `git:*` entry slice 2 added carries a `payload` string. Slice 4 adds `payload` descriptors to bring `fs:*` to parity.
+
+**Triage outcome — every flagged channel kept and documented; no emits deleted.**
+
+- **Public-extension API designation confirmed.** Each `fs:*` channel has a real emit site, zero in-tree subscribers (intentional — plugins like a workspace-sync mirror or a retrieval index-maintainer subscribe externally), and a coherent payload shape. Same outcome class as slice 2 (every `git:*` channel triaged to "kept + documented"; no deletions).
+- **Payload shapes from emit-site read:**
+  - `fs:created` → [`js/ui/file-create.js`](js/ui/file-create.js) line 67 → `{ path, branch }`
+  - `fs:updated` → [`js/ui/commit.js`](js/ui/commit.js) line 337 → `{ path, branch }`
+  - `fs:deleted` → [`js/file-tree.js`](js/file-tree.js) line 328 (file) and 367 (folder) → `{ path, branch, isFolder? }`
+  - `fs:renamed` → [`js/ui/file-rename.js`](js/ui/file-rename.js) line 150 (file) and 192 (folder) → `{ oldPath, newPath, branch, isFolder? }`
+- **The `isFolder?` axis** captures the folder-op branches (`deleteFolder` and `_submitFolderRename`) that add `isFolder: true` to the same channel — same emit, optional axis.
+
+**What did NOT change.** No emit-site deletions or additions. No subscriber additions (zero in-tree subscribers is correct — these are plugin-extension hooks). No `js/profiles/plugin-dev-v1.js` edits — the new descriptors render automatically through `renderPublicEventChannels()` into the plugin-dev system-prompt addendum (same flow established at 2.39.0.0). No `v2.39.0` tag push from this PR — that's Jeff's gate-firing operation per [Decision 12](docs/ROADMAP.md).
+
+### Tests
+
+[`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) gains 3 cases under a new `// 2.39.0 fs:* parity confirmation (sweep wave slice 4 — final)` band, mirroring the slice-2 `git:*` payload-axis pattern at lines 238-260:
+
+- **`fs:* payload descriptors present and shape-correct`** — asserts each of the 4 entries has its expected payload axes (`path`/`branch` for created/updated; adds `isFolder` for deleted; `oldPath`/`newPath`/`branch`/`isFolder` for renamed). Catches a descriptor regression on the four shapes pinned this slice.
+- **`fs:* audit-miss check — every fs: emit in js/ is declared public`** — walks `js/` via the existing `collectEmittedChannels()` helper, filters to `fs:*` names, asserts each is in `PUBLIC_EVENT_CHANNELS.files`. Same shape as the slice-2 `git:issueUpdated` audit-miss case — if a 5th `fs:*` emit lands without a registry entry, this lights up.
+- **`fs:* payload-axis guard — every fs: entry documents a path axis`** — pins the path-axis invariant: every `fs:*` descriptor must reference either `path` (single-file ops) or both `oldPath` + `newPath` (rename ops). Catches a future descriptor that forgets to name the file.
+
+The bidirectional codebase-parity guard at [tests/test-public-event-channels.mjs](tests/test-public-event-channels.mjs) line 367-378 already covered `fs:*` since 2.39.0.0 (every registry entry has at least one emit; symmetric with `git:*`) — no change needed there. The render-shape test at lines 109-113 (payload descriptors render in parens) automatically pins the new `fs:*` descriptors via `renderPublicEventChannels()`.
+
+### Versioning
+
+`js/version.js` reads **`2.39.0`** — the `.N`-strip closing the four-slice 2.39 wave per [`docs/VERSIONING.md`](docs/VERSIONING.md) line 27. The `## [Unreleased]` heading promotes to `## [2.39.0] - 2026-05-12` containing all four slices' rationale (slice 4 above; slices 1-3 below in `### 2.39.0.0`/`### 2.39.0.1`/`### 2.39.0.2`). A fresh empty `## [Unreleased]` heading opens above. The 3-segment `js/version.js` value matches the latest `## [X.Y.Z]` CHANGELOG heading — the version-coherence lint's strict-equality branch now applies. The release-readiness gate fires next on the `v2.39.0` tag push (Jeff's operation).
+
 ### 2.39.0.2 (sweep wave slice 3) — orphan-emit cleanup
 
 Third sub-step of the 2026-Q2 audit-sweep wave (continues to develop in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md)). Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entries **#113** (`toast` orphan emit) and **#198** (`error` + `settings:loaded` orphan subscribers). One slice remains in the 2.39 arc before the `v2.39.0` tag (`fs:*` parity confirmation).
