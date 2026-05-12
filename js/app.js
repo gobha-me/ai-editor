@@ -55,6 +55,7 @@ import {
     initStatusBarListener
 } from './ui-helpers.js';
 import { registerOverlay, closeTopmostOverlay } from './ui/modal-registry.js';
+import { bindHotkey, dispatchHotkey } from './ui/hotkey-bindings.js';
 import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush, mountCommitModal } from './ui/commit.js';
 import { openNewBranchModal, closeNewBranchModal, createNewBranch, mountNewBranchModal } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile, mountNewFileModal } from './ui/file-create.js';
@@ -324,159 +325,99 @@ function registerCoreOverlays() {
 // ============================================
 
 function setupKeyboardShortcuts() {
-    // Hotkeys below are mirrored in js/help/hotkey-registry.js (display
-    // contract). Keep in sync until the consolidation follow-up makes
-    // the registry the single source of truth (1.3.11+).
-    document.addEventListener('keydown', (e) => {
-        // Ctrl+S - Open commit modal
-        if (e.ctrlKey && e.key === 's') {
-            e.preventDefault();
-            const dirtyCount = State.openTabs.filter(t => t.dirty).length;
-            if (dirtyCount > 0) {
-                openCommitModal();
-            }
-        }
+    // 2.36.0 — bindings driven by HOTKEYS in js/help/hotkey-registry.js
+    // through the dispatcher in js/ui/hotkey-bindings.js. Combo
+    // definitions live in HOTKEYS only; this file pairs ids with
+    // handlers (+ optional enabled predicate). Adding a new
+    // document-bound shortcut means: declare it in HOTKEYS with
+    // documentBound: true, then add the bindHotkey call here. The
+    // parity check in tests/test-hotkey-bindings.mjs fails CI if
+    // either half is missing.
 
-        // Ctrl+Shift+Z - Revert file to original
-        if (e.ctrlKey && e.shiftKey && e.key === 'Z') {
-            e.preventDefault();
-            revertCurrentFile();
-        }
-
-        // Ctrl+, - Settings
-        if (e.ctrlKey && e.key === ',') {
-            e.preventDefault();
-            openSettings();
-        }
-
-        // Ctrl+B - Toggle sidebar
-        if (e.ctrlKey && e.key === 'b') {
-            e.preventDefault();
-            toggleSidebar();
-        }
-
-        // Ctrl+Shift+P - Toggle preview
-        if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-            e.preventDefault();
+    bindHotkey({
+        id: 'file.commit',
+        handler: openCommitModal,
+        enabled: () => State.openTabs.filter(t => t.dirty).length > 0,
+    });
+    bindHotkey({ id: 'file.revert', handler: revertCurrentFile });
+    bindHotkey({ id: 'settings.open', handler: openSettings });
+    bindHotkey({ id: 'sidebar.toggle', handler: toggleSidebar });
+    bindHotkey({
+        id: 'editor.preview',
+        handler: togglePreviewPane,
+        enabled: () => {
             const btn = document.getElementById('btnTogglePreview');
-            if (btn && !btn.disabled) {
-                togglePreviewPane();
-            }
-        }
-
-        // Ctrl+Shift+D - Toggle diff
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-            e.preventDefault();
+            return !!btn && !btn.disabled;
+        },
+    });
+    bindHotkey({
+        id: 'editor.diff',
+        handler: toggleDiffPane,
+        enabled: () => {
             const btn = document.getElementById('btnToggleDiff');
-            if (btn && !btn.disabled) {
-                toggleDiffPane();
-            }
-        }
-
-        // Ctrl+Shift+B - Toggle blame
-        if (e.ctrlKey && e.shiftKey && e.key === 'B') {
-            e.preventDefault();
+            return !!btn && !btn.disabled;
+        },
+    });
+    bindHotkey({
+        id: 'editor.blame',
+        handler: toggleBlamePane,
+        enabled: () => {
             const btn = document.getElementById('btnToggleBlame');
-            if (btn && !btn.disabled) {
-                toggleBlamePane();
-            }
-        }
-
-        // Ctrl+Shift+L - Toggle line numbers
-        if (e.ctrlKey && e.shiftKey && e.key === 'L') {
-            e.preventDefault();
-            toggleLineNumbers();
-        }
-
-        // Ctrl+P - Quick Open file finder
-        if (e.ctrlKey && !e.shiftKey && e.key === 'p') {
-            e.preventDefault();
-            QuickOpen.open();
-        }
-
-        // Ctrl+K - Top-bar command surface
-        // 1.3.6 Phase 1: aliases the Ctrl+P file finder. The palette accretes
-        // commands and settings/help search in 1.3.7+; until then ⌘K and
-        // Ctrl+P share a single overlay so muscle memory works either way.
-        if (e.ctrlKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
-            e.preventDefault();
-            QuickOpen.open();
-        }
-
-        // Ctrl+Shift+F - Project search
-        if (e.ctrlKey && e.shiftKey && e.key === 'F') {
-            e.preventDefault();
-            openSearchPanel();
-        }
-
-        // Ctrl+J - Toggle chat panel
-        if (e.ctrlKey && !e.shiftKey && e.key === 'j') {
-            e.preventDefault();
-            toggleChat();
-        }
-
-        // F1 - Open help slide-out
-        if (e.key === 'F1') {
-            e.preventDefault();
-            openHelpSlideOut();
-        }
-
-        // Cmd+/ (Ctrl+/ on win/linux) - Open help slide-out, when the
-        // editor doesn't have focus. CodeMirror binds this to "toggle
-        // line comment" inside the editor, so the closest('.cm-editor')
-        // check defers to it there.
-        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === '/') {
-            const inEditor = e.target?.closest?.('.cm-editor');
-            if (!inEditor) {
-                e.preventDefault();
-                openHelpSlideOut();
-            }
-        }
-
-        // F2 - Rename current file
-        if (e.key === 'F2' && !e.ctrlKey && !e.shiftKey) {
-            if (State.currentFile && State.activeTabIndex >= 0) {
-                e.preventDefault();
-                openRenameModal(State.currentFile.path);
-            }
-        }
-
-        // Ctrl+1 - Focus sidebar
-        if (e.ctrlKey && !e.shiftKey && e.key === '1') {
-            e.preventDefault();
+            return !!btn && !btn.disabled;
+        },
+    });
+    bindHotkey({ id: 'editor.lineNumbers', handler: toggleLineNumbers });
+    bindHotkey({ id: 'quickopen.open', handler: () => QuickOpen.open() });
+    bindHotkey({ id: 'palette.open', handler: () => QuickOpen.open() });
+    bindHotkey({ id: 'file.search', handler: openSearchPanel });
+    bindHotkey({ id: 'chat.toggle', handler: toggleChat });
+    bindHotkey({ id: 'help.open', handler: () => openHelpSlideOut() });
+    // CodeMirror binds Cmd+/ / Ctrl+/ to "toggle line comment" inside
+    // the editor; defer to it via the .cm-editor target guard.
+    bindHotkey({
+        id: 'help.openMod',
+        handler: () => openHelpSlideOut(),
+        enabled: (e) => !e.target?.closest?.('.cm-editor'),
+    });
+    bindHotkey({
+        id: 'file.rename',
+        handler: () => openRenameModal(State.currentFile.path),
+        enabled: () => !!State.currentFile && State.activeTabIndex >= 0,
+    });
+    bindHotkey({
+        id: 'focus.sidebar',
+        handler: () => {
             const sidebar = document.getElementById('sidebar');
             if (sidebar && !sidebar.classList.contains('hidden')) {
                 const first = sidebar.querySelector('select, button, input, [tabindex]');
                 if (first) first.focus();
             }
-        }
-
-        // Ctrl+2 - Focus editor
-        if (e.ctrlKey && !e.shiftKey && e.key === '2') {
-            e.preventDefault();
+        },
+    });
+    bindHotkey({
+        id: 'focus.editor',
+        handler: () => {
             const cm = document.querySelector('.cm-editor .cm-content');
             if (cm) cm.focus();
             else document.getElementById('editorContainer')?.focus();
-        }
-
-        // Ctrl+3 - Focus chat input
-        if (e.ctrlKey && !e.shiftKey && e.key === '3') {
-            e.preventDefault();
-            document.getElementById('chatInput')?.focus();
-        }
-
-        // Escape - close topmost overlay. Priority + stacking (e.g.
-        // merge-conflict layers above pr-review) lives in
-        // js/ui/modal-registry.js, not as a chain here.
-        if (e.key === 'Escape') {
-            closeTopmostOverlay();
-        }
+        },
     });
+    bindHotkey({
+        id: 'focus.chat',
+        handler: () => document.getElementById('chatInput')?.focus(),
+    });
+    // Esc — close topmost overlay. Priority + stacking (merge-conflict
+    // layers above pr-review) lives in js/ui/modal-registry.js, not as
+    // a chain here.
+    bindHotkey({ id: 'esc.close', handler: () => closeTopmostOverlay() });
 
-    // popstate: browser-back closes whichever poppable overlay is on top.
-    // Mount modules push `history.state.{prReview, mergeConflict}`; the
-    // registry's `poppable: true` flag scopes this to overlays that
-    // pushed a history entry.
+    document.addEventListener('keydown', dispatchHotkey);
+
+    // popstate: browser-back closes whichever poppable overlay is on
+    // top. Mount modules push history.state.{prReview, mergeConflict};
+    // the registry's poppable: true flag scopes this to overlays that
+    // pushed a history entry. Out of the hotkey path because it's
+    // navigation, not a keystroke.
     window.addEventListener('popstate', () => {
         closeTopmostOverlay({ popstate: true });
     });

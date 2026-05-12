@@ -4,6 +4,45 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.36.0] - 2026-05-12
+
+### Feature — `HotkeyBindings` registry (2026-Q2 audit sweep)
+
+Closes the [`[HC] [S] [likely] Keyboard-shortcut handlers in setupKeyboardShortcuts mirror hotkey-registry.js`](docs/audit-2026-Q2/inventory.md) entry from the §app-boot section of the [2026-Q2 audit + sweep](docs/ROADMAP.md) track. Continues the per-slot sweep cadence (2.33.0 ModalRegistry → 2.34.0 admission-tag derivation → 2.35.0 system-prompt enumeration derivation → 2.36.0 keyboard-shortcut consolidation).
+
+**Why it's load-bearing.** Pre-2.36.0 [`js/app.js#setupKeyboardShortcuts`](js/app.js) carried ~158 LOC of `if (e.ctrlKey && e.key === 's') { ... openCommitModal(); }`-shaped branches — 19 of them, one per document-bound chord. [`js/help/hotkey-registry.js`](js/help/hotkey-registry.js) carried the **same** 19 combos declaratively for the Help-page display. Two parallel enumerations of the same keyboard vocabulary; any new shortcut had to land in both. The comment at `js/app.js:327-329` explicitly described this as a 1.3.11+ follow-up that never landed — 30 minor versions outstanding at 2.35.0. Same parallel-enumeration class the 2.33.0 → 2.35.0 sweep has been retiring one slot at a time.
+
+**New [`js/ui/hotkey-bindings.js`](js/ui/hotkey-bindings.js).** Mirrors the 2.33.0 [`ModalRegistry`](js/ui/modal-registry.js) shape:
+
+- `bindHotkey({ id, handler, enabled? })` — one-shot at boot. `id` must reference a `HOTKEYS` entry with `documentBound: true`; throws on unknown id, non-`documentBound` id, duplicate registration, or non-function handler. `enabled?: (e) => boolean` is optional and gates both the handler call AND `preventDefault()` — returning false leaves the keystroke to bubble (so e.g. Ctrl+/ inside CodeMirror still toggles the line comment).
+- `dispatchHotkey(event)` — single document-level listener wired by `setupKeyboardShortcuts`. Scans bindings in registration order, finds the first whose `HOTKEYS[id].combo` matches the event modifiers + key, runs the optional `enabled` predicate, calls `preventDefault()` + `handler(event)`. Returns true on dispatch.
+- `matchCombo(comboTokens, event)` — pure helper translating the registry's Kbd vocabulary (`mod` / `shift` / `alt` / `slash` / `comma` / `esc` / `f1`-`f12` / single chars) against `KeyboardEvent`. `mod` → `ctrlKey || metaKey`. Modifier-strictness: a combo that omits `shift` does NOT match an event with shift held — otherwise Ctrl+P would also fire on Ctrl+Shift+P. The aliased Ctrl+P / Ctrl+K both-open-Quick-Open case is handled by registering two bindings, not by relaxing strictness.
+- `listBindings()` / `listMissingBindings()` / `_resetForTests()` — diagnostics + test affordance, parity with `modal-registry.js`. `listMissingBindings()` returns the set of `documentBound: true` ids that have NOT been bound — empty array means parity holds.
+
+**[`HOTKEYS`](js/help/hotkey-registry.js) gains a `documentBound?: boolean` field.** The 19 entries that `setupKeyboardShortcuts` previously hand-wired now carry `documentBound: true`: `help.open`, `help.openMod`, `palette.open`, `quickopen.open`, `settings.open`, `sidebar.toggle`, `chat.toggle`, `esc.close`, `focus.sidebar`, `focus.editor`, `focus.chat`, `file.commit`, `file.search`, `file.revert`, `file.rename`, `editor.preview`, `editor.diff`, `editor.blame`, `editor.lineNumbers`. Entries without the flag (`editor.comment` — CM-bound; `tabs.*` / `tree.*` / `qo.*` — focused-context listeners; `chat.send` / `chat.newline` — chat-input listener; `plugin.*` — plugin-editor listener; `vim.*` — vim mode) stay display-only. Module-header comment refreshed: the registry is now described as the single source of truth driving **both** the Help page and the keydown dispatcher.
+
+**[`js/app.js#setupKeyboardShortcuts`](js/app.js) collapses.** The ~158-LOC keydown chain becomes ~70 LOC of `bindHotkey` calls plus a single `document.addEventListener('keydown', dispatchHotkey)` plus the existing popstate handler. The "Keep in sync" comment at lines 327-329 deletes — the divergence it warned about no longer exists. Three `enabled` predicates carry the prior in-line guards verbatim:
+
+- `file.commit` — `() => State.openTabs.filter(t => t.dirty).length > 0` (commit modal opens only with dirty files).
+- `editor.preview` / `editor.diff` / `editor.blame` — each checks its `#btnToggleX.disabled` (the secondary-pane buttons gate when the file type / mode doesn't support the action).
+- `help.openMod` — `(e) => !e.target?.closest?.('.cm-editor')` (defers to CodeMirror's line-comment binding inside the editor; Help opens elsewhere).
+- `file.rename` — `() => !!State.currentFile && State.activeTabIndex >= 0` (F2 needs an active editable tab).
+
+The popstate handler stays inline (`window.addEventListener('popstate', () => closeTopmostOverlay({ popstate: true }))`) — it's navigation, not a keystroke; no place in the hotkey path.
+
+**Tests — [`tests/test-hotkey-bindings.mjs`](tests/test-hotkey-bindings.mjs) (18 cases).** Pure-logic, runs under [`tests/_node-shim.mjs`](tests/_node-shim.mjs). Covers:
+
+- **`matchCombo`** — `mod` ↔ `ctrl/meta` resolution, modifier-strictness (Ctrl+P ≠ Ctrl+Shift+P), case-insensitive single-key match, special tokens (`f1`/`f2`/`slash`/`comma`/`esc`), alt-strictness.
+- **`bindHotkey` validation** — rejects unknown ids, non-`documentBound` ids (e.g. `tabs.switch`), duplicate registration, non-function handlers.
+- **`dispatchHotkey` routing** — synthesized `mod+s` invokes the `file.commit` handler and calls `preventDefault`; `enabled: () => false` skips both the handler AND `preventDefault` (so the keystroke bubbles); no-match returns false; `enabled(e)` receives the event so context guards can read `e.target`.
+- **`HOTKEYS` parity** — snapshot guard on the 19 `documentBound: true` ids (sorted); every documentBound entry has a unique combo modulo the documented Ctrl+P / Ctrl+K alias; `listMissingBindings()` reports the unbound set; `findHotkey` resolves every documentBound id. The parity check is the antibody — adding a new `documentBound: true` HOTKEYS entry without a corresponding `bindHotkey` in app.js fails CI. Adding a binding for an id that isn't `documentBound: true` also fails. Drift in either direction is caught at PR time, not at "user reports the shortcut doesn't work" time. Plays the same anti-regression role for the hotkey arc that `tests/test-no-inline-onclick.mjs` (2.32.0) plays for the inline-handlers arc.
+
+CI auto-globs `tests/test-*.mjs` per [`reference_testing_ci.md`](docs/) so the test wires in by name.
+
+**Removability.** Revert the PR → `js/ui/hotkey-bindings.js` + `tests/test-hotkey-bindings.mjs` delete; `js/help/hotkey-registry.js` `documentBound?: boolean` field strips from 19 entries + typedef + module-header comment revert; `js/app.js` `setupKeyboardShortcuts` restores the ~158-LOC keydown chain body byte-for-byte + the "Keep in sync" comment + the `bindHotkey` / `dispatchHotkey` import strips; version + CHANGELOG + inventory revert. No persisted state, no migration, no new dependencies. Main returns to 2.35.0 byte-equivalent.
+
+**User-visible note.** None. The 19 chord behaviors are preserved including their guard predicates. Help-page rendering of the shortcut list is unchanged. The change is purely the disappearance of two-place editing for shortcut authors.
+
 ## [2.35.0] - 2026-05-11
 
 ### Feature — `LEGACY_TOOL_ENUMERATION` derivation (2026-Q2 audit sweep)

@@ -1,24 +1,33 @@
 /**
- * Hotkey registry — display contract.
+ * Hotkey registry — single source of truth for shortcut combos.
  *
- * Single source of truth for the Help page's hotkeys list. Mirrors the
- * shortcuts wired in `js/app.js` setupKeyboardShortcuts() (lines ~595-735)
- * plus a handful of CodeMirror-bound editor + chat shortcuts that don't
- * route through the document-level handler. Keep this list in sync with
- * the keydown block until the consolidation follow-up (1.3.11+) makes
- * the handler consume from this registry.
+ * Drives both surfaces:
+ *   - The Help page's hotkeys list (display contract).
+ *   - The document-level keydown dispatcher in `js/ui/hotkey-bindings.js`,
+ *     wired by `js/app.js#setupKeyboardShortcuts` (2.36.0 consolidation).
+ *
+ * Entries flagged `documentBound: true` are bound at the document level
+ * via `bindHotkey({ id, handler, enabled? })`; the dispatcher reads the
+ * `combo` here when matching events. Entries without the flag are
+ * CodeMirror-bound (editor.comment), tabs/tree/quick-open/plugin-editor
+ * focused-context listeners, or vim-mode bindings — their handlers live
+ * in CM extensions / panel-local listeners and the registry describes
+ * them informationally via `when?`.
  *
  * Combo tokens match the Kbd vocabulary in `js/help/kbd.js` (mod / shift
  * / alt / enter / esc / tab / space / arrows / single chars). The `mod`
  * token resolves to ⌘ on mac and Ctrl elsewhere.
  *
  * Shape:
- *   id     unique identifier — one per shortcut
- *   group  display group on the Help page
- *   combo  array of Kbd tokens
- *   desc   one-line description
- *   when?  optional context (informational in 1.3.10; becomes a guard in
- *          the consolidation follow-up)
+ *   id              unique identifier — one per shortcut
+ *   group           display group on the Help page
+ *   combo           array of Kbd tokens
+ *   desc            one-line description
+ *   when?           optional context (informational; CM/panel-scoped
+ *                   entries use this to describe the scope)
+ *   documentBound?  true if `setupKeyboardShortcuts` calls bindHotkey for
+ *                   this id; drives both runtime dispatch and the CI
+ *                   parity check in tests/test-hotkey-bindings.mjs
  */
 
 /** @typedef {{
@@ -26,41 +35,42 @@
  *   group: string,
  *   combo: string[],
  *   desc: string,
- *   when?: string
+ *   when?: string,
+ *   documentBound?: boolean
  * }} HotkeyEntry */
 
 /** @type {HotkeyEntry[]} */
 export const HOTKEYS = [
     // Global
-    { id: 'help.open',           group: 'Global',  combo: ['f1'],                 desc: 'Show this help panel' },
-    { id: 'help.openMod',        group: 'Global',  combo: ['mod', 'slash'],       desc: 'Toggle help', when: 'editor.unfocused' },
+    { id: 'help.open',           group: 'Global',  combo: ['f1'],                 desc: 'Show this help panel', documentBound: true },
+    { id: 'help.openMod',        group: 'Global',  combo: ['mod', 'slash'],       desc: 'Toggle help', when: 'editor.unfocused', documentBound: true },
     // 1.3.6 Phase 1: ⌘K is the command-surface entry point but currently
     // aliases the ⌘P quick-open overlay. Commands and settings/help search
     // accrete onto it in 1.3.7+; until then the desc reflects what it does
     // today rather than what the design canvas calls it.
-    { id: 'palette.open',        group: 'Global',  combo: ['mod', 'k'],           desc: 'Open quick search (command palette stub)' },
-    { id: 'quickopen.open',      group: 'Global',  combo: ['mod', 'p'],           desc: 'Quick-open file' },
-    { id: 'settings.open',       group: 'Global',  combo: ['mod', 'comma'],       desc: 'Open settings' },
-    { id: 'sidebar.toggle',      group: 'Global',  combo: ['mod', 'b'],           desc: 'Toggle sidebar' },
-    { id: 'chat.toggle',         group: 'Global',  combo: ['mod', 'j'],           desc: 'Toggle chat panel' },
-    { id: 'esc.close',           group: 'Global',  combo: ['esc'],                desc: 'Close panel / modal / quick-open' },
+    { id: 'palette.open',        group: 'Global',  combo: ['mod', 'k'],           desc: 'Open quick search (command palette stub)', documentBound: true },
+    { id: 'quickopen.open',      group: 'Global',  combo: ['mod', 'p'],           desc: 'Quick-open file', documentBound: true },
+    { id: 'settings.open',       group: 'Global',  combo: ['mod', 'comma'],       desc: 'Open settings', documentBound: true },
+    { id: 'sidebar.toggle',      group: 'Global',  combo: ['mod', 'b'],           desc: 'Toggle sidebar', documentBound: true },
+    { id: 'chat.toggle',         group: 'Global',  combo: ['mod', 'j'],           desc: 'Toggle chat panel', documentBound: true },
+    { id: 'esc.close',           group: 'Global',  combo: ['esc'],                desc: 'Close panel / modal / quick-open', documentBound: true },
 
     // Panel focus
-    { id: 'focus.sidebar',       group: 'Panel focus', combo: ['mod', '1'],       desc: 'Focus sidebar' },
-    { id: 'focus.editor',        group: 'Panel focus', combo: ['mod', '2'],       desc: 'Focus editor' },
-    { id: 'focus.chat',          group: 'Panel focus', combo: ['mod', '3'],       desc: 'Focus chat input' },
+    { id: 'focus.sidebar',       group: 'Panel focus', combo: ['mod', '1'],       desc: 'Focus sidebar', documentBound: true },
+    { id: 'focus.editor',        group: 'Panel focus', combo: ['mod', '2'],       desc: 'Focus editor', documentBound: true },
+    { id: 'focus.chat',          group: 'Panel focus', combo: ['mod', '3'],       desc: 'Focus chat input', documentBound: true },
 
     // Files
-    { id: 'file.commit',         group: 'Files',   combo: ['mod', 's'],           desc: 'Open commit modal' },
-    { id: 'file.search',         group: 'Files',   combo: ['mod', 'shift', 'f'],  desc: 'Search in project' },
-    { id: 'file.revert',         group: 'Files',   combo: ['mod', 'shift', 'z'],  desc: 'Revert file(s)' },
-    { id: 'file.rename',         group: 'Files',   combo: ['f2'],                 desc: 'Rename / move current file' },
+    { id: 'file.commit',         group: 'Files',   combo: ['mod', 's'],           desc: 'Open commit modal', documentBound: true },
+    { id: 'file.search',         group: 'Files',   combo: ['mod', 'shift', 'f'],  desc: 'Search in project', documentBound: true },
+    { id: 'file.revert',         group: 'Files',   combo: ['mod', 'shift', 'z'],  desc: 'Revert file(s)', documentBound: true },
+    { id: 'file.rename',         group: 'Files',   combo: ['f2'],                 desc: 'Rename / move current file', documentBound: true },
 
     // Editor
-    { id: 'editor.preview',      group: 'Editor',  combo: ['mod', 'shift', 'p'],  desc: 'Toggle preview pane' },
-    { id: 'editor.diff',         group: 'Editor',  combo: ['mod', 'shift', 'd'],  desc: 'Toggle diff view' },
-    { id: 'editor.blame',        group: 'Editor',  combo: ['mod', 'shift', 'b'],  desc: 'Toggle blame / file history' },
-    { id: 'editor.lineNumbers',  group: 'Editor',  combo: ['mod', 'shift', 'l'],  desc: 'Toggle line numbers' },
+    { id: 'editor.preview',      group: 'Editor',  combo: ['mod', 'shift', 'p'],  desc: 'Toggle preview pane', documentBound: true },
+    { id: 'editor.diff',         group: 'Editor',  combo: ['mod', 'shift', 'd'],  desc: 'Toggle diff view', documentBound: true },
+    { id: 'editor.blame',        group: 'Editor',  combo: ['mod', 'shift', 'b'],  desc: 'Toggle blame / file history', documentBound: true },
+    { id: 'editor.lineNumbers',  group: 'Editor',  combo: ['mod', 'shift', 'l'],  desc: 'Toggle line numbers', documentBound: true },
     { id: 'editor.comment',      group: 'Editor',  combo: ['mod', 'slash'],       desc: 'Toggle line comment', when: 'editor.focused' },
 
     // Editor tabs

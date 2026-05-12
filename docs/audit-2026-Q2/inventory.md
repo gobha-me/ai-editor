@@ -240,11 +240,12 @@
 - **Touch points:** `js/app.js:664`, `js/help/index.js:146`.
 - **Resolution:** 2.26.0 replaced the bareword reference with the already-imported `openHelpSlideOut` from `./help/index.js` (line 30 import was already in place; line 660 swapped to it). The `window.openHelpModal` global side-effect at `js/help/index.js:146` stays for any external consumer. See [CHANGELOG §2.26.0](../../CHANGELOG.md).
 
-#### [HC] [S] [likely] Keyboard-shortcut handlers in `setupKeyboardShortcuts` mirror `hotkey-registry.js`
-- **What:** `js/app.js:306-489` lists 18 key bindings (Ctrl+S, Ctrl+P, F1, F2, Esc, etc.) inline. `js/help/hotkey-registry.js:33+` lists the same 18+ bindings declaratively for the Help page display.
-- **Why it's load-bearing:** Direct parallel enumeration — Files added 2.20.0+ shortcut (Ctrl+Shift+Z revert, e.g.) need to land in both. Comment at `js/app.js:307-309` says: "Keep in sync until the consolidation follow-up makes the registry the single source of truth (1.3.11+)."
+#### ~~[HC] [S] [likely] Keyboard-shortcut handlers in `setupKeyboardShortcuts` mirror `hotkey-registry.js`~~ *(✅ closed — shipped 2.36.0)*
+- **What:** `js/app.js:326-483` listed 19 key bindings (Ctrl+S, Ctrl+P, F1, F2, Esc, etc.) inline. `js/help/hotkey-registry.js:33+` listed the same combos declaratively for the Help page display.
+- **Why it's load-bearing:** Direct parallel enumeration — Files added 2.20.0+ shortcut (Ctrl+Shift+Z revert, e.g.) need to land in both. Comment at `js/app.js:327-329` said: "Keep in sync until the consolidation follow-up makes the registry the single source of truth (1.3.11+)."
 - **Suggested fix shape:** Pivot `setupKeyboardShortcuts` to read `HOTKEYS` from the registry and dispatch via `when:`/handler metadata. This was explicitly the 1.3.11+ follow-up that never landed.
-- **Touch points:** `js/app.js:306-489`, `js/help/hotkey-registry.js`.
+- **Touch points:** `js/app.js:326-483`, `js/help/hotkey-registry.js`.
+- **Resolution:** 2.36.0 — `HotkeyBindings` registry at `js/ui/hotkey-bindings.js` mirrors the 2.33.0 `ModalRegistry` pattern: `bindHotkey({ id, handler, enabled? })` at boot, `dispatchHotkey(event)` from a single document keydown listener; combos live only in `HOTKEYS` and the 19 document-bound entries now carry `documentBound: true` driving both the dispatcher and the CI parity check at `tests/test-hotkey-bindings.mjs`. See [CHANGELOG §2.36.0](../../CHANGELOG.md).
 
 ---
 
