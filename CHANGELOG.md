@@ -4,6 +4,66 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.40.0] - 2026-05-12
+
+### Storage discipline — localStorage → Storage migration sweep
+
+Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entries **#183** (`[ST] [M] [likely] localStorage.setItem/getItem called directly outside core.js`) and **#189** (`[ST] [S] [maybe-intentional] js/help/platform.js writes aiEditorPlatformOverride directly`). Tag-direct `X.Y.Z` (no `X.Y.Z.N` sub-slice) per [`docs/VERSIONING.md`](docs/VERSIONING.md) — each call-site migration is independent and the change is end-to-end testable on a single push.
+
+**Why now.** Memory note `feedback_storage_idb_authoritative.md` flagged this concern as a recurring miss (incidents 1.5.9 #16 and 1.6.5): IDB is the authoritative store, localStorage is best-effort with a quota ceiling. Raw `localStorage.*` calls in `js/` outside the Storage wrapper bypass the IDB persistence layer — on a quota event the affected keys die where Storage-wrapped keys survive (Storage's in-memory `_cache` and IDB shadow outlast localStorage). The audit-sweep inventory's [ST][M] entry quantified the surface at "14 files outside core.js"; triage at slice-open trimmed that to **5 surviving files / ~13 call sites** (see "What did NOT migrate" below).
+
+**Single-PR shape.** Tag-direct `v2.40.0`. The convention question (sub-slice in `X.Y.Z.N` space vs. tag directly) resolved to single-PR after a pre-write Plan-agent pass — each site migrates independently, the only inter-site coupling is the new `Storage.migrateLegacyKey` helper, and an intermediate state would only fall short of "end-to-end testable" if multiple sub-slices each needed their own gate.
+
+### Storage helper — `Storage.migrateLegacyKey()`
+
+Added to [`js/core.js`](js/core.js) on the Storage object, sibling to the existing `_migrateTabScopedKeys` (which handles the pre-isolation → tab-scoped one-time copy). Signature:
+
+```js
+Storage.migrateLegacyKey(legacyKey, storageKey, { transform = JSON.parse } = {})
+```
+
+One-time: reads `localStorage.getItem(legacyKey)` (unprefixed); if missing → no-op return `false`; if the Storage cache (or prefixed localStorage) already holds `storageKey` → drop the legacy duplicate without overwrite; else apply `transform(stringValue)` → `Storage.set(storageKey, parsed)` → `localStorage.removeItem(legacyKey)`. Idempotent (safe to call on every `getPlatform()` / `readStoredActiveView()` / etc.) — once the legacy key is gone the next call returns `false` and exits in constant time. Corrupt legacy values are caught + removed (logged at `console.debug`) so a single bad value doesn't permanently block the migration.
+
+Transform modes used in this PR:
+- **`JSON.parse` (default)** — `searchHistory`, `pr-review.drafts.${N}`, `pr-review.viewed.${N}` (every legacy value was already JSON-stringified).
+- **`s => s`** (identity) — `aieditor.help.platform`, `leftPaneRail.activeView` (bare-string values).
+- **`s => s === '1'`** — `chat.planMode` (bool-as-`'1'`/`'0'` flag pattern).
+
+### Call-site migrations
+
+| File | Sites | Storage key | Migration trigger |
+|---|---|---|---|
+| [`js/help/platform.js`](js/help/platform.js) | 31, 40, 41 | `help.platform` | Lazy on first `getPlatform()` call |
+| [`js/chat/state.js`](js/chat/state.js) | 42, 228 | `chat.planMode` | Eager via `hydratePlanMode()` called from `js/app.js` after `Storage.init()` (the module-scope read at L42 predated Storage's cache populating, so it stayed on raw localStorage; the new boot call handles both hydration and legacy migration) |
+| [`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js) | 440, 644 | `leftPaneRail.activeView` | Lazy on first `readStoredActiveView()` call |
+| [`js/pr-review/review-state.js`](js/pr-review/review-state.js) | 66, 77, 85, 96 | `pr-review.drafts.${N}`, `pr-review.viewed.${N}` | **Lazy per-PR** inside `_loadDrafts(prNumber)` / `_loadViewed(prNumber)` — drafts for un-opened PRs stay in raw localStorage; they migrate the moment that PR opens. Avoids enumerating raw localStorage at boot (which would be exactly the kind of cross-cutting key-shape leak this sweep aims to eliminate). |
+| [`js/managers/search-manager.js`](js/managers/search-manager.js) | 230, 234 | `searchHistory` | Retired the hand-written legacy shim from 1.7.x — replaced with one `Storage.migrateLegacyKey('searchHistory', 'searchHistory')` call. Net -8 LOC. The shim had done its job many minors ago; keeping module-local migration code as runtime antibody is exactly the antipattern this sweep retires |
+
+### Removed — the 1.1.3 Transformers.js cache-wipe code
+
+`js/embeddings-client.js` carried a one-time wipe-on-boot of the Transformers.js Cache-API store gated by a `embedder.cacheWiped.1.1.3` localStorage flag (4 of the original 17 call sites). Pre-1.1.3 the embedder cached HTML index fallbacks under model-URL keys because `allowLocalModels = true` made Transformers.js fetch from `<origin>/models/...` first; the wipe cleared that poisoned state on the upgrade path. Many minors later, `caches.delete('transformers-cache')` is idempotent on miss, the wipe has already run for every user on the affected versions, and the flag is dead weight. Deleted: `_wipePoisonedTransformersCacheOnce()` (16 lines), the call site in `_initLocal()`, the `localStorage.removeItem('embedder.cacheWiped.1.1.3')` line in `clearAllCaches()`. Net -25 LOC, 4 fewer migration sites for free, no behavioral change for any 2.39.0+ user.
+
+### What did NOT migrate
+
+- `js/intelligence/workspace-settings/file-layer.js:114` — flagged by the inventory's `grep -rn "localStorage\." js/` but the file already uses `Storage.get/set`; only a doc-comment mentioned localStorage. Updated the comment for accuracy; no code change.
+- `js/settings-manager.js`, `js/settings/persistence.js`, `js/resize-manager.js`, `js/storage/idb.js` — also grep-positives via doc-comments only.
+
+### Tests
+
+[`tests/test-storage-legacy-migration.mjs`](tests/test-storage-legacy-migration.mjs) (new, 10 cases) exercises the helper end-to-end against the `_node-shim.mjs` Map-backed localStorage stub: no-op on missing legacy, JSON.parse default transform, bool-as-string transform, identity transform, drop-without-overwrite when storageKey populated, corrupt-JSON path (legacy removed, no Storage write), non-throwing transform-with-default, idempotence on second call after migration.
+
+[`tests/test-no-raw-localstorage.mjs`](tests/test-no-raw-localstorage.mjs) (new, 2 cases) is the anti-regression CI guard. Globs `js/**/*.js`, strips `//` and `/* */` comments to avoid tripping on JSDoc prose, fails if any non-allow-listed file matches `/localStorage\.(getItem|setItem|removeItem|clear|key|length)/`. The allow-list contains only `js/core.js` (the Storage module). A companion test asserts the allow-listed file still calls raw localStorage internally — a tripwire so the allow-list doesn't grow stale if Storage's implementation strategy ever changes.
+
+[`tests/test-plan-mode.mjs`](tests/test-plan-mode.mjs) and [`tests/test-left-pane-rail.mjs`](tests/test-left-pane-rail.mjs) updated: the pre-2.40.0 assertions read raw `localStorage.getItem('chat.planMode')` / `localStorage.getItem('leftPaneRail.activeView')` for the persistence-round-trip checks — both now route through Storage, so they read from the prefixed `ai-editor-chat.planMode` / `ai-editor-leftPaneRail.activeView` keys (boolean stored as `true`/`false`; bare string as `"value"`). A new regression case in `test-left-pane-rail.mjs` pins the legacy → Storage migration path: seed only the unprefixed key, call `readStoredActiveView()`, assert legacy gone + prefixed populated.
+
+### Audit-sweep closure
+
+Post-migration `Grep "localStorage\." js/` returns matches only inside `js/core.js` (the Storage module) and doc-comments in `js/storage/idb.js`, `js/settings-manager.js`, `js/settings/persistence.js`, `js/resize-manager.js`. The two inventory entries gain strikethrough resolution lines pointing to this commit. The new anti-regression test makes future raw-`localStorage` regressions a CI failure rather than a slow-burn miss.
+
+### Versioning
+
+`js/version.js` reads **`2.40.0`** — tag-direct per the convention's "single-PR feature that's meaningfully usable on its own push" rule ([`docs/VERSIONING.md`](docs/VERSIONING.md) line 35). `## [Unreleased]` promotes to `## [2.40.0] - 2026-05-12`; a fresh empty `## [Unreleased]` opens above for the next arc. The release-readiness gate (per [`ROADMAP Decision 12`](docs/ROADMAP.md)) fires next on the `v2.40.0` tag push — Jeff's gate-firing operation.
+
 ## [2.39.0] - 2026-05-12
 
 ### 2.39.0 (sweep wave slice 4 — final, wave complete) — `fs:*` parity confirmation

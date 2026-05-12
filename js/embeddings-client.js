@@ -84,42 +84,10 @@ const EmbeddingsClient = {
     },
 
     /**
-     * One-time wipe of the `transformers-cache` Cache-API store. Pre-1.1.3
-     * the embedder ran with `allowLocalModels = true`, which made
-     * Transformers.js fetch model files from `<origin>/models/...` first.
-     * The deployment doesn't serve model files, so the SPA fallback returned
-     * `index.html` and Transformers.js cached the HTML body under the local
-     * URL keys. Once cached, those entries kept short-circuiting subsequent
-     * loads — even after the flag flipped to `false` — because the lib's
-     * cache lookup still hit them. This wipe runs at most once per browser
-     * (gated by a `localStorage` flag) so existing users aren't left in the
-     * poisoned-cache state. Safe on fresh installs (no entries to delete).
-     */
-    async _wipePoisonedTransformersCacheOnce() {
-        const FLAG = 'embedder.cacheWiped.1.1.3';
-        try {
-            if (typeof localStorage === 'undefined' || localStorage.getItem(FLAG)) return;
-            if (typeof caches === 'undefined') {
-                localStorage.setItem(FLAG, '1');
-                return;
-            }
-            const deleted = await caches.delete('transformers-cache');
-            localStorage.setItem(FLAG, '1');
-            if (deleted) {
-                console.log('[Embeddings] Cleared poisoned transformers-cache (one-time 1.1.3 migration)');
-            }
-        } catch (e) {
-            console.warn('[Embeddings] transformers-cache wipe skipped:', e?.message || e);
-        }
-    },
-
-    /**
      * Initialize local mode (Transformers.js)
      */
     async _initLocal(modelName) {
         console.log('[Embeddings] Loading Transformers.js...');
-
-        await this._wipePoisonedTransformersCacheOnce();
 
         // Dynamically import Transformers.js — try local vendor first, then CDN
         try {
@@ -449,9 +417,6 @@ const EmbeddingsClient = {
         try {
             if (typeof caches !== 'undefined') {
                 transformersDeleted = await caches.delete('transformers-cache');
-            }
-            if (typeof localStorage !== 'undefined') {
-                localStorage.removeItem('embedder.cacheWiped.1.1.3');
             }
         } catch (e) {
             console.warn('[Embeddings] Failed to delete transformers-cache:', e?.message || e);

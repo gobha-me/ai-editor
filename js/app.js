@@ -21,6 +21,7 @@ import { SlotManager, applyProviderContributions } from './slot-manager.js';
 import { IgnoreManager } from './ignore.js';
 import { initProjectConventions } from './intelligence/project-conventions.js';
 import { initChat, stopGeneration, clearChat } from './chat/index.js';
+import { hydratePlanMode } from './chat/state.js';
 import { mountChatMessages } from './chat/messages.js';
 import { loadCodeMirror, setKeybindingMode, setInvisibleUnicodeEnabled } from './editor.js';
 import { applyVisualSettings, applyLineNumbersVisibility } from './utils/apply-visual-settings.js';
@@ -709,7 +710,13 @@ async function init() {
     
     // Initialize storage (IDB + migration) before loading settings
     await Storage.init();
-    
+
+    // 2.40.0: hydrate plan-mode from Storage (and migrate the unprefixed
+    // pre-2.40.0 `chat.planMode` legacy localStorage key). Must run after
+    // Storage.init() — chat/state.js's module-load timing predates the
+    // Storage cache populating.
+    hydratePlanMode();
+
     // Load settings
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]

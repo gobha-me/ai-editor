@@ -14,7 +14,7 @@ import './_node-shim.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { EventBus } from '../js/core.js';
+import { EventBus, Storage } from '../js/core.js';
 import {
     getPlanMode,
     setPlanMode,
@@ -53,12 +53,17 @@ test('setPlanMode flips the flag and is idempotent', () => {
     assert.equal(getPlanMode(), false);
 });
 
-test('setPlanMode persists to localStorage', () => {
+test('setPlanMode persists via Storage (2.40.0 — IDB-backed, prefixed)', () => {
     reset();
     setPlanMode(true);
-    assert.equal(localStorage.getItem('chat.planMode'), '1');
+    // Storage holds a real boolean and prefixes the localStorage write-through.
+    assert.equal(Storage.get('chat.planMode'), true);
+    assert.equal(localStorage.getItem('ai-editor-chat.planMode'), 'true');
     setPlanMode(false);
-    assert.equal(localStorage.getItem('chat.planMode'), '0');
+    assert.equal(Storage.get('chat.planMode'), false);
+    assert.equal(localStorage.getItem('ai-editor-chat.planMode'), 'false');
+    // The pre-2.40.0 unprefixed legacy key is never written.
+    assert.equal(localStorage.getItem('chat.planMode'), null);
 });
 
 test('setPlanMode emits plan-mode:changed only on transition', () => {

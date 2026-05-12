@@ -180,17 +180,19 @@
 
 ### plumbing/storage
 
-#### [ST] [M] [likely] `localStorage.setItem/getItem` called directly outside core.js
+#### ~~[ST] [M] [likely] `localStorage.setItem/getItem` called directly outside core.js~~ *(✅ closed — shipped 2.40.0)*
 - **What:** Per `grep -rn "localStorage\." js/`, 14 files outside `core.js` use `localStorage` directly: `js/ui/left-pane-rail.js:176,345`, `js/pr-review/review-state.js:66,77,85,96`, `js/managers/search-manager.js:230,234`, `js/chat/state.js:42,228`, `js/help/platform.js:31,40,41`, `js/embeddings-client.js:101,103,107,454`, `js/intelligence/workspace-settings/file-layer.js:114-ish`.
 - **Why it's load-bearing:** `feedback_storage_idb_authoritative.md` says IDB is authoritative; localStorage is best-effort fallback. Each direct localStorage call bypasses the IDB persistence layer — on a quota event, those keys die where Storage-wrapped keys survive.
 - **Suggested fix shape:** Migrate each direct call to `Storage.set/get/remove`. Storage already namespace-prefixes (`ai-editor-` + key) and handles JSON. For PR-review drafts (`pr-review/review-state.js`), the keys include `${STORAGE_PREFIX}.drafts.${prNumber}` which is dynamic — Storage supports that fine.
 - **Touch points:** Each of the 14 sites; `js/core.js:450` Storage module.
+- **Resolution:** 2.40.0 verified the inventory's "14 files" claim resolved to **5 surviving files / ~13 call sites** after triage (`workspace-settings/file-layer.js` was a doc-comment false positive; `embeddings-client.js`'s 4 sites belonged to a 1.1.3-era cache-wipe-flag whose code was retired). Added `Storage.migrateLegacyKey(legacyKey, storageKey, { transform? })` to `js/core.js` mirroring the existing `_migrateTabScopedKeys` shape — one-time copy from unprefixed raw localStorage → Storage cache + IDB + prefixed localStorage + legacy remove. Migrated 5 files: `js/help/platform.js`, `js/chat/state.js` (module-scope read deferred to `hydratePlanMode()` called from `app.js` after `Storage.init()` to avoid a pre-init prefix mismatch), `js/ui/left-pane-rail.js`, `js/pr-review/review-state.js` (lazy per-PR migration — drafts for un-opened PRs stay in raw localStorage until the user reopens that PR), `js/managers/search-manager.js` (retired the hand-written legacy shim from 1.7.x-era in favor of the shared helper). New `tests/test-storage-legacy-migration.mjs` (10 cases) covers the helper end-to-end; new `tests/test-no-raw-localstorage.mjs` is the anti-regression CI guard — globs `js/**/*.js`, strips comments, fails if any file outside the `js/core.js` allow-list calls raw `localStorage.*`. See [CHANGELOG §2.40.0](../../CHANGELOG.md).
 
-#### [ST] [S] [maybe-intentional] `js/help/platform.js` writes `aiEditorPlatformOverride` directly
+#### ~~[ST] [S] [maybe-intentional] `js/help/platform.js` writes `aiEditorPlatformOverride` directly~~ *(✅ closed — shipped 2.40.0)*
 - **What:** `js/help/platform.js:31,40,41` reads/writes `aiEditorPlatformOverride` via raw localStorage, not Storage. This is a 2-letter string (`mac` or `win`), small surface.
 - **Why it's load-bearing:** Same axis as above but lowest stakes — the override only affects keyboard-shortcut display labels.
 - **Suggested fix shape:** Migrate to `Storage.set('platformOverride', plat)`.
 - **Touch points:** `js/help/platform.js:31,40,41`.
+- **Resolution:** Bundled into the same 2.40.0 storage-discipline sweep. The legacy unprefixed key (`aieditor.help.platform`, actual key — the inventory entry's `aiEditorPlatformOverride` was a misread) routes through `Storage.migrateLegacyKey` on first `getPlatform()` call; the Storage key is `help.platform` with `transform: s => s` (identity — the value is a bare string, not JSON-encoded under the legacy key).
 
 ---
 

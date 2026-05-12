@@ -32,7 +32,7 @@
  * them post-render. The static `<div data-rail-view-container>` HTML
  * scaffolding deleted from `html/sidebar.html` at 2.24.0.
  *
- * The active view persists across reloads in `localStorage` under
+ * The active view persists across reloads via Storage under
  * `leftPaneRail.activeView` — a `view.id` string. When the persisted id
  * is no longer registered (e.g. a provider that contributed it was
  * removed), the active view falls back to the first contribution's id.
@@ -429,19 +429,16 @@ export function resolveActiveView(contribs, stored) {
 }
 
 /**
- * Read the persisted active-view id (or null when localStorage is empty
- * / unavailable). The mount path passes this to `resolveActiveView` so
- * the chosen-view logic is testable as a pure function.
+ * Read the persisted active-view id (or null when Storage is empty).
+ * The mount path passes this to `resolveActiveView` so the chosen-view
+ * logic is testable as a pure function.
  *
  * @returns {string|null}
  */
 export function readStoredActiveView() {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        return typeof stored === 'string' && stored.length > 0 ? stored : null;
-    } catch (_) {
-        return null;
-    }
+    Storage.migrateLegacyKey(STORAGE_KEY, STORAGE_KEY, { transform: (s) => s });
+    const stored = Storage.get(STORAGE_KEY);
+    return typeof stored === 'string' && stored.length > 0 ? stored : null;
 }
 
 /**
@@ -641,7 +638,7 @@ export function setActiveView(viewId) {
     const contribs = SlotManager.getContributions('rail-views');
     const contrib = contribs.find(c => c.view?.id === viewId);
     if (!contrib) return;
-    try { localStorage.setItem(STORAGE_KEY, viewId); } catch (_) { /* ignore */ }
+    Storage.set(STORAGE_KEY, viewId);
     _applyActiveView(viewId);
     if (typeof contrib.view.onActivate === 'function') {
         try {

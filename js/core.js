@@ -886,6 +886,65 @@ const Storage = {
         }
     },
 
+    /**
+     * One-time migration: copy an unprefixed legacy localStorage key into
+     * Storage (cache + IDB + prefixed localStorage) and remove the legacy
+     * entry. Idempotent — safe to call on every read after migration since
+     * the legacy key is gone.
+     *
+     * Used by 2.40.0 storage discipline sweep to migrate ad-hoc raw
+     * localStorage call sites onto the Storage wrapper without orphaning
+     * existing user data (Storage prepends `_prefix: 'ai-editor-'`, so a
+     * naive switch would leave legacy unprefixed keys unreachable).
+     *
+     * @param {string} legacyKey — Unprefixed localStorage key to read.
+     * @param {string} storageKey — Storage-API key to write under.
+     * @param {{ transform?: (str: string) => any }} [opts]
+     *   transform: maps the raw string value to the parsed shape Storage
+     *   should hold. Defaults to `JSON.parse` (matches Storage's own
+     *   serialization). Use `s => s` for already-stringy values, or
+     *   `s => s === '1'` for the boolean-as-string-flag pattern.
+     * @returns {boolean} true if migration ran (or legacy key existed and
+     *   storageKey already populated → legacy removed without overwrite);
+     *   false if nothing to migrate.
+     */
+    migrateLegacyKey(legacyKey, storageKey, { transform = JSON.parse } = {}) {
+        let legacyValue;
+        try {
+            legacyValue = localStorage.getItem(legacyKey);
+        } catch {
+            return false;
+        }
+        if (legacyValue === null) return false;
+
+        // Storage already populated → drop the legacy duplicate (don't overwrite
+        // a freshly-written value with a stale legacy one).
+        const resolved = this._resolveKey(storageKey);
+        const alreadyPopulated = this._cache.has(resolved) ||
+            (() => {
+                try { return localStorage.getItem(this._prefix + resolved) !== null; }
+                catch { return false; }
+            })();
+        if (alreadyPopulated) {
+            try { localStorage.removeItem(legacyKey); } catch { /* ignore */ }
+            return true;
+        }
+
+        let parsed;
+        try {
+            parsed = transform(legacyValue);
+        } catch (e) {
+            // Corrupt legacy value — remove it; caller falls through to default.
+            console.debug(`[Storage] migrateLegacyKey: invalid value at "${legacyKey}":`, e?.message || e);
+            try { localStorage.removeItem(legacyKey); } catch { /* ignore */ }
+            return false;
+        }
+
+        this.set(storageKey, parsed);
+        try { localStorage.removeItem(legacyKey); } catch { /* ignore */ }
+        return true;
+    },
+
     /** Register this tab in the shared registry with a heartbeat timestamp. */
     _registerTab() {
         const key = '_tabRegistry';

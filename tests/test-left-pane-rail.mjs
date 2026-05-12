@@ -41,7 +41,7 @@ import {
     renderHeaderActionHtml,
     BUILTIN_PRIORITY,
 } from '../js/ui/left-pane-rail.js';
-import { State, EventBus } from '../js/core.js';
+import { State, EventBus, Storage } from '../js/core.js';
 import { SlotManager } from '../js/slot-manager.js';
 
 // ============================================
@@ -143,13 +143,31 @@ test('non-numeric badgeCount renders no badge (defensive)', () => {
 // ============================================
 
 test('readStoredActiveView returns null when no value persisted', () => {
+    // Clear both Storage layer (prefixed) and the legacy key
+    Storage._cache.delete('leftPaneRail.activeView');
+    localStorage.removeItem('ai-editor-leftPaneRail.activeView');
     localStorage.removeItem('leftPaneRail.activeView');
     assert.equal(readStoredActiveView(), null);
 });
 
 test('readStoredActiveView returns the persisted value when present', () => {
-    localStorage.setItem('leftPaneRail.activeView', 'prs');
+    Storage._cache.delete('leftPaneRail.activeView');
+    localStorage.removeItem('ai-editor-leftPaneRail.activeView');
+    Storage.set('leftPaneRail.activeView', 'prs');
     assert.equal(readStoredActiveView(), 'prs');
+});
+
+test('readStoredActiveView migrates the pre-2.40.0 unprefixed legacy key on first read', () => {
+    // Seed only the legacy key — Storage layer empty.
+    Storage._cache.delete('leftPaneRail.activeView');
+    localStorage.removeItem('ai-editor-leftPaneRail.activeView');
+    localStorage.setItem('leftPaneRail.activeView', 'branches');
+
+    assert.equal(readStoredActiveView(), 'branches');
+    // After migration: legacy key gone; Storage holds the value (JSON-encoded
+    // bare string under the prefixed key).
+    assert.equal(localStorage.getItem('leftPaneRail.activeView'), null);
+    assert.equal(localStorage.getItem('ai-editor-leftPaneRail.activeView'), '"branches"');
 });
 
 // ============================================
@@ -380,10 +398,11 @@ test('setActiveView ignores unknown view ids', () => {
     const { restore } = _withFakeRailDom();
     try {
         mountLeftPaneRail();
-        const before = localStorage.getItem('leftPaneRail.activeView');
+        // 2.40.0 — persistence routes through Storage (prefixed key).
+        const before = localStorage.getItem('ai-editor-leftPaneRail.activeView');
         setActiveView('not-a-view');
-        const after = localStorage.getItem('leftPaneRail.activeView');
-        assert.equal(after, before, 'localStorage unchanged for unknown id');
+        const after = localStorage.getItem('ai-editor-leftPaneRail.activeView');
+        assert.equal(after, before, 'Storage unchanged for unknown id');
     } finally {
         restore();
         clearRailContributions();
@@ -445,7 +464,8 @@ test('setActiveView swallows onActivate throws (one bad provider cannot break th
         // Must not throw.
         setActiveView('boom');
         assert.ok(captured, 'a console.error was logged');
-        assert.equal(localStorage.getItem('leftPaneRail.activeView'), 'boom',
+        // 2.40.0 — persistence routes through Storage (prefixed + JSON-encoded).
+        assert.equal(localStorage.getItem('ai-editor-leftPaneRail.activeView'), '"boom"',
             'persistence still happened before onActivate fired');
     } finally {
         console.error = origConsoleError;

@@ -5,9 +5,9 @@
  * Owns the per-PR draft queue (line-anchored comments awaiting Submit),
  * the viewed-files set, and the locally-resolved-thread set. Survives
  * `closePrReview()` → `openPrReview()` swaps because the module loads
- * once. Drafts and viewed flags persist across reloads via localStorage;
- * resolved-local stays in-memory because the next `prs:refresh` is the
- * source of truth.
+ * once. Drafts and viewed flags persist across reloads via Storage
+ * (IDB-backed, with localStorage write-through); resolved-local stays
+ * in-memory because the next `prs:refresh` is the source of truth.
  *
  * Pure helpers (`groupDraftsByThread`, `draftAnchorKey`) are exported
  * for the dock count math and for the `tests/test-pr-review-state.mjs`
@@ -18,6 +18,8 @@
  * @since 2.13.0 (Touch 3 PR Review surface — slice 2)
  * @module pr-review/review-state
  */
+
+import { Storage } from '../core.js';
 
 const STORAGE_PREFIX = 'pr-review';
 
@@ -55,46 +57,38 @@ function _ensure(prNumber) {
 }
 
 // ============================================
-// localStorage persistence
+// Storage persistence
 // ============================================
+// Lazy per-PR migration from the pre-2.40.0 unprefixed legacy keys
+// (`pr-review.drafts.${N}` / `pr-review.viewed.${N}`) onto Storage —
+// drafts for un-opened PRs stay in raw localStorage until the user
+// reopens that PR, at which point `_ensure` triggers `_loadDrafts`
+// → `migrateLegacyKey` → IDB + cache. Survives quota events thereafter
+// (memory `feedback_storage_idb_authoritative.md`).
 
 function _draftsKey(prNumber) { return `${STORAGE_PREFIX}.drafts.${prNumber}`; }
 function _viewedKey(prNumber) { return `${STORAGE_PREFIX}.viewed.${prNumber}`; }
 
 function _loadDrafts(prNumber) {
-    try {
-        const serialized = localStorage.getItem(_draftsKey(prNumber));
-        if (!serialized) return [];
-        const parsed = JSON.parse(serialized);
-        return Array.isArray(parsed) ? parsed.filter(_isValidDraft) : [];
-    } catch {
-        return [];
-    }
+    const key = _draftsKey(prNumber);
+    Storage.migrateLegacyKey(key, key);
+    const parsed = Storage.get(key, []);
+    return Array.isArray(parsed) ? parsed.filter(_isValidDraft) : [];
 }
 
 function _persistDrafts(prNumber, drafts) {
-    try {
-        localStorage.setItem(_draftsKey(prNumber), JSON.stringify(drafts));
-    } catch {
-        // localStorage quota / disabled — drafts still live in memory.
-    }
+    Storage.set(_draftsKey(prNumber), drafts);
 }
 
 function _loadViewed(prNumber) {
-    try {
-        const serialized = localStorage.getItem(_viewedKey(prNumber));
-        if (!serialized) return new Set();
-        const parsed = JSON.parse(serialized);
-        return new Set(Array.isArray(parsed) ? parsed : []);
-    } catch {
-        return new Set();
-    }
+    const key = _viewedKey(prNumber);
+    Storage.migrateLegacyKey(key, key);
+    const parsed = Storage.get(key, []);
+    return new Set(Array.isArray(parsed) ? parsed : []);
 }
 
 function _persistViewed(prNumber, viewed) {
-    try {
-        localStorage.setItem(_viewedKey(prNumber), JSON.stringify(Array.from(viewed)));
-    } catch { /* non-fatal */ }
+    Storage.set(_viewedKey(prNumber), Array.from(viewed));
 }
 
 function _isValidDraft(d) {

@@ -3,7 +3,7 @@
  * Centralized state for chat module
  */
 
-import { EventBus } from '../core.js';
+import { EventBus, Storage } from '../core.js';
 
 // DOM references
 let chatContainer = null;
@@ -31,16 +31,18 @@ let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
 
 // Plan Mode (github#25) — global flag that restricts the LLM to read-only
 // tools, instructs it to produce a structured plan, and surfaces an
-// approval card before any mutating action. Persisted to localStorage so a
+// approval card before any mutating action. Persisted via Storage so a
 // refresh keeps the mode the user last saw. Toggled from the chip in the
 // chat input area, the auto-engage-on-issue-start setting in roles-tab,
 // or implicitly cleared when an approval card resolves with status:
 // 'approved'. See pendingPlanApproval below for the gate that pauses the
 // tool loop.
+//
+// Hydrated by `hydratePlanMode()` from `app.js` after `Storage.init()` —
+// the module-load timing predates Storage's IDB-backed cache, so reading
+// here would miss the Storage-prefixed key. The boot call also migrates
+// the pre-2.40.0 unprefixed `chat.planMode` legacy key onto Storage.
 let planMode = false;
-try {
-    planMode = localStorage.getItem('chat.planMode') === '1';
-} catch { /* localStorage unavailable */ }
 
 // Plan-approval pending state — single-slot, mirrors pendingUserResponse.
 // Set by submit_plan_for_approval tool handler; resolved by the
@@ -206,6 +208,18 @@ export function cancelToolLoop() {
 // ============================================
 
 /**
+ * Read the persisted plan-mode value into the module-scope flag. Called
+ * from `app.js` boot after `Storage.init()` completes. Also migrates the
+ * pre-2.40.0 unprefixed `chat.planMode` legacy localStorage key, which
+ * stored `'1'`/`'0'` strings — the new Storage layout holds a real
+ * boolean under the prefixed `ai-editor-chat.planMode` key.
+ */
+export function hydratePlanMode() {
+    Storage.migrateLegacyKey('chat.planMode', 'chat.planMode', { transform: (s) => s === '1' });
+    planMode = Storage.get('chat.planMode', false) === true;
+}
+
+/**
  * @returns {boolean}
  */
 export function getPlanMode() {
@@ -213,7 +227,7 @@ export function getPlanMode() {
 }
 
 /**
- * Toggle plan mode. Persists to localStorage and emits
+ * Toggle plan mode. Persists via Storage and emits
  * `plan-mode:changed` so the chip + banner re-render. The chat loop
  * reads this fresh per round in handlers.js, and the system prompt
  * builder reads it inside buildSystemPrompt() — both paths see the new
@@ -225,7 +239,7 @@ export function setPlanMode(value) {
     const next = !!value;
     if (next === planMode) return;
     planMode = next;
-    try { localStorage.setItem('chat.planMode', planMode ? '1' : '0'); } catch { /* best-effort */ }
+    Storage.set('chat.planMode', planMode);
     try { EventBus.emit('plan-mode:changed', planMode); } catch { /* best-effort */ }
 }
 

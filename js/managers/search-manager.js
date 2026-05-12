@@ -225,16 +225,10 @@ class _SearchManager {
     }
 
     _loadHistory() {
-        // Migrate legacy key (no prefix) → Storage API (prefixed)
-        try {
-            const legacy = localStorage.getItem('searchHistory');
-            if (legacy) {
-                this.searchHistory = JSON.parse(legacy);
-                Storage.set('searchHistory', this.searchHistory);
-                localStorage.removeItem('searchHistory');
-                return;
-            }
-        } catch {}
+        // Pre-2.40.0 the unprefixed `searchHistory` key was migrated by a
+        // hand-written shim here; 2.40.0 retired it in favor of the
+        // shared `Storage.migrateLegacyKey` helper.
+        Storage.migrateLegacyKey('searchHistory', 'searchHistory');
         this.searchHistory = Storage.get('searchHistory', []);
     }
 }

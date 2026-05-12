@@ -111,7 +111,7 @@ export function isOptedIn(workspaceId) {
 }
 
 /**
- * Set the opt-in flag for a workspace. Persisted to localStorage.
+ * Set the opt-in flag for a workspace. Persisted via Storage.
  *
  * @param {string} workspaceId
  * @param {boolean} optedIn

@@ -3,12 +3,15 @@
  *
  * Help's hotkeys page renders `mod` as ⌘ on mac and `Ctrl` on win/linux.
  * The detected default can be overridden via the platform toggle button
- * on the Hotkeys page; the override persists in localStorage across
- * reloads so a user on Linux who works through mac shortcuts in
- * documentation can pin macOS rendering for their session.
+ * on the Hotkeys page; the override persists via Storage across reloads
+ * so a user on Linux who works through mac shortcuts in documentation
+ * can pin macOS rendering for their session.
  */
 
-const STORAGE_KEY = 'aieditor.help.platform';
+import { Storage } from '../core.js';
+
+const STORAGE_KEY = 'help.platform';
+const LEGACY_KEY = 'aieditor.help.platform';
 
 /** Detect from navigator.platform / userAgentData; default to 'win'
  *  for non-mac so Linux + Windows share the Ctrl rendering. */
@@ -27,19 +30,16 @@ export function detectPlatform() {
 
 /** Resolved platform — override (if set) wins over detection. */
 export function getPlatform() {
-    try {
-        const override = localStorage.getItem(STORAGE_KEY);
-        if (override === 'mac' || override === 'win') return override;
-    } catch { /* localStorage may be blocked */ }
+    Storage.migrateLegacyKey(LEGACY_KEY, STORAGE_KEY, { transform: (s) => s });
+    const override = Storage.get(STORAGE_KEY);
+    if (override === 'mac' || override === 'win') return override;
     return detectPlatform();
 }
 
 /** Persist a user-chosen platform. Pass `null` to clear the override. */
 export function setPlatform(plat) {
-    try {
-        if (plat === null) localStorage.removeItem(STORAGE_KEY);
-        else if (plat === 'mac' || plat === 'win') localStorage.setItem(STORAGE_KEY, plat);
-    } catch { /* localStorage may be blocked */ }
+    if (plat === null) Storage.remove(STORAGE_KEY);
+    else if (plat === 'mac' || plat === 'win') Storage.set(STORAGE_KEY, plat);
 }
 
 export function togglePlatform() {
