@@ -4,6 +4,38 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### 2.39.0.1 (sweep wave slice 2) — `git:*` family channel triage
+
+Second sub-step of the 2026-Q2 audit-sweep wave (continues to develop in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md)). Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entries **#3** (`git:branchCreated` dual-naming) and **#8** (13-channel `git:*` 0-subscriber cluster). Two slices remain in the 2.39 arc before the `v2.39.0` tag (orphan-emit cleanup, `fs:*` parity confirmation).
+
+**What.** `PUBLIC_EVENT_CHANNELS.git` ([`js/events/public-channels.js`](js/events/public-channels.js)) gains 17 declarations — 11 provider-level lifecycle events (carry the `{connectionId, owner, repo, ...}` shape) and 6 `js/git.js` internal channels (4 paired-start emits + 2 wholesale folder-op completions). The 7 pre-2.39.0.1 entries are preserved; `branch:created` gains a `payload: '{ sourceBranch, targetBranch }'` descriptor to surface the dual-naming distinction in the plugin SDK render alongside the new provider-level `git:branchCreated`.
+
+**Triage outcome — every flagged channel resolved to public-API; no emits deleted.**
+
+- **Provider-level lifecycle events** (emitted by all 3 of `js/git-providers/{gitea,github,gitlab}.js`): `git:repoCreated`, `git:branchCreated`, `git:branchDeleted`, `git:fileCreated`, `git:issueCreated`, `git:issueCommented`, `git:issueUpdated`, `git:mrCreated`, `git:prMerged`, `git:prReviewSubmitted`, `git:ciRerun`. All follow the documented "plugin SDK extension hook" pattern — third-party plugins (e.g. a Slack-notify-on-PR-merge plugin) subscribe; in-tree subscribers are coincidental.
+- **`git.js` paired-start emits**: `git:loadingFile` / `git:fileLoaded`, `git:saving`, `git:batchSaving`. Each pairs with an already-subscribed completion channel (`git:fileUpdated` ← retrieval manager; `git:saved` ← ui-helpers; `git:batchSaved` ← ui-helpers). The start-side is the natural plugin-symmetry surface for loading/saving indicators — keeping them and declaring them public is byte-equivalent to the prior code and adds a documented extension surface.
+- **`git.js` wholesale folder ops**: `git:folderDeleted`, `git:folderRenamed`. Single-shot completion events; plugins (e.g. a folder-tree mirror) can subscribe.
+- **Entry #3 dual-naming resolution**: provider-level `git:branchCreated` (`{connectionId, owner, repo, name}`) is the complement to UI-level `branch:created` (`{sourceBranch, targetBranch}`), not its duplicate — different payloads, different consumers, both intentional. The registry comment documents the distinction so future audits don't re-flag.
+- **Audit-miss caught**: `git:issueUpdated` is emitted by all 3 providers but was not listed in inventory entry #8; the slice adds it to close the `issue:*` family symmetry.
+
+**What did NOT change.** No emit-site deletions (the "Investigate first" rows all resolved to keep + declare); no behavior change in `git.js` or the providers; no new subscribers wired. The slice is pure registry expansion + tests.
+
+### Tests
+
+[`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) gains 5 cases covering the new cluster:
+
+- Provider-level inventory channels designated as public (8 channels asserted).
+- `git.js` paired-start + folder-op channels designated as public (6 channels asserted).
+- Entry-#3 dual-naming resolution: both `branch:created` and `git:branchCreated` (plus `git:branchDeleted`) present.
+- Audit-miss check: `git:issueUpdated` present.
+- Payload-shape guard: every provider-level channel's `payload` documents the `connectionId` axis (catches drift if a future provider event drops it).
+
+The existing codebase-parity guard (`every PUBLIC_EVENT_CHANNELS entry has at least one EventBus.emit('NAME'…) call in js/`) automatically covers the 17 new declarations.
+
+### Versioning
+
+`js/version.js` reads `2.39.0.1`. Subsequent 2.39 sub-patches still queued: orphan-emit cleanup (`toast` orphan emit + `settings:loaded` orphan subscriber) and `fs:*` parity confirmation. The `v2.39.0` release tag fires when the wave is feature-complete.
+
 ### 2.39.0.0 (sweep wave slice 1) — public EventBus extension-channel registry
 
 First sub-step of the next 2026-Q2 audit-sweep wave; develops in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md) until the wave is testable end-to-end. Closes four `[maybe-intentional]` inventory entries that the audit's own triage note said "should mostly resolve to a 'public extension API' docs PR rather than a refactor."

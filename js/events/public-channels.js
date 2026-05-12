@@ -12,6 +12,18 @@
  * tell "intentional extension point" from "dead wire." This registry is
  * the contract that says so.
  *
+ * **2.39.0.1 (sweep wave slice 2) — git cluster expansion.** Inventory
+ * entries #3 (`git:branchCreated` dual-naming) and #8 (the 13-channel
+ * `git:*` 0-subscriber cluster) close by triaging each channel as either
+ * (a) public-extension API → declared here, (b) internal-only with an
+ * in-tree subscriber → not declared, or (c) dead-wire → emit deleted. The
+ * triage outcome was: every flagged `git:*` channel resolved to (a) —
+ * provider-level events follow the documented "plugin SDK extension hook"
+ * pattern, and the four `git.js` paired-start emits (`git:loadingFile`/
+ * `git:saving`/etc.) pair with already-subscribed completion channels
+ * (`git:fileUpdated`/`git:saved`/etc.), making the start-side the natural
+ * plugin-symmetry surface for loading/saving indicators.
+ *
  * Single source of truth for `js/profiles/plugin-dev-v1.js`'s Plugin SDK
  * system-prompt EVENTBUS EVENTS enumeration — same pattern as 2.35.0
  * `LEGACY_TOOL_ENUMERATION` retirement (`renderToolEnumeration` derives
@@ -100,10 +112,37 @@ export const PUBLIC_EVENT_CHANNELS = Object.freeze({
         Object.freeze({ name: 'git:fileUpdated' }),
         Object.freeze({ name: 'git:projectLoaded' }),
         Object.freeze({ name: 'branch:switch' }),
-        Object.freeze({ name: 'branch:created' }),
+        Object.freeze({ name: 'branch:created', payload: '{ sourceBranch, targetBranch }' }),
         Object.freeze({ name: 'branches:refresh' }),
         Object.freeze({ name: 'tree:refresh' }),
         Object.freeze({ name: 'context:prMerged' }),
+        // 2.39.0.1 (sweep wave slice 2) — provider-level lifecycle events.
+        // All carry the {connectionId, owner, repo, ...} shape.
+        Object.freeze({ name: 'git:repoCreated', payload: '{ connectionId, owner, repo }' }),
+        // `git:branchCreated` is the provider-level companion to UI-level
+        // `branch:created` — different payload shape, intentional both-emit
+        // (closes inventory entry #3).
+        Object.freeze({ name: 'git:branchCreated', payload: '{ connectionId, owner, repo, name }' }),
+        Object.freeze({ name: 'git:branchDeleted', payload: '{ connectionId, owner, repo, name }' }),
+        Object.freeze({ name: 'git:fileCreated', payload: '{ connectionId, owner, repo, path, branch, content }' }),
+        Object.freeze({ name: 'git:issueCreated', payload: '{ connectionId, owner, repo, number }' }),
+        Object.freeze({ name: 'git:issueCommented', payload: '{ connectionId, owner, repo, number }' }),
+        Object.freeze({ name: 'git:issueUpdated', payload: '{ connectionId, owner, repo, number, ...fields }' }),
+        Object.freeze({ name: 'git:mrCreated', payload: '{ connectionId, owner, repo, number }' }),
+        Object.freeze({ name: 'git:prMerged', payload: '{ connectionId, owner, repo, number }' }),
+        Object.freeze({ name: 'git:prReviewSubmitted', payload: '{ connectionId, owner, repo, number }' }),
+        Object.freeze({ name: 'git:ciRerun', payload: '{ connectionId, owner, repo, runId }' }),
+        // 2.39.0.1 (sweep wave slice 2) — js/git.js internal channels. The
+        // four paired-start emits (loadingFile, fileLoaded, saving,
+        // batchSaving) pair with already-subscribed completion channels
+        // (git:fileUpdated, git:saved, git:batchSaved) — start-side is the
+        // plugin-symmetry surface for loading/saving indicators.
+        Object.freeze({ name: 'git:folderDeleted', payload: '{ owner, repo, folderPath, branch, count }' }),
+        Object.freeze({ name: 'git:folderRenamed', payload: '{ owner, repo, oldFolder, newFolder, branch, count }' }),
+        Object.freeze({ name: 'git:loadingFile', payload: '{ path }' }),
+        Object.freeze({ name: 'git:fileLoaded', payload: '{ file, hasDraft, content }' }),
+        Object.freeze({ name: 'git:saving', payload: '{ path }' }),
+        Object.freeze({ name: 'git:batchSaving', payload: '{ files }' }),
     ]),
     llm: Object.freeze([
         Object.freeze({ name: 'llm:generating', payload: 'bool' }),

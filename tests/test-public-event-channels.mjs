@@ -177,6 +177,88 @@ test('mergeConflict:* channels — inventory cluster designated as public', () =
     }
 });
 
+// ----------
+// 2.39.0.1 (sweep wave slice 2) — git:* cluster
+//
+// Inventory entry #8 listed 13 channels with 0 internal subscribers; entry
+// #3 named `git:branchCreated` (dual-naming with UI-level `branch:created`)
+// and called for the same audit on `git:branchDeleted`. The audit also
+// missed `git:issueUpdated`, which shares the same shape as the listed
+// issue channels and is included here.
+
+test('git:* provider-level cluster — entry-#8 inventory channels designated as public', () => {
+    const names = PUBLIC_EVENT_CHANNELS.git.map(e => e.name);
+    for (const name of [
+        'git:repoCreated',
+        'git:branchCreated',
+        'git:issueCreated',
+        'git:issueCommented',
+        'git:mrCreated',
+        'git:prMerged',
+        'git:prReviewSubmitted',
+        'git:ciRerun',
+    ]) {
+        assert.ok(names.includes(name), `git group missing ${name}`);
+    }
+});
+
+test('git:* cluster — git.js paired-start emits designated as public', () => {
+    const names = PUBLIC_EVENT_CHANNELS.git.map(e => e.name);
+    for (const name of [
+        'git:loadingFile',
+        'git:fileLoaded',
+        'git:saving',
+        'git:batchSaving',
+        'git:folderDeleted',
+        'git:folderRenamed',
+    ]) {
+        assert.ok(names.includes(name), `git group missing ${name}`);
+    }
+});
+
+test('git:* cluster — entry-#3 dual-naming resolution (git:branchCreated + git:branchDeleted in registry)', () => {
+    const names = PUBLIC_EVENT_CHANNELS.git.map(e => e.name);
+    // The UI-level companion `branch:created` is already in the registry
+    // (carries `{sourceBranch, targetBranch}`); the provider-level
+    // `git:branchCreated` carries `{connectionId, owner, repo, name}` and
+    // is its complement, not its duplicate.
+    assert.ok(names.includes('branch:created'), 'expected UI-level branch:created');
+    assert.ok(names.includes('git:branchCreated'), 'expected provider-level git:branchCreated');
+    assert.ok(names.includes('git:branchDeleted'), 'expected provider-level git:branchDeleted (entry #3 "same audit")');
+});
+
+test('git:* cluster — git:issueUpdated audit-miss caught', () => {
+    // The 2026-Q2 inventory enumerated git:issueCreated and git:issueCommented
+    // but missed git:issueUpdated, which is emitted by all three providers
+    // and shares the same shape. The slice-2 triage adds it to the registry.
+    const names = PUBLIC_EVENT_CHANNELS.git.map(e => e.name);
+    assert.ok(names.includes('git:issueUpdated'), 'git group missing git:issueUpdated');
+});
+
+test('git:* cluster — provider-level payload descriptors carry the connectionId shape', () => {
+    const providerLevel = [
+        'git:repoCreated',
+        'git:branchCreated',
+        'git:branchDeleted',
+        'git:fileCreated',
+        'git:issueCreated',
+        'git:issueCommented',
+        'git:issueUpdated',
+        'git:mrCreated',
+        'git:prMerged',
+        'git:prReviewSubmitted',
+        'git:ciRerun',
+    ];
+    for (const name of providerLevel) {
+        const entry = PUBLIC_EVENT_CHANNELS.git.find(e => e.name === name);
+        assert.ok(entry, `expected ${name} in git group`);
+        assert.ok(
+            entry.payload && entry.payload.includes('connectionId'),
+            `${name} payload should document connectionId; got "${entry.payload}"`,
+        );
+    }
+});
+
 // ============================================
 // Hand-list corrections
 // ============================================
