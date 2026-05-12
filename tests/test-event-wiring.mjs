@@ -17,14 +17,37 @@ import './_node-shim.mjs';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
 
 import { EventBus } from '../js/core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
+const JS_ROOT = resolve(REPO_ROOT, 'js');
+
+async function jsFiles() {
+    const out = [];
+    async function walk(dir) {
+        for (const entry of await readdir(dir, { withFileTypes: true })) {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) await walk(full);
+            else if (entry.name.endsWith('.js')) out.push(full);
+        }
+    }
+    await walk(JS_ROOT);
+    return out;
+}
+
+async function findMatches(pattern) {
+    const hits = [];
+    for (const file of await jsFiles()) {
+        const text = await readFile(file, 'utf-8');
+        if (pattern.test(text)) hits.push(file);
+    }
+    return hits;
+}
 
 function collectOne(channel) {
     const seen = [];
@@ -150,5 +173,34 @@ test('js/ui/revert.js revertAllFiles loop emits tab:contentChanged per reverted 
         loopMatch[0],
         /EventBus\.emit\(\s*['"]tab:contentChanged['"],\s*\{\s*path:\s*tab\.path\s*\}/,
         'per-tab tab:contentChanged emit inside revertAllFiles loop',
+    );
+});
+
+// ============================================
+// 2.39.0.2 orphan-emit cleanup (sweep wave slice 3)
+// Inventory entries #113 (toast) and #198 (error / settings:loaded).
+// ============================================
+
+test("no EventBus.emit('toast') anywhere in js/ — orphan emit retired at 2.39.0.2", async () => {
+    const hits = await findMatches(/EventBus\.emit\(\s*['"]toast['"]/);
+    assert.deepEqual(hits, [], `unexpected toast emit sites: ${hits.join(', ')}`);
+});
+
+test("no EventBus.on('error') subscriber in js/ — orphan subscriber retired at 2.39.0.2", async () => {
+    const hits = await findMatches(/EventBus\.on\(\s*['"]error['"]/);
+    assert.deepEqual(hits, [], `unexpected error subscribers: ${hits.join(', ')}`);
+});
+
+test("no EventBus.on('settings:loaded') subscriber in js/ — orphan subscriber retired at 2.39.0.2", async () => {
+    const hits = await findMatches(/EventBus\.on\(\s*['"]settings:loaded['"]/);
+    assert.deepEqual(hits, [], `unexpected settings:loaded subscribers: ${hits.join(', ')}`);
+});
+
+test("favicon-manager.js still subscribes to llm:generating (regression guard on the sibling subscriber)", async () => {
+    const text = await readFile(resolve(REPO_ROOT, 'js/favicon-manager.js'), 'utf-8');
+    assert.match(
+        text,
+        /EventBus\.on\(\s*['"]llm:generating['"]/,
+        "favicon's llm:generating subscriber must survive the error-subscriber deletion",
     );
 });

@@ -47,13 +47,6 @@ export const FaviconManager = {
         EventBus.on('llm:generating', (isGenerating) => {
             this.setStatus(isGenerating ? 'loading' : 'idle');
         });
-
-        // Listen for errors
-        EventBus.on('error', () => {
-            this.setStatus('error');
-            // Reset to idle after 3 seconds
-            setTimeout(() => this.setStatus('idle'), 3000);
-        });
     },
 
     /**

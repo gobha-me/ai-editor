@@ -20,6 +20,7 @@
  */
 
 import { State, EventBus } from '../../core.js';
+import { showToast } from '../../ui-helpers.js';
 import { handleGeneralRequest } from '../../chat/handlers.js';
 import { runTestLoop } from './orchestrator.js';
 import * as LoopState from './state.js';
@@ -52,7 +53,6 @@ export function installTestLoopUi() {
     };
     refreshVisibility();
     EventBus.on('settings:changed', refreshVisibility);
-    EventBus.on('settings:loaded', refreshVisibility);
     EventBus.on('workspaceSettings:changed', refreshVisibility);
 
     // Loop card subscriptions.
@@ -134,7 +134,7 @@ async function _onStartClicked() {
         });
     } catch (err) {
         console.error('[test-loop] runTestLoop failed:', err);
-        EventBus.emit('toast', { type: 'error', message: `Test loop failed: ${err.message || String(err)}` });
+        showToast(`Test loop failed: ${err.message || String(err)}`, 'error');
     }
 }
 

@@ -4,6 +4,37 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### 2.39.0.2 (sweep wave slice 3) — orphan-emit cleanup
+
+Third sub-step of the 2026-Q2 audit-sweep wave (continues to develop in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md)). Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entries **#113** (`toast` orphan emit) and **#198** (`error` + `settings:loaded` orphan subscribers). One slice remains in the 2.39 arc before the `v2.39.0` tag (`fs:*` parity confirmation).
+
+**What.** Unlike slices 1 and 2 — which resolved every flagged channel to public-API designation in `PUBLIC_EVENT_CHANNELS` — slice 3's triage found all three orphans were genuine dead code, not undocumented extension hooks. Each resolves to a deletion (or, for the `toast` orphan, a swap to the established `showToast()` function-call contract).
+
+**Triage outcome — three orphans, three deletions; one deliberate behavior fix.**
+
+- **`toast` orphan emit** ([`js/intelligence/test-loop/ui.js`](js/intelligence/test-loop/ui.js)). Sole emit carried a `{ type: 'error', message }` payload; `showToast(message, type)` at [`js/ui-helpers.js`](js/ui-helpers.js) is positional-args — the emit shape never matched any contract. Zero subscribers anywhere in `js/`. Swapped to a direct `showToast(\`Test loop failed: …\`, 'error')` call. **Deliberate behavior change**: the test-loop's catch-block error toast now actually renders. Previously it was silently dropped because no subscriber existed.
+- **`error` channel** ([`js/favicon-manager.js`](js/favicon-manager.js)). Sole subscriber flashed the favicon red for 3 s; handler ignored its payload. Zero emit sites in `js/` — the handler had never run in production. Deleted the 6-line subscriber. The sibling `llm:generating` subscriber in the same `_setupEventListeners` block survives untouched; new regression-guard test pins it. Byte-equivalent user-visible behavior (the error favicon was never observed).
+- **`settings:loaded` channel** ([`js/intelligence/test-loop/ui.js`](js/intelligence/test-loop/ui.js)). Sole subscriber called `refreshVisibility()` to flip the Test Loop button on profile / setting changes. Zero emit sites in `js/`. `refreshVisibility()` already runs eagerly at install time (line 53), and `installTestLoopUi()` is called from [`js/app.js`](js/app.js) AFTER the synchronous `loadSettings()` — so the boot path is already covered. Two live siblings (`settings:changed` from 3 settings-tab sites and `workspaceSettings:changed`) cover every post-boot mutation. Deleted the line.
+
+**Why slice 3 didn't follow the slice-1/2 pattern.** The 2.39.0.0/2.39.0.1 entries resolved to "declare as public extension API" because each flagged channel matched the documented plugin-SDK hook pattern (provider-level event with `{connectionId, owner, repo, ...}` shape, paired with a UI-level companion, etc.). The slice-3 trio share none of those markers: `toast` was a payload-shape mismatch with the only consumer pattern that exists; `error` was a dead handler with no producer history; `settings:loaded` was a redundant init pathway. Public-API designation requires an actual contract — none existed for any of the three.
+
+**What did NOT change.** No `js/app.js` boot-order changes (the synchronous `loadSettings()` → `installTestLoopUi()` chain already covers the deleted `settings:loaded` subscriber's intent). No `PUBLIC_EVENT_CHANNELS` registry additions (none of the three were public). No subscriber additions in `ui-helpers.js` (the function-call contract is the codebase convention).
+
+### Tests
+
+[`tests/test-event-wiring.mjs`](tests/test-event-wiring.mjs) gains 4 cases under a new `// 2.39.0.2 orphan-emit cleanup` band, plus a small `jsFiles()` + `findMatches()` helper pair that walks the `js/` tree once per scan (matches the [`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) `collectEmittedChannels()` shape but in async form):
+
+- No `EventBus.emit('toast', …)` site exists anywhere under `js/` (pins the test-loop emit swap).
+- No `EventBus.on('error', …)` subscriber exists anywhere under `js/` (pins the favicon-manager subscriber delete).
+- No `EventBus.on('settings:loaded', …)` subscriber exists anywhere under `js/` (pins the test-loop-ui subscriber delete).
+- Regression guard — `js/favicon-manager.js` still subscribes to `llm:generating` (catches accidental over-deletion of the sibling subscriber in the same `_setupEventListeners` block).
+
+The 2.24.1 `tabs:render` orphan-retirement cases in the same file are unaffected; the existing producer-coverage cases for `tab:contentChanged` are unaffected. The [`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) codebase-parity guard is unaffected (none of these channels were in the public registry).
+
+### Versioning
+
+`js/version.js` reads `2.39.0.2`. One sweep-wave slice still queued before the `v2.39.0` tag: `fs:*` parity confirmation. The release-readiness gate does not fire on sub-patch versions.
+
 ### 2.39.0.1 (sweep wave slice 2) — `git:*` family channel triage
 
 Second sub-step of the 2026-Q2 audit-sweep wave (continues to develop in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md)). Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) entries **#3** (`git:branchCreated` dual-naming) and **#8** (13-channel `git:*` 0-subscriber cluster). Two slices remain in the 2.39 arc before the `v2.39.0` tag (orphan-emit cleanup, `fs:*` parity confirmation).

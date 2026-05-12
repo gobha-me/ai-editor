@@ -110,11 +110,12 @@
 - **Touch points:** `js/git-providers/{gitea,github,gitlab}.js`, `js/ui/branch.js`, `js/intelligence/retrieval/manager.js:1205`.
 - **Resolution:** 2.39.0.1 declared both `git:branchCreated` and the UI-level `branch:created` in `PUBLIC_EVENT_CHANNELS.git` with explicit payload descriptors — they carry different shapes (provider: `{connectionId, owner, repo, name}`; UI: `{sourceBranch, targetBranch}`) and serve different consumers (provider-level for plugin extension hooks, UI-level for in-tree subscribers like the retrieval manager). The registry comment + `tests/test-public-event-channels.mjs` "dual-naming resolution" case pin the both-channels-intentional decision. `git:branchDeleted` (the "same audit" sibling — 3 emitters, 1 in-tree subscriber via retrieval manager) was declared alongside for parity. See [CHANGELOG §2.39.0.1](../../CHANGELOG.md).
 
-#### [EV] [S] [needs-investigation] `EventBus.emit('toast', ...)` has 1 emit, 0 subscribers
+#### ~~[EV] [S] [needs-investigation] `EventBus.emit('toast', ...)` has 1 emit, 0 subscribers~~ *(✅ closed — shipped 2.39.0.2)*
 - **What:** `js/intelligence/test-loop/ui.js:137` is the only emit. The rest of the codebase calls `window.showToast(...)` or `showToast(...)` directly.
 - **Why it's load-bearing:** The toast contract is split — direct function call vs event-bus emit. A subscriber would need to live in `js/ui-helpers.js`. This is small but the dead emit suggests intent that never landed.
 - **Suggested fix shape:** Either route every toast through the event channel (add a subscriber in ui-helpers.js calling showToast), or replace the test-loop emit with a direct showToast call.
 - **Touch points:** `js/intelligence/test-loop/ui.js:137`, `js/ui-helpers.js:77-85`.
+- **Resolution:** 2.39.0.2 (sweep wave slice 3) replaced the emit with a direct `showToast(\`Test loop failed: …\`, 'error')` call — matching the codebase's established function-call contract. The pre-2.39.0.2 emit's `{type, message}` object payload had never matched `showToast`'s positional-args signature, so the catch-block toast was silently dropped in production; the swap is a deliberate behavior fix (the toast now renders). Test-event-wiring `no EventBus.emit('toast') anywhere in js/` case pins the deletion. See [CHANGELOG §2.39.0.2](../../CHANGELOG.md).
 
 #### ~~[DUP] [S] [likely] CI status icons defined twice with different shapes~~ *(✅ closed — shipped 2.38.0)*
 - **What:** `js/ui/pr-list.js:18-24` defined a `CI_ICONS` map (`success/pending/failure/error/unknown` → emoji). `js/pr-review/PrReviewSurface.js:50-54` defined a different `CI_STATUS_*` map (with `{label, cls}` shape for badges).
@@ -195,11 +196,12 @@
 
 ### events
 
-#### [EV] [S] [likely] `editor` channel subscribed but no emitter
+#### ~~[EV] [S] [likely] `editor` channel subscribed but no emitter~~ *(✅ closed — shipped 2.39.0.2)*
 - **What:** Per the channel-mismatch diff, the channel `error` is subscribed somewhere but emitted nowhere; `settings:loaded` is subscribed but no emit. (Counter-balance: `settings:saved` is emitted in `js/app.js:784` and `js/settings/persistence.js` but not via EventBus.)
 - **Why it's load-bearing:** Probably the wrong channel name was used — subscribers will never fire. Two of the rare-but-known "subscribed without emitter" cases the audit run surfaced.
 - **Suggested fix shape:** Read the subscriber to see what it expects. If `settings:loaded` should fire after `loadSettings()` returns, add the emit. Same for `error`.
 - **Touch points:** Search for `EventBus.on('error',` and `EventBus.on('settings:loaded',` to find the consumers.
+- **Resolution:** 2.39.0.2 (sweep wave slice 3) — both orphan subscribers deleted; no emits added. **`error` channel**: sole subscriber at `js/favicon-manager.js:52-56` flashed the favicon red for 3 s and ignored its payload; the handler had never run in production. Deleted; the sibling `llm:generating` subscriber survives untouched. **`settings:loaded` channel**: sole subscriber at `js/intelligence/test-loop/ui.js:55` called `refreshVisibility()` for Test Loop button visibility. Already covered by the eager-init call at line 53 (`installTestLoopUi()` runs from `js/app.js:752` AFTER the synchronous `loadSettings()` at `app.js:714`; verified `loadSettings` is sync at `core.js:1398`), and the two live siblings (`settings:changed` from 3 settings-tab sites + `workspaceSettings:changed`) cover every post-boot mutation. Deleted; no new init pathway introduced. Two test-event-wiring guards pin the absence: `no EventBus.on('error') subscriber in js/` and `no EventBus.on('settings:loaded') subscriber in js/`. See [CHANGELOG §2.39.0.2](../../CHANGELOG.md).
 
 #### ~~[EV] [S] [maybe-intentional] Plugin lifecycle emits with no internal subscribers~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** From the orphan-emits list: `plugin:configChanged`, `plugin:installed`, `plugin:mcpServerRegistered`, `plugin:modalRegistered`, `plugin:uninstalled` are emitted by `js/core.js` Plugins methods but no `EventBus.on(...)` listens internally.
