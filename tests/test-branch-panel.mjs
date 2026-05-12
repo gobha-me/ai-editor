@@ -17,7 +17,8 @@ import './_node-shim.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { renderBranchPanelHtml } from '../js/ui/branch-panel.js';
+import { renderBranchPanelHtml, renderBranchPanel } from '../js/ui/branch-panel.js';
+import { State } from '../js/core.js';
 
 // ============================================
 // Empty state
@@ -217,4 +218,115 @@ test('escapes branch names inside data-* attributes (attribute-context)', () => 
     });
     // The malicious quote-break must not produce a raw <img> tag
     assert.doesNotMatch(html, /<img src=x>/);
+});
+
+// ============================================
+// gitea#392 — container arg tolerates EventBus payloads (2.38.2)
+// ============================================
+
+/**
+ * Regression: `renderBranchPanel` is wired as both a direct DOM caller (rail
+ * body render passes a real element) AND as an EventBus listener for several
+ * channels (`branch:switch`, `branches:refresh`, `branches:metadataChanged`,
+ * etc.) where the first arg is the event payload object, not a DOM element.
+ *
+ * Pre-2.38.2 the `container || getElementById(PANEL_ID)` fallback would
+ * short-circuit on a truthy payload and silently set `.innerHTML` on the
+ * plain object, leaving the real `#branchPanel` un-rendered. The visible
+ * symptom (gitea#392) was the branch-switcher active-highlight class
+ * staying on the previously-active row after a successful branch switch:
+ * `branch:switch` payload `{ branch, previousBranch }` reached
+ * `renderBranchPanel` first-arg, hit the truthy short-circuit, mutated the
+ * payload object, and never reached the real DOM.
+ *
+ * The fix: `container.nodeType === 1` guard. Tests both shapes — a real
+ * Element-like (nodeType 1) container wins; a payload object falls through
+ * to the `getElementById` lookup.
+ */
+test('renderBranchPanel ignores non-Element first arg, falls back to getElementById (gitea#392)', () => {
+    const panelEl = {
+        nodeType: 1,
+        _innerHTML: '',
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) { this._innerHTML = String(v); },
+    };
+    const origGetById = globalThis.document.getElementById;
+    globalThis.document.getElementById = (id) =>
+        (id === 'branchPanel' ? panelEl : null);
+
+    const origProject = State.currentProject;
+    const origBranches = State.branches;
+    const origCurrent = State.currentBranch;
+    State.currentProject = { connectionId: '__local__', owner: 'a', repo: 'b' };
+    State.branches = [{ name: 'main' }, { name: 'feature-x' }];
+    State.currentBranch = 'feature-x';
+
+    try {
+        // Simulate the EventBus passing a `branch:switch` payload as the first arg.
+        const payload = { branch: 'feature-x', previousBranch: 'main' };
+        renderBranchPanel(payload);
+
+        // The payload object must NOT have been mutated.
+        assert.equal(
+            payload.innerHTML,
+            undefined,
+            'renderBranchPanel must not write innerHTML to a non-Element first arg',
+        );
+        // The real #branchPanel MUST have been rendered via getElementById fallback.
+        assert.match(
+            panelEl._innerHTML,
+            /branch-panel__row/,
+            'real #branchPanel element should receive the rendered rows',
+        );
+        // And the active-highlight class should be on the current branch row,
+        // not the previous one (which was gitea#392's visible symptom).
+        assert.match(
+            panelEl._innerHTML,
+            /branch-panel__row branch-panel__row--current[^"]*"[^>]*data-branch-name="feature-x"/,
+            'current-branch row should carry the --current modifier after re-render',
+        );
+    } finally {
+        globalThis.document.getElementById = origGetById;
+        State.currentProject = origProject;
+        State.branches = origBranches;
+        State.currentBranch = origCurrent;
+    }
+});
+
+test('renderBranchPanel still honors an explicit Element-shaped container override', () => {
+    const explicit = {
+        nodeType: 1,
+        _innerHTML: '',
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) { this._innerHTML = String(v); },
+    };
+    const wrongPanel = {
+        nodeType: 1,
+        _innerHTML: '',
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) { this._innerHTML = String(v); },
+    };
+    const origGetById = globalThis.document.getElementById;
+    globalThis.document.getElementById = (id) =>
+        (id === 'branchPanel' ? wrongPanel : null);
+
+    const origProject = State.currentProject;
+    const origBranches = State.branches;
+    const origCurrent = State.currentBranch;
+    State.currentProject = { connectionId: '__local__' };
+    State.branches = [{ name: 'main' }];
+    State.currentBranch = 'main';
+
+    try {
+        renderBranchPanel(explicit);
+        assert.match(explicit._innerHTML, /branch-panel__row/,
+            'explicit container should receive the render');
+        assert.equal(wrongPanel._innerHTML, '',
+            'getElementById fallback should NOT fire when an Element is passed');
+    } finally {
+        globalThis.document.getElementById = origGetById;
+        State.currentProject = origProject;
+        State.branches = origBranches;
+        State.currentBranch = origCurrent;
+    }
 });

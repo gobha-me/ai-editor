@@ -184,9 +184,21 @@ export async function populateBranchMetadata(project, branches) {
 /**
  * Render the branch panel into its container in the DOM. No-op if the panel
  * element is absent (other surfaces, tests under Node, etc.).
+ *
+ * The first arg is intentionally tolerant: explicit DOM callers (e.g. the
+ * rail's body render) pass a real element; the function's EventBus listeners
+ * (`branch:switch`, `branches:refresh`, etc.) get the event payload as their
+ * first arg instead. Without the `nodeType === 1` guard below, a payload
+ * object like `{ branch, previousBranch }` would short-circuit the
+ * `getElementById` fallback and the function would silently set
+ * `payload.innerHTML` on the plain object — leaving the real `#branchPanel`
+ * un-rendered. This was gitea#392's "branch switcher active highlight does
+ * not move" symptom (fixed in 2.38.2).
  */
 export function renderBranchPanel(container) {
-    const el = container || document.getElementById(PANEL_ID);
+    const el = (container && container.nodeType === 1)
+        ? container
+        : document.getElementById(PANEL_ID);
     if (!el) return;
 
     if (!State.currentProject || !State.branches || State.branches.length === 0) {

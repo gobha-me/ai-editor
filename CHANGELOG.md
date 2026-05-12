@@ -4,6 +4,22 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.38.2] - 2026-05-12
+
+### Fix — branch-switcher active highlight follows the switched-to row ([gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392))
+
+Clicking a non-current branch row in the Branches rail-view switched the active branch (file tree, editor state, etc. all updated), but the `branch-panel__row--current` visual highlight stayed on the previously-active row — the UI looked stuck and users thought the switch hadn't happened.
+
+**Root cause.** [`renderBranchPanel(container)`](js/ui/branch-panel.js) accepted an optional `container` argument with a `container || getElementById(PANEL_ID)` fallback. Six EventBus listeners (`project:loaded`, `project:cleared`, `branches:refresh`, `branches:metadataChanged`, `branch:switch`, `branch:created`) were wired with `renderBranchPanel` as the handler directly — passing event payloads as the first arg. The `branch:switch` payload `{ branch, previousBranch }` is a truthy plain object, so the `||` fallback short-circuited, and the function silently set `.innerHTML` on the payload object instead of the real `#branchPanel`. The DOM was never updated, so the active-highlight class stayed on the previously-active row.
+
+**Fix.** Replace `container || ...` with `(container && container.nodeType === 1) ? container : document.getElementById(PANEL_ID)`. Element callers (`nodeType === 1`) keep their explicit-override path; event payloads (POJOs) now correctly fall through to `getElementById`. Five other listeners (`project:loaded`, etc.) get the same fix as a free bonus.
+
+### Tests
+
+- New regression coverage in [`tests/test-branch-panel.mjs`](tests/test-branch-panel.mjs):
+  - `renderBranchPanel` ignores a non-Element first arg (simulating an EventBus payload), falls back to `getElementById`, and renders the active-highlight class on the current branch row (the gitea#392 symptom).
+  - `renderBranchPanel` still honors an explicit Element-shaped container override (existing direct-call path unchanged).
+
 ## [2.38.1] - 2026-05-12
 
 ### Fix — left-pane rail refreshes data on group click ([gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393))
