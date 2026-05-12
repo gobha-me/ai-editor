@@ -392,6 +392,113 @@ test('setActiveView ignores unknown view ids', () => {
 });
 
 // ============================================
+// gitea#393 — onActivate fires after view switch (2.38.1)
+// ============================================
+
+test('setActiveView fires contribution.view.onActivate after _applyActiveView', () => {
+    clearRailContributions();
+    clearRailListeners();
+    let fired = null;
+    SlotManager.contribute('rail-views', {
+        pluginId: 'test-provider',
+        view: {
+            id: 'tasks',
+            label: 'Tasks',
+            icon: '<svg/>',
+            priority: 50,
+            onActivate: (id) => { fired = id; },
+        },
+        render: () => {},
+    });
+    const { restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        setActiveView('tasks');
+        assert.equal(fired, 'tasks', 'onActivate fired with the activated viewId');
+    } finally {
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
+
+test('setActiveView swallows onActivate throws (one bad provider cannot break the rail)', () => {
+    clearRailContributions();
+    clearRailListeners();
+    SlotManager.contribute('rail-views', {
+        pluginId: 'bad-provider',
+        view: {
+            id: 'boom',
+            label: 'Boom',
+            icon: '<svg/>',
+            priority: 50,
+            onActivate: () => { throw new Error('explode'); },
+        },
+        render: () => {},
+    });
+    const { restore } = _withFakeRailDom();
+    const origConsoleError = console.error;
+    let captured = null;
+    console.error = (...args) => { captured = args; };
+    try {
+        mountLeftPaneRail();
+        // Must not throw.
+        setActiveView('boom');
+        assert.ok(captured, 'a console.error was logged');
+        assert.equal(localStorage.getItem('leftPaneRail.activeView'), 'boom',
+            'persistence still happened before onActivate fired');
+    } finally {
+        console.error = origConsoleError;
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
+
+test('BUILTIN_VIEWS each declare an onActivate (gitea#393 contract)', () => {
+    clearRailContributions();
+    clearRailListeners();
+    const { restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        const contribs = SlotManager.getContributions('rail-views');
+        const byId = Object.fromEntries(contribs.map(c => [c.view.id, c]));
+        for (const id of ['files', 'issues', 'prs', 'branches']) {
+            assert.equal(typeof byId[id].view.onActivate, 'function',
+                `${id} view must declare onActivate (gitea#393)`);
+        }
+    } finally {
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
+
+test('BUILTIN_VIEWS onActivate is a no-op when no project loaded (avoids spurious 404 chatter)', () => {
+    clearRailContributions();
+    clearRailListeners();
+    State.currentProject = null;
+    const seen = [];
+    const origEmit = EventBus.emit;
+    EventBus.emit = (ch, ...rest) => { seen.push(ch); return origEmit.call(EventBus, ch, ...rest); };
+    const { restore } = _withFakeRailDom();
+    try {
+        mountLeftPaneRail();
+        seen.length = 0;
+        setActiveView('files');
+        setActiveView('branches');
+        // Neither files nor branches should have emitted tree:refresh / branches:refresh
+        assert.equal(seen.includes('tree:refresh'), false, 'files onActivate must guard on currentProject');
+        assert.equal(seen.includes('branches:refresh'), false, 'branches onActivate must guard on currentProject');
+    } finally {
+        EventBus.emit = origEmit;
+        restore();
+        clearRailContributions();
+        clearRailListeners();
+    }
+});
+
+// ============================================
 // renderHeaderActionHtml — pure → HTML (2.24.0 SlotManager body migration)
 // ============================================
 

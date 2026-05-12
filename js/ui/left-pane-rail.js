@@ -8,10 +8,18 @@
  * The rail button column is built from `rail-views` contributions
  * (read via `SlotManager.getContributions('rail-views')`); each
  * contribution carries `{view: {id, label, icon, badge?, priority?,
- * headerActions?}, render(container), refreshEvent?}`. The four built-in
- * views (Files / Issues / Pull Requests / Branches) register at boot
+ * headerActions?, onActivate?}, render(container), refreshEvent?}`. The four
+ * built-in views (Files / Issues / Pull Requests / Branches) register at boot
  * from `BUILTIN_VIEWS` — opting out via `SlotManager.hasViewId(id)` so a
  * provider that already claimed the same `view.id` wins.
+ *
+ * **Activation refresh (gitea#393, 2.38.1).** `view.onActivate(viewId)`, when
+ * declared, fires after the rail switches to that view via `setActiveView`.
+ * Built-ins use it to kick a background data refresh so external changes
+ * (e.g. a branch pushed from another session) surface without a full project
+ * reload. The cached content paints immediately from `_applyActiveView`'s
+ * visibility toggle; `onActivate` fires the async fetch in parallel.
+ * Provider contributions can opt in.
  *
  * **Body rendering (2.24.0).** The rail owns the body path end-to-end:
  * on every `rebuild()` it wipes the `[data-rail-view-container]` children
@@ -190,6 +198,13 @@ const BUILTIN_VIEWS = [
                     onClick: () => openNewFileModal(),
                 },
             ],
+            // gitea#393: background-refresh on activation. Matches the
+            // explicit Refresh header action (no toast — silent on click).
+            onActivate: () => {
+                if (!State.currentProject) return;
+                EventBus.emit('tree:refresh');
+                EventBus.emit('branches:refresh');
+            },
         },
         render: (body) => {
             body.innerHTML = FILES_BODY_HTML;
@@ -218,6 +233,12 @@ const BUILTIN_VIEWS = [
                     onClick: () => refreshIssues(),
                 },
             ],
+            // gitea#393: background-refresh on activation so an externally-
+            // created issue surfaces without a project reload.
+            onActivate: () => {
+                if (!State.currentProject) return;
+                refreshIssues();
+            },
         },
         render: (body) => {
             body.innerHTML = ISSUES_BODY_HTML;
@@ -251,6 +272,12 @@ const BUILTIN_VIEWS = [
                     onClick: () => refreshPullRequests(),
                 },
             ],
+            // gitea#393: background-refresh on activation so an externally-
+            // opened PR surfaces without a project reload.
+            onActivate: () => {
+                if (!State.currentProject) return;
+                refreshPullRequests();
+            },
         },
         render: (body) => {
             body.innerHTML = PRS_BODY_HTML;
@@ -290,6 +317,14 @@ const BUILTIN_VIEWS = [
                     onClick: () => { window.openReleaseModal?.(); },
                 },
             ],
+            // gitea#393: background-refresh on activation so an externally-
+            // pushed branch surfaces without a project reload. No dedicated
+            // refresh header action exists for Branches, so this is the only
+            // user-initiated refresh path short of the Files refresh fan-out.
+            onActivate: () => {
+                if (!State.currentProject) return;
+                EventBus.emit('branches:refresh');
+            },
         },
         render: (body) => {
             body.innerHTML = BRANCHES_BODY_HTML;
@@ -594,16 +629,29 @@ export function mountLeftPaneRail() {
 }
 
 /**
- * Switch the active rail view. Persists to localStorage and toggles
- * visibility on all rail-view containers (static + dynamic).
+ * Switch the active rail view. Persists to localStorage, toggles visibility
+ * on all rail-view containers (static + dynamic), then fires the
+ * contribution's `view.onActivate(viewId)` if declared (gitea#393, 2.38.1)
+ * so externally-changed data refreshes into the now-active view without a
+ * full project reload.
  *
  * @param {string} viewId
  */
 export function setActiveView(viewId) {
     const contribs = SlotManager.getContributions('rail-views');
-    if (!contribs.some(c => c.view?.id === viewId)) return;
+    const contrib = contribs.find(c => c.view?.id === viewId);
+    if (!contrib) return;
     try { localStorage.setItem(STORAGE_KEY, viewId); } catch (_) { /* ignore */ }
     _applyActiveView(viewId);
+    if (typeof contrib.view.onActivate === 'function') {
+        try {
+            contrib.view.onActivate(viewId);
+        } catch (err) {
+            console.error('[Rail v2] onActivate failed', {
+                viewId, pluginId: contrib.pluginId, error: err,
+            });
+        }
+    }
 }
 
 function _applyActiveView(viewId) {

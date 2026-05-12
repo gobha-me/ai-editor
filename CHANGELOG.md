@@ -4,6 +4,35 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.38.1] - 2026-05-12
+
+### Fix — left-pane rail refreshes data on group click ([gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393))
+
+Clicking a rail-view group (Files / Issues / PRs / Branches) toggled visibility but did not trigger a refresh against the current provider — externally-changed data (e.g. a branch pushed from a different ai-editor chat session) stayed stale until the user reloaded the entire project.
+
+**`view.onActivate(viewId)` hook on the `rail-views` contribution shape ([`js/ui/left-pane-rail.js`](js/ui/left-pane-rail.js)).** Fires after `setActiveView`'s `_applyActiveView` visibility toggle. Cached state paints instantly so the click stays responsive; the background fetch settles asynchronously and re-renders via the existing `*:refresh` / `*:render` event channels.
+
+Built-in `onActivate` paths:
+
+- **Files** — emits `tree:refresh` + `branches:refresh` (matches the existing Files refresh header action, minus the toast).
+- **Issues** — calls `refreshIssues()`.
+- **PRs** — calls `refreshPullRequests()`.
+- **Branches** — emits `branches:refresh` (no dedicated refresh header action existed before; this is the only user-initiated refresh path short of the Files refresh fan-out).
+
+Each built-in `onActivate` no-ops when `State.currentProject` is null (boot-time / pre-load), so a stray click on the rail before a project loads doesn't fire spurious provider fetches.
+
+Provider contributions can opt in by declaring their own `view.onActivate` — `onClick` and `onActivate` are independent so the explicit Refresh button keeps its current behavior (and toast) while activation gets a quieter background path.
+
+`setActiveView` wraps the `onActivate` invocation in `try/catch` so a misbehaving provider's throw is logged but cannot break the rail switch itself.
+
+### Tests
+
+- New regression coverage in [`tests/test-left-pane-rail.mjs`](tests/test-left-pane-rail.mjs):
+  - `setActiveView` fires `view.onActivate` after `_applyActiveView`.
+  - `setActiveView` swallows `onActivate` throws (one bad provider cannot break the rail).
+  - All four `BUILTIN_VIEWS` declare an `onActivate` (gitea#393 contract).
+  - Each built-in `onActivate` is a no-op when `State.currentProject` is null.
+
 ### Docs — Plinth methodology adoption (architecture session, no code path change)
 
 Docs-only restructure adopting the LLM-assisted-development methodology from `/config/Projects/plinth/docs/METHODOLOGY-llm-assisted-development.md`. Per [`feedback_no_bump_for_measurement_only.md`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) no version bump for this PR; entries accumulate in `[Unreleased]` until the next production-code-path change carries the release.
