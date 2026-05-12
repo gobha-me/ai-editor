@@ -4,6 +4,32 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — DESIGN-sub-agents.md (github#24 design pass)
+
+New design document at [`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md) for [github#24 — "Sub-agent architecture for delegated task execution"](https://github.com/gobha-me/ai-editor/issues/24). Mirrors the structure of [`docs/DESIGN-llm-authored-automation.md`](docs/DESIGN-llm-authored-automation.md) (1.16.0) and [`docs/DESIGN-preview.md`](docs/DESIGN-preview.md) (1.22.0 / 2.10.0) so future readers find the same anchors.
+
+**Load-bearing decision:** the profile is the sub-agent trust boundary. `delegate_task` adds one new tool whose blast radius is bounded at the *profile* level — sub-agents run against a new `subagent.v1` profile (inherits `chat.v1`, read-only-tools-only, ~8 tools) by default; per-call profile override is auditable on the approval card. Recursion is profile-gated (no `delegate_task` in `subagent.v1.tools.static`), not depth-counter-gated. Context isolation is clean-start with explicit `task` + `context_hint` attachments — no deep-copy of the parent's `chatHistory` (preserves the cost-collapse argument). Result is a structured envelope with a `transcript_id` keying into a new `State.subagents` namespace so the parent's context never bloats with the child's intermediate tool results.
+
+**9 prerequisite gaps named** with specific file paths. Biggest is the extraction of `handleGeneralRequest`'s tool loop ([`js/chat/handlers.js:366`](js/chat/handlers.js)) into a reusable core that takes a `SubAgentContext` instead of reading `State.chatHistory` directly — slotted as a Phase 0 audit-sweep PR that must land *before* Phase 1. The Phase 0 work picks up the inventory entry "Tool-name string-literals dotted around chat module" (decoupling chat module from its single user-conversation consumer).
+
+**10 numbered decisions** cover the API surface (`delegate_task({task, profile?, tools?, context_hint?, max_tokens?, max_dollars?, run_timeout_ms?})`, mirroring `submit_script_for_approval`'s Plan-Mode-shaped lifecycle), context isolation, profile binding, tool scoping (intersection — per-call allowlist narrows but never widens the profile's admitted set), new `subagent` admission group tag, three-layer cost gating (per-call tokens + per-call dollars + per-session aggregate cap in Settings → Tools), debugging surface (transcript panel + tool-call card `[View transcript]` link, Notes-tray-shaped slide-over Window v2 will subsume), and profile-gated phasing.
+
+**Six phases sliced**, each gated by named falsifiable conditions:
+
+- **Phase 0** — tool-loop extraction (audit-sweep minor, behavior-preserving, pinned by recorded-session parity test).
+- **Phase 1** — single non-recursive sub-agent on `subagent.v1`, approval-gated, cost-discoverable (feature minor, ~1200–1800 LOC, 10–14 files; precedent: 1.16.0 / 1.22.0 / 2.7.0 / 2.10.0 PRs).
+- **Phase 2** — parallel sub-agents (gated on serial-bottleneck evidence).
+- **Phase 3** — recursive sub-agents via new `subagent_recursive.v1` profile (gated on two-level-decomposition outperforming single-level).
+- **Phase 4** — auto-approve via declarative profile predicates (gated on Phase 1 corpus of low-risk approvals).
+- **Phase 5** — cross-session sub-agent transcript persistence (gated on consent design).
+- **Phase 6** — background sub-agents (requires Window v2 Sessions; may never ship if Sessions subsumes).
+
+**Out of scope (explicitly named):** auto-decomposition, background workers, user-defined sub-agent profiles, recursion beyond profile-gated depth, integration with `chat_multi.v1` / `rp.v1` (deprioritized for ai-editor per `feedback_chat_multi_rp_no_utility_in_aieditor.md`), sub-agents with write tools by default, `ask_user` inside a sub-agent.
+
+**Now/Next/Later** stub at end suggests: audit-sweep slot (~2.36.x successor) for Phase 0; feature minor (post-2.0, pre-Window-v2-Sessions) for Phase 1; no row in ROADMAP for Phases 2–6 until Phase 1 ships and produces data.
+
+Docs-only change — no version bump per `feedback_no_bump_for_measurement_only.md`. github#24 stays the public ticket; a parallel gitea#N issue will be filed when Phase 1 implementation begins per `reference_tea_cli.md`.
+
 ## [2.36.0] - 2026-05-12
 
 ### Feature — `HotkeyBindings` registry (2026-Q2 audit sweep)
