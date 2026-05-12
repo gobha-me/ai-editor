@@ -251,11 +251,12 @@
 
 ### prompts / profiles
 
-#### [HC] [S] [likely] `EditorPrompts.systemPrompt` template carries hardcoded UNTRUSTED markers list
-- **What:** `js/prompts.js:163-164` lists `<UNTRUSTED_ISSUE_BODY>`, `<UNTRUSTED_ISSUE_COMMENT>`, `<UNTRUSTED_PR_BODY>`, `<UNTRUSTED_PR_COMMENT>` inline. The same names appear in `js/security/untrusted-wrap.js` as `UNTRUSTED_KINDS`.
+#### ~~[HC] [S] [likely] `EditorPrompts.systemPrompt` template carries hardcoded UNTRUSTED markers list~~ *(✅ closed — shipped 2.37.0)*
+- **What:** `js/prompts.js:145` listed `<UNTRUSTED_ISSUE_BODY>`, `<UNTRUSTED_ISSUE_COMMENT>`, `<UNTRUSTED_PR_BODY>`, `<UNTRUSTED_PR_COMMENT>` inline. The same names appear in `js/security/untrusted-wrap.js` as `UNTRUSTED_KINDS`.
 - **Why it's load-bearing:** Adding a new untrusted-content surface (e.g. PR review comment, commit message from another author) requires editing both the prompt template and the security wrap. The 1.6.12 PR #296 work added the marker scheme; the enumeration in the prompt was hardcoded.
 - **Suggested fix shape:** Render the marker list from `UNTRUSTED_KINDS` at prompt-build time.
-- **Touch points:** `js/prompts.js:163-164`, `js/security/untrusted-wrap.js`.
+- **Touch points:** `js/prompts.js:145`, `js/security/untrusted-wrap.js`.
+- **Resolution:** 2.37.0 added `renderUntrustedMarkers(kinds)` to `js/prompts.js` (pure projection — first kind shows the open/close-tag pair, rest show the open form, Oxford-or join). The template body collapses to `{{untrustedMarkers}}`; `buildSystemPrompt` substitutes via `Object.values(UNTRUSTED_KINDS)`. Byte-equivalent rendering for the 4-name 2.36.0 registry; a 5th kind surfaces in the prompt the moment it lands in `untrusted-wrap.js`. New `tests/test-untrusted-markers-prompt.mjs` (9 cases) covers the projection shape, registry parity, trigger-sentence preservation, placeholder non-leak, and a byte-equivalent line guard. See [CHANGELOG §2.37.0](../../CHANGELOG.md).
 
 #### [HC] [S] [needs-investigation] Profile addenda hardcoded in `js/profiles/*-v1.js`
 - **What:** `kb-v1.js`, `plugin-dev-v1.js` each carry a `systemPrompt` addendum string. The picker-promotion rule is "promote when the profile has its own addendum" per `js/profiles/registry.js:37-43`. Future profiles will follow the same pattern.
