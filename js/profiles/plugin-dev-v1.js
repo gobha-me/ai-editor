@@ -30,11 +30,19 @@
  * @typedef {import('./profile-contract.js').Profile} Profile
  */
 
+import { renderPublicEventChannels } from '../events/public-channels.js';
+
 /**
  * Plugin SDK system-prompt addendum. Lifted verbatim from `js/core.js`'s
  * `BUILTIN_ROLES['plugin-dev'].systemPrompt`. `js/core.js` re-imports this
  * constant to avoid drift while `BUILTIN_ROLES` still ships; the
  * BUILTIN_ROLES side retires at slice 3 (2.0.0).
+ *
+ * 2.39.0.0 (audit sweep) — the `EVENTBUS EVENTS` enumeration is derived
+ * from `PUBLIC_EVENT_CHANNELS` (`js/events/public-channels.js`) instead
+ * of being hand-maintained inline. Same pattern as `LEGACY_TOOL_ENUMERATION`
+ * (retired 2.35.0) and `renderUntrustedMarkers` (added 2.37.0). Adding a
+ * new public channel surfaces it here without a second edit.
  *
  * @type {string}
  */
@@ -150,14 +158,7 @@ Config persisted in localStorage under pluginState.
 
 ## EVENTBUS EVENTS (subscribe with EventBus.on)
 
-Chat: chat:message, chat:cleared, chat:pruned, chat:editAndResend, chat:stashFlushed
-Editor: editor:change, editor:loaded, editor:loading, editor:created, editor:error, editor:linesReplaced, editor:linesInserted, editor:linesDeleted, editor:editApplied, editor:scrollToLine
-Files: file:opened, file:created, file:deleted, file:renamed, tab:switched, tab:closed
-Git: git:fileUpdated, git:projectLoaded, branch:switch, branch:created, branches:refresh, tree:refresh, context:prMerged
-LLM: llm:generating (bool), model:changed, cost:updated, debug:exchange, debug:exchangeDone
-Plugin: plugin:registered, plugin:initialized, plugin:configChanged, plugin:enabledChanged, plugin:buttonRegistered, plugin:modalRegistered, plugin:toolRegistered
-Issues: issues:loaded, issue:created, issue:updated
-Conversations: conversation:created, conversation:loaded, conversation:deleted, conversation:renamed
+${renderPublicEventChannels()}
 
 ## STATE PROPERTIES (read/write but be careful)
 

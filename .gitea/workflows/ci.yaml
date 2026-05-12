@@ -69,6 +69,35 @@ jobs:
             exit 1
           fi
 
+          # X.Y.Z.N in-flight branch (docs/VERSIONING.md, adopted 2026-05-12).
+          # The 4-segment stamp signals an in-flight sweep wave / multi-PR arc;
+          # the [Unreleased] block holds entries and stays unpromoted until the
+          # final .N-strip. The latest CHANGELOG heading is therefore the LAST
+          # released X.Y.Z, not the in-flight one — the strict-equality check
+          # below would always trip.
+          if [[ "$VERSION_JS" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            STRIPPED="${VERSION_JS%.*}"
+            echo "  js/version.js → $VERSION_JS  (X.Y.Z.N in-flight; target X.Y.Z = $STRIPPED)"
+            echo "  CHANGELOG.md  → $VERSION_CHANGELOG  (last released)"
+            if [[ "$STRIPPED" == "$VERSION_CHANGELOG" ]]; then
+              echo ""
+              echo "❌ FAIL: X.Y.Z.N stamp $VERSION_JS conflicts with already-released $VERSION_CHANGELOG"
+              echo "  An X.Y.Z.N sub-patch is the in-flight prelude to a NEW vX.Y.Z tag."
+              echo "  Bump the X.Y.Z target ahead of $VERSION_CHANGELOG, or drop the .N if"
+              echo "  this PR is the final, testable-end-to-end commit of the wave."
+              exit 1
+            fi
+            if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+              echo ""
+              echo "❌ FAIL: CHANGELOG.md is missing the ## [Unreleased] block"
+              echo "  X.Y.Z.N in-flight work accumulates entries under [Unreleased] until"
+              echo "  the final .N-strip promotes them to ## [X.Y.Z] - YYYY-MM-DD."
+              exit 1
+            fi
+            echo "✅ X.Y.Z.N in-flight; release-readiness gate fires when .N strips"
+            exit 0
+          fi
+
           echo "  js/version.js → $VERSION_JS"
           echo "  CHANGELOG.md  → $VERSION_CHANGELOG"
 
@@ -81,6 +110,8 @@ jobs:
             echo "Fix one of:"
             echo "  • If shipping a new version: bump js/version.js AND promote"
             echo "    ## [Unreleased] in CHANGELOG.md to ## [X.Y.Z] - YYYY-MM-DD"
+            echo "  • If multi-PR / sweep-wave work: tag the in-flight version"
+            echo "    as X.Y.Z.N per docs/VERSIONING.md (Plinth methodology)"
             echo "  • If post-release patch work: the two should already match"
             exit 1
           fi

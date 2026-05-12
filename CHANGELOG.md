@@ -4,6 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### 2.39.0.0 (sweep wave slice 1) — public EventBus extension-channel registry
+
+First sub-step of the next 2026-Q2 audit-sweep wave; develops in `2.39.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md) until the wave is testable end-to-end. Closes four `[maybe-intentional]` inventory entries that the audit's own triage note said "should mostly resolve to a 'public extension API' docs PR rather than a refactor."
+
+**What.** New [`js/events/public-channels.js`](js/events/public-channels.js) exports `PUBLIC_EVENT_CHANNELS` — a frozen registry of public EventBus channels grouped by surface (chat / editor / files / git / llm / plugin / issues / conversations / ghostText / mergeConflict). Channels declared here are intentional extension hooks for third-party plugin code; "0 internal subscribers" is the expected state. `renderPublicEventChannels()` projects the registry into the `## EVENTBUS EVENTS` section of [`js/profiles/plugin-dev-v1.js`](js/profiles/plugin-dev-v1.js)'s Plugin SDK system-prompt addendum — same shape as the 2.35.0 `LEGACY_TOOL_ENUMERATION` retirement and the 2.37.0 `renderUntrustedMarkers` derivation. Adding a new public channel now surfaces in the plugin-editor system prompt without a second edit.
+
+**Inventory entries closed (4):**
+
+- [Plugin lifecycle emits with no internal subscribers](docs/audit-2026-Q2/inventory.md) — 5 channels (`plugin:configChanged`, `plugin:installed`, `plugin:mcpServerRegistered`, `plugin:modalRegistered`, `plugin:uninstalled`).
+- [`editor:linesReplaced`/`linesInserted`/`linesDeleted` emit without internal subscriber](docs/audit-2026-Q2/inventory.md) — 3 channels.
+- [`ghostText:*` channels emit-only](docs/audit-2026-Q2/inventory.md) — 6 channels.
+- [`mergeConflict:*` channels emit-only](docs/audit-2026-Q2/inventory.md) — 6 channels.
+
+**Corrections to the pre-2.39.0.0 hand-list.** The pre-2.39.0.0 addendum at `js/profiles/plugin-dev-v1.js:151-160` claimed three Files-group channels (`file:created`, `file:deleted`, `file:renamed`) and three Issues-group channels (`issues:loaded`, `issue:created`, `issue:updated`) that were never emitted by any module in `js/`. Plugins coded against those names would have subscribed to dead channels. The registry uses the channels that actually exist (`fs:created`/`fs:updated`/`fs:deleted`/`fs:renamed` for Files; `issues:render`/`issues:refresh` for Issues), and the new parity-guard test rejects future drift in either direction.
+
+### Tests
+
+- New [`tests/test-public-event-channels.mjs`](tests/test-public-event-channels.mjs) (18 cases) covers:
+  - Registry frozen-shape: top-level object frozen, each group array frozen, each entry frozen with a non-empty string `name` and (optionally) a string `payload`.
+  - `GROUP_LABELS` parity: every registry key has a label and vice-versa.
+  - No duplicate channel names across groups.
+  - `renderPublicEventChannels` projection: one line per group in `GROUP_LABELS` order; payload descriptors render in parens; comma-separated within a group.
+  - Each of the four audit-cluster designations: plugin lifecycle, `editor:lines*`, `ghostText:*`, `mergeConflict:*` — every channel from the inventory entry is in the registry.
+  - Hand-list corrections: stale `file:*` and `issues:loaded`/`issue:*` claims rejected; real `fs:*` and `issues:render/refresh` enforced.
+  - Plugin-dev addendum integration: rendered block is embedded verbatim; no template-literal leftover; heading preserved; stale claims do not leak.
+  - Codebase parity guard: every `PUBLIC_EVENT_CHANNELS` entry has at least one `EventBus.emit('NAME'…)` call in `js/`. Walks the tree at test time; the diff-style failure message lists any missing channels by `group.name`.
+
+### Versioning
+
+`js/version.js` reads `2.39.0.0` per [`docs/VERSIONING.md`](docs/VERSIONING.md) — this is the first sub-step of a sweep wave. Subsequent sweep-wave slices (orphan-emit cleanup, `git:branchCreated` dual-naming, `git:*` family triage, `fs:*` triage) develop in `2.39.0.N` space and the final `.N`-strip lands as the `v2.39.0` tag. The release-readiness gate does not fire on sub-patch versions.
+
+### CI
+
+[`.gitea/workflows/ci.yaml`](.gitea/workflows/ci.yaml) — the version-coherence lint hadn't been adapted to the 2026-05-12 X.Y.Z.N adoption and would fail on every in-flight sub-patch (the latest CHANGELOG heading by design lags `js/version.js` by one tag during a wave). New in-flight branch: if `js/version.js` matches `X.Y.Z.N`, the lint checks that the stripped `X.Y.Z` is **not** already-released (no clash with a prior tag) and that `## [Unreleased]` exists, then passes. The 3-segment `X.Y.Z` branch keeps strict equality. Error guidance now lists X.Y.Z.N as a valid fix path.
+
 ## [2.38.2] - 2026-05-12
 
 ### Fix — branch-switcher active highlight follows the switched-to row ([gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392))

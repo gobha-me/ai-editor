@@ -200,17 +200,19 @@
 - **Suggested fix shape:** Read the subscriber to see what it expects. If `settings:loaded` should fire after `loadSettings()` returns, add the emit. Same for `error`.
 - **Touch points:** Search for `EventBus.on('error',` and `EventBus.on('settings:loaded',` to find the consumers.
 
-#### [EV] [S] [maybe-intentional] Plugin lifecycle emits with no internal subscribers
+#### ~~[EV] [S] [maybe-intentional] Plugin lifecycle emits with no internal subscribers~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** From the orphan-emits list: `plugin:configChanged`, `plugin:installed`, `plugin:mcpServerRegistered`, `plugin:modalRegistered`, `plugin:uninstalled` are emitted by `js/core.js` Plugins methods but no `EventBus.on(...)` listens internally.
 - **Why it's load-bearing:** These are documented as plugin-extension points (per `js/profiles/plugin-dev-v1.js`), so they're for THIRD-PARTY plugin code. The audit's "0 subscribers" check finds them because we grep only `js/`. Mark these as the documented extension API.
 - **Suggested fix shape:** No-op — but document a "public EventBus channels" registry so future audits don't re-flag them.
 - **Touch points:** `js/core.js` Plugins module emits, `js/profiles/plugin-dev-v1.js` channels list.
+- **Resolution:** 2.39.0.0 (sweep wave slice 1) added `PUBLIC_EVENT_CHANNELS` at [`js/events/public-channels.js`](../../js/events/public-channels.js). All 5 plugin lifecycle channels are declared under the `plugin` group as intentional public extension API. `tests/test-public-event-channels.mjs` enforces registry-vs-codebase parity so future "0 subscribers" diffs against this cluster are short-circuited: if a channel is declared public, the parity guard already pins that it must be emitted; if it's not in the registry, it isn't claimed as public. See [CHANGELOG §2.39.0.0](../../CHANGELOG.md).
 
-#### [EV] [M] [maybe-intentional] `editor:linesReplaced`/`linesInserted`/`linesDeleted` emit without internal subscriber
+#### ~~[EV] [M] [maybe-intentional] `editor:linesReplaced`/`linesInserted`/`linesDeleted` emit without internal subscriber~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** `js/editor/instance.js:575,632,699,753` emit those channels; only `editor:editApplied` has an in-tree subscriber (`js/core.js:1543`, `js/chat/index.js:232`).
 - **Why it's load-bearing:** Documented plugin extension point (`plugin-dev-v1.js:154`). Same status as the plugin lifecycle channels — public API.
 - **Suggested fix shape:** Confirm in PR notes that these are public extension channels; document them in a single registry.
 - **Touch points:** `js/editor/instance.js:575-778`, `js/profiles/plugin-dev-v1.js:154`.
+- **Resolution:** Bundled into the same 2.39.0.0 `PUBLIC_EVENT_CHANNELS` registry. All 3 channels declared under the `editor` group; the registry-vs-codebase parity test pins them. Sized [M] for the audit due to potential subscriber wiring, but the load-bearing decision was the public-API designation — same 2-line registry contribution as the plugin lifecycle cluster.
 
 #### [EV] [S] [likely] `git:fileLoaded`, `git:loadingFile`, `git:saving`, `git:folderDeleted`, `git:folderRenamed`, `git:repoCreated`, `git:issueCreated`, `git:issueCommented`, `git:mrCreated`, `git:prMerged`, `git:prReviewSubmitted`, `git:ciRerun`, `git:batchSaving` all emit with 0 internal subscribers
 - **What:** Run the channel diff to enumerate.
@@ -334,17 +336,19 @@
 - **Suggested fix shape:** Read the emit sites + decide.
 - **Touch points:** Whatever module emits them — most likely git.js or edit-tools.js.
 
-#### [EV] [S] [maybe-intentional] `ghostText:*` channels emit-only
+#### ~~[EV] [S] [maybe-intentional] `ghostText:*` channels emit-only~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** `ghostText:requested`, `ghostText:received`, `ghostText:failed`, `ghostText:empty`, `ghostText:dismissed`, `ghostText:accepted` — six channels, all emit-only.
 - **Why it's load-bearing:** Likely plugin extension points for ghost-text customization. Same status as plugin lifecycle channels.
 - **Suggested fix shape:** Add to the public-API channel registry; no-op otherwise.
 - **Touch points:** `js/editor/ghost-text.js`.
+- **Resolution:** 2.39.0.0 `PUBLIC_EVENT_CHANNELS` — all 6 channels declared under the `ghostText` group. Public-API designation; the parity guard pins emit-site existence.
 
-#### [EV] [S] [maybe-intentional] `mergeConflict:*` channels emit-only
+#### ~~[EV] [S] [maybe-intentional] `mergeConflict:*` channels emit-only~~ *(✅ closed — shipped 2.39.0.0)*
 - **What:** `mergeConflict:aborted`, `mergeConflict:aiResolve:error`, `mergeConflict:aiResolve:start`, `mergeConflict:aiResolve:success`, `mergeConflict:opened`, `mergeConflict:resolved` — six channels, all emit-only.
 - **Why it's load-bearing:** Same shape — extension hooks for the new (2.18.0+) Merge Conflict Resolver. Public-API designation.
 - **Suggested fix shape:** Document; no-op.
 - **Touch points:** `js/merge-conflict/*.js`.
+- **Resolution:** 2.39.0.0 `PUBLIC_EVENT_CHANNELS` — all 6 channels declared under the `mergeConflict` group. Public-API designation; parity guard pins emit-site existence.
 
 ---
 

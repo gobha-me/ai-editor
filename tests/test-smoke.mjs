@@ -14,7 +14,9 @@ test('node:test runner is operational', () => {
 
 test('ESM resolution works from tests/ to ../js/', async () => {
     const mod = await import('../js/version.js');
-    assert.match(mod.VERSION, /^\d+\.\d+\.\d+$/);
+    // Accept both `X.Y.Z` (tagged release) and `X.Y.Z.N` (in-flight sub-patch
+    // per docs/VERSIONING.md adopted 2026-05-12).
+    assert.match(mod.VERSION, /^\d+\.\d+\.\d+(\.\d+)?$/);
     assert.equal(typeof mod.APP_NAME, 'string');
 });
 
