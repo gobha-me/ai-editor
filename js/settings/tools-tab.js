@@ -30,6 +30,7 @@ import {
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
 import { resolveScriptAutomationConfig, resolvePreviewConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 let _bound = false;
 
@@ -366,3 +367,7 @@ function _renderScriptAutomationSection() {
 
 // Test seam.
 export const __test__ = { _read, _persist, TOOLS_DEFAULTS };
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabTools'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabTools', initToolsTab);

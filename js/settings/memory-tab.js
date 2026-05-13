@@ -22,6 +22,7 @@
  */
 
 import { mountPreact } from '../utils/preact-mount.js';
+import { registerOnActivate, registerOnClose } from './tab-activation-registry.js';
 
 const ROOT_ID = 'memoryTabRoot';
 
@@ -85,3 +86,11 @@ export function unmountMemoryTab() {
 export function _isMounted() {
     return _cleanup !== null;
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabMemory'` activate
+// branch and the explicit `unmountMemoryTab()` call in `closeSettings()`
+// (pre-2.44.0.2 `js/settings-manager.js`). Memory is currently the only
+// tab that registers an on-close handler — `dispatchAllOnClose()` is
+// nonetheless general enough that future Preact-tree tabs route here.
+registerOnActivate('tabMemory', mountMemoryTab);
+registerOnClose('tabMemory', unmountMemoryTab);

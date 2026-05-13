@@ -28,6 +28,7 @@ import {
     clearDiagnostics,
     resetToGlobal,
 } from '../intelligence/workspace-settings/index.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 let _bound = false;
 let _changeUnsub = null;
@@ -285,3 +286,7 @@ export function decorateOverriddenControls() {
         }
     });
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabWorkspaceSettings'`
+// branch in `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabWorkspaceSettings', initWorkspaceSettingsTab);

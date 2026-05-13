@@ -10,6 +10,7 @@
 
 import { Storage, State, EventBus } from './core.js';
 import { RetrievalManager } from './intelligence/retrieval/manager.js';
+import { registerOnActivate } from './settings/tab-activation-registry.js';
 
 // ============================================
 // CATEGORY DEFINITIONS
@@ -393,3 +394,9 @@ function _escapeHtml(str) {
 function _escapeAttr(str) {
     return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabStorage'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement. The handler
+// is async; the registry calls it sync (return value discarded) — same
+// shape as the pre-2.44.0.2 call site.
+registerOnActivate('tabStorage', renderStorageMetrics);

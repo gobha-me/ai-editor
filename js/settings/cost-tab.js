@@ -23,6 +23,7 @@ import {
 } from '../intelligence/cost/index.js';
 import { VERSION } from '../version.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 /** Selectors used in multiple places — kept in one spot for grep. */
 const SEL = {
@@ -512,3 +513,7 @@ function _fmtRelative(ts) {
     if (days < 7) return `${days}d ago`;
     return new Date(ts).toLocaleDateString();
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabCost'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabCost', populateCostTab);

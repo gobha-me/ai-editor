@@ -10,6 +10,7 @@ import { EmbeddingsClient } from '../embeddings-client.js';
 import { ChatSummarizer } from '../chat/summarizer.js';
 import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { Icon } from '../ui/icons.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 // ── Provider description ──
 
@@ -524,3 +525,7 @@ export function updateEmbeddingsStatus() {
 EventBus.on('model:changed', () => {
     updateSummarizerForModel();
 });
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabEmbeddings'` branch
+// in `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabEmbeddings', updateEmbeddingsStatus);

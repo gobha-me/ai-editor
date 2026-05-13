@@ -18,6 +18,7 @@
  */
 
 import { State, EventBus } from '../core.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 let _bound = false;
 
@@ -141,3 +142,7 @@ export function render() {
 
 // Test seam.
 export const __test__ = { _read, _persist, TEST_LOOP_DEFAULTS };
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabTestLoop'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabTestLoop', initTestLoopTab);

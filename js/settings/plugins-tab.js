@@ -7,6 +7,7 @@ import { escapeHtml, escapeAttr } from '../utils/html.js';
 import { installPlugin, uninstallPlugin, getInstalledPlugins } from '../plugin-loader.js';
 import { getUserPlugins } from '../plugin-editor.js';
 import { Icon } from '../ui/icons.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 // Re-render the Plugins tab when plugin button registration changes,
 // but only if the tab is currently visible (avoid spurious DOM work).
@@ -479,3 +480,7 @@ function _wireCreateButton(container) {
         });
     });
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabPlugins'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabPlugins', populatePluginsTab);

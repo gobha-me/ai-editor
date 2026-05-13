@@ -300,11 +300,12 @@
 
 ### settings
 
-#### [HC] [S] [needs-investigation] Settings tab module list in `js/settings/persistence.js`?
+#### ~~[HC] [S] [needs-investigation] Settings tab module list in `js/settings/persistence.js`?~~ *(✅ closed — shipped 2.44.0.2)*
 - **What:** The settings tabs are explicitly imported in `js/settings-manager.js` (likely a fixed list of tabs). Each tab's persistence column lives in `js/settings/persistence.js`. Adding a new tab requires touching both.
 - **Why it's load-bearing:** TBD — needs verification. If tabs already use a registry (similar to `Plugins.list()`), this isn't an issue.
 - **Suggested fix shape:** Read `js/settings/persistence.js` and `js/settings-manager.js`. Decide if tabs deserve their own registry.
 - **Touch points:** `js/settings/*.js`, `js/settings-manager.js`.
+- **Resolution:** 2.44.0.2 (sweep wave slice 3). **Investigation finding:** the inventory entry's "per-tab persistence column" hypothesis proved inaccurate. `persistence.js`' `collectAndSave()` is one monolithic DOM reader (~80 `getElementById` reads, no per-tab dispatch); adding a tab does add reads to it, but not as a parallel-enumeration alongside a per-tab table. The actual hardcode wall was the **11-branch `tab.dataset.tab === 'tabX'` switch in `js/settings-manager.js#populateSettingsForm`** (pre-2.44.0.2 lines 462-482) — a self-contained intra-file parallel enumeration. **Shape shipped:** new module [`js/settings/tab-activation-registry.js`](../../js/settings/tab-activation-registry.js) mirrors the 2.33.0 `ModalRegistry` / 2.36.0 `HotkeyBindings` / 2.44.0.1 `DomBindings` pattern. Each of 11 tab modules calls `registerOnActivate(tabId, handler)` at module-load (side-effect registration matching `js/tools/registry.js`'s precedent); `settings-manager.js` swaps the switch for `dispatchOnActivate(tab.dataset.tab)` and the explicit `unmountMemoryTab()` in `closeSettings()` for `dispatchAllOnClose()`. The Ignore tab has no dedicated module file (its helpers live in `settings-manager.js`), so its registration is colocated there. New [`tests/test-settings-tab-activation.mjs`](../../tests/test-settings-tab-activation.mjs) (12 cases) covers the registry shape + an anti-regression `tab.dataset.tab ===` scanner that pins the switch's absence + a parity guard pinning the expected 11-tab activation set + the `{tabMemory}` close set. **Out of scope (deferred, explicitly):** per-tab `collect()` migration of `persistence.js` to a column-organized shape — that's a `[M]` refactor (5-10 tabs would need new collect functions added), structurally different from this slice's intra-file switch removal. See [CHANGELOG §2.44.0.2](../../CHANGELOG.md).
 
 ---
 

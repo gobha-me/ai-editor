@@ -7,6 +7,7 @@ import { LLM } from '../llm.js';
 import { showModelCapabilities, populateCommitModelSelect, populateGhostTextModelSelect } from './llm-tab.js';
 import { applyModelOverrides, DEFAULT_CAPABILITIES } from '../providers/registry.js';
 import { Icon } from '../ui/icons.js';
+import { registerOnActivate } from './tab-activation-registry.js';
 
 /**
  * Populate the model select dropdowns (default model + commit model).
@@ -558,3 +559,7 @@ export function initModelsTabEvents() {
     if (resetBtn) resetBtn.addEventListener('click', _resetEditPanel);
     if (closeBtn) closeBtn.addEventListener('click', _closeEditPanel);
 }
+
+// 2.44.0.2 — replaces the `tab.dataset.tab === 'tabModels'` branch in
+// `js/settings-manager.js`'s pre-2.44.0.2 switch statement.
+registerOnActivate('tabModels', populateModelsTab);

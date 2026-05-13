@@ -22,7 +22,12 @@ import { initToolsTab } from './settings/tools-tab.js';
 import { initRetrievalTab } from './settings/retrieval-tab.js';
 import { populateRoleCards } from './settings/roles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
-import { renderStorageMetrics } from './storage-metrics.js';
+// 2.44.0.2 — side-effect imports: the module body's `registerOnActivate`
+// call wires the tab's refresh handler at load time; no name is consumed
+// here. Pre-2.44.0.2 these were named imports referenced from the
+// (now-deleted) `tab.dataset.tab === '...'` switch in `populateSettingsForm`.
+import './storage-metrics.js';
+import './settings/memory-tab.js';
 import {
     updateProviderDescription, renderProviderSettings, showModelCapabilities,
     populateSummarizerSliders, populateAdvancedParams, updateEmbeddingsStatus,
@@ -30,11 +35,15 @@ import {
 } from './settings/llm-tab.js';
 import {
     populateSettingsModelSelects, fetchModelsForSettings,
-    fetchEmbeddingModelsForSettings, populateModelsTab, initModelsTabEvents,
+    fetchEmbeddingModelsForSettings, initModelsTabEvents,
     populateEmbeddingModelsByProvider
 } from './settings/models-tab.js';
-import { initCostTab, populateCostTab } from './settings/cost-tab.js';
-import { mountMemoryTab, unmountMemoryTab } from './settings/memory-tab.js';
+import { initCostTab } from './settings/cost-tab.js';
+import {
+    registerOnActivate,
+    dispatchOnActivate,
+    dispatchAllOnClose,
+} from './settings/tab-activation-registry.js';
 
 // ── Theme switching ──
 // Live-swaps the active theme stylesheet by updating the <link> href
@@ -103,10 +112,12 @@ export async function openSettings() {
 }
 
 export function closeSettings() {
-    // Tear down the Memory tab Preact root so its EventBus subscriptions
-    // don't accumulate across modal open/close cycles. Idempotent — no-op
-    // if the tab was never opened.
-    unmountMemoryTab();
+    // Tear down per-tab on-close handlers (Memory tab unmounts its Preact
+    // root so EventBus subscriptions don't accumulate across open/close
+    // cycles). Idempotent — handlers no-op when never activated.
+    // 2.44.0.2 — routed through tab-activation-registry; pre-2.44.0.2
+    // this was an explicit `unmountMemoryTab()` call.
+    dispatchAllOnClose();
     document.getElementById('settingsModal').classList.remove('active');
 }
 
@@ -458,28 +469,12 @@ function populateSettingsForm() {
             tab.setAttribute('aria-selected', 'true');
             document.getElementById(tab.dataset.tab).classList.add('active');
 
-            // Update embeddings status when switching to Embeddings tab
-            if (tab.dataset.tab === 'tabEmbeddings') updateEmbeddingsStatus();
-            // Populate Models tab when switching to it
-            if (tab.dataset.tab === 'tabModels') populateModelsTab();
-            // Refresh Plugins tab when switching to it
-            if (tab.dataset.tab === 'tabPlugins') populatePluginsTab();
-            // Refresh Ignore stats when switching to it
-            if (tab.dataset.tab === 'tabIgnore') { _updateIgnoreStats(); _updateProjectIgnoreDisplay(); }
-            // Render Storage metrics when switching to it
-            if (tab.dataset.tab === 'tabStorage') renderStorageMetrics();
-            // Refresh Cost dashboard when switching to it
-            if (tab.dataset.tab === 'tabCost') populateCostTab();
-            // Mount the Memory tab Preact tree on first activation; idempotent.
-            if (tab.dataset.tab === 'tabMemory') mountMemoryTab();
-            // Refresh Workspace Settings tab on switch (1.4.4).
-            if (tab.dataset.tab === 'tabWorkspaceSettings') initWorkspaceSettingsTab();
-            // Refresh Test Loop tab on switch (1.4.5).
-            if (tab.dataset.tab === 'tabTestLoop') initTestLoopTab();
-            // Refresh Tools tab on switch (1.4.8).
-            if (tab.dataset.tab === 'tabTools') initToolsTab();
-            // Refresh Retrieval tab on switch (1.5.12).
-            if (tab.dataset.tab === 'tabRetrieval') initRetrievalTab();
+            // 2.44.0.2 — routed through tab-activation-registry. Each tab
+            // module self-registers its on-activate handler at module-
+            // load; pre-2.44.0.2 this was an 11-branch switch in-place.
+            // Tabs without a registration are no-ops (most tabs are fully
+            // populated once during `populateSettingsForm()`).
+            dispatchOnActivate(tab.dataset.tab);
         };
     });
 
@@ -551,6 +546,15 @@ function _updateProjectIgnoreDisplay() {
         container.style.display = 'none';
     }
 }
+
+// 2.44.0.2 — Ignore tab has no dedicated `ignore-tab.js` module (its
+// state lives in `IgnoreManager` and its UI in the local helpers above),
+// so the registration is here. Replaces the
+// `tab.dataset.tab === 'tabIgnore'` branch from the pre-2.44.0.2 switch.
+registerOnActivate('tabIgnore', () => {
+    _updateIgnoreStats();
+    _updateProjectIgnoreDisplay();
+});
 
 // ── Re-exports for external consumers ──
 
