@@ -13,33 +13,49 @@ function getErrorLogger() {
 }
 
 /**
+ * Required parameters per tool — frozen, module-scope, exported for the
+ * anti-regression test (`tests/test-chat-tool-name-literals.mjs`, 2.44.0.0).
+ *
+ * Each key MUST be a registered tool name (`js/tools/*.js#register('NAME', …)`).
+ * The pinning test cross-references every key against the canonical set; a
+ * tool rename in the registry surfaces here as a test failure instead of as
+ * silent dead validation. Pre-2.44.0.0 this map lived inside
+ * `validateToolParameters` as a function-local const, which made it
+ * invisible to module-import-based tests — the audit-2026-Q2 inventory
+ * §tools entry "Tool-name string-literals dotted around chat module"
+ * called for either centralization or coverage; we ship coverage.
+ *
+ * Tools omitted here are validated through the registered handler's own
+ * argument checks; the `null`-on-miss return below is the documented
+ * "let it through" path.
+ */
+export const REQUIRED_TOOL_PARAMS = Object.freeze({
+    'create_file': ['path', 'content', 'message'],
+    'delete_file': ['path'],
+    'replace_lines': ['start_line', 'end_line', 'new_content'],
+    'insert_lines': ['after_line', 'content'],
+    'delete_lines': ['start_line', 'end_line'],
+    'read_file': ['path'],
+    'open_file': ['path'],
+    'read_lines': ['path', 'start_line', 'end_line'],
+    'search_in_files': ['query'],
+    'create_issue': ['title'],
+    'update_issue': ['number'],
+    'add_issue_comment': ['number', 'body'],
+    'read_issue': ['number'],
+    'read_pull_request': ['number'],
+    'add_pr_review': ['number', 'body'],
+    'scan_file': ['path'],
+    'read_function': ['name', 'path'],
+    'find_references': ['symbol'],
+});
+
+/**
  * Validate that required parameters are present and non-empty.
  * Prevents bugs where AI hits token limits and sends incomplete tool calls.
  */
 export function validateToolParameters(toolName, args) {
-    // Define required parameters for each tool
-    const requiredParams = {
-        'create_file': ['path', 'content', 'message'],
-        'delete_file': ['path'],
-        'replace_lines': ['start_line', 'end_line', 'new_content'],
-        'insert_lines': ['after_line', 'content'],
-        'delete_lines': ['start_line', 'end_line'],
-        'read_file': ['path'],
-        'open_file': ['path'],
-        'read_lines': ['path', 'start_line', 'end_line'],
-        'search_in_files': ['query'],
-        'create_issue': ['title'],
-        'update_issue': ['number'],
-        'add_issue_comment': ['number', 'body'],
-        'read_issue': ['number'],
-        'read_pull_request': ['number'],
-        'add_pr_review': ['number', 'body'],
-        'scan_file': ['path'],
-        'read_function': ['name', 'path'],
-        'find_references': ['symbol']
-    };
-
-    const required = requiredParams[toolName];
+    const required = REQUIRED_TOOL_PARAMS[toolName];
     if (!required) return null; // Unknown tool, let it through
 
     const missing = required.filter(param => {

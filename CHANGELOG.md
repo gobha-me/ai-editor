@@ -4,6 +4,22 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.44.0.0] - 2026-05-13
+
+### Chat tool-name string-literal pin — sweep wave slice 1
+
+First sub-step of the next 2026-Q2 audit-sweep wave (develops in `2.44.0.N` space per [`docs/VERSIONING.md`](docs/VERSIONING.md)). Closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §tools entry **"Tool-name string-literals dotted around chat module"** (`[HC] [M] [needs-investigation]`). Per ROADMAP §"Now / Next / Later" line 36 ("Continued audit-sweep waves on the remaining `[needs-investigation]` and `[M] [likely]` inventory entries (tool-name string-literals; `safeAdd` fragility; etc.)"), this is the first-named candidate. The remaining 4 open inventory entries (`safeAdd` fragility; settings-tab list; profile addenda; `managers/` dir) trail in subsequent slices before the `v2.44.0` tag.
+
+Pre-2.44.0.0 the chat module did case-dispatch on tool names in three places — `summarizeToolArgs` / `summarizeToolResult` in [`js/chat/messages.js`](js/chat/messages.js) for compact tool-call rendering, `_writeRange` / `_readRange` in [`js/chat/turn-enrich.js`](js/chat/turn-enrich.js) for FileOp range extraction, and the function-local `requiredParams` map in [`js/chat/tools.js`](js/chat/tools.js) for required-args validation. A tool rename in [`js/tools/*.js#register('NAME', ...)`](js/tools/) silently degraded each surface: the summarizer fell through to the `default:` branch (cosmetic), the range extractor returned `null` (the FileOp omitted the range), and the validator's "let it through" path silently dropped a stale required-args row. Bug surface is degradation, not crash — but the test is cheap and durable.
+
+**Investigation outcome.** Pure centralization (a single `TOOL_NAMES` constant exported from [`js/tools/registry.js`](js/tools/registry.js) read by every consumer) was considered and rejected — the `switch (toolName) { case 'X': ... }` idiom is more readable as bare literals than as `case TOOL_NAMES.read_lines:`, the equality checks in `turn-enrich.js` would gain no compile-time safety from indirection (string equality is still string equality), and the churn covers ~40 sites without proportional safety. Shipped coverage instead — the established anti-regression pattern of [`tests/test-no-raw-localstorage.mjs`](tests/test-no-raw-localstorage.mjs) (2.40.0) and [`tests/test-no-inline-onclick.mjs`](tests/test-no-inline-onclick.mjs) (2.32.0): glob source, regex-extract, cross-reference against the canonical set.
+
+**Minimal hoist.** [`js/chat/tools.js`](js/chat/tools.js) — the function-local `const requiredParams = {...}` inside `validateToolParameters` lifted to module-scope `export const REQUIRED_TOOL_PARAMS = Object.freeze({...})`; the function body now reads from it. Behavior byte-equivalent (the map was already static and rebuilt on every call). Reason for the hoist: the test needs to `import` the map's keys and cross-reference them.
+
+**New test.** [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs) — 4 cases. Case A pins `REQUIRED_TOOL_PARAMS` keys against the canonical set. Case B walks `summarizeToolArgs` / `summarizeToolResult` in `messages.js` via brace-counted function-body slicing and extracts `case 'X':` labels. Case C extracts `toolName === 'X'` and `toolName.startsWith('X')` equality literals from `turn-enrich.js`. Case D is the scanner sanity guard (≥ 30 names; stable spot-check handful of `read_file` / `read_lines` / `edit_file` / `create_file` / `commit_files`). Source-of-truth scanner reads `js/tools/*.js` for `(?:ToolRegistry|registry)\.register\('NAME'`, capturing both the top-level `ToolRegistry.register(...)` side-effect registrations (commit-tools / ci-tools / context-tools / git-log-tools) and the `registry.register(...)` shadowed-arg form inside the `register<X>Tools(registry)` helpers (file-tools / scan-tools / edit-tools / etc.). One allow-list entry: `peek_read_lines` (meta-tool layered above `read_lines`, not directly registered).
+
+[`js/version.js`](js/version.js) reads `2.44.0.0` per [`docs/VERSIONING.md`](docs/VERSIONING.md) — this is the first sub-step of a sweep wave. Subsequent slices (`safeAdd` fragility, settings-tab triage, `managers/` placement decision) develop in `2.44.0.N` space and the final `.N`-strip lands as the `v2.44.0` tag. The release-readiness gate does not fire on sub-patch versions.
+
 ## [2.43.0] - 2026-05-12
 
 ### Git-provider `panels` manifest pruned — `rail-views` is the seam
