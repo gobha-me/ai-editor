@@ -57,6 +57,8 @@ import {
 } from './ui-helpers.js';
 import { registerOverlay, closeTopmostOverlay } from './ui/modal-registry.js';
 import { bindHotkey, dispatchHotkey } from './ui/hotkey-bindings.js';
+import { bindClick, bindEvent, rewireUnboundElements } from './ui/dom-bindings.js';
+import { forSlot } from './events/public-channels.js';
 import { openCommitModal, closeCommitModal, generateCommitMsg, commitAndPush, mountCommitModal } from './ui/commit.js';
 import { openNewBranchModal, closeNewBranchModal, createNewBranch, mountNewBranchModal } from './ui/branch.js';
 import { openNewFileModal, closeNewFileModal, createNewFile, mountNewFileModal } from './ui/file-create.js';
@@ -558,71 +560,65 @@ function initBranchIndicator() {
 }
 
 function setupEventListeners() {
-    // Helper to safely add event listener
-    const safeAdd = (id, event, handler) => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener(event, handler);
-        } else {
-            console.warn(`Element #${id} not found during event listener setup`);
-        }
-    };
+    // 2.44.0.1: button wirings flow through `dom-bindings.js` so that
+    // plugin-mounted buttons (any element mounted into a SlotManager slot
+    // after `init()` runs) wire on the next `slot:rail-views:changed`
+    // emission instead of being silently dropped. See
+    // `docs/audit-2026-Q2/inventory.md` §app-boot.
 
     // Top-bar (1.3.6 Restructure)
-    safeAdd('btnCommit', 'click', openCommitModal);
-    safeAdd('btnRevert', 'click', revertCurrentFile);  // now in editor toolbar
-    safeAdd('btnSettings', 'click', openSettings);
-    safeAdd('btnHelp', 'click', openHelpSlideOut);
-    safeAdd('tbCmdK', 'click', () => QuickOpen.open());
+    bindClick('btnCommit', openCommitModal);
+    bindClick('btnRevert', revertCurrentFile);  // now in editor toolbar
+    bindClick('btnSettings', openSettings);
+    bindClick('btnHelp', openHelpSlideOut);
+    bindClick('tbCmdK', () => QuickOpen.open());
 
     // Panel collapse buttons (inside panel headers)
-    safeAdd('btnCollapseSidebar', 'click', toggleSidebar);
-    safeAdd('btnCollapseChat', 'click', toggleChat);
+    bindClick('btnCollapseSidebar', toggleSidebar);
+    bindClick('btnCollapseChat', toggleChat);
 
     // Panel edge expand tabs (shown when panel is hidden)
-    safeAdd('sidebarExpandTab', 'click', toggleSidebar);
-    safeAdd('chatExpandTab', 'click', toggleChat);
+    bindClick('sidebarExpandTab', toggleSidebar);
+    bindClick('chatExpandTab', toggleChat);
     // Also support keyboard activation on edge tabs
     const edgeKeyHandler = (fn) => (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
     };
-    const sidebarTab = document.getElementById('sidebarExpandTab');
-    const chatTab = document.getElementById('chatExpandTab');
-    if (sidebarTab) sidebarTab.addEventListener('keydown', edgeKeyHandler(toggleSidebar));
-    if (chatTab) chatTab.addEventListener('keydown', edgeKeyHandler(toggleChat));
+    bindEvent('sidebarExpandTab', 'keydown', edgeKeyHandler(toggleSidebar));
+    bindEvent('chatExpandTab', 'keydown', edgeKeyHandler(toggleChat));
 
     // Sidebar buttons
-    safeAdd('btnRefreshProjects', 'click', refreshProjects);
-    safeAdd('btnClearProject', 'click', clearProject);
+    bindClick('btnRefreshProjects', refreshProjects);
+    bindClick('btnClearProject', clearProject);
     // Per-view header buttons (Refresh files / New file / Refresh issues /
     // Refresh PRs / New branch / Download zip / Release / New PR / Zip upload)
     // are wired declaratively via `view.headerActions[].onClick` in
     // `js/ui/left-pane-rail.js#BUILTIN_VIEWS` (2.24.0 SlotManager body migration).
 
     // Issue focus bar
-    safeAdd('btnIssueFocusDismiss', 'click', unfocusIssue);
-    safeAdd('btnIssueFocusExpand', 'click', () => {
+    bindClick('btnIssueFocusDismiss', unfocusIssue);
+    bindClick('btnIssueFocusExpand', () => {
         if (State.focusedIssue) openIssueTab(State.focusedIssue.number, { pin: true });
     });
     // Accept/Deny/Comment/Work wired via EventBus from project-manager
 
     // Selectors
-    safeAdd('projectSelect', 'change', onProjectChange);
+    bindEvent('projectSelect', 'change', onProjectChange);
     // Branch selector is now the row-list panel — its switch button delegates
     // through `mountBranchPanel({ onSwitch })` in project-manager.js (1.12.0).
-    safeAdd('modelSelect', 'change', onModelChange);
+    bindEvent('modelSelect', 'change', onModelChange);
     // Cost reset moves to the §1.3.9 Debug slide-out — until then expose on
     // window for power users / docs.
     window.resetSessionCost = resetSessionCost;
 
     // Editor toolbar
-    safeAdd('btnToggleLineNumbers', 'click', toggleLineNumbers);
-    safeAdd('btnTogglePreview', 'click', togglePreviewPane);
-    safeAdd('btnToggleDiff', 'click', toggleDiffPane);
-    safeAdd('btnToggleBlame', 'click', toggleBlamePane);
+    bindClick('btnToggleLineNumbers', toggleLineNumbers);
+    bindClick('btnTogglePreview', togglePreviewPane);
+    bindClick('btnToggleDiff', toggleDiffPane);
+    bindClick('btnToggleBlame', toggleBlamePane);
 
     // Chat
-    safeAdd('btnSend', 'click', () => {
+    bindClick('btnSend', () => {
         const input = document.getElementById('chatInput');
         const text = input ? input.value.trim() : '';
         const hasImages = document.getElementById('imagePreviewStrip')?.style.display !== 'none'
@@ -632,14 +628,14 @@ function setupEventListeners() {
             if (input) input.value = '';
         }
     });
-    safeAdd('btnStop', 'click', stopGeneration);
-    safeAdd('btnFetchModels', 'click', fetchModels);
-    safeAdd('btnNewChat', 'click', () => {
+    bindClick('btnStop', stopGeneration);
+    bindClick('btnFetchModels', fetchModels);
+    bindClick('btnNewChat', () => {
         clearChat();
         resetSessionCost();
         showToast('New conversation started', 'success');
     });
-    safeAdd('btnExportChat', 'click', () => {
+    bindClick('btnExportChat', () => {
         if (window.Chat && window.Chat.exportChat) {
             window.Chat.exportChat();
         }
@@ -792,6 +788,11 @@ async function init() {
     }
     initSessionListeners();
     mountLeftPaneRail();
+    // 2.44.0.1: re-walk dom-bindings entries whose target element wasn't in
+    // the boot-time DOM. Today the only structured slot mounting buttons
+    // is `rail-views`; if a future structured slot starts mounting
+    // wired-by-id elements, add another `forSlot(...)` subscriber here.
+    EventBus.on(forSlot('rail-views'), rewireUnboundElements);
     mountNowStrip();
     mountSwitcherMenu();
     mountCommitModal({ onClose: closeCommitModal, onCommit: commitAndPush, onGenerate: generateCommitMsg });

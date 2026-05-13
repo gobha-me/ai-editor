@@ -240,11 +240,12 @@
 
 ### app-boot
 
-#### [ST] [M] [likely] `safeAdd` pattern + bareword global reference fragility in setupEventListeners
+#### ~~[ST] [M] [likely] `safeAdd` pattern + bareword global reference fragility in setupEventListeners~~ *(✅ closed — shipped 2.44.0.1)*
 - **What:** `js/app.js:649-777` wires 31 buttons via `safeAdd(id, ...)`. Each call is `getElementById(id)` + `.addEventListener(event, handler)`. If the button isn't in the boot-time DOM, it logs a warning and skips. The 2.23.0 rail migration broke a few buttons this way until verified.
 - **Why it's load-bearing:** Any contribution-driven button (a future Plugin button mounted into a SlotManager slot AFTER `init()` runs) is invisible to `safeAdd`. The pattern assumes static DOM. The migration to SlotManager-driven rendering would break every wired button.
 - **Suggested fix shape:** Use event delegation on `document` keyed by `data-action="commit"`-style attributes (already used in `js/projects/switcher-menu.js`). Or migrate to a `registerAction(id, handler)` API that handles late binding.
 - **Touch points:** `js/app.js:649-777`, `js/project-manager.js:746-880` (also uses a `safeClick` helper).
+- **Resolution:** 2.44.0.1 — Option C (`registerAction`-flavored). New module `js/ui/dom-bindings.js` mirrors the 2.36.0 `HotkeyRegistry`/`bindHotkey` precedent: closure-local `safeAdd` graduates to module-level `bindClick(id, handler)` / `bindEvent(id, event, handler)` with a `_bindings` registry and an idempotency guard (duplicate `(id, event)` throws). Unbound entries flip `wired: true` on the next `EventBus.on(forSlot('rail-views'), rewireUnboundElements)` emission — closes the plugin-mounted-button failure mode in one round-trip. Rejected Option A (document-level `data-action` delegation) for blast radius; the command-surface migration sized for a `2.45.0+` minor. Both touch points migrate in the same slice: 31 `safeAdd` calls in `js/app.js#setupEventListeners` + 8 `safeClick` calls in `js/project-manager.js#initProjectListeners`. New tests in `tests/test-slot-manager.mjs` under banner *plugin-mounted button wiring (2.44.0.1)* (5 cases: deferred wire, idempotency, duplicate guard, immediate attach, input-shape guards). See [CHANGELOG §2.44.0.1](../../CHANGELOG.md).
 
 #### ~~[ST] [S] [likely] `safeAdd('btnHelp', 'click', openHelpModal)` references undefined `openHelpModal`~~ *(✅ closed — shipped 2.26.0)*
 - **What:** `js/app.js:664` references the bareword `openHelpModal` which is NOT imported. The reference resolves only because `js/help/index.js:146` sets `window.openHelpModal = openHelpSlideOut` as a module-load side effect, and module-scope bare names resolve via window in non-strict mode.

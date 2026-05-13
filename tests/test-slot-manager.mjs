@@ -669,3 +669,124 @@ test('rail-views rejects view.headerActions entry with empty id', () => {
     });
     assert.match(warns[0][1].reason, /view\.headerActions\[0\]\.id/);
 });
+
+/* ============================================================ */
+/* plugin-mounted button wiring (2.44.0.1)                      */
+/* — closes audit-2026-Q2/inventory.md §app-boot [ST][M][likely] */
+/* ============================================================ */
+
+import {
+    bindClick,
+    rewireUnboundElements,
+    listUnboundIds,
+    listBindings,
+    _resetForTests as _domBindingsReset,
+} from '../js/ui/dom-bindings.js';
+import { forSlot } from '../js/events/public-channels.js';
+
+function withStubGetElementById(stubFn, fn) {
+    const original = document.getElementById;
+    document.getElementById = stubFn;
+    try { fn(); } finally { document.getElementById = original; }
+}
+
+function makeFakeButton() {
+    const calls = [];
+    return {
+        addEventListener(event, handler) { calls.push({ event, handler }); },
+        _calls: calls,
+    };
+}
+
+test('dom-bindings: deferred wire — boot-time-absent element wires on slot:rail-views:changed', () => {
+    _domBindingsReset();
+    const spy = () => {};
+    let fakeBtn = null;
+
+    // Phase 1: element absent at boot. bindClick records the entry but
+    // can't attach.
+    withStubGetElementById(() => null, () => {
+        bindClick('pluginBtn', spy);
+    });
+    assert.deepEqual(listUnboundIds(), ['pluginBtn']);
+    const initial = listBindings()[0];
+    assert.equal(initial.id, 'pluginBtn');
+    assert.equal(initial.event, 'click');
+    assert.equal(initial.wired, false);
+
+    // Phase 2: subscribe like js/app.js#init does, swap the stub to return
+    // a fake element, emit forSlot('rail-views'). rewireUnboundElements
+    // should pick up the deferred entry.
+    const off = EventBus.on(forSlot('rail-views'), rewireUnboundElements);
+    try {
+        fakeBtn = makeFakeButton();
+        withStubGetElementById((id) => (id === 'pluginBtn' ? fakeBtn : null), () => {
+            EventBus.emit(forSlot('rail-views'));
+        });
+        assert.equal(fakeBtn._calls.length, 1, 'addEventListener fired exactly once on rewire');
+        assert.equal(fakeBtn._calls[0].event, 'click');
+        assert.equal(fakeBtn._calls[0].handler, spy);
+        assert.equal(listBindings()[0].wired, true);
+        assert.deepEqual(listUnboundIds(), []);
+    } finally {
+        off();
+        _domBindingsReset();
+    }
+});
+
+test('dom-bindings: idempotency — second slot:rail-views:changed does not double-bind', () => {
+    _domBindingsReset();
+    const spy = () => {};
+
+    withStubGetElementById(() => null, () => {
+        bindClick('idempotentBtn', spy);
+    });
+
+    const off = EventBus.on(forSlot('rail-views'), rewireUnboundElements);
+    try {
+        const fakeBtn = makeFakeButton();
+        withStubGetElementById((id) => (id === 'idempotentBtn' ? fakeBtn : null), () => {
+            EventBus.emit(forSlot('rail-views'));
+            assert.equal(fakeBtn._calls.length, 1, 'first emission attaches');
+            EventBus.emit(forSlot('rail-views'));
+            assert.equal(fakeBtn._calls.length, 1, 'second emission does NOT re-attach');
+            EventBus.emit(forSlot('rail-views'));
+            assert.equal(fakeBtn._calls.length, 1, 'third emission still does not re-attach');
+        });
+    } finally {
+        off();
+        _domBindingsReset();
+    }
+});
+
+test('dom-bindings: duplicate (id, event) registration throws', () => {
+    _domBindingsReset();
+    bindClick('dupBtn', () => {});
+    assert.throws(
+        () => bindClick('dupBtn', () => {}),
+        /already bound/,
+        'second bindClick for the same id throws',
+    );
+    _domBindingsReset();
+});
+
+test('dom-bindings: immediate attach when element is present at registration', () => {
+    _domBindingsReset();
+    const spy = () => {};
+    const fakeBtn = makeFakeButton();
+    withStubGetElementById((id) => (id === 'liveBtn' ? fakeBtn : null), () => {
+        bindClick('liveBtn', spy);
+    });
+    assert.equal(fakeBtn._calls.length, 1, 'addEventListener fired at registration time');
+    assert.equal(fakeBtn._calls[0].event, 'click');
+    assert.equal(listBindings()[0].wired, true);
+    assert.deepEqual(listUnboundIds(), []);
+    _domBindingsReset();
+});
+
+test('dom-bindings: input-shape guards reject empty id, empty event, non-function handler', () => {
+    _domBindingsReset();
+    assert.throws(() => bindClick('', () => {}), /id must be a non-empty string/);
+    assert.throws(() => bindClick('btn', null), /handler/);
+    _domBindingsReset();
+});

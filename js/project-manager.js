@@ -13,6 +13,7 @@ import {
 } from './ui/branch-panel.js';
 import { renderIssueRowsHtml } from './ui/issue-list.js';
 import { renderPrRowsHtml } from './ui/pr-list.js';
+import { bindClick } from './ui/dom-bindings.js';
 
 export async function refreshProjects() {
     try {
@@ -863,23 +864,23 @@ export function initProjectListeners() {
         await refreshBranches();
     });
 
+    // 2.44.0.1: button wirings flow through `dom-bindings.js` registry so
+    // plugin-mounted buttons wire on the next `slot:rail-views:changed`
+    // emission. Closes the inventory entry's project-manager.js touch point.
+
     // Issue focus bar action buttons
-    const safeClick = (id, fn) => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('click', fn);
-    };
-    safeClick('btnIssueFocusAccept', acceptFocusedIssue);
-    safeClick('btnIssueFocusDeny', denyFocusedIssue);
-    safeClick('btnIssueFocusComment', commentOnFocusedIssue);
-    safeClick('btnIssueFocusWork', () => {
+    bindClick('btnIssueFocusAccept', acceptFocusedIssue);
+    bindClick('btnIssueFocusDeny', denyFocusedIssue);
+    bindClick('btnIssueFocusComment', commentOnFocusedIssue);
+    bindClick('btnIssueFocusWork', () => {
         if (State.focusedIssue) startWorkOnIssue(State.focusedIssue);
     });
 
     // New Project modal
-    safeClick('btnNewProject', openNewProjectModal);
-    safeClick('btnCloseNewProject', closeNewProjectModal);
-    safeClick('btnCancelNewProject', closeNewProjectModal);
-    safeClick('btnSubmitNewProject', submitNewProject);
+    bindClick('btnNewProject', openNewProjectModal);
+    bindClick('btnCloseNewProject', closeNewProjectModal);
+    bindClick('btnCancelNewProject', closeNewProjectModal);
+    bindClick('btnSubmitNewProject', submitNewProject);
 
     // Close on overlay click
     const overlay = document.getElementById('newProjectModal');
