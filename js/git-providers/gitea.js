@@ -1176,26 +1176,7 @@ const giteaProvider = {
     // ========================================
 
     contributes: {
-        panels: [
-            {
-                id: 'gitea-issues',
-                slot: 'sidebar-panels',
-                title: 'Issues',
-                icon: '📋',
-                collapsible: true,
-                refreshEvent: 'issues:refresh',
-                priority: 10
-            },
-            {
-                id: 'gitea-prs',
-                slot: 'sidebar-panels',
-                title: 'Pull Requests',
-                icon: '🔀',
-                collapsible: true,
-                refreshEvent: 'prs:refresh',
-                priority: 15
-            }
-        ],
+        panels: [],
 
         settings: [
             {

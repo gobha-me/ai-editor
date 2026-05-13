@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-12 (post-2.41.0; first re-eval slot under the methodology). Current released: **v2.41.0** · `main` HEAD: 2.42.0 + [Unreleased] (2.42.0 is the first re-eval slot — doc-only PR: ARCHITECTURE.md refresh + first ICD authoring). Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). Sweep waves develop in X.Y.Z.N space per [`VERSIONING.md`](VERSIONING.md); the 2.33.0–2.41.0 audit-sweep arc continues with `[needs-investigation]` + `[M] [likely]` entries from [`audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
+> Last updated: 2026-05-12 (2.43.0 in flight — first code minor post-re-eval). Current released: **v2.42.0** · `main` HEAD: 2.43.0 + [Unreleased] (2.43.0 closes `audit-2026-Q2/inventory.md` §sidebar/rail panels-manifest entry; first code minor after the 2026-05-12 re-eval). Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). Sweep waves develop in X.Y.Z.N space per [`VERSIONING.md`](VERSIONING.md); the 2.33.0–2.43.0 audit-sweep arc continues with `[needs-investigation]` + `[M] [likely]` entries from [`audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
 
 ## How to read this doc
 
@@ -32,9 +32,9 @@ Every pending milestone in this doc carries a commitment-band label per the meth
 
 | Phase | Track | Band |
 |---|---|---|
-| **Now (in flight)** | **2.42.0 doc-only PR — first re-eval slot under the methodology.** Deliverables: ARCHITECTURE.md refresh to 2.41.0 sync; first ICD (`ICD-chat-handlers.md`) per §"Per-subsystem ICD backfill program"; paper-half roadmap drift fixes (header, gitea#392/393 close-out, panels-manifest promotion). | `[strong]` |
-| **Next (2.43.0)** | **Git-provider `panels` manifest → rail-views migration** — promoted to `[strong]` at the 2026-05-12 re-eval; concrete fix shape in `audit-2026-Q2/inventory.md` §sidebar/rail. ~100-200 LOC; first code minor post-re-eval. | `[strong]` |
-| **Next-after (2.44.0+)** | Continued audit-sweep waves on the remaining `[needs-investigation]` and `[M] [likely]` inventory entries (tool-name string-literals; `safeAdd` fragility; etc.). **Touch 3 Window v2 / Sessions** remains post-2.0 by design. **github#27 OAuth flows** remains pending its DESIGN doc. | `[strong]` (sweep) · `[medium]` (OAuth pending ICD) |
+| **Now (in flight)** | **2.43.0 panels-manifest prune — first code minor post-re-eval.** Deletes the 6 dead `panels: [{slot: 'sidebar-panels', ...}]` entries from gitea/github/gitlab providers (render-less, silently skipped at runtime). Adds regression test asserting providers ship no flat-slot panels. Closes `audit-2026-Q2/inventory.md` §sidebar/rail `[REG][M][likely]`. ~150 LOC. | `[strong]` |
+| **Next (2.44.0)** | Continued audit-sweep waves on the remaining `[needs-investigation]` and `[M] [likely]` inventory entries (tool-name string-literals; `safeAdd` fragility; etc.). Next ROADMAP-paper drift-fix slot is `RE-EVAL following 2.44.0` — paper-half tightens + code-aware half reads `js/` for new architectural seams. ICD-backfill target #2 is the Intelligence-layer Composer seam. | `[strong]` (sweep) · `[medium]` (next re-eval) |
+| **Next-after (2.45.0+)** | **Touch 3 Window v2 / Sessions** remains post-2.0 by design. **github#27 OAuth flows** remains pending its DESIGN doc. | `[medium]` (OAuth pending ICD) · `[fuzzy]` (Window v2) |
 | **Later** | **Tier 3b in-editor preview** — sidecar + build-step support (Playwright per workspace, container isolation); gating probe not operational. github#37 Phase 2 (re-scope from dogfood signal); github#27 Phase 3 self-hosted templates; github#24 sub-agents Phase 1 (DESIGN shipped 2.37.0); github#18 cross-device sync (post-2.0). | `[medium]` / `[fuzzy]` per row in §"Known open issues" |
 | **Deferred** | Foundations (was 1.1.x), Compression Rules 3–5, various UI items — see §"Deferred / parked" below. | `[fuzzy]` per row |
 
@@ -109,12 +109,12 @@ Per methodology §3.1, every `[strong]` milestone in the next-N window must have
 
 | `[strong]` milestone in next-3 window | Contract | Status |
 |---|---|---|
-| **2.43.0 — Git-provider `panels` manifest → rail-views migration** | `audit-2026-Q2/inventory.md` §sidebar/rail (`[REG] [M] [likely]`) + `DESIGN-git-providers-and-ui-extensions.md` §4 decisions table | ✅ present — promoted to `[strong]` at this re-eval |
+| ~~**2.43.0 — Git-provider `panels` manifest → rail-views migration**~~ | `audit-2026-Q2/inventory.md` §sidebar/rail (`[REG] [M] [likely]`) + `DESIGN-git-providers-and-ui-extensions.md` §4 decisions table | ✅ shipped 2.43.0 (entries deleted; rail-views seam regression-guarded by `tests/test-slot-manager.mjs`) |
 | Subsequent audit-sweep waves | `docs/audit-2026-Q2/inventory.md` is the running queue | ✅ present |
 | Touch 3 Window v2 / Sessions | None — `docs/DESIGN-sessions.md` will need authoring | ❌ missing — but milestone is `[strong]` only post-2.0; today it's `[medium]` (see below); not in next-3 window |
 | MCP discovery Phase 2 OAuth flows | None — `docs/DESIGN-mcp-oauth.md` will need authoring | ❌ missing — milestone demotes to `[medium]` until contract lands; ICD-authoring slot would be `X.Y.Z.N` ahead |
 
-Translation post-2.42.0 re-eval: **2.43.0's `[strong]` milestone (panels-manifest migration) has its contract present** in the inventory + DESIGN doc. Subsequent waves continue with `[needs-investigation]` and `[M] [likely]` inventory entries. The two named near-term features (Window v2 / Sessions, MCP OAuth) still carry `[medium]` because their contracts haven't been written; they're not in the next-3 window. Next re-eval `RE-EVAL following 2.44.0` is when these get tightened or demoted again.
+Translation post-2.43.0: **the panels-manifest `[strong]` milestone shipped** (entries deleted; the rail-views seam carries forward as the supported extension path, regression-guarded by `tests/test-slot-manager.mjs`). Subsequent waves continue with `[needs-investigation]` and `[M] [likely]` inventory entries. The two named near-term features (Window v2 / Sessions, MCP OAuth) still carry `[medium]` because their contracts haven't been written; they're not in the next-3 window. Next re-eval `RE-EVAL following 2.44.0` is when these get tightened or demoted again, with ICD-backfill target #2 (Intelligence-layer Composer seam) on deck.
 
 ---
 

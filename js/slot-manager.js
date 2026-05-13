@@ -11,8 +11,10 @@
  * `applyProviderContributions()` consumes GitProviderRegistry.getAllContributions()
  * and registers each panel. The slot's `contribution kind` (flat vs structured)
  * determines what shape is acceptable; entries missing the required shape are
- * silently skipped (forward-compat) — every git provider today declares panel
- * metadata without renderers, and the rails ship before that migration.
+ * silently skipped (forward-compat). Providers extend via structured `rail-views`
+ * contributions; the four built-in views (files / issues / prs / branches) ship
+ * from `js/ui/left-pane-rail.js#BUILTIN_VIEWS` and a provider can add new
+ * `view.id`s or override built-ins via the `view.id` collision-skip in `contribute()`.
  *
  * Slot kinds (per §4 "Slot catalog" Contribution-kind column):
  *

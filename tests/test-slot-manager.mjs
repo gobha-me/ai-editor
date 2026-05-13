@@ -511,6 +511,37 @@ test('rail-views: applyProviderContributions wires structured panels from provid
     }
 });
 
+// 2.43.0 — regression guard for `audit-2026-Q2/inventory.md` §sidebar/rail
+// `[REG][M][likely]` closure. The 6 dead `panels: [{slot: 'sidebar-panels'}]`
+// entries (gitea-issues, gitea-prs, github-issues, github-prs, gitlab-issues,
+// gitlab-mrs) were render-less flat-slot entries silently skipped at
+// `slot-manager.js`. Providers now ship empty `panels: []`; `rail-views` is
+// the supported extension path (covered by the test above).
+test('providers ship no flat-slot panels metadata (2.43.0 manifest prune)', async () => {
+    const [giteaMod, githubMod, gitlabMod, localMod] = await Promise.all([
+        import('../js/git-providers/gitea.js'),
+        import('../js/git-providers/github.js'),
+        import('../js/git-providers/gitlab.js'),
+        import('../js/git-providers/local.js'),
+    ]);
+    const providers = [
+        giteaMod.default,
+        githubMod.default,
+        gitlabMod.default,
+        localMod.LOCAL_PROVIDER,
+    ];
+    for (const p of providers) {
+        assert.ok(p, 'provider module exported its provider object');
+        const panels = p.contributes?.panels ?? [];
+        for (const entry of panels) {
+            assert.equal(entry.slot, 'rail-views',
+                `${p.id ?? '(unknown)'} ships a non-rail-views panel — reintroducing flat-slot metadata`);
+            assert.equal(typeof entry.render, 'function',
+                `${p.id ?? '(unknown)'} ships a rail-views panel without a render function`);
+        }
+    }
+});
+
 test('getContributions returns a shallow copy (caller mutations do not affect store)', () => {
     SlotManager.contribute('rail-views', makeRailView({ pluginId: 'gc-1', viewId: 'gc-1' }));
     try {

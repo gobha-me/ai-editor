@@ -1169,26 +1169,7 @@ const gitlabProvider = {
     // ========================================
 
     contributes: {
-        panels: [
-            {
-                id: 'gitlab-issues',
-                slot: 'sidebar-panels',
-                title: 'Issues',
-                icon: '📋',
-                collapsible: true,
-                refreshEvent: 'issues:refresh',
-                priority: 10
-            },
-            {
-                id: 'gitlab-mrs',
-                slot: 'sidebar-panels',
-                title: 'Merge Requests',
-                icon: '🔀',
-                collapsible: true,
-                refreshEvent: 'prs:refresh',
-                priority: 15
-            }
-        ],
+        panels: [],
 
         settings: [
             {

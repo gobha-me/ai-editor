@@ -720,7 +720,7 @@ async function init() {
     // Load settings
     loadSettings();
     initGitProviders();  // Must run after loadSettings — migrates legacy giteaUrl/giteaToken to connections[]
-    applyProviderContributions();  // 2.22.0 — wire provider manifests to SlotManager. Render-less entries skipped silently.
+    applyProviderContributions();  // 2.22.0 — wire provider manifests to SlotManager (structured `rail-views` is the supported extension seam).
     IgnoreManager.init(); // Must run after loadSettings — reads ignorePatterns from State.settings
     initProjectConventions(); // Subscribes to git:projectLoaded to fetch repo-root CLAUDE.md (github#37)
     applyVisualSettings();

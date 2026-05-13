@@ -4,6 +4,14 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.43.0] - 2026-05-12
+
+### Git-provider `panels` manifest pruned — `rail-views` is the seam
+
+Following the 2026-05-12 re-eval (CHANGELOG §2.42.0; ROADMAP §"Now/Next/Later"), the 6 dead `panels: [{slot: 'sidebar-panels', ...}]` entries in gitea/github/gitlab — render-less flat-slot entries silently skipped inside `applyProviderContributions()` — were removed. Providers now ship `panels: []` uniformly. The `rail-views` structured-slot seam (`SlotManager.contribute('rail-views', {pluginId, view, render})`, wired through `applyProviderContributions()` at [`js/app.js:723`](js/app.js)) is the supported extension path, exercised by [`tests/test-slot-manager.mjs`](tests/test-slot-manager.mjs) (`rail-views: applyProviderContributions wires structured panels from provider manifests`) and now newly regression-guarded against flat-slot reintroduction by the new test `providers ship no flat-slot panels metadata`. Docstring at [`js/slot-manager.js`](js/slot-manager.js) header and inline comment at [`js/app.js:723`](js/app.js) updated to reflect post-migration state.
+
+Closes [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §sidebar/rail `[REG][M][likely]`. First code minor post-2.42.0 re-eval (per ROADMAP Decision §14: re-eval gates the next code minor).
+
 ## [2.42.0] - 2026-05-12
 
 ### RE-EVAL following 2.41.0 — first re-eval slot under the methodology adopted 2026-05-12
