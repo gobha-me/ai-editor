@@ -1,10 +1,15 @@
 /**
  * Search Manager
  * Handles search operations via web worker with EventBus integration.
- * ES module — import { SearchManager } from './managers/search-manager.js'
+ * ES module — import { SearchManager } from './search-manager.js'
+ *
+ * Sibling-placement per 2.44.0.3 (sweep wave close); previously at
+ * `js/managers/search-manager.js`. The `js/managers/` directory retired —
+ * it held this one file; the singleton-class shape matches the top-level
+ * idiom (`tab-manager.js`, `project-manager.js`, `file-tree.js`).
  */
 
-import { EventBus, Storage } from '../core.js';
+import { EventBus, Storage } from './core.js';
 
 class _SearchManager {
     constructor() {

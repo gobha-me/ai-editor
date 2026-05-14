@@ -4,6 +4,57 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.44.0] - 2026-05-14
+
+### `managers/` placement fix — sweep wave slice 4 (final; wave-close)
+
+Fourth and final sub-step of the 2.44.0 audit-sweep wave; closes [`audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md) §Misc entry **"`js/managers/` has only `search-manager.js`"** (`[ST] [S] [maybe-intentional]`) and strips the `.N` per [`docs/VERSIONING.md`](docs/VERSIONING.md) — matches the 2.39.0 wave-close pattern (inventory line 350 resolution: *"The slice closes the wave; `js/version.js` drops the `.N` to `2.39.0`"*).
+
+**Decision: sibling-place, not inline.** The inventory entry's suggested-shape offered two options: move `SearchManager` into `js/search-panel.js` (its only consumer), or punt. Reading the two files showed two distinct concerns — `SearchManager` (~237 LOC: web-worker init + sync fallback + history persistence with legacy-key migration + replace + EventBus wiring) and `search-panel` (~374 LOC: DOM bridge + key bindings + render + result rendering). Inlining yields ~600 LOC where the worker-boundary seam is the only natural split — losing that seam to save one file is the kind of accumulation the methodology pushes back on. Sibling placement at the top level matches the established idiom of `tab-manager.js` / `project-manager.js` / `file-tree.js`.
+
+**Shape shipped.** `git mv js/managers/search-manager.js js/search-manager.js`; the `js/managers/` directory retired. The one import in [`js/search-panel.js`](js/search-panel.js) updated from `'./managers/search-manager.js'` → `'./search-manager.js'`. Inside the moved file, the `import { EventBus, Storage } from '../core.js'` tightens to `'./core.js'` (file's relative depth changed by one) and the module docstring gains a migration note ("Sibling-placement per 2.44.0.3; previously at `js/managers/search-manager.js`") matching the wave's documentation pattern.
+
+**New anti-regression test.** [`tests/test-module-locations.mjs`](tests/test-module-locations.mjs) — modeled on [`tests/test-no-raw-localstorage.mjs`](tests/test-no-raw-localstorage.mjs). Two assertions over a single `RETIRED_PATHS` table: (1) the retired directory does not exist on disk (catches a future PR re-creating `js/managers/foo.js`); (2) no live JS in `js/` references the retired-import needle `managers/search-manager` after comment-stripping (catches stale imports without tripping on the moved file's own migration-note docstring). Designed as a general-purpose location-pin contract that future sweep slices append rows to.
+
+### Triage closures — three open entries closed under no-op-or-precondition-not-met
+
+The wave's threshold ("Closure when fewer than ~5 entries remain that survive triage") fires once these three entries close under triage:
+
+- **Profile addenda hardcoded in `js/profiles/*-v1.js`** (`[HC] [S] [needs-investigation]`) — the inventory entry's own suggested-shape was "Punt. Re-evaluate after the next 1-2 profile additions." Precondition is *more profiles surfacing shared fragments*, not wave-close timing. Acting now manufactures duplication where none exists; re-opens automatically the moment a 2nd profile registers a sharable addendum fragment.
+- **Preview-tool classification sets co-located in `tool-classifications.js`** (`[ST] [S] [maybe-intentional]`) — entry's own suggested-shape was "No-op. The model for `tool-classifications.js` is already well-applied here." Entry documented for contrast with the file-tools side; no refactor warranted.
+- **Hardcoded provider lists in `intelligence/retrieval/test-corpus.js`** (`[HC] [S] [needs-investigation]`) — entry's own suggested-shape was "No-op. Flag is here only because it surfaced in the search; not a real audit candidate." Test fixtures (benchmark corpus), not runtime registry.
+
+All three closures cite the inventory entry's own stated fix-shape; full resolution lines added in-place at [`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md).
+
+### Wave-close summary — 2.33.0 → 2.44.0
+
+The 2026-Q2 audit-sweep arc (started 2026-05-11 post-2.23.0 SlotManager migration) closes here. Across two waves the inventory ([`docs/audit-2026-Q2/inventory.md`](docs/audit-2026-Q2/inventory.md)) drove 22 closures across 11 system buckets (sidebar/rail, chat, tools, git-providers, slot-manager, plumbing/storage, settings, app-boot, prompts/profiles, html-shell, events, Misc). The 2.44.0 wave alone shipped 4 slices:
+
+- **2.44.0.0** (PR #405) — chat tool-name string-literal pin via [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs); module-scope `REQUIRED_TOOL_PARAMS` hoist; closes the §tools `[HC] [M] [needs-investigation]` entry.
+- **2.44.0.1** (PR #406) — `safeAdd` graduates to [`js/ui/dom-bindings.js`](js/ui/dom-bindings.js) `bindClick` / `bindEvent` / `rewireUnboundElements` registry; 34 production bindings flow through it; rail-views slot-changed event drives re-wire; closes the §app-boot `[ST] [M] [likely]` entry.
+- **2.44.0.2** (PR #407) — [`js/settings/tab-activation-registry.js`](js/settings/tab-activation-registry.js) retires the 11-branch `tab.dataset.tab === 'tabX'` switch in `populateSettingsForm`; 11 settings tab modules + storage-metrics register at module-load; closes the §settings `[HC] [S] [needs-investigation]` entry.
+- **2.44.0.3** (this PR) — `js/managers/` directory retired; SearchManager moves to top-level sibling; module-locations anti-regression test; triage-closure of the three remaining inventory entries; `.N` strip to `v2.44.0`.
+
+The four 2.44.0.N slices add one new registry (`DomBindings`), one new dispatch registry (`tab-activation`), one new anti-regression test for chat tool-name drift, one new module-locations test, and retire one one-file directory. Net inventory state post-close: the queue holds 22 closed entries (historical record); zero open entries; the document remains live for the next sweep wave whenever the next audit pass starts.
+
+### Roadmap paper-half — re-eval handoff
+
+In [`docs/ROADMAP.md`](docs/ROADMAP.md):
+- Header date + HEAD pointer move to 2.44.0; current-released line updated.
+- Now/Next/Later: "Now (in flight)" row retires; "Next" becomes `RE-EVAL following 2.44.0` (2.45.0 slot) — the second re-eval pass under the methodology adopted 2026-05-12 (Decision §14), with the Intelligence-layer Composer seam ICD on deck per §"Per-subsystem ICD backfill program" target #2.
+- §"Re-evaluation cadence": "Next re-eval slot" activates; subsequent-slot anchor advances to `RE-EVAL following 2.47.0`.
+- §"2026-Q2 code audit + sweep track": marked wave-closed with this PR cited.
+- §"Forward ICD presence check": Composer-seam ICD remains pending for the 2.45.0 code-aware half.
+
+### Tests
+
+- New: [`tests/test-module-locations.mjs`](tests/test-module-locations.mjs) (2 cases).
+- Pre-existing suite: `node --test tests/test-*.mjs` passes — no test imports `SearchManager` from the old path (confirmed via grep before the move).
+
+### Verification
+
+End-to-end smoke in the running app: Settings → Search (Ctrl+Shift+F) → enter a pattern → worker-driven results render; history persists across reload (Storage migration path intact). The release-readiness gate (Decision §12) fires on this tag — 2.44.0 is `X.Y.Z`-shaped, not sub-patch — and the 10-turn dogfood honor-system check records on the tag annotation per the gate's convention. The `[`Unreleased`]` block becomes empty post-promotion.
+
 ## [2.44.0.2] - 2026-05-13
 
 ### Settings-tab activation registry — sweep wave slice 3

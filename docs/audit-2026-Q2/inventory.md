@@ -4,6 +4,8 @@
 >
 > Started: 2026-05-11 (post-2.23.0 SlotManager migration).
 >
+> **Wave-close: 2026-05-14 at 2.44.0.** The 2.33.0 → 2.44.0.N audit-sweep arc closed when the final actionable entry (`js/managers/` placement) shipped at 2.44.0.3 and the three remaining open entries (profile addenda, preview classifications, retrieval test-corpus) each closed under triage as no-op-or-precondition-not-met. Inventory retained as historical record + queue for future sweep waves. Re-evaluation cadence (every 3 minors) picks up at `RE-EVAL following 2.44.0` (2.45.0 slot).
+>
 > Categories: **HC** hardcode wall · **EV** missing event wiring · **DUP** duplicate implementation · **REG** should-be-registered isn't · **ST** style drift.
 
 ## Triage policy
@@ -272,11 +274,12 @@
 - **Touch points:** `js/prompts.js:145`, `js/security/untrusted-wrap.js`.
 - **Resolution:** 2.37.0 added `renderUntrustedMarkers(kinds)` to `js/prompts.js` (pure projection — first kind shows the open/close-tag pair, rest show the open form, Oxford-or join). The template body collapses to `{{untrustedMarkers}}`; `buildSystemPrompt` substitutes via `Object.values(UNTRUSTED_KINDS)`. Byte-equivalent rendering for the 4-name 2.36.0 registry; a 5th kind surfaces in the prompt the moment it lands in `untrusted-wrap.js`. New `tests/test-untrusted-markers-prompt.mjs` (9 cases) covers the projection shape, registry parity, trigger-sentence preservation, placeholder non-leak, and a byte-equivalent line guard. See [CHANGELOG §2.37.0](../../CHANGELOG.md).
 
-#### [HC] [S] [needs-investigation] Profile addenda hardcoded in `js/profiles/*-v1.js`
+#### ~~[HC] [S] [needs-investigation] Profile addenda hardcoded in `js/profiles/*-v1.js`~~ *(✅ closed — triaged no-op at 2.44.0; wave-close survivor)*
 - **What:** `kb-v1.js`, `plugin-dev-v1.js` each carry a `systemPrompt` addendum string. The picker-promotion rule is "promote when the profile has its own addendum" per `js/profiles/registry.js:37-43`. Future profiles will follow the same pattern.
 - **Why it's load-bearing:** Each addendum is its own constant; if multiple profiles share an addendum fragment, it duplicates. So far, distinct enough not to share.
 - **Suggested fix shape:** Punt. Re-evaluate after the next 1-2 profile additions.
 - **Touch points:** `js/profiles/kb-v1.js`, `js/profiles/plugin-dev-v1.js`.
+- **Resolution:** Triage closure at 2.44.0 wave-close. The entry's own stated fix-shape ("Punt. Re-evaluate after the next 1-2 profile additions") names a precondition — *more profile additions surfacing shared fragments* — that has not fired. Acting now manufactures duplication where none exists, the antipattern the 2.43.0 panels-manifest closure explicitly rejected. Re-opens automatically the moment a 2nd profile registers a sharable addendum fragment; the trip-wire is the next `js/profiles/*-v1.js` addition.
 
 ---
 
@@ -311,19 +314,21 @@
 
 ### preview
 
-#### [ST] [S] [maybe-intentional] Preview-tool classification sets co-located in tool-classifications.js
+#### ~~[ST] [S] [maybe-intentional] Preview-tool classification sets co-located in tool-classifications.js~~ *(✅ closed — triaged no-op at 2.44.0; wave-close survivor)*
 - **What:** `PREVIEW_MUTATING_TOOLS` (4 tools) + `PREVIEW_READ_TOOLS` (11 tools) in `js/chat/tool-classifications.js:101-122`. The total preview-tool count is 12; the 1 not in either set is `preview_stop` (in MUTATING). So every preview tool is classified — good.
 - **Why it's load-bearing:** This is healthy. Mention only to document the contrast with the file-tools side where the sets diverge.
 - **Suggested fix shape:** No-op. The model for `tool-classifications.js` is already well-applied here.
+- **Resolution:** Triage closure at 2.44.0 wave-close. Entry's own fix-shape declared no-op — the preview classification co-location is the *positive* model the file-tools side is being measured against. Documented here for contrast; no refactor warranted. Re-opens only if a future preview tool surfaces that the classification model can't express.
 
 ---
 
 ### retrieval / compression / intelligence
 
-#### [HC] [S] [needs-investigation] Hardcoded provider lists in `intelligence/retrieval/test-corpus.js`
+#### ~~[HC] [S] [needs-investigation] Hardcoded provider lists in `intelligence/retrieval/test-corpus.js`~~ *(✅ closed — triaged no-op at 2.44.0; wave-close survivor)*
 - **What:** `js/intelligence/retrieval/test-corpus.js:230-302` includes 'js/git-providers/github.js', 'js/git-providers/gitlab.js' hardcoded as expected-to-rank files.
 - **Why it's load-bearing:** Test fixtures, NOT a runtime hardcode. The file list is the corpus — adding a new provider means updating the corpus, which is correct behavior for a benchmark.
 - **Suggested fix shape:** No-op. Flag is here only because it surfaced in the search; not a real audit candidate.
+- **Resolution:** Triage closure at 2.44.0 wave-close. False positive on the original grep — the file is a benchmark corpus (`recall@5` ground truth), not a runtime registry. Test fixtures *should* hardcode their expected file lists; that's the contract a benchmark exposes. Entry retained for the audit-trail record (next time the same grep surfaces it, the closure-line is the answer).
 
 ---
 
@@ -336,11 +341,12 @@
 - **Touch points:** `js/ui/left-pane-rail.js`, `docs/DESIGN-git-providers-and-ui-extensions.md`.
 - **Resolution:** 2.26.0 exported `BUILTIN_PRIORITY = Object.freeze({ files: 10, issues: 20, prs: 30, branches: 40 })` from `js/ui/left-pane-rail.js`. Each `BUILTIN_VIEWS` entry's `priority` reads from the constant. New tests in `tests/test-left-pane-rail.mjs` assert the frozen shape, ascending order, and ≥10 spacing (the provider-insertion-room invariant). See [CHANGELOG §2.26.0](../../CHANGELOG.md).
 
-#### [ST] [S] [maybe-intentional] `js/managers/` has only `search-manager.js`
+#### ~~[ST] [S] [maybe-intentional] `js/managers/` has only `search-manager.js`~~ *(✅ closed — shipped 2.44.0.3)*
 - **What:** The `managers/` directory contains a single file. Other manager-shaped modules (StorageManager, CostManager, ConversationManager) live in `core.js` / `intelligence/cost/` / `chat/conversations.js`. Inconsistent placement.
 - **Why it's load-bearing:** Low stakes; orientation cost for new developers. The `js/intelligence/` subtree has its own internal organization that doesn't match `managers/`.
 - **Suggested fix shape:** Either move SearchManager into `js/search-panel.js` (the only consumer) or punt.
 - **Touch points:** `js/managers/search-manager.js`, `js/search-panel.js`.
+- **Resolution:** 2.44.0.3 (sweep wave close — final slice). **Decision:** sibling-place, not inline. `SearchManager` (~237 LOC: web-worker init + sync fallback + history persistence + replace + EventBus wiring) and `search-panel` (~374 LOC: DOM bridge + key bindings + render) are two distinct concerns — combining them would yield ~600 LOC, losing the worker-boundary seam. **Shape shipped:** `git mv js/managers/search-manager.js js/search-manager.js`; `js/managers/` directory retired; the one import in `js/search-panel.js` updated. The moved file's `../core.js` import tightens to `./core.js`; its module docstring gains a migration note. New module-locations test [`tests/test-module-locations.mjs`](../../tests/test-module-locations.mjs) pins both the directory's non-existence and the absence of any live `managers/search-manager` import (comment-stripped, so the migration-note docstring doesn't trip it). Designed as a general-purpose `RETIRED_PATHS` table that future retirements append to. The slice closes the wave; `js/version.js` drops the `.N` to `2.44.0`. See [CHANGELOG §2.44.0](../../CHANGELOG.md).
 
 #### ~~[EV] [S] [needs-investigation] `fs:created`/`fs:updated`/`fs:deleted`/`fs:renamed` emitted with 0 subscribers~~ *(✅ closed — shipped 2.39.0)*
 - **What:** From the orphan-emits list, these channels fire but nothing listens.

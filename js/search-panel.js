@@ -9,7 +9,7 @@
  */
 
 import { State, EventBus } from './core.js';
-import { SearchManager } from './managers/search-manager.js';
+import { SearchManager } from './search-manager.js';
 import { escapeHtml as _escapeHtml } from './utils/html.js';
 
 // ============================================

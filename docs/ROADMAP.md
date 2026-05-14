@@ -1,6 +1,6 @@
 # AI Editor — Roadmap
 
-> Last updated: 2026-05-13 (2.44.0 sweep wave in flight — slices 1, 2, 3 shipped). Current released: **v2.43.0** · `main` HEAD: 2.44.0.2 + [Unreleased] (slice 3 closes `audit-2026-Q2/inventory.md` §settings tab-list entry). Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). Sweep waves develop in X.Y.Z.N space per [`VERSIONING.md`](VERSIONING.md); the 2.33.0–2.44.0.N audit-sweep arc continues with the remaining `[needs-investigation]` + `[M] [likely]` entries from [`audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
+> Last updated: 2026-05-14 (2.44.0 sweep wave closed — all 4 slices shipped; arc end). Current released: **v2.44.0** · `main` HEAD: 2.44.0 + [Unreleased]. Recent shipped work: see [CHANGELOG.md](../CHANGELOG.md). The 2.33.0 → 2.44.0 audit-sweep arc closed with 22 inventory entries resolved across 11 system buckets; the inventory at [`audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md) remains live as historical record + queue for the next sweep wave. Next forward step: `RE-EVAL following 2.44.0` (the 2.45.0 re-eval slot under Decision §14).
 
 ## How to read this doc
 
@@ -32,9 +32,9 @@ Every pending milestone in this doc carries a commitment-band label per the meth
 
 | Phase | Track | Band |
 |---|---|---|
-| **Now (in flight)** | **2.43.0 panels-manifest prune — first code minor post-re-eval.** Deletes the 6 dead `panels: [{slot: 'sidebar-panels', ...}]` entries from gitea/github/gitlab providers (render-less, silently skipped at runtime). Adds regression test asserting providers ship no flat-slot panels. Closes `audit-2026-Q2/inventory.md` §sidebar/rail `[REG][M][likely]`. ~150 LOC. | `[strong]` |
-| **Next (2.44.0)** | Continued audit-sweep waves on the remaining `[needs-investigation]` and `[M] [likely]` inventory entries. Shipped sub-slices: ~~tool-name string-literals (2.44.0.0)~~, ~~`safeAdd` fragility (2.44.0.1)~~, ~~settings-tab list triage (2.44.0.2)~~. Remaining: profile addenda; `managers/` placement. Next ROADMAP-paper drift-fix slot is `RE-EVAL following 2.44.0` — paper-half tightens + code-aware half reads `js/` for new architectural seams. ICD-backfill target #2 is the Intelligence-layer Composer seam. | `[strong]` (sweep) · `[medium]` (next re-eval) |
-| **Next-after (2.45.0+)** | **Touch 3 Window v2 / Sessions** remains post-2.0 by design. **github#27 OAuth flows** remains pending its DESIGN doc. | `[medium]` (OAuth pending ICD) · `[fuzzy]` (Window v2) |
+| **Now (next up)** | **`RE-EVAL following 2.44.0` (2.45.0 slot) — second re-eval pass under the methodology adopted 2026-05-12.** Both halves run per Decision §14. **Paper half** tightens any `[medium]` content whose milestone window approached during the 2.33.0 → 2.44.0 sweep arc; demotes/relocates content whose milestone slipped. **Code-aware half** reads `js/` against ARCHITECTURE.md (refreshed at 2.42.0); ICD-backfill target #2 is the Intelligence-layer Composer seam (`getAdmittedTools()` + `buildSystemPrompt()` Composer-vs-non-Composer path drift bit at 2.35.0; ICD prevents the next instance). No code changes in the re-eval session itself; drift fixes spawn as `[strong]`-band rows in 2.46.0+. | `[rewrite session]` |
+| **Next (2.46.0)** | Shape TBD by the 2.45.0 re-eval's code-aware half. Inventory candidates if a new sweep wave opens: dependent on the next audit pass. Touch 3 Window v2 / Sessions and github#27 OAuth flows remain `[medium]` until their DESIGN docs land. | `[fuzzy]` until re-eval picks |
+| **Next-after (2.47.0+)** | `RE-EVAL following 2.47.0` is the next scheduled re-eval slot. ICD-backfill target #3 (Tool registry admission contract — `LEGAL_GROUP_TAGS` derivation + `roles: 'all'` / `allowed_groups: '*'` carve-outs) is the code-aware target. | `[rewrite session]` (re-eval) |
 | **Later** | **Tier 3b in-editor preview** — sidecar + build-step support (Playwright per workspace, container isolation); gating probe not operational. github#37 Phase 2 (re-scope from dogfood signal); github#27 Phase 3 self-hosted templates; github#24 sub-agents Phase 1 (DESIGN shipped 2.37.0); github#18 cross-device sync (post-2.0). | `[medium]` / `[fuzzy]` per row in §"Known open issues" |
 | **Deferred** | Foundations (was 1.1.x), Compression Rules 3–5, various UI items — see §"Deferred / parked" below. | `[fuzzy]` per row |
 
@@ -81,7 +81,7 @@ Per methodology §Phase 3, every 3 code minors past the next-N window get a re-e
 
 **~~First re-eval slot: `RE-EVAL following 2.41.0`~~** — ✅ ran 2026-05-12 as the 2.42.0 doc-only PR. Deliverables shipped: (a) **ARCHITECTURE.md refresh** to 2.41.0 sync (was 1.9.1 sync — 32 minors behind) including new sections for Touch 3 surfaces, slot/event registries, audit-sweep wave outcomes, refreshed File Size Map, and a corrected Testing & CI section; (b) **first ICD** authored at [`ICD-chat-handlers.md`](ICD-chat-handlers.md) — chat tool-loop 5-axis classification contract per §"Per-subsystem ICD backfill program" target #1; (c) **paper-half roadmap drift fixes** below (header re-sync, gitea#392 / gitea#393 strikethrough, panels-manifest promotion to next-3 window).
 
-**Next re-eval slot: `RE-EVAL following 2.44.0`** — 3 minors out. Code-aware target per §"Per-subsystem ICD backfill program" line below: Intelligence-layer Composer seam (target #2). Paper half tightens any `[medium]` content whose milestone window has approached.
+**Next re-eval slot: `RE-EVAL following 2.44.0`** — **active; 2.45.0 is the slot.** Code-aware target per §"Per-subsystem ICD backfill program" line below: Intelligence-layer Composer seam (target #2). Paper half tightens any `[medium]` content whose milestone window approached during the 2.33.0 → 2.44.0 sweep arc (notable: github#27 OAuth flows and Touch 3 Window v2 / Sessions still without DESIGN docs after 3 minors — demote to `[fuzzy]` if no movement, or schedule a contract-authoring slot at 2.46.0 if the dogfood signal warrants).
 
 **Subsequent re-evals.** Inline as `RE-EVAL following 2.47.0`, `RE-EVAL following 2.50.0`, etc. — every 3 minors. Skip the code-aware half only when nothing meaningful has merged since the last pass (the methodology's "structural-only" exception). Default is run both.
 
@@ -110,11 +110,12 @@ Per methodology §3.1, every `[strong]` milestone in the next-N window must have
 | `[strong]` milestone in next-3 window | Contract | Status |
 |---|---|---|
 | ~~**2.43.0 — Git-provider `panels` manifest → rail-views migration**~~ | `audit-2026-Q2/inventory.md` §sidebar/rail (`[REG] [M] [likely]`) + `DESIGN-git-providers-and-ui-extensions.md` §4 decisions table | ✅ shipped 2.43.0 (entries deleted; rail-views seam regression-guarded by `tests/test-slot-manager.mjs`) |
-| Subsequent audit-sweep waves | `docs/audit-2026-Q2/inventory.md` is the running queue | ✅ present |
-| Touch 3 Window v2 / Sessions | None — `docs/DESIGN-sessions.md` will need authoring | ❌ missing — but milestone is `[strong]` only post-2.0; today it's `[medium]` (see below); not in next-3 window |
-| MCP discovery Phase 2 OAuth flows | None — `docs/DESIGN-mcp-oauth.md` will need authoring | ❌ missing — milestone demotes to `[medium]` until contract lands; ICD-authoring slot would be `X.Y.Z.N` ahead |
+| ~~**2.44.0.N audit-sweep wave** (4 slices)~~ | `docs/audit-2026-Q2/inventory.md` is the running queue | ✅ shipped 2.44.0 — wave-close at 2.44.0.3 with 22 entries closed across the arc; inventory remains live for next sweep wave |
+| **2.45.0 — `RE-EVAL following 2.44.0`** | `/config/Projects/plinth/docs/METHODOLOGY-llm-assisted-development.md` §Phase 3 | ✅ present — methodology contract; ICD-backfill target #2 (Composer seam) is the code-aware half's named deliverable |
+| Touch 3 Window v2 / Sessions | None — `docs/DESIGN-sessions.md` will need authoring | ❌ missing — milestone stays `[medium]` until contract lands; the 2.45.0 re-eval's paper-half will decide whether to demote to `[fuzzy]` or schedule contract-authoring at 2.46.0 |
+| MCP discovery Phase 2 OAuth flows | None — `docs/DESIGN-mcp-oauth.md` will need authoring | ❌ missing — milestone stays `[medium]` until contract lands; same re-eval treatment |
 
-Translation post-2.43.0: **the panels-manifest `[strong]` milestone shipped** (entries deleted; the rail-views seam carries forward as the supported extension path, regression-guarded by `tests/test-slot-manager.mjs`). Subsequent waves continue with `[needs-investigation]` and `[M] [likely]` inventory entries. The two named near-term features (Window v2 / Sessions, MCP OAuth) still carry `[medium]` because their contracts haven't been written; they're not in the next-3 window. Next re-eval `RE-EVAL following 2.44.0` is when these get tightened or demoted again, with ICD-backfill target #2 (Intelligence-layer Composer seam) on deck.
+Translation post-2.44.0: **the audit-sweep arc closed** (22 entries resolved across 11 system buckets between 2.33.0 and 2.44.0). The next `[strong]`-band code milestone is undefined until the 2.45.0 re-eval picks shape — the methodology's "what's next" answer for a freshly-closed arc is *the re-eval itself*, which is `[rewrite session]`-tagged (no code work; paper + code-aware halves only). The two named near-term features (Window v2 / Sessions, MCP OAuth) carry forward into the re-eval as decision points: keep `[medium]` if signal warrants ICD-authoring, demote to `[fuzzy]` otherwise.
 
 ---
 
@@ -151,17 +152,15 @@ The 1.14.0 → 2.0.0 profiles arc shipped end-to-end through 14 slices (1.14.0 �
 
 ---
 
-## 2026-Q2 code audit + sweep track `[strong]`
+## 2026-Q2 code audit + sweep track ~~`[strong]`~~ (✅ closed 2026-05-14 at 2.44.0)
 
-> *Started 2026-05-11 post-2.23.0 SlotManager migration. Measurement-first sweep — read the codebase, catalog refactor candidates, burn them down at ~1 entry per spare slot.*
+> *Started 2026-05-11 post-2.23.0 SlotManager migration. Measurement-first sweep — read the codebase, catalog refactor candidates, burn them down at ~1 entry per spare slot. Closed 2026-05-14 at 2.44.0 (PR #408 wave-close) after 22 entries resolved across 11 system buckets.*
 
-Living inventory: [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md). Categories (**HC** hardcode wall · **EV** missing event wiring · **DUP** duplicate implementation · **REG** should-be-registered-isn't · **ST** style drift), system buckets, confidence tags, and per-entry touch points all live there. ROADMAP does **not** enumerate entries — that defeats the point of the separate inventory.
+Living inventory: [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md) — retained as historical record + queue for the next sweep wave whenever the next audit pass starts. Categories (**HC** hardcode wall · **EV** missing event wiring · **DUP** duplicate implementation · **REG** should-be-registered-isn't · **ST** style drift), system buckets, confidence tags, and per-entry touch points all live there.
 
-**Sizing.** **[S]** (single PR, <100 LOC) folds into in-track patches; **[M]** earns its own minor slot; **[L]** earns a design doc first.
+**Closure summary.** Two waves shipped in X.Y.Z.N space: the 2.33.0 → 2.39.0 wave (orphan-emit hygiene + early sweep entries; closed 2.39.0 per `js/version.js` `.N` strip) and the 2.44.0 wave (4 slices: tool-name string-literals, `safeAdd` registry, settings-tab activation, `managers/` placement; closed 2.44.0 with three remaining open entries triage-closed as no-op-or-precondition-not-met). The X.Y.Z.N wave shape (one tag covering many sub-step closures) is now established precedent for future sweep waves.
 
-**Cadence implication.** Each individual sweep entry is small; collectively they're a wave. **Future sweep waves develop in X.Y.Z.N space** per [`VERSIONING.md`](VERSIONING.md) — i.e. a sweep wave is one tag covering many sub-step closures, not six tags for six sub-steps as 2.33.0–2.38.0 did.
-
-**Triage policy.** Lives in the inventory under §"Triage policy" — confidence-tag rules (likely → ship; needs-investigation → audit-first; maybe-intentional → designate as public extension API or delete). Closure when fewer than ~5 entries remain that survive triage.
+**Triage policy + sizing.** Confidence-tag rules (likely → ship; needs-investigation → audit-first; maybe-intentional → designate as public extension API or delete). Sizing: **[S]** (single PR, <100 LOC) folds into in-track patches; **[M]** earns its own minor slot; **[L]** earns a design doc first. Closure threshold: fewer than ~5 entries remain that survive triage — fired 2.44.0.3.
 
 ---
 
