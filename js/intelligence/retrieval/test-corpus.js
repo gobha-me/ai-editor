@@ -129,12 +129,18 @@
  *   - Cross-repo / portable query corpus (post-1.5.0 if at all).
  *   - Ground-truth / hand-labeled correctness corpus (post-1.5.0).
  *
- * **No runtime wire-up.** Nothing imports `QUERY_CORPUS` outside the
- * test suite. With this module deleted, the barrel re-exports
- * removed, and the typedefs removed, no production behavior degrades
- * — `find_relevant_files` keeps running through legacy
- * `ContextManager.findRelevantFiles` exactly as before. Removability
- * holds (Decision §7).
+ * **Production module-graph wiring (since 1.5.14).** The data role is
+ * still measurement-fixture (production `findRelevantFiles()` does not
+ * consume these queries), but [`measurement.js:161`](./measurement.js)
+ * imports `QUERY_CORPUS` / `QUERY_FIXTURES` / `QUERY_CATEGORIES` at
+ * module load to build `DEFAULT_BATCH_FIXTURES`, and
+ * [`manager.js:45`](./manager.js) in turn imports
+ * `defaultComposeFiltersResolver` from `measurement.js` and calls it
+ * on the live retrieval path. Removability is therefore inverted at
+ * the module-graph level — deleting this module breaks
+ * `measurement.js`'s imports and cascades to `manager.js`. Legacy
+ * `ContextManager.findRelevantFiles` is also no longer the runtime
+ * fallback (it retired at the 1.5.14 cutover).
  *
  * @module intelligence/retrieval/test-corpus
  */

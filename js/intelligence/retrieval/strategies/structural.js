@@ -54,11 +54,13 @@
  * `getChunkByID` is the second injected seam — its real implementation
  * lands with the chunk-store ingest PR. Today it's faked in tests.
  *
- * **No runtime wire-up:** nothing imports `createStructuralStrategy`
- * outside the test suite yet. The Composer placeholder in
- * [`../index.js`](../index.js) still throws on call. With this module
- * deleted, `find_relevant_files` keeps running through the legacy
- * file-level path. Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** [`../manager.js:37`](../manager.js)
+ * imports `createStructuralStrategy` and registers it alongside Semantic
+ * + Thematic for live `find_relevant_files` calls; the legacy
+ * `js/context-manager.js` file-level path retired in the same cutover.
+ * Removability is inverted — deleting this module breaks structural
+ * ancestor-walk expansion in production retrieval. ICD contract:
+ * [`docs/ICD-intelligence-composers.md`](../../../../docs/ICD-intelligence-composers.md).
  *
  * @module intelligence/retrieval/strategies/structural
  */

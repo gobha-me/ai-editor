@@ -41,11 +41,13 @@
  * shared module is premature factoring until that second consumer
  * arrives.
  *
- * No runtime wire-up: nothing imports `createSemanticStrategy` outside
- * the test suite yet. The Composer placeholder in
- * [`../index.js`](../index.js) still throws on call. With this module
- * deleted, `find_relevant_files` keeps running through the legacy
- * file-level path. Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** [`../manager.js:36`](../manager.js)
+ * imports `createSemanticStrategy` and registers it as the Composer's
+ * primary candidate generator for live `find_relevant_files` calls; the
+ * legacy `js/context-manager.js` file-level path retired in the same
+ * cutover. Removability is inverted — deleting this module breaks
+ * semantic retrieval in production. ICD contract:
+ * [`docs/ICD-intelligence-composers.md`](../../../../docs/ICD-intelligence-composers.md).
  *
  * @module intelligence/retrieval/strategies/semantic
  */

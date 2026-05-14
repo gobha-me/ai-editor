@@ -4,6 +4,43 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.47.0.2] - 2026-05-14
+
+### Retrieval `No runtime wire-up` / `Removability holds` cleanup — 5 files missed by the 2.47.0.1 sweep
+
+Bundled docstring-only sub-patch closing the second-pass drift the 2.47.0.1 sweep didn't catch. The 2.47.0.1 fix scoped to references that literally contained the string `context-manager.js`; this PR drains the parallel `No runtime wire-up: nothing imports X outside the test suite` / `Removability holds (Decision §7)` pattern that the 1.5.14 cutover also invalidated. Per-file shape mirrors the 2.46.0 [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) lines 31–35 reference shape one-for-one — `**Production wiring (since 1.5.14):**` paragraph naming the production import site with line number, and the Removability claim inverted to its current truth (deleting the module breaks production retrieval). No behavior change. No new tests.
+
+#### Fixed — 4 Composer-seam retrieval modules ([strong] [S] each)
+
+| File | Line | Production import site | ICD reference |
+|---|---|---|---|
+| [`js/intelligence/retrieval/structure-extractor.js`](js/intelligence/retrieval/structure-extractor.js) | 31 | [`pipeline.js:62`](js/intelligence/retrieval/pipeline.js) imports `extractStructure` as post-pass after every chunker dispatch | [ICD-intelligence-composers.md](docs/ICD-intelligence-composers.md) |
+| [`js/intelligence/retrieval/store.js`](js/intelligence/retrieval/store.js) | 64 | [`manager.js:34`](js/intelligence/retrieval/manager.js) imports `createInMemoryChunkStore` for Composer `priority_pins` + Semantic/Structural seams | [ICD-intelligence-composers.md](docs/ICD-intelligence-composers.md) |
+| [`js/intelligence/retrieval/strategies/structural.js`](js/intelligence/retrieval/strategies/structural.js) | 57 | [`manager.js:37`](js/intelligence/retrieval/manager.js) imports `createStructuralStrategy` for live `find_relevant_files` calls | [ICD-intelligence-composers.md](docs/ICD-intelligence-composers.md) |
+| [`js/intelligence/retrieval/strategies/semantic.js`](js/intelligence/retrieval/strategies/semantic.js) | 44 | [`manager.js:36`](js/intelligence/retrieval/manager.js) imports `createSemanticStrategy` as the Composer's primary candidate generator | [ICD-intelligence-composers.md](docs/ICD-intelligence-composers.md) |
+
+**Note on `semantic.js`:** the file already had a separate fix landed in 2.47.0.1 for a `context-manager.js` reference at line 23; line 44 is a SECOND stale claim in the same file that the 2.47.0.1 sweep didn't touch because the paragraph didn't mention `context-manager`. This PR closes the second one.
+
+#### Fixed — [`js/intelligence/retrieval/test-corpus.js`](js/intelligence/retrieval/test-corpus.js) line 132 — audited and flipped
+
+Originally flagged for audit: the corpus data is still measurement-fixture by ROLE (production `findRelevantFiles()` does not consume the queries at retrieval-time), so the question was whether the literal "nothing imports `QUERY_CORPUS` outside the test suite" claim still held. **It does not.** [`measurement.js:161`](js/intelligence/retrieval/measurement.js) imports `QUERY_CORPUS` / `QUERY_FIXTURES` / `QUERY_CATEGORIES` at module load to build `DEFAULT_BATCH_FIXTURES`, and [`manager.js:45`](js/intelligence/retrieval/manager.js) imports `defaultComposeFiltersResolver` from the same `measurement.js` module and calls it on the live retrieval path (`manager.js:661`). The corpus is therefore pulled into the production module graph even though the data isn't reached at retrieval-time. Removability is inverted at the module-graph level. The flipped paragraph captures the nuance explicitly ("data role is still measurement-fixture, but module-graph removability is inverted") so a future reader doesn't have to re-derive it.
+
+Also dropped the trailing "`find_relevant_files` keeps running through legacy `ContextManager.findRelevantFiles` exactly as before" — legacy retired at 1.5.14.
+
+### Verification
+
+- `grep -rn 'No runtime wire-up' js/intelligence/retrieval/` returns **0 matches** (was 5 pre-PR).
+- `grep -rn 'Removability holds' js/intelligence/retrieval/` returns 2 surviving matches — both in different files, different paragraph shapes, both out-of-scope per the brief:
+  - [`js/intelligence/retrieval/embedder.js`](js/intelligence/retrieval/embedder.js) line 38: meta-retrospective ("keeps reviews tractable and Removability holds") inside a scope-decisions §; `embedder.js` already has its own "Production wiring (since 1.5.14)" paragraph at line 103.
+  - [`js/intelligence/retrieval/bm25-indexer.js`](js/intelligence/retrieval/bm25-indexer.js) lines 82–86: a multi-step deletion-procedure claim ("Delete `bm25-indexer.js`, drop the barrel export, drop the four-line wire-up in `measurement.js`... No production code path runs through any of this. Removability holds.") that may also be stale (`buildBM25Index` is imported by [`manager.js:40`](js/intelligence/retrieval/manager.js)), but the user's brief explicitly scoped the same-pattern sweep to the 5 listed files. Parked as a `[strong] [S]` candidate for the next in-track patch if no other work intervenes.
+- `node --test tests/test-*.mjs` runs clean (no regression expected — docstring-only).
+
+### Out of scope (per the brief)
+
+- Any file outside `js/intelligence/retrieval/`.
+- Any docstring drift not in the `No runtime wire-up` / `Removability holds` pattern.
+- Other Removability claims elsewhere in the codebase — this is a same-pattern targeted sweep, not a Removability-claim audit pass.
+
 ## [2.47.0.1] - 2026-05-14
 
 ### Sibling-file `context-manager.js` cleanup + stale `getToolsForProfile` docstring fix

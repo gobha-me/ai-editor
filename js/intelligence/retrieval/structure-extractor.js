@@ -28,10 +28,14 @@
  *     design says these don't carry structural metadata, and the spec
  *     chunker is deferred past Phase 1.
  *
- * No runtime wire-up: nothing imports `extractStructure` outside the test
- * suite yet. The Composer placeholder in [index.js](./index.js) still
- * throws on call. With this module deleted, no user-visible behavior
- * degrades — Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** [`pipeline.js:62`](./pipeline.js)
+ * imports `extractStructure` and runs it as the post-pass after every
+ * chunker dispatch; the retrieval Manager drives `runChunkerPipeline`
+ * on every chunked source, so `metadata.structural` is populated on
+ * every chunk in the production store. Removability is inverted —
+ * deleting this module breaks the Structural strategy's ancestor walk
+ * and degrades `findRelevantFiles()` recall. ICD contract:
+ * [`docs/ICD-intelligence-composers.md`](../../../docs/ICD-intelligence-composers.md).
  *
  * @module intelligence/retrieval/structure-extractor
  */

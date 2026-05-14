@@ -61,11 +61,14 @@
  *   - Persistent / IDB-backed storage.
  *   - Concurrency control beyond single-threaded JS.
  *
- * **No runtime wire-up.** Nothing imports `createInMemoryChunkStore`
- * outside the test suite. Strategies and Composer keep their fakes; the
- * production wiring is the incremental-ingest controller's job at 1.4.23.
- * With this module deleted, no production behavior degrades — Removability
- * holds (Decision §7).
+ * **Production wiring (since 1.5.14):** [`manager.js:34`](./manager.js)
+ * imports `createInMemoryChunkStore` and threads the store handle into
+ * the Composer (for `priority_pins` resolution) and the Semantic +
+ * Structural strategies (for `chunkVectorSearch` + `getChunkByID`).
+ * The legacy `js/context-manager.js` file-level path retired in the
+ * same cutover. Removability is inverted — deleting this module breaks
+ * chunk storage for production retrieval. ICD contract:
+ * [`docs/ICD-intelligence-composers.md`](../../../docs/ICD-intelligence-composers.md).
  *
  * @module intelligence/retrieval/store
  */
