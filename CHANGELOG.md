@@ -4,6 +4,66 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.46.0] - 2026-05-14
+
+### Retrieval Composer stale docstring fix
+
+Single-file docstring fix in [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) lines 31–34 — closes the one `[strong] [S]` row queued by the 2.45.0 re-eval's code-aware half. Per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Now / Next / Later" and [`docs/ICD-intelligence-composers.md`](docs/ICD-intelligence-composers.md) §"Code-aware findings": the docstring still claimed the Composer was *"exported but not yet called by `find_relevant_files` or `js/context-manager.js`; production wiring lands with the migration PR (1.5.2 per ROADMAP)"* — stale since the 1.5.14 cutover that retired legacy `js/context-manager.js` and wired the Composer into [`js/intelligence/retrieval/manager.js:38`](js/intelligence/retrieval/manager.js). The Removability claim was also inverted (deleting `composer.js` now breaks `findRelevantFiles()`).
+
+**Old (lines 31–34):**
+
+> **No runtime wire-up:** the Composer is exported but not yet called by `find_relevant_files` or `js/context-manager.js`; production wiring lands with the migration PR (1.5.2 per ROADMAP). Removability holds (Decision §7) — with `composer.js` deleted nothing in production degrades.
+
+**New (lines 31–35):**
+
+> **Production wiring (since 1.5.14):** `manager.js:38` imports `compose` and drives `findRelevantFiles()` through it. Legacy `js/context-manager.js` was retired in the same cutover. Removability is inverted now — deleting `composer.js` breaks `findRelevantFiles()`. ICD contract: `docs/ICD-intelligence-composers.md`.
+
+Forward pointer to the new ICD added per ICD-intelligence-composers §"Forward-evolution rules" — *"document the wiring location and keep it current"* — making the seam discoverable from the production source.
+
+### Audit pass on rest of `composer.js`
+
+Per the ROADMAP row's explicit ask, the remaining ~631 lines of [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) were audited for similar stale 1.4.x-era claims. **Lines 31–34 were the only drift item.** Verified line-by-line:
+
+| Location | Status |
+|---|---|
+| Lines 6–7 — PR 9 (1.4.17) + PR 10 (1.4.18) attribution | Accurate — kept |
+| Lines 26–28 — Phase 1 score-incomparability note | Accurate — kept |
+| **Lines 31–34 — "No runtime wire-up"** | **STALE — fixed this PR** |
+| Lines 36–38 — DI pattern attribution (1.4.15 / 1.4.16) | Accurate (verified vs. `compose(req, deps, opts)` at line 435) — kept |
+| Line 316 — Phase 1 no-`system_context` note | Accurate — kept |
+| Line 411 — `queryParaphraser` opt (1.5.12) | Accurate — kept |
+| Line 419 — `queryExpander` opt (1.8.1, lever-B) | Accurate — kept |
+| Lines 468–484 — Step-0 expander-vs-paraphraser comment | Accurate — kept |
+
+The other version-anchored references in the file are either (a) historical attribution that remains accurate, or (b) design-state references still in force.
+
+### Out-of-scope: sibling-file `context-manager.js` references
+
+A broader grep across `js/intelligence/retrieval/` surfaced **~12 sibling files** with stale `js/context-manager.js` / "migration PR (1.5.2)" references in their own docstrings: `index.js`, `pipeline.js`, `bm25-indexer.js`, `loader.js`, `ledger-consumer.js`, `measurement.js`, `strategies/semantic.js`, `strategies/thematic.js`, `test-corpus.js` (× several), plus forward-looking comments in `manager.js:4–5`. **These are deliberately not bundled into 2.46.0** — the 2.45.0 re-eval scoped the fix to *"the same module"* (composer.js). The wider sweep is captured here as a known finding for a future re-eval slot.
+
+### Roadmap paper-half follow-through
+
+[`docs/ROADMAP.md`](docs/ROADMAP.md) updates:
+
+- **Header line 3** — current-released bumped from 2.45.0 → 2.46.0; HEAD pointer to 2.46.0 + [Unreleased]; "Next forward step" advances to 2.47.0 (`RE-EVAL following 2.47.0` slot).
+- **§"Now / Next / Later"** — "Now (next up)" promotes to the 2.47.0 re-eval slot; the 2.46.0 row strikethrough as shipped; "Next-after" advances to 2.48.0+ (TBD by the next re-eval).
+- **§"Forward ICD presence check"** — 2.46.0 row marked ✅ shipped (contract reference = `ICD-intelligence-composers.md` §"Code-aware findings").
+- **§"Per-subsystem ICD backfill program" target #2** — the "one `[strong] [S]` row for 2.46.0" finding annotated as shipped + the out-of-scope sibling sweep recorded as a future-slot candidate.
+
+### Tests
+
+No new tests. Doc-only change — no `js/` behavior changed beyond the version constant. Existing [`tests/test-retrieval-composer.mjs`](tests/test-retrieval-composer.mjs) runs as a no-regression check (imports `compose` from the production path).
+
+Doc-internal consistency:
+
+- `js/version.js` `VERSION = '2.46.0'` matches the `## [2.46.0]` heading above (version-coherence lint).
+- ROADMAP line 3 header version matches `js/version.js` ↔ `[Unreleased]` shape.
+- New composer.js docstring cites `manager.js:38` and 1.5.14 — both consistent with [`docs/ICD-intelligence-composers.md`](docs/ICD-intelligence-composers.md) §"Per-export contract" line 106 (`Trigger point: js/intelligence/retrieval/manager.js:38 ... Production cutover happened at 1.5.14`).
+
+### Versioning
+
+[`js/version.js`](js/version.js) reads **`2.46.0`** — tag-direct per [`docs/VERSIONING.md`](docs/VERSIONING.md) line 35 ("single-PR feature that's meaningfully usable on its own push" rule). `## [Unreleased]` promotes to `## [2.46.0] - 2026-05-14`; a fresh empty `## [Unreleased]` opens above for the next arc. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) fires on this tag push — 2.46.0 is `X.Y.Z`-shaped, not sub-patch; the 10-turn dogfood honor-system check records on the tag annotation per the gate's convention.
+
 ## [2.45.0] - 2026-05-14
 
 ### RE-EVAL following 2.44.0 — second re-eval slot under the methodology adopted 2026-05-12

@@ -28,10 +28,11 @@
  *      beats raw-score comparison.
  *   8. Assemble blocks (`task` tail, `retrieved` body, `history` body).
  *
- * **No runtime wire-up:** the Composer is exported but not yet called by
- * `find_relevant_files` or `js/context-manager.js`; production wiring lands
- * with the migration PR (1.5.2 per ROADMAP). Removability holds (Decision
- * §7) — with `composer.js` deleted nothing in production degrades.
+ * **Production wiring (since 1.5.14):** [`manager.js:38`](./manager.js) imports
+ * `compose` and drives `findRelevantFiles()` through it. Legacy
+ * `js/context-manager.js` was retired in the same cutover. Removability is
+ * inverted now — deleting `composer.js` breaks `findRelevantFiles()`. ICD
+ * contract: [`docs/ICD-intelligence-composers.md`](../../../docs/ICD-intelligence-composers.md).
  *
  * **Dependency injection mirrors 1.4.15 / 1.4.16:** the caller supplies
  * the strategy list and a `getChunkByID` for `priority_pins`, so the
