@@ -54,20 +54,20 @@ test('Base: capabilities default to all false (no review submission)', () => {
     assert.equal(baseCaps.merge, false);
 });
 
-test('GitLab: capabilities override declares only mergeConflictResolution; review/merge still default-falsy at call sites', () => {
+test('GitLab: capabilities override declares mergeConflictResolution + five explicit-false flags', () => {
     // Slice 2 (2.19.0) added a minimal `capabilities` getter to GitLab
-    // flipping `mergeConflictResolution` on. The PR-Review-track
-    // capabilities (reviewSubmission, merge, threadResolve, viewedFiles)
-    // are intentionally NOT declared — each one is its own future slice.
+    // flipping `mergeConflictResolution` on. The other five flags were
+    // made explicit `false` at 2.50.0 (ICD #4 finding #2) so the
+    // shape-anti-regression at `test-provider-capabilities-shape.mjs`
+    // can pin the six-flag contract. Each flag flips on in its own
+    // slice with live testing.
     const caps = gitlabProvider.capabilities;
     assert.equal(caps.mergeConflictResolution, true);
-    // Strict-equality `=== true` checks at the call sites read undefined
-    // as falsy, preserving the pre-2.19.0 behaviour for the unrelated
-    // capabilities.
-    assert.notEqual(caps.reviewSubmission, true);
-    assert.notEqual(caps.merge, true);
-    assert.notEqual(caps.threadResolve, true);
-    assert.notEqual(caps.viewedFiles, true);
+    assert.equal(caps.reviewSubmission, false);
+    assert.equal(caps.merge, false);
+    assert.equal(caps.threadResolve, false);
+    assert.equal(caps.viewedFiles, false);
+    assert.equal(caps.rerunCi, false);
 });
 
 // ============================================

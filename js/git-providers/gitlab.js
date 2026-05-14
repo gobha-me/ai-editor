@@ -1151,15 +1151,21 @@ const gitlabProvider = {
      * routes through `Git.batchCommitFilesOnBranch` → `batchCommitFiles`
      * which GitLab implements via the atomic Commits API.
      *
-     * Other capability fields (reviewSubmission, threadResolve, merge,
-     * rerunCi, viewedFiles) are intentionally NOT declared here — they
-     * stay default-undefined (read as `false` via `?.` checks at the
-     * call sites) until each one gets its own slice with live testing.
+     * The other five capability fields are declared as explicit `false`
+     * (rather than left default-undefined) to satisfy the
+     * `tests/test-provider-capabilities-shape.mjs` anti-regression — a
+     * future consumer that omits the `?.` chain would have thrown on
+     * GitLab. Each flag flips on in its own slice with live testing.
      *
-     * @since 2.19.0 (Touch 3 Merge Conflict Resolver — slice 2)
+     * @since 2.19.0 (Touch 3 Merge Conflict Resolver — slice 2; all six flags made explicit at 2.50.0)
      */
     get capabilities() {
         return {
+            reviewSubmission: false,
+            threadResolve: false,
+            viewedFiles: false,
+            merge: false,
+            rerunCi: false,
             mergeConflictResolution: true,
         };
     },

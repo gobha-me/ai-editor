@@ -635,6 +635,23 @@ const BASE_GIT_PROVIDER = {
     },
 
     // ========================================
+    // COMMIT DIFF
+    // ========================================
+
+    /**
+     * Get a single commit's full diff (files + patches).
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} sha
+     * @returns {Promise<{sha:string, shortSha:string, message:string, author:string, date:string, files:Array<{path:string, status:string, additions:number, deletions:number, patch:string}>}>}
+     * @since 2.50.0 (extracted from informal cross-provider extension at github.js / gitea.js / gitlab.js)
+     */
+    async getCommitDiff(connection, owner, repo, sha) {
+        notSupported(this.name, 'getCommitDiff');
+    },
+
+    // ========================================
     // TAGS & RELEASES
     // ========================================
 

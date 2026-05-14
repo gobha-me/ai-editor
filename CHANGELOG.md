@@ -4,12 +4,105 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Doc — `RE-EVAL following 2.49.0` (fourth re-eval slot; doc-only, no version bump)
+## [2.50.0] - 2026-05-14
+
+### ICD #4 code-aware findings — `getCommitDiff` base-promotion + provider capabilities-shape test
+
+Closes findings #1 + #2 of the three queued at `RE-EVAL following 2.49.0`
+([`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) §"Code-aware
+findings"). Finding #3 (`resolveReviewThread` dead-code decision) stays
+open — decision-required, not a code change. Mirrors the
+2.46.0/2.47.0.1 shape: queued findings ship in the next code minor.
+
+#### Fixed — `getCommitDiff` promoted to `BASE_GIT_PROVIDER`
+
+[`js/git-providers/base.js`](js/git-providers/base.js) lines 637–650. The
+public `async getCommitDiff(connection, owner, repo, sha)` method was an
+**informal cross-provider extension**: GitHub
+([`github.js:755`](js/git-providers/github.js)), Gitea
+([`gitea.js:639`](js/git-providers/gitea.js)), and GitLab
+([`gitlab.js:904`](js/git-providers/gitlab.js)) all implemented it with
+the same return shape, but the base class never declared it. A future
+fourth remote provider would silently land without `getCommitDiff` and
+its absence would only surface at the first runtime call site. This PR
+adds the `notSupported(this.name, 'getCommitDiff')` default stub in the
+COMMIT-DIFF section adjacent to `getCommitStatus`. No changes to the
+three concrete providers — their existing overrides satisfy the
+contract. Same shape as the 2.46.0 retrieval-Composer fix (`[strong]
+[S]`, single-file, no behavior change).
+
+#### Added — `tests/test-provider-capabilities-shape.mjs`
+
+[`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)
+**NEW**. Anti-regression for the six-flag capability contract
+(`reviewSubmission`, `threadResolve`, `viewedFiles`, `merge`, `rerunCi`,
+`mergeConflictResolution`). For each of the four concrete providers
+(plus base + local-via-base-inheritance), shallow-spreads
+`{ ...BASE_GIT_PROVIDER, ...provider }` (matches `registry.js#register`)
+and asserts every flag resolves to an explicit `typeof === 'boolean'`.
+A second test asserts no provider exposes flags beyond the six —
+extending the matrix requires updating the array in lockstep. Prevents
+the `undefined → false` invariant from silently regressing if a future
+consumer omits the `?.` chain.
+
+#### Fixed — GitLab capabilities getter declares all six flags explicitly
+
+[`js/git-providers/gitlab.js`](js/git-providers/gitlab.js) lines 1161–
+1172. The 2.19.0 slice introduced GitLab's `get capabilities()` with
+only `mergeConflictResolution: true` declared; the other five flags
+were left default-undefined. To satisfy the new shape-test contract,
+the getter now declares `reviewSubmission: false`, `threadResolve:
+false`, `viewedFiles: false`, `merge: false`, `rerunCi: false`
+explicitly. Runtime behavior unchanged — every consumer site already
+used `capabilities?.flag === true`, so `undefined` and `false` read
+identically. Docstring updated to reflect the new shape.
+[`tests/test-pr-review-provider-shape.mjs`](tests/test-pr-review-provider-shape.mjs)
+lines 57–71 updated in lockstep — assertions flip from
+`assert.notEqual(caps.x, true)` (which accepted `undefined`) to
+`assert.equal(caps.x, false)` (which now pins the explicit shape).
+
+### Verification
+
+Three new tests in
+[`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)
+(one per-provider shape assertion × 5 providers + one no-extras
+assertion = 6 subtests). One updated test at
+[`tests/test-pr-review-provider-shape.mjs:57-71`](tests/test-pr-review-provider-shape.mjs)
+flipped to pin the new GitLab explicit-flag shape. Full Node suite
+expected to remain green (was 3326 pass / 1 skipped / 0 fail at 2.49.0).
+Manual `getCommitDiff` stub check via one-shot import + call confirms
+the throw is `EditorError(GIT_NOT_SUPPORTED)` with the
+`{ recoveryHint }` shape pattern matching the sibling `notSupported`
+sites.
+
+### Versioning
+
+`js/version.js` bumped `2.49.0` → `2.50.0`. CHANGELOG `## [2.50.0]`
+heading matches; ROADMAP line 3 header rolls forward to current-
+released **v2.50.0**. The release-readiness gate
+([ROADMAP Decision §12](docs/ROADMAP.md)) **fires** — `2.50.0` is
+`X.Y.Z`-shaped. Per [`feedback_version_bump`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_version_bump.md):
+bump version + promote `[Unreleased]` in the same PR (both done here;
+`[Unreleased]` re-opens empty above this section).
+
+### Absorbs the RE-EVAL following 2.49.0 entries
+
+The fourth RE-EVAL slot's doc-only content (ICD #4 authored at
+[`docs/ICD-git-providers.md`](docs/ICD-git-providers.md), paper-half
+drift fixes against the stale 43-method figure across ROADMAP /
+ARCHITECTURE / DESIGN-git-providers, "Now"/"Just shipped" row roll-
+forward) was accumulating in `[Unreleased]` per the policy refinement
+(Decision §14 sub-clause) and is absorbed into this `[2.50.0]` heading
+on tag. Per the policy, the re-eval slot itself did not consume a
+version slot — 2.50.0 is the next versioned PR after 2.49.0, and it
+absorbs anything `[Unreleased]` was holding.
+
+### RE-EVAL following 2.49.0 — fourth re-eval slot (doc-only; absorbed into 2.50.0)
 
 Ran 2026-05-14 per the Plinth methodology re-eval cadence (every 3 code
 minors; 3 code minors past 2.46.0 = 2.49.0). Doc-only — no version bump
-consumed; deliverables accumulate here in `[Unreleased]` until the next
-versioned PR absorbs them (mirrors the 2.45.0 / 2.47.0.1 re-eval shape).
+consumed; deliverables accumulated in `[Unreleased]` until this 2.50.0
+PR absorbed them (mirrors the 2.45.0 / 2.47.0.1 re-eval shape).
 
 #### Added — `docs/ICD-git-providers.md`
 
@@ -65,37 +158,27 @@ Other paper-half edits:
   Per-method body of §2 intentionally NOT rewritten (DESIGN docs are
   historical-design shape, ICDs are current-shape).
 
-#### Code-aware findings (queued for next code minor; not applied this slot)
+#### Code-aware findings (two resolved at 2.50.0; one decision-required deferred)
 
 Three drift items surfaced during ICD authoring:
 
-1. **`getCommitDiff` informal extension.** GitHub
-   ([`github.js:755`](js/git-providers/github.js)), Gitea
-   ([`gitea.js:639`](js/git-providers/gitea.js)), and GitLab
-   ([`gitlab.js:904`](js/git-providers/gitlab.js)) all declare a public
-   `async getCommitDiff(connection, owner, repo, sha)` with the same
-   return shape. The method is **not declared in `BASE_GIT_PROVIDER`**.
-   A future fourth remote provider would land without it unless the
-   pattern is noticed by grep. Suggested fix for next code minor:
-   single-file edit adding `getCommitDiff` to base with `notSupported`
-   default. `[strong] [S]` candidate; same shape as the 2.46.0
-   retrieval-Composer fix.
-2. **GitLab partial-capabilities shape test.**
-   [`gitlab.js:1161`](js/git-providers/gitlab.js) declares only
-   `mergeConflictResolution: true`; the other five flags are
-   `undefined`. Every consumer site uses `capabilities?.flag === true`
-   so `undefined` reads as `false`. A future consumer that omits the
-   `?.` would throw on GitLab. Suggested fix: anti-regression test at
-   `tests/test-provider-capabilities-shape.mjs` asserting every
-   provider returns all six flags explicitly.
+1. ~~**`getCommitDiff` informal extension.**~~ ✅ resolved at 2.50.0.
+   The public `async getCommitDiff(connection, owner, repo, sha)` is now
+   declared in `BASE_GIT_PROVIDER` with the `notSupported` default — a
+   future fourth remote provider that omits the method now throws the
+   expected `EditorError(GIT_NOT_SUPPORTED)` rather than silently
+   `undefined`-ing.
+2. ~~**GitLab partial-capabilities shape test.**~~ ✅ resolved at 2.50.0.
+   [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)
+   pins the six-flag contract across all five provider surfaces (base +
+   github + gitea + gitlab + local); GitLab's `get capabilities()`
+   getter now declares all six flags explicitly.
 3. **`resolveReviewThread` dead code.** Declared at
    [`base.js:594`](js/git-providers/base.js); no provider overrides;
    `threadResolve` capability is `false` everywhere; no UI read site.
    Decision deferred — promote (GitHub GraphQL integration) or demote
-   (remove method + capability flag).
-
-Selection of which finding promotes to the next code minor's `[strong]`
-slot is deferred to the row scheduling pass.
+   (remove method + capability flag). **Still open** post-2.50.0;
+   requires an architecture-decision session, not a code session.
 
 #### Verification
 
