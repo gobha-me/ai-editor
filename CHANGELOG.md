@@ -4,6 +4,44 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.48.0.1] - 2026-05-14
+
+### In-track patch — file-edit tool surface (gitea#415)
+
+Bundled in-track patch under the 2.48.0 tag, draining the only open gitea bug. Origin: after-action review of a `qwen-3-6-plus` session that fixed [HTML-Games#212](https://git.gobha.me/xcaliber/HTML-Games/issues/212) using ai-editor — the LLM diagnosed the bug correctly and produced a 3-line fix, but ~30% of the request budget went to recovering from confusing tool errors. The friction was 100% on the harness; this PR straightens it out. Four sub-issues, all surfaced in the same session, all small — bundled per the precedent shape of 2.47.0.1 (single PR, multiple co-located fixes).
+
+#### Fixed — `edit_file` opaque error on stringified `edits` (gitea#415 §1)
+
+[`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) lines 119–146 — extends `_detectWrongShape()` with a third branch alongside the `operations/ops/op` (2.30.x) and `new_text/text/content` (2.30.x) branches. Detects `args.edits` (whether stringified-array OR raw array), emits a hint mirroring the `operations` branch tone, and **echoes the first parsed entry back as `parsed_edits`** so the model sees its own intent surfaced and can re-shape the call directly. Unparseable strings suppress the echo but keep the hint. Pre-fix: model called `edit_file({file_path, edits: '[{...}]'})` four times against the bare `replace requires start_line, end_line, and new_content` error before falling out into `find_tool` / `list_tools_by_category`. Post-fix: turn-1 directed hint with the parsed payload echoed.
+
+#### Fixed — `edit_file` description contradicted `replace_lines` prerequisite (gitea#415 §2)
+
+[`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) line 308 — dropped the "Preferred over open_file + replace_lines for multi-file workflows" framing. Pre-fix: when `edit_file` opaquely failed, the model fell back to `replace_lines` and hit `No file is currently open in the editor. Use open_file first…` (surprise stateful prerequisite). Post-fix: positive description naming what `edit_file` is FOR ("multi-file edits by path; auto-opens the file") plus an explicit example payload and the flipped polarity — `replace_lines`/`insert_lines`/`delete_lines` are the niche stateful path, used only when a file is already open in the editor UI. `replace_lines` was **not** retro-fitted to accept `path` — that would create a fourth state model (memory: `project_constraints.md` single-global-state).
+
+#### Fixed — `read_lines` truncation-blame error message (gitea#415 §3)
+
+[`js/chat/tools.js`](js/chat/tools.js) lines 67–79 — removed the `"This usually happens when the AI response was truncated. Please provide all required parameters."` sentence from `validateToolParameters()`. Pre-fix: `read_lines` called without `path` returned a misleading hypothesis that sent the model into retry-or-split loops (response was never truncated; the actual cause was that `replace_lines` doesn't require `path` and `read_lines` does — schema inconsistency, not truncation). Post-fix: plain "missing required parameter(s): X. Required for tool: A, B, C." that lets the caller act on `missingParams`/`providedArgs` directly. The `REQUIRED_TOOL_PARAMS` table untouched (pinned by [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs)). `read_lines` `path` was **not** made optional via `State.currentFile` fallback — same reasoning as §2.
+
+#### Downstream — tool-discovery cost (gitea#415 §4)
+
+No code change. The two-turn `find_tool` / `list_tools_by_category` recovery loop in the original AAR was a symptom of §1's opaque error; with the directed hint landing on turn 1, the model no longer falls out into discovery.
+
+#### Tests
+
+| File | Action | Coverage |
+|---|---|---|
+| [`tests/test-edit-file-refusal-hint.mjs`](tests/test-edit-file-refusal-hint.mjs) | EDIT | +3 tests (8 → 11): stringified `edits`, raw-array `edits`, unparseable-string `edits` (assert hint present + echo suppressed). Asserts `parsed_edits` echo on the parseable cases. |
+| [`tests/test-chat-tools-validation-message.mjs`](tests/test-chat-tools-validation-message.mjs) | **NEW** | 5 tests: `read_lines` missing `path` (no truncation blame; names missing param + full required set), `create_file` missing `content` (same shape, non-`read_lines` path), valid args return null, unknown tool passes through. |
+
+#### Verification
+
+`node --test tests/test-edit-file-refusal-hint.mjs tests/test-chat-tools-validation-message.mjs tests/test-chat-tool-name-literals.mjs` → 20/20 pass. Full suite (`tests/test-*.mjs`) → 3303 pass / 1 skipped / 0 fail. Browser verification: `ToolRegistry.execute('edit_file', { path, edits: '[…]' })` returns the hint with `parsed_edits` echoed; `validateToolParameters('read_lines', { start_line: 1, end_line: 10 })` returns error free of `truncated`.
+
+#### Version coherence
+
+- `js/version.js` bumped `2.48.0` → `2.48.0.1` ↔ CHANGELOG `## [2.48.0.1]` heading ↔ ROADMAP `[2.48.0.1]` row.
+- ROADMAP header line 3 stays on **2.48.0** (X.Y.Z.N sub-patches don't move the released-tag pointer).
+
 ## [2.48.0] - 2026-05-14
 
 ### Feature minor — tool-loop core extraction (github#24 Phase 0)

@@ -65,9 +65,14 @@ export function validateToolParameters(toolName, args) {
     });
 
     if (missing.length > 0) {
+        // Earlier wording blamed "AI response was truncated" — gitea#415
+        // showed that hypothesis usually wrong (schema-inconsistency was
+        // the actual cause; truncation hint misled the model into retry
+        // loops). Plain "what's missing + which fields are required" lets
+        // the caller act on `missingParams`/`providedArgs` directly.
         return {
-            error: `Tool call validation failed for ${toolName}: Missing required parameters: ${missing.join(', ')}. ` +
-            `This usually happens when the AI response was truncated. Please provide all required parameters.`,
+            error: `Tool call validation failed for ${toolName}: missing required parameter(s): ${missing.join(', ')}. ` +
+            `Required for ${toolName}: ${required.join(', ')}.`,
             missingParams: missing,
             providedArgs: args
         };

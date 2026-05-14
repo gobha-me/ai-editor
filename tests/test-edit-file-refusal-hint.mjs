@@ -56,6 +56,52 @@ test('edit_file with `ops` returns the same batched-ops hint', async () => {
     assert.match(result.hint, /single op at the top level/i);
 });
 
+// gitea#415 — qwen-3-6-plus invented `{file_path, edits: "[{...}]"}` in the
+// HTML-Games#212 AAR. Same batched-shape mistake as `operations`, different
+// key name. The hint must surface and echo the first entry as `parsed_edits`
+// so the model can re-shape the call without another speculative turn.
+test('edit_file with stringified `edits` array returns hint + parsed_edits echo', async () => {
+    setup();
+    const edit_file = getHandler('edit_file');
+    const result = await edit_file({
+        path: 'js/app.js',
+        edits: '[{"start_line":523,"end_line":526,"new_content":"x"}]',
+    });
+    assert.ok(result.error, 'should return an error');
+    assert.ok(result.hint, 'should return a hint');
+    assert.match(result.error, /'edits'/);
+    assert.match(result.hint, /single op at the top level/i);
+    assert.match(result.hint, /new_content/);
+    assert.match(result.hint, /once per change/i);
+    assert.ok(result.parsed_edits, 'should echo the first parsed entry');
+    assert.equal(result.parsed_edits.start_line, 523);
+    assert.equal(result.parsed_edits.end_line, 526);
+    assert.equal(result.parsed_edits.new_content, 'x');
+});
+
+test('edit_file with array `edits` (not stringified) returns the same hint', async () => {
+    setup();
+    const edit_file = getHandler('edit_file');
+    const result = await edit_file({
+        path: 'js/app.js',
+        edits: [{ start_line: 10, end_line: 12, new_content: 'y' }],
+    });
+    assert.match(result.error, /'edits'/);
+    assert.match(result.hint, /single op at the top level/i);
+    assert.match(result.hint, /new_content/);
+    assert.equal(result.parsed_edits.start_line, 10);
+});
+
+test('edit_file with unparseable string `edits` still emits hint (no echo)', async () => {
+    setup();
+    const edit_file = getHandler('edit_file');
+    const result = await edit_file({ path: 'js/app.js', edits: 'not-json' });
+    assert.match(result.error, /'edits'/);
+    assert.match(result.hint, /single op at the top level/i);
+    assert.equal(result.parsed_edits, undefined,
+        'unparseable string should suppress the echo but keep the hint');
+});
+
 test('edit_file with `new_text` instead of `new_content` returns hint', async () => {
     setup();
     const edit_file = getHandler('edit_file');

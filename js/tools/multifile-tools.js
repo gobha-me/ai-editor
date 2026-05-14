@@ -116,6 +116,32 @@ function _detectWrongShape(args) {
         };
     }
 
+    // Second batched-shape variant: `edits: [...]` (array or stringified
+    // array). Surfaced by the 2026-05-14 HTML-Games AAR (gitea#415) —
+    // qwen-3-6-plus invented `{file_path, edits: "[{start_line, end_line,
+    // new_content}]"}` and the bare "replace requires …" error fired four
+    // times. Echo the first parsed entry back as `parsed_edits` so the
+    // model sees its own intent and can flatten the call directly.
+    if (keys.includes('edits')) {
+        const result = {
+            error: `edit_file does not accept 'edits'. It takes a single op at the top level.`,
+            hint: `edit_file takes a single op at the top level: ${correctShape}. The "edits" / batched-array shape does not exist on this tool — call edit_file once per change with the fields at the top level.`
+        };
+        let firstEntry = null;
+        if (Array.isArray(args.edits)) {
+            firstEntry = args.edits[0];
+        } else if (typeof args.edits === 'string') {
+            try {
+                const arr = JSON.parse(args.edits);
+                if (Array.isArray(arr) && arr.length > 0) firstEntry = arr[0];
+            } catch { /* unparseable — skip the echo, keep the hint */ }
+        }
+        if (firstEntry && typeof firstEntry === 'object') {
+            result.parsed_edits = firstEntry;
+        }
+        return result;
+    }
+
     if (keys.includes('new_text') || keys.includes('text') || keys.includes('content')) {
         const wrong = keys.includes('new_text') ? 'new_text'
             : keys.includes('text') ? 'text'
@@ -282,7 +308,7 @@ export function registerMultiFileTools(registry) {
         type: 'function',
         function: {
             name: 'edit_file',
-            description: 'Edit any file by path — auto-opens it if needed. Supports replace, insert, and delete operations. Preferred over open_file + replace_lines for multi-file workflows.',
+            description: 'Edit any file by path — auto-opens it if needed. Supports replace, insert, and delete operations. One op per call, fields at the top level (no `edits` or `operations` wrapper). Example: { path: "js/x.js", operation: "replace", start_line: 10, end_line: 12, new_content: "..." }. Use replace_lines / insert_lines / delete_lines only when you have already opened the target file via the editor UI.',
             parameters: {
                 type: 'object',
                 properties: {
