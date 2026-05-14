@@ -4,6 +4,79 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### RE-EVAL following 2.46.0 — third re-eval slot (doc-only; no version bump)
+
+**Doc-only.** Third firing of the re-eval cadence (every 3 code minors per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"; Decision §14). **Policy refinement adopted this slot: re-eval slots accumulate in `[Unreleased]`; they do NOT consume a version slot.** The 2.42.0 (first re-eval) and 2.45.0 (second re-eval) doc-only releases were the pre-refinement shape; the rule corrects forward without rewriting their history. This composes with the [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) memory rule — both apply to docs-only / measurement-only changes.
+
+`js/version.js` stays at **`2.46.0`** through this PR. The next code minor (2.47.0; see ROADMAP §"Now / Next / Later") will absorb these entries into its versioned heading on tag — or, if more doc-only / measurement-only changes accumulate first, `[Unreleased]` keeps growing.
+
+### Third ICD shipped — `docs/ICD-tool-registry.md`
+
+Per ROADMAP §"Per-subsystem ICD backfill program" target #3 (Tool registry admission contract) — new file [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md). Covers the seam across [`js/tools/registry.js`](js/tools/registry.js) + [`js/profiles/registry.js`](js/profiles/registry.js) under one admission contract:
+
+- **The seam at a glance** — side-by-side table comparing tool-side declaration (`definition.roles: 'all' | string[]` at `register()`) vs profile-side declaration (`Profile.tools.allowed_groups: string[]`). Validation sites, stored forms, public namespaces, carve-outs, anti-regression tests — all named.
+- **5 classification axes** spanning the seam — Declaration (where tags come from + legal-tag set derivation via `Profiles.getKnownGroupTags()` at 2.34.0), Admission (`'all'` short-circuit on tool side, `'*'` wildcard on profile side, otherwise intersection), Bypass (`'all'` universal-default; `'*'` wholesale; `'full'` legal-but-never-declared admin-tier tag — 4 tools use it today: `context-tools.js:203`, `memory-tools.js:318`/`:535`, `doc-tools.js:96`), Failure (register-time throws vs runtime soft denials vs profile-name fallback warns), Diagnostics (console logs + `EventBus.emit('tools:unregistered')` + `getStats().byRole`).
+- **Per-export contract** — for each of the 11 public exports (`ToolRegistry.register` / `unregister` / `checkRoleAccess` / `execute` / `getDefinitions` / `getToolsForProfile` / `filterReadOnly` / `getStats` / `clear`; `Profiles.getKnownGroupTags` / `filterTools`): signature, validation, invariants. Plus `scanToolReturn` documented orthogonally (security scan, not admission).
+- **Interaction matrix** — shared contract (derived legal-tag set, three named carve-outs, soft profile-name fallback); disjoint surfaces (read-only ⊥ role filter, unregister-emits ⊥ register-silent, Plan-Mode ⊥ runtime admission); open invariants (`'full'`-tagged tool list not contract-pinned; `Profiles.list()` order not asserted against picker `<select>`).
+- **Why the two sides resist consolidation** — different lifecycle profiles (boot-time vs every-turn), rationale already adjacent to use sites; collapse remains a future option if a third consumer (audit-logging) needs the shared view.
+- **Forward-evolution rules** — when adding a new profile / a new tool / changing the legal-tag derivation / changing the admission filter. Six load-bearing constraints named (e.g. `'all'` and `'full'` are seed values for `getKnownGroupTags`; `'*'` MUST stay excluded from its output; admission filter is single source of truth; profile-name fallback is soft, not hard).
+
+### ARCHITECTURE.md catch-up sync — 2.44.0 → 2.46.0
+
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) was at **2.44.0 sync** — 2 minors behind. This refresh catches it up to 2.46.0:
+
+- **Header line 4** — `Last sync` bumped from 2.44.0 → 2.46.0; flagged as "third RE-EVAL slot — doc-only — no version bump" per the policy refinement.
+- **`tools/registry.js` section** — added forward-pointer to the new ICD-tool-registry.md; existing ICD-chat-handlers + ROLES_AND_TOOLS pointers preserved.
+- **Document hierarchy** gains the third ICD row (`ICD-tool-registry.md` — target #3).
+- **Slot & Event Registries section-header** range updated from "2.22.0 → 2.41.0" → "2.22.0 → 2.44.0 (closed 2.44.0)" — housekeeping the prior re-eval's catch-up missed.
+
+No 2.45.0-or-2.46.0-specific structural additions — those two minors were doc-only themselves (2.45.0 = ICD-intelligence-composers shipping; 2.46.0 = single-file docstring fix in a Composer the architecture already documents). Both are covered by the ICD hierarchy row update + the existing Composer-seam paragraph at line 230.
+
+### Roadmap paper-half — band tightening + policy refinement
+
+In [`docs/ROADMAP.md`](docs/ROADMAP.md):
+
+- **Header line 3** — current-released stays at 2.46.0; "Next forward step" rephrased: 2.47.0 is now the next code minor (not a re-eval slot); the re-eval's run is noted with `[Unreleased]` accumulation.
+- **§"How to read the bands" cadence note** — adds "Re-eval slots are doc-only and accumulate in `[Unreleased]`; they do NOT consume a version slot. The cadence counts code minors only."
+- **§"Now / Next / Later"** — restructured. "Now (next up)" promotes to 2.47.0 (sibling-file cleanup + stale `getToolsForProfile` docstring fix — bundled). The just-shipped re-eval row appears as ~~strikethrough~~ with the three deliverables cited. Previous-row (2.46.0) preserved as historical context.
+- **§"Re-evaluation cadence"** — first + second slot retained with a parenthetical noting the pre-refinement versioned shape. Third slot added as ✅ ran with all three deliverables enumerated. Next slot renamed to `RE-EVAL following 2.49.0` (3 code minors past 2.46.0; target #4 = `git-providers/base.js` 43-method base interface). Subsequent slots example list updated to `RE-EVAL following 2.52.0`, `RE-EVAL following 2.55.0` for consistency with the corrected cadence.
+- **§"Per-subsystem ICD backfill program"** — target #3 strikethrough'd as ✅ shipped at this re-eval with the +1 code-aware finding cited; target #4's milestone target updated to `RE-EVAL following 2.49.0`.
+- **§"Forward ICD presence check"** — `RE-EVAL following 2.46.0` row added as ✅ ran (cites methodology + ICD-tool-registry); 2.47.0 row added with the bundled sibling-file + docstring fix candidates. Translation paragraph rewritten to summarize the three re-eval slots' outputs.
+- **Decision §14** — sub-clause appended (refined 2026-05-14 at `RE-EVAL following 2.46.0`): "Re-eval sessions are doc-only PRs that accumulate in `[Unreleased]`; they do NOT consume a version slot. This composes with `feedback_no_bump_for_measurement_only`." The 2.42.0 + 2.45.0 doc-only releases acknowledged as pre-refinement shape; rule corrects forward.
+
+### Code-aware findings → 2.47.0 `[strong] [S]` row
+
+One drift item surfaced by authoring the Tool registry ICD: [`js/tools/registry.js`](js/tools/registry.js) lines 265–267 (`ToolRegistry.getToolsForProfile` docstring) still claims:
+
+> `Renamed from getToolsForRole; the legacy alias is preserved below for any plugin-side caller that still imports the old name (deprecation shim retires at 2.1.0).`
+
+This is **stale**. Reading the rest of the file (lines 272–330) shows no `getToolsForRole` alias — it was retired (presumably at 2.1.0 as the docstring's own promise read at the time). We're at 2.46.0; the docstring claim that the shim "is preserved below" doesn't match the file.
+
+**Suggested fix shape (2.47.0):** Single-file docstring update. Drop the "legacy alias is preserved" sentence; replace with a one-liner pointing at the 2.0.0 slice-3 rename history and confirming the shim was retired at 2.1.0 as planned. Same shape as the 2.46.0 retrieval-Composer docstring fix (`[strong] [S]`, single-file, no behavior change). Bundles cleanly with the 2.46.0 out-of-scope sibling-file `context-manager.js` reference cleanup — both are docstring-shape fixes.
+
+**Why this matters:** A future plugin author reading this docstring would expect a `getToolsForRole` alias to exist on `ToolRegistry`. They'd land on the LLM-side `LLMTools.getToolsForRole()` (`js/llm/api.js:1025`) — a coincidentally-same-named method that builds the per-turn tool array, not the registry filter. That misdirection is the kind of seam-confusion the ICD program is meant to prevent.
+
+### Other observations (parked, not promoted)
+
+- **`LLMTools.getToolsForRole` name collision** — `js/llm/api.js:1025` retains the method name from the pre-2.0 era. Renaming would surface during a future tooling-rename pass; stability-preserving today. `[fuzzy]` deferred bucket.
+- **`'full'`-tagged tool list is not contract-pinned** — a test asserting `findToolsByGroup('full').map(t => t.name).sort() === ['<expected list>']` would land it; deferred until a real drift event motivates the antibody.
+- **Profile docs reference `Roles.filterTools` in historical attribution** — `js/profiles/pm-v1.js:8`, `migration.js:15`, `full-v1.js:8`, `plugin-dev-v1.js:9`, `reviewer-v1.js:9`, `coder-v1.js:250`, `profiles/registry.js:21/210/222/224`. Explanatory comments documenting the 1.23.x slice-1 cross-product equivalence — not drift. Kept as historical context.
+- **MCP-bridge tools land without `readOnly: true`** — by design; the registry can't introspect MCP server semantics. Conservative default; not drift.
+
+### Tests
+
+No new tests in this PR. Doc-only — no `js/` behavior changed; `js/version.js` stays at 2.46.0. Existing suites (`node --test tests/test-*.mjs`) run as a no-regression check. Doc-internal consistency:
+
+- `js/version.js` `VERSION = '2.46.0'` — unchanged. `[Unreleased]` populated but no new versioned heading. Version-coherence lint pass-condition unchanged.
+- ROADMAP line 3 header version matches `js/version.js` ↔ `[Unreleased]` accumulation shape.
+- ARCHITECTURE.md `Last sync: **2.46.0** (2026-05-14, third RE-EVAL slot — doc-only — no version bump)` matches the policy refinement.
+- ICD-tool-registry cross-checks: every named export in `js/tools/registry.js` + `js/profiles/registry.js` (11 total) appears in the per-export contract section; every trigger-point line citation has been grep-verified against the production source.
+- Test-file references: [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) (already shipped — confirmed via `ls`; `node tests/test-tools-registry-legal-groups.mjs` passes); [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs) (referenced for cross-product equivalence pin).
+
+### Versioning
+
+`js/version.js` reads **`2.46.0`** — unchanged. **No version bump.** Per the policy refinement adopted at this re-eval (Decision §14 sub-clause), re-eval sessions are doc-only PRs that accumulate in `[Unreleased]`; they do not consume a version slot. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) does NOT fire on this PR — `[Unreleased]` accumulation is not `X.Y.Z`-shaped. Gate fires next on the 2.47.0 tag push, which will absorb these entries into its versioned heading.
+
 ## [2.46.0] - 2026-05-14
 
 ### Retrieval Composer stale docstring fix

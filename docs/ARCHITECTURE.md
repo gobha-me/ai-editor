@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Last sync: **2.44.0** (2026-05-14, second RE-EVAL slot under the methodology adopted 2026-05-12; 4-minor catch-up from the 2.41.0 sync). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
+> Last sync: **2.46.0** (2026-05-14, third RE-EVAL slot under the methodology adopted 2026-05-12; doc-only — no version bump, accumulates in [Unreleased] per the policy refinement at this re-eval; 2-minor catch-up from the 2.44.0 sync). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
 
 > **Commitment bands.** Per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) and [`ROADMAP.md`](ROADMAP.md) §"How to read the bands"), unlabeled sections in this document are implicit `[strong]`-band commitments — load-bearing for the next ~3 milestones. The Intelligence Layer carries `[medium]` for Phase 2 picker promotion (`kb.v1` shipped 2.8.0; `chat_multi.v1` / `rp.v1` deprioritized for ai-editor) and `[fuzzy]` for Phase 3 operational maturity and Phase 4 extensibility.
 
@@ -200,7 +200,7 @@ System prompt builder. `buildSystemPrompt({ admittedDefs?, composerActive? })` a
 
 ### `tools/registry.js`
 
-Dynamic tool registration. Tools declare `allowed_groups` (and, since 2.0, `roles: 'all'` / explicit group tags) at registration time. `ToolRegistry.getDefinitions()` returns the raw tool defs; profile-side filtering happens via `Profiles.filterTools()` (the canonical admission). Tool unregistration emits `tools:unregistered` so the tool-embeddings cache (`js/intelligence/tools/embeddings.js`) drops stale entries. The legal group tags derive from `Profiles.getKnownGroupTags()` since 2.34.0 — adding a new profile no longer requires a registry edit. See [`docs/ROLES_AND_TOOLS.md`](ROLES_AND_TOOLS.md) for the admission contract; see [`docs/ICD-chat-handlers.md`](ICD-chat-handlers.md) for the tool-classification axes consumed by the chat tool loop.
+Dynamic tool registration. Tools declare `allowed_groups` (and, since 2.0, `roles: 'all'` / explicit group tags) at registration time. `ToolRegistry.getDefinitions()` returns the raw tool defs; profile-side filtering happens via `Profiles.filterTools()` (the canonical admission). Tool unregistration emits `tools:unregistered` so the tool-embeddings cache (`js/intelligence/tools/embeddings.js`) drops stale entries. The legal group tags derive from `Profiles.getKnownGroupTags()` since 2.34.0 — adding a new profile no longer requires a registry edit. Full admission contract — 11 exports across `js/tools/registry.js` + `js/profiles/registry.js`, 5 classification axes, three carve-outs (`'all'` / `'*'` / `'full'`), forward-evolution rules — at [`docs/ICD-tool-registry.md`](ICD-tool-registry.md). See [`docs/ROLES_AND_TOOLS.md`](ROLES_AND_TOOLS.md) for the admission narrative and per-tool role table; see [`docs/ICD-chat-handlers.md`](ICD-chat-handlers.md) for the tool-classification axes consumed by the chat tool loop.
 
 Errors thrown by tool handlers (and by the rest of the editor) follow the
 contract in `js/utils/errors.js`: `EditorError` extends `Error` with a
@@ -275,7 +275,7 @@ Preact takeover that stacks above PR Review (priority `80 > 70` in `ModalRegistr
 
 `preview-host.js` (1039 LOC) owns the per-session lifecycle: registers the workspace-resolving Service Worker (idempotent), maintains the in-memory `serverId → entry` registry, mounts the iframe in the preview slide-over, probes for `package.json#scripts.dev` to gate Tier-3-only build-step projects. Tier 2 added per-`serverId` ring buffers for console / errors / routes / network captures (`BUFFER_CAP = 200`). Tier 3a added 5 driveable tools (`preview_snapshot` / `preview_click` / `preview_fill` / `preview_inspect` / `preview_resize`) — selector-shaped, no `preview_eval`. The driving tools mutate state and read it, so they appear in both `PREVIEW_MUTATING_TOOLS` and `PREVIEW_READ_TOOLS`; see [`ICD-chat-handlers.md`](ICD-chat-handlers.md) for the cache-invalidation contract. Tier 3b (sidecar / build-step support) is `[fuzzy]` per ROADMAP.
 
-## Slot & Event Registries (2.22.0 → 2.41.0 — audit-sweep wave)
+## Slot & Event Registries (2.22.0 → 2.44.0 — audit-sweep wave; closed 2.44.0)
 
 The 2026-Q2 audit-sweep wave (2.33.0 → 2.41.0) consolidated four ad-hoc patterns into typed registries. Each replaces a hand-rolled chain that had become its own maintenance hazard.
 
@@ -443,8 +443,9 @@ ARCHITECTURE.md (source of truth — what you're reading)
 │   └── DESIGN-sub-agents.md     — shipped 2.37.0; gated on Phase 0 audit-sweep + post-2.0
 │
 ├── ICD-*.md (single-subsystem interface contracts — Scale-1.5 per methodology §"Per-subsystem ICD backfill program")
-│   ├── ICD-chat-handlers.md     — chat tool-loop classification axes; target #1 (RE-EVAL following 2.41.0)
-│   └── ICD-intelligence-composers.md — Tools + Retrieval Composer seam; target #2 (RE-EVAL following 2.44.0)
+│   ├── ICD-chat-handlers.md         — chat tool-loop classification axes; target #1 (RE-EVAL following 2.41.0)
+│   ├── ICD-intelligence-composers.md — Tools + Retrieval Composer seam; target #2 (RE-EVAL following 2.44.0)
+│   └── ICD-tool-registry.md         — Tool registry admission contract; target #3 (RE-EVAL following 2.46.0)
 │
 ├── discussion/ (pre-architecture; not commitments — cited only as "see discussion/X.md for the thinking")
 │
