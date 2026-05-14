@@ -4,6 +4,109 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.48.0] - 2026-05-14
+
+### Feature minor — tool-loop core extraction (github#24 Phase 0)
+
+Refactor `handleGeneralRequest`'s iterative tool loop into a reusable
+`runToolLoop(context, hooks, transport)` function in
+[`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) so Phase 1
+sub-agents (the `delegate_task` tool, targeted at 2.49.0) can drive the
+same loop with a different context + hooks bag. The pre-2.48.0
+[`js/chat/handlers.js`](js/chat/handlers.js) coupled the loop body to
+the user chat surface in three load-bearing ways — DOM streaming
+(`addStreamingMessage` / `updateStreamingMessage` / mid-loop placeholder
+manipulation), `State.chatHistory` writes via `ChatHistoryStore`, and
+the `coder.v1`-gated `TaskLedger` records. The Phase 1 sub-agent design
+([`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md) §"Gap 2")
+names this coupling as the prerequisite refactor that has to land
+*before* the feature itself.
+
+**No behavior change to the chat surface.** The wrapper
+`handleGeneralRequest` keeps the same input/output contract; the only
+observable change for users is the per-PR version bump in the title
+bar.
+
+#### Refactored — `runToolLoop` extraction (`[strong]`)
+
+| File | Action | LOC | Notes |
+|---|---|---|---|
+| [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) | **NEW** | ~720 | Pure-ish core: takes `context` (no `State.*` reach-back), `hooks` (DOM/chat-history callbacks default to no-ops), `transport` (`{chat, stop}` LLM adapter). Returns `{finalContent, lastRoundContent, lastRoundReasoning, textCommittedMidLoop, toolActions, breakReason, fallbackContent}`. Migrates `_summarizeToolResult`, `_summarizeArgs`, `_rollbackHistory` from `handlers.js`. The empty-response fallback also moves here so Phase 1 sub-agent result envelopes inherit the same synthesized summary. |
+| [`js/chat/handlers.js`](js/chat/handlers.js) | EDIT | ~−700 net | `handleGeneralRequest` shrinks from ~820 lines to ~210 lines. Now: assemble context, build hooks, invoke `runToolLoop`, run post-loop placeholder finalize + queue kick-new-run. The 13 DOM/state-coupling sites map 1-to-1 onto hooks (`onStreamStart` / `onStreamToken` / `onRoundCommit` / `onToolCall` / `onAssistantTurn` / `onToolResultTurn` / `onSystemMessage` / `onConsentCard` / `onUserInputDrain` / `onLedgerRecord` / `onDiscoveryAdmissions` / `onPlanModeApproved` / `onChatComplete`). |
+
+#### Tests — `runToolLoop` core pinning
+
+| File | Action | Coverage |
+|---|---|---|
+| [`tests/test-tool-loop-core.mjs`](tests/test-tool-loop-core.mjs) | **NEW** | 22 subtests: 10 for `summarizeToolResult` branches, 6 for `summarizeArgs` (passthrough + truncation), 6 for `runToolLoop` exit paths reachable without invoking `executeToolCall` (text-only natural-stop, pre-round-0 cancellation, empty-response fallback synthesis, transient-error retry, catastrophic-error rethrow + history rollback, `finishReason: 'length'` guidance + continue). |
+
+Tool-execution paths (multi-round, duplicate detection, ledger
+recording, cache invalidation) are exercised in the browser via the
+manual chat session battery below. Mocking the full tool registry +
+result shapes under Node would re-implement half of
+[`js/tools/`](js/tools/); the cost-to-coverage isn't there for Phase 0.
+Phase 1 (2.49.0) will add a `delegate_task` integration test that
+covers the same paths from the other side.
+
+#### Implementation notes
+
+- **`lastRoundReasoning` left as a TODO.** Declared in the pre-2.48.0
+  loop, read at the assistant-turn assembly and the post-loop finalize,
+  but never assigned in the visible loop body — the streaming-layer
+  wiring that would populate it never landed. Preserved as `null` with
+  a `TODO(reasoning-capture)` next to the declaration so the seam stays
+  cite-able when reasoning capture ships. Per
+  `feedback_fix_bugs_found_in_verify.md`: diagnose, don't paper over.
+- **`State.isGenerating` re-assertion** preserved via the new
+  `onChatComplete` hook. `LLM.chat`'s internal `finally` clears the
+  flag per-call; the wrapper-side hook re-asserts so any late observer
+  of the `llm:generating` event sees the still-generating state across
+  rounds. Sub-agents pass a no-op (their UI doesn't observe this flag).
+- **Plan Mode dynamic import** preserved verbatim inside
+  `hooks.onPlanModeApproved` — keeps `state.js` out of the top-level
+  import graph for that code path (the pre-2.48.0 placement comment is
+  load-bearing for the same reason).
+- **`State.toolActionLog` trim** changed from reassignment
+  (`State.toolActionLog = State.toolActionLog.slice(-50)`) to in-place
+  splice. The core mutates an injected array reference; reassigning
+  would break the wrapper's view of the same array. Behavior preserved
+  (same 50-entry cap; same FIFO eviction).
+
+### Verification
+
+**Automated:** `node --test tests/test-*.mjs` — new
+`test-tool-loop-core.mjs` (22 subtests) + the full chat / handlers /
+tool-classifications / message-rendering test suite green. Browser
+suite (`tests/index.html`) unchanged. Version-coherence and security
+lints pass.
+
+**Manual chat-session battery (the release-readiness gate):**
+
+1. Single text reply ("what is 2+2") → one streamed message, no tool
+   calls, finalize once.
+2. Single tool round ("read js/version.js") → exactly one tool-call
+   panel, no orphaned streaming placeholder.
+3. Multi-round tool chain → tool-call panels in order, mid-loop text
+   commit leaves no duplicate text in the final message.
+4. Duplicate-trigger refusal → third identical call returns refusal
+   payload, loop continues.
+5. Cancel mid-loop → no leaked Promise warnings, `isGenerating`
+   returns to false, no orphan streaming element.
+6. Queue-drain — send a second message while the first is running →
+   second lands as a user turn mid-loop and the model sees it in the
+   next round.
+7. Plan Mode approval → mode auto-clears after Approve; the model
+   regains its full tool catalog on the next round.
+
+### Out of scope (deferred to Phase 1 / 2.49.0)
+
+The Phase 1 feature minor — `delegate_task` tool, `subagent.v1`
+profile, `SubAgentContext`, approval card, transcript panel,
+`State.subagents` namespace, `costAttribution` plumbing through the
+cost store — is its own PR. The DESIGN doc's intent ("Phase 0 extraction
+PR lands first; Phase 1 lands next as its own feature minor") matches
+the project's "don't bundle" feedback memory.
+
 ## [2.47.0.2] - 2026-05-14
 
 ### Retrieval `No runtime wire-up` / `Removability holds` cleanup — 5 files missed by the 2.47.0.1 sweep
