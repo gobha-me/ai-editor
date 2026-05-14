@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Last sync: **2.46.0** (2026-05-14, third RE-EVAL slot under the methodology adopted 2026-05-12; doc-only — no version bump, accumulates in [Unreleased] per the policy refinement at this re-eval; 2-minor catch-up from the 2.44.0 sync). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
+> Last sync: **2.49.0** (2026-05-14, fourth RE-EVAL slot under the methodology adopted 2026-05-12; doc-only — no version bump, accumulates in [Unreleased]; 3-minor catch-up from the 2.46.0 sync covering 2.47.0+0.1+0.2 retrieval/runtime cleanup, 2.48.0+0.1 tool-loop core + file-edit tool surface, and 2.49.0+0.0 sub-agents Phase 1). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
 
 > **Commitment bands.** Per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) and [`ROADMAP.md`](ROADMAP.md) §"How to read the bands"), unlabeled sections in this document are implicit `[strong]`-band commitments — load-bearing for the next ~3 milestones. The Intelligence Layer carries `[medium]` for Phase 2 picker promotion (`kb.v1` shipped 2.8.0; `chat_multi.v1` / `rp.v1` deprioritized for ai-editor) and `[fuzzy]` for Phase 3 operational maturity and Phase 4 extensibility.
 
@@ -154,8 +154,7 @@ and delegates to the correct provider instance from `git-providers/registry`.
 
 ### `git-providers/base.js`
 
-Default interface (43 methods). Providers extend this and override only
-the methods they support. Unimplemented methods throw `"not supported"`.
+Default interface (55 methods + 1 `get capabilities()` getter; see [`ICD-git-providers.md`](ICD-git-providers.md) for the full contract). Providers are plain object literals; the registry merges them onto `BASE_GIT_PROVIDER` via shallow spread (`{ ...BASE_GIT_PROVIDER, ...provider }`) — no class inheritance. Three default behaviors: `notSupported` throw (the rule, 40 of 55 methods), safe-empty return (`null`/`[]` for feature-detection paths — `getLanguages`, all `listWorkflow*`), and functional defaults that compose other base methods (`getMergeConflicts`, `getBranchAheadBehind`, `getChangedFilesBetween`, `addPullRequestComment`). The status-code → `ErrorCode` map at lines 89–104 produces LLM-actionable `EditorError` envelopes. A six-flag capability matrix (`reviewSubmission`, `threadResolve`, `viewedFiles`, `merge`, `rerunCi`, `mergeConflictResolution`) is read by the PR Review surfaces; the `undefined → false` invariant lets providers declare partial subsets. The **circuit breaker** (`circuitBreakerGuard` + `markUnreachable`/`markReachable` + `healthProbe`, `CIRCUIT_COOLDOWN_MS = 60_000`) is exported separately and wrapped manually by the three remote providers' `request()` overrides; Local skips it.
 
 ### `git-providers/{gitea,github,gitlab}.js`
 
@@ -389,7 +388,7 @@ The barrel re-export pattern (`llm.js`, `editor.js`, `ui-helpers.js`) keeps impo
 | `issue-detail.js` | ~1089 | Issue tab renderer + actions (DOMPurify-sanitized markdown render) |
 | `preview/preview-host.js` | ~1039 | Tier 1/2/3a preview lifecycle, SW registration, capture ring buffers |
 | `intelligence/retrieval/comparison.js` | ~979 | Strategy comparison harness (offline measurement) |
-| `git-providers/base.js` | ~973 | Default 43-method provider interface; typedefs (`BlameData`, `FileCommit`, `PullRequestData`, `PRFileChange`, `CommitStatus`); `glyph` field (2.26.0) |
+| `git-providers/base.js` | ~973 | Default 55-method + 1-getter provider interface; typedefs (`BlameData`, `FileCommit`, `PullRequestData`, `PRFileChange`, `CommitStatus`); `glyph` field (2.26.0); circuit breaker (`circuitBreakerGuard`, `markUnreachable`/`markReachable`, `healthProbe`). See [`ICD-git-providers.md`](ICD-git-providers.md). |
 | `editor/instance.js` | ~953 | CodeMirror EditorView wrapper + edit ops |
 | `app.js` | ~944 | Bootstrap, event wiring (post-inline-handler retirement; -80 LOC vs 1.6.11) |
 | `zip-upload.js` | ~935 | Zip-flow project loader (2.20.0); placeholder-modal entry for Session zip / Clone-from-URL |
@@ -408,7 +407,7 @@ The barrel re-export pattern (`llm.js`, `editor.js`, `ui-helpers.js`) keeps impo
 | `intelligence/retrieval/strategies/semantic.js` | ~684 | Semantic strategy (embeddings-backed) |
 | `ui/left-pane-rail.js` | ~667 | Rail v2 (Touch 3) — `rail-views` consumer, body-owned since 2.24.0 |
 
-Provider files trend large because each implements the same ~43-method base interface. `core.js` is large because it's the only module allowed to import from `providers/`, so all globally-used registries (EventBus, State, Storage, Plugins, Providers) live there to avoid cycles. The intelligence subsystems trend large because each is a self-contained unit. Touch 3 surfaces and `preview-host.js` are Preact-rendering or session-lifecycle modules respectively, both new since 1.9.1.
+Provider files trend large because each implements the same ~55-method base interface. `core.js` is large because it's the only module allowed to import from `providers/`, so all globally-used registries (EventBus, State, Storage, Plugins, Providers) live there to avoid cycles. The intelligence subsystems trend large because each is a self-contained unit. Touch 3 surfaces and `preview-host.js` are Preact-rendering or session-lifecycle modules respectively, both new since 1.9.1.
 
 ## Type Coverage
 

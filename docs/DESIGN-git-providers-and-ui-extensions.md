@@ -66,6 +66,8 @@ State.currentProject = {
 Mirrors `ProviderRegistry` pattern. Each provider implements a normalized
 interface; the core never calls provider-specific APIs directly.
 
+> **Forward-pointer (2026-05-14).** The interface stub below is the 1.1.0 minimum-viable surface preserved for historical-design context. The current-shape source of truth is [`ICD-git-providers.md`](ICD-git-providers.md) — 55 methods + 1 getter, three default-modes (`notSupported` / safe-empty / functional default), six-flag capability matrix, circuit breaker, plus the `undefined → false` invariant for partial capability declarations. Do not extend the stub below per-method; extend the ICD.
+
 ```javascript
 // js/git-providers/registry.js
 

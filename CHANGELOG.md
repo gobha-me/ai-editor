@@ -4,6 +4,111 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Doc — `RE-EVAL following 2.49.0` (fourth re-eval slot; doc-only, no version bump)
+
+Ran 2026-05-14 per the Plinth methodology re-eval cadence (every 3 code
+minors; 3 code minors past 2.46.0 = 2.49.0). Doc-only — no version bump
+consumed; deliverables accumulate here in `[Unreleased]` until the next
+versioned PR absorbs them (mirrors the 2.45.0 / 2.47.0.1 re-eval shape).
+
+#### Added — `docs/ICD-git-providers.md`
+
+ICD #4 in the per-subsystem ICD-backfill program (target #4 per
+[`ROADMAP.md`](docs/ROADMAP.md) §"Per-subsystem ICD backfill program").
+Covers `BASE_GIT_PROVIDER` (55 callable methods + 1 `get capabilities()`
+getter + 7 non-callable fields) plus the four concrete providers
+(`github.js`, `gitea.js`, `gitlab.js`, `local.js`) plus the
+circuit-breaker module (`circuitBreakerGuard`, `markUnreachable` /
+`markReachable`, `healthProbe`, `CIRCUIT_COOLDOWN_MS = 60_000`,
+`HEALTH_PROBE_TIMEOUT = 5_000`) under one inheritance-via-shallow-spread
+contract. Five classification axes: **Implementation** (three default
+modes: `notSupported` throw / safe-empty return / functional default),
+**Capability** (six-flag matrix read by PR Review surfaces;
+`undefined → false` invariant for partial declarations), **Error
+translation** (status-code → `ErrorCode` → `recoveryHint` map at
+[`base.js:89–104`](js/git-providers/base.js)), **Circuit-breaker**
+(opt-in per provider; the three remote providers wrap manually, Local
+skips), **Contribution** (`contributes: { panels, tools, settings,
+menuItems }` deep-merged at registration). Mirrors
+[`ICD-tool-registry.md`](docs/ICD-tool-registry.md) section structure
+(prior re-eval's template).
+
+#### Paper-half drift fixes
+
+The stale **"43-method base interface"** figure (carried forward in
+`ROADMAP.md` §"Per-subsystem ICD backfill program" target #4 +
+§"Next re-eval slot", and in `ARCHITECTURE.md` line-table + descriptive
+paragraph) was corrected to **55 methods + 1 getter** in every cited
+site. The drift originated pre-2.13.0 (Touch 3 PR Review surface added 4
+methods + 1 getter); subsequent slices (2.18.0 Merge Conflict, 2.26.0
+glyph, 2.13.2 rerunCi) accumulated without a doc-side re-count.
+
+Other paper-half edits:
+- `docs/ROADMAP.md` — line-3 header roll-forward; "Now" row rewritten
+  to point at this re-eval slot; "Just shipped" rows roll forward to
+  capture 2.49.0 end-to-end + 2.49.0.0 plumbing + 2.48.0 tool-loop +
+  2.48.0.1 file-edit; Forward ICD presence table gains five rows
+  (2.48.0, 2.48.0.1, 2.49.0.0, 2.49.0, this re-eval slot); §"Per-
+  subsystem ICD backfill program" target #4 strikethrough with
+  reference to the authored ICD; next re-eval slot renamed
+  `RE-EVAL following 2.52.0` (3 minors past 2.49.0).
+- `docs/ARCHITECTURE.md` — header sync 2.46.0 → 2.49.0; `git-
+  providers/base.js` description rewritten to describe inheritance-via-
+  shallow-spread + the three default behaviors + the capability matrix
+  + the circuit breaker + the forward-pointer to ICD-git-providers.md;
+  File Size Map row gains capabilities/circuit-breaker mention; "~43-
+  method" → "~55-method" in the per-file-size paragraph.
+- `docs/DESIGN-git-providers-and-ui-extensions.md` — §2 gains a single
+  forward-pointer paragraph marking the inline interface stub as the
+  1.1.0 minimum-viable surface (historical-design shape) and naming
+  `ICD-git-providers.md` as the current-shape source of truth.
+  Per-method body of §2 intentionally NOT rewritten (DESIGN docs are
+  historical-design shape, ICDs are current-shape).
+
+#### Code-aware findings (queued for next code minor; not applied this slot)
+
+Three drift items surfaced during ICD authoring:
+
+1. **`getCommitDiff` informal extension.** GitHub
+   ([`github.js:755`](js/git-providers/github.js)), Gitea
+   ([`gitea.js:639`](js/git-providers/gitea.js)), and GitLab
+   ([`gitlab.js:904`](js/git-providers/gitlab.js)) all declare a public
+   `async getCommitDiff(connection, owner, repo, sha)` with the same
+   return shape. The method is **not declared in `BASE_GIT_PROVIDER`**.
+   A future fourth remote provider would land without it unless the
+   pattern is noticed by grep. Suggested fix for next code minor:
+   single-file edit adding `getCommitDiff` to base with `notSupported`
+   default. `[strong] [S]` candidate; same shape as the 2.46.0
+   retrieval-Composer fix.
+2. **GitLab partial-capabilities shape test.**
+   [`gitlab.js:1161`](js/git-providers/gitlab.js) declares only
+   `mergeConflictResolution: true`; the other five flags are
+   `undefined`. Every consumer site uses `capabilities?.flag === true`
+   so `undefined` reads as `false`. A future consumer that omits the
+   `?.` would throw on GitLab. Suggested fix: anti-regression test at
+   `tests/test-provider-capabilities-shape.mjs` asserting every
+   provider returns all six flags explicitly.
+3. **`resolveReviewThread` dead code.** Declared at
+   [`base.js:594`](js/git-providers/base.js); no provider overrides;
+   `threadResolve` capability is `false` everywhere; no UI read site.
+   Decision deferred — promote (GitHub GraphQL integration) or demote
+   (remove method + capability flag).
+
+Selection of which finding promotes to the next code minor's `[strong]`
+slot is deferred to the row scheduling pass.
+
+#### Verification
+
+Doc-only diff. The `BASE_GIT_PROVIDER` method count was verified via
+grep against `js/git-providers/base.js` (55 `async`/sync methods + 1
+`get capabilities()` getter); subclass override map spot-checked across
+issues, PR Review, and CI/CD axes against actual provider files; the
+five capability-flag read sites (`PrReviewDock.js:92-94`,
+`PrReviewSurface.js:544/570/571/650`, `PrMergeControls.js:49`,
+`git.js:513/591`) confirmed against `get capabilities()` declarations
+in each provider. Node test suite + version-coherence + security lints
+all pass on doc-only diff.
+
 ## [2.49.0] - 2026-05-14
 
 ### Feature — sub-agents end-to-end (slice 2 of github#24 Phase 1, gitea#418 successor)
