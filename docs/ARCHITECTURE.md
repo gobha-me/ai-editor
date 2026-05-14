@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Last sync: **2.41.0** (2026-05-12, first RE-EVAL slot under the methodology adopted 2026-05-12). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
+> Last sync: **2.44.0** (2026-05-14, second RE-EVAL slot under the methodology adopted 2026-05-12; 4-minor catch-up from the 2.41.0 sync). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
 
 > **Commitment bands.** Per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) and [`ROADMAP.md`](ROADMAP.md) §"How to read the bands"), unlabeled sections in this document are implicit `[strong]`-band commitments — load-bearing for the next ~3 milestones. The Intelligence Layer carries `[medium]` for Phase 2 picker promotion (`kb.v1` shipped 2.8.0; `chat_multi.v1` / `rp.v1` deprioritized for ai-editor) and `[fuzzy]` for Phase 3 operational maturity and Phase 4 extensibility.
 
@@ -227,6 +227,8 @@ The 1.5.x retrieval cutover (PR #266 → bundled into the 1.6.0 tag) and the 1.6
 
 The retrieval manager exposes `findRelevantFiles(query, opts)`, the public entry point used by both the `find_relevant_files` tool and any plugin that wants the same scoring. It returns structured envelopes on cold-start (`indexer_not_ready`) and budget overrun (`retrieval_partial`) under the 30 s hard tool wall.
 
+**Composer seam.** Two pure-function Composers sit at the admissibility boundary between registry-or-index and the model: [`js/intelligence/tools/composer.js`](../js/intelligence/tools/composer.js) (`composeAdmission` + `renderForLLM`) and [`js/intelligence/retrieval/composer.js`](../js/intelligence/retrieval/composer.js) (`compose`). Both are wired into production — tools via `js/llm/api.js#LLMTools._runComposer()`; retrieval via `js/intelligence/retrieval/manager.js` (cutover at 1.5.14, replacing legacy `js/context-manager.js`). Full seam contract — frozen exports, classification axes, interaction matrix, forward-evolution rules — at [`docs/ICD-intelligence-composers.md`](ICD-intelligence-composers.md).
+
 ## MCP Layer (`js/mcp/`, `plugins/mcp-bridge.js`)
 
 Model Context Protocol bridge. External MCP servers expose tools via the plugin layer; the bridge registers them through `ToolRegistry` so the LLM sees them alongside native tools (under the namespaced `mcp__<serverId>__<toolName>` naming). Per-server enable/disable from Settings → MCP Servers. Diff-based state messages emit on `mcp:serversChanged` so the model's prior-turn tool list does not go stale silently. Role/group-based access works through the standard profile admission flow (no separate MCP-only carve-out since 2.0); the registry default is `'all'`. Phase 1 (catalog + curated server list) is the open work per ROADMAP github#27; Phase 2 (OAuth flows) and Phase 3 (self-hosted templates) are gated on a `docs/DESIGN-mcp-oauth.md` design slot.
@@ -298,6 +300,14 @@ Every overlay registers once at boot via `registerOverlay({id, isActive, close, 
 
 Replaces the pre-2.36.0 hand-rolled keydown chain in `app.js` (~158 LOC). Every binding registers once at boot via `bindHotkey({id, handler, enabled?})`; a single keydown listener calls `dispatchHotkey(event)`. Combo definitions are the single source of truth in `HOTKEYS` (carrying `documentBound: true` for the 19 entries this dispatcher owns). Combo vocabulary covers `mod` (Ctrl/Cmd), `shift`, `alt`, named keys (`slash`, `comma`, `esc`, `f1`-`f12`), and case-insensitive single chars; modifier-strictness prevents Ctrl+P from firing on Ctrl+Shift+P.
 
+### `ui/dom-bindings.js` — boot-time + slot-aware click/event wiring (2.44.0.1)
+
+Replaces the closure-local `safeAdd` helper that lived in `js/app.js#setupEventListeners` and the parallel `safeClick` in `js/project-manager.js#initProjectListeners`. Every binding registers once via `bindClick(id, handler)` (or `bindEvent(id, event, handler)` for non-click events); 34 production sites flow through it today. Entries whose `getElementById` returns null at registration time record `wired: false`; `rewireUnboundElements()` retries via subscription to `forSlot('rail-views')` so plugin-mounted buttons land wiring as soon as the structured slot re-renders. Duplicate `(id, event)` registration throws — same idempotency contract as `bindHotkey`. Regression-guarded by 5 cases in [`tests/test-slot-manager.mjs`](../tests/test-slot-manager.mjs) under "plugin-mounted button wiring (2.44.0.1)".
+
+### `settings/tab-activation-registry.js` — settings-tab on-activate/on-close dispatch (2.44.0.2)
+
+Replaces the 11-branch `tab.dataset.tab === 'tabX'` switch in `js/settings-manager.js#populateSettingsForm` plus the explicit `unmountMemoryTab()` call in `closeSettings()`. Tab modules register via `registerOnActivate(tabId, handler)` / `registerOnClose(tabId, handler)` at module-load — side-effect registration matches the `js/tools/registry.js` precedent for tool definitions. `dispatchOnActivate(tabId)` (single tab on rail click) and `dispatchAllOnClose()` (modal close) wrap handler calls in `try/catch` with `console.warn` — one tab's failure can't strand the modal. Coverage: 11 tabs registered (Embeddings, Models, Plugins, Ignore, Storage, Cost, Memory, Workspace Settings, Test Loop, Tools, Retrieval); only `tabMemory` carries an on-close registration. 12 cases in [`tests/test-settings-tab-activation.mjs`](../tests/test-settings-tab-activation.mjs) split parity-cluster (3) + shape-cluster (9).
+
 ### `tool-classifications.js` (2.25.0 hoist) + `cache-invalidation.js`
 
 Five tool-classification axes — 8 frozen exports — co-located so adding a new tool is a top-to-bottom scan rather than a hunt across files. The 2.25.0 hoist inverted an earlier "deliberately NOT hoisted" decision after the inline-in-handlers location became the recurring source of "missed an axis" bugs. Full contract: [`docs/ICD-chat-handlers.md`](ICD-chat-handlers.md). `cache-invalidation.js` implements the two eviction helpers (`invalidateCachesForPath`, `invalidateCachesForPreviewMutation`) that consume the mutation axes.
@@ -305,6 +315,14 @@ Five tool-classification axes — 8 frozen exports — co-located so adding a ne
 ### Inline-handler retirement (2.27.0 → 2.32.0)
 
 The 4-phase migration arc (`docs/DESIGN-html-inline-handlers-migration.md`) retired 53 inline `onclick="window.foo()"` strings across `html/*.html` and pure-renderer modules in favor of `data-action`-based event delegation. Phase 4 (2.32.0) retired 56 dead `window.*` aliases from `app.js`. `tests/test-no-inline-onclick.mjs` is the anti-regression CI guard.
+
+### Chat tool-name string-literal pin (2.44.0.0)
+
+`REQUIRED_TOOL_PARAMS` hoisted to module-scope `Object.freeze({...})` in [`js/chat/tools.js`](../js/chat/tools.js) — function-local `requiredParams` map lifted so the test can `import` the keys. [`tests/test-chat-tool-name-literals.mjs`](../tests/test-chat-tool-name-literals.mjs) (4 cases) cross-references against `ToolRegistry`-registered names extracted from `js/tools/*.js` to catch rename drift across `summarizeToolArgs` / `summarizeToolResult` (`js/chat/messages.js`), `_writeRange` / `_readRange` (`js/chat/turn-enrich.js`), and the validator map itself. Anti-regression CI guard against the cosmetic-and-functional degradation class that earlier versions silently absorbed.
+
+### `managers/` directory retirement (2.44.0.3)
+
+The one-file `js/managers/` directory (carrying only `search-manager.js`) retired in favor of top-level sibling placement matching `tab-manager.js` / `project-manager.js` / `file-tree.js`. `SearchManager` moved to [`js/search-manager.js`](../js/search-manager.js); [`tests/test-module-locations.mjs`](../tests/test-module-locations.mjs) is the new anti-regression test (2 cases over a `RETIRED_PATHS` table — directory absence + import-needle scan). Designed as a general-purpose location-pin contract that future sweep slices append rows to.
 
 ## Data Flows
 
@@ -425,7 +443,8 @@ ARCHITECTURE.md (source of truth — what you're reading)
 │   └── DESIGN-sub-agents.md     — shipped 2.37.0; gated on Phase 0 audit-sweep + post-2.0
 │
 ├── ICD-*.md (single-subsystem interface contracts — Scale-1.5 per methodology §"Per-subsystem ICD backfill program")
-│   └── ICD-chat-handlers.md     — chat tool-loop classification axes; first in the backfill program (RE-EVAL following 2.41.0)
+│   ├── ICD-chat-handlers.md     — chat tool-loop classification axes; target #1 (RE-EVAL following 2.41.0)
+│   └── ICD-intelligence-composers.md — Tools + Retrieval Composer seam; target #2 (RE-EVAL following 2.44.0)
 │
 ├── discussion/ (pre-architecture; not commitments — cited only as "see discussion/X.md for the thinking")
 │

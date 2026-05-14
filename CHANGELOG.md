@@ -4,6 +4,68 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.45.0] - 2026-05-14
+
+### RE-EVAL following 2.44.0 — second re-eval slot under the methodology adopted 2026-05-12
+
+Doc-only PR. Second firing of the re-eval cadence (every 3 minors per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"; Decision §14). Tag-direct `X.Y.Z` per [`docs/VERSIONING.md`](docs/VERSIONING.md) line 35 — multi-file doc deliverable end-to-end testable on a single push; not an X.Y.Z.N sub-slice. No code changes in `js/` beyond the version bump — methodology rule per ROADMAP §"Per-subsystem ICD backfill program" line 92: *"No code changes in the ICD session itself — drift fixes spawn as `[strong]`-band roadmap items in subsequent code minors."*
+
+**Why now.** The second re-eval slot was scheduled at `RE-EVAL following 2.44.0` per ROADMAP §"Re-evaluation cadence"; 2.44.0 just closed the audit-sweep arc. Per Decision §14, re-eval gates the next code minor — code work resumes at 2.46.0 with the one `[strong]`-band row this re-eval produced (stale retrieval-Composer docstring; see ICD findings below).
+
+### ARCHITECTURE.md catch-up sync — 2.41.0 → 2.44.0
+
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) was at **2.41.0 sync** — 4 minors behind. This refresh catches it up to 2.44.0:
+
+- **`ui/dom-bindings.js` section** added — registry that graduated from the closure-local `safeAdd` helper at 2.44.0.1; 34 production sites + plugin-mounted button wiring via `forSlot('rail-views')` re-wire path.
+- **`settings/tab-activation-registry.js` section** added — registry that retired the 11-branch `tab.dataset.tab === 'tabX'` switch in `settings-manager.js#populateSettingsForm` at 2.44.0.2.
+- **Chat tool-name string-literal pin section** added — 2.44.0.0's `REQUIRED_TOOL_PARAMS` hoist + `tests/test-chat-tool-name-literals.mjs` anti-regression guard.
+- **`managers/` directory retirement section** added — 2.44.0.3's sibling placement decision + `tests/test-module-locations.mjs` location-pin contract.
+- **Composer seam paragraph** added to the Intelligence Layer section — cross-references the new ICD; notes that both Composers are production-wired (tools via `js/llm/api.js#LLMTools._runComposer`; retrieval via `js/intelligence/retrieval/manager.js` cutover at 1.5.14).
+- **Document hierarchy** gains the second ICD row (`ICD-intelligence-composers.md`).
+
+### Second ICD shipped — `docs/ICD-intelligence-composers.md`
+
+Per ROADMAP §"Per-subsystem ICD backfill program" target #2 (Intelligence-layer Composer seam) — new file [`docs/ICD-intelligence-composers.md`](docs/ICD-intelligence-composers.md). Covers both Composer modules under one seam contract:
+
+- **Two modules at a glance** — side-by-side table comparing [`js/intelligence/tools/composer.js`](js/intelligence/tools/composer.js) (`composeAdmission` / `renderForLLM`, sync, single-arg) vs [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) (`compose`, async, DI tuple). Both pure functions; both production-wired since 1.3.14 / 1.5.14 respectively.
+- **5 classification axes** spanning the seam — Source (static vs sticky/discovery), Budget (single-tier vs three-layer), Authorization (`required_groups` vs upstream-only), Overflow (privileged-static vs round-robin-lowest-score), Diagnostics (`ToolDiagnostics` vs `Diagnostics` with disjoint field semantics).
+- **Per-export contract** — for each of the 3 public exports across both Composers: signature, request/result shape, trigger points (with line numbers in production wire-up), invariants.
+- **Interaction matrix** — shared seam contract (pure functions, DI deps, structured diagnostics, separate render export); disjoint surfaces (admission units; discovery paths; overflow protection targets); open invariants (diagnostics field-name overlap not type-compatible — no assertion today).
+- **Composer-vs-non-Composer path drift** (tools side) — cross-references [`ICD-chat-handlers.md`](docs/ICD-chat-handlers.md); freezes the 2.35.0 same-projection contract (`Profiles.filterTools(defs, profileName)` reads from one source on both paths).
+- **Why these two Composers resist consolidation** — different domains/shapes, different lifecycle profiles, the seam IS the abstraction.
+- **Forward-evolution rules** — pure-function discipline, DI for collaborators, structured diagnostics, separate render export, document the wiring location and keep it current (motivated by the one drift finding below).
+
+### Code-aware findings → 2.46.0 `[strong] [S]` row
+
+One drift item surfaced by authoring this ICD: [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) lines 31–34 still claim *"the Composer is exported but not yet called by find_relevant_files or js/context-manager.js; production wiring lands with the migration PR (1.5.2 per ROADMAP)"*. This is stale — production wiring landed at 1.5.14 (the cutover that retired legacy `js/context-manager.js`); [`js/intelligence/retrieval/manager.js:38`](js/intelligence/retrieval/manager.js) imports `compose` and drives `findRelevantFiles()` through it. The Removability claim is inverted now too. Suggested fix shape: single-file docstring update + audit pass for other stale 1.4.x-era claims in the same module. Folds into the next in-track patch.
+
+Tools Composer docstring: current and accurate — no drift found.
+
+### Roadmap paper-half — band tightening + drift fixes
+
+In [`docs/ROADMAP.md`](docs/ROADMAP.md):
+
+- **Header re-sync** — line 3 updated to "2.45.0 re-eval slot ran"; current-released line moves to v2.45.0; HEAD pointer to 2.45.0 + [Unreleased].
+- **Now / Next / Later table** restructured — "Now (next up)" becomes 2.46.0 (single `[strong] [S]` retrieval-Composer-docstring fix); "Next (2.47.0)" advances the re-eval anchor; "Next-after" advances to 2.48.0+.
+- **ICD-backfill program** — target #2 marked shipped (✅) with the +1 code-aware finding cited; target #3 (Tool registry admission contract) remains queued for `RE-EVAL following 2.47.0`.
+- **Re-evaluation cadence** — `RE-EVAL following 2.44.0` slot marked completed with the three deliverable references (architecture sync, ICD, paper-half output); next-slot anchor advances to `RE-EVAL following 2.47.0`.
+- **Forward ICD presence check** — 2.45.0 row marked shipped; 2.46.0 added with the new ICD as its contract reference; Touch 3 Window v2 / Sessions row updated (band call: `[medium]` retained — 2.0.0 dependency cleared, promotion blocked on DESIGN-sessions.md); MCP OAuth row updated (band call: `[medium]` retained — security surface warrants paper-first contract; DESIGN-mcp-oauth.md authoring slot queued).
+- **Known open issues — github#27** row updated to reflect the re-eval's band-retention decision.
+
+### Tests
+
+No new tests in this PR. The plan's verification section runs the existing `node --test tests/test-*.mjs` suite as a "no regression" check (no `js/` code changed beyond the version constant). Doc-internal consistency:
+
+- `js/version.js` `VERSION = '2.45.0'` matches the `## [2.45.0]` heading above (version-coherence lint).
+- ROADMAP line 3 header version matches `js/version.js` ↔ `[Unreleased]` shape.
+- ARCHITECTURE.md `Last sync: **2.44.0** (2026-05-14)` matches the four-minor catch-up state.
+- ICD doc cross-checks: every named export in the two Composer source files (`composeAdmission`, `renderForLLM`, `_testing`, `compose`) appears in the per-export contract section; every trigger-point line citation in the ICD has been grep-verified against the production source.
+- Test-file references: `tests/test-tools-composer.mjs`, `tests/test-retrieval-composer.mjs`, `tests/test-system-prompt-admission.mjs` — all confirmed present via glob before citing.
+
+### Versioning
+
+`js/version.js` reads **`2.45.0`** — tag-direct per the convention's "single-PR feature that's meaningfully usable on its own push" rule ([`docs/VERSIONING.md`](docs/VERSIONING.md) line 35). `## [Unreleased]` promotes to `## [2.45.0] - 2026-05-14`; a fresh empty `## [Unreleased]` opens above for the next arc. The release-readiness gate (per [ROADMAP Decision §12](docs/ROADMAP.md)) fires on this tag push — 2.45.0 is `X.Y.Z`-shaped, not sub-patch; the 10-turn dogfood honor-system check records on the tag annotation per the gate's convention.
+
 ## [2.44.0] - 2026-05-14
 
 ### `managers/` placement fix — sweep wave slice 4 (final; wave-close)
