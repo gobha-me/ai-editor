@@ -402,7 +402,7 @@ export async function runToolLoop(context, hooks, transport) {
                         : `Tool execution timeout (${effectiveTimeout/1000}s)`;
                     try {
                         toolResult = await Promise.race([
-                            executeToolCall(toolCall),
+                            executeToolCall(toolCall, context.toolProfile || null),
                             new Promise((_, reject) =>
                                 setTimeout(() => reject(new Error(timeoutError)), effectiveTimeout)
                             )

@@ -139,7 +139,17 @@ function _onCostUpdated(payload) {
         modelId, inputTokens, outputTokens, cachedTokens,
     });
 
-    const byTool = _attributeTools(payload.messages || [], inputTokens);
+    // 2.49.0 — sub-agent cost attribution. When `costAttribution` is set
+    // (sub-agent's `LLM.chat` call), all input + output tokens roll up
+    // under that single tool name (e.g. `'delegate_task'`) so the cost
+    // dashboard shows sub-agent spend as one bucket instead of
+    // attributing per-child-tool-call. The sub-agent's transcript panel
+    // exposes per-round detail for humans; the dashboard cares about
+    // delegation as a category. Parent chat passes no `costAttribution`
+    // → existing message-derived attribution preserved.
+    const byTool = (typeof payload.costAttribution === 'string' && payload.costAttribution)
+        ? { [payload.costAttribution]: { calls: 1, estTokens: inputTokens + outputTokens } }
+        : _attributeTools(payload.messages || [], inputTokens);
 
     // 1.6.8 — drain any pending retrieval stats for this conversation so
     // strategy hits/tokens land on the same `recordTurn` write as the LLM

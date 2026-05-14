@@ -83,9 +83,20 @@ export function validateToolParameters(toolName, args) {
 
 /**
  * Execute a tool call using the registry.
+ *
+ * When `profileName` is provided (2.49.0 — sub-agent dispatch), the
+ * registry consults that profile for admission instead of the
+ * conversation-bound one. Parent chat dispatch passes nothing → the
+ * existing conversation-profile-bound path runs (byte-equivalent to
+ * pre-2.49.0). Sub-agent runner (`js/chat/subagent-runner.js`) passes
+ * the resolved sub-agent profile (defaults to `'subagent.v1'`).
+ *
  * GUARANTEE: Always returns a non-null object that JSON.stringify produces a non-empty string.
+ *
+ * @param {{function?: {name?: string, arguments?: string}}} toolCall
+ * @param {string|null} [profileName]
  */
-export async function executeToolCall(toolCall) {
+export async function executeToolCall(toolCall, profileName = null) {
     const toolName = toolCall.function?.name || 'unknown';
     try {
         let args;
@@ -110,7 +121,9 @@ export async function executeToolCall(toolCall) {
             return validationError;
         }
 
-        const result = await ToolRegistry.execute(toolName, args);
+        const result = profileName
+            ? await ToolRegistry.executeWithProfile(toolName, args, profileName)
+            : await ToolRegistry.execute(toolName, args);
         
         // Log any tool-level errors for debugging
         if (result?.error) {

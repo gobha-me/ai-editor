@@ -29,7 +29,7 @@ import {
     DEFAULT_TOP_K,
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, resolveSubAgentConfig, getActiveProfileName } from '../profiles/resolve.js';
 import { registerOnActivate } from './tab-activation-registry.js';
 
 let _bound = false;
@@ -118,6 +118,33 @@ function _persistPreview(patch) {
     EventBus.emit('settings:changed', { section: 'preview', patch });
 }
 
+// 2.49.0 — sub-agents overlay (github#24 Phase 1 slice 2). Stored under
+// `State.settings.subagent` so it parallels the profile's `subagent`
+// slice. Settings overlay wins when set; otherwise the resolved profile
+// default applies. Same shape as `_readScript` / `_readPreview` above.
+function _readSubAgent() {
+    const profileName = getActiveProfileName(State?.settings);
+    const cfg = resolveSubAgentConfig(profileName);
+    const overlay = (State.settings && State.settings.subagent) || {};
+    const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
+    // `sessionCap` is workspace-wide (parallel to ScriptAutomation's
+    // timeout/byte caps). DESIGN-sub-agents.md §Decision §6 names this
+    // as a workspace setting, not a per-profile knob.
+    const overlaySessionCap = Number(overlay.sessionCap);
+    const sessionCap = Number.isFinite(overlaySessionCap) && overlaySessionCap > 0
+        ? overlaySessionCap
+        : 5.0;
+    return { enabled, sessionCap, profileDefault: cfg.enabled };
+}
+
+function _persistSubAgent(patch) {
+    if (!State.settings.subagent || typeof State.settings.subagent !== 'object') {
+        State.settings.subagent = {};
+    }
+    Object.assign(State.settings.subagent, patch);
+    EventBus.emit('settings:changed', { section: 'subagent', patch });
+}
+
 /**
  * Initialise the tab. Idempotent — safe to call on every modal open.
  */
@@ -132,6 +159,29 @@ export function initToolsTab() {
     root.addEventListener('input', _onInput);
     root.addEventListener('change', _onScriptChange);
     root.addEventListener('change', _onPreviewChange);
+    root.addEventListener('change', _onSubAgentChange);
+    root.addEventListener('input', _onSubAgentChange);
+}
+
+function _onSubAgentChange(ev) {
+    const target = ev.target;
+    if (!target || !target.dataset) return;
+    const key = target.dataset.subagentKey;
+    if (!key) return;
+    if (key === 'enabled' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+        _persistSubAgent({ enabled: !!target.checked });
+        render();
+        return;
+    }
+    if (key === 'sessionCap' && target instanceof HTMLInputElement && target.type === 'number') {
+        let v = Number(target.value);
+        if (!Number.isFinite(v)) v = 5.0;
+        v = Math.max(0.01, Math.min(v, 100));
+        // Round to 2 decimal places.
+        v = Math.round(v * 100) / 100;
+        if (ev.type === 'change') target.value = String(v);
+        _persistSubAgent({ sessionCap: v });
+    }
 }
 
 function _onPreviewChange(ev) {
@@ -270,6 +320,55 @@ export function render() {
       ${_renderScriptAutomationSection()}
 
       ${_renderPreviewSection()}
+
+      ${_renderSubAgentSection()}
+    `;
+}
+
+function _renderSubAgentSection() {
+    const s = _readSubAgent();
+    const profileLabel = s.profileDefault ? 'enabled' : 'disabled';
+    return `
+      <h3 style="margin-top: 1.5em;">Sub-agents (delegate_task)</h3>
+      <p class="settings-help">
+        Lets the parent agent spawn bounded child sub-agents on focused
+        investigative sub-tasks (e.g. "find every call site of X across
+        N files"). Each child runs against a restrictive read-only
+        profile (<code>subagent.v1</code>) by default; you review the
+        delegation + capability summary on an approval card before the
+        child runs. The child's full transcript + cost surfaces back as
+        a structured envelope. Per-profile default for the current
+        role: <strong>${profileLabel}</strong>.
+      </p>
+
+      <div class="form-group" data-setting-key="subagent.enabled">
+        <label>
+          <input type="checkbox"
+                 data-subagent-key="enabled"
+                 ${s.enabled ? 'checked' : ''}>
+          Enable <code>delegate_task</code> tool
+        </label>
+        <small>
+          Overrides the profile default. When off, the model never sees
+          the tool and cannot delegate. Per-call ceilings
+          (<code>max_tokens</code> / <code>max_dollars</code> /
+          <code>run_timeout_ms</code>) come from the sub-agent's own
+          profile, not from this section.
+        </small>
+      </div>
+
+      <div class="form-group" data-setting-key="subagent.sessionCap">
+        <label for="subagentSessionCap">Per-conversation cost cap ($)</label>
+        <input id="subagentSessionCap" type="number" min="0.01" max="100" step="0.05"
+               data-subagent-key="sessionCap" value="${s.sessionCap.toFixed(2)}">
+        <small>
+          Hard dollar cap on cumulative sub-agent spend across all
+          <code>delegate_task</code> invocations in the current
+          conversation. Default <strong>$5.00</strong>. The approval
+          card surfaces the running aggregate; calls that would exceed
+          this cap are rejected before mounting the card.
+        </small>
+      </div>
     `;
 }
 

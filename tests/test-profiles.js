@@ -119,17 +119,28 @@ T.deepEq(CODER_V1.tools.static, [
     'list_tool_categories',
     'list_tools_by_category',
     'find_tool',
-    // 1.8.4 — structural-anchor tools promoted to static (github#34
-    // sibling fix). See coder-v1.js comment for why.
+    // 1.8.4 — structural-anchor tools.
     'scratchpad_write',
     'scratchpad_read',
     'scratchpad_clear',
     'todo_write',
     'todo_read',
-    // 1.9.0 — interaction tool (github#33 Phase 1).
-    'ask_user',
-    // 1.10.0 — Plan Mode approval gate (github#25).
-    'submit_plan_for_approval',
+    'ask_user',                          // 1.9.0
+    'submit_plan_for_approval',          // 1.10.0
+    'submit_script_for_approval',        // 1.16.0
+    'preview_start',                     // 1.22.0
+    'preview_stop',
+    'preview_list',
+    'preview_console_logs',              // 2.7.0
+    'preview_errors',
+    'preview_logs',
+    'preview_network',
+    'preview_snapshot',                  // 2.10.0
+    'preview_click',
+    'preview_fill',
+    'preview_inspect',
+    'preview_resize',
+    'delegate_task',                     // 2.49.0
     'read_file',
     'read_lines',
     'scan_file',
@@ -139,7 +150,7 @@ T.deepEq(CODER_V1.tools.static, [
     'get_ci_status',
     'wait_for_ci',
     'get_ci_logs',
-], 'tools.static populated by 1.3.4 / 1.4.0 / 1.4.5 / 1.8.4 / 1.9.0 / 1.10.0');
+], 'tools.static populated through 2.49.0');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');

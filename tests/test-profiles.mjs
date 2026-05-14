@@ -226,6 +226,8 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'preview_fill',
         'preview_inspect',
         'preview_resize',
+        // 2.49.0 — Sub-agents Phase 1 slice 2 (DESIGN-sub-agents.md).
+        'delegate_task',
         'read_file',
         'read_lines',
         'scan_file',

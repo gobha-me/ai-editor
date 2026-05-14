@@ -226,6 +226,16 @@ export const CODER_V1 = {
             'preview_fill',
             'preview_inspect',
             'preview_resize',
+            // 2.49.0 — sub-agents Phase 1 slice 2 (github#24, DESIGN-sub-agents.md).
+            // Coder admits `delegate_task` so the parent agent can spawn
+            // bounded child sub-agents on focused investigative sub-tasks.
+            // The runtime filter in `js/llm/api.js` (`applySubAgentToolFilter`)
+            // drops this tool when `subagent.enabled === false` on the
+            // resolved profile + settings overlay; coder's `subagent.enabled`
+            // below flips the gate on. Marked readOnly so Plan Mode admits
+            // it — the handler is read-only; the side effect is gated by
+            // the approval card.
+            'delegate_task',
             // Always-loaded coder essentials — ROADMAP §1.4.0.
             'read_file',
             'read_lines',
@@ -278,6 +288,21 @@ export const CODER_V1 = {
     // workspace, observe whether the page boots, fix what doesn't. This
     // override flips the inherited `enabled: false` from chat.v1 to `true`.
     preview: {
+        enabled: true,
+    },
+
+    // 2.49.0 — Sub-agents Phase 1 slice 2 (github#24, DESIGN-sub-agents.md).
+    // Coder is the value-case surface for `delegate_task` — long
+    // investigative sub-tasks (call-site sweeps, test-coverage summaries,
+    // import-graph audits) collapse into a bounded child agent whose
+    // intermediate tool calls do not inflate the parent's context. This
+    // override flips the inherited `enabled: false` from chat.v1 to `true`
+    // (slice 1's `applySubAgentToolFilter` becomes load-bearing when this
+    // flag is true). Per-call ceilings come from `subagent.v1.subagent`,
+    // not from this block — coder's block only declares `enabled` (the
+    // gate); the sub-agent's own profile (default: `subagent.v1`) carries
+    // `run_timeout_ms` / `max_tokens` / `max_dollars` / `recursion_depth`.
+    subagent: {
         enabled: true,
     },
 };

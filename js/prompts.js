@@ -390,6 +390,30 @@ function buildSystemPrompt(opts = {}) {
     // Inject live cursor / selection context from the editor
     prompt += buildCursorPrompt(admittedNames);
 
+    // Sub-agent delegation guidance (2.49.0 slice 2 — github#24 Phase 1).
+    // Gated on `delegate_task` admission per the `admittedNames.has(name)`
+    // parallel-enumeration pattern used elsewhere in this builder. The
+    // tool exists in `coder.v1.tools.static`; the runtime filter
+    // `applySubAgentToolFilter` in `js/llm/api.js` drops it from
+    // admission when `subagent.enabled === false` on the resolved
+    // profile + settings overlay. When admitted, this block tells the
+    // model *when* delegation pays off — single dense investigative
+    // task with discardable intermediates — and warns against
+    // over-delegation (DESIGN-sub-agents.md §Risks).
+    if (admittedNames.has('delegate_task')) {
+        prompt += `\n\n--- SUB-AGENT DELEGATION ---`;
+        prompt += `\nThe \`delegate_task\` tool spawns a bounded child agent on a focused investigative sub-task. The child runs against a restrictive read-only profile by default; you get a structured \`summary\` back without the intermediate tool-call sequence inflating your context.`;
+        prompt += `\n\nUse delegate_task when:`;
+        prompt += `\n- The sub-task takes 5+ planned tool calls AND the intermediate results don't inform your final answer (e.g., "find every call site of X across N files", "summarize the test coverage for module Y").`;
+        prompt += `\n- You can phrase the sub-task as a single clear question with a single returnable answer.`;
+        prompt += `\n- The user-visible answer is the sub-agent's summary, not the path taken.`;
+        prompt += `\n\nDO NOT use delegate_task for:`;
+        prompt += `\n- A single \`read_file\` or \`search_in_files\` — call those directly.`;
+        prompt += `\n- Work that produces edits — sub-agents are read-only by default.`;
+        prompt += `\n- Tasks where you need to see the intermediate reasoning (use direct tool calls so you stay in the loop).`;
+        prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation.`;
+    }
+
     // Plan Mode (github#25, 1.10.0) — when active, prepend a load-bearing
     // instruction block telling the model to plan first and submit via
     // submit_plan_for_approval. The tool catalog filter in
@@ -538,9 +562,55 @@ function getLanguageFromPath(path) {
     return langMap[ext] || ext;
 }
 
+/**
+ * Build the sub-agent's own (child-side) system prompt. Short,
+ * task-shaped, no parent-history leak. Per DESIGN-sub-agents.md
+ * §Decision §2 (clean-start) and §"Approval-card capability summary":
+ * the sub-agent sees only its task + context hint + admitted-tool
+ * enumeration. The parent's chat history is invisible by design.
+ *
+ * @param {{task: string, contextHint?: string, admittedToolNames?: string[], profileName?: string, ceilings?: {max_tokens?: number, max_dollars?: number, run_timeout_ms?: number}}} args
+ * @returns {string}
+ * @since 2.49.0 (github#24 Phase 1 slice 2)
+ */
+function buildSubAgentSystemPrompt({ task, contextHint, admittedToolNames, profileName, ceilings }) {
+    const tools = Array.isArray(admittedToolNames) && admittedToolNames.length > 0
+        ? admittedToolNames.join(', ')
+        : '(no tools admitted)';
+    const profile = profileName || 'subagent.v1';
+    const c = ceilings || {};
+    const ceilingParts = [];
+    if (typeof c.max_tokens === 'number') ceilingParts.push(`${c.max_tokens.toLocaleString()} tokens`);
+    if (typeof c.max_dollars === 'number') ceilingParts.push(`$${c.max_dollars.toFixed(2)}`);
+    if (typeof c.run_timeout_ms === 'number') {
+        const mins = Math.round(c.run_timeout_ms / 60000);
+        ceilingParts.push(`${mins} min`);
+    }
+    const ceilingsText = ceilingParts.length > 0 ? ceilingParts.join(' / ') : 'profile defaults';
+
+    let prompt = `You are a focused sub-agent invoked via delegate_task. You exist for the duration of this one task; nothing carries over to the parent agent except the structured answer you return.`;
+    prompt += `\n\nProfile: ${profile}`;
+    prompt += `\nAdmitted tools: ${tools}`;
+    prompt += `\nCeilings: ${ceilingsText}`;
+    prompt += `\n\n=== TASK ===\n${task}`;
+    if (contextHint && String(contextHint).trim()) {
+        prompt += `\n\n=== CONTEXT HINT (parent-supplied; everything you need to start) ===\n${contextHint}`;
+    }
+    prompt += `\n\n=== ANSWER SHAPE ===`;
+    prompt += `\nWhen you are done, your final assistant message must be the answer the parent agent will read as its tool_result. Make it:`;
+    prompt += `\n- Short — the parent is paying for these tokens. Aim for <500 words unless the task explicitly requires a longer summary.`;
+    prompt += `\n- Factual — cite file paths and line numbers where applicable.`;
+    prompt += `\n- Structured — when the parent's task asks for a list (call sites, files, references), return a list. When it asks for a summary, return prose.`;
+    prompt += `\n- Self-contained — the parent has no access to your tool-call trail; if the answer depends on something you read, include it.`;
+    prompt += `\n- Honest — if you ran out of budget, said so. If a tool failed, say so. The parent re-scopes from your failure modes.`;
+    prompt += `\n\nDo not ask the user questions; you cannot. Make a decision with what you have, or report you cannot.`;
+    return prompt;
+}
+
 export {
     EditorPrompts,
     buildSystemPrompt,
+    buildSubAgentSystemPrompt,
     buildEditPrompt,
     buildCommitMessagePrompt,
     getLanguageFromPath

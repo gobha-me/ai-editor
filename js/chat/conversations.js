@@ -22,6 +22,62 @@ import { ChatSummarizer } from './summarizer.js';
 import { ChatHistoryStore } from './history-store.js';
 import { removeConvCost } from '../intelligence/cost/cost-store.js';
 import { pickProfileName } from '../profiles/resolve.js';
+import { cancelToolLoop } from './state.js';
+
+/** 2.49.0 — DESIGN-sub-agents.md §Risks line 536: bound transcript
+ *  bloat by capping `tool_result` content per turn on persistence.
+ *  Same scale as the parent's `TOOL_RESULT_LIMIT`. The runtime
+ *  transcript retains full content (re-runnable from the transcript
+ *  panel); persistence is the bloat surface. */
+const SUBAGENT_TRANSCRIPT_TURN_LIMIT = 12000;
+const SUBAGENT_TRUNCATION_MARKER = '\n…(truncated for persistence; full content lost when the conversation reloads)';
+
+/**
+ * Truncate a single transcript's tool-result turns to ≤12K chars +
+ * marker before persisting. Reads + writes deep copies to avoid
+ * mutating the live `State.subagents.transcripts[id]` slot the
+ * transcript panel reads from.
+ *
+ * @param {Object} transcript
+ * @returns {Object}
+ */
+function _truncateTranscriptForPersistence(transcript) {
+    if (!transcript || typeof transcript !== 'object') return transcript;
+    const out = { ...transcript };
+    if (Array.isArray(transcript.messages)) {
+        out.messages = transcript.messages.map(msg => {
+            if (msg && msg.role === 'tool' && typeof msg.content === 'string'
+                && msg.content.length > SUBAGENT_TRANSCRIPT_TURN_LIMIT) {
+                return {
+                    ...msg,
+                    content: msg.content.slice(0, SUBAGENT_TRANSCRIPT_TURN_LIMIT) + SUBAGENT_TRUNCATION_MARKER,
+                };
+            }
+            return msg;
+        });
+    }
+    return out;
+}
+
+/**
+ * Serialize the in-memory transcripts map for persistence. Applies the
+ * 12K-per-turn truncation. Empty input → empty object (the field is
+ * always written so `load()` can clear stale state confidently).
+ *
+ * @param {Object} transcripts
+ * @returns {Object}
+ */
+function _serializeSubAgentTranscripts(transcripts) {
+    const out = {};
+    if (!transcripts || typeof transcripts !== 'object') return out;
+    for (const [id, t] of Object.entries(transcripts)) {
+        out[id] = _truncateTranscriptForPersistence(t);
+    }
+    return out;
+}
+
+// Exported for the tests (`tests/test-subagent-transcript-truncation.mjs`).
+export { _serializeSubAgentTranscripts, _truncateTranscriptForPersistence, SUBAGENT_TRANSCRIPT_TURN_LIMIT };
 
 /** Max conversations kept in the index */
 const MAX_CONVERSATIONS = 50;
@@ -246,13 +302,23 @@ const ConversationManager = {
         // (length=0 + push), so without the copy a later `load(otherId)` call
         // would clear the previously-saved conversation's cached messages —
         // and the queued async IDB write would persist the corrupted state.
+        // 2.49.0 — Sub-agent transcripts persist per-conversation
+        // (DESIGN-sub-agents.md §Phasing Phase 1, §Risks line 536 —
+        // 12K-per-tool-result truncation on persistence). Cross-session
+        // promotion is Phase 5; for Phase 1 the transcripts live with
+        // their originating conversation and discard on delete().
+        const subagentTranscripts = _serializeSubAgentTranscripts(
+            State.subagents?.transcripts || {}
+        );
+
         Storage.set(`conv-${id}`, {
             messages: messages.slice(),
             summaryInfo,
             pruneStash,
             toolActionLog: toolActionLog.slice(-50),
             todos,
-            scratchpad
+            scratchpad,
+            subagentTranscripts,
         });
         // Update index
         const index = _getIndex();
@@ -341,6 +407,19 @@ const ConversationManager = {
             : {};
         EventBus.emit('scratchpad:changed', { action: 'restored' });
 
+        // 2.49.0 — Sub-agent transcripts restore from per-conversation
+        // payload. Pre-2.49.0 payloads have no `subagentTranscripts` field;
+        // treat as empty. Replace wholesale so a load() doesn't leak the
+        // outgoing conversation's transcripts into the incoming view.
+        if (!State.subagents) {
+            State.subagents = { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } };
+        }
+        State.subagents.transcripts = (payload.subagentTranscripts && typeof payload.subagentTranscripts === 'object')
+            ? { ...payload.subagentTranscripts }
+            : {};
+        // Reset session_cost — running aggregate is per-conversation.
+        State.subagents.session_cost = { dollars: 0, tokens: 0 };
+
         EventBus.emit('conversation:loaded', { id });
         console.log(`[conversations] Loaded conversation ${id}`);
     },
@@ -365,6 +444,11 @@ const ConversationManager = {
         State.scratchpad = {};
         State.toolActionLog = [];
         State.todo = [];
+        // 2.49.0 — clear sub-agent transcripts for the new conversation.
+        if (State.subagents) {
+            State.subagents.transcripts = {};
+            State.subagents.session_cost = { dollars: 0, tokens: 0 };
+        }
         Storage.set('activeConversation', id);
         Storage.remove('chatSummaryInfo');
         Storage.remove('chatPruneStash');
@@ -400,6 +484,21 @@ const ConversationManager = {
         const idx = index.findIndex(c => c.id === id);
         if (idx === -1) return false;
 
+        const wasActive = this.getActiveId() === id;
+
+        // 2.49.0 — Cancel any in-flight sub-agent loop bound to this
+        // conversation before tearing down its state. `cancelToolLoop`
+        // releases the parent's awaited Promise via the slice-1
+        // `cancelSubAgentApproval()` path; the sub-agent runner's
+        // cancelSignal flips to true on the next round boundary.
+        // Only fires when deleting the active conversation (sub-agents
+        // are conversation-scoped and only one runs at a time in
+        // Phase 1 — see DESIGN §Phasing). Inactive deletes have no
+        // in-flight sub-agent by construction.
+        if (wasActive) {
+            try { cancelToolLoop(); } catch { /* best-effort */ }
+        }
+
         // Remove payload
         Storage.remove(`conv-${id}`);
         // Clear the matching cost record (1.2.1) so storage doesn't leak.
@@ -408,7 +507,7 @@ const ConversationManager = {
         _setIndex(index);
 
         // If we deleted the active conversation, switch
-        if (this.getActiveId() === id) {
+        if (wasActive) {
             if (index.length > 0) {
                 const sorted = index.sort((a, b) => b.updatedAt - a.updatedAt);
                 this.load(sorted[0].id);
@@ -418,6 +517,13 @@ const ConversationManager = {
                 State.lastExchangeTokens = null;
                 State.scratchpad = {};
                 State.todo = [];
+                // 2.49.0 — clear in-memory sub-agent transcripts so the
+                // panel doesn't surface stale data from the deleted
+                // conversation.
+                if (State.subagents) {
+                    State.subagents.transcripts = {};
+                    State.subagents.session_cost = { dollars: 0, tokens: 0 };
+                }
                 Storage.remove('activeConversation');
                 Storage.remove('chatSummaryInfo');
                 Storage.remove('chatPruneStash');

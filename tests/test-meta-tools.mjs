@@ -91,6 +91,12 @@ function registerStaticFixture() {
     reg('preview_fill',     'Fill a form field in a preview.',      { type: 'object', properties: { serverId: { type: 'string' }, selector: { type: 'string' }, value: { type: 'string' } } });
     reg('preview_inspect',  'Inspect computed style of an element.', { type: 'object', properties: { serverId: { type: 'string' }, selector: { type: 'string' } } });
     reg('preview_resize',   'Resize the preview iframe element.',   { type: 'object', properties: { serverId: { type: 'string' } } });
+    // 2.49.0 — `delegate_task` (sub-agents Phase 1 slice 2) joined the
+    // coder static set; the runtime filter in `js/llm/api.js`
+    // (`applySubAgentToolFilter`) controls whether it's admitted to the
+    // per-turn tool list. Static enumeration must still resolve it
+    // through the catalog so the unresolved_static exit signal stays clean.
+    reg('delegate_task', 'Delegate a focused sub-task to a bounded child sub-agent.', { type: 'object', properties: { task: { type: 'string' }, context_hint: { type: 'string' } } });
 }
 
 // ============================================

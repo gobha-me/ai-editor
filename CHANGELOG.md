@@ -4,6 +4,185 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.49.0] - 2026-05-14
+
+### Feature — sub-agents end-to-end (slice 2 of github#24 Phase 1, gitea#418 successor)
+
+The second + final slice of the 2.49.0 minor — Phase 1 sub-agents per
+[`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md). Slice 1
+(2.49.0.0) landed pure plumbing — profile, resolver, registry
+entry-points, state slot, classification, no-op filter. **This slice
+makes `delegate_task` user-visible end-to-end:** the model can call
+it; an approval card mounts surfacing a capability summary (security-
+load-bearing per DESIGN §Risks); the user approves; a sub-agent loop
+runs against `subagent.v1` (restrictive read-only default); the
+parent receives a structured result envelope; a transcript panel
+opens via the parent's tool-call card.
+
+The `v2.49.0` release tag fires here (not at 2.49.0.0 — the
+`X.Y.Z.N` sub-patch convention per [`VERSIONING.md`](docs/VERSIONING.md)).
+
+#### Added — `delegate_task` tool
+
+[`js/tools/subagent-tools.js`](js/tools/subagent-tools.js) **NEW**. The
+handler validates args (rejects empty task / unknown profile / cost-cap
+overflow), computes the resolved profile + per-call narrow + ceilings,
+builds a capability summary, fires
+[`setPendingSubAgentApproval`](js/chat/state.js) and awaits the user's
+resolution. **Handler does NOT run the loop** — the card does (mirrors
+[`ScriptApprovalCard.js`](js/chat/script-approval-card/ScriptApprovalCard.js)
+where Approve owns the side-effect lifecycle). Admitted into
+[`coder.v1.tools.static`](js/profiles/coder-v1.js); declares
+`readOnly: true` so Plan Mode keeps it admitted; `roles: 'all'`. Per-
+call ceilings clamp DOWN against profile defaults (parent cannot
+raise above `subagent.v1`'s `max_tokens: 50000` / `max_dollars: 0.50`
+/ `run_timeout_ms: 300000` / `recursion_depth: 0`).
+
+#### Added — `SubAgentApprovalCard` + lifecycle wrapper
+
+[`js/chat/subagent-approval-card.js`](js/chat/subagent-approval-card.js)
++ [`js/chat/subagent-approval-card/SubAgentApprovalCard.js`](js/chat/subagent-approval-card/SubAgentApprovalCard.js)
+**NEW**. Preact component mirroring `ScriptApprovalCard`'s three-state
+shape (`review` → `running` → `done` via `useState`). Renders the
+**capability summary** per DESIGN §"Approval-card capability summary"
+— profile name + admitted tools + per-call narrow + cost ceiling +
+run timeout + recursion + memory ✗ + **write-access ✗/✓ with warning
+class when ✓**. The write-access warning class is the load-bearing
+mitigation for DESIGN §Risks "user does not notice profile override
+on capability summary" (High-severity trust failure). Approve runs
+the sub-agent loop *inside the card*; Stop terminates via
+`cancelToolLoop`; Reject resolves `{status:'rejected', feedback}`.
+
+#### Added — `subagent-runner` (sub-agent loop driver)
+
+[`js/chat/subagent-runner.js`](js/chat/subagent-runner.js) **NEW**.
+Wraps `tool-loop-core.runToolLoop` with a sub-agent-shaped context +
+hooks bag + transport. Sub-agent has its OWN `SubAgentContext`
+(separate `messages[]`, own cancel signal, `toolProfile:
+'subagent.v1'`), its OWN cost tracking, and its OWN system prompt
+(built via [`buildSubAgentSystemPrompt`](js/prompts.js)). Tool
+dispatch uses slice 1's `ToolRegistry.executeWithProfile` so the
+sub-agent's catalog filter is `subagent.v1`'s admitted set, NOT the
+parent's profile. **Triple-bound termination** per DESIGN §Risks
+(any one of cost cap / dollar cap / wall-clock timeout breaks the
+loop). Returns `{cancel}` handle to the card; calls `onProgress` /
+`onComplete` callbacks.
+
+#### Added — `SubAgentTranscriptPanel` slide-over
+
+[`js/chat/subagent-transcript-panel.js`](js/chat/subagent-transcript-panel.js)
++ [`js/chat/subagent-transcript-panel/SubAgentTranscriptPanel.js`](js/chat/subagent-transcript-panel/SubAgentTranscriptPanel.js)
+**NEW**. Read-only modal that renders the sub-agent's full transcript
+(task, capability summary, messages, tool-call timeline, cost) keyed
+off `State.subagents.transcripts[transcriptId]`. Mounts on
+`subagent:open_transcript` (fired from the [View sub-agent transcript]
+button injected into the parent's `delegate_task` tool-call card —
+[`messages.js`](js/chat/messages.js)). Subscribes to
+`subagent:transcript_updated` so a panel opened mid-run reflects new
+rounds as they arrive.
+
+#### Added — sub-agent delegation guidance in system prompt
+
+[`js/prompts.js`](js/prompts.js) — new conditional block in
+`buildSystemPrompt`, gated on `admittedNames.has('delegate_task')`
+(parallel-enumeration pattern per
+[`feedback_prompts_js_parallel_enumeration.md`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_prompts_js_parallel_enumeration.md)).
+Tells the parent agent *when* delegation pays off (single dense
+investigative task, 5+ planned tool calls whose intermediate results
+are discardable) and warns against over-delegation. Plus
+`buildSubAgentSystemPrompt(task, contextHint, ...)` for the child's
+own system prompt — short, task-shaped, "focused investigator, return
+structured `summary`".
+
+#### Added — cost attribution threading
+
+[`js/llm/api.js`](js/llm/api.js) — `LLM.chat` accepts optional
+`costAttribution?: string` arg. Sub-agent loop's transport passes
+`'delegate_task'`; cost-recorder's `byTool` rolls up cumulative
+spend under that single bucket per DESIGN §Risks line 532 (sub-agent
+spend visible as one dashboard row instead of being attributed
+per-child-tool-call). Parent chat passes no `costAttribution` →
+existing message-derived attribution preserved (byte-equivalent to
+pre-2.49.0).
+
+#### Added — Settings → Tools → Sub-agents row
+
+[`js/settings/tools-tab.js`](js/settings/tools-tab.js) — two-view
+config per [`DESIGN-profiles.md`](docs/DESIGN-profiles.md) §"Two-View
+Configuration": preset `enabled` checkbox (overrides the per-profile
+default) + advanced `sessionCap` (workspace-wide dollar cap on
+cumulative `delegate_task` spend per conversation; default $5.00).
+The cap is checked in the handler before the card mounts — the user
+isn't asked to approve a call that would exceed it on completion.
+
+#### Added — `coder.v1` admission + admission flip
+
+[`js/profiles/coder-v1.js`](js/profiles/coder-v1.js):
+1. `'delegate_task'` joins `tools.static` (the static-set admission).
+2. `subagent.enabled = true` flips slice 1's
+   `applySubAgentToolFilter` from no-op to load-bearing. Per-call
+   ceilings come from `subagent.v1`'s own `subagent` block, not from
+   coder's (coder only declares the gate).
+
+#### Added — persistence + 12K-per-turn truncation
+
+[`js/chat/conversations.js`](js/chat/conversations.js) — `save()`
+writes `State.subagents.transcripts` to `conv-{id}.subagentTranscripts`
+applying a 12K-char-per-`tool_result`-turn truncation
+(`SUBAGENT_TRANSCRIPT_TURN_LIMIT`) per DESIGN §Risks line 536. `load()`
+restores; `create()` / `delete()` clear in-memory transcripts for the
+incoming / outgoing conversation. `delete()` also fires
+`cancelToolLoop` to release any in-flight sub-agent's awaited Promise
+(slice 1's `cancelSubAgentApproval` is already in the cancel chain).
+
+#### Tests
+
+- [`tests/test-delegate-task-handler.mjs`](tests/test-delegate-task-handler.mjs)
+  **NEW** — 14 subtests. Pins handler envelope shapes for empty-task /
+  unknown-profile / cost-cap-overflow rejection paths, **four
+  independent ceiling-clamp paths** (max_tokens / max_dollars /
+  run_timeout_ms / parent-narrows-OK — the DESIGN §Risks triple-bound
+  mitigation), capability-summary shape, per-call narrow intersection
+  with the profile, rejected / cancelled envelope flows.
+- [`tests/test-subagent-transcript-truncation.mjs`](tests/test-subagent-transcript-truncation.mjs)
+  **NEW** — 7 subtests. Pins the 12K-per-tool-result truncation on
+  persistence, non-tool turns pass through unchanged, live State slot
+  is never mutated by the serializer.
+- [`tests/test-subagent-approval-card.js`](tests/test-subagent-approval-card.js)
+  **NEW** — browser test (manual track via [`tests/index.html`](tests/index.html)).
+  Pins card mount lifecycle, capability-summary surface, the **profile-
+  override write-access ✓ warning** (DESIGN §Risks High-severity trust
+  failure mitigation), Reject + external-cancel paths.
+- Updated pinning tests: `test-profile-subagent-resolve.mjs` (coder.v1
+  flip), `test-profile-resolution.mjs` (CODER_V1_PRE_TRIM snapshot),
+  `test-profiles.mjs` (coder.v1.tools.static + delegate_task),
+  `test-tools-composer.mjs` (28-name fixture), `test-meta-tools.mjs`
+  (delegate_task registered for the unresolved_static gate).
+- Regenerated `tests/fixtures/profiles/coder.v1.snapshot.json` (and
+  the cross-profile snapshots via `tests/update-profile-fixtures.mjs`)
+  for the `subagent.enabled = true` flip on coder.
+
+#### Verification — release-readiness gate
+
+`v2.49.0` is `X.Y.Z`-shaped → fires the gate per Decision §12. The
+10-turn dogfood ran against this repo on 2026-05-14: included
+`find_relevant_files`, an `edit_file` + `commit_files` to a working
+branch, and one `delegate_task` invocation (sub-agent task: "list the
+five tools in `js/tools/file-tools.js` and their declared roles"). The
+profile capability summary surfaced correctly; sub-agent did not have
+access to write-class tools; cost dashboard's `delegate_task` row
+appeared after the run; transcript persisted across reload.
+
+#### Closes
+
+- [github#24](https://github.com/gobha-me/ai-editor/issues/24) — Sub-agent
+  architecture (Phase 1). Phases 2–6 in the DESIGN doc remain as future
+  work, each gated on Phase 1 dogfood signal per
+  [`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md) §Phasing.
+- [gitea#418](https://git.gobha.me/xcaliber/ai-editor/issues/418) —
+  Paired Gitea tracker for Phase 1 slicing (per
+  [`reference_tea_cli.md`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/reference_tea_cli.md)).
+
 ## [2.49.0.0] - 2026-05-14
 
 ### In-track slice — sub-agent foundation (slice 1 of github#24 Phase 1)

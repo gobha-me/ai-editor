@@ -40,14 +40,19 @@ test('chat.v1 → enabled=false (no subagent block; defaults apply)', () => {
     assert.equal(cfg.recursion_depth, 0);
 });
 
-test('coder.v1 → enabled=false (slice 1 leaves coder unchanged)', () => {
-    // Slice 2 flips this when delegate_task is admitted into
-    // coder.v1.tools.static. Slice 1 must not — the prompt addendum
-    // and approval card are not here yet (per
-    // feedback_prompts_js_parallel_enumeration.md).
+test('coder.v1 → enabled=true (slice 2 flips this when delegate_task admits)', () => {
+    // Slice 2 (2.49.0) flipped this: `coder.v1.subagent.enabled = true`
+    // alongside admitting `delegate_task` into `coder.v1.tools.static`.
+    // The runtime filter (`applySubAgentToolFilter` in `js/llm/api.js`)
+    // now drops `delegate_task` from the admitted set only when this
+    // resolves to `false` (e.g. via a Settings → Tools overlay flipping
+    // it off). The companion test in the prompts.js parallel-enumeration
+    // path is implicit: the `admittedNames.has('delegate_task')`-gated
+    // SUBAGENT block in `buildSystemPrompt` only fires when this flag
+    // resolves to `true`.
     const cfg = resolveSubAgentConfig('coder.v1');
     assert.equal(cfg.profileName, 'coder.v1');
-    assert.equal(cfg.enabled, false);
+    assert.equal(cfg.enabled, true);
 });
 
 test('every registered profile resolves cleanly', () => {
@@ -55,6 +60,12 @@ test('every registered profile resolves cleanly', () => {
     // profile resolution throws, this test fails. Catches accidental
     // breakage from future profile additions whose `base` chain
     // confuses the resolver.
+    //
+    // Profiles with `subagent.enabled = true` after slice 2:
+    //   - `subagent.v1` (the sub-agent's own profile)
+    //   - `coder.v1` (admits delegate_task)
+    // Everything else resolves to the inherited default (`enabled: false`).
+    const subagentEnabledProfiles = new Set(['subagent.v1', 'coder.v1']);
     for (const name of [
         'chat.v1', 'coder.v1', 'kb.v1',
         'chat_multi.v1', 'rp.v1',
@@ -64,9 +75,8 @@ test('every registered profile resolves cleanly', () => {
         assert.ok(Profiles.has(name), `expected '${name}' to be a registered profile`);
         const cfg = resolveSubAgentConfig(name);
         assert.equal(cfg.profileName, name);
-        // Only subagent.v1 declares enabled=true; everything else
-        // resolves to the default-false.
-        assert.equal(cfg.enabled, name === 'subagent.v1');
+        assert.equal(cfg.enabled, subagentEnabledProfiles.has(name),
+            `${name} subagent.enabled mismatch`);
     }
 });
 

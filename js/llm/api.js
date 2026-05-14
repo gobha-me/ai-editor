@@ -377,7 +377,14 @@ export const LLM = {
             maxTokens,
             temperature = 0.7,
             tools = null,
-            onToken = null
+            onToken = null,
+            // 2.49.0 — sub-agent cost attribution (github#24 Phase 1
+            // slice 2). When set, the per-call cost-store entry's
+            // `byTool` aggregates under this single name (e.g.
+            // `'delegate_task'`) instead of being derived from
+            // `messages[]`. Parent chat passes nothing → existing
+            // attribution preserved.
+            costAttribution = null,
         } = options;
 
         State.isGenerating = true;
@@ -510,6 +517,7 @@ export const LLM = {
             this._trackUsage(result.usage, hookedModel, {
                 messages: hookedMessages,
                 toolCalls: result.toolCalls || null,
+                costAttribution,
             });
             return result;
 
@@ -609,6 +617,10 @@ export const LLM = {
             modelId,
             messages: context?.messages,
             toolCalls: context?.toolCalls,
+            // 2.49.0 — sub-agent cost attribution. Cost recorder rolls
+            // up `byTool` under this single name when set, instead of
+            // deriving from `messages[]`.
+            costAttribution: context?.costAttribution || null,
             toolDefTokens: m?.admitted ?? 0,
             toolDefBaseline: m?.baseline ?? 0,
             toolDefUnfiltered: m?.unfiltered ?? 0,

@@ -83,6 +83,7 @@
         "preview_fill",
         "preview_inspect",
         "preview_resize",
+        "delegate_task",
         "read_file",
         "read_lines",
         "scan_file",
@@ -114,6 +115,9 @@
       "max_output_bytes": 262144
     },
     "preview": {
+      "enabled": true
+    },
+    "subagent": {
       "enabled": true
     }
   },
@@ -173,6 +177,7 @@
         "preview_fill",
         "preview_inspect",
         "preview_resize",
+        "delegate_task",
         "read_file",
         "read_lines",
         "scan_file",

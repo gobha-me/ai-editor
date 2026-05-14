@@ -112,6 +112,8 @@ const CODER_V1_PRE_TRIM = {
             'preview_fill',
             'preview_inspect',
             'preview_resize',
+            // 2.49.0 — Sub-agents Phase 1 slice 2 (DESIGN-sub-agents.md).
+            'delegate_task',
             'read_file',
             'read_lines',
             'scan_file',
@@ -151,6 +153,15 @@ const CODER_V1_PRE_TRIM = {
     // surface (chat.v1 has `enabled: false`). Coder's `enabled: true`
     // overrides chat's `enabled: false`.
     preview: {
+        enabled: true,
+    },
+
+    // 2.49.0 — Sub-agents Phase 1 slice 2 (DESIGN-sub-agents.md).
+    // Coder is the value-case surface (chat.v1 has no `subagent` block).
+    // Coder's `enabled: true` flips the runtime filter
+    // (`applySubAgentToolFilter`) on; per-call ceilings come from
+    // the sub-agent's own profile (default: `subagent.v1`).
+    subagent: {
         enabled: true,
     },
 };

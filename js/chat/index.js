@@ -17,6 +17,7 @@ import { registerTodoTools } from '../tools/todo-tools.js';
 import { registerAskUserTools } from '../tools/ask-user-tools.js';
 import { registerPlanTools } from '../tools/plan-tools.js';
 import { registerScriptTools } from '../tools/script-tools.js';
+import { registerSubAgentTools } from '../tools/subagent-tools.js';
 import { registerPreviewTools } from '../tools/preview-tools.js';
 import { registerXRefTools } from '../tools/xref-tools.js';
 import { registerDocTools } from '../tools/doc-tools.js';
@@ -63,6 +64,8 @@ import { initAskUserCard } from './ask-user-card.js';
 import { mountPlanModeChip } from './plan-mode-chip.js';
 import { initPlanApprovalCard } from './plan-approval-card.js';
 import { initScriptApprovalCard } from './script-approval-card.js';
+import { initSubAgentApprovalCard } from './subagent-approval-card.js';
+import { initSubAgentTranscriptPanel } from './subagent-transcript-panel.js';
 
 // ============================================
 // TOOL REGISTRATION
@@ -85,6 +88,7 @@ registerTodoTools(ToolRegistry);
 registerAskUserTools(ToolRegistry);
 registerPlanTools(ToolRegistry);
 registerScriptTools(ToolRegistry);
+registerSubAgentTools(ToolRegistry);
 registerPreviewTools(ToolRegistry);
 registerXRefTools(ToolRegistry);
 registerDocTools(ToolRegistry);
@@ -176,6 +180,18 @@ function initChat(containerEl, inputEl) {
     // the LLM calls `submit_script_for_approval`; the wrapper owns
     // the Worker handle (spawn on Approve, terminate on resolve/cancel).
     initScriptApprovalCard();
+
+    // 2.49.0 — Sub-agents Phase 1 slice 2 approval card. Mirrors the
+    // plan-approval-card / script-approval-card lifecycles. The card
+    // mounts when the LLM calls `delegate_task`; the card itself owns
+    // the sub-agent loop's in-flight handle (run on Approve, cancel
+    // on Stop/resolve).
+    initSubAgentApprovalCard();
+
+    // 2.49.0 — Sub-agents transcript slide-over. Mounts on
+    // `subagent:open_transcript` from `messages.js`'s "View sub-agent
+    // transcript" button on the parent's tool-call card.
+    initSubAgentTranscriptPanel();
 
     // Debounced conversation save — persists after message activity settles
     let _saveTimer = null;

@@ -654,6 +654,21 @@ export function addToolCallMessage(toolName, args, result) {
                 </div>`;
     }
 
+    // 2.49.0 — Sub-agents Phase 1 slice 2. For `delegate_task` tool
+    // calls, surface a "View sub-agent transcript" button when the
+    // result envelope carries a `transcript_id`. The button emits
+    // `subagent:open_transcript` which `subagent-transcript-panel.js`
+    // listens for to mount the slide-over.
+    const subagentTranscriptId = (toolName === 'delegate_task' && typeof result?.transcript_id === 'string' && result.transcript_id)
+        ? result.transcript_id
+        : null;
+    const subagentLinkHtml = subagentTranscriptId ? `
+                <div class="tool-call-section tool-call-subagent-link">
+                    <button type="button" class="subagent-transcript-link" data-transcript-id="${escapeHtml(subagentTranscriptId)}">
+                        🔍 View sub-agent transcript
+                    </button>
+                </div>` : '';
+
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message tool-call ${isError ? 'tool-error' : 'tool-success'}`;
     messageEl.innerHTML = `
@@ -672,10 +687,23 @@ export function addToolCallMessage(toolName, args, result) {
                 <div class="tool-call-section">
                     <div class="tool-call-label">Result</div>
                     <pre class="tool-call-json">${escapeHtml(truncatedResult)}</pre>
-                </div>
+                </div>${subagentLinkHtml}
             </div>
         </details>
     `;
+    // Wire the sub-agent transcript button.
+    if (subagentTranscriptId) {
+        const btn = messageEl.querySelector('.subagent-transcript-link');
+        if (btn) {
+            btn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                try {
+                    EventBus.emit('subagent:open_transcript', { transcriptId: subagentTranscriptId });
+                } catch { /* best-effort */ }
+            });
+        }
+    }
     chatContainer.appendChild(messageEl);
     virtNotifyAppended();
     scrollToBottom();
