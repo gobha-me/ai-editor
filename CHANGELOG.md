@@ -77,6 +77,62 @@ No new tests in this PR. Doc-only — no `js/` behavior changed; `js/version.js`
 
 `js/version.js` reads **`2.46.0`** — unchanged. **No version bump.** Per the policy refinement adopted at this re-eval (Decision §14 sub-clause), re-eval sessions are doc-only PRs that accumulate in `[Unreleased]`; they do not consume a version slot. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) does NOT fire on this PR — `[Unreleased]` accumulation is not `X.Y.Z`-shaped. Gate fires next on the 2.47.0 tag push, which will absorb these entries into its versioned heading.
 
+## [2.47.0] - 2026-05-14
+
+### Runtime regression fixes — `startWorkOnIssueFromList` + `Providers.enrichModels`
+
+Two stale-reference regressions surfaced from a live `editor.gobha.ai/dev` diagnostic dump on 2.46.0. Both are bundled here as a single `fix:` PR because they share the same shape (a call site outlived its target) and both are `[S]`-sized. The roadmap's pre-approved 2.47.0 docstring-cleanup row (`js/context-manager.js` sibling-file refs + `getToolsForProfile` docstring) is re-scoped to **2.47.0.1** as the next sub-patch — runtime regressions take precedence over doc-only cleanup.
+
+#### Fixed — issue-list Start button
+
+[`js/app.js`](js/app.js) lines 836–843: the `mountIssueList` callback wired `onStartWork` to `window.startWorkOnIssueFromList(issueNumber)`, a global that was exposed in app.js pre-inline-handlers-migration (see CHANGELOG entry around line 5098) but had since been removed without rewiring the callback. Clicking the inline Start button on any issue row threw `Uncaught TypeError: window.startWorkOnIssueFromList is not a function` and the row never entered a working session.
+
+**Before:**
+
+```js
+onStartWork: (issueNumber) => window.startWorkOnIssueFromList(issueNumber),
+```
+
+**After (mirrors the lookup at `js/chat/handlers.js:343`):**
+
+```js
+onStartWork: (issueNumber) => {
+    const issue = State.issues?.find(i => i.number === issueNumber);
+    if (issue) startWorkOnIssue(issue);
+},
+```
+
+`startWorkOnIssue` was already imported at [`js/app.js:83`](js/app.js#L83) from `project-manager.js`; `State` was already imported at line 8. No new imports.
+
+#### Fixed — `Providers.enrichModels` facade gap
+
+[`js/core.js`](js/core.js) lines 1425–1438: the "Backward-compatible Providers facade" predates `enrichModels` (added to [`ProviderRegistry`](js/providers/registry.js#L320) after the facade was authored). [`js/llm/api.js:262`](js/llm/api.js#L262) imports `Providers` from `core.js` and calls `Providers.enrichModels(...)`, so the call resolved against the stale facade and the catch path logged
+
+```
+[LLM] Model enrichment failed (using defaults): Providers.enrichModels is not a function
+```
+
+at every app init. Models still populated (the try/catch fell back to non-enriched), but Ollama models lost their `/api/show` capability enrichment and the warn-spam was the kind of stale-reference rot the audit-sweep arc was meant to drain.
+
+**Fix:** added an `enrichModels` delegation to the facade, mirroring the existing `register / get / list / parseModels` proxies:
+
+```js
+async enrichModels(models, settings) {
+    return ProviderRegistry.enrichModels(models, settings);
+}
+```
+
+Out-of-scope follow-up: a full facade ↔ `ProviderRegistry` parity audit (other registry methods like `fetchBalance`, `getDefaultEndpoint`, `setActiveProvider` may also be missing from the facade). Spawned as a separate audit-sweep entry; not bundled into this PR.
+
+### Regression tests
+
+- [`tests/test-app-issue-list-wiring.mjs`](tests/test-app-issue-list-wiring.mjs) — pins the `js/app.js` source pattern: asserts the file no longer contains `window.startWorkOnIssueFromList` and that the `onStartWork` callback reads `State.issues` and calls `startWorkOnIssue(issue)`. Source-pattern rather than behavioral because app.js wires the full app at module-load and is not cleanly importable under `node --test`.
+- [`tests/test-core-providers-facade.mjs`](tests/test-core-providers-facade.mjs) — pins the facade ↔ `ProviderRegistry` parity for `enrichModels`: asserts `typeof Providers.enrichModels === 'function'` and that calling it with a provider that does not implement enrichment returns the input array unchanged.
+
+### Versioning
+
+`js/version.js` bumped from `2.46.0` → `2.47.0`. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) fires on this tag push — drove a 10-turn dogfood session in this repo confirming the issue-list Start button enters a working session and the init logs no longer show the enrichment warn. The third RE-EVAL slot's doc-only content stays in `[Unreleased]` per the policy refinement.
+
 ## [2.46.0] - 2026-05-14
 
 ### Retrieval Composer stale docstring fix

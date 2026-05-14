@@ -1434,6 +1434,9 @@ const Providers = {
     },
     parseModels(rawModels) {
         return ProviderRegistry.parseModels(rawModels, State.settings.apiProvider);
+    },
+    async enrichModels(models, settings) {
+        return ProviderRegistry.enrichModels(models, settings);
     }
 };
 

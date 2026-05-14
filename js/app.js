@@ -835,7 +835,10 @@ async function init() {
     });
     mountIssueList({
         onSendDepMessage: (depNum) => window.Chat?.sendMessage(`Show me issue #${depNum}`),
-        onStartWork: (issueNumber) => window.startWorkOnIssueFromList(issueNumber),
+        onStartWork: (issueNumber) => {
+            const issue = State.issues?.find(i => i.number === issueNumber);
+            if (issue) startWorkOnIssue(issue);
+        },
         onOpenIssueTab: (issueNumber) => openIssueTab(issueNumber),
     });
     mountPrList({ onOpenPrReview: (number) => openPrReview(number) });
