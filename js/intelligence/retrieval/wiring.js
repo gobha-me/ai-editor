@@ -65,33 +65,37 @@
  *      and look up chunks via `store.getChunkByID` for downstream
  *      consumers (the comparison harness's job at the next PR).
  *
- *   6. **No app-boot integration in this PR.** Nothing imports `wiring.js`
- *      outside the test suite and (after this PR) the barrel re-export.
- *      `find_relevant_files` keeps running through legacy
- *      `js/context-manager.js`. Removability holds (Decision §7).
+ *   6. **No app-boot integration in 1.5.1.** App-boot wiring into the
+ *      retrieval Manager arrived at 1.5.14 alongside the legacy
+ *      `js/context-manager.js` retirement; this module now drives
+ *      production ingest via `manager.js`. Removability is inverted —
+ *      deleting `wiring.js` breaks production ingest.
  *
- * **Out of scope for 1.5.1:**
+ * **Out of scope for 1.5.1 (subsequently shipped except where noted):**
  *   - App-boot calls into `EmbeddingsClient.init()` or walker construction
- *     (the walker is *available* but not started at boot; the comparison
- *     harness PR triggers ingestion when its test runs).
- *   - The comparison harness running queries through both legacy
- *     `js/context-manager.js` and the new Composer (next PR).
- *   - Test-query fixture corpus (later PR).
- *   - The actual ≥80% legacy-vs-new agreement measurement that promotes
- *     the track (later PR).
+ *     — ✓ 1.5.14 via `manager.js`.
+ *   - The comparison harness running queries through both the legacy
+ *     path and the new Composer — ✓ 1.5.2 `comparison.js` (legacy
+ *     retired 1.5.14).
+ *   - Test-query fixture corpus — ✓ 1.5.3 `test-corpus.js`.
+ *   - The actual ≥80% legacy-vs-new agreement measurement — ✓ 1.5.4,
+ *     subsequently superseded by the §1.5.5 `expectedPaths` recall@5
+ *     reframe.
  *   - Migration of `find_relevant_files` off `js/context-manager.js`
- *     (1.5.3 after the §1.5.x renumber that this PR lands).
+ *     — ✓ 1.5.14 cutover (slipped from the originally-planned 1.5.3
+ *     post-renumber slot).
  *   - Walker tree-walking / source-URI enumeration from `State.fileTree`
- *     (the consumer's job; the walker takes URIs, doesn't discover them).
+ *     — ✓ `manager.js` since 1.5.14.
  *   - Persistent embedding cache / IDB-backed storage (Phase 1.5.x).
  *   - File-size ceiling / filetype filters (Foundations 1.1.2 branch).
  *   - Multi-repo / cross-workspace URI scheme.
- *   - Thematic strategy (renumbered to 1.5.2 in this PR).
+ *   - Thematic strategy (renumbered to 1.5.2 in this PR; ✓ shipped).
  *
- * **No runtime wire-up.** Nothing imports `createProductionLoader` /
- * `createProductionEmbedder` / `createProductionIngestWalker` outside the
- * test suite. With this module deleted (and the three barrel re-exports
- * removed), no production behavior degrades — Removability holds
+ * **Production wiring (since 1.5.14):** `createProductionLoader` /
+ * `createProductionEmbedder` / `createProductionIngestWalker` are
+ * imported by the retrieval Manager. With this module deleted (and the
+ * three barrel re-exports removed), production ingest breaks —
+ * Removability is inverted
  * (Decision §7).
  *
  * @module intelligence/retrieval/wiring

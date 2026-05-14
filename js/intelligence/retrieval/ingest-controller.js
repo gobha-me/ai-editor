@@ -86,22 +86,21 @@
  *      stays null on this pass. A future "back-fill nulls" sweep is a
  *      separate concern (1.5.x) — not the controller's job.
  *
- * **Out of scope for 1.4.23:**
- *   - File-system / Git-tree walking (1.5.0 parallel-execution harness).
+ * **Out of scope for 1.4.23 (subsequently shipped except where noted):**
+ *   - File-system / Git-tree walking — ✓ 1.5.0 walker harness.
  *   - Production wire-up to `Git.getFile(...)` / `EmbeddingsClient.embed(...)`
- *     (1.5.0 harness; this module is DI-friendly so the wiring is a
- *     handful of lines at the call site).
- *   - Concurrency / retry / backoff (1.5.0 harness).
+ *     — ✓ 1.5.1 `wiring.js`.
+ *   - Concurrency / retry / backoff — ✓ 1.5.0 walker harness.
  *   - Persistent state between process runs (1.5.x, gated on a persistent
  *     chunk store).
  *   - Migration of `find_relevant_files` off `js/context-manager.js`
- *     (1.5.2).
+ *     — ✓ 1.5.14 cutover (slipped from the originally-planned 1.5.2 slot).
  *   - Back-fill sweep for chunks with `embedding: null` (1.5.x).
  *
- * **No runtime wire-up.** Nothing imports `createIngestController` outside
- * the test suite. `find_relevant_files` keeps running through legacy
- * [`js/context-manager.js`](../../context-manager.js). With this module
- * deleted, no production behavior degrades — Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** `createProductionIngestWalker`
+ * (`./wiring.js`) constructs a controller with production loader /
+ * embedder / store wired in; `manager.js` drives it. Removability is
+ * inverted — deleting this module breaks chunk ingest.
  *
  * @module intelligence/retrieval/ingest-controller
  */

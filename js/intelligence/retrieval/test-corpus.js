@@ -1,9 +1,12 @@
 // @ts-check
 /**
  * Test-query fixture corpus — the queries the comparison harness
- * (1.5.2) drives through both legacy `js/context-manager.js` and the
- * new Composer pipeline. Nineteenth PR in the 1.5.0 stream and the
- * structural input for the next PR:
+ * (1.5.2) drove through both the legacy `js/context-manager.js` path
+ * and the new Composer pipeline during the §1.5.0 gate-clearing
+ * window. The legacy module retired at 1.5.14; the corpus now drives
+ * the production Composer pipeline against `expectedPaths` ground
+ * truth (the §1.5.5 reframe). Nineteenth PR in the 1.5.0 stream and
+ * the structural input for the next PR:
  *
  *   - **Next PR (1.5.4):** the actual ≥80% legacy-vs-new agreement
  *     *measurement* run that promotes the track to 1.5.0-final. Drives
@@ -78,10 +81,10 @@
  *      the theory that "legacy-vs-new agreement" was sufficient to
  *      promote §1.5.0. The 1.5.4-patch canonical run on 2026-05-03
  *      surfaced the flaw: the legacy `js/context-manager.js` pipeline
- *      returns `assets/fonts/SOURCES.md` and `evals/pacing.js` for
- *      most queries (file-level summary embeddings appear near-
- *      degenerate), so "agreement with legacy" measures alignment
- *      with a broken baseline. After T1 + T2 stripped prose from the
+ *      (retired at 1.5.14) returned `assets/fonts/SOURCES.md` and
+ *      `evals/pacing.js` for most queries (file-level summary
+ *      embeddings near-degenerate), so "agreement with legacy"
+ *      measured alignment with a broken baseline. After T1 + T2 stripped prose from the
  *      new pipeline's results in the same release, the 2026-05-03
  *      re-run reported `meanAgreement = 0.0026` — but the per-query
  *      results showed the new pipeline was returning the *correct*
@@ -474,9 +477,10 @@ export const QUERY_FIXTURES = Object.freeze(/** @type {QueryFixture[]} */ ([
         query: 'why might the embedder skip large files?',
         category: C.BUG_INVESTIGATION,
         intent: 'guard / ceiling logic by symptom',
-        // Legacy file-level size limit lives at `js/context-manager.js:27`
-        // (`MAX_INDEX_SIZE: 250_000`). The new pipeline's embedder + ingest
-        // controller surface chunk-level skip logic.
+        // Pre-1.5.14 the file-level size limit lived at
+        // `js/context-manager.js:27` (`MAX_INDEX_SIZE: 250_000`). After the
+        // 1.5.14 retirement, the embedder + ingest controller surface
+        // chunk-level skip logic.
         expectedPaths: [
             'js/context-manager.js',
             'js/intelligence/retrieval/embedder.js',

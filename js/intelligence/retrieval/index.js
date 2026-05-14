@@ -78,18 +78,20 @@
  * 1.4.x PR before 1.5.0 — single-source orchestrator only; the walker
  * / parallel-execution harness and the ≥80% legacy-vs-new agreement gate
  * that promotes the track to 1.5.0 land in 1.5.0 itself. The migration
- * off `js/context-manager.js` arrives at 1.5.2 (see `docs/ROADMAP.md`).
+ * off `js/context-manager.js` slipped from the originally-planned 1.5.2
+ * slot to the 1.5.14 cutover; the retirement shipped there.
  * 1.5.0 adds `createIngestWalker` — the parallel-execution harness layered
  * over the 1.4.23 controller. Bounded-concurrency worker pool over a
  * shared async iterator runs `controller.ingest(uri)` across N source
  * URIs with per-source error isolation, optional progress reporting, and
  * abort support (in-flight calls finish; no new dispatch). Pure DI; no
  * production wire-up. First PR opening the 1.5.0 minor — subsequent PRs
- * add (a) production wiring to `Git.getFile()` / `EmbeddingsClient.embed()`,
- * (b) the comparison harness running queries through both legacy
- * `js/context-manager.js` and the new Composer, (c) a test-query fixture
- * corpus, and (d) the actual ≥80% agreement measurement that promotes
- * the track.
+ * added (a) production wiring to `Git.getFile()` / `EmbeddingsClient.embed()`,
+ * (b) the comparison harness that ran queries through both the legacy
+ * `js/context-manager.js` path and the new Composer during the §1.5.0
+ * gate-clearing window, (c) a test-query fixture corpus, and (d) the
+ * actual ≥80% agreement measurement that promoted the track. The legacy
+ * module itself retired at 1.5.14.
  * 1.5.1 adds `createProductionLoader` / `createProductionEmbedder` /
  * `createProductionIngestWalker` — the integration seam (`./wiring.js`)
  * that bridges the production `Git` and `EmbeddingsClient` modules to the
@@ -99,21 +101,23 @@
  * library startup per DESIGN-retrieval lines 304-308. Project context
  * (owner / repo / ref) closes over the loader so `source_uri` is a plain
  * in-repo path. No app-boot integration in 1.5.1 — the comparison harness
- * PR triggers ingestion when its test runs; `find_relevant_files` keeps
- * running through legacy `js/context-manager.js` until 1.5.4.
+ * PR triggered ingestion when its test ran; `find_relevant_files` kept
+ * running through legacy `js/context-manager.js` until the 1.5.14 cutover
+ * that retired the legacy module.
  * 1.5.2 adds `createComparisonHarness` plus the default normalizers
  * (`normalizeLegacyResult`, `normalizeComposerResult`) and metrics
  * (`jaccardSimilarity`, `precisionAtK`) — the measurement infrastructure
  * for the §1.5.0 ≥80% legacy-vs-new agreement exit criterion. Pure DI
  * over two opaque retrieval runners; `compareBatch` aggregates per-query
  * Jaccard into a `ComparisonReport` with histogram and mean. Eighteenth
- * PR in the 1.5.0 stream — runs on top of 1.5.1's production wiring at
- * the consumer's call site. Subsequent PRs add (a) the test-query
- * fixture corpus the harness drives (1.5.3) and (b) the actual ≥80%
- * agreement measurement that promotes the track to 1.5.0-final. No
- * runtime wire-up: `find_relevant_files` keeps running through legacy
- * `ContextManager.findRelevantFiles` until 1.5.4 (renumbered from 1.5.3
- * to make room for the corpus PR).
+ * PR in the 1.5.0 stream — ran on top of 1.5.1's production wiring at
+ * the consumer's call site. Subsequent PRs added (a) the test-query
+ * fixture corpus the harness drove (1.5.3) and (b) the actual ≥80%
+ * agreement measurement that promoted the track to 1.5.0-final. No
+ * runtime wire-up at the time: `find_relevant_files` kept running
+ * through legacy `ContextManager.findRelevantFiles` until the 1.5.14
+ * cutover that retired the legacy module (slipped from the
+ * originally-planned 1.5.4 slot).
  * 1.5.3 adds `QUERY_CORPUS` + `QUERY_FIXTURES` + `QUERY_CATEGORIES` +
  * `getQueriesByCategory` (`./test-corpus.js`) — the test-query fixture
  * corpus the comparison harness drives. Two parallel shapes: a flat

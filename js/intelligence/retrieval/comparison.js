@@ -13,28 +13,29 @@
  *   - **Next PR (1.5.3 in the renumbered schedule):** the test-query
  *     fixture corpus the harness drives.
  *   - **The PR after (later 1.5.0-betaN):** the actual ≥80%
- *     legacy-vs-new agreement *measurement* — runs the corpus through
+ *     legacy-vs-new agreement *measurement* — ran the corpus through
  *     this harness against a real wired-up Composer + the live
- *     legacy `js/context-manager.js` and reports the number that
- *     promotes the track to 1.5.0-final.
+ *     legacy `js/context-manager.js` and reported the number that
+ *     promoted the track to 1.5.0-final. (The legacy module
+ *     subsequently retired at 1.5.14; the §1.5.5 reframe replaced
+ *     agreement-with-legacy with recall@5 against `expectedPaths`.)
  *
- * **What this PR is NOT.** It does not run the measurement; it does
- * not ship the corpus; it does not wire up production runners; it
- * does not migrate `find_relevant_files`. Same restraint posture
+ * **What this PR was NOT.** It did not run the measurement; it did
+ * not ship the corpus; it did not wire up production runners; it
+ * did not migrate `find_relevant_files`. Same restraint posture
  * every retrieval Phase-1 module took: one focused, pure, removable
  * factory per PR.
  *
  * **Public surface:** `createComparisonHarness({ runLegacy, runNew,
  * normalizeLegacy?, normalizeNew?, metric?, topK?, now? })`. The
- * runners are opaque callables — the harness does not care whether
- * `runLegacy` is calling `ContextManager.findRelevantFiles` (the
- * legacy file-level path at [`js/context-manager.js`](../../context-manager.js))
- * or a fake; it does not care whether `runNew` is calling
- * `compose(...)` against a wired-up Composer (1.5.1 production
- * wiring) or a fake. That separation is exactly what keeps this
- * module node-test-safe: the legacy module imports `core.js` and is
- * not node-importable, but a runner closure can live in any
- * environment its caller chooses.
+ * runners are opaque callables — the harness did not care whether
+ * `runLegacy` called `ContextManager.findRelevantFiles` (the legacy
+ * file-level path that lived at `js/context-manager.js` until the
+ * 1.5.14 retirement) or a fake; it did not care whether `runNew`
+ * called `compose(...)` against a wired-up Composer (1.5.1 production
+ * wiring) or a fake. That separation kept this module node-test-safe:
+ * the legacy module imported `core.js` and was not node-importable,
+ * but a runner closure can live in any environment its caller chooses.
  *
  * **Shape contract.** Both runners return some opaque value; the
  * normalizers reduce that to `string[]` (typically file paths or
@@ -116,14 +117,17 @@
  *     runs — runners are opaque, so caching belongs at the runner
  *     level if the consumer wants it.
  *   - Migration of `find_relevant_files` off `js/context-manager.js`
- *     — that's 1.5.4 in the renumbered schedule.
+ *     — ✓ shipped at 1.5.14 (slipped from the originally-planned
+ *     1.5.4 slot; the §1.5.5 reframe also retired agreement-with-legacy
+ *     as the gate metric, so this harness's role narrowed to a
+ *     diagnostic drift signal).
  *
- * **No runtime wire-up.** Nothing imports `createComparisonHarness`
- * outside the test suite. With this module deleted, the barrel
- * re-exports removed, and the typedefs removed,
- * `find_relevant_files` keeps running through legacy
- * `ContextManager.findRelevantFiles` exactly as before. Removability
- * holds (Decision §7).
+ * **Production wiring scope:** the comparison harness itself is not
+ * production-wired — it lives behind the standalone measurement
+ * runner and the test suite. With this module deleted, the barrel
+ * re-exports removed, and the typedefs removed, the production
+ * `find_relevant_files` path is unaffected (it routes through
+ * `manager.js` → Composer, not through this harness).
  *
  * @module intelligence/retrieval/comparison
  */
@@ -251,13 +255,14 @@ function syncToAsyncIterator(iterable) {
 
 /**
  * Default legacy normalizer. Accepts the shape
- * `ContextManager.findRelevantFiles` returns at
- * [`js/context-manager.js`](../../context-manager.js): an array of
- * `{ path, similarity, summary }`. Returns dedup'd paths in input
- * order, capped at `topK`. Also tolerates an envelope of
- * `{ files: [...] }` (the shape the `find_relevant_files` LLM tool
- * wraps the result in at [`js/tools/context-tools.js`](../../tools/context-tools.js))
- * so callers can run either without re-shaping.
+ * `ContextManager.findRelevantFiles` returned at the pre-1.5.14
+ * `js/context-manager.js` path: an array of `{ path, similarity, summary }`.
+ * Returns dedup'd paths in input order, capped at `topK`. Also tolerates
+ * an envelope of `{ files: [...] }` (the shape the `find_relevant_files`
+ * LLM tool wraps the result in at
+ * [`js/tools/context-tools.js`](../../tools/context-tools.js)) so callers
+ * can run either without re-shaping. Kept for historical replay against
+ * archived legacy outputs; live production no longer emits this shape.
  *
  * Defensive: a non-array / missing-`path` / non-string-`path` entry
  * is silently skipped. Empty input → `[]`.

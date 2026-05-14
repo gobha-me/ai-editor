@@ -63,13 +63,13 @@
  *     ships between 1.4.22 and 1.5.1).
  *   - Concurrency / retry / backoff (controller's job).
  *   - Migration of `find_relevant_files` off `js/context-manager.js`
- *     (1.5.2).
+ *     — ✓ shipped at 1.5.14 (legacy module retired in the same cutover).
  *   - `spec` content_type — deferred past Phase 1 per the design's
  *     §"Chunker" table; this module does not produce `"spec"` hints.
  *
- * **No runtime wire-up.** Nothing imports `createLoader` outside the
- * test suite. With this module deleted, no production behavior degrades —
- * Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** `createProductionLoader`
+ * (`./wiring.js`) wraps `createLoader` for the retrieval Manager;
+ * deleting this module would break ingest. Removability is inverted.
  *
  * @module intelligence/retrieval/loader
  */
@@ -100,8 +100,9 @@
 /* ---------------- Extension → content_type ---------------- */
 
 /**
- * Phase 1 extension table. Mirrors the `js/context-manager.js` legacy
- * mapping for the subset of content types the shipped chunkers handle:
+ * Phase 1 extension table. Originally mirrored the legacy
+ * `js/context-manager.js` mapping (retired at 1.5.14); kept here for the
+ * subset of content types the shipped chunkers handle:
  *
  *   - `code`: JS/TS family + Python.
  *   - `prose`: Markdown + plain-text + reStructuredText.

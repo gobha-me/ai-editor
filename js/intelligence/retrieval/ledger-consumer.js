@@ -108,10 +108,12 @@
  * Implemented in `_spillIfAtCapacity`; called from `appendAdmission`
  * *before* push.
  *
- * **Removability.** Like the rest of the 1.5.0 stream, no production
- * wiring: `find_relevant_files` continues to run through
- * `js/context-manager.js`. With this module deleted and the step-6.5
- * call removed from `composer.js`, nothing in production degrades.
+ * **Production wiring (since 1.5.14):** `composer.js` step-6.5 calls
+ * `consultLedger` whenever `req.task_ledger` is supplied; the retrieval
+ * Manager threads the active ledger through on chat-driven retrievals.
+ * The legacy `js/context-manager.js` module retired in the same cutover.
+ * Removability is inverted — deleting this module would break the
+ * ledger-aware re-admission marker shape.
  *
  * @module intelligence/retrieval/ledger-consumer
  */

@@ -61,11 +61,11 @@
  *      for tuning experiments without reaching into the strategy.
  *
  *   5. **No persistence; no incremental rebuild.** This PR's only consumer
- *      is the measurement harness, which builds the index once after
- *      ingest finishes (corpus is static during a measurement run).
- *      Production wire-up to `find_relevant_files` (still on legacy
- *      `js/context-manager.js` until the legacy retirement PR) is where
- *      incremental updates would land — under a separate scoping decision.
+ *      was the measurement harness, which built the index once after
+ *      ingest finished (corpus static during a measurement run). The
+ *      1.5.14 cutover wired `buildBM25Index` into the production
+ *      retrieval Manager (`manager.js`); incremental updates remain
+ *      a separate scoping decision and have not landed.
  *
  *   6. **No RRF tuning surface.** The strategy hardcodes `RRF_K = 60`
  *      (Cormack et al. 2009). If T7 measurement shows BM25 helping, RRF

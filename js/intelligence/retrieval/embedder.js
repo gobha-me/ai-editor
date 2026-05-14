@@ -87,22 +87,23 @@
  *      `embedBatch(chunks, {concurrency})`. Batching ships when a real
  *      consumer demands it.
  *
- * **Out of scope for 1.4.22:**
+ * **Out of scope for 1.4.22 (subsequently shipped except where noted):**
  *   - Provider selection / fallback chain (`EmbeddingsClient` already
  *     does that at library init).
- *   - Production wire-up to `EmbeddingsClient.embed` (1.4.23 controller).
+ *   - Production wire-up to `EmbeddingsClient.embed` — ✓ 1.4.23
+ *     controller + 1.5.1 `wiring.js`.
  *   - Persistent cache (IDB / localStorage). The in-memory cache turns
  *     over on process restart, same lifetime as the in-memory Store.
  *     Persistence is a 1.5.x concern.
- *   - BM25 index construction (still deferred per
- *     [`loader.js`](./loader.js) lines 60-63).
+ *   - BM25 index construction — ✓ 1.5.11 `bm25-indexer.js`.
  *   - Migration of `find_relevant_files` off `js/context-manager.js`
- *     (1.5.2).
+ *     — ✓ 1.5.14 cutover (slipped from the originally-planned 1.5.2 slot).
  *   - Concurrency / retry / backoff (controller's job).
  *
- * **No runtime wire-up.** Nothing imports `createEmbedder` outside the
- * test suite. With this module deleted, no production behavior degrades —
- * Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** `createProductionEmbedder`
+ * (`./wiring.js`) wraps `createEmbedder` with `EmbeddingsClient.embed`
+ * for the retrieval Manager. Removability is inverted — deleting this
+ * module breaks chunk embedding on ingest.
  *
  * @module intelligence/retrieval/embedder
  */

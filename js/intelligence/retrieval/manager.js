@@ -1,8 +1,9 @@
 // @ts-check
 /**
  * Retrieval Manager — production singleton owning the chunk-level
- * retrieval pipeline lifecycle. Replaces legacy `js/context-manager.js`
- * (file-level summary embeddings) at 1.5.14. Drives `find_relevant_files`,
+ * retrieval pipeline lifecycle. Replaced legacy `js/context-manager.js`
+ * (file-level summary embeddings) at the 1.5.14 cutover — the legacy
+ * module was deleted in the same release. Drives `find_relevant_files`,
  * the index-status indicator, the debug slideout's Indexer panel,
  * Settings → Storage's per-index list, and the auto-pause when the LLM
  * is generating.

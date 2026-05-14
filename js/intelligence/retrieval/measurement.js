@@ -135,19 +135,19 @@
  *   - Tuning the Composer if agreement <80% — that's a follow-up patch
  *     series before 1.5.5 / 1.5.6 (Thematic / legacy removal).
  *   - Migration of `find_relevant_files` off legacy
- *     `js/context-manager.js` — that's 1.5.6 in the renumbered schedule.
+ *     `js/context-manager.js` — ✓ shipped at 1.5.14 (slipped from the
+ *     originally-planned 1.5.6 slot).
  *   - Wiring the harness into the in-app Settings/Debug surface — the
  *     standalone HTML runner is sufficient for the one-time ≥80%
  *     measurement.
  *   - Concurrency / retry / per-query embedding cache between runs.
  *   - Persistent chunk store / IDB backing.
  *
- * **No runtime wire-up.** Nothing imports `createMeasurementHarness`
- * outside the test suite and the standalone HTML runner. With this
- * module deleted (and the barrel re-export removed and the HTML runner
- * deleted), `find_relevant_files` keeps running through legacy
- * `ContextManager.findRelevantFiles` exactly as before. Removability
- * holds (Decision §7).
+ * **Runtime wire-up scope:** the measurement harness itself remains
+ * test-suite + standalone HTML runner only. The legacy
+ * `ContextManager.findRelevantFiles` baseline path retired at 1.5.14;
+ * subsequent measurement runs target the production Manager pipeline
+ * directly without a legacy comparison runner.
  *
  * @module intelligence/retrieval/measurement
  */
@@ -447,8 +447,9 @@ export function defaultComposeFiltersResolver(opts) {
  *
  *   The function form is the T3 seam — callers wanting per-fixture
  *   experimentation supply a custom resolver without touching the
- *   harness itself. Live `find_relevant_files` (still on legacy
- *   `js/context-manager.js` until 1.5.9) is unaffected.
+ *   harness itself. Live `find_relevant_files` is unaffected (the
+ *   legacy `js/context-manager.js` path retired at 1.5.14; production
+ *   now runs the Composer pipeline via `manager.js`).
  * @property {AbortSignal|undefined} [signal]
  *   Optional. A pre-aborted signal supplied here is honored at
  *   construction time — `ingest()` will return immediately with a

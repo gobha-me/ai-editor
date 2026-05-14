@@ -18,13 +18,14 @@
  * ([js/embeddings-client.js](../../../embeddings-client.js)) — the editor
  * has had `EmbeddingsClient.embed()` for four releases. What's new is
  * **chunk-level** retrieval that pairs with the chunkers landed in
- * 1.4.10–1.4.13; the legacy file-level `find_relevant_files` path keeps
- * working through `js/context-manager.js` until the migration PR (1.5.2
- * per the roadmap). To keep this strategy a pure function of injected
- * deps — and to keep node tests free of the browser-only `core.js`
- * import chain — `embedQuery` is a required factory parameter rather
- * than a default-to-`EmbeddingsClient.embed` import. Production callers
- * wire `(text) => EmbeddingsClient.embed(text)` at the call site (the
+ * 1.4.10–1.4.13; the legacy file-level `find_relevant_files` path
+ * retired at the 1.5.14 cutover that decommissioned
+ * `js/context-manager.js` and made the Composer pipeline production.
+ * To keep this strategy a pure function of injected deps — and to keep
+ * node tests free of the browser-only `core.js` import chain —
+ * `embedQuery` is a required factory parameter rather than a
+ * default-to-`EmbeddingsClient.embed` import. Production callers wire
+ * `(text) => EmbeddingsClient.embed(text)` at the call site (the
  * Composer in PR 9 of 1.5.0); tests inject deterministic fakes.
  *
  * The chunk-level vector store does not exist yet either: the chunkers

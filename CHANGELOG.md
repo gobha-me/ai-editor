@@ -4,11 +4,49 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### RE-EVAL following 2.46.0 — third re-eval slot (doc-only; no version bump)
+## [2.47.0.1] - 2026-05-14
+
+### Sibling-file `context-manager.js` cleanup + stale `getToolsForProfile` docstring fix
+
+Bundled docstring-only sub-patch under the 2.47.0 tag, closing both `[strong] [S]` rows queued at the third RE-EVAL slot ([`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) §"Code-aware findings" + the 2.46.0 audit pass's out-of-scope finding). No behavior change. Mirrors the 2.46.0 retrieval-Composer fix shape one-for-one: past-tense anchored on the 1.5.14 cutover that retired legacy `js/context-manager.js`, with ICD cross-references where the seam is contract-pinned.
+
+#### Fixed — `js/tools/registry.js` `getToolsForProfile` docstring
+
+[`js/tools/registry.js`](js/tools/registry.js) lines 253–271. The docstring claimed `"Renamed from getToolsForRole; the legacy alias is preserved below for any plugin-side caller that still imports the old name (deprecation shim retires at 2.1.0)."` Reading the rest of the file (lines 272–330) showed no `getToolsForRole` alias — the 2.1.0 shim retirement happened on schedule. The stale claim risked misdirecting a future plugin author toward the unrelated [`LLMTools.getToolsForRole()`](js/llm/api.js#L1025) (a coincidentally-same-named method on the LLM-side tool builder, not the registry filter). Replacement docstring now states the 2.1.0 retirement happened as planned, points at `getToolsForProfile` as the only public name, and forward-references [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) §"Per-export contract" for the admission contract.
+
+#### Fixed — sibling-file `context-manager.js` references across `js/intelligence/retrieval/`
+
+15 files / 27 stale references caught up to the 1.5.14 retirement. The 2.46.0 [`js/intelligence/retrieval/composer.js`](js/intelligence/retrieval/composer.js) fix scoped tightly to that one module per the §RE-EVAL #2 directive; this PR drains the same drift across the rest of the subsystem. Per-file shape mirrors `composer.js` lines 31–35 — forward-looking 1.4.x phrasing ("until the migration PR", "running through legacy `js/context-manager.js`", "Removability holds") flipped to past-tense anchored on 1.5.14, with ICD cross-references where applicable.
+
+| File | Updated |
+|---|---|
+| [`js/intelligence/retrieval/index.js`](js/intelligence/retrieval/index.js) | 1.5.0-stream chronicle: tense flip + cutover-date correction (1.5.2 / 1.5.4 originally planned; shipped 1.5.14) |
+| [`js/intelligence/retrieval/pipeline.js`](js/intelligence/retrieval/pipeline.js) | "No runtime wire-up" → "Production wiring (since 1.5.14)" + Removability inverted |
+| [`js/intelligence/retrieval/bm25-indexer.js`](js/intelligence/retrieval/bm25-indexer.js) | Scope-decision #5 retrospective; "still on legacy" → "1.5.14 wired into Manager" |
+| [`js/intelligence/retrieval/loader.js`](js/intelligence/retrieval/loader.js) | Out-of-scope migration item annotated `✓ shipped 1.5.14`; Phase-1 extension-table attribution updated; Removability inverted |
+| [`js/intelligence/retrieval/ledger-consumer.js`](js/intelligence/retrieval/ledger-consumer.js) | Removability paragraph → "Production wiring (since 1.5.14)"; inverted |
+| [`js/intelligence/retrieval/measurement.js`](js/intelligence/retrieval/measurement.js) | Two refs: out-of-scope migration `✓ shipped 1.5.14`; T3-seam comment updated |
+| [`js/intelligence/retrieval/strategies/semantic.js`](js/intelligence/retrieval/strategies/semantic.js) | Mid-paragraph "until the migration PR (1.5.2)" → "retired at the 1.5.14 cutover" |
+| [`js/intelligence/retrieval/strategies/thematic.js`](js/intelligence/retrieval/strategies/thematic.js) | "No runtime wire-up" → "Production wiring (since 1.5.14)" + Removability inverted |
+| [`js/intelligence/retrieval/test-corpus.js`](js/intelligence/retrieval/test-corpus.js) | Header + §6 reframe note + line-481 fixture comment all updated to past-tense; **literal `'js/context-manager.js'` in `expectedPaths` preserved** as historical fixture data (out-of-scope) |
+| [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) | "Replaces legacy" → "Replaced legacy ... at the 1.5.14 cutover — the legacy module was deleted in the same release" |
+| [`js/intelligence/retrieval/walker.js`](js/intelligence/retrieval/walker.js) | Chronicle tense flip + out-of-scope items annotated `✓` per slice + "No runtime wire-up" → "Production wiring (since 1.5.14)" inverted |
+| [`js/intelligence/retrieval/comparison.js`](js/intelligence/retrieval/comparison.js) | Four refs: harness narrative past-tense + out-of-scope annotated + default normalizer note revised |
+| [`js/intelligence/retrieval/wiring.js`](js/intelligence/retrieval/wiring.js) | Three refs: scope-decision #6 + out-of-scope items annotated `✓` per slice + Production wiring paragraph inverted |
+| [`js/intelligence/retrieval/ingest-controller.js`](js/intelligence/retrieval/ingest-controller.js) | Out-of-scope items annotated `✓` per slice + Production wiring inverted |
+| [`js/intelligence/retrieval/embedder.js`](js/intelligence/retrieval/embedder.js) | Out-of-scope migration item `✓ shipped 1.5.14` + Production wiring inverted |
+
+**Surviving `context-manager` mentions after this PR (27 instances across 16 files including `composer.js`):** all are now past-tense / historical-attribution / preserved fixture data (the `test-corpus.js:485` literal in `expectedPaths`). Grep `context-manager js/intelligence/retrieval/` returns 27 matches; none are forward-looking claims.
+
+### Absorbs the RE-EVAL following 2.46.0 entries
+
+The third RE-EVAL slot's doc-only content (third ICD authored at [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md), ARCHITECTURE.md catch-up sync 2.44.0 → 2.46.0, roadmap paper-half band tightening + Decision §14 sub-clause refinement) was accumulating in `[Unreleased]` per the policy refinement (Decision §14 sub-clause) and is absorbed into this `[2.47.0.1]` heading on tag. Per the policy, the re-eval slot itself did not consume a version slot — 2.47.0.1 is the next versioned in-track PR after 2.47.0, and it absorbs anything `[Unreleased]` was holding.
+
+### RE-EVAL following 2.46.0 — third re-eval slot (doc-only; absorbed into 2.47.0.1)
 
 **Doc-only.** Third firing of the re-eval cadence (every 3 code minors per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"; Decision §14). **Policy refinement adopted this slot: re-eval slots accumulate in `[Unreleased]`; they do NOT consume a version slot.** The 2.42.0 (first re-eval) and 2.45.0 (second re-eval) doc-only releases were the pre-refinement shape; the rule corrects forward without rewriting their history. This composes with the [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) memory rule — both apply to docs-only / measurement-only changes.
 
-`js/version.js` stays at **`2.46.0`** through this PR. The next code minor (2.47.0; see ROADMAP §"Now / Next / Later") will absorb these entries into its versioned heading on tag — or, if more doc-only / measurement-only changes accumulate first, `[Unreleased]` keeps growing.
+`js/version.js` stayed at **`2.46.0`** through the re-eval PR (PR #411). The next versioned in-track PR (2.47.0.1; this entry) absorbs these deliverables into its versioned heading; 2.47.0 itself was a queue-jumping `fix:` for runtime regressions and shipped without absorbing the re-eval content.
 
 ### Third ICD shipped — `docs/ICD-tool-registry.md`
 
@@ -65,17 +103,17 @@ This is **stale**. Reading the rest of the file (lines 272–330) shows no `getT
 
 ### Tests
 
-No new tests in this PR. Doc-only — no `js/` behavior changed; `js/version.js` stays at 2.46.0. Existing suites (`node --test tests/test-*.mjs`) run as a no-regression check. Doc-internal consistency:
+No new tests in this PR — docstring-only fix; matches the 2.46.0 retrieval-Composer fix shape. Existing suites (`node --test tests/test-*.mjs`) run as a no-regression check. Doc-internal consistency:
 
-- `js/version.js` `VERSION = '2.46.0'` — unchanged. `[Unreleased]` populated but no new versioned heading. Version-coherence lint pass-condition unchanged.
-- ROADMAP line 3 header version matches `js/version.js` ↔ `[Unreleased]` accumulation shape.
-- ARCHITECTURE.md `Last sync: **2.46.0** (2026-05-14, third RE-EVAL slot — doc-only — no version bump)` matches the policy refinement.
-- ICD-tool-registry cross-checks: every named export in `js/tools/registry.js` + `js/profiles/registry.js` (11 total) appears in the per-export contract section; every trigger-point line citation has been grep-verified against the production source.
-- Test-file references: [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) (already shipped — confirmed via `ls`; `node tests/test-tools-registry-legal-groups.mjs` passes); [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs) (referenced for cross-product equivalence pin).
+- `js/version.js` bumped `2.47.0` → `2.47.0.1` ↔ CHANGELOG `## [2.47.0.1]` heading ↔ ROADMAP line 3 header. Version-coherence lint passes.
+- ARCHITECTURE.md `Last sync: **2.46.0**` is older than this version but no new structural surfaces were introduced — next catch-up sync runs at the post-2.49.0 re-eval per the cadence.
+- ICD-tool-registry cross-checks: every named export in `js/tools/registry.js` + `js/profiles/registry.js` (11 total) appears in the per-export contract section; every trigger-point line citation has been grep-verified against the production source. (Established at the RE-EVAL PR; unchanged here.)
+- Test-file references: [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) and [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs) — both already shipped; relevant to the registry docstring contract.
+- Grep verification: `grep -rn 'context-manager' js/intelligence/retrieval/` returns 27 hits across 16 files — same count as pre-PR (the references themselves were edited in place; the count is preserved because the literal string was kept while only the surrounding language flipped to past-tense). Every surviving hit is either past-tense historical-attribution, the preserved `expectedPaths` fixture literal at `test-corpus.js:485`, or the already-fixed 2.46.0 entry in `composer.js`.
 
 ### Versioning
 
-`js/version.js` reads **`2.46.0`** — unchanged. **No version bump.** Per the policy refinement adopted at this re-eval (Decision §14 sub-clause), re-eval sessions are doc-only PRs that accumulate in `[Unreleased]`; they do not consume a version slot. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) does NOT fire on this PR — `[Unreleased]` accumulation is not `X.Y.Z`-shaped. Gate fires next on the 2.47.0 tag push, which will absorb these entries into its versioned heading.
+`js/version.js` reads **`2.47.0.1`** — bumped from 2.47.0. Per the X.Y.Z.N sub-patch convention ([`docs/VERSIONING.md`](docs/VERSIONING.md)): in-track follow-up under the 2.47.0 tag for the deferred docstring cleanup, mirroring how the 2.44.0 wave shipped as 2.44.0.0 through 2.44.0.3 under the 2.44.0 tag. The release-readiness gate ([ROADMAP Decision §12](docs/ROADMAP.md)) **does not fire** — 2.47.0.1 is `X.Y.Z.N`-shaped, not a `X.Y.Z` tag push. Per [`feedback_version_bump`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_version_bump.md): bump version + promote CHANGELOG `[Unreleased]` in the same PR. Both done here; `[Unreleased]` re-opens empty above this section.
 
 ## [2.47.0] - 2026-05-14
 

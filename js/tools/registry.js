@@ -262,9 +262,12 @@ export const ToolRegistry = {
      * preserved — those values are admission tags consumed by
      * `Profile.tools.allowed_groups`.
      *
-     * Renamed from `getToolsForRole`; the legacy alias is preserved
-     * below for any plugin-side caller that still imports the old
-     * name (deprecation shim retires at 2.1.0).
+     * The 2.0.0 slice-3 rename ran with a 2.1.0-targeted deprecation
+     * shim under the old `getToolsForRole` name; that shim retired at
+     * 2.1.0 as planned. There is no plugin-side alias today — callers
+     * import `getToolsForProfile` directly. See
+     * [`docs/ICD-tool-registry.md`](../../docs/ICD-tool-registry.md)
+     * §"Per-export contract" for the admission contract.
      *
      * @param {string} [profileName] - Profile name (defaults to active)
      * @returns {ToolDefinition[]}

@@ -46,11 +46,11 @@
  *     one `content_type`; `extractStructure` already rejects mixed batches
  *     downstream.
  *
- * No runtime wire-up: nothing imports `runChunkerPipeline` outside the
- * test suite yet. `find_relevant_files` keeps running through legacy
- * [`js/context-manager.js`](../../context-manager.js) until the migration
- * lands at 1.5.2. With this module deleted, no user-visible behavior
- * degrades — Removability holds.
+ * **Production wiring (since 1.5.14):** the ingest controller drives
+ * `runChunkerPipeline` on every chunked source; the 1.5.14 cutover
+ * retired legacy `js/context-manager.js` and made this module
+ * load-bearing for `findRelevantFiles()`. Removability is inverted —
+ * deleting this module breaks chunk-level ingest.
  *
  * @module intelligence/retrieval/pipeline
  */

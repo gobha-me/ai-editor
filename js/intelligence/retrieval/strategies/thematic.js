@@ -62,13 +62,13 @@
  * the 50k cap, and a Phase-1 in-memory store reclusters in a few ms
  * even at corpus scale.
  *
- * **No runtime wire-up.** The measurement harness instantiates the
- * strategy alongside Semantic + Structural. The live
- * `find_relevant_files` path keeps running through legacy
- * `js/context-manager.js` until the renumbered legacy retirement
- * (1.5.11). With this module deleted (and the barrel re-export and
- * harness wiring removed) no production behavior degrades —
- * Removability holds (Decision §7).
+ * **Production wiring (since 1.5.14):** the retrieval Manager
+ * registers Thematic alongside Semantic + Structural for live
+ * `find_relevant_files` calls; the legacy `js/context-manager.js`
+ * file-level path retired in the same cutover (slipped from the
+ * originally-planned 1.5.11 slot). Removability is inverted — deleting
+ * this module would break thematic strategy admission and degrade
+ * recall on the topic / onboarding query categories.
  *
  * @module intelligence/retrieval/strategies/thematic
  */

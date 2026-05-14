@@ -10,15 +10,17 @@
  * Loader → Chunker pipeline → Embedder → Store per `docs/DESIGN-retrieval.md`
  * lines 313-328 — but it is single-source by design (one `sourceUri` per
  * call). The walker owns the *iteration*: bounded parallelism, result
- * aggregation, abort semantics, progress notification. This is the first
- * PR opening the 1.5.0 minor; subsequent 1.5.0-betaN PRs add (a) production
- * wiring to `Git.getFile()` / `EmbeddingsClient.embed()`, (b) the
- * comparison harness that runs queries through both legacy
- * `js/context-manager.js` and the new Composer, (c) a test-query fixture
- * corpus, and (d) the actual ≥80% legacy-vs-new agreement measurement that
- * promotes the track. Each is a focused module, matching the established
- * Phase-1 PR cadence (one DI-friendly factory per PR, removability holds
- * for each).
+ * aggregation, abort semantics, progress notification. This was the first
+ * PR opening the 1.5.0 minor; subsequent 1.5.0-betaN PRs added (a)
+ * production wiring to `Git.getFile()` / `EmbeddingsClient.embed()`, (b)
+ * the comparison harness that ran queries through both the legacy
+ * `js/context-manager.js` path and the new Composer during the §1.5.0
+ * gate-clearing window, (c) a test-query fixture corpus, and (d) the
+ * actual ≥80% legacy-vs-new agreement measurement that promoted the
+ * track. The legacy module retired at 1.5.14. Each PR was a focused
+ * module, matching the established Phase-1 PR cadence (one DI-friendly
+ * factory per PR, removability held for each individually before the
+ * cutover).
  *
  * **Public surface:** `createIngestWalker({ controller, concurrency?,
  * onProgress?, now? }) => IngestWalker`. The handle exposes `walk(sourceUris,
@@ -80,18 +82,21 @@
  *      resolution can produce `0` in fast tests; tests inject a clock.
  *      Same DI posture every other retrieval module took.
  *
- * **Out of scope for this PR (later 1.5.0-betaN / 1.5.x PRs):**
+ * **Out of scope for this PR (later 1.5.0-betaN / 1.5.x PRs — all
+ * subsequently shipped):**
  *
  *   - Production wire-up to `Git.getFile()` / `EmbeddingsClient.embed()`
- *     and `EmbeddingsClient.init()` integration.
+ *     and `EmbeddingsClient.init()` integration (✓ 1.5.1 `wiring.js`).
  *   - Workspace tree walking (filtered by `IgnoreManager`, etc.) — the
  *     walker accepts an iterable; producing that iterable is a separate
- *     concern.
- *   - Comparison harness running queries through both legacy
- *     `context-manager.js` and the new Composer.
- *   - Test-query fixture corpus.
- *   - Actual ≥80% legacy-vs-new agreement measurement.
- *   - Migration of `find_relevant_files` (1.5.2).
+ *     concern (✓ `manager.js` since 1.5.14).
+ *   - Comparison harness running queries through both the legacy path
+ *     and the new Composer (✓ 1.5.2 `comparison.js`; legacy retired 1.5.14).
+ *   - Test-query fixture corpus (✓ 1.5.3 `test-corpus.js`).
+ *   - Actual ≥80% legacy-vs-new agreement measurement (✓ 1.5.4 +
+ *     superseded by the §1.5.5 `expectedPaths` recall@5 reframe).
+ *   - Migration of `find_relevant_files` (✓ 1.5.14 cutover; slipped
+ *     from the originally-planned 1.5.2 slot).
  *   - Persistent chunk store / IDB backing (1.5.x).
  *   - Cancellation propagation into in-flight `controller.ingest` calls
  *     (would require an abort surface on the controller / loader / embedder
@@ -99,12 +104,11 @@
  *   - Retry / backoff on transient failures (controller's surface returns
  *     `failed` results; retry policy lives at the call site).
  *
- * **No runtime wire-up.** Nothing imports `createIngestWalker` outside the
- * test suite. `find_relevant_files` keeps running through legacy
- * [`js/context-manager.js`](../../context-manager.js). With this module
- * deleted, the barrel re-export removed, and the `WalkResult` typedef
- * removed, no production behavior degrades — Removability holds
- * (Decision §7).
+ * **Production wiring (since 1.5.14):** `createProductionIngestWalker`
+ * (`./wiring.js`) wraps `createIngestWalker` for `manager.js`. The
+ * legacy `js/context-manager.js` retired in the same cutover.
+ * Removability is inverted — deleting this module would break workspace
+ * ingest.
  *
  * @module intelligence/retrieval/walker
  */
