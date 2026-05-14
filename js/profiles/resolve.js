@@ -379,3 +379,61 @@ export function resolvePreviewConfig(profileName) {
         profileName: profile.name,
     };
 }
+
+/**
+ * Resolve the sub-agent (`delegate_task`) config for a given profile.
+ *
+ * **2.49.0.0 — slice 1 of github#24 Phase 1.** Reads the `subagent`
+ * block from the *resolved* profile (deep-merge of the named profile
+ * on top of its `base` chain) via `resolveProfile`. The merge shape
+ * matters here in a way it does not for `resolveScriptAutomationConfig`
+ * — that helper's `coder.v1` short-circuit works because the
+ * `scriptAutomation` block lives only on `coder.v1` / `chat.v1`. The
+ * `subagent` block lives on `subagent.v1` (Phase 1's only carrier);
+ * future profiles inheriting from `subagent.v1` (e.g.
+ * `subagent_reviewer.v1`) need the inheritance walk to pick up the
+ * block.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — same
+ * shape as the other `resolve*Config` helpers above. `chat.v1` has no
+ * `subagent` block, so the fallback returns the defaults (enabled=false,
+ * 5-minute timeout, 50K tokens, $0.50, no recursion) per
+ * [`docs/DESIGN-sub-agents.md`](../../docs/DESIGN-sub-agents.md)
+ * §Decision §1.
+ *
+ * Slice 1 has no consumer wired up — the data shape lands first.
+ * Slice 2 wires `js/llm/api.js`'s `applySubAgentToolFilter` and the
+ * `delegate_task` tool handler to read from this resolver.
+ *
+ * @param {string|null|undefined} profileName
+ * @returns {{ enabled: boolean, run_timeout_ms: number, max_tokens: number, max_dollars: number, recursion_depth: number, profileName: string }}
+ */
+export function resolveSubAgentConfig(profileName) {
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = Profiles.get(name);
+    const resolved = resolveProfile(leaf, profileLookup);
+    const cfg = resolved.subagent || {};
+
+    return {
+        enabled: cfg.enabled === true,
+        run_timeout_ms: Number.isInteger(cfg.run_timeout_ms) && cfg.run_timeout_ms > 0
+            ? cfg.run_timeout_ms
+            : 300000,
+        max_tokens: Number.isInteger(cfg.max_tokens) && cfg.max_tokens > 0
+            ? cfg.max_tokens
+            : 50000,
+        max_dollars: typeof cfg.max_dollars === 'number' && cfg.max_dollars > 0
+            ? cfg.max_dollars
+            : 0.5,
+        recursion_depth: Number.isInteger(cfg.recursion_depth) && cfg.recursion_depth >= 0
+            ? cfg.recursion_depth
+            : 0,
+        profileName: resolved.name,
+    };
+}

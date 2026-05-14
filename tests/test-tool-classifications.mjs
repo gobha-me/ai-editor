@@ -106,9 +106,13 @@ test('LONG_RUNNING_TOOLS is the single-member wait_for_ci set', () => {
     assert.deepEqual([...LONG_RUNNING_TOOLS], ['wait_for_ci']);
 });
 
-test('USER_PAUSE_TOOLS lists the 3 watchdog-floor user-pause tools', () => {
+test('USER_PAUSE_TOOLS lists the 4 watchdog-floor user-pause tools', () => {
+    // 2.49.0.0 — `delegate_task` (slice 1 of github#24 Phase 1) joined
+    // the set; the approval-card lifecycle + the sub-agent run share
+    // the same 24h watchdog floor per DESIGN-sub-agents.md §"Gap 6".
     assert.deepEqual([...USER_PAUSE_TOOLS].sort(), [
         'ask_user',
+        'delegate_task',
         'submit_plan_for_approval',
         'submit_script_for_approval',
     ]);

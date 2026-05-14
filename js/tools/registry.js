@@ -144,19 +144,21 @@ export const ToolRegistry = {
     },
 
     /**
-     * Check whether the active profile is allowed to invoke a given tool.
+     * Check whether a given profile is allowed to invoke a given tool.
      *
-     * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0 (`State.settings.role`
-     * → special-case `'full'` → intersect `_registeredRoles` with the role).
-     * Now delegates to `Profiles.filterTools` so the runtime tool-execute
-     * gate and the per-turn admission filter share a single implementation.
-     * The pre-2.0.0 `'full'` bypass is preserved via `full.v1`'s
-     * `tools.allowed_groups: ['*']` short-circuit inside `filterTools`.
+     * **2.49.0.0 — extracted from `checkRoleAccess`.** The explicit-
+     * profile entry-point used by `executeWithProfile` (slice 1 of
+     * github#24 Phase 1; see
+     * [`docs/DESIGN-sub-agents.md`](../../docs/DESIGN-sub-agents.md)
+     * §"Decision §4 — Tool scoping is intersection, not union" for why
+     * the sub-agent loop needs a profile-explicit gate instead of the
+     * conversation-binding default).
      *
-     * @param {string} name - Tool name
+     * @param {string} name        Tool name
+     * @param {string} profileName Profile name to gate against (e.g. `'subagent.v1'`)
      * @returns {{ allowed: boolean, reason?: string }}
      */
-    checkRoleAccess(name) {
+    checkRoleAccessForProfile(name, profileName) {
         const def = this.definitions.find(
             d => d.function?.name === name
         );
@@ -165,9 +167,6 @@ export const ToolRegistry = {
             return { allowed: true };
         }
 
-        // 2.8.0 — `ConversationManager.getEffectiveProfileName()` lets
-        // a per-chat profile binding win over `State.settings.profile`.
-        const profileName = ConversationManager.getEffectiveProfileName();
         const filtered = Profiles.filterTools([def], profileName);
         if (filtered.length === 1) {
             return { allowed: true };
@@ -181,22 +180,59 @@ export const ToolRegistry = {
                     `Switch profile via the new-chat picker or in Settings.`
         };
     },
-    
+
     /**
-     * Execute a registered tool by name.
-     * Enforces role-based access control before invoking the handler.
+     * Check whether the active profile is allowed to invoke a given tool.
+     *
+     * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0 (`State.settings.role`
+     * → special-case `'full'` → intersect `_registeredRoles` with the role).
+     * Now delegates to `Profiles.filterTools` so the runtime tool-execute
+     * gate and the per-turn admission filter share a single implementation.
+     * The pre-2.0.0 `'full'` bypass is preserved via `full.v1`'s
+     * `tools.allowed_groups: ['*']` short-circuit inside `filterTools`.
+     *
+     * **2.49.0.0** — body lifted to `checkRoleAccessForProfile`; this
+     * wrapper preserves the conversation-binding default. Equivalence
+     * pinned by `tests/test-tool-registry-execute-with-profile.mjs`.
+     *
+     * @param {string} name - Tool name
+     * @returns {{ allowed: boolean, reason?: string }}
+     */
+    checkRoleAccess(name) {
+        // 2.8.0 — `ConversationManager.getEffectiveProfileName()` lets
+        // a per-chat profile binding win over `State.settings.profile`.
+        return this.checkRoleAccessForProfile(name, ConversationManager.getEffectiveProfileName());
+    },
+
+    /**
+     * Execute a registered tool by name under an explicit profile.
+     *
+     * **2.49.0.0 — slice 1 of github#24 Phase 1.** Additive entry-point
+     * for the sub-agent tool loop. The sub-agent runs in a context where
+     * `ConversationManager.getEffectiveProfileName()` returns the
+     * *parent* conversation's profile, not the sub-agent's — so the
+     * default `execute(name, args)` path would gate against the wrong
+     * profile. `executeWithProfile(name, args, 'subagent.v1')` consults
+     * the explicit profile name; everything else (handler dispatch,
+     * error envelopes, `scanToolReturn`) is byte-identical.
+     *
+     * The existing `execute` delegates here with the conversation-bound
+     * profile name, so there is one implementation body. Equivalence
+     * pinned by `tests/test-tool-registry-execute-with-profile.mjs`.
+     *
      * @param {string} name
      * @param {Object} args
+     * @param {string} profileName Profile name to gate against.
      * @returns {Promise<Object>}
      */
-    async execute(name, args) {
+    async executeWithProfile(name, args, profileName) {
         // === ROLE ENFORCEMENT (server-side gate) ===
-        const access = this.checkRoleAccess(name);
+        const access = this.checkRoleAccessForProfile(name, profileName);
         if (!access.allowed) {
-            console.warn(`[ToolRegistry] 🚫 Profile violation: ${name} blocked for profile '${ConversationManager.getEffectiveProfileName()}'`);
+            console.warn(`[ToolRegistry] 🚫 Profile violation: ${name} blocked for profile '${profileName}'`);
             return { error: access.reason };
         }
-        
+
         const handler = this.handlers.get(name);
         if (!handler) {
             return { error: `Unknown tool: '${name}'. Use get_project_tree or list_issues to see what's available.` };
@@ -240,6 +276,22 @@ export const ToolRegistry = {
             // Unknown errors — stringify so the LLM always knows what happened
             return { error: `Tool '${name}' failed: ${error.message || String(error)}` };
         }
+    },
+
+    /**
+     * Execute a registered tool by name.
+     * Enforces role-based access control before invoking the handler.
+     *
+     * **2.49.0.0** — body lifted to `executeWithProfile`; this wrapper
+     * preserves the conversation-binding default. Equivalence pinned by
+     * `tests/test-tool-registry-execute-with-profile.mjs`.
+     *
+     * @param {string} name
+     * @param {Object} args
+     * @returns {Promise<Object>}
+     */
+    async execute(name, args) {
+        return this.executeWithProfile(name, args, ConversationManager.getEffectiveProfileName());
     },
     
     /**

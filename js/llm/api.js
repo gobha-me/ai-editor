@@ -71,7 +71,7 @@ import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import { getPlanMode } from '../chat/state.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, resolveSubAgentConfig, getActiveProfileName } from '../profiles/resolve.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -1103,6 +1103,32 @@ export const LLMTools = {
             return toolList.filter(t => !PREVIEW_TOOL_NAMES.has(t?.function?.name));
         };
 
+        // 2.49.0.0 — slice 1 of github#24 Phase 1 sub-agents
+        // (DESIGN-sub-agents.md). Drop `delegate_task` from the per-turn
+        // tool list when the resolved profile + settings overlay reports
+        // `subagent.enabled === false`. Profile default is
+        // subagent.v1=on, every other profile=off (chat.v1 has no
+        // `subagent` block, so `resolveSubAgentConfig` returns defaults
+        // with enabled=false). Slice 2 admits `delegate_task` into
+        // `coder.v1.tools.static` and flips `coder.v1.subagent.enabled`
+        // to true; this filter is a no-op against an unregistered tool
+        // until then. Mirror of `applyScriptAutomationFilter` /
+        // `applyPreviewToolFilter` above. Per DESIGN-sub-agents.md
+        // §"Profile gating" — catalog admission via
+        // `coder.v1.tools.static` is the first gate; this runtime
+        // filter is the second so the user can switch the surface off
+        // without changing profile.
+        const _subagentProfile = getActiveProfileName(State?.settings);
+        const subagentCfg = resolveSubAgentConfig(_subagentProfile);
+        const subagentOverlay = State?.settings?.subagent;
+        const subagentEnabled = (subagentOverlay && typeof subagentOverlay.enabled === 'boolean')
+            ? subagentOverlay.enabled
+            : subagentCfg.enabled;
+        const applySubAgentToolFilter = (toolList) => {
+            if (subagentEnabled) return toolList;
+            return toolList.filter(t => t?.function?.name !== 'delegate_task');
+        };
+
         // 1.3.18 — baseline = what THIS request would have shipped without
         // the Composer (profile-filtered legacy set). Unfiltered = ungated
         // whole registry. Both computed from `Catalog` so
@@ -1137,7 +1163,7 @@ export const LLMTools = {
                 profileName,
                 composerActive: false,
             };
-            return applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered)));
+            return applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered))));
         }
 
         const reductionPct = baseline > 0
@@ -1177,7 +1203,7 @@ export const LLMTools = {
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
-        return applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result))));
+        return applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result)))));
     },
 
     /**

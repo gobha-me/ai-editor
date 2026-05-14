@@ -61,6 +61,21 @@ let pendingPlanApproval = null;  // { plan, resolve }
 // can carry partial_stdout / partial_stderr).
 let pendingScriptApproval = null;  // { source, description, expected_output, resolve }
 
+// Sub-agent approval pending state — single-slot, mirrors pendingScriptApproval.
+// 2.49.0.0 — slice 1 of github#24 Phase 1 (DESIGN-sub-agents.md §"Gap 6").
+// Set by the `delegate_task` tool handler (slice 2); resolved by the
+// SubAgentApprovalCard component (slice 2) after the sub-agent loop
+// completes, on Reject, or on Cancel. Held separately because the
+// resolution envelope shape is distinct (approved → carries status /
+// summary / artifacts / cost / transcript_id; cancel can carry
+// `partial: true`).
+//
+// Slice 1 lands the slot + helpers; no caller writes to it yet. The
+// `cancelToolLoop` path below already invokes `cancelSubAgentApproval`
+// so a future stop-button press during slice 2's first dogfood will not
+// leak the awaited Promise.
+let pendingSubAgentApproval = null;  // { transcriptId, task, contextHint, profileName, capabilitySummary, resolve }
+
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button
 
@@ -188,7 +203,8 @@ export function isToolLoopCancelled() {
  * Cancel tool loop. Also releases any pending ask_user Promise so the
  * tool handler doesn't leak — without this, cancelling mid-question
  * would leave the awaited Promise unsettled forever. Same goes for
- * pending plan approval (github#25).
+ * pending plan approval (github#25), script approval (1.16.0), and
+ * sub-agent approval (2.49.0.0 — slice 1 of github#24 Phase 1).
  */
 export function cancelToolLoop() {
     _cancelToolLoop = true;
@@ -200,6 +216,9 @@ export function cancelToolLoop() {
     }
     if (pendingScriptApproval) {
         cancelScriptApproval();
+    }
+    if (pendingSubAgentApproval) {
+        cancelSubAgentApproval();
     }
 }
 
@@ -389,6 +408,95 @@ export function cancelScriptApproval(extras) {
         });
     } catch (err) {
         console.error('[script_approval] cancel resolve threw:', err);
+    }
+    return true;
+}
+
+// ============================================
+// SUB-AGENT APPROVAL (2.49.0.0 — DESIGN-sub-agents.md)
+// ============================================
+
+/**
+ * @returns {{ transcriptId: string, task: string, contextHint?: string, profileName: string, capabilitySummary?: object, resolve: Function } | null}
+ */
+export function getPendingSubAgentApproval() {
+    return pendingSubAgentApproval;
+}
+
+/**
+ * Set the pending sub-agent-approval state. Called by the `delegate_task`
+ * tool handler (slice 2) immediately before it returns the Promise that
+ * `resolve` will eventually settle. Emits `subagent_approval:pending` so
+ * the card mounts.
+ *
+ * Single-slot: nesting is impossible because the chat loop is paused on
+ * the awaited Promise. Phase 2 (parallel sub-agents per DESIGN §"Phasing")
+ * lifts this; Phase 1 (slice 1 + slice 2) does not.
+ *
+ * @param {{ transcriptId: string, task: string, contextHint?: string, profileName: string, capabilitySummary?: object, resolve: Function }} pending
+ */
+export function setPendingSubAgentApproval(pending) {
+    pendingSubAgentApproval = pending;
+    try { EventBus.emit('subagent_approval:pending', pending); } catch { /* best-effort */ }
+}
+
+/**
+ * Resolve the pending sub-agent-approval Promise with the user's verdict +
+ * (when approved) the sub-agent's structured result envelope. The
+ * envelope shape (DESIGN §Decision §6):
+ *   - { status: 'completed' | 'partial', summary, artifacts, cost, transcript_id }
+ *   - { status: 'rejected', feedback }
+ *   - { status: 'cancelled', cancelled: true, partial: true, summary?, cost?, transcript_id }
+ *   - { status: 'errored', error, cost?, transcript_id }
+ *
+ * The chat loop forwards this verbatim as the tool_result; the parent
+ * agent reads `summary` as the load-bearing answer. `artifacts` is
+ * informational; `cost` is informational (visible to the model so it
+ * learns when delegation is paying off); `transcript_id` is intended
+ * for the human reviewer.
+ *
+ * @param {Object} envelope
+ * @returns {boolean} True if a Promise was resolved.
+ */
+export function resolveSubAgentApproval(envelope) {
+    if (!pendingSubAgentApproval) return false;
+    const { resolve } = pendingSubAgentApproval;
+    pendingSubAgentApproval = null;
+    try { EventBus.emit('subagent_approval:resolved', { cancelled: false, ...envelope }); } catch { /* best-effort */ }
+    try { resolve(envelope); } catch (err) {
+        console.error('[subagent_approval] resolve threw:', err);
+    }
+    return true;
+}
+
+/**
+ * Cancel the pending sub-agent-approval Promise. Called from the
+ * Stop-button cancel path (cancelToolLoop) so the awaited handler
+ * doesn't leak. If the sub-agent loop was already running (post-Approve),
+ * the card layer terminates it via the parent cancel signal before
+ * calling this function and passes any captured partial result.
+ *
+ * @param {{ summary?: string, cost?: object, transcript_id?: string }} [extras]
+ * @returns {boolean} True if a Promise was cancelled.
+ */
+export function cancelSubAgentApproval(extras) {
+    if (!pendingSubAgentApproval) return false;
+    const { resolve } = pendingSubAgentApproval;
+    pendingSubAgentApproval = null;
+    const partial = (extras && typeof extras === 'object') ? extras : {};
+    try { EventBus.emit('subagent_approval:resolved', { cancelled: true }); } catch { /* best-effort */ }
+    try {
+        resolve({
+            status: 'cancelled',
+            cancelled: true,
+            partial: true,
+            error: 'User cancelled the sub-agent approval.',
+            summary: typeof partial.summary === 'string' ? partial.summary : '',
+            cost: (partial.cost && typeof partial.cost === 'object') ? partial.cost : null,
+            transcript_id: typeof partial.transcript_id === 'string' ? partial.transcript_id : '',
+        });
+    } catch (err) {
+        console.error('[subagent_approval] cancel resolve threw:', err);
     }
     return true;
 }

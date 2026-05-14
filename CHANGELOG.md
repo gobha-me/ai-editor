@@ -4,6 +4,129 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.49.0.0] - 2026-05-14
+
+### In-track slice — sub-agent foundation (slice 1 of github#24 Phase 1)
+
+First slice of the 2.49.0 minor — Phase 1 sub-agents per
+[`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md). **Pure
+plumbing; zero user-observable surface.** The `delegate_task` tool,
+approval card, transcript panel, `coder.v1` admission, prompt addendum,
+and sub-agent loop wiring all live in slice 2 (target `v2.49.0` tag).
+This slice lands the data shape + admission entry-points so slice 2's
+implementation has stable seams to bind against.
+
+**Why two slices, not one.** Precedent (1.10.0 Plan Mode, 1.16.0
+Script Approval) shipped tool + card together as single feature-minor
+PRs. A stub-tool admitted into `coder.v1` while the approval card is
+not yet here would be model-callable-but-broken — `feedback_prompts_
+js_parallel_enumeration.md` (prompt-side and tool-side enumerations
+move together) plus DESIGN-sub-agents.md §"Gap 6" (the per-invocation
+gate template) both forbid that intermediate state. Slice 1's contract
+is *internal consistency only*; the release-readiness gate at
+[`docs/VERSIONING.md`](docs/VERSIONING.md) does not fire for `X.Y.Z.N`
+sub-patches, and slice 1 ships no surface that would fail dogfood.
+
+#### Added — `subagent.v1` profile (DESIGN §Decision §1)
+
+[`js/profiles/subagent-v1.js`](js/profiles/subagent-v1.js) **NEW**.
+Restrictive-by-default profile bounding a delegated sub-agent's reach.
+Inherits from `chat.v1` (not `coder.v1` — see DESIGN §"Why `base:
+'chat.v1'` not `coder.v1`"). `tools.static` carries 5 read tools +
+3 meta-tools; `tools.allowed_groups: ['all', 'subagent']` declares the
+new `'subagent'` admission tag (DESIGN §Decision §5); `subagent`
+top-level block carries the per-call ceilings (`run_timeout_ms:
+300000`, `max_tokens: 50000`, `max_dollars: 0.50`, `recursion_depth:
+0`). Registered in
+[`js/profiles/registry.js`](js/profiles/registry.js) `SYNTHETIC_ENTRIES`
+— `Profiles.get` / `Profiles.has` succeed for it but `Profiles.list()`
+excludes it (DESIGN §"Gap 7" — sub-agents are invoked by the parent
+agent, not picked by the user). Barrel export in
+[`js/profiles/index.js`](js/profiles/index.js).
+
+#### Added — `resolveSubAgentConfig` (DESIGN §Decision §3)
+
+[`js/profiles/resolve.js`](js/profiles/resolve.js) — mirrors
+`resolveCompressionConfig` / `resolveMemoryConfig` byte-for-byte in
+shape. Uses `resolveProfile` for proper inheritance (a future
+`subagent_reviewer.v1` inheriting from `subagent.v1` picks up the
+block); chat.v1 / coder.v1 fall through to defaults (`enabled: false`).
+Unknown profile names fall back to `chat.v1` with a warn.
+
+#### Added — `ToolRegistry.executeWithProfile` + `checkRoleAccessForProfile`
+
+[`js/tools/registry.js`](js/tools/registry.js) — additive entry-points
+for the sub-agent tool loop (slice 2). `executeWithProfile(name, args,
+profileName)` consults the explicit profile instead of
+`ConversationManager.getEffectiveProfileName()` (the sub-agent runs in
+a context where the *parent's* profile would be the wrong gate). The
+existing `execute` / `checkRoleAccess` delegate to the new methods with
+the conversation-bound profile — one implementation body, no risk of
+drift. Equivalence pinned by
+[`tests/test-tool-registry-execute-with-profile.mjs`](tests/test-tool-registry-execute-with-profile.mjs).
+
+#### Added — `applySubAgentToolFilter` (DESIGN §"Profile gating")
+
+[`js/llm/api.js`](js/llm/api.js) — mirror of
+`applyScriptAutomationFilter` / `applyPreviewToolFilter`. Drops
+`delegate_task` from the per-turn tool list when the resolved profile
+reports `subagent.enabled === false`. **No-op in slice 1** —
+`delegate_task` is not registered yet. Lands in the composition chain
+(`applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(...))))`)
+so slice 2's tool registration auto-routes through the gate.
+
+#### Added — `State.subagents` slot
+
+[`js/core.js`](js/core.js) — single new top-level slot:
+`{ tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } }`.
+Preserves the single-global-state constraint per
+[`project_constraints.md`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/project_constraints.md).
+Slice 2 wires the read/write paths and persists `transcripts` in the
+`conv-{id}` payload.
+
+#### Added — `pendingSubAgentApproval` + helpers
+
+[`js/chat/state.js`](js/chat/state.js) — `setPendingSubAgentApproval` /
+`getPendingSubAgentApproval` / `resolveSubAgentApproval` /
+`cancelSubAgentApproval`, mirroring the `pendingScriptApproval` pair.
+The `cancelToolLoop` Stop-button path now releases an in-flight
+sub-agent approval so the awaited handler does not leak. Slice 1 lands
+the slot + helpers; no caller writes yet.
+
+#### Added — `'delegate_task'` to `USER_PAUSE_TOOLS` (DESIGN §"Gap 6")
+
+[`js/chat/tool-classifications.js`](js/chat/tool-classifications.js) —
+one-line addition. The set is consulted by name and is safe to extend
+with a not-yet-registered tool.
+
+#### Tests
+
+| File | Action | Coverage |
+|---|---|---|
+| [`tests/test-profile-subagent-resolve.mjs`](tests/test-profile-subagent-resolve.mjs) | **NEW** | 7 tests: `subagent.v1` → DESIGN defaults; `chat.v1` / `coder.v1` → enabled=false; every registered profile resolves cleanly; unknown / null / undefined fallback; clamping invariants. |
+| [`tests/test-tool-registry-execute-with-profile.mjs`](tests/test-tool-registry-execute-with-profile.mjs) | **NEW** | 9 tests: profile-gate cases against three fake-tagged fakes (`'all'` / `'coder'` / `'subagent'`); equivalence pin (`execute(name, args) ≡ executeWithProfile(name, args, getEffectiveProfileName())`); `checkRoleAccess` equivalence; handler-throw error envelope identity. |
+| [`tests/test-subagent-state.mjs`](tests/test-subagent-state.mjs) | **NEW** | 7 tests: `State.subagents` initial shape; approval lifecycle (set / resolve / cancel); `cancelToolLoop` releases pending; partial cost / summary forwarding. |
+| [`tests/test-tool-classifications.mjs`](tests/test-tool-classifications.mjs) | EDIT | Pinning test absorbed the new entry — `USER_PAUSE_TOOLS` now lists 4 watchdog-floor tools instead of 3. |
+| [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) | EDIT | Pinning test absorbed the new `'subagent'` tag — `getKnownGroupTags()` snapshot extended; union-property names list adds `subagent.v1`. |
+
+#### Verification
+
+`node --test tests/test-*.mjs` → 3326 pass / 1 skipped / 0 fail. Three
+new test files contribute 23 subtests; two existing pinning tests
+absorbed the new entries (USER_PAUSE_TOOLS now 4 tools; legal-groups
+now 7 tags including `'subagent'`).
+
+#### Version coherence
+
+- `js/version.js` bumped `2.48.0.1` → `2.49.0.0` ↔ CHANGELOG
+  `## [2.49.0.0]` heading ↔ ROADMAP "Now" row updated to note slice 1
+  landed and slice 2 is the next forward step.
+- Tag does NOT fire for `2.49.0.0` per
+  [`docs/VERSIONING.md`](docs/VERSIONING.md) — `X.Y.Z.N` sub-patches
+  develop in-track until the feature is testable end-to-end; the
+  `v2.49.0` tag fires when slice 2 ships the approval card + sub-agent
+  loop.
+
 ## [2.48.0.1] - 2026-05-14
 
 ### In-track patch — file-edit tool surface (gitea#415)

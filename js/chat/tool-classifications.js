@@ -237,6 +237,14 @@ export const LONG_RUNNING_TOOLS = Object.freeze(['wait_for_ci']);
  * hits it, bounded so the loop can't deadlock indefinitely.
  *
  * `ask_user` — github#33. `submit_plan_for_approval` — github#25.
+ * `submit_script_for_approval` — 1.16.0. `delegate_task` — 2.49.0.0
+ * slice 1 of github#24 Phase 1; the approval-card lifecycle plus the
+ * sub-agent run share the same user-pause budget per
+ * [`docs/DESIGN-sub-agents.md`](../../docs/DESIGN-sub-agents.md)
+ * §"Gap 6 — No per-invocation gate template that doesn't auto-execute
+ * on Approve". Slice 1 adds the name to the set ahead of the handler
+ * registration in slice 2; the set is consulted by name and is safe to
+ * extend with a not-yet-registered tool.
  *
  * @type {readonly string[]}
  */
@@ -244,6 +252,7 @@ export const USER_PAUSE_TOOLS = Object.freeze([
     'ask_user',
     'submit_plan_for_approval',
     'submit_script_for_approval',
+    'delegate_task',
 ]);
 
 /**

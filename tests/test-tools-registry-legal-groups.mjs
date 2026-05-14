@@ -41,9 +41,14 @@ const { ToolRegistry } = await import('../js/tools/registry.js');
 // 1. Snapshot guard — byte-for-byte equivalence with the pre-2.34.0 set.
 // ============================================
 
-test('getKnownGroupTags() returns the pre-2.34.0 LEGAL_GROUP_TAGS set, sorted', () => {
-    const PRE_2_34_0 = ['all', 'coder', 'full', 'pm', 'plugin-dev', 'reviewer'].sort();
-    assert.deepEqual(Profiles.getKnownGroupTags(), PRE_2_34_0);
+test('getKnownGroupTags() returns the pre-2.34.0 set + the 2.49.0.0 \'subagent\' tag, sorted', () => {
+    // 2.49.0.0 — `subagent.v1.tools.allowed_groups` declared the new
+    // `'subagent'` tag (DESIGN-sub-agents.md §Decision §5). The
+    // 2.34.0 derivation principle (set unions from profile data, not
+    // hardcoded) caught this addition automatically — this snapshot
+    // guard now pins the post-2.49.0.0 set.
+    const POST_2_49_0_0 = ['all', 'coder', 'full', 'pm', 'plugin-dev', 'reviewer', 'subagent'].sort();
+    assert.deepEqual(Profiles.getKnownGroupTags(), POST_2_49_0_0);
 });
 
 // ============================================
@@ -58,6 +63,8 @@ test('getKnownGroupTags() unions every profile\'s allowed_groups (excluding \'*\
     const names = [
         'chat.v1', 'coder.v1', 'kb.v1',
         'chat_multi.v1', 'full.v1', 'plugin-dev.v1', 'pm.v1', 'reviewer.v1', 'rp.v1',
+        // 2.49.0.0 — synthetic lookup-only profile for sub-agent gating.
+        'subagent.v1',
     ];
     for (const name of names) {
         const profile = Profiles.get(name);

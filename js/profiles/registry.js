@@ -42,6 +42,15 @@
  * `SYNTHETIC_ENTRIES` until they earn their own addenda — granular
  * promotion is fine.
  *
+ * **2.49.0.0 — `subagent.v1` joins as lookup-only (slice 1 of
+ * github#24 Phase 1).** Per `docs/DESIGN-sub-agents.md` §"Gap 7", the
+ * sub-agent profile is invoked by the parent agent via the
+ * `delegate_task` tool (slice 2), not picked by the user — so it
+ * registers for `get` / `has` but stays out of `ENTRIES`. Same posture
+ * as `chat_multi.v1` / `rp.v1`, different rationale: those are
+ * deferred-picker-promotion candidates; `subagent.v1` is structurally
+ * never going into the picker.
+ *
  * @module profiles/registry
  */
 
@@ -54,6 +63,7 @@ import { PLUGIN_DEV_V1 } from './plugin-dev-v1.js';
 import { PM_V1 } from './pm-v1.js';
 import { REVIEWER_V1 } from './reviewer-v1.js';
 import { RP_V1 } from './rp-v1.js';
+import { SUBAGENT_V1 } from './subagent-v1.js';
 
 /**
  * @typedef {import('./profile-contract.js').Profile} Profile
@@ -93,7 +103,7 @@ const ENTRIES = [
 
 /**
  * Lookup-only profiles — registered for `get` / `has` but excluded from
- * `list()`. Two flavors share this list today:
+ * `list()`. Three flavors share this list today:
  *
  *   1. **Legacy-role migration targets** — `full.v1` / `plugin-dev.v1` /
  *      `pm.v1` / `reviewer.v1`. The 2.0.0 migration script (slice 3) maps
@@ -120,6 +130,16 @@ const ENTRIES = [
  *      profiles inheriting `base: 'rp.v1'` etc. unlock with the Phase 4
  *      authoring API.
  *
+ *   3. **Sub-agent trust-boundary profile** — `subagent.v1` (2.49.0.0,
+ *      slice 1 of github#24 Phase 1). Read-only-by-default; bounds a
+ *      `delegate_task`-spawned child agent's reach. Structurally never
+ *      goes into the picker — sub-agents are invoked by the parent
+ *      agent, not selected by the user. See
+ *      [`docs/DESIGN-sub-agents.md`](../../docs/DESIGN-sub-agents.md)
+ *      §"Gap 7" for the registration rationale and §"Load-Bearing
+ *      Decision" for why the profile (not a runtime knob) names the
+ *      trust boundary.
+ *
  * @type {Profile[]}
  */
 const SYNTHETIC_ENTRIES = [
@@ -129,6 +149,7 @@ const SYNTHETIC_ENTRIES = [
     PM_V1,
     REVIEWER_V1,
     RP_V1,
+    SUBAGENT_V1,
 ];
 
 /** @type {Record<string, Profile>} */

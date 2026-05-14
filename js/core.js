@@ -412,6 +412,22 @@ const State = {
     // even after tool results are evicted from context (Issue #17)
     toolActionLog: [],         // [{ toolName, args, resultSummary, timestamp, success }]
 
+    // Sub-agent state (2.49.0.0 — slice 1 of github#24 Phase 1).
+    // Owned by the `delegate_task` tool family per
+    // `docs/DESIGN-sub-agents.md` §"Gap 1" — *not* aliased to chat
+    // surfaces. Single top-level slot preserves the single-global-state
+    // constraint (`project_constraints.md`).
+    //   - `tree[transcriptId]`        — live `SubAgentContext` objects (slice 2)
+    //   - `transcripts[transcriptId]` — per-sub-agent message + result history
+    //   - `session_cost`              — cumulative across all sub-agent calls in
+    //                                   the active parent conversation; gated
+    //                                   by `State.settings.subagentSessionCap`
+    //                                   in slice 2.
+    // Slice 1 lands the shape; no consumer reads or writes it yet.
+    // Persisted in the conv-{id} payload by `ConversationManager.save`
+    // in slice 2 (DESIGN §"Lifecycle, step by step" — step 11).
+    subagents: { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } },
+
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]
     pullRequests: [],          // [{ number, title, head, base, state, ciState }]

@@ -30,6 +30,11 @@ export { PLUGIN_DEV_V1, PLUGIN_DEV_SYSTEM_PROMPT } from './plugin-dev-v1.js';
 export { PM_V1 } from './pm-v1.js';
 export { REVIEWER_V1 } from './reviewer-v1.js';
 
+// 2.49.0.0 — slice 1 of github#24 Phase 1 sub-agents. Registered in
+// `registry.js` for `Profiles.get/has`, excluded from `Profiles.list()`
+// (sub-agents are invoked by the parent agent, not picked by the user).
+export { SUBAGENT_V1 } from './subagent-v1.js';
+
 export { resolveProfile } from './inheritance.js';
 
 export { diffProfiles, formatProfileDiff } from './diff.js';
@@ -44,6 +49,7 @@ export {
     resolveDefaultRememberScope,
     resolveScriptAutomationConfig,
     resolvePreviewConfig,
+    resolveSubAgentConfig,
     getActiveProfileName,
 } from './resolve.js';
 
