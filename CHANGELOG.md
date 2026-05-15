@@ -4,6 +4,58 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.56.0] - 2026-05-15
+
+### Changed — hand-curate admit lists for chat.v1 / coder.v1 / kb.v1 (gitea#440); closes github#40 paper-cut
+
+The 2.54.0 admission inversion (gitea#438) produced **byte-equivalent** `tools.admit` arrays — they reproduced the exact set the legacy `roles:` / `allowed_groups` tag-intersection model admitted, including the original github#40 paper-cut: `create_issue` reachable from picker `chat.v1` via a `'pm'` tag the user never saw. The 2.55.0 default-OFF dev warn (gitea#439) was the safety net for this row — over-trimming surfaces as a console.warn at boot, so the curation pass is regression-safe.
+
+**Three picker profiles trimmed:**
+
+- **`chat.v1`** — drops 10 entries. The issue-write cohort (`create_issue`, `update_issue`, `add_issue_comment`) relocates to `coder.v1` per the paper's *"where it actually belongs"* framing. The PR-write cohort (`create_pull_request`, `merge_pull_request`, `add_pr_review`) drops out of chat — they stay only on `coder.v1`. Four additional out-of-purpose extras drop: `delegate_task` (sub-agent fan-out is coder-shaped), `set_active_project` (admin/coder), `submit_script_for_approval` (Tier-0 script automation = coder), `sync_releases` (admin). Result: 51 entries + `mcp__*` glob — a clean conversational + read-shaped surface.
+
+- **`coder.v1`** — gains 3 entries. The issue-write cohort (`add_issue_comment`, `create_issue`, `update_issue`) relocates from chat.v1; this mirrors the placement of `create_pull_request` / `merge_pull_request` / `add_pr_review` which already lived in coder.v1. Net coder admit: 73 entries + `mcp__*` glob.
+
+- **`kb.v1`** — aggressive read-only trim. `KB_SYSTEM_PROMPT` (the load-bearing 2.8.0 picker-promotion lift) declares kb.v1 read-only ("answer only from attached docs, cite line ranges, no edits, no mutating tools"), but the 2.54.0 byte-equivalent admit list still carried mutating built-ins (`scratchpad_write`, `scratchpad_clear`, `todo_write`, `submit_plan_for_approval`, `submit_script_for_approval`, `delegate_task`, `set_active_project`, `sync_releases`) and the mutating preview drivers (`preview_click`, `preview_fill`, `preview_resize`, `preview_start`, `preview_stop`). This pass makes the admit list and the system-prompt constraint **agree** — every entry is read-only by construction. Also drops the `mcp__*` glob: MCP servers may be mutating; trust boundary is the server config, not the picker profile (mirrors `subagent.v1`'s "explicit per-tool admission" precedent from 2.54.0). Preview reads (`preview_console_logs` / `preview_errors` / `preview_inspect` / `preview_list` / `preview_logs` / `preview_network` / `preview_snapshot`) drop too — `kb.v1.preview.enabled` is false (inherited from chat.v1) so the runtime filter strips them anyway; admit-list is now self-describing of what kb.v1 actually exposes. Net kb admit: 33 entries (was 53 + `mcp__*` glob).
+
+**Bundled regression-prevention test — `every registered tool in js/tools/* is admitted by at least one profile`** at [`tests/test-profile-admit-coverage.mjs`](tests/test-profile-admit-coverage.mjs). The CI-gate mirror of the 2.55.0 default-OFF dev warn: loud at runtime AND hard at test time. Source-scans `js/tools/*.js` for every `(?:ToolRegistry|registry).register('name', ...)` call (same idiom as `tests/test-chat-tool-name-literals.mjs`) and asserts `Profiles.findAdmittingProfiles(name).length > 0` for each. Antibody against future migrations that produce byte-equivalent admit residue.
+
+**Additional regression-prevention test — `kb.v1.admit carries no mutating tools (read-only by construction)`**. Pins the load-bearing property gitea#440 introduces for kb.v1: the admit list and `KB_SYSTEM_PROMPT` read-only constraint agree. If a future trim accidentally re-admits a mutating tool, this test fails with a clear name rather than as a generic baseline mismatch.
+
+**Test updates** — four downstream tests updated to reflect the new reality:
+
+- `tests/test-profile-admit-coverage.mjs` — three baselines (chat/coder/kb) replaced with gitea#440 curated sets; header docstring updated; two new tests added (mutating-guard + registered-tool coverage gate).
+- `tests/test-profile-resolution.mjs` — `CODER_V1_PRE_TRIM.tools.admit` snapshot synced with the 3 new issue-write entries.
+- `tests/test-profiles-phase2.mjs` — "kb is strict subset of chat" test repurposed: the narrowing axis is now mutating-vs-read-only, not pm/reviewer-vs-not. Spot-check moves from `['create_issue', 'update_issue', 'add_pr_review']` to `['scratchpad_write', 'todo_write', 'memory_remember']`; also pins `mcp__*` glob in chat but NOT in kb.
+- `tests/test-delegate-task-handler.mjs` — `resetSubAgentSlot()` now sets `State.settings.profile = 'coder.v1'` (delegate_task is coder.v1-only post-curation; pre-2.56.0 the tests passed because the default chat.v1 admitted delegate_task via byte-equivalent migration).
+- `tests/test-profile-filter-tools.mjs` — glob-admission test target swapped from kb.v1 to chat.v1 (kb.v1 no longer carries the glob); new test added pinning the kb.v1 no-glob property at the filterTools level.
+- `tests/test-profile-find-admitting-profiles.mjs` — glob-admission test no longer asserts kb.v1 admits MCP names.
+- `tests/test-system-prompt-admission.mjs` — non-Composer mode profile-filter test swapped `create_issue` (no longer in chat.v1.admit) with `list_issues` (still in chat.v1.admit) as the "tool that should surface" example.
+- `tests/fixtures/profiles/*.snapshot.json` — regenerated via `tests/update-profile-fixtures.mjs`. All 9 snapshots refreshed (chat/coder/kb directly; chat_multi.v1 and rp.v1 indirectly via chat inheritance; full/pm/reviewer/plugin-dev unchanged in admit but the regen sweeps everything).
+
+**Pre-PR admin** — gitea#438 (2.54.0 admission inversion) and gitea#439 (2.55.0 default-OFF warn) closed: their PRs shipped using `(gitea#N)` reference syntax instead of the auto-close `closes gitea#N` keyword, so the issues stayed open as administrative stragglers (same shape as the gitea#418/#424/#425/#426 cohort the `RE-EVAL following 2.52.0` slot swept).
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/profiles/chat-v1.js`](js/profiles/chat-v1.js) | EDIT — `admit` array trimmed; docstring block gains a 2.56.0 (gitea#440) paragraph. |
+| [`js/profiles/coder-v1.js`](js/profiles/coder-v1.js) | EDIT — three issue-write entries inserted (alphabetic); docstring block gains a 2.56.0 (gitea#440) paragraph. |
+| [`js/profiles/kb-v1.js`](js/profiles/kb-v1.js) | EDIT — `admit` array aggressively trimmed to read-only-by-construction; docstring block gains a 2.56.0 (gitea#440) paragraph. |
+| [`tests/test-profile-admit-coverage.mjs`](tests/test-profile-admit-coverage.mjs) | EDIT — three baselines replaced; header docstring + comment block updated; new mutating-guard test for kb.v1; NEW coverage gate test source-scanning js/tools/*. |
+| [`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs) | EDIT — `CODER_V1_PRE_TRIM.tools.admit` snapshot synced. |
+| [`tests/test-profiles-phase2.mjs`](tests/test-profiles-phase2.mjs) | EDIT — "kb strict subset" test repurposed; spot-check tools swapped. |
+| [`tests/test-delegate-task-handler.mjs`](tests/test-delegate-task-handler.mjs) | EDIT — `resetSubAgentSlot()` pins active profile to `coder.v1`. |
+| [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs) | EDIT — glob test target swapped; new kb-no-glob test added. |
+| [`tests/test-profile-find-admitting-profiles.mjs`](tests/test-profile-find-admitting-profiles.mjs) | EDIT — glob test no longer asserts kb.v1 admission. |
+| [`tests/test-system-prompt-admission.mjs`](tests/test-system-prompt-admission.mjs) | EDIT — `create_issue` → `list_issues` for the chat.v1 surface example. |
+| `tests/fixtures/profiles/*.snapshot.json` | REGENERATED via `tests/update-profile-fixtures.mjs` (9 files). |
+| [`js/version.js`](js/version.js) | EDIT — `2.55.0` → `2.56.0`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — gitea#440 row moves from "Now" to "Just shipped (2.56.0)"; header date bumped. |
+
+Full Node suite: **3471 tests / 3470 pass / 1 skipped (pre-existing) / 0 fail.**
+
 ## [2.55.0] - 2026-05-15
 
 ### Added — default-OFF dev warning when newly-registered tools aren't admitted by any profile (gitea#439)

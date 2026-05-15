@@ -47,11 +47,14 @@ test('literal admission — commit_files is admitted only by coder.v1 among pick
 // tool admission per CHANGELOG 2.54.0).
 // ============================================
 
-test('glob admission — mcp__-prefixed names match the mcp__* glob', () => {
+test('glob admission — mcp__-prefixed names match the mcp__* glob (chat.v1 + coder.v1)', () => {
     const admitters = Profiles.findAdmittingProfiles('mcp__github__create_issue');
     assert.ok(admitters.includes('chat.v1'), `expected chat.v1 via mcp__* glob`);
     assert.ok(admitters.includes('coder.v1'), `expected coder.v1 via mcp__* glob`);
-    assert.ok(admitters.includes('kb.v1'), `expected kb.v1 via mcp__* glob`);
+    // 2.56.0 (gitea#440) — kb.v1 dropped the mcp__* glob (trust boundary
+    // requires explicit per-tool admission); MCP-prefixed names must NOT
+    // resolve to kb.v1 anymore.
+    assert.ok(!admitters.includes('kb.v1'), `kb.v1 must NOT admit mcp__-prefixed names post-gitea#440; got ${JSON.stringify(admitters)}`);
 });
 
 test('glob admission — subagent.v1 does NOT match mcp__* (no glob in subagent admit)', () => {

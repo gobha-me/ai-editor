@@ -260,11 +260,21 @@ export const CODER_V1 = {
         // plus coder-tagged write/run tools (edit_file, commit_files,
         // run_code, etc.). The `'mcp__*'` glob admits MCP-bridge tools
         // by prefix (see `js/mcp/bridge.js` `namespacedName`).
+        //
+        // 2.56.0 (gitea#440) — hand-curation pass. The issue-write cohort
+        // (`add_issue_comment`, `create_issue`, `update_issue`) relocates
+        // here from `chat.v1` — coder is the actual surface that runs
+        // these (the github#40 paper's "where it actually belongs"
+        // framing). Mirrors the placement of `create_pull_request` /
+        // `merge_pull_request` / `add_pr_review` which already lived in
+        // `coder.v1` post-migration. Closes github#40.
         admit: [
+            'add_issue_comment',
             'add_pr_review',
             'ask_user',
             'commit_files',
             'create_file',
+            'create_issue',
             'create_pull_request',
             'delegate_task',
             'delete_file',
@@ -331,6 +341,7 @@ export const CODER_V1 = {
             'sync_releases',
             'todo_read',
             'todo_write',
+            'update_issue',
             'wait_for_ci',
             'write_file',
             'mcp__*',

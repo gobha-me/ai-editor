@@ -100,10 +100,12 @@
       "budget_tokens": 5000,
       "expansion_mode": "short",
       "admit": [
+        "add_issue_comment",
         "add_pr_review",
         "ask_user",
         "commit_files",
         "create_file",
+        "create_issue",
         "create_pull_request",
         "delegate_task",
         "delete_file",
@@ -170,6 +172,7 @@
         "sync_releases",
         "todo_read",
         "todo_write",
+        "update_issue",
         "wait_for_ci",
         "write_file",
         "mcp__*"

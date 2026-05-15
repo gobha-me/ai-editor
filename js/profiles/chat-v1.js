@@ -113,17 +113,23 @@ export const CHAT_V1 = {
         // that `Profiles.filterTools` admits for this profile; the
         // `'mcp__*'` glob admits MCP-bridge tools whose names are formed
         // as `mcp__<serverId>__<toolName>` (see `js/mcp/bridge.js`).
-        // Curating chat.v1 narrower (e.g. trimming PM-only tools off
-        // picker-chat) is gitea#440's job — this list preserves the
-        // byte-equivalent admission set from the legacy tag-intersection
-        // model so the inversion is a pure refactor.
+        //
+        // 2.56.0 (gitea#440) — hand-curation pass. The 2.54.0 migration
+        // produced a byte-equivalent superset of the legacy tag union
+        // (`'all' ∪ 'pm' ∪ 'reviewer'`), which carried the original
+        // github#40 paper-cut: `create_issue` reachable from picker chat
+        // via the `'pm'` tag the user never saw. This pass trims chat.v1
+        // to a conversational + read-shaped surface. Removed entries:
+        // the issue-write cohort (`create_issue`, `update_issue`,
+        // `add_issue_comment`) relocates to `coder.v1` where it actually
+        // belongs; the PR-write cohort (`create_pull_request`,
+        // `merge_pull_request`, `add_pr_review`) stays in `coder.v1`
+        // only; `delegate_task`, `set_active_project`,
+        // `submit_script_for_approval`, `sync_releases` are coder/admin
+        // operations that slipped in via byte-equivalent migration.
+        // Closes github#40.
         admit: [
-            'add_issue_comment',
-            'add_pr_review',
             'ask_user',
-            'create_issue',
-            'create_pull_request',
-            'delegate_task',
             'find_references',
             'find_relevant_files',
             'find_tool',
@@ -142,7 +148,6 @@ export const CHAT_V1 = {
             'memory_recall',
             'memory_remember',
             'memory_revise',
-            'merge_pull_request',
             'open_file',
             'peek_project_file',
             'peek_project_tree',
@@ -172,13 +177,9 @@ export const CHAT_V1 = {
             'scratchpad_write',
             'search_in_files',
             'select_range',
-            'set_active_project',
             'submit_plan_for_approval',
-            'submit_script_for_approval',
-            'sync_releases',
             'todo_read',
             'todo_write',
-            'update_issue',
             'mcp__*',
         ],
     },

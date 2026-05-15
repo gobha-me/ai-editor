@@ -139,25 +139,32 @@ test('kb.v1 disables task ledger (enabled: false; capacity inherited)', () => {
     assert.equal(KB.task_ledger.capacity, CHAT.task_ledger.capacity);
 });
 
-test('kb.v1 narrows tools.admit to drop chat.v1\'s pm/reviewer-tagged additions (gitea#438)', () => {
+test('kb.v1 narrows tools.admit to a read-only subset of chat.v1 (gitea#440)', () => {
     // 2.54.0 (gitea#438) — admission inverted from `allowed_groups`
-    // (tag-intersection) to `admit` (explicit tool-name list). chat.v1
-    // carried `['all', 'pm', 'reviewer']`; kb.v1 narrowed to `['all']`.
-    // The post-inversion equivalent: kb.v1.admit must omit every
-    // pm-only / reviewer-only tool that chat.v1.admit carries.
+    // (tag-intersection) to `admit` (explicit tool-name list).
+    // 2.56.0 (gitea#440) — kb.v1 hand-curated to a read-only-by-
+    // construction set; admit list now agrees with KB_SYSTEM_PROMPT's
+    // read-only consultation constraint. chat.v1 was also trimmed in
+    // the same pass (drops issue/PR-write cohort + 4 out-of-purpose
+    // extras), but it retains scratchpad/todo *_write tools and the
+    // mcp__* glob — the narrowing axis between chat.v1 and kb.v1 is
+    // now mutating-vs-read-only, not pm/reviewer-vs-not.
     const chatAdmit = new Set(CHAT.tools.admit);
     const kbAdmit = new Set(KB.tools.admit);
-    // Every kb-admitted name (except the mcp__* glob, present in both)
-    // must also appear in chat.v1.admit — kb is a strict subset modulo
-    // the glob and the chat-only pm/reviewer tools.
+    // Every kb-admitted name must also appear in chat.v1.admit — kb is
+    // a strict subset along the read-only axis.
     for (const name of kbAdmit) {
         assert.ok(chatAdmit.has(name), `kb.v1.admit entry '${name}' must also appear in chat.v1.admit (kb is a chat subset)`);
     }
-    // Spot-check the narrowing: pm-only tools chat carries should NOT be in kb.
-    for (const pmOnly of ['create_issue', 'update_issue', 'add_pr_review']) {
-        assert.ok(chatAdmit.has(pmOnly), `chat.v1.admit must include ${pmOnly} (carries pm/reviewer tools per migration baseline)`);
-        assert.ok(!kbAdmit.has(pmOnly), `kb.v1.admit must NOT include ${pmOnly} (narrowed to read-only minimum)`);
+    // Spot-check the narrowing: mutating tools chat carries should NOT be in kb.
+    for (const mutating of ['scratchpad_write', 'todo_write', 'memory_remember']) {
+        assert.ok(chatAdmit.has(mutating), `chat.v1.admit must include ${mutating} (post-2.56.0 chat keeps stateful-scratch writers)`);
+        assert.ok(!kbAdmit.has(mutating), `kb.v1.admit must NOT include ${mutating} (read-only by construction)`);
     }
+    // The mcp__* glob lives in chat (and coder) but NOT kb — MCP servers
+    // may be mutating; kb.v1 requires explicit per-tool admission.
+    assert.ok(chatAdmit.has('mcp__*'), 'chat.v1.admit must carry mcp__* glob (MCP servers usable from picker chat)');
+    assert.ok(!kbAdmit.has('mcp__*'), 'kb.v1.admit must NOT carry mcp__* glob (trust boundary requires explicit per-tool admission)');
     // Other tools fields fall through from chat.v1.
     assert.equal(KB.tools.budget_tokens, CHAT.tools.budget_tokens);
     assert.deepEqual(KB.tools.static, CHAT.tools.static);

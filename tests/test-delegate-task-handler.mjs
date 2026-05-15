@@ -42,11 +42,22 @@ registerSubAgentTools(ToolRegistry);
 
 // Helpers to reset State.settings.subagent / State.subagents between
 // tests so cap-overflow tests don't bleed into the next case.
+//
+// 2.56.0 (gitea#440) — pin the active profile to `coder.v1`.
+// `delegate_task` is admitted by `coder.v1` (its design home; see
+// `js/profiles/coder-v1.js`) and was relocated out of chat.v1's admit
+// list as part of the gitea#440 hand-curation pass. Pre-2.56.0 these
+// tests passed without an explicit profile set because chat.v1 (the
+// default) carried `delegate_task` via the byte-equivalent migration
+// from 2.54.0; that admission was over-broad. Test setup now matches
+// the actual surface contract.
 function resetSubAgentSlot() {
     State.subagents = { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } };
     if (State.settings && State.settings.subagent) {
         delete State.settings.subagent;
     }
+    State.settings = State.settings || {};
+    State.settings.profile = 'coder.v1';
 }
 
 /** Resolve the pending approval (mounted by the handler) with a stub

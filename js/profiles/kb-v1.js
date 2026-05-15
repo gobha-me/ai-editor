@@ -103,13 +103,26 @@ export const KB_V1 = {
         // 2.54.0 (gitea#438) — explicit admission. Was `allowed_groups:
         // ['all']` in the legacy tag-intersection model. Mirrors the
         // legacy admission set (every `'all'`-tagged tool) plus the
-        // `'mcp__*'` glob. The KB system-prompt addendum (line 45) is
-        // the load-bearing read-only constraint, not the admit list —
-        // gitea#440 may narrow this further once dedicated citation /
-        // doc-search tools land. Drops chat.v1's pm/reviewer additions.
+        // `'mcp__*'` glob.
+        //
+        // 2.56.0 (gitea#440) — aggressive read-only trim. The KB system-
+        // prompt addendum (line 45) declares kb.v1 read-only ("do not
+        // propose edits, run tools that mutate state, or generate code"),
+        // but the 2.54.0 byte-equivalent admit list still carried
+        // mutating tools (scratchpad write/clear, todo_write,
+        // submit_*, delegate_task, set_active_project, sync_releases,
+        // mutating preview drivers). This pass makes the admit list and
+        // the system-prompt constraint agree — every entry is read-only
+        // by construction. Drops the `'mcp__*'` glob too: MCP servers
+        // may be mutating; trust boundary is the server config, not the
+        // picker profile (mirrors `subagent.v1`'s "explicit per-tool
+        // admission" precedent). Preview tools are dropped wholesale —
+        // `kb.v1.preview.enabled` is false (inherited from chat.v1) so
+        // the runtime filter strips them anyway; admit-list is now
+        // self-describing of what kb.v1 actually exposes. Closes
+        // github#40 / paper-cut.
         admit: [
             'ask_user',
-            'delegate_task',
             'find_references',
             'find_relevant_files',
             'find_tool',
@@ -130,18 +143,6 @@ export const KB_V1 = {
             'peek_project_file',
             'peek_project_tree',
             'peek_read_lines',
-            'preview_click',
-            'preview_console_logs',
-            'preview_errors',
-            'preview_fill',
-            'preview_inspect',
-            'preview_list',
-            'preview_logs',
-            'preview_network',
-            'preview_resize',
-            'preview_snapshot',
-            'preview_start',
-            'preview_stop',
             'read_approved_plan',
             'read_current_file',
             'read_file',
@@ -150,18 +151,10 @@ export const KB_V1 = {
             'read_lines',
             'read_pull_request',
             'scan_file',
-            'scratchpad_clear',
             'scratchpad_read',
-            'scratchpad_write',
             'search_in_files',
             'select_range',
-            'set_active_project',
-            'submit_plan_for_approval',
-            'submit_script_for_approval',
-            'sync_releases',
             'todo_read',
-            'todo_write',
-            'mcp__*',
         ],
     },
 

@@ -53,13 +53,25 @@ const TOOL_FIXTURES = [
 // resolve path. Production profiles' admit lists are pinned separately
 // in `tests/test-profile-admit-coverage.mjs`.
 
-test('literal admit entries match by exact name', () => {
-    const got = Profiles.filterTools(TOOL_FIXTURES, 'kb.v1').map(t => t.function.name);
-    // kb.v1 admits read_file via the explicit list; mcp__* via the glob.
+test('literal admit entries match by exact name (chat.v1 glob path)', () => {
+    const got = Profiles.filterTools(TOOL_FIXTURES, 'chat.v1').map(t => t.function.name);
+    // chat.v1 admits read_file via the explicit list; mcp__* via the glob.
     // Synthesized fixtures don't include `read_file`, so we expect only
     // the mcp__-prefixed tools to admit (the literal names in TOOL_FIXTURES
-    // are not in kb.v1's admit list). Glob matching gives us 2 admits.
+    // are not in chat.v1's admit list). Glob matching gives us 2 admits.
+    // 2.56.0 (gitea#440) — previously targeted kb.v1; kb.v1 dropped the
+    // mcp__* glob as part of the read-only hand-curation pass. The glob-
+    // admission property under test is now verified against chat.v1.
     assert.deepEqual(got.sort(), ['mcp__filesys__read_file', 'mcp__github__create_issue']);
+});
+
+test('kb.v1 no longer admits mcp__* glob (gitea#440 read-only)', () => {
+    // 2.56.0 (gitea#440) — kb.v1 dropped the mcp__* glob: MCP servers may
+    // be mutating; trust boundary is the server config, not the picker.
+    // None of TOOL_FIXTURES appears in kb.v1's explicit admit list either,
+    // so filterTools returns empty.
+    const got = Profiles.filterTools(TOOL_FIXTURES, 'kb.v1').map(t => t.function.name);
+    assert.deepEqual(got, []);
 });
 
 test('mcp__* glob matches double-underscore-prefixed names but NOT single-underscore', () => {

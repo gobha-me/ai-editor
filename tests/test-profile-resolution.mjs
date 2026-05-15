@@ -14,6 +14,11 @@
  * (tag-intersection) to `tools.admit` (explicit name list). The snapshot
  * below carries the post-inversion `admit` array.
  *
+ * 2.56.0 (gitea#440) — admit list hand-curated: the issue-write cohort
+ * (`add_issue_comment`, `create_issue`, `update_issue`) relocated from
+ * `chat.v1` to `coder.v1`. Snapshot updated to match the new resolved
+ * coder.v1 admit array.
+ *
  * Pure logic; no DOM/Storage/fetch. Runs under `node --test`.
  */
 import { test } from 'node:test';
@@ -133,12 +138,17 @@ const CODER_V1_PRE_TRIM = {
         expansion_mode: 'short',
         // 2.54.0 (gitea#438) — explicit-admission inversion. Replaces
         // `allowed_groups: ['all', 'coder']` with the literal name list.
-        // Mirrors `js/profiles/coder-v1.js`'s admit array verbatim.
+        // 2.56.0 (gitea#440) — three issue-write tools added
+        // (`add_issue_comment`, `create_issue`, `update_issue`) — see
+        // header comment block above. Mirrors `js/profiles/coder-v1.js`'s
+        // admit array verbatim.
         admit: [
+            'add_issue_comment',
             'add_pr_review',
             'ask_user',
             'commit_files',
             'create_file',
+            'create_issue',
             'create_pull_request',
             'delegate_task',
             'delete_file',
@@ -205,6 +215,7 @@ const CODER_V1_PRE_TRIM = {
             'sync_releases',
             'todo_read',
             'todo_write',
+            'update_issue',
             'wait_for_ci',
             'write_file',
             'mcp__*',

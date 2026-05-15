@@ -199,11 +199,13 @@ test('non-Composer mode enumerates registered tools admitted to the active profi
 
 test('non-Composer mode respects profile filtering — coder-only tools do NOT appear for chat.v1', () => {
     cleanRegistry();
-    // 2.54.0 (gitea#438) — name-based gate. `commit_files` is admitted
-    // by coder.v1 only; `create_issue` is in chat.v1.admit (carries pm
-    // surface). Both register; only the chat-admitted name surfaces.
+    // 2.54.0 (gitea#438) — name-based gate.
+    // 2.56.0 (gitea#440) — `create_issue` relocated to coder.v1 only as
+    // part of the hand-curation pass; `list_issues` (read-shaped issue
+    // tool) remains in chat.v1.admit. Both register; only the chat-
+    // admitted name surfaces.
     ToolRegistry.register('commit_files', () => {}, defFor('commit_files', null, 'Coder-only test tool (NOT in chat.v1.admit).'));
-    ToolRegistry.register('create_issue', () => {}, defFor('create_issue', null, 'PM-visible test tool (in chat.v1.admit).'));
+    ToolRegistry.register('list_issues', () => {}, defFor('list_issues', null, 'Issue-read test tool (in chat.v1.admit).'));
     try {
         const prompt = buildSystemPrompt({ composerActive: false });
         const block = enumerationBlock(prompt);
@@ -212,8 +214,8 @@ test('non-Composer mode respects profile filtering — coder-only tools do NOT a
             'coder-only name must be filtered out for chat.v1 (not in chat.v1.admit)'
         );
         assert.ok(
-            nameAppearsInBlock(block, 'create_issue'),
-            'pm-surface name in chat.v1.admit must appear under chat.v1'
+            nameAppearsInBlock(block, 'list_issues'),
+            'chat-admitted read tool must appear under chat.v1'
         );
     } finally {
         cleanRegistry();
