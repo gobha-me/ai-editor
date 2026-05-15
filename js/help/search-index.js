@@ -3,7 +3,7 @@
  *
  * Built lazily on first open. Indexes: the 4 static pages
  * (Getting started / Hotkeys / Command palette / Themes) plus the 6
- * markdown-backed pages (Plugin SDK / Tools / Roles / Memory /
+ * markdown-backed pages (Plugin SDK / Tools / Profiles / Memory /
  * Architecture / Changelog). Each doc is split into sections by `##`
  * headings; each section is searchable independently so a hit can
  * deep-link back to its source page.
@@ -37,7 +37,7 @@ const STATIC_DOCS = [
 const MARKDOWN_DOC_TITLES = {
     'plugin-sdk':   'Plugin SDK',
     'tools':        'Tools API',
-    'roles':        'Roles',
+    'roles':        'Profiles',
     'memory':       'Memory',
     'architecture': 'Architecture',
     'security':     'Security',

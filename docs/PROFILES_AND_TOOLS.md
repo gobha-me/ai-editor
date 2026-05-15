@@ -1,14 +1,16 @@
-# Roles and Tools
+# Profiles and Tools
 
-Role-based access control for the 53 LLM tools. Tools declare their allowed roles at registration time; the registry filters tools per active role and enforces access at execution time.
+> **Note (2.57.0):** the underlying admission model changed at 2.54.0 — tools no longer self-declare `roles:`; instead, each profile enumerates the tool names it admits in its `tools.admit` array (see gitea#438). The matrix below still accurately describes *which profile admits which tool*; the registration-time API examples (`roles: 'all'`) and `Roles.register()` snippets describe the retired mechanism and are preserved here for historical reference until a comprehensive rewrite lands.
+
+Profile-based admission for the LLM tool surface. Each profile enumerates which tools it admits via `tools.admit`; the registry filters tools per active profile and enforces access at execution time.
 
 For tool descriptions and examples, see [TOOLS.md](TOOLS.md).
 
 ---
 
-## Built-in roles
+## Built-in profiles
 
-Five roles ship with the editor (`BUILTIN_ROLES` in `js/core.js`). Plugins can register more via `Roles.register()`.
+Five profiles ship with the editor. The picker UI exposes three (`chat.v1`, `coder.v1`, `kb.v1`); two more (`full.v1`, `plugin-dev.v1`) are synthetic.
 
 ### 🔓 Full Access (`full`)
 All tools enabled. Bypasses role filtering entirely (`ToolRegistry.checkRoleAccess` short-circuits for `full`). Use for development and unrestricted assistance.
@@ -77,11 +79,11 @@ The matrix below reflects the actual `roles` field on every `registry.register()
 
 ---
 
-## Tool counts per role
+## Tool counts per profile
 
-Approximate effective tool count when a role is active:
+Approximate effective tool count when a profile is active:
 
-| Role | Effective tools | Versus Full |
+| Profile | Effective tools | Versus Full |
 |---|---|---|
 | **Full** | 53 (all) | baseline |
 | **Coder** | 37 | ~30% fewer |
@@ -89,7 +91,7 @@ Approximate effective tool count when a role is active:
 | **Reviewer** | 27 | ~48% fewer |
 | **Plugin Developer** | ~22 | ~58% fewer (specialized scope) |
 
-Fewer tools = smaller `tools[]` array sent to the LLM = lower input cost and faster response. Switch roles when the task narrows.
+Fewer tools = smaller `tools[]` array sent to the LLM = lower input cost and faster response. Switch profiles when the task narrows.
 
 ---
 
@@ -166,22 +168,22 @@ Carried over from PLAN.md — not committed, captured for reference.
 
 ---
 
-## MCP Server Role Restrictions
+## MCP Server Profile Restrictions
 
-MCP servers can restrict which roles have access to their tools. Each server record has a `roles` field that controls access:
+MCP servers can restrict which profiles have access to their tools. Each server record has a `roles` field that controls access:
 
-- **`'all'`** (default): All roles can use the server's tools.
-- **`['coder', 'pm']`**: Only the specified roles can use the server's tools.
+- **`'all'`** (default): All profiles can use the server's tools.
+- **`['coder', 'pm']`**: Only the specified profiles can use the server's tools.
 
 When an MCP server connects, all its tools inherit the server's `roles` field. The tool registry enforces this at both discovery time (filtered from `list_tools` and `find_tool`) and execution time (blocked in `execute`).
 
 ### Configuration
 
-In **Settings → MCP Servers**, each server has an "Allowed Roles" section with checkboxes for each built-in role. Leave all unchecked for unrestricted access, or check specific roles to restrict access.
+In **Settings → MCP Servers**, each server has an "Allowed Profiles" section with checkboxes for each built-in profile. Leave all unchecked for unrestricted access, or check specific profiles to restrict access.
 
 ### Example
 
 A server with `roles: ['coder']` will:
-- Show its tools only when the active role is `coder` (or `full`)
-- Hide its tools from `pm`, `reviewer`, and `plugin-dev` roles
-- Return an access-denied error if a non-allowed role somehow invokes a tool
+- Show its tools only when the active profile is `coder` (or `full`)
+- Hide its tools from `pm`, `reviewer`, and `plugin-dev` profiles
+- Return an access-denied error if a non-allowed profile somehow invokes a tool

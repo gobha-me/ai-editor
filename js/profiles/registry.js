@@ -5,7 +5,7 @@
  * Extracted at 1.21.0 from the inline `PROFILE_REGISTRY` map that lived
  * in [`resolve.js`](./resolve.js) since 1.17.0 (the comment there had
  * pinned this slice: *"a future `Profiles.get(name)` (1.21.0 picker UI)
- * will subsume it"*). The picker UI in [`js/settings/roles-tab.js`](../settings/roles-tab.js)
+ * will subsume it"*). The picker UI in [`js/settings/profiles-tab.js`](../settings/profiles-tab.js)
  * needs `list()` to populate its `<select>`; `resolve.js` and the new
  * `getActiveProfileName` helper need `get()`/`has()` for lookup +
  * validation. Lifting the map here lets both consumers share one source

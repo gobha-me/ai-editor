@@ -20,7 +20,7 @@ import { initWorkspaceSettingsTab, decorateOverriddenControls } from './settings
 import { initTestLoopTab } from './settings/test-loop-tab.js';
 import { initToolsTab } from './settings/tools-tab.js';
 import { initRetrievalTab } from './settings/retrieval-tab.js';
-import { populateRoleCards } from './settings/roles-tab.js';
+import { populateRoleCards } from './settings/profiles-tab.js';
 import { populatePluginsTab } from './settings/plugins-tab.js';
 // 2.44.0.2 — side-effect imports: the module body's `registerOnActivate`
 // call wires the tab's refresh handler at load time; no name is consumed

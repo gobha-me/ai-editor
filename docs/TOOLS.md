@@ -1,6 +1,6 @@
 # AI Editor — LLM Tool Reference
 
-Reference for all 53 LLM tools. Roles control which tools are available; see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for role definitions and access matrix.
+Reference for all 53 LLM tools. Profiles control which tools are available; see [PROFILES_AND_TOOLS.md](PROFILES_AND_TOOLS.md) for profile definitions and access matrix.
 
 > **Counts at a glance** — 53 tools across 17 modules (`js/tools/*.js`). Tool definitions live with their handler in the same module and self-register at app startup via `js/app.js`.
 
@@ -414,11 +414,11 @@ run_code({ code: "42 * 17" })  // → result: 714
 
 ---
 
-## Role access summary
+## Profile access summary
 
-Compact view — see [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md) for full matrix.
+Compact view — see [PROFILES_AND_TOOLS.md](PROFILES_AND_TOOLS.md) for full matrix.
 
-| Tool | Allowed roles |
+| Tool | Allowed profiles |
 |---|---|
 | File reads, scan/find tools, project tree, search, peek_*, scratchpad, list issues/PRs, CI status/logs, list_projects, set_active_project | `all` |
 | `replace_lines`, `insert_lines`, `delete_lines`, `replace_selection`, `insert_at_cursor`, `edit_file`, `write_file`, `create_file`, `delete_file`, `commit_files`, `list_dirty_files`, `run_code` | `coder` |
@@ -443,4 +443,4 @@ The `full` role bypasses all role checks (`ToolRegistry.checkRoleAccess` short-c
 3. Import the module in `js/app.js` so it registers at startup.
 4. (If the role is new) Register the role first via `Roles.register()` in `js/core.js` or a plugin.
 
-The registry validates role IDs at registration time and throws on typos. See [ROLES_AND_TOOLS.md](ROLES_AND_TOOLS.md#adding-new-tools) for the contract.
+The registry validates profile names admitted via `tools.admit` and warns at registration when a newly-registered tool isn't admitted by any profile (gitea#439). See [PROFILES_AND_TOOLS.md](PROFILES_AND_TOOLS.md#adding-a-new-tool) for the contract.

@@ -4,7 +4,7 @@
  * Right-edge drawer per `docs/design/touch-2-facelift/project/help.jsx`.
  * Replaces the 6-tab `#helpModal` and inherits the 1.3.9 `.slide-out`
  * shell. Left-rail nav with grouped pages; data-driven Hotkeys page;
- * search-all across all 10 docs; Plugin SDK / Tools / Roles / Memory /
+ * search-all across all 10 docs; Plugin SDK / Tools / Profiles / Memory /
  * Architecture / Changelog pages lazy-load existing markdown.
  *
  * Lifecycle template mirrors `js/debug-slideout.js` (1.3.9): single
@@ -32,7 +32,7 @@ const NAV_ITEMS = [
     { id: 'plugin-sdk',      label: 'Plugin SDK',      icon: 'Box',        group: 'Building' },
     { id: 'tools',           label: 'Tools API',       icon: 'Settings',   group: 'Building' },
     { id: 'themes',          label: 'Themes',          icon: 'Palette',    group: 'Building' },
-    { id: 'roles',           label: 'Roles',           icon: 'AtSign',     group: 'Concepts' },
+    { id: 'roles',           label: 'Profiles',        icon: 'AtSign',     group: 'Concepts' },
     { id: 'memory',          label: 'Memory',          icon: 'Brain',      group: 'Concepts' },
     { id: 'architecture',    label: 'Architecture',    icon: 'Server',     group: 'Concepts' },
     { id: 'security',        label: 'Security',        icon: 'Shield',     group: 'Concepts' },

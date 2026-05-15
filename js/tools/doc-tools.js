@@ -11,7 +11,7 @@
 const DOC_MANIFEST = [
     { id: 'plugin-sdk',   path: 'docs/PLUGIN.md',          title: 'Plugin SDK & Authoring Guide' },
     { id: 'tools',        path: 'docs/TOOLS.md',            title: 'LLM Tool System Reference' },
-    { id: 'roles',        path: 'docs/ROLES_AND_TOOLS.md',  title: 'Roles & Tool Access' },
+    { id: 'roles',        path: 'docs/PROFILES_AND_TOOLS.md', title: 'Profiles & Tool Access' },
     { id: 'architecture', path: 'docs/ARCHITECTURE.md',     title: 'Editor Architecture' },
     { id: 'scan-tools',   path: 'docs/scan-tools-guide.md', title: 'Scan Tools Usage Guide' },
     { id: 'error-recovery', inline: 'Error handling in AI Editor is implemented in `js/utils/errors.js`. Use the `EditorError` class with an `ErrorCode` constant and a `recoveryHint` string; consumers compare `err.code` rather than parsing messages, and `err.recoveryHint` is rendered to the user via `js/error-logger.js`. See `docs/ARCHITECTURE.md` § `tools/registry.js` for the tool-execution error path.', title: 'Error Handling — pointer to js/utils/errors.js' },

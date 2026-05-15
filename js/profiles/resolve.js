@@ -63,7 +63,7 @@ const RUNTIME_RULES = {
  * `resolveProfile`'s `base`-name lookup — delegates to the registry
  * extracted at 1.21.0 (`js/profiles/registry.js`). The pre-1.21.0
  * inline `PROFILE_REGISTRY` map lifted to that module so the picker
- * UI in `js/settings/roles-tab.js` can share it without circular-
+ * UI in `js/settings/profiles-tab.js` can share it without circular-
  * importing `resolve.js`.
  *
  * @param {string} name

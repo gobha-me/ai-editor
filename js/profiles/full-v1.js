@@ -11,7 +11,7 @@
  *
  * **Synthetic** — registered in [`registry.js`](./registry.js) for lookup
  * (`Profiles.has`/`get` succeed) but excluded from `Profiles.list()`.
- * The picker UI in [`js/settings/roles-tab.js`](../settings/roles-tab.js)
+ * The picker UI in [`js/settings/profiles-tab.js`](../settings/profiles-tab.js)
  * sees only `chat.v1` + `coder.v1` + `kb.v1`. The 2.0.0 migration script
  * (slice 3) targets `full.v1` for users with `settings.role === 'full'`;
  * post-migration, every tool stays admitted.

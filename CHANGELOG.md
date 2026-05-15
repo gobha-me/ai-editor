@@ -4,6 +4,67 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.57.0] - 2026-05-15
+
+### Changed — complete the 2.0.0 rename: user-visible "Roles" → "Profiles" (gitea#441)
+
+The 2.0.0 rename from "Roles" to "Profiles" finished at the data layer (profile registry, `Profiles.filterTools`, `getEffectiveProfileName`) but never reached the user-visible UI/docs surface. Settings still showed a "Roles" tab; Help still listed "Roles" in the nav and search index; `docs/ROLES_AND_TOOLS.md` lived under its old filename. Closes gitea#441 — Thread 5 of the github#40 paper-cut.
+
+**Pure surface sweep — no admission semantics changed.** Internal symbols (the `populateRoleCards` export, the `tabRoles` DOM ID, the `'roles'` route key in `DOC_PATHS`/`MARKDOWN_DOC_TITLES`) are deliberately preserved per the ticket's "user-visible only" scope; renaming them would expand blast radius without user benefit.
+
+**User-visible string updates:**
+
+- [`html/modals.html`](html/modals.html) — Settings sidebar button label `>Roles<` → `>Profiles<`.
+- [`html/settings-tabs.html`](html/settings-tabs.html) — `<!-- Roles Tab -->` comment normalized; `<label>Allowed Roles:</label>` (MCP edit form) → `<label>Allowed Profiles:</label>`.
+- [`js/help/index.js`](js/help/index.js) — Help nav entry `label: 'Roles'` → `label: 'Profiles'` (the `id: 'roles'` route key stays so existing search-index links keep resolving).
+- [`js/help/search-index.js`](js/help/search-index.js) — display title in `MARKDOWN_DOC_TITLES['roles']` → `'Profiles'`.
+- [`js/help/pages/getting-started.js`](js/help/pages/getting-started.js) — body bullet rewritten: was `<strong>Roles</strong> — task-scoped AI personas (commit-message, review, etc.)` (legacy framing — the personas model retired at 2.0.0); now `<strong>Profiles</strong> — task-scoped configuration sets that pick admitted tools, system-prompt block, and budget` (matches the 2.0.0+ profile contract).
+
+**File renames (history-preserving via `git mv`):**
+
+- `js/settings/roles-tab.js` → [`js/settings/profiles-tab.js`](js/settings/profiles-tab.js). Top-of-file banner updated. Importer at [`js/settings-manager.js`](js/settings-manager.js:23) updated. Five doc-comment references in [`js/profiles/registry.js`](js/profiles/registry.js), [`js/profiles/full-v1.js`](js/profiles/full-v1.js), [`js/profiles/resolve.js`](js/profiles/resolve.js), [`js/chat/state.js`](js/chat/state.js), and [`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs) updated to the new path.
+- `docs/ROLES_AND_TOOLS.md` → [`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md). In-doc title + headings swept ("Built-in roles" → "Built-in profiles"; "Tool counts per role" → "Tool counts per profile"; "MCP Server Role Restrictions" → "MCP Server Profile Restrictions"; matrix column header swap). A 2.57.0 banner added at the top noting the underlying admission model changed at 2.54.0 (gitea#438) — the matrix still describes which profile admits which tool, but the registration-time API examples (`roles: 'all'`) and `Roles.register()` snippets describe the retired mechanism. A comprehensive rewrite of the body remains a follow-up.
+- Live code path references updated:
+  - [`js/tools/doc-tools.js:14`](js/tools/doc-tools.js) — `DOC_MANIFEST` entry path + title.
+  - [`js/help/pages/markdown-pages.js:15`](js/help/pages/markdown-pages.js) — `DOC_PATHS['roles']` → new path.
+- Doc cross-references updated in [`docs/TOOLS.md`](docs/TOOLS.md) (3 link sites + section header), [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) (Design contracts row), [`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) (Design contracts row), and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (registry-section forward-pointer). Each new link includes the legacy filename in a parenthetical so historical context survives.
+
+**Out of scope (deliberate):**
+
+- CHANGELOG historical references — the changelog is a frozen record; sweeping it would falsify history.
+- Retrieval-measurement fixtures (`docs/measurements/*.json`, `js/intelligence/retrieval/test-corpus.js`) — changing the path strings would invalidate captured measurement runs.
+- Internal symbols (`populateRoleCards`, `ROLES_*` constants, `tabRoles` DOM ID, `'roles'` route keys, `Roles` global namespace).
+- Touch-1/2/3 design assets and discussion documents in `docs/design/` and `docs/discussion/` — these are captured snapshots, not user-visible product surface.
+- The legacy `value="full|coder|pm|reviewer"` checkbox group in the MCP edit form (`html/settings-tabs.html:796–805`) is the pre-2.54.0 tag-based admission UI; whether the checkbox set still wires meaningfully to the new `tools.admit` model is a separate question, not a rename.
+- Comprehensive rewrite of `docs/PROFILES_AND_TOOLS.md` body content from the retired role-tag model to the post-2.54.0 admit model — banner flags the gap; rewrite is a follow-up.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`html/modals.html`](html/modals.html) | EDIT — Settings sidebar button label. |
+| [`html/settings-tabs.html`](html/settings-tabs.html) | EDIT — comment + `Allowed Roles:` label. |
+| [`js/help/index.js`](js/help/index.js) | EDIT — nav entry label + module docstring. |
+| [`js/help/search-index.js`](js/help/search-index.js) | EDIT — display title + module docstring. |
+| [`js/help/pages/getting-started.js`](js/help/pages/getting-started.js) | EDIT — Where-to-look-next bullet. |
+| [`js/help/pages/markdown-pages.js`](js/help/pages/markdown-pages.js) | EDIT — `DOC_PATHS['roles']` path. |
+| [`js/tools/doc-tools.js`](js/tools/doc-tools.js) | EDIT — `DOC_MANIFEST` entry. |
+| [`js/settings-manager.js`](js/settings-manager.js) | EDIT — import path. |
+| [`js/settings/profiles-tab.js`](js/settings/profiles-tab.js) | RENAME (from `roles-tab.js`) + banner update. |
+| [`js/profiles/registry.js`](js/profiles/registry.js) | EDIT — docstring path reference. |
+| [`js/profiles/full-v1.js`](js/profiles/full-v1.js) | EDIT — docstring path reference. |
+| [`js/profiles/resolve.js`](js/profiles/resolve.js) | EDIT — docstring path reference. |
+| [`js/chat/state.js`](js/chat/state.js) | EDIT — docstring path reference. |
+| [`tests/test-profiles-registry.mjs`](tests/test-profiles-registry.mjs) | EDIT — docstring path reference. |
+| [`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md) | RENAME (from `ROLES_AND_TOOLS.md`) + title/headings/banner. |
+| [`docs/TOOLS.md`](docs/TOOLS.md) | EDIT — 3 link references + section header swap. |
+| [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) | EDIT — Design contracts row. |
+| [`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) | EDIT — Design contracts row. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — `tools/registry.js` section forward-pointer. |
+| [`js/version.js`](js/version.js) | EDIT — `2.56.0` → `2.57.0`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — gitea#441 strike-through + "Just shipped (2.57.0)" row + header date bump. |
+
 ## [2.56.0] - 2026-05-15
 
 ### Changed — hand-curate admit lists for chat.v1 / coder.v1 / kb.v1 (gitea#440); closes github#40 paper-cut

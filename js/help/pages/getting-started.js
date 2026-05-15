@@ -40,7 +40,7 @@ export function renderGettingStarted() {
             <ul class="help__ul">
                 <li><strong>Hotkeys</strong> — every keyboard shortcut, platform-aware.</li>
                 <li><strong>Plugin SDK</strong> — extend the editor with bundled or external plugins.</li>
-                <li><strong>Roles</strong> — task-scoped AI personas (commit-message, review, etc.).</li>
+                <li><strong>Profiles</strong> — task-scoped configuration sets that pick admitted tools, system-prompt block, and budget.</li>
                 <li><strong>Memory</strong> — how AI Editor remembers project facts across conversations.</li>
                 <li><strong>Architecture</strong> — how the pieces fit together.</li>
             </ul>

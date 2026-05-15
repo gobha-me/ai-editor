@@ -12,7 +12,7 @@ import { renderDocInto } from '../markdown-loader.js';
 export const DOC_PATHS = {
     'plugin-sdk':   'docs/PLUGIN.md',
     'tools':        'docs/TOOLS.md',
-    'roles':        'docs/ROLES_AND_TOOLS.md',
+    'roles':        'docs/PROFILES_AND_TOOLS.md',
     'memory':       'docs/DESIGN-memory.md',
     'architecture': 'docs/ARCHITECTURE.md',
     'security':     'docs/SECURITY.md',

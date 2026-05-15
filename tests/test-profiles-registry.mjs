@@ -1,7 +1,7 @@
 /**
  * 1.21.0 — Profile registry: extracted from `js/profiles/resolve.js`.
  *
- * The picker UI in `js/settings/roles-tab.js` populates its `<select>`
+ * The picker UI in `js/settings/profiles-tab.js` populates its `<select>`
  * from `Profiles.list()`; `resolve.js` and `getActiveProfileName` use
  * `Profiles.get` / `Profiles.has` for lookup + validation. These tests
  * pin the registry's contract so a future regression that drops a

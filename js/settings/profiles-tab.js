@@ -1,5 +1,5 @@
 // ============================================
-// SETTINGS — PROFILE TAB (was Roles, retired at 2.0.0)
+// SETTINGS — PROFILES TAB
 // ============================================
 
 import { State } from '../core.js';

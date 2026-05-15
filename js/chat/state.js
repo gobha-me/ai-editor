@@ -33,7 +33,7 @@ let pendingFiles = [];  // Text/binary [{ text, name, size, type: 'text' }]
 // tools, instructs it to produce a structured plan, and surfaces an
 // approval card before any mutating action. Persisted via Storage so a
 // refresh keeps the mode the user last saw. Toggled from the chip in the
-// chat input area, the auto-engage-on-issue-start setting in roles-tab,
+// chat input area, the auto-engage-on-issue-start setting in profiles-tab,
 // or implicitly cleared when an approval card resolves with status:
 // 'approved'. See pendingPlanApproval below for the gate that pauses the
 // tool loop.
