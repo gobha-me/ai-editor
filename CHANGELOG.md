@@ -4,6 +4,36 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Added — `discussion/` directory bootstrapped with profile-admission paper stubs (github#40)
+
+Three paper-session stubs land under `discussion/` to track the design
+threads opened by [gobha-me/ai-editor#40](https://github.com/gobha-me/ai-editor/issues/40):
+
+- `discussion/profiles-pick-tools.md` — admission inversion proposal
+  (profiles enumerate tools; tools drop `roles:`) + default-state open
+  question (Threads 1 + 4).
+- `discussion/user-built-profile-trees.md` — parent vs. pattern composition
+  for user-authored profiles, with open questions on persistence, picker UX,
+  and migration (Thread 2).
+- `discussion/plugin-dev-mode-vs-profile.md` — plugin-dev as profile, flag,
+  or pattern (Thread 3).
+
+No code changes. The papers carry the design questions ahead of any
+implementation — per the Plinth methodology, [`discussion/`](discussion/)
+is the standing home for paper-session artifacts; this commit bootstraps
+the directory.
+
+**Motivation.** Dogfood observation: an LLM running on `coder.v1` was
+asked to draft a design and file the resulting tickets. It produced the
+design but couldn't call `create_issue` — the tool's `roles: ['pm']`
+tag at [`js/tools/issue-tools.js:206`](js/tools/issue-tools.js) has no
+overlap with coder.v1's `allowed_groups: ['all', 'coder']` at
+[`js/profiles/coder-v1.js:263`](js/profiles/coder-v1.js). The narrow fix
+(re-tag, widen `allowed_groups`) papers over a structural issue: the
+admission gate runs tool→profile when it should run profile→tool, the
+2.0.0 "Roles"→"Profiles" rename never finished at the UI, and inheritance
+diverges instead of narrowing. See github#40 for the full motivation.
+
 ## [2.51.0.1] - 2026-05-15
 
 ### Fixed — Surface session cut-off reason (gitea#425)
