@@ -4,6 +4,113 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Added — `RE-EVAL following 2.52.0` — fifth re-evaluation slot (doc-only, no version bump)
+
+Fifth re-eval per the methodology adopted 2026-05-12 ([ROADMAP.md](docs/ROADMAP.md)
+§"Re-evaluation cadence"); anchored at the 3-code-minor cadence (3 code
+minors past 2.49.0 = 2.52.0). Per **Decision §14 sub-clause** (refined at
+`RE-EVAL following 2.46.0`), re-eval slots accumulate in `[Unreleased]`
+and do not consume a version slot — the next code minor (2.53.0) is the
+absorption slot.
+
+**Paper-half deliverables:**
+
+- **ROADMAP roll-forward.** The "Now / Next / Later" row's parallel-
+  candidate list (gitea#421/#424/#425/#426) was stale; all four shipped
+  across 2.50.0.3 → 2.52.0. Replaced with the post-AAR-cohort reality:
+  ICD #4 finding #3 (`resolveReviewThread`) still open + decision-required;
+  profile-admission paper in flight; one candidate code row from this
+  re-eval (`resolveTaskLedgerConfig`). Seven new "Just shipped" rows
+  added (2.50.0.3 / 2.51.0 / 2.51.0.1 / 2.52.0 plus the re-eval slot
+  row itself).
+- **Forward ICD presence check table** appended seven new shipped rows
+  (2.50.0.1, 2.50.0.2, 2.50.0.3, 2.51.0, 2.51.0.1, 2.52.0,
+  RE-EVAL following 2.52.0) with their AAR-cohort issue refs as
+  contracts. The three named near-term features (Window v2 / Sessions,
+  MCP OAuth, profile-admission paper) re-anchored to `RE-EVAL following
+  2.52.0`.
+- **Re-evaluation cadence §** anchored next slot to
+  `RE-EVAL following 2.55.0`. Target #6 candidates: editor instance,
+  MCP bridge, plugin lifecycle. Profiles registry deferred per
+  `project_profile_admission_paper` memory until the paper lands.
+- **§"Translation post-`RE-EVAL`"** rewritten to summarize the
+  five-re-eval arc (2.42 → 2.45 → 2.46 → 2.49 → 2.52).
+
+**Code-aware half deliverables:**
+
+- **ICD #5 authored** at [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md)
+  — retrieval manager + ingest pipeline + lifecycle + persistence +
+  diagnostics contract. Covers `js/intelligence/retrieval/manager.js`
+  (production singleton, 1264 LOC, 19 public methods + `_resetForTesting`)
+  + pure-DI ingest factories (`loader.js` + `pipeline.js` + `embedder.js`
+  + `store.js` + `ingest-controller.js` + `walker.js`) + production
+  wiring (`wiring.js`) + 3 strategies (`semantic.js` + `structural.js`
+  + `thematic.js`) + measurement harness + event seam. **5
+  classification axes:** Ingest (the 6-invariant update protocol) /
+  Lifecycle (7 event-driven transitions) / Persistence (IDB
+  `retrieval-chunks-` prefix, per-branch) / Query (8-step
+  `findRelevantFiles` pipeline) / Diagnostics (`context:*` events +
+  `retrieval:turn-stats`). The Composer algorithm explicitly out of
+  scope (covered by ICD #2). Cross-references ICD #2 §"Composer-vs-non-
+  Composer path drift" + ICD #4 §"Functional defaults"
+  (`getChangedFilesBetween` consumed by `_tryDeltaIndexFromBranch`).
+- **Three `[strong]`-band code-aware findings:**
+  1. **`CODER_V1.task_ledger.capacity` direct read** at
+     [`manager.js:678`](js/intelligence/retrieval/manager.js) survived
+     the 1.20.0 retrieval-config rewire (the neighboring
+     `novelty_threshold` reads through `resolveRetrievalConfig`; the
+     inline docstring at lines 672–675 explicitly names the task_ledger
+     read as out-of-scope). **Suggested for next code minor's
+     `[strong] [S]` row:** add `resolveTaskLedgerConfig(profileName)`
+     to [`js/profiles/resolve.js`](js/profiles/resolve.js); mirrors the
+     1.20.0 `resolveRetrievalConfig` pattern one-for-one. Drops the
+     direct `CODER_V1` import; single-file edit + a node test pinning
+     the resolver's shape.
+  2. **12 `@ts-ignore` annotations cluster on store calls** in
+     `manager.js`. The runtime store object exposes
+     `getAllChunksForCollection` / `stats` / `chunkVectorSearch` /
+     `chunkIdsForSource` but the `ChunkStore` typedef declares a
+     narrower surface. **Queued (not promoted):** widen the typedef in
+     [`js/intelligence/retrieval/store.js`](js/intelligence/retrieval/store.js);
+     mechanical edit but touches downstream typedef references.
+  3. **`retrieval:turn-stats` event has no shape-pinning test.** Single
+     producer ([`manager.js:837`](js/intelligence/retrieval/manager.js));
+     single consumer ([`cost-recorder.js`](js/intelligence/cost/cost-recorder.js)).
+     **Queued (not promoted):** mirror the
+     [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)
+     idiom from ICD #4 — pinning test that captures the emitted
+     payload and asserts the expected key set. Browser-DOM-coupled;
+     needs JSDOM fake or a manager-side seam.
+- **ARCHITECTURE.md catch-up sync** 2.49.0 → 2.52.0 (3-minor delta).
+  New surfaces documented: `read_approved_plan` tool + `State.approvedPlan`
+  slot (2.52.0), session cut-off `reason` field (2.51.0.1), compact
+  tools TOC in system prompt (2.51.0), Venice prompt-cache breakpoint
+  + `enablePromptCache` setting (2.50.0.1), `applyAliasesAndDefaults`
+  + `TOOL_PARAM_ALIASES` (2.50.0.2), `getCommitDiff` base-promotion +
+  GitLab capability declaration (2.50.0), sub-agents Phase 1 end-to-end
+  (`delegate_task` + `SubAgentApprovalCard` + `SubAgentTranscriptPanel`
+  + `State.subagents`; was sync-target at 2.49.0 but missed). Header
+  bumped + new git-providers / retrieval-manager ICD pointers added to
+  the §"Document hierarchy" tree. Testing & CI test-suite count bumped
+  from ~80 to ~90+.
+
+**Administrative — closed four stale Gitea issues** that should have
+auto-closed with their shipping PRs but didn't:
+
+- [gitea#418](https://git.gobha.me/xcaliber/ai-editor/issues/418) →
+  PR #429 (2.49.0.0 sub-agents Phase 1 slice 1)
+- [gitea#424](https://git.gobha.me/xcaliber/ai-editor/issues/424) →
+  PR #435 (2.52.0 `read_approved_plan`)
+- [gitea#425](https://git.gobha.me/xcaliber/ai-editor/issues/425) →
+  PR #433 (2.51.0.1 cut-off reason)
+- [gitea#426](https://git.gobha.me/xcaliber/ai-editor/issues/426) →
+  PR #432 (2.51.0 compact TOC)
+
+No code changes in this PR; pure docs/ tree mutation (`docs/ROADMAP.md`,
+`docs/ARCHITECTURE.md`, `docs/ICD-retrieval-manager.md` NEW, plus this
+`CHANGELOG.md` `[Unreleased]` entry). Version unchanged at 2.52.0; the
+next code minor (2.53.0) absorbs this content.
+
 ## [2.52.0] - 2026-05-15
 
 ### Added — `read_approved_plan` tool exposes the approved plan to the executor (gitea#424)

@@ -1,7 +1,7 @@
 # AI Editor — Architecture
 
 > Module dependency map, layer boundaries, and key data flows.
-> Last sync: **2.49.0** (2026-05-14, fourth RE-EVAL slot under the methodology adopted 2026-05-12; doc-only — no version bump, accumulates in [Unreleased]; 3-minor catch-up from the 2.46.0 sync covering 2.47.0+0.1+0.2 retrieval/runtime cleanup, 2.48.0+0.1 tool-loop core + file-edit tool surface, and 2.49.0+0.0 sub-agents Phase 1). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
+> Last sync: **2.52.0** (2026-05-15, fifth RE-EVAL slot under the methodology adopted 2026-05-12; doc-only — no version bump, accumulates in [Unreleased]; 3-minor catch-up from the 2.49.0 sync covering 2.50.0+0.1+0.2+0.3 ICD #4 code-aware findings + Venice prompt-cache breakpoint + tool-surface UX + cross-request read-cache full-payload fix, 2.51.0+0.1 compact tools TOC in system prompt + session cut-off reason surfaced, and 2.52.0 `read_approved_plan` tool + persisted plan body). Per-subsystem detail lives in [`docs/DESIGN-*.md`](.) and [`docs/ICD-*.md`](.); this doc tracks structural shape only.
 
 > **Commitment bands.** Per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) and [`ROADMAP.md`](ROADMAP.md) §"How to read the bands"), unlabeled sections in this document are implicit `[strong]`-band commitments — load-bearing for the next ~3 milestones. The Intelligence Layer carries `[medium]` for Phase 2 picker promotion (`kb.v1` shipped 2.8.0; `chat_multi.v1` / `rp.v1` deprioritized for ai-editor) and `[fuzzy]` for Phase 3 operational maturity and Phase 4 extensibility.
 
@@ -145,6 +145,8 @@ LLM API provider plugins. Each provider transforms request bodies and
 response parsing for provider-specific extensions (Venice thinking blocks,
 OpenRouter fallback routing, etc.).
 
+**Venice prompt-cache breakpoint (2.50.0.1).** `js/providers/venice.js#_attachSystemCacheBreakpoint` wraps the last system-message content as `[{type:'text', text, cache_control:{type:'ephemeral'}}]` so Venice's Anthropic-style prefix cache retains `(tools + system)` across the session. Toggle via the `enablePromptCache` setting (default ON; Settings → Provider → Venice). Cache-hit tokens already surface through `extractUsage()` → `State.sessionCost.cacheReadTokens`/`cacheCreationTokens`, so the cost dashboard reflects savings without new UI. Scoped to Venice; other providers extend via the same seam.
+
 ## Git Layer
 
 ### `git.js`
@@ -154,7 +156,7 @@ and delegates to the correct provider instance from `git-providers/registry`.
 
 ### `git-providers/base.js`
 
-Default interface (55 methods + 1 `get capabilities()` getter; see [`ICD-git-providers.md`](ICD-git-providers.md) for the full contract). Providers are plain object literals; the registry merges them onto `BASE_GIT_PROVIDER` via shallow spread (`{ ...BASE_GIT_PROVIDER, ...provider }`) — no class inheritance. Three default behaviors: `notSupported` throw (the rule, 40 of 55 methods), safe-empty return (`null`/`[]` for feature-detection paths — `getLanguages`, all `listWorkflow*`), and functional defaults that compose other base methods (`getMergeConflicts`, `getBranchAheadBehind`, `getChangedFilesBetween`, `addPullRequestComment`). The status-code → `ErrorCode` map at lines 89–104 produces LLM-actionable `EditorError` envelopes. A six-flag capability matrix (`reviewSubmission`, `threadResolve`, `viewedFiles`, `merge`, `rerunCi`, `mergeConflictResolution`) is read by the PR Review surfaces; the `undefined → false` invariant lets providers declare partial subsets. The **circuit breaker** (`circuitBreakerGuard` + `markUnreachable`/`markReachable` + `healthProbe`, `CIRCUIT_COOLDOWN_MS = 60_000`) is exported separately and wrapped manually by the three remote providers' `request()` overrides; Local skips it.
+Default interface (55 methods + 1 `get capabilities()` getter; see [`ICD-git-providers.md`](ICD-git-providers.md) for the full contract). Providers are plain object literals; the registry merges them onto `BASE_GIT_PROVIDER` via shallow spread (`{ ...BASE_GIT_PROVIDER, ...provider }`) — no class inheritance. Three default behaviors: `notSupported` throw (the rule, 40 of 55 methods), safe-empty return (`null`/`[]` for feature-detection paths — `getLanguages`, all `listWorkflow*`), and functional defaults that compose other base methods (`getMergeConflicts`, `getBranchAheadBehind`, `getChangedFilesBetween`, `addPullRequestComment`). The status-code → `ErrorCode` map at lines 89–104 produces LLM-actionable `EditorError` envelopes. A six-flag capability matrix (`reviewSubmission`, `threadResolve`, `viewedFiles`, `merge`, `rerunCi`, `mergeConflictResolution`) is read by the PR Review surfaces; the `undefined → false` invariant lets providers declare partial subsets — GitLab declares all six explicitly since 2.50.0 (was only `mergeConflictResolution: true`). `getCommitDiff` promoted to base with `notSupported` default at 2.50.0 (ICD #4 finding #1; the three remote providers' pre-existing overrides already conform). The **circuit breaker** (`circuitBreakerGuard` + `markUnreachable`/`markReachable` + `healthProbe`, `CIRCUIT_COOLDOWN_MS = 60_000`) is exported separately and wrapped manually by the three remote providers' `request()` overrides; Local skips it. Provider capability-shape contract guarded by [`tests/test-provider-capabilities-shape.mjs`](../tests/test-provider-capabilities-shape.mjs) (2.50.0).
 
 ### `git-providers/{gitea,github,gitlab}.js`
 
@@ -188,6 +190,8 @@ from `contextTokens × fillPct / 800` with min/max clamps. No discrete tiers.
 `State.lastExchangeTokens.prompt` plus a map-reduce multi-pass when the
 utility model's window is small (1M prod ↔ 4–256K utility).
 
+**Session cut-off reason surfacing (2.51.0.1).** Session terminations now carry a structured `reason` field on the trailing assistant message + status pill (`budget-exceeded` / `model-finished` / `user-cancelled` / `tool-cancelled` / etc.) so users (and the model on a Plan-Mode follow-up) can distinguish "we ran out of budget" from "the model stopped cleanly." Closes gitea#425.
+
 ### `prompts.js`
 
 System prompt builder. `buildSystemPrompt({ admittedDefs?, composerActive? })` assembles profile instructions, active tool list, scratchpad contents, project context, and summarizer state into a single system message. Two paths since 2.35.0:
@@ -195,11 +199,17 @@ System prompt builder. `buildSystemPrompt({ admittedDefs?, composerActive? })` a
 - **Composer active** — caller passes `admittedDefs` from `LLMTools.getAdmittedTools()`; enumeration renders directly.
 - **Composer not active** — derives enumeration from `Profiles.filterTools(ToolRegistry.getDefinitions(), profileName).map(...)`. Same filter that powers the API tools-array; no second source.
 
+**Tools TOC compaction (2.51.0).** Replaced verbose per-tool enumeration with a compact category index in the system prompt's stable head; the model reads names + groupings from the TOC without consuming the full tool-by-tool prose every turn. Cuts the model's repeat `list_tool_categories` / `list_tools_by_category` calls (the gitea#426 finding). The full per-tool detail is still available via the existing discovery tools when the model wants it.
+
+**Plan-Mode approved-plan read (2.52.0).** `read_approved_plan` (read-only tool) surfaces the approved plan body persisted to `State.approvedPlan` from the most recent Plan-Mode approval card. Closes the cohort regression where the model regenerated `create_file` payloads verbatim from the inlined plan body — the plan now lives in one place that the executor reads, not in two places that drift.
+
 **Untrusted content** — issue / PR / comment bodies fetched during triage are wrapped in `<UNTRUSTED_*>` markers (1.6.12) and the marker enumeration in the system prompt renders from `UNTRUSTED_KINDS` via `renderUntrustedMarkers()` (2.37.0). The 1.9.x-era "no delimiter" gap closed at PR #296 / 1.6.12; the remaining gap (invisible-Unicode scan of tool returns) is `[fuzzy]` per the roadmap. See [`docs/SECURITY.md`](SECURITY.md) §"Untrusted issue / PR / comment content".
 
 ### `tools/registry.js`
 
 Dynamic tool registration. Tools declare `allowed_groups` (and, since 2.0, `roles: 'all'` / explicit group tags) at registration time. `ToolRegistry.getDefinitions()` returns the raw tool defs; profile-side filtering happens via `Profiles.filterTools()` (the canonical admission). Tool unregistration emits `tools:unregistered` so the tool-embeddings cache (`js/intelligence/tools/embeddings.js`) drops stale entries. The legal group tags derive from `Profiles.getKnownGroupTags()` since 2.34.0 — adding a new profile no longer requires a registry edit. Full admission contract — 11 exports across `js/tools/registry.js` + `js/profiles/registry.js`, 5 classification axes, three carve-outs (`'all'` / `'*'` / `'full'`), forward-evolution rules — at [`docs/ICD-tool-registry.md`](ICD-tool-registry.md). See [`docs/ROLES_AND_TOOLS.md`](ROLES_AND_TOOLS.md) for the admission narrative and per-tool role table; see [`docs/ICD-chat-handlers.md`](ICD-chat-handlers.md) for the tool-classification axes consumed by the chat tool loop.
+
+**Param-aliasing seam (2.50.0.2).** `js/chat/tools.js` exports a frozen `TOOL_PARAM_ALIASES` map (cross-SDK-prior arg-name remaps — `start`→`start_line`, `pattern`→`query`, etc.) consumed by a pure `applyAliasesAndDefaults` rewriter wired before `validateToolParameters` fires in `executeToolCall`. Same shape as 2.48.0.1's `_detectWrongShape`; mirrors the validator-level rewrite path from gitea#415. Every classified tool's description carries a `**Required:** <comma-list>.` prefix derived from `REQUIRED_TOOL_PARAMS` so the model sees the requirement before tripping the validator.
 
 Errors thrown by tool handlers (and by the rest of the editor) follow the
 contract in `js/utils/errors.js`: `EditorError` extends `Error` with a
@@ -224,9 +234,9 @@ The 1.5.x retrieval cutover (PR #266 → bundled into the 1.6.0 tag) and the 1.6
 | Test loop | `intelligence/test-loop/` | Self-test harness for the subsystems |
 | Workspace settings | `intelligence/workspace-settings/` | Per-workspace overrides via `file-layer.js` |
 
-The retrieval manager exposes `findRelevantFiles(query, opts)`, the public entry point used by both the `find_relevant_files` tool and any plugin that wants the same scoring. It returns structured envelopes on cold-start (`indexer_not_ready`) and budget overrun (`retrieval_partial`) under the 30 s hard tool wall.
+The retrieval manager exposes `findRelevantFiles(query, opts)`, the public entry point used by both the `find_relevant_files` tool and any plugin that wants the same scoring. It returns structured envelopes on cold-start (`indexer_not_ready`) and budget overrun (`retrieval_partial`) under the 30 s hard tool wall. Full manager + ingest-pipeline + lifecycle + persistence + query orchestration contract — 19 public methods, 5 classification axes (Ingest / Lifecycle / Persistence / Query / Diagnostics), 7 event-driven transitions, IDB key namespace, forward-evolution rules — at [`docs/ICD-retrieval-manager.md`](ICD-retrieval-manager.md).
 
-**Composer seam.** Two pure-function Composers sit at the admissibility boundary between registry-or-index and the model: [`js/intelligence/tools/composer.js`](../js/intelligence/tools/composer.js) (`composeAdmission` + `renderForLLM`) and [`js/intelligence/retrieval/composer.js`](../js/intelligence/retrieval/composer.js) (`compose`). Both are wired into production — tools via `js/llm/api.js#LLMTools._runComposer()`; retrieval via `js/intelligence/retrieval/manager.js` (cutover at 1.5.14, replacing legacy `js/context-manager.js`). Full seam contract — frozen exports, classification axes, interaction matrix, forward-evolution rules — at [`docs/ICD-intelligence-composers.md`](ICD-intelligence-composers.md).
+**Composer seam.** Two pure-function Composers sit at the admissibility boundary between registry-or-index and the model: [`js/intelligence/tools/composer.js`](../js/intelligence/tools/composer.js) (`composeAdmission` + `renderForLLM`) and [`js/intelligence/retrieval/composer.js`](../js/intelligence/retrieval/composer.js) (`compose`). Both are wired into production — tools via `js/llm/api.js#LLMTools._runComposer()`; retrieval via `js/intelligence/retrieval/manager.js` (cutover at 1.5.14, replacing legacy `js/context-manager.js`). Full seam contract — frozen exports, classification axes, interaction matrix, forward-evolution rules — at [`docs/ICD-intelligence-composers.md`](ICD-intelligence-composers.md). The Composer algorithm is upstream of the manager's Query axis; the manager owns lifecycle + persistence + event seam (covered by ICD #5), the Composer owns the admission algorithm itself (covered by ICD #2).
 
 ## MCP Layer (`js/mcp/`, `plugins/mcp-bridge.js`)
 
@@ -273,6 +283,10 @@ Preact takeover that stacks above PR Review (priority `80 > 70` in `ModalRegistr
 ### `preview/` — In-editor preview (Tier 1 1.22.0, Tier 2 2.7.0, Tier 3a 2.10.0)
 
 `preview-host.js` (1039 LOC) owns the per-session lifecycle: registers the workspace-resolving Service Worker (idempotent), maintains the in-memory `serverId → entry` registry, mounts the iframe in the preview slide-over, probes for `package.json#scripts.dev` to gate Tier-3-only build-step projects. Tier 2 added per-`serverId` ring buffers for console / errors / routes / network captures (`BUFFER_CAP = 200`). Tier 3a added 5 driveable tools (`preview_snapshot` / `preview_click` / `preview_fill` / `preview_inspect` / `preview_resize`) — selector-shaped, no `preview_eval`. The driving tools mutate state and read it, so they appear in both `PREVIEW_MUTATING_TOOLS` and `PREVIEW_READ_TOOLS`; see [`ICD-chat-handlers.md`](ICD-chat-handlers.md) for the cache-invalidation contract. Tier 3b (sidecar / build-step support) is `[fuzzy]` per ROADMAP.
+
+### Sub-agents Phase 1 (2.49.0; github#24)
+
+`delegate_task` (`js/tools/subagent-tools.js`) is the model-facing entry to bounded child conversations. Approval pair: `SubAgentApprovalCard` (Preact + `htm`; mirrors `ScriptApprovalCard` shape per `pendingSubAgentApproval` slot in [`chat/state.js`](../js/chat/state.js)) + `SubAgentTranscriptPanel` (per-conversation transcript surface). The sub-agent runs against the `subagent.v1` profile (read-only default, `coder.v1` base, per-call ceilings) and drives [`chat/tool-loop-core.js`](../js/chat/tool-loop-core.js) (the 2.48.0 Phase 0 extraction, ~720 LOC) with a different context + hooks bag from the parent. Cost attribution threads through `LLM.chat(..., costAttribution)`; per-conversation transcripts persist at `State.subagents = {tree, transcripts, session_cost}`. Profile resolver: `resolveSubAgentConfig` mirrors `resolveCompressionConfig`; admission via `ToolRegistry.executeWithProfile` + `checkRoleAccessForProfile` (additive entry-points; existing `execute` / `checkRoleAccess` delegate). `'delegate_task'` joins `USER_PAUSE_TOOLS`. Full design: [`docs/DESIGN-sub-agents.md`](DESIGN-sub-agents.md).
 
 ## Slot & Event Registries (2.22.0 → 2.44.0 — audit-sweep wave; closed 2.44.0)
 
@@ -380,7 +394,7 @@ The barrel re-export pattern (`llm.js`, `editor.js`, `ui-helpers.js`) keeps impo
 | `core.js` | ~1668 | Shared kernel (EventBus, State, Storage, Plugins, Providers facade, types) |
 | `llm/api.js` | ~1338 | LLM client + streaming SSE parser, tool-call assembly, cost tracking, Composer-aware admission |
 | `git-providers/github.js` | ~1268 | GitHub provider |
-| `intelligence/retrieval/manager.js` | ~1263 | Retrieval orchestration (paraphrase + BM25 + structural + thematic + composer + semantic + AST chunker) |
+| `intelligence/retrieval/manager.js` | ~1264 | Retrieval orchestration (paraphrase + BM25 + structural + thematic + composer + semantic + AST chunker); see [`ICD-retrieval-manager.md`](ICD-retrieval-manager.md) |
 | `git-providers/gitea.js` | ~1257 | Gitea provider |
 | `chat/handlers.js` | ~1244 | Tool-call dispatch, retry, cache management — see [`ICD-chat-handlers.md`](ICD-chat-handlers.md) |
 | `chat/messages.js` | ~1222 | Message rendering, markdown sanitization, escape paths, `data-action` delegation (2.31.0) |
@@ -442,9 +456,11 @@ ARCHITECTURE.md (source of truth — what you're reading)
 │   └── DESIGN-sub-agents.md     — shipped 2.37.0; gated on Phase 0 audit-sweep + post-2.0
 │
 ├── ICD-*.md (single-subsystem interface contracts — Scale-1.5 per methodology §"Per-subsystem ICD backfill program")
-│   ├── ICD-chat-handlers.md         — chat tool-loop classification axes; target #1 (RE-EVAL following 2.41.0)
+│   ├── ICD-chat-handlers.md          — chat tool-loop classification axes; target #1 (RE-EVAL following 2.41.0)
 │   ├── ICD-intelligence-composers.md — Tools + Retrieval Composer seam; target #2 (RE-EVAL following 2.44.0)
-│   └── ICD-tool-registry.md         — Tool registry admission contract; target #3 (RE-EVAL following 2.46.0)
+│   ├── ICD-tool-registry.md          — Tool registry admission contract; target #3 (RE-EVAL following 2.46.0)
+│   ├── ICD-git-providers.md          — `BASE_GIT_PROVIDER` 55-method surface + 4 providers + circuit breaker; target #4 (RE-EVAL following 2.49.0)
+│   └── ICD-retrieval-manager.md      — Retrieval manager + ingest pipeline + lifecycle + persistence + diagnostics; target #5 (RE-EVAL following 2.52.0)
 │
 ├── discussion/ (pre-architecture; not commitments — cited only as "see discussion/X.md for the thinking")
 │
@@ -461,7 +477,7 @@ Implementation (code under `js/`) derives from DESIGN docs (or directly from a r
 
 Tests run on two tracks:
 
-- **`tests/test-*.mjs`** — pure-logic suites that run under `node --test` (no browser); CI auto-globs and executes them. ~80 suites at 2.41.0 covering retrieval contracts, compression rules, profiles inheritance, tool classifications, event wiring, public channels, modal-registry, hotkey-bindings, storage migration, slot-channel hygiene, inline-handler retirement, etc.
+- **`tests/test-*.mjs`** — pure-logic suites that run under `node --test` (no browser); CI auto-globs and executes them. ~90+ suites at 2.52.0 covering retrieval contracts, compression rules, profiles inheritance, tool classifications, event wiring, public channels, modal-registry, hotkey-bindings, storage migration, slot-channel hygiene, inline-handler retirement, provider capability-shape (2.50.0), chat-tool validation aliases (2.50.0.2), Venice prompt-cache (2.50.0.1), session cut-off reason (2.51.0.1), `read_approved_plan` + plan persistence (2.52.0), etc.
 - **`tests/index.html`** — browser-based suites for code that touches DOM, CodeMirror, or vendor scripts. Manual; not gated by CI.
 
 CI (`.gitea/workflows/ci.yaml`) runs **on every PR and on `main` push**:
