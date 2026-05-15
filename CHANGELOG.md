@@ -4,6 +4,50 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.53.0] - 2026-05-15
+
+### Changed — `resolveTaskLedgerConfig` resolver — clears the last direct CODER_V1 read in the retrieval manager (ICD #5 finding #1)
+
+Adds a fifth `resolve*Config` helper at
+[`js/profiles/resolve.js`](js/profiles/resolve.js) mirroring 1.20.0's
+`resolveRetrievalConfig` byte-for-byte:
+
+```js
+resolveTaskLedgerConfig('coder.v1')
+// → { enabled, capacity, novelty_threshold, profileName }
+```
+
+Backed by [`tests/test-resolve-task-ledger.mjs`](tests/test-resolve-task-ledger.mjs)
+(NEW, 9 cases) — Removability check (`'coder.v1'` field-equal to
+`CODER_V1.task_ledger`), profileName surface-key pin, capacity literal
+pin (500), chat.v1 baseline, kb.v1 deep-merge inheritance check, three
+defensive-fallback paths, and a deep-merge sanity test against future
+inheritance-semantics drift.
+
+[`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)'s
+`findRelevantFiles` Composer call site now reads ledger capacity + the
+ledger's surface key through the resolver; the `import { CODER_V1 }`
+line drops. **After 2.53.0 the retrieval manager has zero direct
+`CODER_V1` imports** — every profile read goes through `resolve.js`.
+
+Closes ICD #5 finding #1 (the **`[strong] [S]`** row promoted from the
+`RE-EVAL following 2.52.0` slot). Findings #2 (typedef widening on
+`ChunkStore`) and #3 (`retrieval:turn-stats` shape-pinning test) remain
+queued — separate slices, mechanical edits but each touches downstream
+references the §"Now / Next / Later" row picks up.
+
+**Files.**
+
+- [`js/profiles/resolve.js`](js/profiles/resolve.js) — `resolveTaskLedgerConfig`
+  added (~45 LOC); module-header comment updated.
+- [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js)
+  — `CODER_V1` import removed; `resolveTaskLedgerConfig` added to the
+  existing `resolve.js` import line; ledger-construction call site
+  rewritten (3 lines + updated comment).
+- [`tests/test-resolve-task-ledger.mjs`](tests/test-resolve-task-ledger.mjs)
+  — NEW.
+- [`js/version.js`](js/version.js) — `'2.52.0'` → `'2.53.0'`.
+
 ### Changed — github#40 paper docs relocated to canonical `docs/discussion/`; six follow-up tickets filed; github#40 closed (doc-only, no version bump)
 
 The three github#40 paper docs (`profiles-pick-tools.md`,

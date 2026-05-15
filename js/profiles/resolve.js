@@ -20,7 +20,12 @@
  * 1.18.0 added `resolveMemoryConfig(profileName)` over the same
  * lookup pattern; 1.19.0 added `resolveTools(profileName)`; 1.20.0
  * adds `resolveRetrievalConfig(profileName)` — the last subsystem
- * rewire of the path-to-2.0.0 arc.
+ * rewire of the path-to-2.0.0 arc. 2.53.0 adds
+ * `resolveTaskLedgerConfig(profileName)` — clears the surviving direct
+ * `CODER_V1.task_ledger.capacity` read at
+ * `js/intelligence/retrieval/manager.js`'s findRelevantFiles call site
+ * (ICD #5 finding #1; the 1.20.0 retrieval rewire explicitly named it
+ * as out-of-slice because task_ledger is its own profile section).
  *
  * @module profiles/resolve
  */
@@ -298,6 +303,50 @@ export function resolveRetrievalConfig(profileName) {
         memory_collections: retrieval.memory_collections ?? [],
         strategy_weights: retrieval.strategy_weights ?? {},
         novelty_threshold: retrieval.novelty_threshold ?? 0.4,
+        profileName: resolved.name,
+    };
+}
+
+/**
+ * Resolve task-ledger config for a given profile. Returns the
+ * `profile.task_ledger` slice — `enabled`, `capacity`, `novelty_threshold`
+ * — sourced from the *resolved* profile (deep-merge of the named profile
+ * on top of its `base` chain).
+ *
+ * Mirrors `resolveRetrievalConfig` byte-for-byte in shape. ICD #5
+ * finding #1: the direct `CODER_V1.task_ledger.capacity` read at
+ * `js/intelligence/retrieval/manager.js`'s findRelevantFiles call site
+ * survived the 1.20.0 retrieval-config rewire because `task_ledger` is
+ * its own profile section, out of slice scope. This resolver clears
+ * that — after 2.53.0 the retrieval manager has no direct `CODER_V1`
+ * imports.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; production callers pass a `Profiles.has`-registered name.
+ *
+ * @param {string|null|undefined} profileName
+ * @returns {{ enabled: boolean, capacity: number, novelty_threshold: number, profileName: string }}
+ */
+export function resolveTaskLedgerConfig(profileName) {
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = Profiles.get(name);
+    const resolved = resolveProfile(leaf, profileLookup);
+    const ledger = resolved.task_ledger || {};
+
+    return {
+        enabled: ledger.enabled === true,
+        capacity: Number.isInteger(ledger.capacity) && ledger.capacity > 0
+            ? ledger.capacity
+            : 100,
+        novelty_threshold: typeof ledger.novelty_threshold === 'number'
+            ? ledger.novelty_threshold
+            : 0.5,
         profileName: resolved.name,
     };
 }

@@ -28,8 +28,7 @@ import { IgnoreManager } from '../../ignore.js';
 import { LLM } from '../../llm/api.js';
 import { ConversationManager } from '../../chat/conversations.js';
 import { getOrCreateLedger } from '../../chat/task-state.js';
-import { CODER_V1 } from '../../profiles/coder-v1.js';
-import { resolveRetrievalConfig } from '../../profiles/resolve.js';
+import { resolveRetrievalConfig, resolveTaskLedgerConfig } from '../../profiles/resolve.js';
 
 import { createInMemoryChunkStore } from './store.js';
 import { createProductionIngestWalker } from './wiring.js';
@@ -668,14 +667,15 @@ async function findRelevantFiles(query, topK = 5) {
         // `js/chat/task-state.js`; coder.v1's capacity (500) and
         // novelty_threshold (0.3) drive sizing and re-admission policy.
         // 1.20.0 — `novelty_threshold` now reads through
-        // `resolveRetrievalConfig` per the path-to-2.0.0 arc. The
-        // `task_ledger.capacity` read at line 654 is the surviving
-        // direct-import use of `CODER_V1`; it clears with a future
-        // `task_ledger` resolver (separate slice — task_ledger is its
-        // own profile section, out of scope for the retrieval rewire).
+        // `resolveRetrievalConfig` per the path-to-2.0.0 arc.
+        // 2.53.0 — `task_ledger.capacity` + the ledger's surface key
+        // now read through `resolveTaskLedgerConfig`; this site no
+        // longer imports `CODER_V1`. Closes ICD #5 finding #1
+        // (`RE-EVAL following 2.52.0`).
         const conversationId = ConversationManager.getActiveId();
-        const ledger = getOrCreateLedger(conversationId, CODER_V1.name, {
-            capacity: (CODER_V1.task_ledger && CODER_V1.task_ledger.capacity) || 500,
+        const taskLedgerCfg = resolveTaskLedgerConfig('coder.v1');
+        const ledger = getOrCreateLedger(conversationId, taskLedgerCfg.profileName, {
+            capacity: taskLedgerCfg.capacity,
         });
         // Embed the query once for cosine novelty scoring. Failure
         // degrades to the Jaccard-only path (consumer handles
