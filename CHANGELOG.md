@@ -4,6 +4,84 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.50.0.1] - 2026-05-15
+
+### Fixed — Anthropic-style prompt-cache breakpoint on Venice requests (gitea#423)
+
+Outgoing Venice chat-completions requests now carry a single
+`cache_control: {type: 'ephemeral'}` breakpoint on the system message
+([`js/providers/venice.js`](js/providers/venice.js) lines 12-26 +
+112-118). Venice's OpenAI-compat API follows Anthropic-style prefix
+caching (see [`swaggers/venice.yaml:112`](swaggers/venice.yaml) and
+the parallel content-block definitions); marking the last system
+message causes the stable `(tools + system)` prefix to cache across
+requests in a session.
+
+**Measured impact.** AAR of a real 918k-token dogfood session against
+`xcaliber/HTML-Games#215` (ai-editor + `qwen-3-6-plus`, 42 requests,
+$0.62 total burn): the Composer-trimmed tool-definitions block sat at
+4,969 tokens × 42 requests = ~209k tokens (~23% of session spend) being
+re-billed every turn on a payload that did not change between requests.
+This fix eliminates that re-bill on cache hits. Cache-hit token tracking
+was already wired through
+[`js/intelligence/cost/usage-shape.js`](js/intelligence/cost/usage-shape.js)
+(`cacheReadTokens` / `cacheCreationTokens` shipped 1.8.5), so the
+savings surface automatically in the existing cost dashboard with no
+new UI.
+
+**Implementation shape.** The transform converts the **last** system
+message's `content` from a string to a one-element content-block array
+`[{ type: 'text', text: <original>, cache_control: { type: 'ephemeral' } }]`.
+A module-local `_attachSystemCacheBreakpoint(messages)` helper handles
+the find-last-system + idempotency + empty-string guards. The summarizer
+case (multiple `role: 'system'` entries from
+[`js/chat/summarizer.js`](js/chat/summarizer.js)) leaves earlier
+"summary part N/M" entries untouched and only marks the live system
+prompt — that boundary still caches every byte above it.
+
+**Scope.** Venice-only this PR; the change lives in
+[`js/providers/venice.js`](js/providers/venice.js) `transformRequest`,
+not in the generic
+[`js/llm/api.js`](js/llm/api.js) `buildRequestBody`. The `cache_control`
+field itself is documented harmless on unsupported providers, but the
+string-to-array `content` shape change is not universally safe (OpenAI
+strict-mode tools and some OpenRouter backends have parsed array content
+inconsistently in the wild). Other providers extend later via the same
+`transformRequest` seam.
+
+**Opt-out.** Gated by a new
+`veniceParameters.enablePromptCache` setting (default ON, surfaced in
+Settings → Provider → Venice → "Prompt caching"). The toggle costs ~7
+lines of schema and gives a one-click rollback if a future Venice model
+rejects the shape.
+
+### Tests
+
+[`tests/test-venice-prompt-cache.mjs`](tests/test-venice-prompt-cache.mjs)
+**NEW** — 7 subtests pin the transform: default-on shape, explicit
+opt-out, idempotency (no double-wrap), no-system pass-through,
+empty-system no-op, multi-system (summarizer case) marks only the last
+entry, and `BASE_PROVIDER.transformRequest` is a no-op (pins the
+per-provider scoping so a future "let's globalize this" regression
+trips the suite).
+
+### Versioning
+
+`js/version.js` bumped `2.50.0` → `2.50.0.1`. Sub-patch off 2.50.0
+per [`VERSIONING.md`](docs/VERSIONING.md) X.Y.Z.N convention — mirrors
+the 2.48.0.1 file-edit-tool-surface patch-band precedent (small fix
+following a recent minor, testable on a single merge, no scope creep).
+Tag-gate does **not** fire for `X.Y.Z.N` sub-patches; the next release
+tag waits for the next code minor.
+
+### Out-of-scope — sibling AAR issues stay separate
+
+The same dogfood session produced gitea#421 (read→read cache stub),
+gitea#422 (required-params not surfaced in descriptions), gitea#424
+(plan-mode body inlining), gitea#425 (telemetry cutoff reason), and
+gitea#426 (tool-discovery thrashing). Each stays in its own PR; this
+slice ships clean against a tight verification surface.
+
 ## [2.50.0] - 2026-05-14
 
 ### ICD #4 code-aware findings — `getCommitDiff` base-promotion + provider capabilities-shape test

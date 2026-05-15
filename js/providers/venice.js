@@ -9,6 +9,25 @@
 
 import { DEFAULT_CAPABILITIES } from './registry.js';
 
+// gitea#423 — find the last system message and mark its content with
+// `cache_control: {type: 'ephemeral'}`. Venice follows Anthropic-style
+// prefix caching: marking the system message caches the entire
+// (tools + system) prefix above it, so the ~5k tool-defs prefix
+// stops being re-billed every request.
+function _attachSystemCacheBreakpoint(messages) {
+    let lastSystemIdx = -1;
+    for (let i = 0; i < messages.length; i++) {
+        if (messages[i]?.role === 'system') lastSystemIdx = i;
+    }
+    if (lastSystemIdx === -1) return;
+    const sys = messages[lastSystemIdx];
+    if (Array.isArray(sys.content)) return;
+    if (typeof sys.content !== 'string' || sys.content.length === 0) return;
+    sys.content = [
+        { type: 'text', text: sys.content, cache_control: { type: 'ephemeral' } }
+    ];
+}
+
 export default {
     id: 'venice',
     name: 'Venice.ai',
@@ -111,6 +130,13 @@ export default {
         // Reasoning effort (top-level param for Venice reasoning models)
         if (adv.reasoning_effort) {
             requestBody.reasoning_effort = adv.reasoning_effort;
+        }
+
+        // gitea#423 — Anthropic-style prompt-cache breakpoint.
+        // Marks the end of the system message so Venice caches the
+        // (tools + system) prefix across requests in a session.
+        if ((vp.enablePromptCache ?? true) && Array.isArray(requestBody.messages)) {
+            _attachSystemCacheBreakpoint(requestBody.messages);
         }
 
         return requestBody;
@@ -245,6 +271,12 @@ export default {
             label: 'Venice System Prompt',
             default: true,
             description: 'Include Venice default system prompt'
+        },
+        enablePromptCache: {
+            type: 'boolean',
+            label: 'Prompt caching',
+            default: true,
+            description: 'Mark the system prompt with cache_control so Venice caches the tools+system prefix across requests. Typical saving 20–25% on long sessions (gitea#423).'
         }
     }
 };
