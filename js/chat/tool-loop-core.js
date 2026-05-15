@@ -26,7 +26,13 @@
 import { executeToolCall, parseTextToolCalls } from './tools.js';
 import { enrichToolResultTurn } from './turn-enrich.js';
 import { validateAndCleanHistory } from './history-validator.js';
-import { invalidateCachesForPath, invalidateCachesForPreviewMutation, findMatchingCrossRequestEntry } from './cache-invalidation.js';
+import {
+    invalidateCachesForPath,
+    invalidateCachesForPreviewMutation,
+    findMatchingCrossRequestEntry,
+    buildToolActionLogEntry,
+    buildCrossRequestCacheResult,
+} from './cache-invalidation.js';
 import {
     WRITE_TOOLS,
     MUTATING_TOOLS,
@@ -371,14 +377,10 @@ export async function runToolLoop(context, hooks, transport) {
                         toolName,
                         args,
                     });
-                    const summary = lastEntry?.resultSummary || 'unknown';
-                    toolResult = {
-                        _cached: true,
-                        _cache_note: MUTATING_TOOLS.includes(toolName)
-                            ? `[Your prior ${toolName} call already SUCCEEDED earlier in this conversation. Outcome: ${summary}. The mutation has happened — treat the prior result as authoritative and continue. Do not retry to confirm; that would re-attempt the mutation or loop on this same cache.]`
-                            : `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${summary}. Do NOT call this tool again with the same args.]`,
-                        error: null
-                    };
+                    toolResult = buildCrossRequestCacheResult({ toolName, lastEntry, MUTATING_TOOLS });
+                    if (lastEntry?.result) {
+                        console.log(`[TOOL-LOOP] Cross-request cache hit (full payload) for ${toolName}`);
+                    }
                 } else if (cachedResult && !skipCache && !WRITE_TOOLS.includes(toolName)) {
                     toolResult = {
                         ...cachedResult,
@@ -486,13 +488,14 @@ export async function runToolLoop(context, hooks, transport) {
                 });
 
                 const resultSummary = summarizeToolResult(toolName, toolResult);
-                context.toolActionLog.push({
-                    tool: toolName,
+                context.toolActionLog.push(buildToolActionLogEntry({
+                    toolName,
                     args: summarizeArgs(args),
+                    toolResult,
                     resultSummary,
-                    timestamp: Date.now(),
-                    success: !toolResult?.error
-                });
+                    WRITE_TOOLS,
+                    STATEFUL_READ_TOOLS,
+                }));
                 // Bound the log to 50 entries. Splice in place so the
                 // injected reference (wrapper: `State.toolActionLog`)
                 // keeps pointing at the same array.

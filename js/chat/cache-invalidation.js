@@ -142,6 +142,115 @@ export function findMatchingCrossRequestEntry({ toolActionLog, toolName, args, l
 }
 
 /**
+ * Per-entry cap on the persisted `result` payload (post-`JSON.stringify`).
+ *
+ * 64 KB × 50 entries = ~3.2 MB max in the cross-request log, well under IDB
+ * practical limits and small enough that a long-running session won't bloat
+ * the conversation save path. Oversized results fall back to the legacy
+ * summary-stub envelope at the read site.
+ */
+export const TOOL_ACTION_LOG_RESULT_CAP_BYTES = 64000;
+
+/**
+ * Build a `toolActionLog` entry for a just-executed tool call, optionally
+ * carrying the full `result` payload so cross-request dup-cache hits can
+ * return real data (gitea#421).
+ *
+ * Before this helper, the entry held only `resultSummary` (a short string
+ * like `"189 lines"`). The cross-request branch at the read site could
+ * therefore only return a stub envelope — the model was told "you already
+ * called this" but never given the data back, so it pivoted (often
+ * wasting 2-3 requests before `DUP_REFUSE_THRESHOLD` fired).
+ *
+ * The `result` field is gated to non-write, non-stateful-read tools so:
+ *  - Write tools (`edit_file`, `create_file`, etc.) never serve cached
+ *    results — every retry must re-execute or hit the refusal branch.
+ *  - Stateful reads (`read_current_file`, `ask_user`) depend on hidden
+ *    State and must not be cached cross-request.
+ *
+ * Pure: no module-level state, no globals. Caller supplies the
+ * classification sets so the helper doesn't reach into `tool-classifications.js`
+ * (avoids a load-time cycle with `tool-loop-core.js`).
+ *
+ * @param {object} params
+ * @param {string} params.toolName              Just-executed tool.
+ * @param {object} params.args                  Already-summarized args (caller passes `summarizeArgs(args)`).
+ * @param {object} params.toolResult            Raw tool result object.
+ * @param {string} params.resultSummary         Already-built short summary string.
+ * @param {readonly string[]} params.WRITE_TOOLS
+ * @param {readonly string[]} params.STATEFUL_READ_TOOLS
+ * @param {number} [params.maxResultBytes]      Override the default 64 KB cap (tests).
+ * @returns {{tool:string, args:object, resultSummary:string, timestamp:number, success:boolean, result?:object}}
+ */
+export function buildToolActionLogEntry({
+    toolName,
+    args,
+    toolResult,
+    resultSummary,
+    WRITE_TOOLS,
+    STATEFUL_READ_TOOLS,
+    maxResultBytes = TOOL_ACTION_LOG_RESULT_CAP_BYTES,
+}) {
+    const entry = {
+        tool: toolName,
+        args,
+        resultSummary,
+        timestamp: Date.now(),
+        success: !toolResult?.error,
+    };
+    const canPersist = !toolResult?.error
+        && Array.isArray(WRITE_TOOLS) && !WRITE_TOOLS.includes(toolName)
+        && Array.isArray(STATEFUL_READ_TOOLS) && !STATEFUL_READ_TOOLS.includes(toolName);
+    if (canPersist) {
+        try {
+            const serialized = JSON.stringify(toolResult);
+            if (serialized && serialized.length <= maxResultBytes) {
+                entry.result = toolResult;
+            }
+        } catch (_) {
+            // Circular reference or non-serializable result — skip persistence.
+            // The summary stub branch at the read site will still fire as a fallback.
+        }
+    }
+    return entry;
+}
+
+/**
+ * Build the `toolResult` envelope returned by the cross-request dup-cache
+ * branch — full payload when `lastEntry.result` is present, summary stub
+ * otherwise (legacy entries pre-dating `buildToolActionLogEntry`, oversized
+ * results, write tools).
+ *
+ * Companion to {@link buildToolActionLogEntry} and {@link findMatchingCrossRequestEntry}.
+ *
+ * @param {object} params
+ * @param {string} params.toolName
+ * @param {object|undefined} params.lastEntry   Result of `findMatchingCrossRequestEntry`.
+ * @param {readonly string[]} params.MUTATING_TOOLS
+ * @returns {object}
+ */
+export function buildCrossRequestCacheResult({ toolName, lastEntry, MUTATING_TOOLS }) {
+    const isMutating = Array.isArray(MUTATING_TOOLS) && MUTATING_TOOLS.includes(toolName);
+    if (lastEntry && lastEntry.result) {
+        return {
+            ...lastEntry.result,
+            _cached: true,
+            _cache_note: isMutating
+                ? `[Your prior ${toolName} call already SUCCEEDED — the result above is from that call. The mutation has happened; do not retry to confirm.]`
+                : `[Cached across requests — same ${toolName} call with identical arguments. Data above is from the prior call; it is still current (no mutation invalidated it).]`,
+        };
+    }
+    const summary = lastEntry?.resultSummary || 'unknown';
+    return {
+        _cached: true,
+        _cache_note: isMutating
+            ? `[Your prior ${toolName} call already SUCCEEDED earlier in this conversation. Outcome: ${summary}. The mutation has happened — treat the prior result as authoritative and continue. Do not retry to confirm; that would re-attempt the mutation or loop on this same cache.]`
+            : `[You already called ${toolName} with these arguments earlier in this conversation. The result was: ${summary}. Do NOT call this tool again with the same args.]`,
+        error: null,
+    };
+}
+
+/**
  * Invalidate cached preview reads when a preview-surface mutator runs.
  *
  * github#39 — `preview_stop` tears down the preview server, but the

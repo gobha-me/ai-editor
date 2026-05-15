@@ -4,6 +4,90 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.50.0.3] - 2026-05-15
+
+### Fixed — Cross-request read-cache returns full payload instead of useless stub (gitea#421)
+
+Repeat reads of an unchanged file across separate requests in the same
+conversation now return the actual file content from
+[`State.toolActionLog`](js/chat/tool-loop-core.js), not the truncated
+~150-char `_cache_note` preview the harness had been emitting since
+the action-log was introduced. Companion to gitea#301 (1.7.1): that
+fix invalidated the cache after a mutation; this fix preserves it
+when no mutation occurred.
+
+**Why the regression existed.** The cross-request dup-cache branch at
+[`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) built its
+envelope from `entry.resultSummary` only — the action-log never
+stored the full result, so the in-memory `cachedResult` branch (which
+DOES return real data) was unreachable across requests by
+construction. The model was told "you already called this — do not
+retry" but never given the data back, so it pivoted: usually to a
+`read_lines` with a guessed range, or to a new tool. Each pivot cost
+a request. After three identical calls the existing
+`DUP_REFUSE_THRESHOLD = 3` short-circuit fired, but the two
+intermediate stub returns left the model in a degraded state.
+
+**Measured impact.** AAR of the 2026-05-14 HTML-Games dogfood
+session (ai-editor + `qwen-3-6-plus`, 42 requests, $0.62 burn,
+918k tokens): ~5 requests / ~100k tokens / ~$0.07 were spent
+recovering from this surface for `read_file` / `read_lines` /
+`get_project_tree` calls. This fix eliminates the surface — repeat
+reads succeed silently with the cached payload and a `_cache_note`
+flag for transparency.
+
+**Implementation shape.** Extends each `toolActionLog` entry with an
+optional `result` field, populated when:
+- the tool succeeded (`!toolResult?.error`)
+- the tool is NOT in
+  [`WRITE_TOOLS`](js/chat/tool-classifications.js) (every write
+  must re-execute or hit the refusal branch — never silently cached)
+- the tool is NOT in
+  [`STATEFUL_READ_TOOLS`](js/chat/tool-classifications.js) (result
+  depends on hidden State; cross-request caching would be wrong)
+- the serialized payload is ≤ **64 KB** (per-entry cap; 50-entry
+  log × 64 KB = ~3.2 MB ceiling on the cross-request log,
+  comfortable under IDB practical limits)
+
+When all four gates pass, the read site at
+[`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) reads
+`lastEntry.result` and returns the full payload with a
+`_cached: true` envelope; when any gate fails (legacy entries
+predating this change, oversized results, errored calls), the
+legacy summary-stub envelope still fires as a safe fallback.
+
+The two pure helpers
+([`buildToolActionLogEntry`](js/chat/cache-invalidation.js),
+[`buildCrossRequestCacheResult`](js/chat/cache-invalidation.js))
+were hoisted next to the existing
+[`findMatchingCrossRequestEntry`](js/chat/cache-invalidation.js)
+so the cross-request cache mechanics live in one file.
+
+**Cache-invalidation participation.** The existing
+[`invalidateCachesForPath`](js/chat/cache-invalidation.js) and
+[`invalidateCachesForPreviewMutation`](js/chat/cache-invalidation.js)
+helpers rebuild the array from `kept` entries — the new `result`
+field rides along on retained entries, drops with evicted ones. No
+new invalidation paths are needed; the gitea#301 ↔ #421 interaction
+is covered by a regression test.
+
+### Tests
+
+[`tests/test-tool-loop-core-cache.mjs`](tests/test-tool-loop-core-cache.mjs)
+covers 16 subtests across:
+- `buildToolActionLogEntry` gating (read-family persists; WRITE_TOOLS,
+  STATEFUL_READ_TOOLS, errors, oversized, non-serializable all skip).
+- `buildCrossRequestCacheResult` (full-payload path, legacy stub
+  fallback, MUTATING_TOOLS phrasing, undefined-entry safety).
+- End-to-end shape: read → log → match → cache-result returns the
+  real payload (not a stub).
+- gitea#301 ↔ #421 regression: `invalidateCachesForPath` drops the
+  `result` along with the entry on mutation.
+
+#### Version
+
+`js/version.js` bumped `2.50.0.2 → 2.50.0.3` per `feedback_version_bump`.
+
 ## [2.50.0.2] - 2026-05-15
 
 ### In-track patch — tool-surface UX (gitea#422)
