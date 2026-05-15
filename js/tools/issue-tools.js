@@ -141,7 +141,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'read_issue',
-            description: 'Read a specific issue by number, including its body, labels, and comments.',
+            description: '**Required:** number. Read a specific issue by number, including its body, labels, and comments.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -182,7 +182,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'create_issue',
-            description: 'Create a new issue in the current project.',
+            description: '**Required:** title. Create a new issue in the current project.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -236,7 +236,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'update_issue',
-            description: 'Update issue METADATA only: title, state (open/close), or labels. This does NOT add content to the issue — to post an update, response, or any new information on an issue, use add_issue_comment instead.',
+            description: '**Required:** number. Update issue METADATA only: title, state (open/close), or labels. This does NOT add content to the issue — to post an update, response, or any new information on an issue, use add_issue_comment instead.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -288,7 +288,7 @@ export function registerIssueTools(registry) {
         type: 'function',
         function: {
             name: 'add_issue_comment',
-            description: 'Post a comment on an issue. Use this to add updates, responses, analysis, questions, status reports, or any new content to an existing issue. This is the correct tool whenever you want to contribute information to an issue — update_issue only changes metadata.',
+            description: '**Required:** number, body. Post a comment on an issue. Use this to add updates, responses, analysis, questions, status reports, or any new content to an existing issue. This is the correct tool whenever you want to contribute information to an issue — update_issue only changes metadata.',
             parameters: {
                 type: 'object',
                 properties: {

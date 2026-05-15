@@ -248,7 +248,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'scan_file',
-            description: 'Get file outline (functions, classes, exports) without reading full content. Use this BEFORE read_file to understand file structure. Returns line numbers, names, and signatures. Saves 97% tokens vs reading full file.',
+            description: '**Required:** path. Get file outline (functions, classes, exports) without reading full content. Use this BEFORE read_file to understand file structure. Returns line numbers, names, and signatures. Saves 97% tokens vs reading full file.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -343,7 +343,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'read_function',
-            description: 'Read just one function/class by name from a file. Much more efficient than reading entire file. Use scan_file first to find function names and locations. Saves 89% tokens vs reading full file.',
+            description: '**Required:** name, path. Read just one function/class by name from a file. Much more efficient than reading entire file. Use scan_file first to find function names and locations. Saves 89% tokens vs reading full file.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -478,7 +478,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'find_references',
-            description: 'Find all definitions and usages of a function/variable/class. Returns line numbers and context. Searches up to max_files (default 30) and returns up to max_references (default 100). Use scope parameter to narrow search.',
+            description: '**Required:** symbol. Find all definitions and usages of a function/variable/class. Returns line numbers and context. Searches up to max_files (default 30) and returns up to max_references (default 100). Use scope parameter to narrow search.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -573,7 +573,7 @@ export function registerScanTools(registry) {
         type: 'function',
         function: {
             name: 'read_lines',
-            description: 'Read specific line range from a file. Buffer-aware: prefers the active editor buffer, then any open tab\'s saved content (so dirty edits made via prior edit_file calls on other tabs are visible), then falls back to the remote repository. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
+            description: '**Required:** path, start_line, end_line. Read specific line range from a file. Buffer-aware: prefers the active editor buffer, then any open tab\'s saved content (so dirty edits made via prior edit_file calls on other tabs are visible), then falls back to the remote repository. Perfect for examining code around a reference found by find_references or scan_file. Much more efficient than reading entire file.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -583,11 +583,11 @@ export function registerScanTools(registry) {
                     },
                     start_line: {
                         type: 'integer',
-                        description: 'First line to read (1-indexed)'
+                        description: 'First line to read (1-indexed). Also accepts: start.'
                     },
                     end_line: {
                         type: 'integer',
-                        description: 'Last line to read (1-indexed)'
+                        description: 'Last line to read (1-indexed). Also accepts: end.'
                     },
                     context_lines: {
                         type: 'integer',

@@ -105,7 +105,7 @@ export function registerEditTools(registry) {
         type: 'function',
         function: {
             name: 'replace_lines',
-            description: 'Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed. Do NOT include a trailing newline in new_content.',
+            description: '**Required:** start_line, end_line, new_content. Replace specific lines in the current file. Use this for targeted edits instead of replacing the whole file. Line numbers are 1-indexed. Do NOT include a trailing newline in new_content.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -178,7 +178,7 @@ export function registerEditTools(registry) {
         type: 'function',
         function: {
             name: 'insert_lines',
-            description: 'Insert new lines at a specific position in the current file without replacing existing content.',
+            description: '**Required:** after_line, content. Insert new lines at a specific position in the current file without replacing existing content.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -248,7 +248,7 @@ export function registerEditTools(registry) {
         type: 'function',
         function: {
             name: 'delete_lines',
-            description: 'Delete specific lines from the current file.',
+            description: '**Required:** start_line, end_line. Delete specific lines from the current file.',
             parameters: {
                 type: 'object',
                 properties: {

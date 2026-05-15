@@ -83,13 +83,13 @@ export function registerSearchTools(registry) {
         type: 'function',
         function: {
             name: 'search_in_files',
-            description: 'Search for text across project files. Returns compact snippets with line numbers. Use read_lines to see full context around matches. Efficient for finding functions, variables, strings, or patterns.',
+            description: '**Required:** query. Search for text across project files. Returns compact snippets with line numbers. Use read_lines to see full context around matches. Efficient for finding functions, variables, strings, or patterns.',
             parameters: {
                 type: 'object',
                 properties: {
                     query: {
                         type: 'string',
-                        description: 'Text to search for (case-insensitive)'
+                        description: 'Text to search for (case-insensitive). Also accepts: pattern, text.'
                     },
                     path: {
                         type: 'string',

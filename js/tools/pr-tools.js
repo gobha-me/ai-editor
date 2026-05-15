@@ -243,7 +243,7 @@ export function registerPRTools(registry) {
         type: 'function',
         function: {
             name: 'read_pull_request',
-            description: 'Read full details of a pull request including: description, changed files with diffs, CI/CD status, and review comments. Use this to review code changes, check CI failures, or understand what a PR does.',
+            description: '**Required:** number. Read full details of a pull request including: description, changed files with diffs, CI/CD status, and review comments. Use this to review code changes, check CI failures, or understand what a PR does.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -286,7 +286,7 @@ export function registerPRTools(registry) {
         type: 'function',
         function: {
             name: 'add_pr_review',
-            description: 'Post a review comment on a pull request. Use this to provide code review feedback, approve changes, or request modifications. The comment is posted as a general PR comment (not line-level).',
+            description: '**Required:** number, body. Post a review comment on a pull request. Use this to provide code review feedback, approve changes, or request modifications. The comment is posted as a general PR comment (not line-level).',
             parameters: {
                 type: 'object',
                 properties: {

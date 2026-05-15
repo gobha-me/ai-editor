@@ -134,7 +134,7 @@ export function registerFileTools(registry) {
         type: 'function',
         function: {
             name: 'read_file',
-            description: 'Read the content of a specific file without opening it in the editor. Large files (200+ lines) are truncated by default — use full=true to read complete file, or use read_lines for specific sections.',
+            description: '**Required:** path. Read the content of a specific file without opening it in the editor. Large files (200+ lines) are truncated by default — use full=true to read complete file, or use read_lines for specific sections.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -191,7 +191,7 @@ export function registerFileTools(registry) {
         type: 'function',
         function: {
             name: 'open_file',
-            description: 'Open a specific file from the project in the editor',
+            description: '**Required:** path. Open a specific file from the project in the editor.',
             parameters: {
                 type: 'object',
                 properties: {

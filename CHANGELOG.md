@@ -4,6 +4,120 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.50.0.2] - 2026-05-15
+
+### In-track patch — tool-surface UX (gitea#422)
+
+Second in-track patch off 2.50.0 — same AAR cohort as 2.50.0.1 (gitea#423,
+which shipped the Venice prompt-cache breakpoint earlier today). The
+2026-05-14 `qwen-3-6-plus` session against `xcaliber/HTML-Games#215` ran
+~42 requests at $0.62; in that single run, three tools each cost the model
+an extra round-trip because they were called without a required param the
+description didn't advertise:
+
+| Tool | Required param model omitted | What model tried | Wasted reqs |
+|---|---|---|---|
+| `create_file` | `message` (commit msg) | `{path, content}` | 1 |
+| `read_lines` | `start_line`, `end_line` | `{path, start, end}` | 1 |
+| `search_in_files` | `query` | `{pattern, scope}` | 1 |
+
+Three composable fixes, mirroring the 2.48.0.1 / gitea#415 shape:
+
+#### Added — tool-agnostic alias map at the validator
+
+[`js/chat/tools.js`](js/chat/tools.js). New `TOOL_PARAM_ALIASES` frozen
+export adjacent to `REQUIRED_TOOL_PARAMS` covering the dominant cross-SDK
+priors: `start`→`start_line`, `end`→`end_line`, `startLine`/`endLine` →
+the same, `pattern`→`query`, `text`→`query`, `file_path`/`filepath` →
+`path`. New `applyAliasesAndDefaults(args)` pure function rewrites alias
+keys to canonical names; called in `executeToolCall` *before*
+`validateToolParameters`. Each rewrite logs once via `console.info` at
+`[ToolValidation] aliased <tool>: <alias>→<canonical>` so a sweep of
+session logs reveals which priors keep biting. If both an alias and its
+canonical are present, the canonical wins and the alias is dropped
+silently (not a misuse — just a redundant key).
+
+Flat (tool-agnostic) is safe by invariant: no tool in
+`REQUIRED_TOOL_PARAMS` uses both an alias key and its canonical target.
+The invariant is pinned by `tests/test-chat-tools-validation-aliases.mjs`
+so a future schema change that violates it surfaces as a test failure.
+
+#### Added — `**Required:** ...` description prefix on every classified tool
+
+All 18 tools listed in `REQUIRED_TOOL_PARAMS` now lead their `description`
+field with `**Required:** <comma-separated-required-params>.` (e.g.
+`**Required:** path, start_line, end_line. Read specific line range from
+a file. …`). Tools with optional defaults documented inline: `create_file`
+adds `**Optional:** message (defaults to "Create <path>")`, `delete_file`
+the same for "Delete". The model now sees the required-set in the same
+place it reads the prose, before it constructs args from training-data
+priors.
+
+Files touched:
+[`js/tools/project-tools.js`](js/tools/project-tools.js) (`create_file`,
+`delete_file`),
+[`js/tools/scan-tools.js`](js/tools/scan-tools.js) (`read_lines`,
+`scan_file`, `read_function`, `find_references`; `start_line`/`end_line`
+property descriptions also annotated with `Also accepts: start`/`end`),
+[`js/tools/file-tools.js`](js/tools/file-tools.js) (`read_file`,
+`open_file`),
+[`js/tools/search-tools.js`](js/tools/search-tools.js) (`search_in_files`;
+`query.description` annotated `Also accepts: pattern, text`),
+[`js/tools/edit-tools.js`](js/tools/edit-tools.js) (`replace_lines`,
+`insert_lines`, `delete_lines`),
+[`js/tools/issue-tools.js`](js/tools/issue-tools.js) (`read_issue`,
+`create_issue`, `update_issue`, `add_issue_comment`),
+[`js/tools/pr-tools.js`](js/tools/pr-tools.js) (`read_pull_request`,
+`add_pr_review`).
+
+#### Fixed — `create_file` validator-handler contract collapse
+
+[`js/chat/tools.js:33`](js/chat/tools.js). `REQUIRED_TOOL_PARAMS['create_file']`
+listed `['path', 'content', 'message']`, but the JSON schema at
+[`js/tools/project-tools.js:204`](js/tools/project-tools.js) already
+declared only `['path', 'content']` required, the description advertised
+`message` as optional, and the handler at
+[`js/tools/project-tools.js:171`](js/tools/project-tools.js) defaulted to
+`Create <path>` when missing. Validator was stricter than the tool's own
+schema, costing a round-trip when the model omitted `message`. Validator
+required-list collapsed to `['path', 'content']`, aligning all three
+contracts. Handler default already in place mirrors `delete_file` at
+[line 229](js/tools/project-tools.js).
+
+#### Tests
+
+[`tests/test-chat-tools-validation-aliases.mjs`](tests/test-chat-tools-validation-aliases.mjs)
+(NEW) — 17 subtests covering alias rewriting for each tool that prompted
+gitea#422, canonical-wins-over-alias semantics, defensive handling of
+null/undefined args, three alias-map invariants (every alias targets a
+real canonical, no canonical is also an alias key, no chained rewrites),
+and a regression guard that `edit_file` wrong-shape inputs survive alias
+rewrite untouched so [`js/tools/multifile-tools.js#_detectWrongShape`](js/tools/multifile-tools.js)
+keeps firing as before.
+
+[`tests/test-tool-description-required-prefix.mjs`](tests/test-tool-description-required-prefix.mjs)
+(NEW) — pinning test, same idiom as
+[`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs)
+(source-scan + regex extraction). Iterates `REQUIRED_TOOL_PARAMS` and
+asserts each tool's description starts with the exact
+`**Required:** <param-list>.` clause. A future description rewrite that
+drops the prefix surfaces as a test failure.
+
+[`tests/test-chat-tools-validation-message.mjs`](tests/test-chat-tools-validation-message.mjs) —
+one new subtest asserting `create_file({path, content})` validates clean
+(no `message` required).
+
+#### Roadmap admin
+
+Four AAR-cohort siblings remain candidates for future in-track patches
+or the next code minor: gitea#421 (read-cache stub), #424 (plan-mode
+inlines deliverable content), #425 (session cut-off reason not surfaced),
+#426 (tool-discovery TOC). #423 closed at 2.50.0.1 and #422 closes here.
+
+#### Version
+
+`js/version.js` bumped `2.50.0.1 → 2.50.0.2` per `feedback_version_bump`.
+
 ## [2.50.0.1] - 2026-05-15
 
 ### Fixed — Anthropic-style prompt-cache breakpoint on Venice requests (gitea#423)

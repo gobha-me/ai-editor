@@ -30,7 +30,7 @@ function getErrorLogger() {
  * "let it through" path.
  */
 export const REQUIRED_TOOL_PARAMS = Object.freeze({
-    'create_file': ['path', 'content', 'message'],
+    'create_file': ['path', 'content'],
     'delete_file': ['path'],
     'replace_lines': ['start_line', 'end_line', 'new_content'],
     'insert_lines': ['after_line', 'content'],
@@ -49,6 +49,65 @@ export const REQUIRED_TOOL_PARAMS = Object.freeze({
     'read_function': ['name', 'path'],
     'find_references': ['symbol'],
 });
+
+/**
+ * Tool-agnostic alias map for common param-name near-misses (gitea#422).
+ *
+ * Models drawing on training-data priors call `read_lines` with `start`/`end`
+ * (grep/slice convention) instead of `start_line`/`end_line`, or
+ * `search_in_files` with `pattern` (grep convention) instead of `query`. Each
+ * miss costs a round-trip even though the tool is correctly chosen. The fix
+ * direction in the issue is "accept common aliases at the validator"; this
+ * map is the implementation. Applied via `applyAliasesAndDefaults` before
+ * `validateToolParameters` runs.
+ *
+ * Invariant — flat (tool-agnostic) is safe iff no tool has both an alias key
+ * and its canonical target in its own required-params set. Pinned by
+ * `tests/test-chat-tools-validation-aliases.mjs`.
+ */
+export const TOOL_PARAM_ALIASES = Object.freeze({
+    start: 'start_line',
+    end: 'end_line',
+    startLine: 'start_line',
+    endLine: 'end_line',
+    pattern: 'query',
+    text: 'query',
+    file_path: 'path',
+    filepath: 'path',
+});
+
+/**
+ * Rewrite alias keys to canonical names. Pure; does not mutate input.
+ *
+ * Returns `{args, aliasesUsed}` so callers (and tests) can observe what got
+ * rewritten. `aliasesUsed` entries are formatted `'<alias>→<canonical>'` for
+ * logging; the empty array means no rewrite happened.
+ *
+ * If both an alias and its canonical name appear in the input, the canonical
+ * wins and the alias is dropped (model already used the right name; treat
+ * the alias as a stray).
+ *
+ * @param {Record<string, any>} args
+ * @returns {{args: Record<string, any>, aliasesUsed: string[]}}
+ */
+export function applyAliasesAndDefaults(args) {
+    if (!args || typeof args !== 'object') return { args: args || {}, aliasesUsed: [] };
+    const out = {};
+    const aliasesUsed = [];
+    for (const key of Object.keys(args)) {
+        const canonical = TOOL_PARAM_ALIASES[key];
+        if (canonical && !(canonical in args)) {
+            out[canonical] = args[key];
+            aliasesUsed.push(`${key}→${canonical}`);
+        } else if (canonical && canonical in args) {
+            // Canonical already present; drop the stray alias. Don't log —
+            // not a misuse, just a redundant key.
+        } else {
+            out[key] = args[key];
+        }
+    }
+    return { args: out, aliasesUsed };
+}
 
 /**
  * Validate that required parameters are present and non-empty.
@@ -106,6 +165,17 @@ export async function executeToolCall(toolCall, profileName = null) {
             const msg = `Invalid JSON in tool arguments: ${(toolCall.function?.arguments || '').slice(0, 200)}`;
             _logToolError(toolName, null, msg);
             return { error: msg };
+        }
+
+        // Rewrite common alias keys before validation (gitea#422).
+        // `start`→`start_line`, `pattern`→`query`, etc. Tool-agnostic; safe
+        // by invariant (see TOOL_PARAM_ALIASES doc). Each rewrite is logged
+        // once at INFO so a sweep of `[ToolValidation] aliased` lines shows
+        // which priors keep biting.
+        const { args: aliased, aliasesUsed } = applyAliasesAndDefaults(args);
+        args = aliased;
+        if (aliasesUsed.length > 0) {
+            console.info(`[ToolValidation] aliased ${toolName}: ${aliasesUsed.join(', ')}`);
         }
 
         // Normalize file paths — LLMs often add leading slashes

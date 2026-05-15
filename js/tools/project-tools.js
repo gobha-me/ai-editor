@@ -184,7 +184,7 @@ export function registerProjectTools(registry) {
         type: 'function',
         function: {
             name: 'create_file',
-            description: 'Create a new file in the project repository. Commits directly to the current branch. Intermediate directories are created automatically.',
+            description: '**Required:** path, content. **Optional:** message (defaults to "Create <path>"). Create a new file in the project repository. Commits directly to the current branch. Intermediate directories are created automatically.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -261,7 +261,7 @@ export function registerProjectTools(registry) {
         type: 'function',
         function: {
             name: 'delete_file',
-            description: 'Delete a file from the project repository. Commits the deletion directly to the current branch.',
+            description: '**Required:** path. **Optional:** message (defaults to "Delete <path>"). Delete a file from the project repository. Commits the deletion directly to the current branch.',
             parameters: {
                 type: 'object',
                 properties: {

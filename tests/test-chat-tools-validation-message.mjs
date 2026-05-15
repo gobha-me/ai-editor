@@ -44,6 +44,16 @@ test('create_file missing `content` produces same shape (sanity for non-read_lin
     assert.deepEqual(result.missingParams, ['content']);
 });
 
+// gitea#422 — `message` was previously listed as required in
+// REQUIRED_TOOL_PARAMS even though the JSON schema declares only `path,
+// content` required and the handler defaults `message` to `"Create <path>"`.
+// Validator was stricter than the tool's own schema, costing a round-trip
+// when the model omitted `message`. Validator now aligned with the schema.
+test('create_file: missing `message` is no longer a validation error (handler defaults it)', () => {
+    const result = validateToolParameters('create_file', { path: 'x.md', content: 'hi' });
+    assert.equal(result, null, 'create_file should validate clean without an explicit message');
+});
+
 test('valid args return null (no false-positive validation error)', () => {
     const result = validateToolParameters('read_lines', {
         path: 'js/app.js',
