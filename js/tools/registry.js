@@ -1,7 +1,13 @@
 // @ts-check
 /**
  * AI Editor - Tool Registry
- * Dynamic tool registration system for LLM function calling with role-based access control
+ * Dynamic tool registration system for LLM function calling.
+ *
+ * Admission is profile-side (gitea#438 / 2.54.0). Tools no longer carry
+ * a `roles:` field; profiles enumerate the tool names they admit in
+ * `tools.admit`, and `Profiles.filterTools` matches by name (with
+ * `'<prefix>__*'` glob support for MCP). The registry only stores the
+ * definition + handler; it does not gate.
  *
  * @module tools/registry
  */
@@ -17,9 +23,8 @@
  * @typedef {Object} ToolDefinition
  * @property {'function'}         type
  * @property {ToolFunctionSchema} function
- * @property {string|string[]}    roles            - 'all' or array of role IDs
- * @property {string[]}           [_registeredRoles] - Normalized role array (set at registration)
  * @property {boolean}            [readOnly]        - True if the tool reads only and never mutates files / repo / persistent state. Used by Plan Mode (github#25) to filter the LLM's tool catalog. Default: undefined ⇒ treated as mutating (safe default — opt-in to read-only).
+ * @property {string}             [category]        - Category id used by the catalog adapter (e.g. `'mcp.<serverId>'`).
  */
 
 /**
@@ -51,69 +56,29 @@ export const ToolRegistry = {
      * Register a tool with its handler and definition.
      * @param {string} name
      * @param {ToolHandler} handler
-     * @param {Object} definition - OpenAI function definition with roles metadata
-     * @param {string|string[]} definition.roles - 'all' or array of role IDs
+     * @param {Object} definition - OpenAI function definition (`type`, `function`, optional `readOnly`, optional `category`).
      * @returns {void}
-     * @throws {Error} If roles field is missing or references invalid roles
      */
     register(name, handler, definition) {
-        // === ROLE VALIDATION (STRICT) ===
-        
-        // 1. Require explicit roles declaration
-        if (!definition.roles) {
-            throw new Error(
-                `Tool "${name}" missing required "roles" field. ` +
-                `Must be 'all' or an array of role IDs (e.g., ['coder', 'pm']).`
-            );
-        }
-        
-        // 2. Normalize to array
-        let toolRoles;
-        if (definition.roles === 'all') {
-            toolRoles = ['all'];
-        } else if (Array.isArray(definition.roles)) {
-            toolRoles = definition.roles;
-        } else {
-            throw new Error(
-                `Tool "${name}" has invalid "roles" field. ` +
-                `Expected 'all' or array of role IDs, got: ${typeof definition.roles}`
-            );
-        }
-        
-        // 3. Validate group tags against the known set derived from profile
-        //    data. 2.34.0 — `Profiles.getKnownGroupTags()` unions every
-        //    profile's `tools.allowed_groups` plus the `'all'` / `'full'`
-        //    carve-outs (see profiles/registry.js). Pre-2.34.0 this was a
-        //    hardcoded `LEGAL_GROUP_TAGS` array that silently shadowed
-        //    profile-side additions; deriving from the registry means a
-        //    future profile declaring a new admission group auto-extends
-        //    this validator without a parallel edit.
-        const legalTags = Profiles.getKnownGroupTags();
-        const invalidRoles = toolRoles.filter(r => !legalTags.includes(r));
-        if (invalidRoles.length > 0) {
-            throw new Error(
-                `Tool "${name}" references invalid role(s): ${invalidRoles.join(', ')}. ` +
-                `Valid tags: ${legalTags.join(', ')}`
-            );
-        }
-        
-        // === REGISTRATION ===
-        
-        // Store the normalized roles array in the definition for filtering
+        // 2.54.0 (gitea#438) — admission moved to the profile side.
+        // Tools no longer carry a `roles:` field; profiles enumerate
+        // explicit tool names in `tools.admit` and `Profiles.filterTools`
+        // matches by name (with `'<prefix>__*'` glob support for MCP).
+        // The pre-2.54.0 `roles:` validation block + `_registeredRoles`
+        // enrichment are retired; `register()` is now a pure store.
         const enrichedDefinition = {
             type: 'function',  // Ensure always present
             ...definition,
-            _registeredRoles: toolRoles
         };
-        
+
         this.handlers.set(name, handler);
 
         const existingIdx = this.definitions.findIndex(d => d.function?.name === name);
         if (existingIdx !== -1) {
             this.definitions.splice(existingIdx, 1);
-            console.log(`[ToolRegistry] ♻️ Re-registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
+            console.log(`[ToolRegistry] ♻️ Re-registered tool: ${name}`);
         } else {
-            console.log(`[ToolRegistry] ✅ Registered tool: ${name} (roles: ${toolRoles.join(', ')})`);
+            console.log(`[ToolRegistry] ✅ Registered tool: ${name}`);
         }
         this.definitions.push(enrichedDefinition);
     },
@@ -172,11 +137,10 @@ export const ToolRegistry = {
             return { allowed: true };
         }
 
-        const toolRoles = def._registeredRoles || [];
         return {
             allowed: false,
             reason: `Profile '${profileName}' is not permitted to use tool '${name}'. ` +
-                    `Tool requires one of: ${toolRoles.join(', ') || '(none declared)'}. ` +
+                    `Profiles list admitted tools in tools.admit (gitea#438). ` +
                     `Switch profile via the new-chat picker or in Settings.`
         };
     },
@@ -189,7 +153,7 @@ export const ToolRegistry = {
      * Now delegates to `Profiles.filterTools` so the runtime tool-execute
      * gate and the per-turn admission filter share a single implementation.
      * The pre-2.0.0 `'full'` bypass is preserved via `full.v1`'s
-     * `tools.allowed_groups: ['*']` short-circuit inside `filterTools`.
+     * `tools.admit: ['*']` short-circuit inside `filterTools` (gitea#438).
      *
      * **2.49.0.0** — body lifted to `checkRoleAccessForProfile`; this
      * wrapper preserves the conversation-binding default. Equivalence

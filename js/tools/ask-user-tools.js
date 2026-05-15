@@ -123,7 +123,6 @@ export function registerAskUserTools(registry) {
                 required: ['question', 'type'],
             },
         },
-        roles: 'all',
         // Plan-mode safe: pauses the loop for input but doesn't mutate
         // file or repo state. The LLM may need to ask clarifying
         // questions before producing a plan.

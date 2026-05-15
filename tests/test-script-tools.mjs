@@ -182,7 +182,6 @@ test('registerScriptTools registers submit_script_for_approval as readOnly + rol
     assert.ok(captured, 'tool was registered');
     assert.equal(captured.name, 'submit_script_for_approval');
     assert.equal(captured.definition.readOnly, true);
-    assert.equal(captured.definition.roles, 'all');
     assert.equal(captured.definition.function.name, 'submit_script_for_approval');
     const params = captured.definition.function.parameters;
     assert.deepEqual(params.required.sort(), ['description', 'expected_output', 'source'].sort());

@@ -4,11 +4,10 @@
  * role's tool surface AND the long-form Plugin SDK system-prompt addendum
  * that auto-injects when a plugin editor tab is open.
  *
- * `tools.allowed_groups: ['all', 'plugin-dev']` admits tools tagged
- * `roles: ['all']` or `roles: [..., 'plugin-dev', ...]`, byte-equivalent
- * to the pre-2.0.0 `Roles.filterTools` behavior when
- * `State.settings.role === 'plugin-dev'`. Cross-product equivalence pinned
- * by `tests/test-profile-filter-tools.mjs`.
+ * 2.54.0 (gitea#438) — explicit admission. `tools.admit` enumerates the
+ * union of every `'all'`-tagged and every `'plugin-dev'`-tagged tool
+ * from the pre-inversion `Roles.filterTools`, byte-equivalent to the
+ * legacy behavior when `State.settings.role === 'plugin-dev'`.
  *
  * `systemPrompt` carries the Plugin SDK reference content historically
  * inlined at `js/core.js` `BUILTIN_ROLES['plugin-dev'].systemPrompt`. The
@@ -179,7 +178,7 @@ Namespace keys with plugin ID: Storage.set('my-plugin:cache', data)
 
 ## ADDITIONAL REGISTRIES
 
-Plugins.registerTool('my-plugin', { name, description, parameters, roles, handler }) — Add LLM tools (convenience wrapper, auto-formats definition).
+Plugins.registerTool('my-plugin', { name, description, parameters, handler }) — Add LLM tools (convenience wrapper, auto-formats definition). Admission is profile-side: a tool registered here is only callable by the active profile when the profile's tools.admit list includes its name.
 Plugins.injectCSS('my-plugin', cssText) — Inject a scoped <style> tag. Call again to replace. Plugins.removeCSS('my-plugin') to remove.
 Providers.register(provider) — Add LLM providers (no settings UI auto-discovery).
 
@@ -189,9 +188,9 @@ await Plugins.registerTool('my-plugin', {
     name: 'fetch_weather',
     description: 'Get current weather for a city',
     parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
-    roles: 'all',
     handler: async ({ city }) => ({ temp: 72, conditions: 'sunny', city })
 });
+// Note: tool only fires for profiles whose tools.admit list includes 'fetch_weather'.
 \`\`\`
 
 ### Plugins.injectCSS() example
@@ -260,8 +259,9 @@ export default MyPlugin;
 === END SDK REFERENCE ===`;
 
 /**
- * Plugin-developer overrides on top of `chat.v1`. Carries `allowed_groups`
- * to admit `'plugin-dev'`-tagged tools and the SDK addendum prompt.
+ * Plugin-developer overrides on top of `chat.v1`. Carries an explicit
+ * `tools.admit` list (gitea#438 / 2.54.0) extending chat.v1 with the
+ * plugin-dev tool surface, plus the SDK addendum prompt.
  *
  * @type {Profile}
  */
@@ -276,7 +276,65 @@ export const PLUGIN_DEV_V1 = {
     compression: {},
 
     tools: {
-        allowed_groups: ['all', 'plugin-dev'],
+        admit: [
+            'ask_user',
+            'delegate_task',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'list_user_plugins',
+            'memory_recall',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_docs',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_plugin_source',
+            'read_pull_request',
+            'run_plugin',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'write_plugin_source',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {},

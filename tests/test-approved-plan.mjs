@@ -179,7 +179,6 @@ test('registerPlanTools registers read_approved_plan as readOnly, roles=all, no 
     const entry = captured.get('read_approved_plan');
     assert.ok(entry, 'read_approved_plan was registered');
     assert.equal(entry.definition.readOnly, true);
-    assert.equal(entry.definition.roles, 'all');
     assert.equal(entry.definition.function.name, 'read_approved_plan');
     assert.deepEqual(entry.definition.function.parameters.required, [],
         'read_approved_plan takes no required arguments');

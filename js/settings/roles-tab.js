@@ -120,12 +120,17 @@ export function updateProfileToolsList(profileName) {
         const name = tool.function?.name || tool.name;
         const desc = tool.function?.description || '';
         const enabled = profileToolNames.has(name);
-        const groups = tool._registeredRoles || ['unknown'];
+        // 2.54.0 (gitea#438) — admission inverted; tools no longer carry
+        // `_registeredRoles`. The trailing chip shows the tool's category
+        // (e.g. `code.file.read` from the catalog adapter) instead of the
+        // retired group tags. Tools without a category fall through to
+        // 'misc'.
+        const category = tool.category || 'misc';
 
         return `<div class="role-tool-item ${enabled ? 'enabled' : 'disabled'}">
             <span>${enabled ? '✅' : '⬜'}</span>
             <span><strong>${escapeHtml(name)}</strong> — ${escapeHtml(desc.slice(0, 60))}${desc.length > 60 ? '…' : ''}</span>
-            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">[${escapeHtml(groups.join(', '))}]</span>
+            <span style="font-size: var(--font-xs); color: var(--text-muted); margin-left: auto;">[${escapeHtml(category)}]</span>
         </div>`;
     }).join('');
 

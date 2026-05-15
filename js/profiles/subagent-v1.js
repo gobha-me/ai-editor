@@ -112,12 +112,26 @@ export const SUBAGENT_V1 = {
         discovery_strategies: ['categorical'],
         budget_tokens: 2000,
         expansion_mode: 'short',
-        // New `'subagent'` admission group tag (DESIGN §Decision §5) —
-        // future tools intended for sub-agent-only admission tag
-        // themselves `roles: ['subagent']`; none in Phase 1. `'all'`
-        // covers the read tools above (each is tagged `roles: 'all'` at
-        // its register site).
-        allowed_groups: ['all', 'subagent'],
+        // 2.54.0 (gitea#438) — explicit admission, mirrors `tools.static`
+        // exactly (the read-only catalog above). DESIGN-sub-agents.md
+        // §"The Load-Bearing Decision" — the *profile* is the trust
+        // boundary at the sub-agent level. Pre-2.54.0 the profile used
+        // `allowed_groups: ['all', 'subagent']`, which silently widened
+        // the trust boundary to ~50 `'all'`-tagged tools (the
+        // `'subagent'` group itself had zero registered tools). The
+        // intended boundary is the static read-only set; admit now
+        // restates it explicitly. NO `'mcp__*'` glob — sub-agents do
+        // not get access to user-configured MCP servers by default.
+        admit: [
+            'read_file',
+            'read_lines',
+            'scan_file',
+            'search_in_files',
+            'list_dirty_files',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'find_tool',
+        ],
     },
 
     task_ledger: {

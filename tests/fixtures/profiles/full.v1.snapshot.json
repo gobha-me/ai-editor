@@ -56,7 +56,7 @@
       ],
       "budget_tokens": 5000,
       "expansion_mode": "short",
-      "allowed_groups": [
+      "admit": [
         "*"
       ]
     },

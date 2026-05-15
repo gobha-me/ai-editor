@@ -69,8 +69,9 @@ export const RP_V1 = {
     },
 
     tools: {
-        // Inherits chat.v1's `['all', 'pm', 'reviewer']`. Role-play surfaces
-        // are chat-shaped; no need to narrow the admission set.
+        // 2.54.0 (gitea#438) — inherits chat.v1.admit unchanged.
+        // Role-play surfaces are chat-shaped; no need to narrow the
+        // admission set.
     },
 
     task_ledger: {},

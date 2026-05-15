@@ -138,6 +138,27 @@ A profile may name a `base` profile. At validation time, the resolved profile is
 
 The five canonical profiles all inherit from a common `base.v1` that supplies sensible defaults for fields no surface has reason to override.
 
+#### Tool admission (gitea#438 / 2.54.0)
+
+Profiles enumerate the tools they admit by **explicit name** in `tools.admit`. The pre-2.54.0 model (tools self-tagged with `roles:` arrays; profiles intersected via `tools.allowed_groups`) was inverted because tag overlap was invisible at the gate — tools could silently elect into profiles that didn't want them (e.g. `create_issue` reachable from `chat.v1` via an invisible `'pm'` tag), and tools tagged `'plugin-dev'` could be admitted by zero picker profiles without the contributor noticing.
+
+The contract:
+
+- `tools.admit: string[]` — explicit list of tool names this profile admits.
+- `'*'` as a single entry — full-access bypass (used by `full.v1` only).
+- `'<prefix>__*'` glob entries — admit every tool whose name begins with `<prefix>__`. Used by every picker profile to admit MCP-bridge tools (named `mcp__<serverId>__<toolName>`) without enumerating each per-server tool.
+
+For inherited profiles, two operators let a child narrow or widen its parent's admit list **without restating the full enumeration**:
+
+- `tools.admit_add: string[]` — set-union added to the inherited admit.
+- `tools.admit_remove: string[]` — set-subtracted from the inherited admit.
+
+Resolution order: (1) `base.admit`; (2) subtract `child.admit_remove`; (3) union `child.admit_add`. If the child also supplies a literal `tools.admit`, that wins wholesale and operators are warned-then-ignored. Operator keys never appear on the resolved profile — they're consumed during the merge.
+
+The "narrowing-not-diverging" invariant: a child that uses only `admit_remove` can never widen its parent's admit. Parent always strictly bounds the child unless `admit_add` (or a literal `admit`) opts in explicitly. This is the load-bearing property — it makes profile-tree authoring (Phase 4) safe by default.
+
+**Default OFF for new tools.** A newly-registered tool that no profile lists in its admit array will not be callable from any profile. The contributor cost is bounded: registry-side warning surfaces it (gitea#439). The alternative — default ON — was disqualified because it would silently widen `kb.v1`'s read-only safety property every time a side-effecting tool lands.
+
 ---
 
 ## The Task Ledger

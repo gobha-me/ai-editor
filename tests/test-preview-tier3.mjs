@@ -85,7 +85,6 @@ test('all five Tier 3a tools are readOnly + roles all', () => {
     for (const c of captured) {
         if (!t3aNames.includes(c.name)) continue;
         assert.equal(c.definition.readOnly, true, `${c.name} is readOnly`);
-        assert.equal(c.definition.roles, 'all', `${c.name} roles=all`);
         assert.equal(c.definition.function.name, c.name);
         assert.ok(c.definition.function.description, `${c.name} has a description`);
     }

@@ -90,25 +90,27 @@ test('composeAdmission skips unresolved names without throwing and lists them in
     assert.deepEqual(result.diagnostics.unresolved_static, ['list_tool_categories', 'find_tool']);
 });
 
-test('composeAdmission filters by user_groups against authorization.required_groups', () => {
+test('composeAdmission user_groups gate is a no-op post-2.54.0 (gitea#438) — every requested static name admits', () => {
+    // Pre-2.54.0 the catalog mirrored each tool's `roles:` tag into
+    // `authorization.required_groups`, and `composeAdmission` filtered
+    // by `user_groups ∩ required_groups`. The inversion (gitea#438)
+    // retired the `roles:` field; the catalog now produces empty
+    // `required_groups`, and `isAuthorized` short-circuits to true.
+    // Profile-side admission (`Profiles.filterTools`) is the sole
+    // gate, applied in the chat loop above this layer.
     registerStaticFixture();
     const result = composeAdmission({
         task: 'unit',
         query: null,
         budget_tokens: 100000,
-        // edit_file and commit_files require ['coder']; read_file is 'all'.
         profile_static: ['read_file', 'edit_file', 'commit_files'],
         task_ledger: null,
-        user_groups: ['pm'],          // pm has none of those groups; only 'all'-tagged tool admits.
+        user_groups: ['pm'], // historically would have suppressed coder-tagged tools; now a no-op
         discovery_call: null,
         expansion_mode: 'full',
     });
-    assert.equal(result.admitted.length, 1);
-    assert.equal(Catalog.getById(result.admitted[0].tool_id).name, 'read_file');
-    assert.equal(result.suppressed.length, 2);
-    for (const s of result.suppressed) {
-        assert.equal(s.reason, 'unauthorized');
-    }
+    assert.equal(result.admitted.length, 3);
+    assert.equal(result.suppressed.length, 0);
 });
 
 test('composeAdmission with full user_groups bypasses required_groups gate', () => {
@@ -444,9 +446,14 @@ test('sticky admission: same tool in static AND ledger admits exactly once (stat
     assert.equal(result.diagnostics.sticky_admitted, 0);
 });
 
-test('sticky admission: unauthorized sticky tool lands in suppressed', () => {
+test('sticky admission: user_groups gate is a no-op post-2.54.0 — sticky tools admit regardless of user_groups', () => {
+    // Pre-2.54.0 a sticky `edit_file` would suppress under
+    // `user_groups: ['pm']` because its catalog `required_groups: ['coder']`
+    // had no overlap. The inversion (gitea#438) retired tool-side
+    // `roles:`; the catalog produces empty `required_groups`; the
+    // sticky pass admits. Profile-side `Profiles.filterTools` is the
+    // sole gate (applied above this layer).
     registerStickyFixture();
-    // edit_file requires ['coder']; user is 'pm' (no overlap, no full bypass).
     const ledger = makeLedgerWith('edit_file');
     const result = composeAdmission({
         task: 'unit', query: null, budget_tokens: 100000,
@@ -454,12 +461,10 @@ test('sticky admission: unauthorized sticky tool lands in suppressed', () => {
         task_ledger: ledger,
         user_groups: ['pm'], discovery_call: null, expansion_mode: 'full',
     });
-    // Only the static read_file admits; edit_file is sticky-suppressed.
-    assert.equal(result.admitted.length, 1);
-    assert.equal(result.suppressed.length, 1);
-    assert.equal(result.suppressed[0].reason, 'unauthorized');
-    assert.equal(Catalog.getById(result.suppressed[0].tool_id).name, 'edit_file');
-    assert.equal(result.diagnostics.sticky_admitted, 0);
+    assert.equal(result.admitted.length, 2,
+        'static read_file + sticky edit_file both admit; user_groups gate retired');
+    assert.equal(result.suppressed.length, 0);
+    assert.equal(result.diagnostics.sticky_admitted, 1);
 });
 
 test('sticky admission: over-budget sticky tool lands in suppressed (static is protected)', () => {

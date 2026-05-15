@@ -51,9 +51,9 @@ export const CHAT_MULTI_V1 = {
     compression: {},
 
     tools: {
-        // chat.v1's `['all', 'pm', 'reviewer']` is the right baseline:
-        // multi-user chat surfaces still cover the historical pm + reviewer
-        // shape (chat with full issue access). Inherit unchanged.
+        // 2.54.0 (gitea#438) — inherits chat.v1.admit unchanged.
+        // Multi-user chat surfaces still cover the same historical pm +
+        // reviewer admission shape (chat with full issue access).
     },
 
     task_ledger: {},

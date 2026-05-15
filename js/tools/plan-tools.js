@@ -29,9 +29,11 @@
  *   - Takes no arguments.
  *   - Returns `{ plan: string, approved_at: number }` post-approval, or
  *     `{ error: '...' }` pre-approval. Always available — `readOnly: true`
- *     so plan mode keeps it admitted, `roles: 'all'` so any role can use it.
+ *     so plan mode keeps it admitted; profile admission via
+ *     `profile.tools.admit` (gitea#438).
  *
- * Both tools declare `readOnly: true` and `roles: 'all'`.
+ * Both tools declare `readOnly: true` and are listed in every picker
+ * profile's `admit:` array.
  *
  * @module tools/plan-tools
  */
@@ -70,7 +72,6 @@ export function registerPlanTools(registry) {
                 required: ['plan'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -91,7 +92,6 @@ export function registerPlanTools(registry) {
                 required: [],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

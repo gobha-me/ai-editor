@@ -47,13 +47,15 @@
  */
 
 /**
- * Authorization spec for a tool. Phase 1 enforces only what
- * `js/tools/registry.js` already enforces (`_registeredRoles` →
- * `required_groups`); `required_consent` and `rate_limit` land with the
- * admission layer in subsequent PRs.
+ * Authorization spec for a tool. 2.54.0 (gitea#438) — admission moved
+ * to the profile side (`Profile.tools.admit`); the catalog produces an
+ * empty `required_groups` for every tool, and the composer's
+ * `isAuthorized` filter short-circuits to true. The field is preserved
+ * for downstream shape compatibility (debug surfaces read it). Future
+ * gitea#440 / Phase 4 work may retire it entirely.
  *
  * @typedef {Object} AuthSpec
- * @property {string[]} required_groups  RBAC groups required to invoke. Mirrors `_registeredRoles` from `js/tools/registry.js`.
+ * @property {string[]} required_groups  Pre-2.54.0 RBAC group requirement; **always empty post-gitea#438**.
  * @property {boolean}  required_consent User must approve each call. Always false in 1.3.4.
  * @property {Object|null} [rate_limit]  Reserved; null in 1.3.4.
  */

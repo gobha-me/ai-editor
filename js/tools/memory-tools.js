@@ -315,7 +315,6 @@ export function registerMemoryTools(registry) {
                 required: ['key', 'value', 'category'],
             },
         },
-        roles: ['full', 'coder', 'pm'],
     });
 
     /* ============================================================ */
@@ -431,7 +430,6 @@ export function registerMemoryTools(registry) {
                 required: [],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -532,6 +530,5 @@ export function registerMemoryTools(registry) {
                 required: ['id', 'reason'],
             },
         },
-        roles: ['full', 'coder', 'pm'],
     });
 }

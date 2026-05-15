@@ -310,8 +310,8 @@ function buildSystemPrompt(opts = {}) {
 
     // 2.35.0 — non-Composer paths derive the admitted set from
     // Profiles.filterTools. The registry stores OpenAI-tool-schema-shaped
-    // entries (`{ function: { name, description, ... }, _registeredRoles }`)
-    // while `renderToolEnumeration` expects the flat `{ name, description }`
+    // entries (`{ function: { name, description, ... } }`) while
+    // `renderToolEnumeration` expects the flat `{ name, description }`
     // shape the Composer's `Catalog.getById` produces. Project to that
     // shape inline so the two branches feed the renderer compatibly.
     // Composer path trusts the caller's budget-applied set as-is.
@@ -338,12 +338,11 @@ function buildSystemPrompt(opts = {}) {
 
     // Scratchpad instruction block — render iff `scratchpad_write` is in the
     // admitted set. Pre-2.35.0 the legacy/fallback path rendered the block
-    // unconditionally (`admittedNames === null` branch); now that path has a
-    // real Set too. `scratchpad_write` is tagged `roles: 'all'` so every
-    // profile admits it via the filterTools short-circuit — for every
-    // profile that exists today this is byte-equivalent to the pre-2.35.0
-    // behavior. A future profile that gates scratchpad away will see the
-    // block correctly drop.
+    // unconditionally; now that path has a real Set too. `scratchpad_write`
+    // is listed in every picker profile's `tools.admit` array (gitea#438 /
+    // 2.54.0) so this is byte-equivalent to the pre-2.35.0 behavior. A
+    // future profile that gates scratchpad away will see the block
+    // correctly drop.
     const renderScratchpadBlock = admittedNames.has('scratchpad_write');
     prompt = prompt.replace('{{scratchpadInstructions}}', renderScratchpadBlock ? SCRATCHPAD_INSTRUCTIONS : '');
 

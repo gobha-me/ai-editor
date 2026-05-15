@@ -254,13 +254,85 @@ export const CODER_V1 = {
         discovery_strategies: ['categorical'], // ROADMAP §1.4.0: categorical only; semantic in 1.4.1.
         budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
-        // 1.23.0 — profile-side admission set. Coder admits 'all'-tagged
-        // tools and tools with `roles: ['coder']`. Replaces chat.v1's wider
-        // `['all', 'pm', 'reviewer']` wholesale (array overrides per
-        // inheritance.js). Equivalent to the legacy `Roles.filterTools` path
-        // when `State.settings.role === 'coder'`; pinned by
-        // `tests/test-profile-filter-tools.mjs`.
-        allowed_groups: ['all', 'coder'],
+        // 2.54.0 (gitea#438) — explicit admission. Replaces the legacy
+        // `allowed_groups: ['all', 'coder']` model with an explicit list
+        // of tool names. The byte-equivalent superset of chat.v1.admit
+        // plus coder-tagged write/run tools (edit_file, commit_files,
+        // run_code, etc.). The `'mcp__*'` glob admits MCP-bridge tools
+        // by prefix (see `js/mcp/bridge.js` `namespacedName`).
+        admit: [
+            'add_pr_review',
+            'ask_user',
+            'commit_files',
+            'create_file',
+            'create_pull_request',
+            'delegate_task',
+            'delete_file',
+            'delete_lines',
+            'edit_file',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'index_project',
+            'insert_at_cursor',
+            'insert_lines',
+            'list_dirty_files',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'memory_recall',
+            'memory_remember',
+            'memory_revise',
+            'merge_pull_request',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_pull_request',
+            'replace_lines',
+            'replace_selection',
+            'run_code',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'wait_for_ci',
+            'write_file',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {

@@ -75,7 +75,6 @@ export function registerCursorTools(registry) {
                 required: ['line']
             }
         },
-        roles: ['all']  // Navigation is safe for all roles
     });
 
     // ========================================
@@ -133,7 +132,6 @@ export function registerCursorTools(registry) {
                 required: ['from_line']
             }
         },
-        roles: ['all']  // Selection is safe for all roles
     });
 
     // ========================================
@@ -190,7 +188,6 @@ export function registerCursorTools(registry) {
                 required: ['new_content']
             }
         },
-        roles: ['coder']  // Editing requires coder role
     });
 
     // ========================================
@@ -234,6 +231,5 @@ export function registerCursorTools(registry) {
                 required: ['content']
             }
         },
-        roles: ['coder']  // Editing requires coder role
     });
 }

@@ -198,6 +198,5 @@ Examples:
                 required: ['code']
             }
         },
-        roles: ['coder']
     });
 }

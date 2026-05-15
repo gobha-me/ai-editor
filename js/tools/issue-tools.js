@@ -72,7 +72,6 @@ export function registerIssueTools(registry) {
                 required: []
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -153,7 +152,6 @@ export function registerIssueTools(registry) {
                 required: ['number']
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -203,7 +201,6 @@ export function registerIssueTools(registry) {
                 required: ['title']
             }
         },
-        roles: ['pm']
     });
 
     // ========================================
@@ -262,7 +259,6 @@ export function registerIssueTools(registry) {
                 required: ['number']
             }
         },
-        roles: ['pm']
     });
 
     // ========================================
@@ -304,6 +300,5 @@ export function registerIssueTools(registry) {
                 required: ['number', 'body']
             }
         },
-        roles: ['pm', 'reviewer']
     });
 }

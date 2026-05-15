@@ -125,13 +125,28 @@
 /**
  * Tools configuration consumed by the tools subsystem (1.4.0).
  *
- * `allowed_groups` (1.23.0) is the profile-side authorization vector
- * consumed by `Profiles.filterTools`. Mirrors the legacy tool-side
- * `_registeredRoles` shape — `'all'` admits every tool tagged 'all',
- * `'*'` is the bypass marker (every tool admits regardless), otherwise
- * a tool admits when its `_registeredRoles` and the profile's
- * `allowed_groups` overlap. Optional during the prep slice; consumed
- * for real at 1.24.0.
+ * `admit` (2.54.0, gitea#438) is the profile-side authorization vector
+ * consumed by `Profiles.filterTools`. An explicit list of tool names —
+ * a tool admits when its `function.name` appears in `admit`. Two
+ * sentinels: `'*'` (single string in the array) is the full-access
+ * bypass (every tool admits regardless); a `'<prefix>__*'` entry
+ * matches every tool whose name begins with `<prefix>__` (used to
+ * admit MCP-bridge tools without naming each per-server tool).
+ *
+ * `admit_add` / `admit_remove` are inheritance-time operators that let
+ * a child profile narrow or widen the inherited `admit` *without
+ * restating the full parent list*. Resolution order in
+ * [`./inheritance.js`](./inheritance.js)'s `mergeDeep` is:
+ * (1) base.admit; (2) child.admit_remove (set-subtract); (3)
+ * child.admit_add (set-union); (4) if child carries a literal `admit`,
+ * that wins wholesale and operators are warned-then-ignored.
+ *
+ * The legacy `allowed_groups` field is **retired** at 2.54.0; the
+ * runtime no longer reads it. Profiles must declare `admit` (or
+ * inherit one). The retired `getKnownGroupTags()` helper, the
+ * `roles:` field on tool definitions, and the `_registeredRoles`
+ * enrichment in [`js/tools/registry.js`](../tools/registry.js) are all
+ * removed alongside.
  *
  * @typedef {Object} ToolsConfig
  * @property {ToolDefRef[]} catalog               Available tools for this surface.
@@ -139,7 +154,9 @@
  * @property {string[]}     discovery_strategies  "categorical" | "semantic" | "frequency".
  * @property {number}       budget_tokens         Ceiling for the tool slice (default 5000 per ROADMAP §Decision 5).
  * @property {"short"|"full"} expansion_mode      Default lazy-schema state for discovered tools.
- * @property {string[]}     [allowed_groups]      Profile-side admission set; see `Profiles.filterTools`.
+ * @property {string[]}     [admit]               Profile-side admission set: explicit tool names, plus `'*'` (full bypass) or `'<prefix>__*'` glob entries.
+ * @property {string[]}     [admit_add]           Inheritance operator: names to set-union onto inherited `admit`. Ignored if child also declares literal `admit`.
+ * @property {string[]}     [admit_remove]        Inheritance operator: names to set-subtract from inherited `admit`. Ignored if child also declares literal `admit`.
  */
 
 /**

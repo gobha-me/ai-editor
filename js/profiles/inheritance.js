@@ -101,11 +101,21 @@ export function resolveProfile(profile, lookup) {
  * Treats `null` as a primitive (replaces). `undefined` keys in `override`
  * do not erase keys in `base` — pass an explicit value to override.
  *
+ * Special case for the `tools` block (gitea#438 / 2.54.0):
+ * `admit_add` and `admit_remove` are inheritance operators that
+ * narrow/widen an inherited `admit` array without restating it.
+ * Resolution order: (1) base.admit (or [] if absent); (2) subtract
+ * override.admit_remove; (3) union override.admit_add. If override
+ * also carries a literal `admit` array, that wins wholesale and the
+ * operators are warned-then-ignored. The operator keys never appear
+ * on the merged output — they're consumed during resolution.
+ *
  * @param {Record<string, unknown>} base
  * @param {Record<string, unknown>} override
+ * @param {string} [parentKey] Path key for context-sensitive merging (internal recursion).
  * @returns {Record<string, unknown>}
  */
-function mergeDeep(base, override) {
+function mergeDeep(base, override, parentKey) {
     /** @type {Record<string, unknown>} */
     const out = {};
     // Copy base first.
@@ -121,13 +131,59 @@ function mergeDeep(base, override) {
             out[k] = mergeDeep(
                 /** @type {Record<string, unknown>} */ (bv),
                 /** @type {Record<string, unknown>} */ (ov),
+                k,
             );
         } else {
             // Arrays + primitives + null + dissimilar shapes → replace.
             out[k] = ov;
         }
     }
+    // Tools-block admit operators — applied AFTER the literal merge so
+    // admit_add / admit_remove reference the inherited base.admit.
+    if (parentKey === 'tools') {
+        applyAdmitOperators(out, base, override);
+    }
     return out;
+}
+
+/**
+ * Apply `admit_add` / `admit_remove` operators to the merged tools block.
+ * Mutates `out` in place (already a fresh object from mergeDeep).
+ * Strips operator keys from the output regardless of whether they fired.
+ *
+ * @param {Record<string, unknown>} out      Merged tools block (mutated).
+ * @param {Record<string, unknown>} base     Inherited tools block.
+ * @param {Record<string, unknown>} override Child's tools overrides.
+ */
+function applyAdmitOperators(out, base, override) {
+    const hasLiteralAdmit = Array.isArray(override.admit);
+    const addOp = override.admit_add;
+    const removeOp = override.admit_remove;
+    const hasOps = Array.isArray(addOp) || Array.isArray(removeOp);
+
+    // Operator keys never persist on the merged output.
+    delete out.admit_add;
+    delete out.admit_remove;
+
+    if (hasLiteralAdmit) {
+        if (hasOps) {
+            console.warn(
+                '[profiles/inheritance] admit_add/admit_remove ignored because override declares literal admit; operators are only honored when narrowing/widening an inherited list',
+            );
+        }
+        // Literal admit already won via mergeDeep's array-replace.
+        return;
+    }
+    if (!hasOps) return;
+
+    const inherited = Array.isArray(base.admit) ? /** @type {string[]} */ (base.admit) : [];
+    const removeSet = new Set(Array.isArray(removeOp) ? /** @type {string[]} */ (removeOp) : []);
+    const addList = Array.isArray(addOp) ? /** @type {string[]} */ (addOp) : [];
+    /** @type {Set<string>} */
+    const next = new Set();
+    for (const name of inherited) if (!removeSet.has(name)) next.add(name);
+    for (const name of addList) next.add(name);
+    out.admit = Array.from(next);
 }
 
 /**

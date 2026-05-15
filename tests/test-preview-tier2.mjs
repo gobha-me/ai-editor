@@ -39,7 +39,6 @@ test('Tier 2 registers four readers (preview_console_logs, preview_errors, previ
     assert.equal(t2.length, 4);
     for (const c of t2) {
         assert.equal(c.definition.readOnly, true, `${c.name} is readOnly`);
-        assert.equal(c.definition.roles, 'all', `${c.name} roles=all`);
         assert.equal(c.definition.function.name, c.name);
         assert.deepEqual(c.definition.function.parameters.required, ['serverId'],
             `${c.name} requires serverId`);

@@ -214,3 +214,152 @@ test('resolves a three-level chain (leaf -> mid -> root)', () => {
     assert.equal(out.name, 'leaf.v1');
     assert.equal(out.base, 'mid.v1');
 });
+
+// ============================================
+// admit_add / admit_remove operators (gitea#438 / 2.54.0)
+// ============================================
+//
+// The inversion (`tools.allowed_groups` → `tools.admit`) introduced two
+// inheritance operators that let a child profile narrow / widen its
+// inherited admit list without restating the parent's full enumeration:
+//
+//   - admit_remove: string[]  — set-subtract from base.admit
+//   - admit_add:    string[]  — set-union onto base.admit
+//
+// These are honored ONLY when the child does NOT supply a literal
+// `admit` field; if both are present the literal wins wholesale and a
+// console.warn surfaces the conflict.
+
+test('admit_remove narrows the inherited admit (the load-bearing "narrowing-not-diverging" invariant)', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: { admit: ['a', 'b', 'c', 'd'] },
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_remove: ['b', 'd'] },
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, ['a', 'c']);
+    // Operators never persist on the merged output:
+    assert.equal(out.tools.admit_add, undefined);
+    assert.equal(out.tools.admit_remove, undefined);
+});
+
+test('admit_add widens the inherited admit', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: { admit: ['a', 'b'] },
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_add: ['c', 'd'] },
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, ['a', 'b', 'c', 'd']);
+});
+
+test('admit_remove + admit_add compose (subtract then union)', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: { admit: ['a', 'b', 'c'] },
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_remove: ['b'], admit_add: ['d', 'e'] },
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, ['a', 'c', 'd', 'e']);
+});
+
+test('admit_add deduplicates against the inherited list (set-union semantic)', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: { admit: ['a', 'b'] },
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_add: ['b', 'c'] }, // 'b' already in parent
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, ['a', 'b', 'c']);
+});
+
+test('literal admit wins over operators (operators ignored with warn)', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: { admit: ['a', 'b', 'c'] },
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit: ['x', 'y'], admit_remove: ['a'], admit_add: ['z'] },
+    };
+    // Capture console.warn so the test passes without polluting stderr.
+    const origWarn = console.warn;
+    let warned = '';
+    console.warn = (...args) => { warned += args.join(' '); };
+    let out;
+    try {
+        out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    } finally {
+        console.warn = origWarn;
+    }
+    assert.deepEqual(out.tools.admit, ['x', 'y']); // literal wins
+    assert.equal(out.tools.admit_add, undefined);
+    assert.equal(out.tools.admit_remove, undefined);
+    assert.match(warned, /admit_add\/admit_remove ignored/);
+});
+
+test('admit_remove against an empty inherited admit is a no-op (does not throw)', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: {}, // no admit
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_remove: ['a'] },
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, []);
+});
+
+test('only-admit_add against absent base.admit yields exactly the added set', () => {
+    const parent = {
+        name: 'parent.v1',
+        version: '1',
+        base: null,
+        tools: {},
+    };
+    const child = {
+        name: 'child.v1',
+        version: '1',
+        base: 'parent.v1',
+        tools: { admit_add: ['a', 'b'] },
+    };
+    const out = resolveProfile(/** @type {any} */ (child), lookupOver([/** @type {any} */ (parent)]));
+    assert.deepEqual(out.tools.admit, ['a', 'b']);
+});

@@ -126,7 +126,6 @@ ToolRegistry.register('commit_files', commitFiles, {
             required: []
         }
     },
-    roles: ['coder']  // Only coder role can commit
 });
 
 // ============================================
@@ -173,7 +172,6 @@ ToolRegistry.register('list_dirty_files', listDirtyFiles, {
             required: []
         }
     },
-    roles: ['coder'],  // Read-only but scoped to coder workflow
     readOnly: true
 });
 

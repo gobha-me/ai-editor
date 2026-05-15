@@ -13,11 +13,10 @@
  *
  * Always available — declares `readOnly: true` so Plan Mode keeps it
  * admitted (the side effect is gated by the approval card, not by the
- * tool registration), and `roles: 'all'` so any profile can declare
- * admission. The actual *admission gate* is per-profile: `subagent.v1`
- * does NOT admit `delegate_task` (no recursion in slice 2; DESIGN
- * §Phasing Phase 3 covers recursive sub-agents); `coder.v1` admits via
- * `tools.static`; `chat.v1` does not.
+ * tool registration). Profile-side admission via `profile.tools.admit`
+ * (gitea#438): `subagent.v1.admit` deliberately omits `delegate_task`
+ * (no recursion in slice 2; DESIGN §Phasing Phase 3 covers recursive
+ * sub-agents); `coder.v1.admit` and `chat.v1.admit` both include it.
  *
  * @since 2.49.0
  * @module tools/subagent-tools
@@ -167,7 +166,6 @@ export function registerSubAgentTools(registry) {
                 required: ['task'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

@@ -78,15 +78,16 @@ const DEAD_NAMES_REMOVED = ['read_issue', 'search_project'];
 const PRE_2_35_0_HARDCODED_PHRASE = '— PREFERRED for large files';
 
 // Test-only tool def in the OpenAI-tool-schema shape that `ToolRegistry`
-// stores. The `roles` field is normalized to `_registeredRoles` on register.
-function defFor(name, roles, description) {
+// stores. 2.54.0 (gitea#438) — the `roles` field is retired; admission
+// is keyed off the function name vs. the active profile's `tools.admit`
+// list, so test fakes register under production-admitted names.
+function defFor(name, _legacyRolesIgnored, description) {
     return {
         function: {
             name,
             description: description || `Test tool ${name}.`,
             parameters: { type: 'object', properties: {} },
         },
-        roles,
     };
 }
 
@@ -177,14 +178,15 @@ test('non-Composer mode renders empty-state line when ToolRegistry has no admitt
 
 test('non-Composer mode enumerates registered tools admitted to the active profile (chat.v1 default)', () => {
     cleanRegistry();
-    // chat.v1 admits any tool tagged roles: 'all' (filterTools short-circuit).
-    ToolRegistry.register('fake_universal_tool', () => {}, defFor('fake_universal_tool', 'all', 'A universally-admitted test tool.'));
+    // 2.54.0 (gitea#438) — admission is name-based. `read_file` is in
+    // chat.v1.admit so a test registration under that name surfaces.
+    ToolRegistry.register('read_file', () => {}, defFor('read_file', null, 'A universally-admitted test tool.'));
     try {
         const prompt = buildSystemPrompt({ composerActive: false });
         const block = enumerationBlock(prompt);
         assert.ok(
-            nameAppearsInBlock(block, 'fake_universal_tool'),
-            'all-tagged tool should appear in the chat.v1 enumeration'
+            nameAppearsInBlock(block, 'read_file'),
+            'chat.v1.admit entry must surface in the chat.v1 enumeration'
         );
         // 2.51.0 — per-tool descriptions are no longer carried in the prompt
         // body (they live on the API tools-array). The description-in-prompt
@@ -197,20 +199,21 @@ test('non-Composer mode enumerates registered tools admitted to the active profi
 
 test('non-Composer mode respects profile filtering — coder-only tools do NOT appear for chat.v1', () => {
     cleanRegistry();
-    ToolRegistry.register('fake_coder_only', () => {}, defFor('fake_coder_only', ['coder'], 'Coder-only test tool.'));
-    ToolRegistry.register('fake_pm_visible', () => {}, defFor('fake_pm_visible', ['pm'], 'PM-visible test tool.'));
+    // 2.54.0 (gitea#438) — name-based gate. `commit_files` is admitted
+    // by coder.v1 only; `create_issue` is in chat.v1.admit (carries pm
+    // surface). Both register; only the chat-admitted name surfaces.
+    ToolRegistry.register('commit_files', () => {}, defFor('commit_files', null, 'Coder-only test tool (NOT in chat.v1.admit).'));
+    ToolRegistry.register('create_issue', () => {}, defFor('create_issue', null, 'PM-visible test tool (in chat.v1.admit).'));
     try {
         const prompt = buildSystemPrompt({ composerActive: false });
         const block = enumerationBlock(prompt);
         assert.ok(
-            !nameAppearsInBlock(block, 'fake_coder_only'),
-            'coder-only tool must be filtered out for chat.v1'
+            !nameAppearsInBlock(block, 'commit_files'),
+            'coder-only name must be filtered out for chat.v1 (not in chat.v1.admit)'
         );
-        // chat.v1's allowed_groups includes 'pm' (per js/profiles/chat-v1.js)
-        // — the pm-tagged tool surfaces.
         assert.ok(
-            nameAppearsInBlock(block, 'fake_pm_visible'),
-            'pm-tagged tool must appear under chat.v1'
+            nameAppearsInBlock(block, 'create_issue'),
+            'pm-surface name in chat.v1.admit must appear under chat.v1'
         );
     } finally {
         cleanRegistry();
@@ -228,12 +231,13 @@ test('non-Composer mode does NOT leak the pre-2.35.0 hardcoded enumeration strin
 
 test('no-args call (legacy generateEdit / commit-message path) goes through the non-Composer derivation', () => {
     cleanRegistry();
-    ToolRegistry.register('noargs_probe_tool', () => {}, defFor('noargs_probe_tool', 'all'));
+    // Use a chat.v1.admit name so the gate passes.
+    ToolRegistry.register('read_file', () => {}, defFor('read_file', null));
     try {
         const prompt = buildSystemPrompt();
         const block = enumerationBlock(prompt);
         assert.ok(
-            nameAppearsInBlock(block, 'noargs_probe_tool'),
+            nameAppearsInBlock(block, 'read_file'),
             'no-args call must derive the enumeration, not skip it'
         );
     } finally {
@@ -272,7 +276,7 @@ test('scratchpad instruction block renders when scratchpad_write is in the admit
 
     // Non-Composer branch
     cleanRegistry();
-    ToolRegistry.register('scratchpad_write', () => {}, defFor('scratchpad_write', 'all', 'Persist notes to a scratchpad.'));
+    ToolRegistry.register('scratchpad_write', () => {}, defFor('scratchpad_write', null, 'Persist notes to a scratchpad.'));
     try {
         const promptLeg = buildSystemPrompt({ composerActive: false });
         assert.ok(promptLeg.includes('SCRATCHPAD'), 'block must render when scratchpad_write is admitted (non-Composer branch)');

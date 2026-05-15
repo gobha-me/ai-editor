@@ -100,12 +100,67 @@ export const KB_V1 = {
     },
 
     tools: {
-        // DESIGN-profiles.md §kb.v1: *"Tools: minimal (citation lookup)"*.
-        // chat.v1's `['all', 'pm', 'reviewer']` is the wider chat baseline;
-        // narrow to `['all']` only — universal-tagged tools (ask_user etc.)
-        // still admit, but pm/reviewer-tagged tools are dropped. A
-        // dedicated citation_lookup tool would land in a follow-up.
-        allowed_groups: ['all'],
+        // 2.54.0 (gitea#438) — explicit admission. Was `allowed_groups:
+        // ['all']` in the legacy tag-intersection model. Mirrors the
+        // legacy admission set (every `'all'`-tagged tool) plus the
+        // `'mcp__*'` glob. The KB system-prompt addendum (line 45) is
+        // the load-bearing read-only constraint, not the admit list —
+        // gitea#440 may narrow this further once dedicated citation /
+        // doc-search tools land. Drops chat.v1's pm/reviewer additions.
+        admit: [
+            'ask_user',
+            'delegate_task',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'memory_recall',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_pull_request',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {

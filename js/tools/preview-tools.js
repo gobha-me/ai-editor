@@ -96,7 +96,6 @@ export function registerPreviewTools(registry) {
                 required: [],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -123,7 +122,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -140,7 +138,6 @@ export function registerPreviewTools(registry) {
                 required: [],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -185,7 +182,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -217,7 +213,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -254,7 +249,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -287,7 +281,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -328,7 +321,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -364,7 +356,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId', 'selector'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -400,7 +391,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId', 'selector', 'value'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -437,7 +427,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId', 'selector'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -478,7 +467,6 @@ export function registerPreviewTools(registry) {
                 required: ['serverId'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

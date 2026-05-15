@@ -10,6 +10,10 @@
  * field-for-field equivalent to the pre-trim coder.v1 literal, modulo the
  * intentional `base: null` → `'chat.v1'` flip.
  *
+ * 2.54.0 (gitea#438) — admission inverted from `tools.allowed_groups`
+ * (tag-intersection) to `tools.admit` (explicit name list). The snapshot
+ * below carries the post-inversion `admit` array.
+ *
  * Pure logic; no DOM/Storage/fetch. Runs under `node --test`.
  */
 import { test } from 'node:test';
@@ -127,10 +131,82 @@ const CODER_V1_PRE_TRIM = {
         discovery_strategies: ['categorical'],
         budget_tokens: 5000,
         expansion_mode: 'short',
-        // 1.23.0 — profile-side admission set added to coder.v1 + chat.v1.
-        // Coder overrides chat.v1's `['all', 'pm', 'reviewer']` wholesale
-        // (array replacement per inheritance.js).
-        allowed_groups: ['all', 'coder'],
+        // 2.54.0 (gitea#438) — explicit-admission inversion. Replaces
+        // `allowed_groups: ['all', 'coder']` with the literal name list.
+        // Mirrors `js/profiles/coder-v1.js`'s admit array verbatim.
+        admit: [
+            'add_pr_review',
+            'ask_user',
+            'commit_files',
+            'create_file',
+            'create_pull_request',
+            'delegate_task',
+            'delete_file',
+            'delete_lines',
+            'edit_file',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'index_project',
+            'insert_at_cursor',
+            'insert_lines',
+            'list_dirty_files',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'memory_recall',
+            'memory_remember',
+            'memory_revise',
+            'merge_pull_request',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_pull_request',
+            'replace_lines',
+            'replace_selection',
+            'run_code',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'wait_for_ci',
+            'write_file',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {

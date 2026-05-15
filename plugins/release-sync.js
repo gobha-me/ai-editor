@@ -388,7 +388,6 @@ const ReleaseSyncPlugin = {
                     required: []
                 }
             },
-            roles: 'all'
         });
 
         console.log('[release-sync] Initialized');

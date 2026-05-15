@@ -83,7 +83,6 @@ export function registerPRTools(registry) {
                 required: ['title']
             }
         },
-        roles: ['coder', 'pm']
     });
 
     // ========================================
@@ -135,7 +134,6 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -255,7 +253,6 @@ export function registerPRTools(registry) {
                 required: ['number']
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -302,7 +299,6 @@ export function registerPRTools(registry) {
                 required: ['number', 'body']
             }
         },
-        roles: ['reviewer', 'coder', 'pm']
     });
 
     // ========================================
@@ -390,7 +386,6 @@ export function registerPRTools(registry) {
                 required: ['number']
             }
         },
-        roles: ['coder', 'pm', 'reviewer']
     });
 
     // ========================================
@@ -435,7 +430,6 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -558,7 +552,6 @@ Use get_ci_status first to see which checks passed/failed, then get_ci_logs to r
                 required: []
             }
         },
-        roles: 'all',
         readOnly: true
     });
 }

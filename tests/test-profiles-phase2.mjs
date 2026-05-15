@@ -139,10 +139,25 @@ test('kb.v1 disables task ledger (enabled: false; capacity inherited)', () => {
     assert.equal(KB.task_ledger.capacity, CHAT.task_ledger.capacity);
 });
 
-test('kb.v1 narrows tools.allowed_groups to all-tagged tools only', () => {
-    // chat.v1 carries ['all', 'pm', 'reviewer'] — kb drops pm/reviewer
-    // for the "minimal" tool surface called out in DESIGN-profiles.md.
-    assert.deepEqual(KB.tools.allowed_groups, ['all']);
+test('kb.v1 narrows tools.admit to drop chat.v1\'s pm/reviewer-tagged additions (gitea#438)', () => {
+    // 2.54.0 (gitea#438) — admission inverted from `allowed_groups`
+    // (tag-intersection) to `admit` (explicit tool-name list). chat.v1
+    // carried `['all', 'pm', 'reviewer']`; kb.v1 narrowed to `['all']`.
+    // The post-inversion equivalent: kb.v1.admit must omit every
+    // pm-only / reviewer-only tool that chat.v1.admit carries.
+    const chatAdmit = new Set(CHAT.tools.admit);
+    const kbAdmit = new Set(KB.tools.admit);
+    // Every kb-admitted name (except the mcp__* glob, present in both)
+    // must also appear in chat.v1.admit — kb is a strict subset modulo
+    // the glob and the chat-only pm/reviewer tools.
+    for (const name of kbAdmit) {
+        assert.ok(chatAdmit.has(name), `kb.v1.admit entry '${name}' must also appear in chat.v1.admit (kb is a chat subset)`);
+    }
+    // Spot-check the narrowing: pm-only tools chat carries should NOT be in kb.
+    for (const pmOnly of ['create_issue', 'update_issue', 'add_pr_review']) {
+        assert.ok(chatAdmit.has(pmOnly), `chat.v1.admit must include ${pmOnly} (carries pm/reviewer tools per migration baseline)`);
+        assert.ok(!kbAdmit.has(pmOnly), `kb.v1.admit must NOT include ${pmOnly} (narrowed to read-only minimum)`);
+    }
     // Other tools fields fall through from chat.v1.
     assert.equal(KB.tools.budget_tokens, CHAT.tools.budget_tokens);
     assert.deepEqual(KB.tools.static, CHAT.tools.static);

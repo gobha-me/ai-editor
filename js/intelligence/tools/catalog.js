@@ -317,10 +317,18 @@ function defToToolDef(def) {
     const description = typeof fn.description === 'string' ? fn.description : '';
     const schema = fn.parameters || { type: 'object', properties: {} };
 
-    const requiredGroups = Array.isArray(def._registeredRoles) ? def._registeredRoles.slice() : [];
+    // 2.54.0 (gitea#438) — admission inverted from tool-side `roles:`
+    // tags to profile-side `tools.admit` name lists. The catalog no
+    // longer derives per-tool `required_groups` from `_registeredRoles`
+    // (that field is gone); the authorization filter at
+    // `composer.js#isAuthorized` becomes a no-op and the chat loop's
+    // profile-side `Profiles.filterTools` is the sole admission gate.
+    // The empty `required_groups` array is preserved for downstream
+    // shape compatibility (some debug surfaces read it); future
+    // gitea#440 / Phase 4 work may retire it entirely.
     /** @type {AuthSpec} */
     const authorization = {
-        required_groups: requiredGroups,
+        required_groups: [],
         required_consent: false,
         rate_limit: null,
     };

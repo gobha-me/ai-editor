@@ -4,20 +4,29 @@
  * sub-agent tool loop (slice 2) can gate against `subagent.v1` instead
  * of the conversation-bound profile.
  *
+ * 2.54.0 (gitea#438) — admission inverted from tool-side `roles:` tags
+ * to profile-side `tools.admit` name lists. The test now registers fake
+ * tools under names that production profile admit lists already contain
+ * (or deliberately omit) — the fakes' handlers run when admitted and
+ * are blocked when not.
+ *
+ * Fixture naming map (vs. production profile admit lists):
+ *   - `read_file`      → admitted by every picker profile + subagent.v1.
+ *   - `commit_files`   → admitted only by coder.v1 (not chat.v1, kb.v1,
+ *                        subagent.v1, pm.v1, reviewer.v1, plugin-dev.v1).
+ *   - `delegate_task`  → admitted by chat.v1 / coder.v1 / kb.v1 /
+ *                        plugin-dev.v1 / pm.v1 / reviewer.v1; NOT by
+ *                        subagent.v1 (no recursion in slice 2).
+ *
  * Pins:
- *   - Profile-gate cases against a registered fake tool tagged
- *     `'subagent'` / `'coder'` / `'all'`.
+ *   - Profile-gate cases against the registered fake handlers under each
+ *     name above.
  *   - Equivalence with `execute(name, args)`: byte-equal envelope when
  *     `executeWithProfile(name, args, ConversationManager.getEffectiveProfileName())`.
  *   - Error-envelope identity (the per-profile reason string includes
  *     the gated profile name, distinguishing the two paths in logs).
  *   - The new `checkRoleAccessForProfile` mirrors `checkRoleAccess` when
  *     called with the active profile name.
- *
- * Verifies the pinning surface called out in the 2.49.0.0 plan: this is
- * a *new* pinning slot because `checkRoleAccess` was previously tested
- * only indirectly via `tests/test-profile-filter-tools.mjs` (which pins
- * the filter, not the execute gate).
  *
  * Runs under `node --test`.
  */
@@ -29,7 +38,9 @@ import { ToolRegistry } from '../js/tools/registry.js';
 import { ConversationManager } from '../js/chat/conversations.js';
 
 // ============================================
-// Fixture — register three fake tools with distinct admission tags.
+// Fixture — register fake handlers under names production profile admit
+// lists already gate. The handlers don't do real work; they return a
+// marker so we know the fake (not a leaked production handler) ran.
 // ============================================
 
 function makeHandler(returnValue) {
@@ -38,49 +49,29 @@ function makeHandler(returnValue) {
 
 function registerFakes() {
     ToolRegistry.clear();
-    ToolRegistry.register('fake_all_tool', makeHandler('all'), {
+    // Admitted by every picker profile + subagent.v1.
+    ToolRegistry.register('read_file', makeHandler('all'), {
         function: {
-            name: 'fake_all_tool',
-            description: 'Test tool admitted by every profile.',
+            name: 'read_file',
+            description: 'Test fake — production admits everywhere.',
             parameters: { type: 'object', properties: {} },
         },
-        roles: 'all',
     });
-    ToolRegistry.register('fake_coder_tool', makeHandler('coder'), {
+    // Admitted ONLY by coder.v1.
+    ToolRegistry.register('commit_files', makeHandler('coder'), {
         function: {
-            name: 'fake_coder_tool',
-            description: 'Test tool admitted only by coder-shaped profiles.',
+            name: 'commit_files',
+            description: 'Test fake — production admits coder.v1 only.',
             parameters: { type: 'object', properties: {} },
         },
-        // 'reviewer' is a known group tag from the SYNTHETIC_ENTRIES set —
-        // we use coder's allowed_groups indirectly by tagging the tool
-        // with a tag coder declares. Coder admits via 'all' + 'coder'
-        // and pm/reviewer specifics; easiest is to tag with 'pm' which
-        // is in pm.v1.tools.allowed_groups, then verify chat.v1 (which
-        // declares 'all' / 'pm' / 'reviewer') admits it too. To get a
-        // tool that ONLY admits to coder, we can use a tag coder
-        // uniquely declares — but coder doesn't have a unique tag.
-        // Workaround: use 'coder' itself — it's a legal tag inherited
-        // through profile.tools.allowed_groups; coder.v1 declares it
-        // and chat.v1 does NOT.
-        //
-        // (Verified by reading js/profiles/{chat,coder}-v1.js — chat
-        // has ['all','pm','reviewer'], coder has the coder-specific
-        // tags. The exact tags vary; we accept whatever profile-side
-        // configuration the actual chat/coder profiles produce, and
-        // assert based on observed admission.)
-        roles: ['coder'],
     });
-    ToolRegistry.register('fake_subagent_tool', makeHandler('subagent'), {
+    // Admitted by every picker profile EXCEPT subagent.v1 (trust boundary).
+    ToolRegistry.register('delegate_task', makeHandler('not-subagent'), {
         function: {
-            name: 'fake_subagent_tool',
-            description: 'Test tool admitted only by sub-agent profiles.',
+            name: 'delegate_task',
+            description: 'Test fake — production admits everywhere except subagent.v1.',
             parameters: { type: 'object', properties: {} },
         },
-        // 2.49.0.0 — `'subagent'` is the new admission tag declared by
-        // subagent.v1.tools.allowed_groups. No other registered
-        // profile declares it.
-        roles: ['subagent'],
     });
 }
 
@@ -88,36 +79,36 @@ function registerFakes() {
 // Tests
 // ============================================
 
-test('executeWithProfile: subagent.v1 admits fake_subagent_tool', async () => {
+test('executeWithProfile: subagent.v1 admits read_file', async () => {
     registerFakes();
-    const r = await ToolRegistry.executeWithProfile('fake_subagent_tool', { x: 1 }, 'subagent.v1');
+    const r = await ToolRegistry.executeWithProfile('read_file', { x: 1 }, 'subagent.v1');
     assert.equal(r.ok, true);
     assert.deepEqual(r.args, { x: 1 });
 });
 
-test('executeWithProfile: chat.v1 BLOCKS fake_subagent_tool with profile-specific reason', async () => {
+test('executeWithProfile: subagent.v1 BLOCKS delegate_task with profile-specific reason', async () => {
     registerFakes();
-    const r = await ToolRegistry.executeWithProfile('fake_subagent_tool', {}, 'chat.v1');
+    const r = await ToolRegistry.executeWithProfile('delegate_task', {}, 'subagent.v1');
     assert.ok(typeof r.error === 'string');
-    assert.match(r.error, /Profile 'chat\.v1' is not permitted/);
-    assert.match(r.error, /fake_subagent_tool/);
+    assert.match(r.error, /Profile 'subagent\.v1' is not permitted/);
+    assert.match(r.error, /delegate_task/);
 });
 
-test('executeWithProfile: subagent.v1 BLOCKS fake_coder_tool (coder-tagged)', async () => {
+test('executeWithProfile: subagent.v1 BLOCKS commit_files (coder-only)', async () => {
     registerFakes();
-    const r = await ToolRegistry.executeWithProfile('fake_coder_tool', {}, 'subagent.v1');
+    const r = await ToolRegistry.executeWithProfile('commit_files', {}, 'subagent.v1');
     assert.ok(typeof r.error === 'string');
     assert.match(r.error, /Profile 'subagent\.v1' is not permitted/);
 });
 
-test('executeWithProfile: every profile admits fake_all_tool (roles: "all")', async () => {
+test('executeWithProfile: every profile admits read_file', async () => {
     registerFakes();
     for (const profile of [
         'chat.v1', 'coder.v1', 'kb.v1', 'subagent.v1',
         'full.v1', 'plugin-dev.v1', 'pm.v1', 'reviewer.v1',
     ]) {
-        const r = await ToolRegistry.executeWithProfile('fake_all_tool', {}, profile);
-        assert.equal(r.ok, true, `profile=${profile} expected to admit fake_all_tool`);
+        const r = await ToolRegistry.executeWithProfile('read_file', {}, profile);
+        assert.equal(r.ok, true, `profile=${profile} expected to admit read_file`);
     }
 });
 
@@ -129,12 +120,12 @@ test('executeWithProfile: unknown tool returns "Unknown tool" envelope regardles
 
 test('executeWithProfile: handler-thrown errors flow through the same error wrapper', async () => {
     ToolRegistry.clear();
-    ToolRegistry.register('fake_throws', async () => { throw new Error('boom'); }, {
-        function: { name: 'fake_throws', description: 't', parameters: { type: 'object', properties: {} } },
-        roles: 'all',
+    // Use a name in chat.v1.admit so the gate passes and the handler runs.
+    ToolRegistry.register('read_file', async () => { throw new Error('boom'); }, {
+        function: { name: 'read_file', description: 't', parameters: { type: 'object', properties: {} } },
     });
-    const r = await ToolRegistry.executeWithProfile('fake_throws', {}, 'chat.v1');
-    assert.match(r.error, /fake_throws.*failed.*boom/);
+    const r = await ToolRegistry.executeWithProfile('read_file', {}, 'chat.v1');
+    assert.match(r.error, /read_file.*failed.*boom/);
 });
 
 test('execute(name,args) ≡ executeWithProfile(name,args, getEffectiveProfileName())', async () => {
@@ -144,7 +135,7 @@ test('execute(name,args) ≡ executeWithProfile(name,args, getEffectiveProfileNa
     // not change `execute`'s contract.
     registerFakes();
     const activeProfile = ConversationManager.getEffectiveProfileName();
-    for (const tool of ['fake_all_tool', 'fake_coder_tool', 'fake_subagent_tool', 'does_not_exist']) {
+    for (const tool of ['read_file', 'commit_files', 'delegate_task', 'does_not_exist']) {
         const viaExecute = await ToolRegistry.execute(tool, { p: 42 });
         const viaProfile = await ToolRegistry.executeWithProfile(tool, { p: 42 }, activeProfile);
         assert.deepEqual(viaExecute, viaProfile, `divergence on tool=${tool}, profile=${activeProfile}`);
@@ -154,7 +145,7 @@ test('execute(name,args) ≡ executeWithProfile(name,args, getEffectiveProfileNa
 test('checkRoleAccess(name) ≡ checkRoleAccessForProfile(name, getEffectiveProfileName())', () => {
     registerFakes();
     const activeProfile = ConversationManager.getEffectiveProfileName();
-    for (const tool of ['fake_all_tool', 'fake_coder_tool', 'fake_subagent_tool', 'does_not_exist']) {
+    for (const tool of ['read_file', 'commit_files', 'delegate_task', 'does_not_exist']) {
         const viaActive = ToolRegistry.checkRoleAccess(tool);
         const viaProfile = ToolRegistry.checkRoleAccessForProfile(tool, activeProfile);
         assert.deepEqual(viaActive, viaProfile, `divergence on tool=${tool}, profile=${activeProfile}`);

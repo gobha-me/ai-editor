@@ -20,16 +20,19 @@
  *       { status: 'rejected', feedback: string }
  *       { status: 'cancelled', cancelled: true, partial_stdout?, partial_stderr?, error }
  *
- * Always registered with `readOnly: true` (so Plan Mode keeps it admitted
- * — the *handler* is read-only; what the user does on approval is a
- * separate authorization decision happening at a different surface) and
- * `roles: 'all'`. Per-profile admission is controlled by:
- *   - `coder.v1.tools.static` (this tool is in coder's static set);
- *     other profiles don't admit it via the Composer.
+ * Always registered with `readOnly: true` (so Plan Mode keeps it
+ * admitted — the *handler* is read-only; what the user does on approval
+ * is a separate authorization decision happening at a different
+ * surface). Profile-side admission is controlled by:
+ *   - `profile.tools.admit` (gitea#438) — the explicit list of tool
+ *     names a profile admits. `coder.v1.admit` includes
+ *     `submit_script_for_approval`; `chat.v1.admit` also lists it for
+ *     parity, but `chat.v1` leaves `scriptAutomation.enabled = false`
+ *     so the runtime filter still drops it.
  *   - `scriptAutomation.enabled` toggle from the resolved profile +
  *     settings overlay; the runtime filter in `js/llm/api.js`
- *     `applyScriptAutomationFilter()` drops the tool when off, regardless
- *     of static admission.
+ *     `applyScriptAutomationFilter()` drops the tool when off,
+ *     regardless of admission.
  *
  * Per DESIGN-llm-authored-automation.md §"Per-Invocation Gate, Not
  * Per-Tool Gate": catalog admission is the trust boundary at the tool
@@ -93,7 +96,6 @@ export function registerScriptTools(registry) {
                 required: ['source', 'description', 'expected_output'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

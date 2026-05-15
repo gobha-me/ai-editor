@@ -16,10 +16,12 @@
  * `find_tool` is **categorical/text scoring only** in 1.3.16; semantic
  * matching arrives in 1.4.1 per ROADMAP §1.4.1.
  *
- * Authorization: all three handlers register with `roles: 'all'`. Discovery
- * is read-only introspection; gating it by role would only confuse a `pm`
- * user about what's in the session. The existing `ToolRegistry.checkRoleAccess()`
- * still blocks invocation downstream — so a `pm` user can *see* `commit_files`
+ * Authorization: discovery is read-only introspection. All three
+ * handlers are listed in every picker profile's `tools.admit` array
+ * (gitea#438) — gating discovery by profile would only confuse the
+ * model about what's in the session. The existing
+ * `ToolRegistry.checkRoleAccess()` still blocks *invocation* downstream
+ * — so a `kb.v1` user's model can *see* `commit_files` via discovery
  * but won't be allowed to *call* it.
  *
  * Sources:
@@ -114,7 +116,6 @@ export function registerMetaTools(registry) {
             description: 'Enumerate all tool categories with counts and 1-line descriptions. The cheapest discovery call — use this first when you need to figure out what kinds of tools are available. Returns {categories: CategoryInfo[]}; each entry has {category, description, tool_count}. Then call list_tools_by_category to drill into one.',
             parameters: { type: 'object', properties: {}, required: [] },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -151,7 +152,6 @@ export function registerMetaTools(registry) {
                 required: ['category'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 
@@ -226,7 +226,6 @@ export function registerMetaTools(registry) {
                 required: ['description'],
             },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

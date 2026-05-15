@@ -341,7 +341,6 @@ export function registerMultiFileTools(registry) {
                 required: ['path']
             }
         },
-        roles: ['coder']
     });
 
     // ========================================
@@ -429,7 +428,6 @@ export function registerMultiFileTools(registry) {
                 required: ['path', 'content']
             }
         },
-        roles: ['coder']
     });
 }
 

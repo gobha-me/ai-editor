@@ -81,7 +81,6 @@ ToolRegistry.register('get_ci_status', getCiStatus, {
             required: ['ref']
         }
     },
-    roles: ['coder'],
     readOnly: true
 });
 
@@ -159,7 +158,6 @@ ToolRegistry.register('wait_for_ci', waitForCi, {
             required: ['ref']
         }
     },
-    roles: ['coder'],
     readOnly: true
 });
 
@@ -270,7 +268,6 @@ ToolRegistry.register('get_ci_logs', getCiLogs, {
             required: ['ref']
         }
     },
-    roles: ['coder'],
     readOnly: true
 });
 

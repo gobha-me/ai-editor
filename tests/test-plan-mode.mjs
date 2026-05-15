@@ -222,7 +222,6 @@ test('registerPlanTools registers submit_plan_for_approval as readOnly', () => {
     const entry = captured.get('submit_plan_for_approval');
     assert.ok(entry, 'submit_plan_for_approval was registered');
     assert.equal(entry.definition.readOnly, true);
-    assert.equal(entry.definition.roles, 'all');
     assert.equal(entry.definition.function.name, 'submit_plan_for_approval');
     assert.ok(entry.definition.function.parameters.required.includes('plan'));
 });
@@ -331,7 +330,6 @@ test('registerPlanTools registers read_approved_plan as readOnly (gitea#424 — 
     const entry = captured.get('read_approved_plan');
     assert.ok(entry, 'read_approved_plan was registered');
     assert.equal(entry.definition.readOnly, true);
-    assert.equal(entry.definition.roles, 'all');
     assert.equal(entry.definition.function.name, 'read_approved_plan');
     assert.deepEqual(entry.definition.function.parameters.required, []);
 });

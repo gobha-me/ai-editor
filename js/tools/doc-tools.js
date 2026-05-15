@@ -93,7 +93,6 @@ export function registerDocTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev', 'full'],
         readOnly: true
     });
 }

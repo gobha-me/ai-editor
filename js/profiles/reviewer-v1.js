@@ -4,11 +4,10 @@
  * role's "Reviewer" tool surface (read-only code access + issue
  * commenting; no editing or issue creation).
  *
- * `tools.allowed_groups: ['all', 'reviewer']` admits tools tagged
- * `roles: ['all']` or `roles: [..., 'reviewer', ...]`, byte-equivalent
- * to the pre-2.0.0 `Roles.filterTools` behavior when
- * `State.settings.role === 'reviewer'`. Cross-product equivalence
- * pinned by `tests/test-profile-filter-tools.mjs`.
+ * 2.54.0 (gitea#438) — explicit admission. `tools.admit` enumerates the
+ * union of every `'all'`-tagged and every `'reviewer'`-tagged tool from
+ * the pre-inversion `Roles.filterTools`, byte-equivalent to the legacy
+ * behavior when `State.settings.role === 'reviewer'`.
  *
  * **Synthetic** — same posture as `pm.v1` and `full.v1`: registered for
  * lookup, excluded from `Profiles.list()`, targeted by the 2.0.0
@@ -22,8 +21,8 @@
  */
 
 /**
- * Reviewer overrides on top of `chat.v1`. Only `tools.allowed_groups`
- * is overridden; everything else inherits unchanged.
+ * Reviewer overrides on top of `chat.v1`. Only `tools.admit` is
+ * overridden; everything else inherits unchanged.
  *
  * @type {Profile}
  */
@@ -38,7 +37,63 @@ export const REVIEWER_V1 = {
     compression: {},
 
     tools: {
-        allowed_groups: ['all', 'reviewer'],
+        admit: [
+            'add_issue_comment',
+            'add_pr_review',
+            'ask_user',
+            'delegate_task',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'memory_recall',
+            'merge_pull_request',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_pull_request',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {},

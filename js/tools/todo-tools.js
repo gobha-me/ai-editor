@@ -146,7 +146,6 @@ export function registerTodoTools(registry) {
                 required: ['todos'],
             },
         },
-        roles: 'all',
         // Plan Mode (github#25): the todo list is conversation-scoped — it
         // rides in the `conv-{id}` payload and dies with the chat. A planning
         // LLM uses this surface to break down what it's about to propose, so
@@ -173,7 +172,6 @@ export function registerTodoTools(registry) {
             description: 'Read the current structured todo list for this conversation. Returns an empty list when nothing has been written. The list also appears in your context automatically each turn — you usually don\'t need to call this.',
             parameters: { type: 'object', properties: {}, required: [] },
         },
-        roles: 'all',
         readOnly: true,
     });
 }

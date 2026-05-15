@@ -59,7 +59,6 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev'],
         readOnly: true
     });
 
@@ -108,7 +107,6 @@ export function registerPluginTools(registry) {
                 required: ['source']
             }
         },
-        roles: ['plugin-dev']
     });
 
     // ── run_plugin ─────────────────────────────────
@@ -191,7 +189,6 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev']
     });
 
     // ── list_user_plugins ──────────────────────────
@@ -231,7 +228,6 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        roles: ['plugin-dev'],
         readOnly: true
     });
 }

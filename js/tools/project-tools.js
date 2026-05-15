@@ -53,7 +53,6 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -114,7 +113,6 @@ export function registerProjectTools(registry) {
                 required: ['connectionId', 'owner', 'repo']
             }
         },
-        roles: 'all'
     });
     
     // ========================================
@@ -155,7 +153,6 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        roles: 'all',  // All roles can view project structure
         readOnly: true
     });
 
@@ -204,7 +201,6 @@ export function registerProjectTools(registry) {
                 required: ['path', 'content']
             }
         },
-        roles: ['coder']  // Only coders can create new files
     });
 
     // ========================================
@@ -277,6 +273,5 @@ export function registerProjectTools(registry) {
                 required: ['path']
             }
         },
-        roles: ['coder']  // Only coders can delete files
     });
 }

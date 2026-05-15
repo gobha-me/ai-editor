@@ -64,6 +64,7 @@ import { PM_V1 } from './pm-v1.js';
 import { REVIEWER_V1 } from './reviewer-v1.js';
 import { RP_V1 } from './rp-v1.js';
 import { SUBAGENT_V1 } from './subagent-v1.js';
+import { resolveProfile } from './inheritance.js';
 
 /**
  * @typedef {import('./profile-contract.js').Profile} Profile
@@ -73,7 +74,7 @@ import { SUBAGENT_V1 } from './subagent-v1.js';
  * @property {string} label        Short human-readable label for UI controls.
  * @property {string} description  One-line rationale for the picker tooltip.
  *
- * @typedef {{ type: 'function', _registeredRoles?: string[] }} ToolDefShape  Subset of `js/tools/registry.js`'s `ToolDefinition` consumed by `filterTools`.
+ * @typedef {{ type: 'function', function?: { name?: string } }} ToolDefShape  Subset of `js/tools/registry.js`'s `ToolDefinition` consumed by `filterTools`.
  */
 
 /**
@@ -189,61 +190,25 @@ export function list() {
 }
 
 /**
- * Returns the set of known tool-admission group tags — the union of every
- * registered profile's `tools.allowed_groups` (excluding the `'*'`
- * wildcard, which is a wholesale-bypass marker rather than a tag) plus
- * two carve-outs that are admitted at the tool-registration layer but
- * never declared by a profile today:
+ * Filter tool definitions by the active profile's `tools.admit` list
+ * (gitea#438 / 2.54.0 — replaces the legacy `allowed_groups`
+ * tag-intersection model).
  *
- *   - `'all'` — universal-default. Tools tagged `roles: ['all']` are
- *     admitted by every profile (short-circuited inside `filterTools`).
- *     No profile declares `'all'` in `allowed_groups` because the check
- *     is on the tool side.
- *   - `'full'` — legacy bypass tag. `full.v1` admits via
- *     `allowed_groups: ['*']`, which short-circuits to the full set; the
- *     tag `'full'` itself never appears in any profile's allowed_groups.
- *     Tool registrations (e.g. `js/tools/memory-tools.js`,
- *     `js/tools/doc-tools.js`) still use `roles: ['full', ...]` to mark
- *     admin-tier admission, so the tag must remain legal for register-time
- *     typo validation.
+ * Resolution rules, in order:
  *
- * Consumed by `js/tools/registry.js` `register()` as the typo-rejection
- * allowlist (replaces a previously-hardcoded `LEGAL_GROUP_TAGS` array
- * inline there). Deriving from profile data means future profile
- * additions declaring a new `allowed_groups` entry auto-extend the
- * admission vocabulary without a parallel edit in two files.
- *
- * @returns {string[]} Sorted array of legal admission tags.
- */
-export function getKnownGroupTags() {
-    const tags = new Set(['all', 'full']);
-    for (const profile of Object.values(BY_NAME)) {
-        const groups = (profile && profile.tools && profile.tools.allowed_groups) || [];
-        for (const g of groups) {
-            if (g !== '*') tags.add(g);
-        }
-    }
-    return Array.from(tags).sort();
-}
-
-/**
- * Filter tool definitions by the active profile's `tools.allowed_groups`.
- * Mirrors the legacy `Roles.filterTools` semantics in [`js/core.js`](../core.js):
- *
- *   - `'*'` in the profile's `allowed_groups` short-circuits to the full
- *     unfiltered set (the legacy `'full'` role bypass).
- *   - Tools tagged `roles: ['all']` (i.e. `_registeredRoles` includes
- *     `'all'`) admit unconditionally.
- *   - Otherwise a tool admits when its `_registeredRoles` and the
- *     profile's `allowed_groups` overlap on at least one entry.
+ *   - `'*'` as a single entry in the profile's resolved admit array
+ *     short-circuits to the full unfiltered set (full.v1's bypass).
+ *   - Otherwise a tool admits when its `function.name` either:
+ *       (a) appears literally in the admit array, OR
+ *       (b) matches a `'<prefix>__*'` glob entry by name prefix
+ *           (used for MCP-bridge tools whose names are formed as
+ *           `mcp__<serverId>__<toolName>` — see `js/mcp/bridge.js`).
  *
  * Unknown profile names fall back to `chat.v1` with a warn — defensive
  * only; production `getActiveProfileName` never emits anything else.
  *
- * **Slice 1 (1.23.0)** — this helper exists alongside `Roles.filterTools`;
- * no consumer wires up to it yet. Cross-product equivalence vs.
- * `Roles.filterTools` is pinned by `tests/test-profile-filter-tools.mjs`
- * so slice 2 (1.24.0) can flip every consumer site safely.
+ * Profiles are resolved via `resolveProfile` so inherited admit lists
+ * (and `admit_add` / `admit_remove` operators) are honored.
  *
  * @param {ToolDefShape[]}        defs         Tool definitions (typically `ToolRegistry.definitions`).
  * @param {string|null|undefined} profileName  Active profile name (e.g. `'coder.v1'`).
@@ -260,15 +225,28 @@ export function filterTools(defs, profileName) {
         }
     }
 
-    const allowed = (profile.tools && profile.tools.allowed_groups) || [];
-    if (allowed.includes('*')) return defs.slice();
+    const resolved = resolveProfile(profile, name => BY_NAME[name] || null);
+    const admit = (resolved.tools && resolved.tools.admit) || [];
+    if (admit.includes('*')) return defs.slice();
+
+    /** @type {Set<string>} */
+    const literal = new Set();
+    /** @type {string[]} */
+    const globPrefixes = [];
+    for (const entry of admit) {
+        if (typeof entry !== 'string') continue;
+        if (entry.endsWith('__*')) {
+            globPrefixes.push(entry.slice(0, -1)); // keep the trailing '__'
+        } else {
+            literal.add(entry);
+        }
+    }
 
     return defs.filter(def => {
-        const groups = (def && def._registeredRoles) || [];
-        if (groups.includes('all')) return true;
-        for (let i = 0; i < groups.length; i++) {
-            if (allowed.includes(groups[i])) return true;
-        }
+        const name = def && def.function && def.function.name;
+        if (typeof name !== 'string') return false;
+        if (literal.has(name)) return true;
+        for (const p of globPrefixes) if (name.startsWith(p)) return true;
         return false;
     });
 }
@@ -278,4 +256,4 @@ export function filterTools(defs, profileName) {
  * named imports — matches the established `Roles` / `Storage` / `State`
  * convention in `js/core.js`.
  */
-export const Profiles = { get, has, list, filterTools, getKnownGroupTags };
+export const Profiles = { get, has, list, filterTools };

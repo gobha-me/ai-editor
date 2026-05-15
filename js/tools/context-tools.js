@@ -161,7 +161,6 @@ async function indexProject({ force }) {
 // Register tools
 ToolRegistry.register('find_relevant_files', findRelevantFiles, {
     type: 'function',
-    roles: 'all', // 1.6.9 — read-only retrieval; opened to PM and plugin-dev (mirrors git_log at 1.6.8 / github#32)
     readOnly: true,
     function: {
         name: 'find_relevant_files',
@@ -186,7 +185,6 @@ ToolRegistry.register('find_relevant_files', findRelevantFiles, {
 
 ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
     type: 'function',
-    roles: 'all',
     readOnly: true,
     function: {
         name: 'get_embeddings_status',
@@ -200,7 +198,6 @@ ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
 
 ToolRegistry.register('index_project', indexProject, {
     type: 'function',
-    roles: ['full', 'coder'],
     function: {
         name: 'index_project',
         description: 'Manually trigger indexing of all project files for embeddings. Usually done automatically, but can be forced to refresh.',

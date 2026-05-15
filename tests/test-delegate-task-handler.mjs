@@ -205,6 +205,16 @@ test('delegate_task: workspace cost cap honors overlay from Settings', async () 
 
 test('delegate_task: capability summary surfaces admitted-tool list + ceilings', async () => {
     resetSubAgentSlot();
+    // 2.54.0 (gitea#438) — admission is name-based against
+    // subagent.v1.admit (the 8-tool read-only set). Pre-2.54.0 a
+    // delegate_task tagged `roles: 'all'` would over-admit to
+    // subagent.v1 via the legacy `'all'` tag short-circuit; the
+    // inversion correctly omits it. Register a known-admitted fixture
+    // (`read_file` IS in subagent.v1.admit) so the capability summary
+    // has something to surface.
+    ToolRegistry.register('read_file', async () => ({}), {
+        function: { name: 'read_file', description: 'read', parameters: { type: 'object', properties: {} } },
+    });
     let cap = null;
     const handlerPromise = ToolRegistry.execute('delegate_task', {
         task: 'audit',
@@ -218,6 +228,8 @@ test('delegate_task: capability summary surfaces admitted-tool list + ceilings',
     assert.equal(cap.profileRegistered, true);
     assert.ok(Array.isArray(cap.admittedTools) && cap.admittedTools.length > 0,
         'subagent.v1 admits read-only tools');
+    assert.ok(cap.admittedTools.includes('read_file'),
+        'read_file is in subagent.v1.admit and registered → must surface');
     // Default profile has no write tools — DESIGN §"Approval-card capability summary".
     assert.deepEqual(cap.writeTools, [], 'subagent.v1 has no write tools');
     assert.deepEqual(cap.memoryWriteTools, [], 'subagent.v1 has no memory tools');

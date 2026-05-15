@@ -952,14 +952,14 @@ export const LLMTools = {
      *
      * **2.0.0 — slice 3 flip.** `State.settings.role` is gone; the
      * Composer activates on `profileName === 'coder.v1'` (the picker-
-     * mapped or migrated value). `user_groups` is derived from the
-     * active profile's `tools.allowed_groups` so the Composer's
-     * authorization check (`isAuthorized` in `intelligence/tools/composer.js`,
-     * which expects role-style group tags like `'coder'`/`'pm'`)
-     * continues to work over the 5 legacy tags. The `'*'` bypass on
-     * `full.v1` translates to `['full']` so the legacy "full role
-     * bypass" branch in `isAuthorized` still fires for migrated full
-     * users.
+     * mapped or migrated value).
+     *
+     * **2.54.0 (gitea#438)** — admission inverted to profile-side
+     * `tools.admit` name lists. The Composer's separate `user_groups`
+     * authorization filter is now a no-op (the catalog no longer
+     * populates `required_groups` from the retired `roles:` field), so
+     * we pass an empty `user_groups` and rely on the chat loop's
+     * `Profiles.filterTools` as the sole admission gate.
      *
      * @returns {{ result: import('../intelligence/tools/contracts.js').ToolAdmissionResult|null, composerActive: boolean, profileName: string }}
      * @private
@@ -987,25 +987,13 @@ export const LLMTools = {
         const conversationId = Storage.get('activeConversation', null);
         const ledger = getOrCreateLedger(conversationId, CODER_V1.name);
 
-        // 2.0.0 — slice 3: derive the legacy group-tag list from the
-        // resolved profile's `allowed_groups`. `'*'` translates to
-        // `['full']` to preserve the pre-2.0.0 full-role bypass; `'all'`
-        // is filtered because the Composer's `isAuthorized` admits
-        // `required_groups: ['all']` unconditionally regardless of
-        // `user_groups` content.
-        const profile = Profiles.get(profileName);
-        const allowed = (profile && profile.tools && profile.tools.allowed_groups) || [];
-        const userGroups = allowed.includes('*')
-            ? ['full']
-            : allowed.filter(g => g !== 'all');
-
         const result = composeAdmission({
             task: 'chat',
             query: null,
             budget_tokens: CODER_V1.tools.budget_tokens,
             profile_static: CODER_V1.tools.static,
             task_ledger: ledger,
-            user_groups: userGroups,
+            user_groups: [],
             discovery_call: null,
             expansion_mode: CODER_V1.tools.expansion_mode,
         });

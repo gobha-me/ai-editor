@@ -49,7 +49,6 @@ test('all twelve preview tools are readOnly + roles all', () => {
     registerPreviewTools(stub);
     for (const c of captured) {
         assert.equal(c.definition.readOnly, true, `${c.name} should be readOnly`);
-        assert.equal(c.definition.roles, 'all', `${c.name} should have roles 'all'`);
         assert.equal(c.definition.type, 'function');
         assert.equal(c.definition.function.name, c.name);
         assert.ok(c.definition.function.description, `${c.name} has a description`);

@@ -96,7 +96,6 @@ function makeRegistration(server, mcpTool) {
             description,
             parameters,
         },
-        roles: server.roles || 'all',
         category: `mcp.${server.id}`,
     };
 

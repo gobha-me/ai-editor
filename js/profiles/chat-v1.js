@@ -107,15 +107,78 @@ export const CHAT_V1 = {
         discovery_strategies: ['categorical'], // Same default as coder.v1; semantic discovery in 1.4.1.
         budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
-        // 1.23.0 — profile-side admission set, parallel to the legacy tool-
-        // registration `roles: [...]` lists. `Profiles.filterTools` reads
-        // this and admits a tool when its `_registeredRoles` and this list
-        // overlap (or when the tool is `'all'`-tagged). Picker-selected
-        // chat.v1 covers historical pm + reviewer roles in addition to its
-        // own surface — both are subsets of "chat with full issue access".
-        // Tighter pm.v1 / reviewer.v1 synthetic profiles preserve granularity
-        // for migrated users; see `js/profiles/{pm,reviewer}-v1.js`.
-        allowed_groups: ['all', 'pm', 'reviewer'],
+        // 2.54.0 (gitea#438) — explicit admission. Replaces the legacy
+        // `allowed_groups: ['all', 'pm', 'reviewer']` tag-intersection
+        // model with an explicit list of tool names. Each name is a tool
+        // that `Profiles.filterTools` admits for this profile; the
+        // `'mcp__*'` glob admits MCP-bridge tools whose names are formed
+        // as `mcp__<serverId>__<toolName>` (see `js/mcp/bridge.js`).
+        // Curating chat.v1 narrower (e.g. trimming PM-only tools off
+        // picker-chat) is gitea#440's job — this list preserves the
+        // byte-equivalent admission set from the legacy tag-intersection
+        // model so the inversion is a pure refactor.
+        admit: [
+            'add_issue_comment',
+            'add_pr_review',
+            'ask_user',
+            'create_issue',
+            'create_pull_request',
+            'delegate_task',
+            'find_relevant_files',
+            'find_tool',
+            'get_ci_logs',
+            'get_ci_status',
+            'get_embeddings_status',
+            'get_project_tree',
+            'git_log',
+            'goto_line',
+            'list_issues',
+            'list_open_tabs',
+            'list_projects',
+            'list_pull_requests',
+            'list_tool_categories',
+            'list_tools_by_category',
+            'memory_recall',
+            'memory_remember',
+            'memory_revise',
+            'merge_pull_request',
+            'open_file',
+            'peek_project_file',
+            'peek_project_tree',
+            'peek_read_lines',
+            'preview_click',
+            'preview_console_logs',
+            'preview_errors',
+            'preview_fill',
+            'preview_inspect',
+            'preview_list',
+            'preview_logs',
+            'preview_network',
+            'preview_resize',
+            'preview_snapshot',
+            'preview_start',
+            'preview_stop',
+            'read_approved_plan',
+            'read_current_file',
+            'read_file',
+            'read_issue',
+            'read_lines',
+            'read_pull_request',
+            'scan_file',
+            'scratchpad_clear',
+            'scratchpad_read',
+            'scratchpad_write',
+            'search_in_files',
+            'select_range',
+            'set_active_project',
+            'submit_plan_for_approval',
+            'submit_script_for_approval',
+            'sync_releases',
+            'todo_read',
+            'todo_write',
+            'update_issue',
+            'mcp__*',
+        ],
     },
 
     task_ledger: {

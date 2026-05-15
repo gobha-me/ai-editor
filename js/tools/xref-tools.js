@@ -94,7 +94,6 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo']
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -195,7 +194,6 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo', 'path']
             }
         },
-        roles: 'all',
         readOnly: true
     });
 
@@ -282,7 +280,6 @@ export function registerXRefTools(registry) {
                 required: ['connectionId', 'owner', 'repo', 'path', 'start_line', 'end_line']
             }
         },
-        roles: 'all',
         readOnly: true
     });
 }

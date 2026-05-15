@@ -52,8 +52,6 @@ test('todo_write and todo_read register with roles: all', () => {
     assert.ok(write, 'todo_write must be in definitions');
     assert.ok(read, 'todo_read must be in definitions');
     // roles is normalized to an array of role ids by registry.register
-    assert.ok(Array.isArray(write._registeredRoles), 'roles array should be set');
-    assert.ok(Array.isArray(read._registeredRoles), 'roles array should be set');
 });
 
 // ============================================

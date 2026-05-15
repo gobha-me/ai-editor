@@ -4,7 +4,9 @@
  * Stubs `globalThis.fetch` so the protocol layer thinks it's talking to a
  * real MCP server. Asserts:
  *   - connect translates `tools/list` into `ToolRegistry.register()` calls
- *     with `mcp__<id>__<name>` names, `mcp.<id>` category, roles 'all'
+ *     with `mcp__<id>__<name>` names and `mcp.<id>` category. Admission is
+ *     profile-side (gitea#438): every picker profile's `tools.admit` carries
+ *     the `'mcp__*'` glob entry; `subagent.v1` deliberately omits it.
  *   - Catalog auto-derives the registered MCP tools (no extra wiring)
  *   - disconnect calls ToolRegistry.unregister and aborts in-flight calls
  *   - reconnect cleans up stale registrations from a prior connect
@@ -241,12 +243,20 @@ test('makeRegistration: short-circuits when server is disabled at call time', as
     globalThis.fetch = ORIG_FETCH;
 });
 
-// gitea#21: MCP server `roles` field gates tool visibility/execution.
-// The bridge passes `server.roles` straight to ToolRegistry.register(),
-// so the existing checkRoleAccess() machinery enforces it. These tests
-// guard the wire-up so a future refactor can't quietly regress to the
-// pre-1.6.10 hardcoded `roles: 'all'`.
-test('makeRegistration: server without roles → tool registered with roles "all"', async () => {
+// 2.54.0 (gitea#438) — MCP admission flipped from per-server-`roles:`
+// → per-tool group tags → profile `allowed_groups` intersection
+// → name-membership against `profile.tools.admit`. The MCP bridge no
+// longer copies `server.roles` onto the tool definition; admission
+// flows through the `'mcp__*'` glob entry that every picker profile
+// declares in its `admit:` array (with `subagent.v1` deliberately
+// omitting it as a trust-boundary measure).
+//
+// The per-server `roles:` config field on `MCPServerRegistry` records
+// is dead but persisted (back-compat for users who set it pre-2.54.0);
+// the bridge no longer consumes it. Per-server admission narrowing
+// arrives later via gitea#440 (hand-curate admit) or gitea#442
+// (`plugin.enabled` overlay), not via this codepath.
+test('makeRegistration: tool registers with no `roles` / `_registeredRoles` field (gitea#438 inversion)', async () => {
     resetAll();
     globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
     MCPServerRegistry.addServer({ id: 'demo', label: 'Demo', url: 'https://mcp.example/mcp' });
@@ -254,41 +264,41 @@ test('makeRegistration: server without roles → tool registered with roles "all
 
     const def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
     assert.ok(def, 'tool should be registered');
-    // Internal field set by ToolRegistry.register() at line ~87 — the canonical
-    // place to check the resolved role set.
-    assert.deepEqual(def._registeredRoles, ['all']);
+    assert.equal(def._registeredRoles, undefined,
+        '_registeredRoles must be absent in the post-inversion world');
+    assert.equal(def.roles, undefined,
+        'roles field must be absent in the post-inversion world');
 
     globalThis.fetch = ORIG_FETCH;
 });
 
-test('makeRegistration: server.roles array survives bridge → registry → checkRoleAccess', async () => {
+test('MCP tool admits via `mcp__*` glob in chat.v1 / coder.v1; rejected by subagent.v1 (trust boundary)', async () => {
     resetAll();
     globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
     MCPServerRegistry.addServer({
         id: 'demo',
         label: 'Demo',
         url: 'https://mcp.example/mcp',
-        roles: ['coder'],
+        roles: ['coder'], // legacy field — dead in 2.54.0 but persisted
     });
     await bridge.connect('demo');
 
-    const def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
-    assert.ok(def);
-    assert.deepEqual(def._registeredRoles, ['coder']);
-
-    // 2.0.0 — slice 3: profile-keyed gate. Save/restore the active
-    // profile so we don't leak into later tests.
     const priorProfile = State.settings.profile;
     try {
         State.settings.profile = 'coder.v1';
         assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
 
-        State.settings.profile = 'pm.v1';
-        const blocked = ToolRegistry.checkRoleAccess('mcp__demo__echo');
-        assert.equal(blocked.allowed, false);
-        assert.match(blocked.reason, /pm\.v1.*not permitted/);
+        State.settings.profile = 'chat.v1';
+        assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true,
+            'chat.v1 admits MCP tools via mcp__* glob (per-server narrowing arrives via gitea#440/#442)');
 
-        // 'full.v1' carries `tools.allowed_groups: ['*']` — bypass.
+        State.settings.profile = 'subagent.v1';
+        const blocked = ToolRegistry.checkRoleAccess('mcp__demo__echo');
+        assert.equal(blocked.allowed, false,
+            'subagent.v1 omits the mcp__* glob — trust boundary requires explicit admission');
+        assert.match(blocked.reason, /subagent\.v1.*not permitted/);
+
+        // `full.v1.tools.admit: ['*']` — wholesale bypass.
         State.settings.profile = 'full.v1';
         assert.equal(ToolRegistry.checkRoleAccess('mcp__demo__echo').allowed, true);
     } finally {
@@ -298,29 +308,28 @@ test('makeRegistration: server.roles array survives bridge → registry → chec
     globalThis.fetch = ORIG_FETCH;
 });
 
-test('reconnect: server.roles change re-registers tools with the new roles', async () => {
+test('reconnect: tool re-registers cleanly across the bridge cycle', async () => {
     resetAll();
     globalThis.fetch = makeFetchStub([{ name: 'echo', description: 'Echo' }]);
     MCPServerRegistry.addServer({
         id: 'demo',
         label: 'Demo',
         url: 'https://mcp.example/mcp',
-        roles: ['coder'],
     });
     await bridge.connect('demo');
 
     let def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
-    assert.deepEqual(def._registeredRoles, ['coder']);
+    assert.ok(def, 'first connect registers the tool');
 
-    // The Settings tab fires `mcp:serversChanged` after editing roles; the
-    // bridge handles that with disconnectAll → bootstrapAllServers, but the
-    // primitive being exercised is the same: a fresh connect after the
-    // record's roles change.
-    MCPServerRegistry.updateServer('demo', { roles: ['pm', 'reviewer'] });
+    // The Settings tab fires `mcp:serversChanged` after edits; the bridge
+    // handles that with disconnectAll → bootstrapAllServers. Exercise the
+    // primitive: a fresh connect after a record update should re-register
+    // cleanly without leaking duplicate definitions.
+    MCPServerRegistry.updateServer('demo', { label: 'Demo Renamed' });
     await bridge.connect('demo');
 
-    def = ToolRegistry.getDefinitions().find(d => d.function?.name === 'mcp__demo__echo');
-    assert.deepEqual(def._registeredRoles.sort(), ['pm', 'reviewer']);
+    const matches = ToolRegistry.getDefinitions().filter(d => d.function?.name === 'mcp__demo__echo');
+    assert.equal(matches.length, 1, 'reconnect should not leak duplicate registrations');
 
     globalThis.fetch = ORIG_FETCH;
 });
@@ -358,7 +367,6 @@ test('tool embeddings cache drops entry on tools:unregistered', async () => {
     ToolRegistry.register(fakeName, async () => ({ result: 'ok' }), {
         type: 'function',
         function: { name: fakeName, description: 'fixture', parameters: { type: 'object', properties: {} } },
-        roles: 'all',
         category: 'misc',
     });
 

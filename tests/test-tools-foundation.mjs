@@ -163,10 +163,15 @@ test('Catalog.cost_estimate ≥ short_cost and both are positive', () => {
         `cost_estimate=${td.metadata.cost_estimate} should be >= short_cost=${td.metadata.short_cost}`);
 });
 
-test('Catalog mirrors registered roles into authorization.required_groups', () => {
+test('Catalog populates authorization.required_groups as empty (gitea#438 — admission inverted to profile-side admit lists)', () => {
+    // 2.54.0 (gitea#438) — the catalog no longer derives per-tool
+    // `required_groups` from the retired `_registeredRoles` field.
+    // The composer's `isAuthorized` filter is correspondingly a no-op
+    // (returns true on empty `required_groups`); profile-side
+    // `Profiles.filterTools` is the sole admission gate.
     registerFixtureTools();
-    assert.deepEqual(Catalog.getByName('read_file').metadata.authorization.required_groups, ['all']);
-    assert.deepEqual(Catalog.getByName('edit_file').metadata.authorization.required_groups, ['coder']);
+    assert.deepEqual(Catalog.getByName('read_file').metadata.authorization.required_groups, []);
+    assert.deepEqual(Catalog.getByName('edit_file').metadata.authorization.required_groups, []);
 });
 
 test('Catalog.required_consent is false in 1.3.4 (consent gate lands later)', () => {
@@ -284,7 +289,6 @@ test('git_log is registered with roles: all', async () => {
     const defs = ToolRegistry.getDefinitions();
     const gitLogDef = defs.find(d => d.function?.name === 'git_log');
     assert.ok(gitLogDef, 'git_log should be registered');
-    assert.deepEqual(gitLogDef._registeredRoles, ['all'], 'git_log must be available to all roles');
 });
 
 // ============================================
@@ -302,5 +306,4 @@ test('find_relevant_files is registered with roles: all', async () => {
     const defs = ToolRegistry.getDefinitions();
     const def = defs.find(d => d.function?.name === 'find_relevant_files');
     assert.ok(def, 'find_relevant_files should be registered');
-    assert.deepEqual(def._registeredRoles, ['all'], 'find_relevant_files must be available to all roles');
 });

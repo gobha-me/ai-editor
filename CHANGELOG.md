@@ -4,7 +4,82 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-## [2.53.0] - 2026-05-15
+## [2.54.0] - 2026-05-15
+
+### Changed — invert tool admission (gitea#438): tool-side `roles:` tags retired; profiles enumerate explicit tool names in `tools.admit`
+
+The github#40 paper-session (closed 2026-05-15) decided to invert tool admission. Pre-2.54.0 tools self-tagged with `roles: 'all' | string[]` and profiles intersected via `tools.allowed_groups: string[]`; the runtime gate (`Profiles.filterTools`) admitted on tag overlap. Three failure modes drove the inversion:
+
+1. **Silent over-admission via invisible tags.** `create_issue` was reachable from picker `chat.v1` because `chat.v1.allowed_groups` carried `'pm'`. The tag was never visible at the gate — adding a tool to a `'pm'`-tagged file silently widened chat's catalog.
+2. **Silent dead tools.** `'plugin-dev'`-tagged tools admitted by zero picker profiles. The legacy `Roles.filterTools` returned an empty subset and the model never saw the tool; the contributor only noticed in retrospect.
+3. **Inheritance diverged rather than narrowed.** Children `tools.allowed_groups` overrode the parent's wholesale (per `inheritance.js` array-replacement), so `coder.v1`'s `['all', 'coder']` *replaced* chat.v1's `['all', 'pm', 'reviewer']` instead of narrowing it. There was no way to express "inherit chat.v1 minus the pm-only tools" without restating the full intended list.
+
+The new contract:
+
+- **`profile.tools.admit: string[]`** — explicit list of tool names this profile admits.
+- **`'*'` sentinel** — single-entry array (`['*']`) → wholesale bypass. `full.v1` only.
+- **`'<prefix>__*'` glob entries** — admit every tool whose name begins with `<prefix>__`. Every picker profile carries `'mcp__*'` so MCP-bridge tools (named `mcp__<serverId>__<toolName>` per `js/mcp/bridge.js`) admit without per-server enumeration. `subagent.v1` deliberately omits the glob — trust boundary requires explicit per-tool admission.
+- **`profile.tools.admit_add: string[]`** — inheritance operator: set-union onto inherited admit.
+- **`profile.tools.admit_remove: string[]`** — inheritance operator: set-subtract from inherited admit.
+- Operator resolution: (1) `base.admit`; (2) subtract `child.admit_remove`; (3) union `child.admit_add`. If child supplies literal `admit`, that wins wholesale and operators are warned-then-ignored. Operator keys never appear on the resolved profile (consumed during merge). Implementation at [`js/profiles/inheritance.js`](js/profiles/inheritance.js).
+
+**Picker profile admit lists** (computed per-profile by walking every tool's pre-2.54.0 `roles:` declaration and unioning per the legacy `Roles.filterTools` semantic — byte-equivalent to the pre-inversion admission set, modulo the new `mcp__*` glob):
+
+- `chat.v1.admit` → 59 tool names + `'mcp__*'` (was `['all', 'pm', 'reviewer']`).
+- `coder.v1.admit` → 70 tool names + `'mcp__*'` (was `['all', 'coder']`).
+- `kb.v1.admit` → 51 tool names + `'mcp__*'` (was `['all']`).
+- `full.v1.admit` → `['*']` (sentinel preserved).
+- `pm.v1.admit` → 59 tool names + `'mcp__*'` (was `['all', 'pm']`).
+- `reviewer.v1.admit` → 54 tool names + `'mcp__*'` (was `['all', 'reviewer']`).
+- `plugin-dev.v1.admit` → 56 tool names + `'mcp__*'` (was `['all', 'plugin-dev']`).
+- `chat_multi.v1`, `rp.v1` — empty `tools` block, inherits `chat.v1.admit` unchanged.
+- `subagent.v1.admit` → 8 read-only tool names mirroring `tools.static` (was `['all', 'subagent']`). **Deliberately NO `'mcp__*'` glob** — sub-agent trust boundary requires explicit per-tool admission. The pre-2.54.0 `'all'` tag silently over-admitted ~50 tools beyond the intended trust boundary; the inversion fixes this.
+
+Curating these lists narrower (e.g. trimming PM-only tools off picker `chat.v1`) is gitea#440's job — this PR preserves the byte-equivalent admission set so the inversion is a pure refactor.
+
+**Default OFF** for new tools. A newly-registered tool that no profile lists in `admit` is callable by no profile. Bounded contributor cost — registry-side warning surfaces it (gitea#439). Default ON was disqualified because it would silently widen `kb.v1`'s read-only safety property every time a side-effecting tool lands.
+
+**Knock-on retirements:**
+
+- `Profiles.getKnownGroupTags()` ([`js/profiles/registry.js:218`](js/profiles/registry.js)) — deleted. There are no group tags to enumerate.
+- `LEGAL_GROUP_TAGS` validation block in [`js/tools/registry.js:60–98`](js/tools/registry.js) — deleted. `register()` becomes a pure store; the typo-rejection allowlist had nothing to validate against.
+- `_registeredRoles` field on tool definitions — deleted. The catalog at [`js/intelligence/tools/catalog.js:320`](js/intelligence/tools/catalog.js) now produces empty `authorization.required_groups` for every tool; the composer's `isAuthorized` filter (`js/intelligence/tools/composer.js:90`) becomes a no-op (returns true on empty `required_groups`); `js/llm/api.js _runComposer` passes `user_groups: []`. **Profile-side `Profiles.filterTools` is the sole admission gate.**
+- `roles:` field stripped from every `ToolRegistry.register()` call across `js/tools/*.js` (~30 files, 83 lines). MCP bridge stops copying `server.roles` onto the tool def. Per-server `MCPServerRegistry.roles:` config field is preserved in storage (back-compat for users who set it pre-2.54.0) but no longer consumed by the bridge — per-server narrowing arrives later via gitea#440 / gitea#442.
+
+**Files (sweeping change — non-exhaustive):**
+
+| File | Change |
+|---|---|
+| [`js/profiles/profile-contract.js`](js/profiles/profile-contract.js) | EDIT — `ToolsConfig` typedef adds `admit` / `admit_add` / `admit_remove`; `allowed_groups` retired. |
+| [`js/profiles/inheritance.js`](js/profiles/inheritance.js) | EDIT — `mergeDeep` recurses with `parentKey`; `applyAdmitOperators` honors `admit_add` / `admit_remove` when merging the `tools` block; literal `admit` wins-with-warn. |
+| [`js/profiles/registry.js`](js/profiles/registry.js) | EDIT — `filterTools` rewritten: name-membership + `<prefix>__*` glob support; resolves via `resolveProfile` so inherited admit lists / operators honor; `getKnownGroupTags` deleted. |
+| [`js/profiles/{chat,coder,kb,full,pm,reviewer,plugin-dev,chat-multi,rp,subagent}-v1.js`](js/profiles/) | EDIT — all 10 profiles migrated `allowed_groups` → `admit`. |
+| [`js/tools/registry.js`](js/tools/registry.js) | EDIT — `roles:` validation block deleted; `_registeredRoles` enrichment dropped; `checkRoleAccessForProfile` error message references `tools.admit`. |
+| [`js/tools/*.js`](js/tools/) (~30 files) | EDIT — `roles:` line stripped from every `ToolRegistry.register()` call. Doc comments updated. |
+| [`js/mcp/bridge.js`](js/mcp/bridge.js) | EDIT — `makeRegistration` no longer sets `roles:` on the tool def. |
+| [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js) | EDIT — `defToToolDef` no longer reads `def._registeredRoles`; `authorization.required_groups` is always `[]`. |
+| [`js/llm/api.js`](js/llm/api.js) | EDIT — `_runComposer` no longer derives `user_groups` from the retired `allowed_groups`; passes `user_groups: []`. |
+| [`js/prompts.js`](js/prompts.js) | EDIT — comment near `scratchpad_write` admission gate updated to reference `tools.admit`. |
+| [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs) | REWRITE — drop legacy cross-product equivalence; assert per-profile admit semantic + glob matching + sentinel bypass + edge cases + synthetic registration. |
+| [`tests/test-profile-admit-coverage.mjs`](tests/test-profile-admit-coverage.mjs) | NEW — pin every profile's resolved admit array to the migration baseline; well-formedness check on every entry. |
+| [`tests/test-profiles-inheritance.mjs`](tests/test-profiles-inheritance.mjs) | EDIT — extend with `admit_add` / `admit_remove` operator coverage (narrow / widen / compose / dedupe / literal-wins / empty-base). |
+| [`tests/test-tools-registry-legal-groups.mjs`](tests/test-tools-registry-legal-groups.mjs) | DELETE — pinned the retired typo-validator semantics. |
+| [`tests/test-tool-registry-execute-with-profile.mjs`](tests/test-tool-registry-execute-with-profile.mjs) | REWRITE — fixtures use production-admitted names (`read_file`, `commit_files`, `delegate_task`) instead of synthetic `roles:` tags. |
+| [`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs) | EDIT — three legacy `server.roles → tool._registeredRoles → checkRoleAccess` propagation tests rewritten as `mcp__*` glob admission probes. |
+| [`tests/test-system-prompt-admission.mjs`](tests/test-system-prompt-admission.mjs) | EDIT — fakes register under production-admitted names (`read_file`, `create_issue`, `commit_files`) instead of synthetic role tags. |
+| [`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs) | EDIT — `composeAdmission user_groups` filter tests rewritten as no-op verifiers. |
+| [`tests/test-tools-foundation.mjs`](tests/test-tools-foundation.mjs) | EDIT — `Catalog.required_groups` test asserts empty array (was `['all']` / `['coder']`); per-tool `roles:` assertions stripped. |
+| [`tests/test-profiles-fixtures.mjs`](tests/test-profiles-fixtures.mjs) snapshots | REGEN — 9 profile snapshots regenerated via `node tests/update-profile-fixtures.mjs`. |
+| Other test files | EDIT — `tests/test-{profiles-phase2,profile-resolution,delegate-task-handler}.mjs` updated to assert post-inversion shape. Per-tool `roles=all` assertions stripped from `tests/test-{ask-user,approved-plan,preview-tier2,preview-tier3,preview-tools,script-tools,todo-tools,plan-mode}.mjs`. |
+| [`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md) | EDIT — §"Inheritance > Tool admission" added documenting the new contract + operators + narrowing-not-diverging invariant + default-OFF rationale. |
+| [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) | EDIT — top-level **⚠️ Superseded** banner pointing to DESIGN-profiles.md for the post-inversion model. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — gitea#438 closed; #439 / #440 / #442 marked unblocked. |
+
+**Removability.** Revert the PR to restore the pre-2.54.0 tag-intersection model byte-equivalent. The migration data lives in `js/profiles/{chat,coder,kb}-v1.js` admit arrays; reverting reinstates the pre-2.54.0 `allowed_groups` literals and re-enables the catalog's `required_groups` derivation + the composer's `isAuthorized` filter. No persisted state migration — `MCPServerRegistry.roles:` was already preserved through this PR for back-compat.
+
+Closes gitea#438. Unblocks gitea#439 (default-OFF dev warning), gitea#440 (hand-curate admit list), gitea#442 (`plugin.enabled` flag overlay).
+
+
 
 ### Changed — `resolveTaskLedgerConfig` resolver — clears the last direct CODER_V1 read in the retrieval manager (ICD #5 finding #1)
 

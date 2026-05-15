@@ -115,7 +115,6 @@ ToolRegistry.register('git_log', gitLog, {
             required: []
         }
     },
-    roles: 'all',  // Read-only — safe for every role
     readOnly: true
 });
 

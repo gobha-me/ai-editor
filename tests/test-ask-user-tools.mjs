@@ -52,8 +52,6 @@ test('ask_user registers with roles: all', () => {
     const defs = ToolRegistry.getDefinitions();
     const def = defs.find(d => d.function?.name === 'ask_user');
     assert.ok(def, 'ask_user must be in definitions');
-    assert.ok(Array.isArray(def._registeredRoles), 'roles array should be set');
-    assert.deepEqual(def._registeredRoles, ['all']);
     // Confirm the schema declares the three modes the issue specifies.
     const enumValues = def.function?.parameters?.properties?.type?.enum;
     assert.deepEqual(
