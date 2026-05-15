@@ -4,6 +4,89 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.51.0] - 2026-05-15
+
+### Changed — Compact tools table-of-contents replaces per-tool description bullets in the system prompt (gitea#426)
+
+The system prompt's admitted-tools enumeration switched from per-tool
+bullets (`- <description> (<name>)`) to a category-grouped
+table-of-contents:
+
+```
+TOOLS (22 admitted):
+  read_file, read_lines, read_current_file, read_function — Read-only file access (full files, line ranges, current buffer)
+  edit_file, replace_lines, insert_lines, delete_lines — In-place edits
+  create_file, write_file, delete_file — Create, overwrite, or delete entire files
+  ...
+```
+
+Per-tool descriptions are no longer redundantly carried in the prompt
+body; the OpenAI tools-array already publishes them in the function-
+calling schema each request. The TOC turns the prompt into a *directory*
+(which tools exist, how they group) while the schema stays the
+*reference* (what each tool does).
+
+**Why the change.** AAR of the 2026-05-14 `qwen-3-6-plus` session
+against `xcaliber/HTML-Games#215` (sibling to gitea#421/#422/#423/
+#424/#425, same 918k-token / 42-request session) observed the model
+burning **5–6 requests / ~5k tokens per session** on pure tool
+discovery — repeated `list_tool_categories` and `list_tools_by_category`
+calls including a second `list_tool_categories` invocation 30 minutes
+after the first, because the model had lost track of what categories
+existed. The flat enumeration didn't surface "what category does this
+tool belong to," so the model traversed the catalog as if it had no
+list at all. The TOC presents the admitted set *as* a directory
+keyed by category, eliminating the routine discovery loop.
+
+**Implementation shape.** [`js/prompts.js`](js/prompts.js) lines 88-179
+— `renderToolEnumeration` rewritten + `_categoryShortLabel` and
+`_groupAdmittedByCategory` helpers added. The renderer calls
+`Catalog.listAll()` and `Catalog.listCategories()` exactly once each
+per turn (bounded by the registry size, ~75 tools, not the admitted
+set); for each admitted def it looks up the registered category via
+the live registry. Unknown names land under `misc` (matches the
+catalog's pre-existing honest-gap convention; runtime-registered MCP
+tools surface under their `mcp.<server>` category automatically).
+Categories sort alphabetically; within a category, admission order
+is preserved.
+
+**Token budget.** ~200 tokens for a typical 22-tool admission vs.
+~1000 tokens for the pre-2.51.0 bullet shape. The 2.50.0.1 Anthropic-
+style prompt-cache breakpoint (gitea#423) means the cost amortizes to
+~0 after the first request in a Venice session.
+
+**Test coverage.**
+[`tests/test-system-prompt-tools-toc.mjs`](tests/test-system-prompt-tools-toc.mjs)
+NEW (7 subtests): header line carries the admitted count; multi-category
+admission groups names per category; empty admission preserves the
+existing empty-state line; single-tool admission renders a single
+category line; realistic 22-tool fixture stays under the 250-token
+budget (25% headroom over the 200-token target); unregistered tool
+falls back to `misc`; diverse admission orders alphabetically by
+category slug.
+[`tests/test-system-prompt-admission.mjs`](tests/test-system-prompt-admission.mjs)
+positive-name assertions updated from `(${name})` paren-suffix to
+word-boundary matching within the enumeration block; the pre-2.51.0
+description-in-prompt assertion removed (descriptions live on the API
+tools-array, not in the prompt body). Negative-leakage assertions,
+drift-catch, dead-name absence, and scratchpad admission-gate tests
+all preserved unchanged.
+
+**Why this is a minor not a sub-patch.** New prompt content + a
+user-observable shape change in the system prompt that affects model
+behavior (the model now sees a directory, not a description list);
+the X.Y.Z.N convention reserves sub-patches for in-track polish off
+an existing minor's contract. `2.51.0` is the right band.
+
+**Out of scope.** Option C from the gitea#426 issue (auto-cache the
+catalog in scratchpad on first `list_tool_categories` call) is
+deferred — the TOC eliminates the routine discovery loop directly;
+re-evaluate after one dogfood AAR. Adding a structured `purpose`
+field on `ToolDef` is also deferred — that would create a parallel
+enumeration the existing `feedback_prompts_js_parallel_enumeration`
+load-bearing memory warns against; the category-grouped layout
+side-steps the need.
+
 ## [2.50.0.3] - 2026-05-15
 
 ### Fixed — Cross-request read-cache returns full payload instead of useless stub (gitea#421)

@@ -15,6 +15,13 @@
  * .getDefinitions(), profileName)`, matching the API tools-array
  * `getToolsForRole()` already publishes via the same filter.
  *
+ * **2.51.0 — line shape switched to category-grouped TOC.** The pre-2.51.0
+ * `- <description> (<name>)` bullets become `<name>, <name> — <category>`
+ * lines per gitea#426. Per-tool descriptions are no longer redundantly
+ * carried in the prompt; the OpenAI tools-array already carries them.
+ * The positive assertions here grep the admitted names within the
+ * enumeration block; description-in-prompt assertions have been removed.
+ *
  * Tests cover:
  *   - **Composer-active branch** — unchanged from 1.3.15: enumerates exactly
  *     the admitted set, no leakage of non-admitted names.
@@ -93,24 +100,47 @@ function cleanRegistry() {
 // Composer-active branch — 1.3.15 behavior preserved
 // ============================================
 
+// Slice the enumeration block out of a rendered prompt. Pre-2.51.0 the
+// upper bound was '📝 SCRATCHPAD' (which only appears when scratchpad_write
+// is admitted); post-2.51.0 the TOC is always followed by '🚨 EFFICIENCY
+// RULES' regardless. Try both for forward compat with future template
+// reshuffles.
+function enumerationBlock(prompt) {
+    const afterPreamble = prompt.split('You have access to these tools:')[1] || '';
+    const upper = afterPreamble.indexOf('📝 SCRATCHPAD');
+    const fallback = afterPreamble.indexOf('🚨');
+    const end = upper >= 0 ? upper : (fallback >= 0 ? fallback : afterPreamble.length);
+    return afterPreamble.slice(0, end);
+}
+
+// 2.51.0 TOC line shape: `  name1, name2, name3 — <category label>`. The
+// per-tool word-boundary check survives the shape change AND any later
+// shape change that still embeds the canonical name (e.g. back to per-tool
+// bullets, or to a JSON-shaped table). Tests that pinned `(${name})` were
+// reading the wrong invariant.
+function nameAppearsInBlock(block, name) {
+    return new RegExp(`(?:^|[\\s,])${name}(?:[\\s,]|$)`, 'm').test(block);
+}
+
 test('buildSystemPrompt Composer-active mode enumerates exactly the admitted names', () => {
     const prompt = buildSystemPrompt({ admittedDefs: ADMITTED_FIXTURE, composerActive: true });
+    const block = enumerationBlock(prompt);
     for (const td of ADMITTED_FIXTURE) {
         assert.ok(
-            prompt.includes(`(${td.name})`),
-            `expected enumeration to include "(${td.name})", but it did not`
+            nameAppearsInBlock(block, td.name),
+            `expected enumeration to include "${td.name}" as a word, but it did not`
         );
     }
 });
 
 test('buildSystemPrompt Composer-active mode does NOT enumerate non-admitted legacy names', () => {
     const prompt = buildSystemPrompt({ admittedDefs: ADMITTED_FIXTURE, composerActive: true });
-    const enumerationBlock = prompt.split('You have access to these tools:')[1].split('📝 SCRATCHPAD')[0];
+    const block = enumerationBlock(prompt);
     for (const name of LEGACY_TOOL_NAMES) {
         if (ADMITTED_NAMES.has(name)) continue;
         assert.ok(
-            !enumerationBlock.includes(`(${name})`),
-            `enumeration leaked non-admitted tool "(${name})" — drift gap reopened`
+            !nameAppearsInBlock(block, name),
+            `enumeration leaked non-admitted tool "${name}" — drift gap reopened`
         );
     }
 });
@@ -151,8 +181,15 @@ test('non-Composer mode enumerates registered tools admitted to the active profi
     ToolRegistry.register('fake_universal_tool', () => {}, defFor('fake_universal_tool', 'all', 'A universally-admitted test tool.'));
     try {
         const prompt = buildSystemPrompt({ composerActive: false });
-        assert.ok(prompt.includes('(fake_universal_tool)'), 'all-tagged tool should appear in the chat.v1 enumeration');
-        assert.ok(prompt.includes('A universally-admitted test tool.'), 'description should appear alongside the name');
+        const block = enumerationBlock(prompt);
+        assert.ok(
+            nameAppearsInBlock(block, 'fake_universal_tool'),
+            'all-tagged tool should appear in the chat.v1 enumeration'
+        );
+        // 2.51.0 — per-tool descriptions are no longer carried in the prompt
+        // body (they live on the API tools-array). The description-in-prompt
+        // assertion that lived here pre-2.51.0 has been removed; the name
+        // assertion above is the load-bearing check.
     } finally {
         cleanRegistry();
     }
@@ -164,10 +201,17 @@ test('non-Composer mode respects profile filtering — coder-only tools do NOT a
     ToolRegistry.register('fake_pm_visible', () => {}, defFor('fake_pm_visible', ['pm'], 'PM-visible test tool.'));
     try {
         const prompt = buildSystemPrompt({ composerActive: false });
-        assert.ok(!prompt.includes('(fake_coder_only)'), 'coder-only tool must be filtered out for chat.v1');
+        const block = enumerationBlock(prompt);
+        assert.ok(
+            !nameAppearsInBlock(block, 'fake_coder_only'),
+            'coder-only tool must be filtered out for chat.v1'
+        );
         // chat.v1's allowed_groups includes 'pm' (per js/profiles/chat-v1.js)
         // — the pm-tagged tool surfaces.
-        assert.ok(prompt.includes('(fake_pm_visible)'), 'pm-tagged tool must appear under chat.v1');
+        assert.ok(
+            nameAppearsInBlock(block, 'fake_pm_visible'),
+            'pm-tagged tool must appear under chat.v1'
+        );
     } finally {
         cleanRegistry();
     }
@@ -187,7 +231,11 @@ test('no-args call (legacy generateEdit / commit-message path) goes through the 
     ToolRegistry.register('noargs_probe_tool', () => {}, defFor('noargs_probe_tool', 'all'));
     try {
         const prompt = buildSystemPrompt();
-        assert.ok(prompt.includes('(noargs_probe_tool)'), 'no-args call must derive the enumeration, not skip it');
+        const block = enumerationBlock(prompt);
+        assert.ok(
+            nameAppearsInBlock(block, 'noargs_probe_tool'),
+            'no-args call must derive the enumeration, not skip it'
+        );
     } finally {
         cleanRegistry();
     }

@@ -21,6 +21,7 @@ import { isConnectionDown } from './offline-indicator.js';
 import { wrapUntrusted, UNTRUSTED_KINDS } from './security/untrusted-wrap.js';
 import { getPlanMode } from './chat/state.js';
 import { ToolRegistry } from './tools/registry.js';
+import { Catalog } from './intelligence/tools/catalog.js';
 
 // ============================================
 // EDITOR-SPECIFIC PROMPTS
@@ -73,10 +74,79 @@ You have a scratchpad for notes that persist across the entire conversation, eve
 `;
 
 /**
- * Render an admitted tool list as enumeration bullets. Each bullet shows
- * the tool's `description` (the same 1-2 sentence "for discovery" copy
- * carried on `ToolDef.description`) followed by the canonical name in
- * parens. Stable order — preserves the admission order from the Composer.
+ * Shorten a category description to its first clause (up to the first
+ * period or em dash). Falls back to the category name itself when the
+ * description is empty (unmapped category) — matches the catalog's
+ * honest-gap convention without crashing the renderer.
+ *
+ * @param {string} description  Raw entry from `Catalog.listCategories()`.
+ * @param {string} fallbackName Category slug to display if `description` is empty.
+ * @returns {string}
+ */
+function _categoryShortLabel(description, fallbackName) {
+    if (!description) return fallbackName;
+    const head = description.split(/[.—]/)[0].trim();
+    return head || fallbackName;
+}
+
+/**
+ * Group admitted tool defs by their registered category. Looks each
+ * admitted name up in `Catalog.listAll()` (the live registry, which
+ * includes runtime-registered MCP tools); unknown names land under `misc`
+ * to surface the gap rather than silently misfile. Categories are sorted
+ * alphabetically; within a category, tools preserve the admission order
+ * passed in (matters for the Composer's budget-applied ordering).
+ *
+ * Reads `Catalog.listAll()` + `Catalog.listCategories()` exactly once
+ * each — bounded by the registry size (~75 tools), not the admitted set.
+ *
+ * @param {Array<{name: string, description: string}>} admittedDefs
+ * @returns {Array<{category: string, label: string, tools: Array<{name: string, description: string}>}>}
+ */
+function _groupAdmittedByCategory(admittedDefs) {
+    const nameToCat = new Map();
+    const catToDesc = new Map();
+    try {
+        for (const td of Catalog.listAll()) {
+            nameToCat.set(td.name, td.category);
+        }
+        for (const ci of Catalog.listCategories()) {
+            catToDesc.set(ci.category, ci.description);
+        }
+    } catch (_) {
+        // Catalog read failed (test fixture without a populated registry) —
+        // every admitted def falls through to 'misc' below.
+    }
+
+    const groups = new Map();
+    for (const td of admittedDefs) {
+        const cat = nameToCat.get(td.name) || 'misc';
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat).push(td);
+    }
+
+    const sortedCats = [...groups.keys()].sort();
+    return sortedCats.map(cat => ({
+        category: cat,
+        label: _categoryShortLabel(catToDesc.get(cat), cat),
+        tools: groups.get(cat),
+    }));
+}
+
+/**
+ * Render an admitted tool list as a compact tools-table-of-contents —
+ * one line per category, with the admitted names joined by `, ` and a
+ * short category label after an em dash. Replaces the pre-2.51.0
+ * per-tool bullet shape that re-stated each tool's `description` (already
+ * carried natively on the API tools-array).
+ *
+ * **Why a TOC instead of per-tool bullets** — the model already sees
+ * each tool's description in the function-calling schema; re-emitting
+ * the descriptions in the prompt is redundant. A TOC turns the prompt
+ * into a *directory* (which tools exist, how they group) and lets the
+ * tools-array stay as the *reference* (what each tool does). Sized at
+ * ~200 tokens for a typical 22-tool admission vs. ~1000 tokens for the
+ * old bullet shape. See gitea#426.
  *
  * Returns an empty-state line when no tools are admitted (e.g., the
  * profile's static set was budget-pressured down to zero) so the prompt
@@ -87,9 +157,15 @@ You have a scratchpad for notes that persist across the entire conversation, eve
  */
 function renderToolEnumeration(admittedDefs) {
     if (!admittedDefs || admittedDefs.length === 0) {
-        return '- (no tools currently admitted — none of the profile\'s static set could be admitted under the current budget)';
+        return 'TOOLS (0 admitted):\n  (no tools currently admitted — none of the profile\'s static set could be admitted under the current budget)';
     }
-    return admittedDefs.map(td => `- ${td.description.trim()} (${td.name})`).join('\n');
+    const header = `TOOLS (${admittedDefs.length} admitted):`;
+    const groups = _groupAdmittedByCategory(admittedDefs);
+    const lines = groups.map(g => {
+        const names = g.tools.map(td => td.name).join(', ');
+        return `  ${names} — ${g.label}`;
+    }).join('\n');
+    return `${header}\n${lines}`;
 }
 
 /**
