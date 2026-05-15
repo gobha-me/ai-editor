@@ -413,6 +413,9 @@ export function stopGeneration() {
     if (streamingEl) {
         const content = streamingEl.querySelector('.message-content').textContent;
         streamingEl.remove();
-        addMessage('assistant', content + '\n\n*(generation stopped)*');
+        // gitea#425 — this path only fires from the explicit Stop button
+        // (bound in app.js); name the reason rather than the symptom so
+        // an exported transcript shows why the run ended.
+        addMessage('assistant', content + '\n\n*Stopped by you.*');
     }
 }

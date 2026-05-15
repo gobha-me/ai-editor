@@ -159,6 +159,35 @@ export const LLMDebug = {
         this._current = null;
     },
 
+    /**
+     * Tag the most recent finalized exchange with the tool-loop's outcome
+     * (the loop's `breakReason`, the round count, and any captured
+     * provider finish-reason / error). Called from the wrapper's
+     * `onLoopComplete` hook so a multi-request loop's outcome ends up
+     * surfaced on its last exchange (and therefore in `exportText` and
+     * the debug-modal renderer).
+     *
+     * Per-loop info — distinct from the per-request `finishReason` set by
+     * `endExchange`. If the same exchange has both, both are preserved.
+     *
+     * @param {object} outcome
+     * @since 2.50.0.4 — gitea#425
+     */
+    tagLoopOutcome(outcome) {
+        if (!outcome) return;
+        if (this.exchanges.length === 0) return;
+        const last = this.exchanges[this.exchanges.length - 1];
+        if (!last.result) last.result = {};
+        last.result.loopBreakReason = outcome.breakReason || null;
+        last.result.loopRounds = outcome.rounds ?? null;
+        last.result.loopToolActions = outcome.toolActions ?? null;
+        if (outcome.finishReason && !last.result.finishReason) {
+            last.result.finishReason = outcome.finishReason;
+        }
+        if (outcome.error) last.result.loopError = String(outcome.error);
+        EventBus.emit('debug:loopOutcomeTagged', last);
+    },
+
     /** Clear all exchanges. */
     clear() {
         this.exchanges = [];
@@ -212,6 +241,13 @@ export const LLMDebug = {
                     }
                 }
                 if (ex.result.usage) lines.push(`Usage: ${JSON.stringify(ex.result.usage)}`);
+                if (ex.result.loopBreakReason) {
+                    const parts = [`reason=${ex.result.loopBreakReason}`];
+                    if (ex.result.loopRounds != null) parts.push(`rounds=${ex.result.loopRounds}`);
+                    if (ex.result.loopToolActions != null) parts.push(`tool_actions=${ex.result.loopToolActions}`);
+                    if (ex.result.loopError) parts.push(`error=${ex.result.loopError}`);
+                    lines.push(`Loop: ${parts.join(', ')}`);
+                }
             } else {
                 lines.push('(no result recorded)');
             }

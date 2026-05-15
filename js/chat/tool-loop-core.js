@@ -140,6 +140,11 @@ function _normalizeHooks(hooks) {
         // `LLM.chat`'s internal finally clears the flag per-call. Sub-agents
         // pass a no-op.
         onChatComplete: provided.onChatComplete || _NOOP,
+        // Fires once at the end of the loop (after the for-loop exits and
+        // before the `return`), regardless of how it exited. Receives the
+        // structured stop context so the wrapper can tag debug exchanges,
+        // emit telemetry, etc. Sub-agents pass a no-op. (gitea#425)
+        onLoopComplete: provided.onLoopComplete || _NOOP,
     };
 }
 
@@ -180,6 +185,11 @@ export async function runToolLoop(context, hooks, transport) {
     let textCommittedMidLoop = false;
     const toolActions = [];
     let breakReason = 'natural_stop';
+    // gitea#425 — capture last provider finish/error so the loop's stop
+    // context can carry them out for telemetry + debug-pane tagging.
+    let lastFinishReason = null;
+    let lastError = null;
+    let roundsExecuted = 0;
 
     const toolCallCache = new Map();
     const duplicateStreak = new Map();
@@ -219,10 +229,14 @@ export async function runToolLoop(context, hooks, transport) {
             result = await transport.chat(_validated.messages, chatOptions);
 
             content = content || result.content || '';
+            roundsExecuted = round + 1;
+            lastFinishReason = result?.finishReason || null;
             h.onChatComplete();
         } catch (err) {
             transport.stop();
             lastRoundContent = '';
+            lastError = err.message || String(err);
+            roundsExecuted = round + 1;
 
             if (context.cancelSignal()) {
                 breakReason = 'cancelled';
@@ -718,6 +732,28 @@ export async function runToolLoop(context, hooks, transport) {
         }
         finalContent = fallbackContent;
     }
+
+    // gitea#425 — emit one structured stop line per loop completion and
+    // fire the wrapper hook so the debug pane can tag the last exchange.
+    // The `breakReason` codes are the existing tool-loop vocabulary
+    // (natural_stop / cancelled / transient_failure / no_progress /
+    // tool_call_signal_no_calls); the wrapper maps to user-facing words.
+    const loopOutcome = {
+        breakReason,
+        finishReason: lastFinishReason,
+        error: lastError,
+        rounds: roundsExecuted,
+        toolActions: toolActions.length,
+    };
+    const _stopParts = [`rounds=${loopOutcome.rounds}`, `tools=${loopOutcome.toolActions}`];
+    if (breakReason === 'natural_stop' && loopOutcome.finishReason) {
+        _stopParts.push(`finish_reason=${loopOutcome.finishReason}`);
+    }
+    if (breakReason === 'transient_failure' && loopOutcome.error) {
+        _stopParts.push(`error=${String(loopOutcome.error).slice(0, 80)}`);
+    }
+    console.info(`[Session] Stopped: reason=${breakReason} (${_stopParts.join(', ')})`);
+    h.onLoopComplete(loopOutcome);
 
     return {
         finalContent,

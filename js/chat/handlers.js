@@ -40,6 +40,7 @@ import { _readDiscoveryCap } from '../intelligence/tools/embeddings.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { resolveTools } from '../profiles/resolve.js';
 import { runToolLoop } from './tool-loop-core.js';
+import { LLMDebug } from '../llm/debug.js';
 
 /**
  * Main entry point for user input
@@ -469,6 +470,13 @@ export async function handleGeneralRequest(input) {
             // event sees the still-generating state across rounds.
             State.isGenerating = true;
             EventBus.emit('llm:generating', true);
+        },
+        onLoopComplete: (outcome) => {
+            // gitea#425 — tag the most recent debug exchange with the
+            // tool-loop's outcome so the debug pane + exported transcript
+            // surface why the session stopped (cancelled / no_progress /
+            // transient_failure / natural_stop / tool_call_signal_no_calls).
+            LLMDebug.tagLoopOutcome(outcome);
         },
     };
 

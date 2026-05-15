@@ -4,6 +4,87 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.51.0.1] - 2026-05-15
+
+### Fixed — Surface session cut-off reason (gitea#425)
+
+When an ai-editor session stopped mid-task, users (and AAR authors)
+couldn't tell *why* — was it user abort, provider error, model
+finished, no-progress loop detector, or an empty `tool_calls` signal?
+The exported transcript ended with `(generation stopped)` placeholder
+or simply trailed off, with no structured reason captured anywhere.
+The user had to infer from `[Balance]` lines and
+`usage.completion_tokens` patterns. This fix surfaces the existing
+[`runToolLoop`](js/chat/tool-loop-core.js) `breakReason` (already
+computed as `natural_stop` / `cancelled` / `transient_failure` /
+`no_progress` / `tool_call_signal_no_calls`) at three places: the
+console log, the debug-pane export, and the user-facing placeholder.
+
+**The data was already there — the fix is plumbing.**
+[`runToolLoop`](js/chat/tool-loop-core.js) has tracked `breakReason`
+since the 2.48.0 sub-agent extraction, but the value was returned to
+the wrapper without being emitted, logged, or surfaced anywhere a
+user (or post-hoc AAR author) could see it.
+
+**Three surfaces:**
+
+1. **Console log line.** Every loop completion emits exactly one
+   `[Session] Stopped: reason=<code> (rounds=N, tools=N, ...)` line
+   via `console.info`. For `natural_stop` it carries the provider's
+   `finish_reason` (`stop` / `length` / `tool_calls`); for
+   `transient_failure` it carries the first 80 chars of the error.
+
+2. **Debug pane + transcript export.** A new
+   [`LLMDebug.tagLoopOutcome`](js/llm/debug.js) method tags the most
+   recent exchange's `result` with `loopBreakReason` / `loopRounds` /
+   `loopToolActions`, wired via the new `onLoopComplete` hook from
+   the wrapper at [`js/chat/handlers.js`](js/chat/handlers.js). The
+   `LLMDebug.exportText` formatter surfaces these as a `Loop:` line
+   so a saved transcript carries the reason.
+
+3. **UI placeholder.** The `(generation stopped)` placeholder in
+   [`stopGeneration`](js/chat/input.js) is now `Stopped by you.`
+   The placeholder code path only fires from the explicit Stop
+   button (bound in [`js/app.js`](js/app.js)), so the reason is
+   always known and can be named outright.
+
+**Implementation shape.** A new optional `onLoopComplete` hook on
+`runToolLoop` (defaulted to no-op so sub-agents inherit the existing
+quiet behavior). Inside the loop, three new outer scopes capture
+`lastFinishReason`, `lastError`, and `roundsExecuted` so the final
+stop context can be built without restructuring the existing
+break paths. The structured `breakReason` vocabulary stays as-is —
+the issue's sketch (`provider_finish` / `provider_error` / etc.) is
+mapped to the existing internal codes rather than the codes
+renamed, since they're already in flight in `tests/test-tool-loop-core.mjs`.
+
+**Test footprint.**
+[`tests/test-session-stop-reason.mjs`](tests/test-session-stop-reason.mjs)
+**NEW** — 12 tests covering `[Session] Stopped:` log emission for
+each break path, `onLoopComplete` hook fire-once + ordering after
+the last `onChatComplete`, `LLMDebug.tagLoopOutcome` last-exchange
+tagging including null/empty edge cases, and `exportText` Loop-line
+inclusion.
+
+**Out of scope.** The issue's `budget_exceeded` and `in_flight`
+codes from the sketch — there's no existing budget gate path in
+the tool loop today, and `in_flight` is an export-time concern
+that would need debug pane + export plumbing it doesn't yet have.
+File a follow-up if either becomes visible in dogfood.
+
+**Files.**
+- [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) — capture
+  `lastFinishReason` / `lastError` / `roundsExecuted`; emit
+  `[Session] Stopped:` log; fire `onLoopComplete`; new hook in
+  `_normalizeHooks`.
+- [`js/llm/debug.js`](js/llm/debug.js) — `tagLoopOutcome` method;
+  `Loop:` line in `exportText`.
+- [`js/chat/handlers.js`](js/chat/handlers.js) — wire
+  `onLoopComplete` to `LLMDebug.tagLoopOutcome`; import `LLMDebug`.
+- [`js/chat/input.js`](js/chat/input.js) — placeholder text.
+- [`tests/test-session-stop-reason.mjs`](tests/test-session-stop-reason.mjs)
+  — **NEW**.
+
 ## [2.51.0] - 2026-05-15
 
 ### Changed — Compact tools table-of-contents replaces per-tool description bullets in the system prompt (gitea#426)
@@ -86,7 +167,6 @@ field on `ToolDef` is also deferred — that would create a parallel
 enumeration the existing `feedback_prompts_js_parallel_enumeration`
 load-bearing memory warns against; the category-grouped layout
 side-steps the need.
-
 ## [2.50.0.3] - 2026-05-15
 
 ### Fixed — Cross-request read-cache returns full payload instead of useless stub (gitea#421)
