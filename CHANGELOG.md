@@ -111,6 +111,77 @@ No code changes in this PR; pure docs/ tree mutation (`docs/ROADMAP.md`,
 `CHANGELOG.md` `[Unreleased]` entry). Version unchanged at 2.52.0; the
 next code minor (2.53.0) absorbs this content.
 
+### Added — github#40 paper-session decisions recorded (doc-only, no version bump)
+
+The three discussion stubs bootstrapped at [PR #434 / 2.52.0](#) move from
+`Status: Draft — paper session not yet held` to `Status: Decided 2026-05-15`.
+Per the Plinth methodology, `discussion/` is the standing home for
+paper-session artifacts; this commit records the session outcomes so the
+mechanical sweep can be scheduled and the dogfood run that surfaced the
+trigger paper-cut ([gobha-me/ai-editor#40](https://github.com/gobha-me/ai-editor/issues/40))
+can resume.
+
+**Three papers, three decisions:**
+
+- **[`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md)
+  — invert + default OFF (Threads 1 + 4).** Admission inverts: profiles
+  enumerate tools via `profile.tools.admit`; tools drop `roles: [...]` and
+  the required-field check at [`js/tools/registry.js:65`](js/tools/registry.js).
+  `filterTools` at [`js/profiles/registry.js:252`](js/profiles/registry.js)
+  becomes a name-set lookup; [`js/profiles/inheritance.js`](js/profiles/inheritance.js)
+  gains `admit_add` / `admit_remove` for narrowing-without-restating. Default
+  state for new tools is **OFF** — newly-registered tools admit nowhere
+  until a profile lists them; a `ToolRegistry.register` dev-warning surfaces
+  the missing admission. Default ON was disqualifying (eats `kb.v1`'s
+  read-only safety property); default per-category was partial inversion
+  (re-introduces a tag layer one level up). Default OFF relocates the
+  failure but makes it loud at first call.
+- **[`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md)
+  — direction yes, implementation Phase 4 (Thread 2).** User-authored
+  profiles are the right direction; implementation does not ship from this
+  paper. Sub-decisions recorded: per-user persistence (`State.settings.profiles[name]`),
+  inline-with-curated-first picker UX, MVP editor scope (name + base +
+  admit-list checklist + system-prompt), `*.v1` name reservation, synthetic
+  profiles (`pm.v1` / `reviewer.v1` / `full.v1`) stay as `base:` targets but
+  remain out of the picker, JSON export/import in the Profiles tab. Phase 4
+  authoring API picks it up; ai-editor 2.x ships nothing from this paper.
+- **[`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md)
+  — flag (Thread 3).** `plugin-dev` becomes a `plugin.enabled` capability
+  flag mirroring `preview.enabled` / `scriptAutomation.enabled`. The
+  ergonomic argument is decisive (switching profiles mid-session burns
+  system prompt + budget + scratchpad + ledger; flipping a flag preserves
+  all of it). The flag doesn't violate the inversion's "one axis" framing
+  — it's a profile-side construct that contributes names to `admit` at
+  filter-time, not a parallel admission engine.
+
+**Out of scope (deferred to follow-ups):** any code change to `js/tools/`,
+`js/profiles/`, or `js/prompts.js`; the "Roles" → "Profiles" UI rename
+(github#40 Thread 5, pre-shippable independently); `profile.tools.admit`
+semantic implementation; `plugin.enabled` flag wiring; user-authored
+profile editor.
+
+**Follow-up issues filed on Gitea** (mirrored to GitHub) after merge:
+mechanical inversion sweep, default-OFF dev warning, plugin.enabled flag
+wiring, cosmetic "Roles"→"Profiles" rename, Phase 4 placeholder for the
+authoring API. Each links back to its source paper. github#40 itself
+gets a final comment with paper links and closes once the mechanical
+sweep lands.
+
+**Files.** All docs-only:
+
+- [`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md)
+  — status flip + §Decision (Threads 1 + 4) + §Follow-up.
+- [`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md)
+  — status flip + §Decision (direction-yes, 6 sub-decisions) + §Out of scope
+  + §Follow-up.
+- [`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md)
+  — status flip + §Decision (flag) + §Acknowledging the tension + §Rejected
+  + §Follow-up.
+
+No code changes. No version bump (per `feedback_no_bump_for_measurement_only.md`,
+docs-only paper artifacts accumulate in `[Unreleased]`); the next code minor
+(2.53.0) absorbs this content alongside the RE-EVAL entry above.
+
 ## [2.52.0] - 2026-05-15
 
 ### Added — `read_approved_plan` tool exposes the approved plan to the executor (gitea#424)
