@@ -3,11 +3,11 @@
 **Status:** Decided 2026-05-15 — flag (`plugin.enabled`).
 **Tracks:** [gobha-me/ai-editor#40](https://github.com/gobha-me/ai-editor/issues/40) Thread 3.
 **Depends on:** [profiles-pick-tools.md](profiles-pick-tools.md) (admission inversion changes the available verbs).
-**Touches:** [`js/tools/plugin-tools.js`](../js/tools/plugin-tools.js) (the 4 affected tools), [`js/tools/doc-tools.js`](../js/tools/doc-tools.js) (co-tagged), [`js/profiles/`](../js/profiles/).
+**Touches:** [`js/tools/plugin-tools.js`](../../js/tools/plugin-tools.js) (the 4 affected tools), [`js/tools/doc-tools.js`](../../js/tools/doc-tools.js) (co-tagged), [`js/profiles/`](../../js/profiles/).
 
 ## Question
 
-`plugin-dev` is special. It's not a job description ("I am a PM") — it's a capability ("I am currently building a plugin and need plugin SDK + doc tools"). The 4 tools registered with `roles: ['plugin-dev']` at [`js/tools/plugin-tools.js:62,111,194,234`](../js/tools/plugin-tools.js) are currently admitted by zero picker profiles. Once admission inverts, what shape should plugin-dev take?
+`plugin-dev` is special. It's not a job description ("I am a PM") — it's a capability ("I am currently building a plugin and need plugin SDK + doc tools"). The 4 tools registered with `roles: ['plugin-dev']` at [`js/tools/plugin-tools.js:62,111,194,234`](../../js/tools/plugin-tools.js) are currently admitted by zero picker profiles. Once admission inverts, what shape should plugin-dev take?
 
 ## Three candidates
 
@@ -15,7 +15,7 @@
   - Pro: clean, fits the profile model, no new concept.
   - Con: every user-authored profile that wants plugin tools has to re-list them. The capability isn't reusable across profile shapes.
 
-- **A flag** (`plugin.enabled: true`), modeled after [`scriptAutomation.enabled`](../js/profiles/coder-v1.js) and [`preview.enabled`](../js/profiles/coder-v1.js). Any profile can flip it on to add a known group of tools as an overlay.
+- **A flag** (`plugin.enabled: true`), modeled after [`scriptAutomation.enabled`](../../js/profiles/coder-v1.js) and [`preview.enabled`](../../js/profiles/coder-v1.js). Any profile can flip it on to add a known group of tools as an overlay.
   - Pro: composable with any profile shape, mirrors the existing capability-flag pattern.
   - Con: introduces a second axis of admission (profile list + flag overlays), which is what the inversion is trying to flatten.
 
@@ -35,7 +35,7 @@ The flag answer is the one that doesn't ask the user to throw away their working
 
 ## Out of scope
 
-- Whether the plugin SDK track itself is alive enough to justify keeping these tools. If the answer is "no," the tools just get removed and there's nothing to decide here. The LLM-authored automation track shipped Phase 1 at 1.16.0 (see [CHANGELOG.md](../CHANGELOG.md)), so this is probably still live.
+- Whether the plugin SDK track itself is alive enough to justify keeping these tools. If the answer is "no," the tools just get removed and there's nothing to decide here. The LLM-authored automation track shipped Phase 1 at 1.16.0 (see [CHANGELOG.md](../../CHANGELOG.md)), so this is probably still live.
 
 ## Decision
 
@@ -43,7 +43,7 @@ The flag answer is the one that doesn't ask the user to throw away their working
 
 The deciding question — "does someone mid-session in `coder.v1` switch profiles or flip a flag to add plugin tools?" — answers itself once stated. Switching profiles burns the system prompt, budget, scratchpad, and conversation ledger the user has built up; flipping a flag preserves all of it. The user has working state to protect.
 
-The flag overlay also fits the established pattern: `scriptAutomation.enabled` and `preview.enabled` are already-shipped capability flags at [`js/profiles/coder-v1.js`](../js/profiles/coder-v1.js), and `preview.enabled` in particular is the closest analog — preview tools are a co-located group of read-and-side-effect tools that overlay onto a base profile. `plugin.enabled` slots into that same pattern.
+The flag overlay also fits the established pattern: `scriptAutomation.enabled` and `preview.enabled` are already-shipped capability flags at [`js/profiles/coder-v1.js`](../../js/profiles/coder-v1.js), and `preview.enabled` in particular is the closest analog — preview tools are a co-located group of read-and-side-effect tools that overlay onto a base profile. `plugin.enabled` slots into that same pattern.
 
 ### Acknowledging the tension
 
@@ -75,5 +75,5 @@ This work depends on Paper 1's `admit` semantic landing first — there's no poi
 ## What "done" looks like
 
 - [x] Decision recorded here on which of the three candidates plugin-dev becomes.
-- [ ] Follow-up: add `plugin.enabled` to the profile contract + wire the overlay through `filterTools` (depends on Paper 1's mechanical sweep).
-- [ ] [`js/tools/plugin-tools.js`](../js/tools/plugin-tools.js) and [`js/tools/doc-tools.js`](../js/tools/doc-tools.js) re-tagged (untagged, post-inversion) accordingly — ships with the same sweep.
+- [x] Follow-up filed: gitea#442 (`plugin.enabled` flag schema + `filterTools` overlay + Settings toggle — depends on gitea#438).
+- [ ] [`js/tools/plugin-tools.js`](../../js/tools/plugin-tools.js) and [`js/tools/doc-tools.js`](../../js/tools/doc-tools.js) re-tagged (untagged, post-inversion) accordingly — ships with the same sweep.

@@ -2,7 +2,7 @@
 
 **Status:** Decided 2026-05-15 — paper session held.
 **Tracks:** [gobha-me/ai-editor#40](https://github.com/gobha-me/ai-editor/issues/40) Thread 1 + Thread 4.
-**Touches:** [`docs/DESIGN-profiles.md`](../docs/DESIGN-profiles.md), [`js/profiles/registry.js`](../js/profiles/registry.js), [`js/profiles/inheritance.js`](../js/profiles/inheritance.js), [`js/tools/registry.js`](../js/tools/registry.js), every file in [`js/tools/`](../js/tools/).
+**Touches:** [`docs/DESIGN-profiles.md`](../DESIGN-profiles.md), [`js/profiles/registry.js`](../../js/profiles/registry.js), [`js/profiles/inheritance.js`](../../js/profiles/inheritance.js), [`js/tools/registry.js`](../../js/tools/registry.js), every file in [`js/tools/`](../../js/tools/).
 
 ## Question
 
@@ -10,20 +10,20 @@ Should we invert the admission model so that **profiles declare which tools they
 
 ## Why this is on the table
 
-The current model — tools tag themselves with role names, profiles passively match via array overlap at [`js/profiles/registry.js:252`](../js/profiles/registry.js) — produces three failure modes that all share the same root:
+The current model — tools tag themselves with role names, profiles passively match via array overlap at [`js/profiles/registry.js:252`](../../js/profiles/registry.js) — produces three failure modes that all share the same root:
 
 - Tools quietly elected into the wrong profile (`create_issue` reachable from `chat.v1` only because of a `'pm'` tag the user never sees).
 - Tools quietly dead (`plugin-dev`-tagged tools admitted by zero picker profiles).
-- Inheritance that diverges rather than narrows ([`js/profiles/coder-v1.js:263`](../js/profiles/coder-v1.js) replaces `chat.v1`'s `['all', 'pm', 'reviewer']` with `['all', 'coder']` wholesale).
+- Inheritance that diverges rather than narrows ([`js/profiles/coder-v1.js:263`](../../js/profiles/coder-v1.js) replaces `chat.v1`'s `['all', 'pm', 'reviewer']` with `['all', 'coder']` wholesale).
 
 In all three cases the bug is invisible at the gate. Inverting the model makes the gap visible at profile-definition time: a tool is either listed in a profile or it isn't.
 
 ## Shape of the inversion
 
-- Drop `roles: [...]` from every tool registration. Drop the required-field check at [`js/tools/registry.js:65`](../js/tools/registry.js).
+- Drop `roles: [...]` from every tool registration. Drop the required-field check at [`js/tools/registry.js:65`](../../js/tools/registry.js).
 - Replace `profile.tools.allowed_groups` with `profile.tools.admit` — an explicit list of tool names (and/or a wildcard sentinel; see Thread 4).
-- Rewrite [`js/profiles/registry.js:252`](../js/profiles/registry.js) `filterTools` to look up names instead of intersecting tag arrays.
-- Teach [`js/profiles/inheritance.js`](../js/profiles/inheritance.js) to deep-merge tool lists — children should be able to *narrow* the parent's `admit` without restating the whole thing (add/remove operations, not wholesale replace).
+- Rewrite [`js/profiles/registry.js:252`](../../js/profiles/registry.js) `filterTools` to look up names instead of intersecting tag arrays.
+- Teach [`js/profiles/inheritance.js`](../../js/profiles/inheritance.js) to deep-merge tool lists — children should be able to *narrow* the parent's `admit` without restating the whole thing (add/remove operations, not wholesale replace).
 
 ## Open: Thread 4 — default state for new tools
 
@@ -45,9 +45,9 @@ No recommendation yet — surface in the session.
 
 Concretely:
 - New profile field `profile.tools.admit: string[]` — an explicit list of tool names (the empty list is valid and means "no tools"; the sentinel `'*'` is reserved for `full.v1` and any user-authored super-profile).
-- Drop the `roles: [...]` field from every tool registration and the required-field check at [`js/tools/registry.js:65`](../js/tools/registry.js). Tools no longer self-elect.
-- Rewrite [`filterTools` at `js/profiles/registry.js:252`](../js/profiles/registry.js) to do a name-set lookup against `profile.tools.admit` instead of intersecting `_registeredRoles` ∩ `allowed_groups`.
-- Teach [`js/profiles/inheritance.js`](../js/profiles/inheritance.js) to deep-merge `admit` with explicit add/remove operations (`admit_add: [...]`, `admit_remove: [...]`) so children can narrow without restating the parent's list.
+- Drop the `roles: [...]` field from every tool registration and the required-field check at [`js/tools/registry.js:65`](../../js/tools/registry.js). Tools no longer self-elect.
+- Rewrite [`filterTools` at `js/profiles/registry.js:252`](../../js/profiles/registry.js) to do a name-set lookup against `profile.tools.admit` instead of intersecting `_registeredRoles` ∩ `allowed_groups`.
+- Teach [`js/profiles/inheritance.js`](../../js/profiles/inheritance.js) to deep-merge `admit` with explicit add/remove operations (`admit_add: [...]`, `admit_remove: [...]`) so children can narrow without restating the parent's list.
 - Synthetic `'all'` self-tagging on tools goes away — there is no longer a special case at the admission gate.
 
 **Why this shape, restated tersely.** The three failure modes in §Why share one root: tag overlap is invisible at the gate. Inverting makes the gap visible at profile-definition time. The 1.7.0 AST chunker retired the token-cost argument that originally motivated narrow admission; narrowing now serves focus and safety, both of which reward a clarity-forward model.
@@ -66,14 +66,14 @@ The contributor cost of Default OFF is real but bounded: at tool-registration ti
 
 After the paper PR merges, the mechanical sweep ships as one or more gitea issues:
 
-1. **Invert admission semantic** — rename `allowed_groups` → `admit`, rewrite `filterTools`, teach `inheritance.js` `admit_add` / `admit_remove`, sweep `js/tools/*` to drop `roles:`, update [`docs/DESIGN-profiles.md`](../docs/DESIGN-profiles.md) §Inheritance. Tests for narrowing-not-diverging at `coder.v1 ← chat.v1`.
+1. **Invert admission semantic** — rename `allowed_groups` → `admit`, rewrite `filterTools`, teach `inheritance.js` `admit_add` / `admit_remove`, sweep `js/tools/*` to drop `roles:`, update [`docs/DESIGN-profiles.md`](../DESIGN-profiles.md) §Inheritance. Tests for narrowing-not-diverging at `coder.v1 ← chat.v1`.
 2. **Default-OFF dev warning** — `ToolRegistry.register` warns when a newly-registered tool name appears in no profile's `admit`. Console only, not a CI failure.
-3. **Picker / system-prompt audit** — every profile in [`js/profiles/`](../js/profiles/) gets a hand-curated `admit` list; the `create_issue` paper-cut that opened github#40 closes by `coder.v1.admit` including `create_issue`.
+3. **Picker / system-prompt audit** — every profile in [`js/profiles/`](../../js/profiles/) gets a hand-curated `admit` list; the `create_issue` paper-cut that opened github#40 closes by `coder.v1.admit` including `create_issue`.
 
 Each follow-up references this file and github#40. The "Roles" → "Profiles" UI rename (Thread 5 from github#40 body) ships as a fourth, independent issue — pre-shippable.
 
 ## What "done" looks like
 
 - [x] A decision recorded in this file on the inversion shape and the default-state question.
-- [ ] A follow-up issue / sub-issues filed for the mechanical sweep + inheritance helper rewrite (after paper PR merges).
-- [ ] [`docs/DESIGN-profiles.md`](../docs/DESIGN-profiles.md) §Inheritance updated to reflect the new semantic (deep-merge with add/remove on tool lists) — ships with the mechanical sweep, not this paper.
+- [x] Follow-up issues filed: gitea#438 (admission inversion / mechanical sweep), gitea#439 (default-OFF dev warning), gitea#440 (picker / system-prompt audit — closes paper-cut), gitea#441 ("Roles" → "Profiles" UI rename — independent).
+- [ ] [`docs/DESIGN-profiles.md`](../DESIGN-profiles.md) §Inheritance updated to reflect the new semantic (deep-merge with add/remove on tool lists) — ships with the mechanical sweep, not this paper.

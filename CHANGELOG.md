@@ -4,6 +4,68 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Changed — github#40 paper docs relocated to canonical `docs/discussion/`; six follow-up tickets filed; github#40 closed (doc-only, no version bump)
+
+The three github#40 paper docs (`profiles-pick-tools.md`,
+`plugin-dev-mode-vs-profile.md`, `user-built-profile-trees.md`) were
+bootstrapped at `/discussion/` (repo root) in PR #434 and decision-content
+added in PR #437. The canonical Plinth-methodology location is
+[`docs/discussion/`](docs/discussion/) — where the README, ROADMAP
+references, and the three seed docs (`github-37-phase-2.md`,
+`pr-review-polish.md`, `touch-3-window-v2-sessions.md`) all live. This PR
+relocates them and fixes their internal relative paths (`../js/` →
+`../../js/`, `../docs/DESIGN-profiles.md` → `../DESIGN-profiles.md`,
+`../CHANGELOG.md` → `../../CHANGELOG.md`). Decision content unchanged.
+
+ROADMAP's links to the github#40 docs already used `discussion/X.md`
+relative to `docs/` — the move *fixes* those links without further edits.
+The `[Unreleased]` paper-session entry below also had its `discussion/`
+prefixes corrected to `docs/discussion/` to match.
+
+**Six follow-up tickets filed on Gitea**, decomposing each paper's
+§Follow-up bullets:
+
+- [gitea#438](https://git.gobha.me/xcaliber/ai-editor/issues/438) — **G1:**
+  invert admission (`allowed_groups` → `admit`, sweep `roles:` from
+  `js/tools/*`, deep-merge inheritance with `admit_add` / `admit_remove`).
+  Folds the `plugin-tools.js` / `doc-tools.js` tag sweep from Paper 2.
+- [gitea#439](https://git.gobha.me/xcaliber/ai-editor/issues/439) — **G2:**
+  default-OFF dev warning in `ToolRegistry.register` for unadmitted new
+  tools (console only, not CI failure). Depends on G1.
+- [gitea#440](https://git.gobha.me/xcaliber/ai-editor/issues/440) — **G3:**
+  picker / system-prompt audit — hand-curate every profile's `admit`;
+  `coder.v1.admit` includes `create_issue` (closes github#40 paper-cut).
+  Depends on G1.
+- [gitea#441](https://git.gobha.me/xcaliber/ai-editor/issues/441) — **G4:**
+  "Roles" → "Profiles" UI rename across modals, help, settings, docs
+  (github#40 Thread 5). Pre-shippable independently of G1.
+- [gitea#442](https://git.gobha.me/xcaliber/ai-editor/issues/442) — **G5:**
+  `plugin.enabled` flag schema + `filterTools` overlay + Settings toggle
+  (mirrors `preview.enabled` pattern). Depends on G1.
+- [gitea#443](https://git.gobha.me/xcaliber/ai-editor/issues/443) — **G6:**
+  Phase 4 placeholder for user-authored profiles authoring API. Tracking
+  only; no schedule.
+
+**github#40 closed.** Summary comment posted on github#40 listing the six
+gitea tickets + canonical doc paths; issue closed as `completed` since the
+paper-session deliverable (recorded decisions decomposed into trackable
+work) is complete. Per the dual-tracker convention, github holds the
+public design discussion; gitea holds the implementation tickets.
+
+Each moved doc's §"What done looks like" checklist updated with `[x]`
+references to the filed gitea tickets.
+
+**Files.** Doc-only:
+
+- Renamed: 3 files from `/discussion/` → `docs/discussion/`.
+- Edited: each moved file (relative-path fixes + `[x]` follow-up
+  checklist entries).
+- Edited: this `CHANGELOG.md` (the paper-session entry below had its
+  `discussion/` paths corrected to `docs/discussion/`).
+
+No code changes. No version bump (per
+`feedback_no_bump_for_measurement_only.md`).
+
 ### Added — `RE-EVAL following 2.52.0` — fifth re-evaluation slot (doc-only, no version bump)
 
 Fifth re-eval per the methodology adopted 2026-05-12 ([ROADMAP.md](docs/ROADMAP.md)
@@ -115,7 +177,7 @@ next code minor (2.53.0) absorbs this content.
 
 The three discussion stubs bootstrapped at [PR #434 / 2.52.0](#) move from
 `Status: Draft — paper session not yet held` to `Status: Decided 2026-05-15`.
-Per the Plinth methodology, `discussion/` is the standing home for
+Per the Plinth methodology, `docs/discussion/` is the standing home for
 paper-session artifacts; this commit records the session outcomes so the
 mechanical sweep can be scheduled and the dogfood run that surfaced the
 trigger paper-cut ([gobha-me/ai-editor#40](https://github.com/gobha-me/ai-editor/issues/40))
@@ -123,7 +185,7 @@ can resume.
 
 **Three papers, three decisions:**
 
-- **[`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md)
+- **[`docs/discussion/profiles-pick-tools.md`](docs/discussion/profiles-pick-tools.md)
   — invert + default OFF (Threads 1 + 4).** Admission inverts: profiles
   enumerate tools via `profile.tools.admit`; tools drop `roles: [...]` and
   the required-field check at [`js/tools/registry.js:65`](js/tools/registry.js).
@@ -136,7 +198,7 @@ can resume.
   read-only safety property); default per-category was partial inversion
   (re-introduces a tag layer one level up). Default OFF relocates the
   failure but makes it loud at first call.
-- **[`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md)
+- **[`docs/discussion/user-built-profile-trees.md`](docs/discussion/user-built-profile-trees.md)
   — direction yes, implementation Phase 4 (Thread 2).** User-authored
   profiles are the right direction; implementation does not ship from this
   paper. Sub-decisions recorded: per-user persistence (`State.settings.profiles[name]`),
@@ -145,7 +207,7 @@ can resume.
   profiles (`pm.v1` / `reviewer.v1` / `full.v1`) stay as `base:` targets but
   remain out of the picker, JSON export/import in the Profiles tab. Phase 4
   authoring API picks it up; ai-editor 2.x ships nothing from this paper.
-- **[`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md)
+- **[`docs/discussion/plugin-dev-mode-vs-profile.md`](docs/discussion/plugin-dev-mode-vs-profile.md)
   — flag (Thread 3).** `plugin-dev` becomes a `plugin.enabled` capability
   flag mirroring `preview.enabled` / `scriptAutomation.enabled`. The
   ergonomic argument is decisive (switching profiles mid-session burns
@@ -169,12 +231,12 @@ sweep lands.
 
 **Files.** All docs-only:
 
-- [`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md)
+- [`docs/discussion/profiles-pick-tools.md`](docs/discussion/profiles-pick-tools.md)
   — status flip + §Decision (Threads 1 + 4) + §Follow-up.
-- [`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md)
+- [`docs/discussion/user-built-profile-trees.md`](docs/discussion/user-built-profile-trees.md)
   — status flip + §Decision (direction-yes, 6 sub-decisions) + §Out of scope
   + §Follow-up.
-- [`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md)
+- [`docs/discussion/plugin-dev-mode-vs-profile.md`](docs/discussion/plugin-dev-mode-vs-profile.md)
   — status flip + §Decision (flag) + §Acknowledging the tension + §Rejected
   + §Follow-up.
 
