@@ -128,6 +128,10 @@ const CATEGORY_BY_NAME = {
     // interaction (user-facing prompts)
     'ask_user': 'interaction',
 
+    // plan (Plan Mode artifacts — github#25 + gitea#424, 2.52.0)
+    'submit_plan_for_approval': 'plan',
+    'read_approved_plan':       'plan',
+
     // plugin
     'read_plugin_source': 'plugin',
     'write_plugin_source': 'plugin',
@@ -189,6 +193,8 @@ const SIDE_EFFECTS_BY_NAME = {
     'list_tools_by_category': 'read',
     'find_tool': 'read',
     'ask_user': 'read',
+    'submit_plan_for_approval': 'read',
+    'read_approved_plan': 'read',
 
     'edit_file': 'write',
     'replace_lines': 'write',
@@ -247,6 +253,7 @@ const CATEGORY_DESCRIPTIONS = {
     'memory':            'Long-term curated facts (cross-session, scoped).',
     'scratchpad':        'Session-scoped key-value notes (cleared per task).',
     'interaction':       'Pause and ask the user — structured questions, choices, free-text.',
+    'plan':              'Plan Mode artifacts — submit a plan for approval, read back the approved plan during execution.',
     'plugin':            'Plugin source read/write and runtime invocation.',
     'docs':              'Read project / app documentation.',
     'eval':              'Execute code in a sandboxed runner.',

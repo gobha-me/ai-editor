@@ -52,6 +52,17 @@ let planMode = false;
 // guessing which card resolved.
 let pendingPlanApproval = null;  // { plan, resolve }
 
+// Approved-plan slot — gitea#424 (2.52.0). Captured at
+// `resolvePlanApproval` when the user clicks Approve, exposed to the
+// model during execution via the `read_approved_plan` tool so the
+// executor can reference the approved plan instead of regenerating
+// deliverable content from its own working memory. Module-scope only —
+// not persisted across page refresh; cleared on new chat / conversation
+// switch alongside `State.scratchpad`. Rejected / cancelled approvals
+// do NOT write here (the slot's contract is "the plan the user said yes
+// to," not "the most recent plan submitted").
+let approvedPlan = null;  // { plan: string, approvedAt: number } | null
+
 // Script-approval pending state — single-slot, mirrors pendingPlanApproval.
 // 1.16.0: LLM-authored automation Phase 1 (DESIGN-llm-authored-automation.md).
 // Set by submit_script_for_approval tool handler; resolved by the
@@ -294,7 +305,15 @@ export function setPendingPlanApproval(pending) {
  */
 export function resolvePlanApproval(envelope) {
     if (!pendingPlanApproval) return false;
-    const { resolve } = pendingPlanApproval;
+    const { plan, resolve } = pendingPlanApproval;
+    // gitea#424 — capture the approved plan body before clearing the
+    // pending slot so the executor can read it back via `read_approved_plan`.
+    // Only writes on status='approved'; rejected/cancelled leave the prior
+    // slot untouched (a re-plan iteration shouldn't erase a previously
+    // approved plan from earlier in the conversation).
+    if (envelope && envelope.status === 'approved' && typeof plan === 'string' && plan.length > 0) {
+        approvedPlan = { plan, approvedAt: Date.now() };
+    }
     pendingPlanApproval = null;
     try { EventBus.emit('plan_approval:resolved', { cancelled: false, ...envelope }); } catch { /* best-effort */ }
     try { resolve(envelope); } catch (err) {
@@ -320,6 +339,38 @@ export function cancelPlanApproval() {
         console.error('[plan_approval] cancel resolve threw:', err);
     }
     return true;
+}
+
+/**
+ * Read the approved-plan slot. Backs the `read_approved_plan` tool
+ * (gitea#424, 2.52.0). Returns null when no plan has been approved in
+ * the current conversation.
+ *
+ * @returns {{ plan: string, approvedAt: number } | null}
+ */
+export function getApprovedPlan() {
+    return approvedPlan;
+}
+
+/**
+ * Replace the approved-plan slot. Primary writer is `resolvePlanApproval`
+ * on `status='approved'`; exposed here for tests + future seam consumers
+ * that want to seed the slot without round-tripping through the approval
+ * card.
+ *
+ * @param {{ plan: string, approvedAt: number } | null} value
+ */
+export function setApprovedPlan(value) {
+    approvedPlan = value;
+}
+
+/**
+ * Clear the approved-plan slot. Called on conversation switch / new chat
+ * by `js/chat/conversations.js` alongside the scratchpad reset, so a
+ * fresh conversation starts without a stale plan from the prior thread.
+ */
+export function clearApprovedPlan() {
+    approvedPlan = null;
 }
 
 /**

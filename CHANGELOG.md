@@ -4,6 +4,139 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.52.0] - 2026-05-15
+
+### Added — `read_approved_plan` tool exposes the approved plan to the executor (gitea#424)
+
+Plan-Mode sessions now persist the approved plan body in a new
+`State.approvedPlan` slot, surfaced back to the model via a
+read-only `read_approved_plan` tool. Closes the last open AAR-cohort
+issue from the 2026-05-14 `qwen-3-6-plus` session against
+[xcaliber/HTML-Games#215](https://git.gobha.me/xcaliber/HTML-Games/issues/215)
+(siblings: gitea#421 → 2.50.0.3, #422 → 2.50.0.2, #423 → 2.50.0.1,
+#425 → 2.51.0.1, #426 → 2.51.0).
+
+**Why this exists.** Symptom from the AAR: the model submitted a
+plan that inlined the full `DESIGN.md` body (~8000 chars / ~2000
+tokens) plus 20 child-issue spec bodies, then called `create_file
+path=oregon-trail/DESIGN.md` with the same ~8000 chars regenerated
+from scratch. Net effect: identical DESIGN.md content existed in
+the conversation twice — paid for once as the plan, again as the
+regenerated `create_file` payload. Across multi-deliverable
+sessions this compounds.
+
+Root cause: `resolvePlanApproval` cleared `pendingPlanApproval` and
+returned `{ status: 'approved' }` without persisting the plan body
+anywhere. After approval the plan existed only in the tool-call
+history — there was no way for the executor to *reference* what it
+had just had approved, so the model regenerated each deliverable
+from its working memory.
+
+**Three composable fixes.** The issue laid out three options; this
+patch bundles option B (structural) and option A (description-only
+stop-gap), plus one drive-by catalog gap found in passing.
+
+1. **Option B — `State.approvedPlan` slot + `read_approved_plan`
+   tool.** [`js/chat/state.js`](js/chat/state.js) gains a new
+   module-level slot `approvedPlan = { plan, approvedAt } | null`,
+   mirroring the existing `pendingPlanApproval` shape. The slot is
+   written inside `resolvePlanApproval` *before* `pendingPlanApproval`
+   clears, but only when `envelope.status === 'approved'` and the
+   plan body is a non-empty string. Rejection / cancellation leave
+   the slot untouched — a re-plan iteration doesn't erase a
+   previously approved plan from earlier in the conversation.
+   New helpers: `getApprovedPlan` / `setApprovedPlan` /
+   `clearApprovedPlan`. The new tool lives in
+   [`js/tools/plan-tools.js`](js/tools/plan-tools.js) alongside
+   `submit_plan_for_approval`; takes no arguments; returns
+   `{ plan, approved_at }` post-approval or
+   `{ error: 'No approved plan available...' }` pre-approval.
+   `roles: 'all'`, `readOnly: true` — admitted in Plan Mode AND
+   after Plan Mode lifts, so the executor can re-ground at each
+   implementation step. Dedicated state slot (not scratchpad
+   reuse) because (a) scratchpad has a 15-key budget that an
+   approved-plan singleton shouldn't compete for, (b) the slot
+   can't be wiped by a model `scratchpad_clear`, and (c) the
+   `pendingPlanApproval` parallel naming makes the contract obvious.
+
+2. **Option A — `submit_plan_for_approval` description + Plan
+   Mode prompt block tightened.**
+   [`js/tools/plan-tools.js`](js/tools/plan-tools.js): the
+   tool description and `plan` parameter description both now
+   carry an explicit *"describe deliverables by intent, do NOT
+   inline their production-ready content"* directive with the
+   token-cost rationale. [`js/prompts.js`](js/prompts.js) lines
+   501–511: the in-prompt Plan Mode block step 3 is rewritten
+   along the same line; step 4 is extended to announce
+   `read_approved_plan()` as the post-approval re-grounding tool.
+
+3. **Drive-by catalog gap.** Pre-patch,
+   `submit_plan_for_approval` fell through to `'misc'` in
+   [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)
+   (it was registered but never categorized — the
+   `list_tool_categories` meta-tool surfaced it under the misc
+   fallback). The new `'plan'` category covers both tools with a
+   `'Plan Mode artifacts — submit a plan for approval, read back
+   the approved plan during execution.'` description.
+
+**Lifecycle.** The slot is cleared on conversation switch
+(`conversations.load`), new chat (`conversations.create`), and
+last-conversation-deletion (`conversations.delete`'s fall-through
+to a blank state). Module-scope only — not persisted to the
+conversation payload, so a page refresh during execute loses the
+plan (acceptable for v1; if dogfood shows this hurts, future
+patch can mirror the scratchpad's per-conversation persistence).
+
+**Why this is a minor not a sub-patch.** New tool surface,
+visible in the system-prompt TOC (gitea#426 shape), with model-
+behavior implications during the Plan Mode → execute handoff.
+The X.Y.Z.N convention reserves sub-patches for in-track polish;
+a new admitted tool earns a code minor.
+
+**Out of scope.**
+- **System-reminder reinjection variant** — the issue's option B
+  also allowed "include the plan as a system reminder in the
+  next request"; the tool-call shape was picked instead because
+  (a) lazy-load — model pays the cost only when re-grounding is
+  needed; (b) no bloat across subsequent system prompts. If
+  dogfood shows the model isn't reaching for `read_approved_plan`
+  on its own, a follow-up patch can wire reinjection.
+- **Option C — content-overlap warning at `create_file`.** Pure
+  diagnostic; doesn't change model behavior. File a follow-up if
+  the AAR battery shows the model still regenerates after option
+  B ships.
+- **Cross-refresh persistence.** Not in payload v1; future patch
+  if dogfood demands it.
+
+**Files.**
+- [`js/chat/state.js`](js/chat/state.js) — `approvedPlan` slot
+  declaration; auto-write inside `resolvePlanApproval`;
+  `getApprovedPlan` / `setApprovedPlan` / `clearApprovedPlan`
+  exports.
+- [`js/tools/plan-tools.js`](js/tools/plan-tools.js) — new
+  `read_approved_plan` registration; tightened
+  `submit_plan_for_approval` description + `plan` parameter
+  description.
+- [`js/prompts.js`](js/prompts.js) — Plan Mode block rewrite
+  (steps 3 + 4).
+- [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js)
+  — new `'plan'` category; `submit_plan_for_approval` +
+  `read_approved_plan` in `CATEGORY_BY_NAME` /
+  `SIDE_EFFECTS_BY_NAME` / `CATEGORY_DESCRIPTIONS`.
+- [`js/chat/conversations.js`](js/chat/conversations.js) —
+  `clearApprovedPlan` import + three call sites
+  (`load` / `create` / `delete` fall-through).
+- [`tests/test-approved-plan.mjs`](tests/test-approved-plan.mjs)
+  — **NEW**, 13 subtests covering slot writes / read-tool handler
+  / registration shape / description-content drift catch.
+- [`tests/test-plan-mode.mjs`](tests/test-plan-mode.mjs) —
+  `_capturePlanTools` Map-based stub captor accommodating the new
+  two-tool registration; new `read_approved_plan` admission test;
+  end-to-end `filterReadOnly` slice extended.
+- [`tests/test-system-prompt-tools-toc.mjs`](tests/test-system-prompt-tools-toc.mjs)
+  — new test pinning the `'plan'` category line groups both
+  plan tools.
+
 ### Added — `discussion/` directory bootstrapped with profile-admission paper stubs (github#40)
 
 Three paper-session stubs land under `discussion/` to track the design

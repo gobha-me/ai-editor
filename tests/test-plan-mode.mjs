@@ -202,47 +202,49 @@ test('ToolRegistry.filterReadOnly preserves order', () => {
 // submit_plan_for_approval tool registration
 // ============================================
 
-test('registerPlanTools registers submit_plan_for_approval as readOnly', () => {
-    // Use a fresh registry-shape stub so this test doesn't disturb the
-    // real registry; we just verify the call shape registerPlanTools makes.
-    let captured = null;
+// gitea#424 (2.52.0) — registerPlanTools now registers BOTH
+// submit_plan_for_approval and read_approved_plan, so test stubs use a
+// Map captor keyed by tool name. The submit_plan_for_approval contract
+// stays unchanged.
+function _capturePlanTools() {
+    const captured = new Map();
     const stub = {
         register(name, handler, definition) {
-            captured = { name, handler, definition };
+            captured.set(name, { handler, definition });
         },
     };
     registerPlanTools(stub);
-    assert.equal(captured.name, 'submit_plan_for_approval');
-    assert.equal(captured.definition.readOnly, true);
-    assert.equal(captured.definition.roles, 'all');
-    assert.equal(captured.definition.function.name, 'submit_plan_for_approval');
-    assert.ok(captured.definition.function.parameters.required.includes('plan'));
+    return captured;
+}
+
+test('registerPlanTools registers submit_plan_for_approval as readOnly', () => {
+    const captured = _capturePlanTools();
+    const entry = captured.get('submit_plan_for_approval');
+    assert.ok(entry, 'submit_plan_for_approval was registered');
+    assert.equal(entry.definition.readOnly, true);
+    assert.equal(entry.definition.roles, 'all');
+    assert.equal(entry.definition.function.name, 'submit_plan_for_approval');
+    assert.ok(entry.definition.function.parameters.required.includes('plan'));
 });
 
 test('submit_plan_for_approval handler rejects empty / non-string plan', async () => {
-    let captured = null;
-    const stub = {
-        register(name, handler) { captured = handler; },
-    };
-    registerPlanTools(stub);
-    const r1 = await captured(null);
+    const captured = _capturePlanTools();
+    const handler = captured.get('submit_plan_for_approval').handler;
+    const r1 = await handler(null);
     assert.ok(r1.error);
-    const r2 = await captured({});
+    const r2 = await handler({});
     assert.ok(r2.error);
-    const r3 = await captured({ plan: '   ' });
+    const r3 = await handler({ plan: '   ' });
     assert.ok(r3.error);
-    const r4 = await captured({ plan: 42 });
+    const r4 = await handler({ plan: 42 });
     assert.ok(r4.error);
 });
 
 test('submit_plan_for_approval handler returns a Promise that settles via resolvePlanApproval', async () => {
     reset();
-    let captured = null;
-    const stub = {
-        register(name, handler) { captured = handler; },
-    };
-    registerPlanTools(stub);
-    const handlerPromise = captured({ plan: 'a real plan' });
+    const captured = _capturePlanTools();
+    const handler = captured.get('submit_plan_for_approval').handler;
+    const handlerPromise = handler({ plan: 'a real plan' });
     // Now there's a pending plan approval; resolve it from outside.
     assert.ok(getPendingPlanApproval());
     resolvePlanApproval({ status: 'approved' });
@@ -320,6 +322,20 @@ test('registerTodoTools flags todo_write as readOnly (Plan Mode admits it)', () 
     assert.equal(read.definition.readOnly, true);
 });
 
+test('registerPlanTools registers read_approved_plan as readOnly (gitea#424 — admitted in Plan Mode and after)', () => {
+    // The read tool must stay admitted during Plan Mode so the model
+    // could in principle read a plan from a prior conversation cycle,
+    // and admitted after approval so the executor can re-ground each
+    // implementation step. `readOnly: true` is the single knob.
+    const captured = _capturePlanTools();
+    const entry = captured.get('read_approved_plan');
+    assert.ok(entry, 'read_approved_plan was registered');
+    assert.equal(entry.definition.readOnly, true);
+    assert.equal(entry.definition.roles, 'all');
+    assert.equal(entry.definition.function.name, 'read_approved_plan');
+    assert.deepEqual(entry.definition.function.parameters.required, []);
+});
+
 test('Plan Mode filter (filterReadOnly) admits scratchpad_write + todo_write but drops memory_write', () => {
     // End-to-end check on the same name-based filter that LLMTools.getToolsForRole
     // uses. We build a representative slice of the OpenAI-shape tool array that
@@ -334,12 +350,16 @@ test('Plan Mode filter (filterReadOnly) admits scratchpad_write + todo_write but
         { type: 'function', function: { name: 'memory_recall'    }, readOnly: true },
         { type: 'function', function: { name: 'memory_write'     } },                  // stays blocked
         { type: 'function', function: { name: 'edit_file'        } },                  // stays blocked
+        { type: 'function', function: { name: 'submit_plan_for_approval' }, readOnly: true },  // github#25
+        { type: 'function', function: { name: 'read_approved_plan' }, readOnly: true },        // gitea#424 (2.52.0)
     ];
     const out = ToolRegistry.filterReadOnly(slice).map(d => d.function.name);
     assert.deepEqual(out.sort(), [
         'memory_recall',
+        'read_approved_plan',
         'scratchpad_read',
         'scratchpad_write',
+        'submit_plan_for_approval',
         'todo_read',
         'todo_write',
     ].sort());

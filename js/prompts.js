@@ -504,9 +504,8 @@ function buildSystemPrompt(opts = {}) {
         prompt += `\n\nWorkflow:`;
         prompt += `\n1. Use read-only tools (read_file, find_relevant_files, scan_file, search_in_files, git_log, etc.) to gather what you need.`;
         prompt += `\n2. If you need clarification before planning, call ask_user.`;
-        prompt += `\n3. When ready, call submit_plan_for_approval(plan: <markdown>) with the FULL plan: files to change and why, new files to create, order of operations, risks, open questions.`;
-        prompt += `\n4. The user will Approve → Plan Mode lifts, you regain full tool access, and you implement the approved plan.`;
-        prompt += `\n   Or Reject with feedback → you receive their feedback and re-plan; Plan Mode stays on.`;
+        prompt += `\n3. When ready, call submit_plan_for_approval(plan: <markdown>) describing what files will change and why, what new files will be created, order of operations, risks, and open questions. **Describe deliverables by intent — do NOT inline the production-ready body of any file, issue, or PR you will later create.** That content is regenerated during execution, and inlining it in the plan doubles the token cost (you pay once for the plan body, again for the regenerated artifact).`;
+        prompt += `\n4. The user will Approve → Plan Mode lifts, you regain full tool access, and the approved plan stays readable via read_approved_plan() — call it at the start of each implementation step so you ground your work in what was approved instead of regenerating the plan text. Or Reject with feedback → you receive their feedback and re-plan; Plan Mode stays on.`;
         prompt += `\n\nMutating tools (edit_file, write_file, commit_files, git push, scratchpad_write, todo_write, memory_remember, etc.) are NOT in your catalog right now. Don't try to call them — they'll be admitted again after approval.`;
     }
 

@@ -174,6 +174,35 @@ test('TOC: unregistered tool name falls back to misc category', () => {
     assert.ok(toc.includes('misc'), 'unregistered tool should land in the misc category fallback');
 });
 
+test('TOC: gitea#424 (2.52.0) — plan category groups submit_plan_for_approval + read_approved_plan on one line', () => {
+    cleanRegistry();
+    ToolRegistry.register('submit_plan_for_approval', () => {}, defFor('submit_plan_for_approval', 'all'));
+    ToolRegistry.register('read_approved_plan', () => {}, defFor('read_approved_plan', 'all'));
+    try {
+        const admittedDefs = [
+            { name: 'submit_plan_for_approval', description: 'Submit a plan.' },
+            { name: 'read_approved_plan', description: 'Read the approved plan.' },
+        ];
+        const prompt = buildSystemPrompt({ admittedDefs, composerActive: true });
+        const toc = tocBlock(prompt);
+        // Both names share a single `plan` category line.
+        assert.ok(toc.includes('read_approved_plan'), 'read_approved_plan present in TOC');
+        assert.ok(toc.includes('submit_plan_for_approval'), 'submit_plan_for_approval present in TOC');
+        // The two should appear together on the same category line (no
+        // intervening newline between them).
+        const planLineMatch = toc.split('\n').find(l => l.includes('read_approved_plan'));
+        assert.ok(
+            planLineMatch && planLineMatch.includes('submit_plan_for_approval'),
+            'both plan tools belong to the same category line'
+        );
+        // Em-dash separator carries the category label.
+        assert.ok(/—\s*Plan/i.test(planLineMatch) || /—\s*plan/i.test(planLineMatch),
+            'plan-category line carries the Plan label after the em-dash');
+    } finally {
+        cleanRegistry();
+    }
+});
+
 test('TOC: categories ordered alphabetically across diverse admission', () => {
     cleanRegistry();
     // Register one tool per category — meta, code.file.read, code.git.pr,
