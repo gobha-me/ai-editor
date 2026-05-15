@@ -81,6 +81,19 @@ export const ToolRegistry = {
             console.log(`[ToolRegistry] ✅ Registered tool: ${name}`);
         }
         this.definitions.push(enrichedDefinition);
+
+        // gitea#439 — default-OFF dev warning. 2.54.0's inversion accepted
+        // "newly-registered tool admitted by no profile = silently unreachable"
+        // as the cost of fixing silent over-admission; this surfaces it.
+        // Only fires on first registration: re-register implies the tool
+        // was already in the registry (if it was admit-clean then, it still
+        // is; HMR/MCP-reconnect would otherwise re-warn for the same tool).
+        if (existingIdx === -1) {
+            const admitters = Profiles.findAdmittingProfiles(name);
+            if (admitters.length === 0) {
+                console.warn(`[ToolRegistry] tool '${name}' is not admitted by any profile; add to profile X.tools.admit (e.g. chat.v1, coder.v1, kb.v1)`);
+            }
+        }
     },
 
     /**

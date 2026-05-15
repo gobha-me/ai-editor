@@ -252,8 +252,59 @@ export function filterTools(defs, profileName) {
 }
 
 /**
+ * Return the names of every profile whose resolved `tools.admit` admits
+ * `toolName` (literal match or `'<prefix>__*'` glob match). Powers the
+ * registry-side default-OFF dev warning (gitea#439): `ToolRegistry.register`
+ * calls this after the store updates and emits a `console.warn` if the
+ * returned list is empty.
+ *
+ * Differs from `filterTools` in two ways:
+ *
+ *   1. Queries by `toolName`, not by a defs array. Used at registration
+ *      time before the new tool is visible to any caller.
+ *   2. The `'*'` sentinel does NOT count as admission. A tool reachable
+ *      only via `full.v1`'s `['*']` bypass is invisible to picker
+ *      profiles — exactly the silent-vanish failure mode the warning
+ *      catches. Picker-side admission must be explicit (literal or glob).
+ *
+ * @param {string} toolName Tool name (matches `function.name` in
+ *   `ToolDefinition`).
+ * @param {{ overlayNames?: string[] }} [opts] Optional capability-overlay
+ *   name list (e.g. `PLUGIN_TOOL_NAMES` from the gitea#442
+ *   `plugin.enabled` flag). When `toolName` appears in `overlayNames`,
+ *   the synthetic name `'<overlay>'` joins the returned list — gitea#442
+ *   wires real overlay ids through here without further surface change.
+ * @returns {string[]} Profile names (e.g. `['chat.v1', 'coder.v1']`).
+ *   Empty array means no profile admits `toolName` and no overlay names
+ *   the tool; the caller should warn.
+ */
+export function findAdmittingProfiles(toolName, opts) {
+    if (typeof toolName !== 'string' || !toolName) return [];
+    const overlayNames = (opts && Array.isArray(opts.overlayNames)) ? opts.overlayNames : [];
+    /** @type {string[]} */
+    const admitters = [];
+    for (const profileName of Object.keys(BY_NAME)) {
+        const profile = BY_NAME[profileName];
+        const resolved = resolveProfile(profile, name => BY_NAME[name] || null);
+        const admit = (resolved.tools && resolved.tools.admit) || [];
+        let matched = false;
+        for (const entry of admit) {
+            if (typeof entry !== 'string') continue;
+            if (entry === '*') continue;  // sentinel does not count — silent-vanish guard
+            if (entry === toolName) { matched = true; break; }
+            if (entry.endsWith('__*') && toolName.startsWith(entry.slice(0, -1))) {
+                matched = true; break;
+            }
+        }
+        if (matched) admitters.push(profileName);
+    }
+    if (overlayNames.includes(toolName)) admitters.push('<overlay>');
+    return admitters;
+}
+
+/**
  * Namespace export for callers that prefer `Profiles.get(...)` over
  * named imports — matches the established `Roles` / `Storage` / `State`
  * convention in `js/core.js`.
  */
-export const Profiles = { get, has, list, filterTools };
+export const Profiles = { get, has, list, filterTools, findAdmittingProfiles };

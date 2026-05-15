@@ -279,6 +279,7 @@ export const PLUGIN_DEV_V1 = {
         admit: [
             'ask_user',
             'delegate_task',
+            'find_references',
             'find_relevant_files',
             'find_tool',
             'get_ci_logs',
@@ -315,6 +316,7 @@ export const PLUGIN_DEV_V1 = {
             'read_current_file',
             'read_docs',
             'read_file',
+            'read_function',
             'read_issue',
             'read_lines',
             'read_plugin_source',

@@ -4,6 +4,52 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.55.0] - 2026-05-15
+
+### Added — default-OFF dev warning when newly-registered tools aren't admitted by any profile (gitea#439)
+
+The 2.54.0 inversion (gitea#438) accepted *default-OFF* as the cost of fixing silent over-admission: a newly-registered tool admitted by no profile is callable by no profile. The failure mode is real but recoverable — this PR surfaces it loudly at registration time with a `console.warn`.
+
+**Two pieces:**
+
+1. **New helper `Profiles.findAdmittingProfiles(toolName, { overlayNames? }) → string[]`** at [`js/profiles/registry.js`](js/profiles/registry.js). Walks every registered profile (3 picker + 7 synthetic) via `resolveProfile` so inherited `admit_add` / `admit_remove` operators are honored. Returns the list of admitting profile names. Matches by literal entry or `'<prefix>__*'` glob — mirrors `filterTools` exactly except for one deliberate rule:
+
+   **The `'*'` sentinel does NOT count as admission.** A tool reachable only via `full.v1`'s `['*']` bypass is invisible to picker profiles, which is exactly the silent-vanish failure mode the warning catches. Picker-side admission must be explicit (literal or glob).
+
+   The optional `overlayNames` param is forward-compat for gitea#442 (`plugin.enabled` flag overlay — `PLUGIN_TOOL_NAMES` will pass through here as one line of wiring). When a name matches an overlay list, the synthetic admitter `'<overlay>'` joins the returned array.
+
+2. **Registry-side wire-up** at [`js/tools/registry.js`](js/tools/registry.js). After `this.definitions.push(enrichedDefinition)`, on the fresh-registration branch only (suppressed in the re-register `♻️` branch — HMR / MCP-reconnect antibody), calls `Profiles.findAdmittingProfiles(name)`. If the result is empty, emits one `console.warn`:
+
+   `[ToolRegistry] tool '<name>' is not admitted by any profile; add to profile X.tools.admit (e.g. chat.v1, coder.v1, kb.v1)`
+
+   No CI failure, no thrown error — dev affordance only. Avoids the "every PR has an `admit:` churn" trap that gitea#439 §Scope explicitly calls out.
+
+**Why generic warning text (no heuristic profile guess):** prefixes like `edit_` / `create_` / `write_` mis-classify constantly — `create_issue` is chat-side, `create_file` is coder-side. Generic phrasing keeps the warning honest; the contributor knows their tool's intended surface and picks the right profile to add to.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/profiles/registry.js`](js/profiles/registry.js) | EDIT — new export `findAdmittingProfiles`, added to the `Profiles` namespace alongside `filterTools`. |
+| [`js/tools/registry.js`](js/tools/registry.js) | EDIT — admit-coverage scan + `console.warn` inside the fresh-register branch of `ToolRegistry.register`. |
+| [`tests/test-profile-find-admitting-profiles.mjs`](tests/test-profile-find-admitting-profiles.mjs) | NEW — 12 subtests pinning literal / glob / `'*'`-skip / defensive-input / overlayNames forward-compat. |
+| [`tests/test-tool-registry-admit-warning.mjs`](tests/test-tool-registry-admit-warning.mjs) | NEW — 5 subtests pinning warn-once / no-warn-when-admitted / glob-match-no-warn / re-register-suppression / `'*'`-must-not-count. |
+
+**Bundled fix — 2.54.0 migration miss surfaced by the new warning.** Boot-time verification fired the new warn for two real production tools: `read_function` and `find_references` ([`js/tools/scan-tools.js`](js/tools/scan-tools.js) lines 273 + 367). Both had `roles: 'all'` pre-2.54.0 (`git show main:js/tools/scan-tools.js` confirms), meaning the byte-equivalent inversion should have included them in every picker / pm / reviewer / plugin-dev profile's admit list. The 2.54.0 PR's curated baselines missed them — until 2.55.0 they were registered every boot but unreachable by any model. Per the `feedback_fix_bugs_found_in_verify` antibody (don't paper over unexpected behavior; diagnose + add a regression test), the fix is bundled here rather than deferred to gitea#440:
+
+- `chat.v1`, `coder.v1`, `kb.v1`, `pm.v1`, `reviewer.v1`, `plugin-dev.v1` admit lists each gain both names (alphabetic insertion).
+- `subagent.v1` deliberately omitted — its 8-name trust-boundary list intentionally excludes scan/symbol-search tools; that boundary is from 2.49.0.0, not a 2.54.0 miss.
+- `full.v1` already admits via `'*'`.
+- `tests/test-profile-admit-coverage.mjs` baselines updated to absorb both names; documented inline why (so a future re-eval doesn't undo the fix).
+- `tests/test-profile-resolution.mjs` `CODER_V1_PRE_TRIM` snapshot synced.
+- `tests/fixtures/profiles/*.snapshot.json` regenerated via `tests/update-profile-fixtures.mjs`.
+
+This is exactly the silent-vanish failure mode the warning was designed to catch — the bundled fix demonstrates the antibody working end-to-end on its first dogfood.
+
+Full Node suite: 3468 tests / 3467 pass / 1 skipped (pre-existing) / 0 fail.
+
+**Unblocks regression-safe execution of gitea#440** (hand-curate admit lists). When #440 trims a profile's admit list, this warning will surface any tool that ends up admitted by zero profiles — the silent-vanish failure mode is now noisy at registration time.
+
 ## [2.54.0] - 2026-05-15
 
 ### Changed — invert tool admission (gitea#438): tool-side `roles:` tags retired; profiles enumerate explicit tool names in `tools.admit`

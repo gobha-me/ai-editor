@@ -34,9 +34,20 @@ import { Profiles, resolveProfile } from '../js/profiles/index.js';
 // Drift from these requires a gitea#440 curation PR.
 // ============================================
 
+// 2.55.0 — `find_references` and `read_function` added across every
+// picker/synthetic profile that inherits the `roles: 'all'` baseline
+// (chat/coder/kb/pm/reviewer/plugin-dev). Pre-2.55.0, both tools carried
+// `roles: 'all'` (see `git show main:js/tools/scan-tools.js`) and the
+// 2.54.0 inversion's byte-equivalent migration should have included them
+// in every picker admit list — but didn't. The gitea#439 dev warning
+// surfaced this miss at boot ("[ToolRegistry] tool 'read_function' is not
+// admitted by any profile..."); the bundled fix here corrects the
+// baselines without expanding the trust surface (these were universally
+// admitted in 2.54.0's predecessor; the inversion lost them in transit).
 const CHAT_V1_ADMIT_BASELINE = [
     'add_issue_comment', 'add_pr_review', 'ask_user', 'create_issue',
-    'create_pull_request', 'delegate_task', 'find_relevant_files', 'find_tool',
+    'create_pull_request', 'delegate_task', 'find_references',
+    'find_relevant_files', 'find_tool',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
     'git_log', 'goto_line', 'list_issues', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
@@ -45,7 +56,8 @@ const CHAT_V1_ADMIT_BASELINE = [
     'preview_click', 'preview_console_logs', 'preview_errors', 'preview_fill',
     'preview_inspect', 'preview_list', 'preview_logs', 'preview_network',
     'preview_resize', 'preview_snapshot', 'preview_start', 'preview_stop',
-    'read_approved_plan', 'read_current_file', 'read_file', 'read_issue',
+    'read_approved_plan', 'read_current_file', 'read_file', 'read_function',
+    'read_issue',
     'read_lines', 'read_pull_request', 'scan_file', 'scratchpad_clear',
     'scratchpad_read', 'scratchpad_write', 'search_in_files', 'select_range',
     'set_active_project', 'submit_plan_for_approval',
@@ -56,7 +68,8 @@ const CHAT_V1_ADMIT_BASELINE = [
 const CODER_V1_ADMIT_BASELINE = [
     'add_pr_review', 'ask_user', 'commit_files', 'create_file',
     'create_pull_request', 'delegate_task', 'delete_file', 'delete_lines',
-    'edit_file', 'find_relevant_files', 'find_tool', 'get_ci_logs',
+    'edit_file', 'find_references', 'find_relevant_files', 'find_tool',
+    'get_ci_logs',
     'get_ci_status', 'get_embeddings_status', 'get_project_tree', 'git_log',
     'goto_line', 'index_project', 'insert_at_cursor', 'insert_lines',
     'list_dirty_files', 'list_issues', 'list_open_tabs', 'list_projects',
@@ -66,7 +79,8 @@ const CODER_V1_ADMIT_BASELINE = [
     'preview_click', 'preview_console_logs', 'preview_errors', 'preview_fill',
     'preview_inspect', 'preview_list', 'preview_logs', 'preview_network',
     'preview_resize', 'preview_snapshot', 'preview_start', 'preview_stop',
-    'read_approved_plan', 'read_current_file', 'read_file', 'read_issue',
+    'read_approved_plan', 'read_current_file', 'read_file', 'read_function',
+    'read_issue',
     'read_lines', 'read_pull_request', 'replace_lines', 'replace_selection',
     'run_code', 'scan_file', 'scratchpad_clear', 'scratchpad_read',
     'scratchpad_write', 'search_in_files', 'select_range', 'set_active_project',
@@ -75,7 +89,8 @@ const CODER_V1_ADMIT_BASELINE = [
 ];
 
 const KB_V1_ADMIT_BASELINE = [
-    'ask_user', 'delegate_task', 'find_relevant_files', 'find_tool',
+    'ask_user', 'delegate_task', 'find_references', 'find_relevant_files',
+    'find_tool',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
     'git_log', 'goto_line', 'list_issues', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
@@ -84,7 +99,8 @@ const KB_V1_ADMIT_BASELINE = [
     'preview_errors', 'preview_fill', 'preview_inspect', 'preview_list',
     'preview_logs', 'preview_network', 'preview_resize', 'preview_snapshot',
     'preview_start', 'preview_stop', 'read_approved_plan', 'read_current_file',
-    'read_file', 'read_issue', 'read_lines', 'read_pull_request', 'scan_file',
+    'read_file', 'read_function', 'read_issue', 'read_lines', 'read_pull_request',
+    'scan_file',
     'scratchpad_clear', 'scratchpad_read', 'scratchpad_write', 'search_in_files',
     'select_range', 'set_active_project', 'submit_plan_for_approval',
     'submit_script_for_approval', 'sync_releases', 'todo_read', 'todo_write',

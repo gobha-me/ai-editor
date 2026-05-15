@@ -110,6 +110,7 @@ export const KB_V1 = {
         admit: [
             'ask_user',
             'delegate_task',
+            'find_references',
             'find_relevant_files',
             'find_tool',
             'get_ci_logs',
@@ -144,6 +145,7 @@ export const KB_V1 = {
             'read_approved_plan',
             'read_current_file',
             'read_file',
+            'read_function',
             'read_issue',
             'read_lines',
             'read_pull_request',
