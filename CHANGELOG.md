@@ -4,6 +4,40 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.57.0.1] - 2026-05-15
+
+### Changed — comprehensive rewrite of `docs/PROFILES_AND_TOOLS.md` body to the post-2.54.0 admission model
+
+The 2.57.0 rename ([PR #449](https://git.gobha.me/xcaliber/ai-editor/pulls/449)) moved `docs/ROLES_AND_TOOLS.md` → `docs/PROFILES_AND_TOOLS.md` and swept the title / headings / cross-refs, but the body still described the **pre-2.54.0** admission mechanism: tool-side `roles:` field at registration, `ToolRegistry.checkRoleAccess` short-circuits, `Roles.register()` plugin API, register-time `roles` validation, the `LEGAL_GROUP_TAGS` typo discipline, a tool-access matrix keyed on role tags. All of these were retired at 2.54.0 (gitea#438) when admission inverted to profile-side `tools.admit` arrays; the doc carried a 2.57.0 banner flagging the gap and naming the rewrite as a follow-up. This is that follow-up.
+
+**Body replaced wholesale:**
+
+- **Built-in profiles** — rewritten to describe the three picker profiles (`chat.v1`, `coder.v1`, `kb.v1`) and the seven synthetics (`full.v1`, `pm.v1`, `reviewer.v1`, `plugin-dev.v1`, `chat_multi.v1`, `rp.v1`, `subagent.v1`) grouped by category. Drops the pre-2.0.0 emoji-keyed role icons (legacy `'pm'` / `'reviewer'` / `'plugin-dev'` framing) — those identifiers exist only as `SYNTHETIC_ENTRIES` migration targets today, not as user-facing picker options.
+- **How admission works** — new short section describing the post-2.54.0 contract in two rules (literal-name match + three carve-outs: `'*'`, `'<prefix>__*'`, `admit_add` / `admit_remove`). Default-OFF for new tools called out with the gitea#439 dev warn + the CI coverage gate.
+- **Tool admit matrix** — rewritten to reflect actual 2.56.0 hand-curated admit lists. Names regrouped by purpose (conversation + interaction / reads + navigation / peek / scratchpad / memory / issue + PR writes / code edits / preview / etc.) rather than by role tag. Each row identifies which profiles admit the tool. The github#40 paper-cut closure (issue / PR writes relocating from `chat.v1` to `coder.v1`) is called out explicitly.
+- **Tool counts per profile** — refreshed to actual 2.56.0 numbers: `chat.v1` 52 (51 + `'mcp__*'`), `coder.v1` 76 (75 + `'mcp__*'`), `kb.v1` 33 (no glob), `full.v1` `['*']`, `subagent.v1` 8 explicit (no glob). The old "~30% fewer" framing dropped — fixed counts are more useful.
+- **Adding a new tool** — rewritten. No `roles:` field (it's gone); profiles enumerate names. Surface-fit table replaces the role-id picker. Default-OFF dev warn + CI coverage gate documented as the antibodies. `#adding-a-new-tool` anchor preserved so [`TOOLS.md`](docs/TOOLS.md) line 446's cross-ref still resolves.
+- **Adding a new role** → **Adding a new profile** — the `Roles.register()` plugin API is retired; section rewritten to describe in-tree profile authoring against the [`Profile`](js/profiles/profile-contract.js) typedef, with explicit caveats about `tools.admit_add` / `admit_remove` semantics and a forward pointer to the Phase 4 authoring API (per [`docs/discussion/user-built-profile-trees.md`](docs/discussion/user-built-profile-trees.md) decision).
+- **Validation** + **Future Enhancements** — dropped. The pre-2.54.0 validation section described the retired `LEGAL_GROUP_TAGS` / `roles:` typo discipline; the PLAN.md-derived Future Enhancements list referenced the retired `Roles.register()` plugin API. Both replaced by inline pointers to [`ICD-tool-registry.md`](docs/ICD-tool-registry.md) and [`DESIGN-profiles.md`](docs/DESIGN-profiles.md).
+- **MCP Server Profile Restrictions** → **MCP server admission** — rewritten around the `'mcp__*'` glob model (per `js/mcp/bridge.js`). Notes the legacy per-server `roles:` config field is preserved in storage but no longer consumed by the bridge; narrower per-server admission is gitea#442's responsibility (`plugin.enabled` capability-flag overlay).
+- **Banner removed.** The 2.57.0 warning that the body described the retired model is no longer needed.
+- **References section** added at the end pointing at source + contract docs + paper-session decisions + tests.
+
+**Concise by design.** Body is ~150 lines (was ~190 lines of stale prose). The ICD owns the deep contract — five classification axes, three carve-outs, forward-evolution rules, anti-regression test inventory — and `DESIGN-profiles.md` owns the schema. This doc keeps the user-facing narrative + the actual admit-list matrix; readers wanting the seam-level invariants click through.
+
+**Out of scope (deliberate):**
+
+- The stale "Profile access summary" + "Adding a new tool" sections in [`docs/TOOLS.md`](docs/TOOLS.md) (lines 417–446) still describe the pre-2.54.0 model (role-id columns + `roles` field at registration). Same paper-cut shape, different file; separate follow-up so this PR stays focused.
+- The stale `tools/registry.js` section in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) line 210 still describes `allowed_groups` + `roles: 'all'` + `getKnownGroupTags()`. Same shape; separate follow-up.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md) | REWRITE — body replaced wholesale; 2.57.0 banner dropped; `#adding-a-new-tool` anchor preserved. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.57.0'` → `'2.57.0.1'`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
 ## [2.57.0] - 2026-05-15
 
 ### Changed — complete the 2.0.0 rename: user-visible "Roles" → "Profiles" (gitea#441)
