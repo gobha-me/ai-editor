@@ -4,6 +4,38 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.60.0] - 2026-05-16
+
+### Removed — demote dead `resolveReviewThread` (ICD #4 finding #3)
+
+Closes the third (and last open) `[strong]`-band code-aware finding surfaced at `RE-EVAL following 2.49.0` against [`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) §"Code-aware findings". The method declared at [`js/git-providers/base.js`](js/git-providers/base.js) had no provider override, no live caller, and no UI read site — the only references were its own `notSupported` default, the [`js/git.js`](js/git.js) facade that delegated to it, and a `notSupported`-throw test that pinned the dead behavior. Static audit confirmed zero consumers anywhere in `js/` outside the demote target.
+
+**Demote, not delete-everything.** The `threadResolve` capability flag is **retained** on the 6-flag matrix in `get capabilities()` and in [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs) — the slot documents the intentional gap (Gitea has no first-class thread state; GitHub REST has none, GraphQL would) and a future GraphQL-capable provider re-adds the method behind the flag without re-litigating the shape pinned by the capability test. Mirrors the inverse rule applied at 2.50.0: `getCommitDiff` was *promoted* because it had real concrete-provider overrides; `resolveReviewThread` is *demoted* because it had none.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/git-providers/base.js`](js/git-providers/base.js) | EDIT — drops the 18-line `resolveReviewThread` block (jsdoc + `async` method with `notSupported(this.name, 'resolveReviewThread')` body). The capability getter at the same file's `get capabilities()` keeps `threadResolve: false` unchanged. |
+| [`js/git.js`](js/git.js) | EDIT — drops the 9-line `resolveReviewThread` facade that delegated to `provider.resolveReviewThread(...)`. |
+| [`tests/test-pr-review-provider-shape.mjs`](tests/test-pr-review-provider-shape.mjs) | EDIT — drops the lone `'GitLab: resolveReviewThread throws GIT_NOT_SUPPORTED'` test. The `threadResolve: false` capability assertions in the same file (Gitea/GitHub/GitLab capability rows) are intentionally kept — they pin the 6-flag shape. |
+| [`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) | EDIT — strikes through finding #3's body and inserts a "✅ resolved at 2.60.0" resolution note explaining the demote-not-delete rationale; updates the `threadResolve` row in the capability axis table to describe the retained-slot semantics; removes `resolveReviewThread` from the `notSupported`-throw enumeration (40 → 39 of 55 methods, reflecting the post-demote count). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.59.0'` → `'2.60.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikes (a) on the "Now" row; advances the Now row to leave only (b) (`retrieval:turn-stats` test, still blocked on the browser-DOM-coupling architecture decision); adds a "Just shipped (2.60.0)" row. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Admin sweep (bundled):** Three stale gitea tickets whose shipping PRs used `(gitea#N)` reference syntax rather than `closes gitea#N` are closed administratively as part of this minor — mirrors the 2.52.0 precedent that closed gitea#418/#424/#425/#426 the same way:
+
+- **gitea#440** — admit-list hand-curation. Shipped at 2.56.0.
+- **gitea#441** — user-visible Roles → Profiles rename. Shipped at 2.57.0.
+- **gitea#442** — `plugin.enabled` capability-overlay flag. Shipped at 2.58.0.
+
+gitea#443 (Phase 4 user-authored profiles placeholder) intentionally stays open as a tracking ticket.
+
+**Verification:** Full Node suite re-run — expect one fewer test relative to the 2.59.0 baseline (3485 / 3484 pass / 1 skipped / 0 fail). `grep -rn 'resolveReviewThread' js/ tests/` returns zero matches post-edit. `tests/test-provider-capabilities-shape.mjs` + the surviving `threadResolve: false` assertions in `tests/test-pr-review-provider-shape.mjs` continue to pin the 6-flag matrix.
+
+**Closes:** ICD #4 finding #3 (last open finding from the [`RE-EVAL following 2.49.0`](docs/ROADMAP.md) slot). One ICD #5 finding remains queued: (b2) `retrieval:turn-stats` shape-pinning test, still blocked on a browser-DOM-coupling architecture decision per [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md) §"Code-aware findings".
+
 ## [2.59.0] - 2026-05-16
 
 ### Changed — widen `ChunkStore` typedef to absorb 12 `@ts-ignore` annotations (ICD #5 finding (b1))

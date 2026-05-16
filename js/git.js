@@ -495,17 +495,6 @@ const Git = {
     },
 
     /**
-     * Resolve (or unresolve) a review thread on the active provider.
-     * Unsupported on Gitea + GitHub-via-REST in 2.13.0; the dock hides
-     * the button and falls back to local UX-hide via `review-state`.
-     * @since 2.13.0
-     */
-    async resolveReviewThread(owner, repo, number, threadId, opts = {}) {
-        const { provider, connection } = resolveCurrentConnection();
-        return provider.resolveReviewThread(connection, owner, repo, number, threadId, opts);
-    },
-
-    /**
      * Capabilities advertised by the active provider. Read by the
      * PR Review dock to enable / disable + render explanatory notices.
      *

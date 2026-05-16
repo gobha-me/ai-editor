@@ -575,27 +575,6 @@ const BASE_GIT_PROVIDER = {
     },
 
     /**
-     * Resolve (or unresolve via opts.resolve === false) a review thread.
-     *
-     * Neither Gitea nor GitHub REST exposes this — Gitea has no first-
-     * class thread state, GitHub requires GraphQL. Both providers leave
-     * `capabilities.threadResolve === false` so the dock hides the
-     * Resolve button and falls back to local UX-hide via
-     * `review-state.markResolvedLocal()`.
-     *
-     * @param {Object} connection
-     * @param {string} owner
-     * @param {string} repo
-     * @param {number} number
-     * @param {string|number} threadId
-     * @param {{resolve?:boolean}} [opts]
-     * @returns {Promise<{threadId:string|number, resolved:boolean}>}
-     */
-    async resolveReviewThread(connection, owner, repo, number, threadId, opts = {}) {
-        notSupported(this.name, 'resolveReviewThread');
-    },
-
-    /**
      * Capability matrix for the PR Review dock. Providers override to
      * advertise what their implementations support; the dock reads this
      * to enable / disable + render explanatory notices.

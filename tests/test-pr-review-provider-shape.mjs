@@ -219,11 +219,3 @@ test('GitLab: createReviewComment throws GIT_NOT_SUPPORTED', async () => {
         (err) => err && err.code === ErrorCode.GIT_NOT_SUPPORTED
     );
 });
-
-test('GitLab: resolveReviewThread throws GIT_NOT_SUPPORTED', async () => {
-    const merged = mergedClone(gitlabProvider);
-    await assert.rejects(
-        () => merged.resolveReviewThread(FAKE_CONN, 'o', 'r', 1, 't1'),
-        (err) => err && err.code === ErrorCode.GIT_NOT_SUPPORTED
-    );
-});
