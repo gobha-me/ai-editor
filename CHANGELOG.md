@@ -4,6 +4,30 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.59.0] - 2026-05-16
+
+### Changed — widen `ChunkStore` typedef to absorb 12 `@ts-ignore` annotations (ICD #5 finding (b1))
+
+Closes the first of the three `[strong]`-band code-aware findings surfaced at `RE-EVAL following 2.52.0` against [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md) §"Code-aware findings". The 1.5.10-added [`store.getAllChunksForCollection`](js/intelligence/retrieval/store.js) was never reflected in the `ChunkStore` typedef (the typedef declared 8 methods; the runtime factory exposed 9). The gap accumulated 12 `@ts-ignore` annotations across [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) — 11 suppressing the un-typed method's call sites, one stale suppression on an already-typed `store.stats().sources` read (the sibling reader at [`manager.js:1091`](js/intelligence/retrieval/manager.js) typechecks the same expression without an ignore — proof the second ignore was redundant).
+
+Two-line typedef edit + 12 single-line removals + a small shape-pinning test. Mechanical; no behavior change. Mirrors the 2.50.0 ICD #4 cohort closure shape: typedef/contract finding closes with a runtime shape-pinning test that guards against future drift between typedef and factory.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/intelligence/retrieval/store.js`](js/intelligence/retrieval/store.js) | EDIT — adds one `@property` line for `getAllChunksForCollection: (collection: CollectionName) => Promise<ChunkRef[]>` to the `ChunkStore` typedef at lines 88–97. `stats` was already declared (line 96); no change there. |
+| [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) | EDIT — drops 12 `@ts-ignore` annotations (lines 242, 282, 367, 416, 520, 583, 648, 654, 880, 897, 1074, 1143 pre-edit). 11 wrap `store.getAllChunksForCollection(...)` calls now typed via the typedef widening; 1 wraps `store.stats().sources` and was always redundant. |
+| [`tests/test-chunk-store-shape.mjs`](tests/test-chunk-store-shape.mjs) | NEW — 4 subtests: (a) runtime store exposes every typedef method; (b) runtime store exposes no extras beyond the typedef; (c) `stats()` returns the documented three-field `{ chunks, collections, sources }` shape; (d) `getAllChunksForCollection` returns `Promise<ChunkRef[]>` with `[]` on unknown collection. Pure import-and-assert, no shim required (store.js has no browser-bound imports). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.58.0'` → `'2.59.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikes (b1) on the "Now" row; corrects the stale (c) row claiming `resolveTaskLedgerConfig` is still ready code (shipped at 2.53.0, commit `0d96117`); adds a "Just shipped (2.59.0)" row. |
+| [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md) | EDIT — strikes finding (b1) in §"Code-aware findings"; queued (b2) remains. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Verification:** Full Node suite re-run — 3485 tests / 3484 pass / 1 skipped (pre-existing) / 0 fail. `grep -n '@ts-ignore' js/intelligence/retrieval/manager.js` returns zero matches.
+
+**Closes:** ICD #5 finding (b1). The remaining ICD #5 queued finding — `retrieval:turn-stats` shape-pinning test (browser-DOM-coupled; needs seam-vs-JSDOM architecture decision) — is tracked at [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md) §"Code-aware findings". Finding (a) (`resolveTaskLedgerConfig`) is recorded as already-shipped at 2.53.0 in this PR's ROADMAP drift fix.
+
 ## [2.58.0] - 2026-05-16
 
 ### Added — `plugin.enabled` capability-overlay flag (gitea#442)

@@ -128,13 +128,15 @@ The single entry-point for query-time retrieval. Each step is a documented escap
 - **No test pins the manager's public surface shape.** `Object.keys(RetrievalManager).sort()` could regress (a renamed method, a silently dropped getter) and only the production call sites would surface. ICD #4 cited the same gap for `BASE_GIT_PROVIDER`; same shape applies here.
 - **No test pins the `context:*` event names against listener registration.** A renamed emit site without a matching listener rename would silently break the status indicator + cost recorder.
 - **No test asserts the `retrieval:turn-stats` payload shape.** The cost-recorder reads `strategyStats` keys; a producer-side rename would silently lose attribution.
-- **The `@ts-ignore` count signals typedef drift.** 12 `@ts-ignore` annotations across [`manager.js`](../js/intelligence/retrieval/manager.js) cluster on `store.*` calls — the store's typedef declares fewer methods than the store object actually exports. See code-aware finding #2.
+- ~~**The `@ts-ignore` count signals typedef drift.** 12 `@ts-ignore` annotations across [`manager.js`](../js/intelligence/retrieval/manager.js) cluster on `store.*` calls — the store's typedef declares fewer methods than the store object actually exports. See code-aware finding #2.~~ ✅ **resolved 2.59.0** — `ChunkStore` typedef widened with one `@property` for `getAllChunksForCollection`; all 12 `@ts-ignore` annotations removed; new [`tests/test-chunk-store-shape.mjs`](../tests/test-chunk-store-shape.mjs) pins the typedef-vs-runtime contract.
 
 ## Code-aware findings (feed back to ROADMAP as 2.53.0+ rows)
 
 Authoring this ICD surfaced **three** drift items worth tracking. Per re-eval methodology, one is suggested for the next code minor's `[strong]` row; the others stay queued.
 
-### 1. `CODER_V1.task_ledger.capacity` direct read survived the 1.20.0 retrieval-config rewire
+### ~~1. `CODER_V1.task_ledger.capacity` direct read survived the 1.20.0 retrieval-config rewire~~ ✅ shipped 2.53.0
+
+✅ **Resolved at 2.53.0** (commit `0d96117`). `resolveTaskLedgerConfig(profileName)` added to [`js/profiles/resolve.js`](../js/profiles/resolve.js); [`manager.js`](../js/intelligence/retrieval/manager.js) `findRelevantFiles` call site now reads through the resolver (lines 670–679); direct `CODER_V1` import dropped. Historical record preserved below.
 
 [`manager.js:678`](../js/intelligence/retrieval/manager.js) reads `CODER_V1.task_ledger.capacity` directly:
 
@@ -150,7 +152,11 @@ The neighboring line ([`manager.js:744`](../js/intelligence/retrieval/manager.js
 
 **Why this matters:** The §Decision 7 Removability check requires every subsystem read to go through a resolver so the call site can be retargeted at a different profile without source surgery. The direct read prevents `chat_multi.v1` or `kb.v1` from ever calling `find_relevant_files` with a different ledger capacity (today both fall through to the CODER_V1 hardcode). Memory `feedback_chat_multi_rp_no_utility_in_aieditor` says those profiles don't ship for ai-editor; the drift is still real for future plugin profiles.
 
-### 2. Twelve `@ts-ignore` annotations cluster on store method calls
+### ~~2. Twelve `@ts-ignore` annotations cluster on store method calls~~ ✅ shipped 2.59.0
+
+✅ **Resolved at 2.59.0.** Authoring this finding mis-counted the gap as four un-typed methods (`getAllChunksForCollection`, `stats`, `chunkVectorSearch`, `chunkIdsForSource`); the actual gap was **one** — `getAllChunksForCollection`, missing from the typedef since the method's 1.5.10 addition. `stats`, `chunkVectorSearch`, and `chunkIdsForSource` were already declared. The 12 `@ts-ignore` annotations broke down as 11 wrapping `getAllChunksForCollection(...)` call sites (now typed) + 1 stale suppression on an already-typed `store.stats().sources` read (the sibling reader at [`manager.js:1091`](../js/intelligence/retrieval/manager.js) typechecked the same expression without an ignore — proof the suppression was redundant). Fix: one `@property` line added to the typedef; all 12 ignores removed; new [`tests/test-chunk-store-shape.mjs`](../tests/test-chunk-store-shape.mjs) pins the typedef-vs-runtime contract (4 subtests).
+
+Historical record preserved below.
 
 `grep -c '@ts-ignore' js/intelligence/retrieval/manager.js` returns **12**. All cluster on `store.getAllChunksForCollection(...)` / `store.stats()` / `store.chunkVectorSearch` calls. The store object exports these methods at runtime but the [`store.js`](../js/intelligence/retrieval/store.js) typedef (or the `ChunkStore` interface in [`store.js`](../js/intelligence/retrieval/store.js)) declares a narrower surface. The result is that the manager has type-safety holes on every store interaction.
 

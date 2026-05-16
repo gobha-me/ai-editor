@@ -239,7 +239,6 @@ function _buildStrategies() {
         getChunkByID: store.getChunkByID,
     });
     const thematic = createThematicStrategy({
-        // @ts-ignore — store has the method even if the typedef doesn't list it
         getChunksForClustering: (collection) => store.getAllChunksForCollection(collection),
     });
     _strategies = [semantic, structural, thematic];
@@ -279,7 +278,6 @@ function _resolvePause() {
 async function saveIndexToStorage() {
     if (!_indexedProject) return;
     try {
-        // @ts-ignore
         const allChunks = await store.getAllChunksForCollection(_collection);
         /** @type {Object<string, string>} */
         const sourceHashes = {};
@@ -364,7 +362,6 @@ function _setProject(owner, repo, branch) {
     // Drop any chunks still in the prior collection — limits memory growth on long sessions.
     if (_collection && _collection !== projectKey) {
         try {
-            // @ts-ignore
             store.getAllChunksForCollection(_collection).then((chunks) => {
                 const ids = chunks.map(c => c.id).filter(Boolean);
                 if (ids.length > 0) store.markStale(ids);
@@ -413,7 +410,6 @@ async function indexProject(force = false, resume = false) {
     }
 
     // Already indexed? Short-circuit unless forced/resuming.
-    // @ts-ignore
     const existingChunks = await store.getAllChunksForCollection(projectKey);
     if (!force && !resume && _indexedProject === projectKey && existingChunks.length > 0) {
         console.log('[Retrieval] Project already indexed');
@@ -517,7 +513,6 @@ async function indexProject(force = false, resume = false) {
         } else {
             _resumeRemaining = null;
             // Build BM25 over the populated corpus.
-            // @ts-ignore
             const allChunks = await store.getAllChunksForCollection(projectKey);
             _bm25Index = buildBM25Index(allChunks);
             chunksAdded = allChunks.length;
@@ -580,7 +575,6 @@ async function _ingestSingle(uri) {
         const result = await controller.ingest(uri);
         if (result.status === 'ingested') {
             // Rebuild BM25 over the updated corpus — cheap relative to a full walk.
-            // @ts-ignore
             const allChunks = await store.getAllChunksForCollection(_collection);
             _bm25Index = buildBM25Index(allChunks);
             _bumpIndexFingerprint();
@@ -645,13 +639,11 @@ async function findRelevantFiles(query, topK = 5) {
     }
     _queryCacheMisses += 1;
 
-    // @ts-ignore
     const corpusChunks = await store.getAllChunksForCollection(_collection);
     if (corpusChunks.length === 0) {
         console.log('[Retrieval] No chunks indexed, walking project first…');
         await indexProject(false, false);
     }
-    // @ts-ignore
     const finalCorpus = await store.getAllChunksForCollection(_collection);
     if (finalCorpus.length === 0) return [];
 
@@ -877,7 +869,6 @@ function _trackQuery() {
 // ============================================
 
 function clearIndex() {
-    // @ts-ignore
     store.getAllChunksForCollection(_collection).then(chunks => {
         const ids = chunks.map(c => c.id).filter(Boolean);
         if (ids.length > 0) store.markStale(ids);
@@ -894,7 +885,6 @@ function removeIndexForBranch(branchName) {
     const projectKey = projectKeyFor(owner, repo, branchName);
     Storage.remove(storageKeyFor(projectKey));
     if (_indexedProject === projectKey) {
-        // @ts-ignore
         store.getAllChunksForCollection(projectKey).then(chunks => {
             const ids = chunks.map(c => c.id).filter(Boolean);
             if (ids.length > 0) store.markStale(ids);
@@ -1071,7 +1061,6 @@ function autoResume() {
 
 function getStats() {
     return {
-        // @ts-ignore — sync access via store.stats() for the chunk count
         filesIndexed: store.stats().sources,
         project: _indexedProject,
         isIndexing: _indexing,
@@ -1140,7 +1129,6 @@ export const RetrievalManager = {
     getIndexedProject,
     /** Test/diagnostic seam: drops all in-memory state (does NOT touch IDB). */
     _resetForTesting() {
-        // @ts-ignore
         store.getAllChunksForCollection(_collection).then(chunks => {
             const ids = chunks.map(c => c.id).filter(Boolean);
             if (ids.length > 0) store.markStale(ids);

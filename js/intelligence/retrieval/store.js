@@ -91,6 +91,7 @@
  * @property {(sourceUri: string) => string|null}                                                                     getSourceHash
  * @property {(sourceUri: string, hash: string) => void}                                                              setSourceHash
  * @property {(sourceUri: string) => ChunkID[]}                                                                       chunkIdsForSource
+ * @property {(collection: CollectionName) => Promise<ChunkRef[]>}                                                    getAllChunksForCollection
  * @property {(chunks: ChunkRef[]) => void}                                                                           upsert
  * @property {(ids: Iterable<ChunkID>) => number}                                                                     markStale
  * @property {() => { chunks: number, collections: number, sources: number }}                                         stats
