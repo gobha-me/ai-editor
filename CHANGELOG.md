@@ -4,6 +4,32 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.57.0.3] - 2026-05-16
+
+### Fixed — `docs/ARCHITECTURE.md` `tools/registry.js` paragraph stale post-2.54.0 admission inversion (gitea#441 follow-up)
+
+Third and final paper-cut in the post-2.54.0 admission-doc sweep. Sibling fixes 2.57.0.1 ([`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md) body rewrite, [PR #450](https://git.gobha.me/xcaliber/ai-editor/pulls/450)) and 2.57.0.2 ([`docs/TOOLS.md`](docs/TOOLS.md) section rewrite, [PR #451](https://git.gobha.me/xcaliber/ai-editor/pulls/451)) both explicitly deferred this paragraph as "same shape, separate follow-up so this PR stays focused" — this is the deferred PR.
+
+The `tools/registry.js` section at [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (line 210) still described the pre-2.54.0 admission model retired by gitea#438. Three stale claims:
+
+- "Tools declare `allowed_groups` (and, since 2.0, `roles: 'all'` / explicit group tags) at registration time" — both fields gone; `register()` at [`js/tools/registry.js:62`](js/tools/registry.js) is now a pure store (no admission fields validated; `_registeredRoles` enrichment + `LEGAL_GROUP_TAGS` validation block deleted at 2.54.0).
+- "The legal group tags derive from `Profiles.getKnownGroupTags()` since 2.34.0" — `getKnownGroupTags` deleted at 2.54.0; there are no group tags.
+- "three carve-outs (`'all'` / `'*'` / `'full'`)" — `'all'` and `'full'` are gone; the post-2.54.0 carve-outs are `'*'` (sentinel → wholesale bypass), `'<prefix>__*'` glob entries (per-prefix family admit, e.g. `'mcp__*'`), and inheritance operators `admit_add` / `admit_remove` (set-union / set-subtract onto a parent's resolved admit).
+
+Rewritten paragraph reflects the post-2.54.0 reality: registration is a pure store; admission is profile-side via `Profiles.filterTools` (literal-name OR `'<prefix>__*'`-glob match against the active profile's resolved `tools.admit`); three current carve-outs enumerated; default-OFF discipline for new tools called out with both the gitea#439 dev-warn site (`js/tools/registry.js:91`) and the CI gate test (`tests/test-profile-admit-coverage.mjs`). Cross-refs preserved per the original — [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) (now flagged as historical under its §⚠️ Superseded banner), [`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md), [`docs/ICD-chat-handlers.md`](docs/ICD-chat-handlers.md) — with the live contract pointer added to [`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md) §"Inheritance > Tool admission".
+
+Docs-only edit; no behavior change. Closes the three-PR cohort that finishes propagating the 2.54.0 admission inversion through the doc surface.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — single-paragraph rewrite at `### tools/registry.js`. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.57.0.2'` → `'2.57.0.3'`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Tests:** Full Node suite re-run — 3471 tests / 3470 pass / 1 skipped (pre-existing) / 0 fail (matches the 2.57.0.2 baseline; docs-only change).
+
 ## [2.57.0.2] - 2026-05-16
 
 ### Changed — rewrite `docs/TOOLS.md` "Profile access summary" + "Adding a new tool" sections for the post-2.54.0 admit model (gitea#441 follow-up)
