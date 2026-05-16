@@ -4,6 +4,32 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.57.0.2] - 2026-05-16
+
+### Changed — rewrite `docs/TOOLS.md` "Profile access summary" + "Adding a new tool" sections for the post-2.54.0 admit model (gitea#441 follow-up)
+
+The 2.57.0.1 rewrite of [`docs/PROFILES_AND_TOOLS.md`](docs/PROFILES_AND_TOOLS.md) called out two stale sections in [`docs/TOOLS.md`](docs/TOOLS.md) as a separate follow-up — same paper-cut shape (pre-2.54.0 role-id model surviving in prose), different file. This is that follow-up.
+
+**Sections rewritten:**
+
+- **Profile access summary** (was lines 417–435) — the legacy role-id matrix keyed on `all` / `coder` / `pm` / `reviewer` / `full` / `plugin-dev` and the closing line *"The `full` role bypasses all role checks (`ToolRegistry.checkRoleAccess` short-circuits)"* are post-2.54.0 fiction. The matrix is now replaced with a compact one-paragraph summary of the three picker profiles' shape (entry counts + what each carries) plus a pointer to [`PROFILES_AND_TOOLS.md#tool-admit-matrix`](docs/PROFILES_AND_TOOLS.md#tool-admit-matrix) for the full per-purpose matrix. No need to maintain two copies — the canonical matrix lives in `PROFILES_AND_TOOLS.md` per the 2.57.0.1 rewrite.
+- **Adding a new tool** (was lines 437–445) — Step 2's *"with a `roles` field — `'all'` or `string[]` of role IDs"* is wrong (the field is gone at 2.54.0); Step 4's *"If the role is new, Register the role first via `Roles.register()`"* references the retired plugin API. Replaced with a sequence that names the actual admission site: `registry.register` takes no `roles:` field, and the tool name must be added to a profile's `tools.admit` array at [`js/profiles/{chat,coder,kb}-v1.js`](js/profiles/) for the tool to be callable.
+- **Bottom note** (line 446) was already updated in the 2.57.0 sweep — kept verbatim. It correctly names the gitea#439 default-OFF dev warn and points at [`PROFILES_AND_TOOLS.md#adding-a-new-tool`](docs/PROFILES_AND_TOOLS.md#adding-a-new-tool) for the surface-fit table.
+
+**Out of scope (deliberate):**
+
+- The stale `tools/registry.js` paragraph in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) line 210 still describes the pre-2.54.0 `allowed_groups` / `roles: 'all'` / `getKnownGroupTags()` model. Same paper-cut shape, different file — separate follow-up so this PR stays focused.
+
+**Tests:** Full Node suite re-run — 3471 tests / 3470 pass / 1 skipped (pre-existing) / 0 fail (matches the 2.57.0.1 baseline; docs-only change).
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/TOOLS.md`](docs/TOOLS.md) | EDIT — two stale sections replaced; bottom note kept verbatim. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.57.0.1'` → `'2.57.0.2'`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
 ## [2.57.0.1] - 2026-05-15
 
 ### Changed — comprehensive rewrite of `docs/PROFILES_AND_TOOLS.md` body to the post-2.54.0 admission model

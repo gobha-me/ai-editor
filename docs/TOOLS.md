@@ -416,31 +416,17 @@ run_code({ code: "42 * 17" })  // → result: 714
 
 ## Profile access summary
 
-Compact view — see [PROFILES_AND_TOOLS.md](PROFILES_AND_TOOLS.md) for full matrix.
+Tool admission is profile-side: each profile enumerates which tool names it admits in its `tools.admit` array (gitea#438 / 2.54.0). The three picker profiles divide cleanly — `chat.v1` carries the conversational + read-shaped surface (52 entries: 51 literal + `'mcp__*'`), `coder.v1` adds code edits, issue/PR writes, preview drivers, sub-agent fan-out, and admin tools (76 entries: 75 + `'mcp__*'`), and `kb.v1` is read-only by construction (33 entries, no `'mcp__*'` glob). The wholesale-bypass sentinel `['*']` lives only on `full.v1`.
 
-| Tool | Allowed profiles |
-|---|---|
-| File reads, scan/find tools, project tree, search, peek_*, scratchpad, list issues/PRs, CI status/logs, list_projects, set_active_project | `all` |
-| `replace_lines`, `insert_lines`, `delete_lines`, `replace_selection`, `insert_at_cursor`, `edit_file`, `write_file`, `create_file`, `delete_file`, `commit_files`, `list_dirty_files`, `run_code` | `coder` |
-| `goto_line`, `select_range` | `all` |
-| `create_issue`, `update_issue` | `pm` |
-| `add_issue_comment` | `pm`, `reviewer` |
-| `create_pull_request` | `coder`, `pm` |
-| `add_pr_review`, `merge_pull_request` | `coder`, `pm`, `reviewer` |
-| `find_relevant_files` | `full`, `coder`, `reviewer` |
-| `index_project` | `full`, `coder` |
-| `read_plugin_source`, `write_plugin_source`, `run_plugin`, `list_user_plugins` | `plugin-dev` |
-| `read_docs` | `plugin-dev`, `full` |
-
-The `full` role bypasses all role checks (`ToolRegistry.checkRoleAccess` short-circuits).
+For the full per-tool matrix (regrouped by purpose with each row's admitting profiles), see [PROFILES_AND_TOOLS.md §Tool admit matrix](PROFILES_AND_TOOLS.md#tool-admit-matrix).
 
 ---
 
 ## Adding a new tool
 
 1. Create or extend a module in `js/tools/`.
-2. Call `registry.register(name, handler, definition)` with a `roles` field — `'all'` or `string[]` of role IDs.
+2. Call `registry.register(name, handler, definition)` — there is no `roles:` field; the registry stores the definition + handler, and admission is decided profile-side.
 3. Import the module in `js/app.js` so it registers at startup.
-4. (If the role is new) Register the role first via `Roles.register()` in `js/core.js` or a plugin.
+4. Add the new tool name to the relevant profile's admit list at `js/profiles/{chat,coder,kb}-v1.js` — without this, the tool is callable by no profile (see the default-OFF warning below).
 
 The registry validates profile names admitted via `tools.admit` and warns at registration when a newly-registered tool isn't admitted by any profile (gitea#439). See [PROFILES_AND_TOOLS.md](PROFILES_AND_TOOLS.md#adding-a-new-tool) for the contract.
