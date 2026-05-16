@@ -49,7 +49,9 @@ export {
     resolveDefaultRememberScope,
     resolveScriptAutomationConfig,
     resolvePreviewConfig,
+    resolvePluginConfig,
     resolveSubAgentConfig,
+    PLUGIN_TOOL_NAMES,
     getActiveProfileName,
 } from './resolve.js';
 

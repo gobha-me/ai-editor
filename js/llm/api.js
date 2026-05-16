@@ -71,7 +71,7 @@ import { isToolsComposeDisabled } from '../utils/tools-compose-flag.js';
 import { getOrCreateLedger } from '../chat/task-state.js';
 import { extractUsage } from '../intelligence/cost/usage-shape.js';
 import { getPlanMode } from '../chat/state.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig, resolveSubAgentConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, resolvePluginConfig, resolveSubAgentConfig, PLUGIN_TOOL_NAMES, getActiveProfileName } from '../profiles/resolve.js';
 import {
     EditorPrompts,
     buildSystemPrompt,
@@ -1129,6 +1129,30 @@ export const LLMTools = {
             return toolList.filter(t => t?.function?.name !== 'delegate_task');
         };
 
+        // 2.58.0 — `plugin.enabled` capability overlay (gitea#442).
+        // Drop the plugin SDK + doc tools from the per-turn tool list
+        // when the resolved profile + settings overlay reports
+        // `plugin.enabled === false`. Default is OFF everywhere — the
+        // flag is opt-in; flipping it admits `PLUGIN_TOOL_NAMES` onto
+        // whatever profile is active, preserving the user's working
+        // state. Decision: `docs/discussion/plugin-dev-mode-vs-profile.md`.
+        // Mirror of `applyPreviewToolFilter` above — same shape, different
+        // membership set. The synthetic `plugin-dev.v1` profile (used by
+        // the legacy `'plugin-dev'`-role migration) admits these names
+        // directly in its `tools.admit` list and is unaffected by this
+        // filter for callers that route through it.
+        const _pluginProfile = getActiveProfileName(State?.settings);
+        const pluginCfg = resolvePluginConfig(_pluginProfile);
+        const pluginOverlay = State?.settings?.plugin;
+        const pluginEnabled = (pluginOverlay && typeof pluginOverlay.enabled === 'boolean')
+            ? pluginOverlay.enabled
+            : pluginCfg.enabled;
+        const PLUGIN_TOOL_NAME_SET = new Set(PLUGIN_TOOL_NAMES);
+        const applyPluginToolFilter = (toolList) => {
+            if (pluginEnabled) return toolList;
+            return toolList.filter(t => !PLUGIN_TOOL_NAME_SET.has(t?.function?.name));
+        };
+
         // 1.3.18 — baseline = what THIS request would have shipped without
         // the Composer (profile-filtered legacy set). Unfiltered = ungated
         // whole registry. Both computed from `Catalog` so
@@ -1163,7 +1187,7 @@ export const LLMTools = {
                 profileName,
                 composerActive: false,
             };
-            return applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered))));
+            return applyPluginToolFilter(applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(filtered)))));
         }
 
         const reductionPct = baseline > 0
@@ -1203,7 +1227,7 @@ export const LLMTools = {
             'unresolved:', result.diagnostics.unresolved_static.join(',') || 'none'
         );
 
-        return applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result)))));
+        return applyPluginToolFilter(applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(renderForLLM(result))))));
     },
 
     /**

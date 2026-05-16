@@ -29,7 +29,7 @@ import {
     DEFAULT_TOP_K,
     DISCOVERY_ADMISSION_CAP,
 } from '../intelligence/tools/embeddings.js';
-import { resolveScriptAutomationConfig, resolvePreviewConfig, resolveSubAgentConfig, getActiveProfileName } from '../profiles/resolve.js';
+import { resolveScriptAutomationConfig, resolvePreviewConfig, resolvePluginConfig, resolveSubAgentConfig, PLUGIN_TOOL_NAMES, getActiveProfileName } from '../profiles/resolve.js';
 import { registerOnActivate } from './tab-activation-registry.js';
 
 let _bound = false;
@@ -118,6 +118,27 @@ function _persistPreview(patch) {
     EventBus.emit('settings:changed', { section: 'preview', patch });
 }
 
+// 2.58.0 — plugin overlay (gitea#442). Stored under `State.settings.plugin`
+// so it parallels the profile's `plugin` slice. Settings overlay wins
+// when set; otherwise the resolved profile default applies (which is OFF
+// everywhere — the flag is opt-in). Same shape as `_readScript` /
+// `_readPreview` above.
+function _readPlugin() {
+    const profileName = getActiveProfileName(State?.settings);
+    const cfg = resolvePluginConfig(profileName);
+    const overlay = (State.settings && State.settings.plugin) || {};
+    const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
+    return { enabled, profileDefault: cfg.enabled };
+}
+
+function _persistPlugin(patch) {
+    if (!State.settings.plugin || typeof State.settings.plugin !== 'object') {
+        State.settings.plugin = {};
+    }
+    Object.assign(State.settings.plugin, patch);
+    EventBus.emit('settings:changed', { section: 'plugin', patch });
+}
+
 // 2.49.0 — sub-agents overlay (github#24 Phase 1 slice 2). Stored under
 // `State.settings.subagent` so it parallels the profile's `subagent`
 // slice. Settings overlay wins when set; otherwise the resolved profile
@@ -159,8 +180,20 @@ export function initToolsTab() {
     root.addEventListener('input', _onInput);
     root.addEventListener('change', _onScriptChange);
     root.addEventListener('change', _onPreviewChange);
+    root.addEventListener('change', _onPluginChange);
     root.addEventListener('change', _onSubAgentChange);
     root.addEventListener('input', _onSubAgentChange);
+}
+
+function _onPluginChange(ev) {
+    const target = ev.target;
+    if (!target || !target.dataset) return;
+    const key = target.dataset.pluginKey;
+    if (!key) return;
+    if (key === 'enabled' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+        _persistPlugin({ enabled: !!target.checked });
+        render();
+    }
 }
 
 function _onSubAgentChange(ev) {
@@ -321,7 +354,42 @@ export function render() {
 
       ${_renderPreviewSection()}
 
+      ${_renderPluginSection()}
+
       ${_renderSubAgentSection()}
+    `;
+}
+
+function _renderPluginSection() {
+    const p = _readPlugin();
+    const profileLabel = p.profileDefault ? 'enabled' : 'disabled';
+    const toolList = PLUGIN_TOOL_NAMES.map(n => `<code>${n}</code>`).join(' / ');
+    return `
+      <h3 style="margin-top: 1.5em;">Plugin development mode</h3>
+      <p class="settings-help">
+        Opt-in capability overlay that admits the Plugin SDK + doc tools
+        onto whatever profile is active — flip it on mid-session without
+        burning the working system prompt, budget, scratchpad, or
+        conversation ledger. Mirrors the <code>preview.enabled</code>
+        pattern. Decision recorded at
+        <code>docs/discussion/plugin-dev-mode-vs-profile.md</code>.
+        Per-profile default for the current profile:
+        <strong>${profileLabel}</strong>.
+      </p>
+
+      <div class="form-group" data-setting-key="plugin.enabled">
+        <label>
+          <input type="checkbox"
+                 data-plugin-key="enabled"
+                 ${p.enabled ? 'checked' : ''}>
+          Enable plugin SDK + doc tools
+        </label>
+        <small>
+          Overrides the profile default. When on, admits ${toolList} onto
+          the active profile's tool list for the current turn. Default
+          OFF everywhere — opt-in only.
+        </small>
+      </div>
     `;
 }
 

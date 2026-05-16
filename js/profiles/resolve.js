@@ -430,6 +430,53 @@ export function resolvePreviewConfig(profileName) {
 }
 
 /**
+ * Plugin SDK + doc tool names. The capability-overlay membership for the
+ * `plugin.enabled` flag (gitea#442). Four tools registered in
+ * [`js/tools/plugin-tools.js`](../tools/plugin-tools.js) +
+ * `read_docs` from [`js/tools/doc-tools.js`](../tools/doc-tools.js) — the
+ * co-tagged doc tool noted in [`docs/discussion/plugin-dev-mode-vs-profile.md`](../../docs/discussion/plugin-dev-mode-vs-profile.md).
+ *
+ * Frozen so `Profiles.findAdmittingProfiles(name, { overlayNames })` and
+ * `applyPluginToolFilter` share one immutable membership.
+ *
+ * @type {readonly string[]}
+ */
+export const PLUGIN_TOOL_NAMES = Object.freeze([
+    'read_plugin_source',
+    'write_plugin_source',
+    'run_plugin',
+    'list_user_plugins',
+    'read_docs',
+]);
+
+/**
+ * Resolve the `plugin.enabled` capability-overlay flag for a given
+ * profile. Mirrors `resolvePreviewConfig` byte-for-byte in shape — same
+ * `coder.v1` short-circuit, same `chat.v1` fallback, same
+ * `cfg.enabled === true` check. Settings overlay
+ * (`State.settings.plugin`) wins when set.
+ *
+ * **2.58.0 (gitea#442).** Decision settled in
+ * [`docs/discussion/plugin-dev-mode-vs-profile.md`](../../docs/discussion/plugin-dev-mode-vs-profile.md):
+ * plugin-dev is a *capability anyone can engage as needed*, not a *role
+ * someone takes on for a session*. Default is OFF everywhere — opt-in
+ * only. Flipping the flag admits `PLUGIN_TOOL_NAMES` onto whatever
+ * profile is active, preserving the user's working state (system prompt,
+ * budget, scratchpad, ledger) instead of forcing a profile switch.
+ *
+ * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
+ * @returns {{ enabled: boolean, profileName: string }}
+ */
+export function resolvePluginConfig(profileName) {
+    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
+    const cfg = profile.plugin || {};
+    return {
+        enabled: cfg.enabled === true,
+        profileName: profile.name,
+    };
+}
+
+/**
  * Resolve the sub-agent (`delegate_task`) config for a given profile.
  *
  * **2.49.0.0 — slice 1 of github#24 Phase 1.** Reads the `subagent`

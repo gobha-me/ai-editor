@@ -126,3 +126,25 @@ test("register() warns even when full.v1's '*' sentinel would otherwise match (s
     });
     assert.equal(warnings.length, 1, `expected 1 warn (full.v1 '*' must not count); got ${warnings.length}`);
 });
+
+// ============================================
+// `PLUGIN_TOOL_NAMES` overlay (gitea#442 / 2.58.0) — picker profiles
+// don't admit plugin SDK tools directly; the `<overlay>` synthetic
+// admitter from `findAdmittingProfiles(..., { overlayNames })`
+// suppresses the warn so registering these tools doesn't false-positive
+// at boot. plugin-dev.v1 also admits them literally, but the registry's
+// overlay arg is the load-bearing signal here (suppresses the warn even
+// in a hypothetical future where plugin-dev.v1 is retired).
+// ============================================
+
+test("register() emits no warning for PLUGIN_TOOL_NAMES entries (overlay suppresses)", async () => {
+    const { PLUGIN_TOOL_NAMES } = await import('../js/profiles/resolve.js');
+    for (const name of PLUGIN_TOOL_NAMES) {
+        ToolRegistry.clear();
+        const warnings = captureWarn(() => {
+            ToolRegistry.register(name, async () => ({}), defFor(name));
+        });
+        assert.equal(warnings.length, 0,
+            `expected zero warns for plugin-overlay tool '${name}'; got ${JSON.stringify(warnings)}`);
+    }
+});

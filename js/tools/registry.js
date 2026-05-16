@@ -36,6 +36,7 @@
 import { State, EventBus } from '../core.js';
 import { EditorError, ErrorCode } from '../utils/errors.js';
 import { Profiles } from '../profiles/registry.js';
+import { PLUGIN_TOOL_NAMES } from '../profiles/resolve.js';
 import { ConversationManager } from '../chat/conversations.js';
 import { scanForInvisible } from '../security/untrusted-wrap.js';
 
@@ -88,8 +89,15 @@ export const ToolRegistry = {
         // Only fires on first registration: re-register implies the tool
         // was already in the registry (if it was admit-clean then, it still
         // is; HMR/MCP-reconnect would otherwise re-warn for the same tool).
+        //
+        // 2.58.0 (gitea#442) — pass `PLUGIN_TOOL_NAMES` overlay so the
+        // plugin SDK + doc tools (admitted via the `plugin.enabled` flag
+        // rather than per-profile `tools.admit`) don't trip the warn.
+        // The `'<overlay>'` synthetic admitter pushed by
+        // `findAdmittingProfiles` keeps the result non-empty for these
+        // names without claiming a picker-profile admits them.
         if (existingIdx === -1) {
-            const admitters = Profiles.findAdmittingProfiles(name);
+            const admitters = Profiles.findAdmittingProfiles(name, { overlayNames: PLUGIN_TOOL_NAMES });
             if (admitters.length === 0) {
                 console.warn(`[ToolRegistry] tool '${name}' is not admitted by any profile; add to profile X.tools.admit (e.g. chat.v1, coder.v1, kb.v1)`);
             }

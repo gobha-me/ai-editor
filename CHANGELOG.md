@@ -4,6 +4,45 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.58.0] - 2026-05-16
+
+### Added — `plugin.enabled` capability-overlay flag (gitea#442)
+
+Profile-side capability overlay that admits the Plugin SDK + doc tools onto whatever profile is active when flipped on. Decision recorded at [`docs/discussion/plugin-dev-mode-vs-profile.md`](docs/discussion/plugin-dev-mode-vs-profile.md) 2026-05-15: plugin-dev is a *capability anyone can engage as needed* (flag), not a *role someone takes on for a session* (profile). Mid-session, a `coder.v1` user adding a plugin flips a flag and keeps the working system prompt + budget + scratchpad + ledger, rather than burning that state on a profile switch.
+
+The 2.55.0 PR (gitea#439) pre-built the seam — [`js/profiles/registry.js:281`](js/profiles/registry.js)'s `findAdmittingProfiles(name, { overlayNames })` already accepted the overlay argument and pushed a synthetic `'<overlay>'` admitter for matching names. This row wires the real overlay through. Mirrors `scriptAutomation.enabled` / `preview.enabled` byte-for-byte in shape; `preview.enabled` is the closest analog (co-located group of tools overlaid onto a base profile).
+
+**Membership (frozen):** `PLUGIN_TOOL_NAMES` at [`js/profiles/resolve.js`](js/profiles/resolve.js) = `['read_plugin_source', 'write_plugin_source', 'run_plugin', 'list_user_plugins', 'read_docs']`. Four plugin SDK tools from [`js/tools/plugin-tools.js`](js/tools/plugin-tools.js) + the co-tagged `read_docs` from [`js/tools/doc-tools.js`](js/tools/doc-tools.js). Single central constant — admission gate, boot-warn, and the Settings toggle copy all read from the same list.
+
+**Default OFF everywhere.** `resolvePluginConfig('chat.v1').enabled === false`, `resolvePluginConfig('coder.v1').enabled === false`. The flag is opt-in only; the synthetic `plugin-dev.v1` profile (migration target for legacy `settings.role === 'plugin-dev'` users) admits the names directly in its `tools.admit` list and is unaffected by the runtime filter.
+
+**Filter chain.** New `applyPluginToolFilter` in [`js/llm/api.js`](js/llm/api.js) — mirror of `applyPreviewToolFilter` — joins the existing chain as the outermost wrap: `applyPluginToolFilter(applySubAgentToolFilter(applyPreviewToolFilter(applyScriptAutomationFilter(applyPlanModeFilter(...)))))`. Same shape, different membership set.
+
+**Settings UI.** [`js/settings/tools-tab.js`](js/settings/tools-tab.js) gains a "Plugin development mode" section between "In-editor preview" and "Sub-agents". One checkbox at `data-setting-key="plugin.enabled"`; persists to `State.settings.plugin.enabled` and emits `settings:changed` with `section: 'plugin'`. Toggle flips the per-turn admission immediately on next compose.
+
+**Boot-warn passthrough.** [`js/tools/registry.js`](js/tools/registry.js) line 92 passes `{ overlayNames: PLUGIN_TOOL_NAMES }` into `findAdmittingProfiles` so the 2.55.0 default-OFF dev warn doesn't false-positive on plugin/doc-tool registration. The `'<overlay>'` synthetic admitter keeps the result non-empty for these names.
+
+**Legacy `roles:` cleanup — already done.** Follow-up #2 from `discussion/plugin-dev-mode-vs-profile.md` ("sweep `plugin-tools.js` + `doc-tools.js`") was closed by the 2.54.0 inversion sweep — verified via grep: no `roles:` fields remain in either file.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/profiles/resolve.js`](js/profiles/resolve.js) | EDIT — adds `resolvePluginConfig(profileName)` + frozen `PLUGIN_TOOL_NAMES` export after `resolvePreviewConfig`. |
+| [`js/profiles/index.js`](js/profiles/index.js) | EDIT — re-export both from the barrel. |
+| [`js/llm/api.js`](js/llm/api.js) | EDIT — adds `applyPluginToolFilter` after `applySubAgentToolFilter`; chains it into both `getToolsForRole` return statements; widens the `../profiles/resolve.js` import. |
+| [`js/tools/registry.js`](js/tools/registry.js) | EDIT — passes `{ overlayNames: PLUGIN_TOOL_NAMES }` into the `findAdmittingProfiles` boot-warn call; imports the constant. |
+| [`js/settings/tools-tab.js`](js/settings/tools-tab.js) | EDIT — adds `_readPlugin` / `_persistPlugin` / `_onPluginChange` / `_renderPluginSection` (mirror of preview trio); wires listener in `initToolsTab`; inserts the new section between preview + sub-agents. |
+| [`tests/test-profile-plugin-overlay.mjs`](tests/test-profile-plugin-overlay.mjs) | NEW — 10 subtests: `PLUGIN_TOOL_NAMES` membership + freeze; `resolvePluginConfig` chat.v1 / coder.v1 / unknown / null defaults; overlay sentinel for every entry; picker-profile negative pins (none admit any name directly); `plugin-dev.v1` positive pins (admits all 5 directly). |
+| [`tests/test-tool-registry-admit-warning.mjs`](tests/test-tool-registry-admit-warning.mjs) | EDIT — new subtest verifies zero boot-warns for every `PLUGIN_TOOL_NAMES` entry under the post-2.58.0 overlay wire-up. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.57.0.3'` → `'2.58.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikethrough gitea#442 entry on the Now row; new Just shipped (2.58.0) row. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Tests:** Full Node suite re-run — green; pre-existing skipped test still skipped; new subtests included.
+
+**Closes:** `gitea#442`. Closes the wiring follow-up from `docs/discussion/plugin-dev-mode-vs-profile.md` §"What 'done' looks like" rows 2-3.
+
 ## [2.57.0.3] - 2026-05-16
 
 ### Fixed — `docs/ARCHITECTURE.md` `tools/registry.js` paragraph stale post-2.54.0 admission inversion (gitea#441 follow-up)
