@@ -4,6 +4,36 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — sub-agents Phase 2 spec (github#24 Phase 2 prep)
+
+Doc-only expansion of [`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md) §Phasing → Phase 2 from a single paragraph (pre-edit lines 506–508) into a full sub-section with 5 OQ resolutions, parent-loop integration contract, state-shape touchpoints, and a falsifiable Phase 1 dogfood-signal definition. No code, no tests, no version bump (per [Decision §14 sub-clause](docs/ROADMAP.md) + the `feedback_no_bump_for_measurement_only` memory rule).
+
+**Why now (before Phase 1 dogfood signal):** The existing design gates Phase 2 *implementation* on serial-sub-agent-bottleneck evidence; it does **not** gate Phase 2 *spec authoring*. Pre-baking the spec means when dogfood signal arrives, the implementation PR is shape-ready and can land without a paper-pause.
+
+**Resolutions pinned (post-Phase 1 OQ closures):**
+
+1. **Approval-card UX** — single batched card with per-row Approve/Reject/Cancel + "Approve all"/"Reject all" footer (mirrors `commit_files` / `script-approval-card` file-list shape). N independent cards rejected: they stack the chat surface and create per-card watchdog races.
+2. **In-flight state** — `pendingSubAgentApprovalBatch: { id, slots: Map<callId, ApprovalSlot> }` replaces Phase 1's single-slot `pendingSubAgentApproval`. Single batch in flight (preserves `USER_PAUSE_TOOLS` contract); per-row slots resolve concurrently.
+3. **`session_cost` race mitigation** — new `subagentCostMutex` keyed by `'session'`, copying the `KeyMutex` call-site shape from [`js/intelligence/cost/cost-store.js`](js/intelligence/cost/cost-store.js) `recordTurn`. Per-sub-agent finalizer + per-call pre-flight both go through it. No new mutex primitive.
+4. **`LLMDebug` per-loop view** — debug-modal grouping learns to render parallel siblings side-by-side; no new fields (Phase 1 already threads `subagent_id`).
+5. **`tools` allowlist strictness** — stay lenient (silent drop + `LLMDebug` note) for Phase 2's first ship; strict-mode promotion remains gated on typo-driven-drop evidence.
+
+**Parent-loop contract pinned:** N `delegate_task` `tool_use` blocks in one round → one batched approval card → on Approve, concurrent `Promise.all` of N sub-agent runners → batch resolves when all N reach a terminal state → N `tool_result` blocks emit in the same next round (in-order, no streaming — provider API doesn't admit multi-turn `tool_result` streaming).
+
+**Phase 1 dogfood-signal definition added** — three falsifiable triggers (A: ≥2 sessions with 3+ adjacent `delegate_task` rows within a 10-minute window; B: ≥1 session with model intent for parallelism; C: explicit user ask). Any one fires the implementation slot. None satisfied as of this spec (Phase 1 shipped 2 days prior, 2.49.0 / 2026-05-14; insufficient corpus).
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/DESIGN-sub-agents.md`](docs/DESIGN-sub-agents.md) | EDIT — §Phasing → Phase 2 expansion (paragraph → full sub-section + sub-decisions table + parent-loop contract + state-shape touchpoints + sizing); §Phasing → new "Phase 1 dogfood-signal definition" sub-section with Triggers A/B/C; §Open Questions table loses 3 Phase-2-specific rows (batched-vs-N cards, `LLMDebug` partition, `tools` allowlist strictness), prefaced with a pointer to the new spec; §Risks cost-race entry updated to cite the `subagentCostMutex` pin; §Failure Modes "Two `delegate_task` in flight" row updated to cite `pendingSubAgentApprovalBatch`; §Now/Next/Later → Later row updated to mark Phase 2 spec'd but still implementation-gated. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — §"Known open issues — not yet scheduled" github#24 row title updated (Phase 1 → Phase 2), summary reflects shipped Phase 1 + spec'd Phase 2, status moves from `[medium]` to `[fuzzy]` (implementation gate unchanged), rationale points to the new spec sub-section + Triggers A/B/C. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Closes:** none (paper-only; no ticket closed). Composes with github#24 by pre-baking the Phase 2 spec so the implementation PR is shape-ready when Trigger A/B/C fires.
+
+**Verification:** Doc-only — no test suite run. `grep -n 'pendingSubAgentApprovalBatch' docs/DESIGN-sub-agents.md` returns the new spec entries (Phase 2 sub-decisions table + Failure Modes update). `grep -n 'subagentCostMutex' docs/DESIGN-sub-agents.md` returns the Risk + Phase 2 entries. [`js/version.js`](js/version.js) unchanged at `2.60.0`.
+
 ## [2.60.0] - 2026-05-16
 
 ### Removed — demote dead `resolveReviewThread` (ICD #4 finding #3)
