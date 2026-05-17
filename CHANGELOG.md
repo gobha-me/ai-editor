@@ -4,6 +4,35 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.61.0] - 2026-05-17
+
+### Changed — `server.roles` dead-letter docstring + Settings copy honesty (ICD #6 finding #1)
+
+Closes the one `[strong]`-band code-aware finding from `RE-EVAL following 2.55.0` that was suggested for the next code minor (see the `[Unreleased]` `Docs — RE-EVAL following 2.55.0` block below; the other two findings remain queued behind architecture decisions). The per-server `roles:` field on MCP records survived the 2.54.0 admission inversion as **dead state** — persisted in IDB, edited in Settings as a checkbox group, validated by `LEGACY_GROUP_TAGS`, but no longer consumed by the bridge (admission flows through `Profiles.filterTools` against profile-side `tools.admit`; pinned by [`tests/test-mcp-bridge.mjs:259`](tests/test-mcp-bridge.mjs) `"roles field must be absent in the post-inversion world"`). The docstring at [`js/mcp/registry.js:28–36`](js/mcp/registry.js) still claimed *"post-2.0.0 they're consumed as group tags by `Profile.tools.allowed_groups`"* — wrong post-2.54.0; the help-text under the Settings checkbox group still said *"Check specific roles to restrict which roles can use this server's tools"* — also wrong.
+
+**In-place correction, not field deletion.** The field, its `normaliseRoles()` validator, the `LEGACY_GROUP_TAGS` array, the IDB serialize path, and the Settings checkbox group are all preserved unchanged for back-compat with records pre-dating 2.54.0 — removing them would force a migration without semantic benefit, and the dead-letter shape is already test-pinned by the bridge so re-divergence would be loud. Mirrors the 2.57.0 user-visible `Roles → Profiles` rename shape and the 2.46.0 / 2.47.0.1 docstring-honesty pattern (in-place correction with zero behavior change).
+
+**Absorption release.** This minor absorbs the two `[Unreleased]` doc-only deliverables from `RE-EVAL following 2.55.0` + the sub-agents Phase 2 spec, per the cadence pattern shipped at 2.50.0 / 2.59.0 / 2.60.0.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/mcp/registry.js`](js/mcp/registry.js) | EDIT — `LEGACY_GROUP_TAGS` docstring rewritten to honestly state the post-2.54.0 dead-letter status; cross-references [`docs/ICD-mcp-bridge.md`](docs/ICD-mcp-bridge.md) §"Code-aware findings #1" and the bridge-side regression assertion at [`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs). Function body + array contents untouched. |
+| [`html/settings-tabs.html`](html/settings-tabs.html) | EDIT — single-line help-text rewrite under the "Allowed Profiles:" checkbox group (line 811): drops the misleading *"Check specific roles to restrict…"* framing; replaces with a back-compat note pointing users to the active profile's tool list (Settings → Profiles) as the real admission surface. Checkbox group itself + values unchanged. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.60.0'` → `'2.61.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikes through the "Now" row's finding #1; adds a "Just shipped (2.61.0)" row; updates the §"Re-evaluation cadence" `RE-EVAL following 2.55.0` summary to mark finding #1 ✅ resolved (leaves findings #2 + #3 queued behind their respective architecture decisions); current released bumped 2.60.0 → 2.61.0. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry + `[Unreleased]` block promoted to `[2.61.0]`. |
+
+**Closes:** ICD #6 finding #1 (`docs/ICD-mcp-bridge.md` §"Code-aware findings"). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-*.mjs` — full Node suite passes; the regression guard at [`tests/test-mcp-bridge.mjs:259`](tests/test-mcp-bridge.mjs) (`"roles field must be absent in the post-inversion world"`) continues to hold.
+- Version coherence: [`js/version.js`](js/version.js) at `'2.61.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.61.0)" row.
+- Audit pass: `grep -nE 'Roles\.filterTools|allowed_groups|user_groups' js/mcp/` returns only the new rationale references inside the rewritten docstring (the retired-contract names are *named for context* and *not used*).
+- Settings UI manual smoke: opening Settings → MCP Servers → Edit on any server renders the new help text; the checkbox group still saves/loads as before (no schema change); adding a fresh server still persists `roles` to IDB per the unchanged `serialize()` path.
+
 ### Docs — `RE-EVAL following 2.55.0` (sixth re-eval slot; overdue by 5 minors past anchor)
 
 Doc-only re-eval slot per the Plinth methodology adopted 2026-05-12 (see [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" + Decision §14 sub-clause). Overdue by 5 code minors past anchor — the slot was anchored at 2.55.0 but 2.55.0 → 2.60.0 shipped without firing it. No version bump (composes with [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md)); deliverables accumulate in this `[Unreleased]` block.

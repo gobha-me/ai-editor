@@ -25,11 +25,22 @@ let _servers = [];
 const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
 
 /**
- * 2.0.0 — slice 3: legacy admission-tag list. Pre-2.0.0 these were
- * "role IDs" used by `Roles.filterTools`; post-2.0.0 they're consumed
- * as group tags by `Profile.tools.allowed_groups` (same semantics,
- * same vocabulary). The MCP per-server `roles:` field is preserved
- * unchanged for back-compat with existing user records.
+ * Dead-letter validator (post-2.54.0). The per-server `roles:` field is
+ * **no longer consumed by admission** — gitea#438 (shipped 2.54.0)
+ * inverted tool admission, so admission now flows through
+ * `Profiles.filterTools` against the profile-side `tools.admit`
+ * enumeration. The pre-2.0.0 `Roles.filterTools` consumer was retired
+ * at 2.0.0; the 2.0.0 → 2.54.0 `Profile.tools.allowed_groups` consumer
+ * was retired at 2.54.0 (composer's `user_groups` filter is a pass-
+ * through). See [docs/ICD-mcp-bridge.md] §"Code-aware findings #1".
+ *
+ * The field, this validator, and the Settings form are preserved
+ * unchanged for back-compat with IDB records pre-dating 2.54.0 —
+ * removing them would force a migration without semantic benefit.
+ * The dead-letter shape is pinned by
+ * `tests/test-mcp-bridge.mjs` ("roles field must be absent in the
+ * post-inversion world" — bridge-side assertion that registry storage
+ * does not leak into tool-registration metadata).
  *
  * @type {string[]}
  */
