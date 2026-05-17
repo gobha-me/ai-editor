@@ -172,3 +172,109 @@ test('setEnabled on unknown plugin id is a quiet no-op', async () => {
     await Plugins.setEnabled('does-not-exist', true);
     assert.equal(Plugins.get('does-not-exist'), undefined);
 });
+
+/* ============================================================ */
+/* setEnabled runs destroy() on first disable (2.64.0 / ICD #7 #1) */
+/* ============================================================ */
+
+test('setEnabled(false) invokes manifest.destroy with (instance, config)', async () => {
+    let destroyCalls = 0;
+    let destroyArgs = null;
+    const id = 'lifecycle-test-destroy-1';
+    const manifest = {
+        ...makePlugin(id, {
+            defaultEnabled: true,
+            init: async () => ({ ready: true }),
+        }),
+        destroy: async (instance, config) => {
+            destroyCalls++;
+            destroyArgs = { instance, config };
+        },
+    };
+    Plugins.register(manifest);
+    Plugins.setConfig(id, { key: 'value' });
+    await Plugins.init(id);
+
+    await Plugins.setEnabled(id, false);
+
+    assert.equal(destroyCalls, 1, 'destroy called exactly once on disable');
+    assert.deepEqual(destroyArgs.instance, { ready: true }, 'destroy received the init() return value');
+    assert.deepEqual(destroyArgs.config, { key: 'value' }, 'destroy received the persisted config');
+    assert.equal(Plugins.get(id).enabled, false);
+    assert.equal(Plugins.get(id).instance, null, 'instance cleared after destroy');
+});
+
+test('setEnabled(false) twice does not invoke destroy twice', async () => {
+    let destroyCalls = 0;
+    const id = 'lifecycle-test-destroy-2';
+    Plugins.register({
+        ...makePlugin(id, {
+            defaultEnabled: true,
+            init: async () => ({}),
+        }),
+        destroy: async () => {
+            destroyCalls++;
+        },
+    });
+    await Plugins.init(id);
+
+    await Plugins.setEnabled(id, false);
+    await Plugins.setEnabled(id, false);
+
+    assert.equal(destroyCalls, 1, 'destroy is idempotent across redundant disables');
+});
+
+test('destroy() throwing is logged but does not block disable persistence', async () => {
+    const errors = [];
+    const origError = console.error;
+    console.error = (...args) => errors.push(args.join(' '));
+    try {
+        const id = 'lifecycle-test-destroy-3';
+        Plugins.register({
+            ...makePlugin(id, {
+                defaultEnabled: true,
+                init: async () => ({}),
+            }),
+            destroy: async () => {
+                throw new Error('destroy bomb');
+            },
+        });
+        await Plugins.init(id);
+
+        await Plugins.setEnabled(id, false);
+
+        assert.equal(Plugins.get(id).enabled, false, 'disable persisted despite throw');
+        assert.equal(Plugins.get(id).instance, null, 'instance cleared even when destroy throws');
+        assert.ok(
+            errors.some((e) => e.includes('Plugin destroy failed on disable') && e.includes(id)),
+            'destroy failure logged with pluginId',
+        );
+    } finally {
+        console.error = origError;
+    }
+});
+
+test('setEnabled(false) on plugin without destroy hook is a quiet no-op', async () => {
+    const errors = [];
+    const origError = console.error;
+    console.error = (...args) => errors.push(args.join(' '));
+    try {
+        const id = 'lifecycle-test-destroy-4';
+        Plugins.register(makePlugin(id, {
+            defaultEnabled: true,
+            init: async () => ({ ready: true }),
+        }));
+        await Plugins.init(id);
+
+        await Plugins.setEnabled(id, false);
+
+        assert.equal(Plugins.get(id).enabled, false);
+        // Instance is preserved when no destroy is declared — the old
+        // "skip re-init on toggle off→on" antibody still applies for
+        // plugins without lifecycle cleanup.
+        assert.deepEqual(Plugins.get(id).instance, { ready: true }, 'instance preserved when no destroy declared');
+        assert.equal(errors.length, 0, 'no spurious console output when no destroy declared');
+    } finally {
+        console.error = origError;
+    }
+});

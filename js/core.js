@@ -1232,6 +1232,22 @@ const Plugins = {
                 console.error(`Plugin init failed on enable: ${pluginId}`, e);
             }
         }
+
+        // First-time disable: run destroy() so the plugin can release timers,
+        // listeners, captured DOM nodes, etc. Symmetric mirror of the
+        // first-enable init antibody above. Catch + log destroy errors —
+        // never block disable persistence on a faulty cleanup hook. Clear
+        // the captured instance so a redundant second disable no-ops and a
+        // later re-enable runs init() fresh (the prior instance's state was
+        // released by destroy).
+        if (!enabled && wasEnabled && plugin.instance && plugin.manifest && plugin.manifest.destroy) {
+            try {
+                await plugin.manifest.destroy(plugin.instance, plugin.config);
+            } catch (e) {
+                console.error(`Plugin destroy failed on disable: ${pluginId}`, e);
+            }
+            plugin.instance = null;
+        }
     },
 
     registerButton(pluginId, { icon, label, onClick }) {

@@ -4,9 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Docs — `RE-EVAL following 2.58.0` (seventh re-eval slot; doc-only, no version bump)
+## [2.64.0] - 2026-05-17
 
-Seventh re-eval slot under the methodology adopted 2026-05-12 (Decision §14). Anchored at 2.58.0; ran 2026-05-17 — **overdue by 5 minors past anchor** (2.58.0 → 2.63.0 shipped without firing it), same shape as the sixth slot (anchored at 2.55.0, ran 2026-05-16 after 2.60.0). Per Decision §14 sub-clause: re-eval deliverables accumulate in `[Unreleased]` without a version slot; the next code minor absorbs (probably 2.64.0, mirroring the 2.61.0 absorption pattern).
+### Fixed — invoke declared `destroy()` plugin hook (ICD #7 finding #1)
+
+Closes the first of the three code-aware findings from `RE-EVAL following 2.58.0` (see the `Docs — RE-EVAL following 2.58.0` block below; findings #2 + #3 remain queued — #2 behind a tightening decision, #3 as a separate `[strong]` two-file fix). The plugin SDK has advertised a `destroy(instance, config)` hook in the [`docs/PLUGIN.md`](docs/PLUGIN.md) schema + the plugin template comments at [`js/plugin-editor.js:51-93`](js/plugin-editor.js) since the SDK shipped, but `Plugins.setEnabled(id, false)` at [`js/core.js:1215`](js/core.js) only flipped the flag + persisted; the declared hook was never invoked. Plugins declaring cleanup logic (timers, listeners, captured DOM nodes) leaked those resources on disable. `uninstallPlugin` at [`js/plugin-loader.js:167-169`](js/plugin-loader.js) is covered transitively — it already cascades through `setEnabled(false)` (verified: only call site).
+
+**Strict symmetric mirror of the init antibody.** The existing first-enable init block at [`js/core.js:1227-1234`](js/core.js) is the template — runs `manifest.init?.(config)` once on the `enabled && !wasEnabled` transition and captures the returned instance. The destroy invocation added here is the inverse: first-time disable runs `manifest.destroy?.(instance, config)` when an instance was actually captured, catches + logs errors so a faulty cleanup hook never blocks the disable flag persistence, and clears the captured instance so a redundant second disable no-ops and a later re-enable runs init fresh. The four-part guard (`!enabled && wasEnabled && plugin.instance && plugin.manifest.destroy`) makes idempotency load-bearing.
+
+**Consciously changes Enablement-axis invariant #2 for plugins with destroy.** The existing invariant "no re-init on toggle off→on when instance exists" still applies to plugins **without** destroy — their `plugin.instance` is preserved across `setEnabled(false)` because the new guard's `manifest.destroy` check is falsy. Plugins **with** destroy now re-init on toggle off→on, which is correct because destroy released their prior state. The existing test `disable then re-enable does not run init twice (instance already set)` at [`tests/test-plugin-lifecycle.mjs:95-115`](tests/test-plugin-lifecycle.mjs) covers a plugin without destroy and continues to pass unchanged.
+
+**Absorption release.** This minor absorbs the `[Unreleased]` `Docs — RE-EVAL following 2.58.0` deliverable, per the cadence pattern shipped at 2.50.0 / 2.59.0 / 2.60.0 / 2.61.0.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/core.js`](js/core.js) | EDIT — added destroy invocation block in `Plugins.setEnabled` immediately after the init antibody. Four-part guard + try/catch + console.error + `plugin.instance = null` after invocation. |
+| [`tests/test-plugin-lifecycle.mjs`](tests/test-plugin-lifecycle.mjs) | EDIT — appended 4 new subtests covering: destroy invoked once with `(instance, config)` + instance cleared; idempotency across two disables; throw-logged-but-disable-persisted; no destroy declared = no-op + instance preserved. Existing 7 subtests unchanged. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.63.0'` → `'2.64.0'`. |
+| [`docs/ICD-plugin-lifecycle.md`](docs/ICD-plugin-lifecycle.md) | EDIT — §"Code-aware findings" #1 struck through with resolution note pointing to 2.64.0 + the new test. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikes through finding #1 sub-bullet in the "Now" row; adds "Just shipped (2.64.0)" row above the 2.63.0 row; updates `RE-EVAL following 2.58.0` summary in §"Re-evaluation cadence" to mark finding #1 ✅ resolved; current released bumped 2.63.0 → 2.64.0. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` `Docs — RE-EVAL following 2.58.0` block promoted into this section. |
+
+**Closes:** ICD #7 finding #1 ([`docs/ICD-plugin-lifecycle.md`](docs/ICD-plugin-lifecycle.md) §"Code-aware findings"). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-plugin-lifecycle.mjs` — 11/11 pass standalone (7 existing + 4 new).
+- `node --test tests/test-*.mjs` — full Node suite expected 3522 pass / 1 skipped / 0 fail (3518 baseline + 4 new subtests).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.64.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.64.0)" row.
+- No regression in adjacent suites — `tests/test-plugin-modal-dispatch.mjs`, `tests/test-plugin-tools-tracker.mjs`, `tests/test-profile-plugin-overlay.mjs` all green.
+
+### Docs — `RE-EVAL following 2.58.0` (seventh re-eval slot; absorbed into 2.64.0 per cadence)
+
+Seventh re-eval slot under the methodology adopted 2026-05-12 (Decision §14). Anchored at 2.58.0; ran 2026-05-17 — **overdue by 5 minors past anchor** (2.58.0 → 2.63.0 shipped without firing it), same shape as the sixth slot (anchored at 2.55.0, ran 2026-05-16 after 2.60.0). Per Decision §14 sub-clause: re-eval deliverables accumulate in `[Unreleased]` without a version slot; absorbed into 2.64.0 above per the 2.61.0 absorption pattern.
 
 **ICD #7 authored at [`docs/ICD-plugin-lifecycle.md`](docs/ICD-plugin-lifecycle.md).** Seventh subsystem in the ICD-backfill program per [`ROADMAP.md`](docs/ROADMAP.md) §"Per-subsystem ICD backfill program" target #7. Covers the plugin in-process registry (`Plugins` namespace in [`js/core.js`](js/core.js) ~390 LOC) + external-URL installer ([`js/plugin-loader.js`](js/plugin-loader.js) 241 LOC; invisible-Unicode pre-flight + blob-URL dynamic import + registration-snapshot diff) + in-editor source editor ([`js/plugin-editor.js`](js/plugin-editor.js) 487 LOC; CodeMirror standalone instance + tab renderer + auto-profile-switch on activation + `loadUserPlugins` boot path) + generic plugin-contributed modal container ([`js/plugin-modal.js`](js/plugin-modal.js) 61 LOC) + Settings → Plugins tab ([`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) 486 LOC; install / enable / disable / configure / uninstall UI + invisible-Unicode warning band) + 5-tool plugin-dev cohort ([`js/tools/plugin-tools.js`](js/tools/plugin-tools.js) 233 LOC; `read_plugin_source` / `write_plugin_source` / `run_plugin` / `list_user_plugins` + `read_docs` from [`doc-tools.js`](js/tools/doc-tools.js)). **6 files / ~1898 LOC under one ICD; 5 classification axes (Installation / Registration / Enablement / Invocation / Cleanup).** Three persistence stores documented (`installedPlugins` + `userPlugins` + `pluginState`); no-sandbox property pinned as load-bearing (contrast with Tier-0 Worker sandbox); 2.58.0 `plugin.enabled` capability overlay vs. per-plugin enabled distinguished as two separate concepts sharing the word "enabled"; six open invariants noted (plugin-registered tool admission post-2.54.0 / hot-reload teardown / init-error envelope inconsistency / `configSchema` field-type coverage / `Plugins.list` order stability / auto-profile-switch + per-chat-binding interaction).
 
