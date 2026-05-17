@@ -4,6 +4,36 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.62.0] - 2026-05-17
+
+### Changed — `retrieval:turn-stats` shape contract extracted + pinned (ICD #5 finding (b2))
+
+Closes the second of the three `[strong]`-band code-aware findings from `RE-EVAL following 2.52.0` (the third, (b1) `ChunkStore` typedef widening, shipped 2.59.0; the first, `resolveTaskLedgerConfig`, was already shipped 2.53.0). The `retrieval:turn-stats` EventBus payload is the cost-attribution channel from the retrieval manager (producer; two dispatch sites at [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) lines 829 + 844) to the cost recorder (consumer; [`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js) `_onRetrievalTurnStats` listener). The two sides had no shape pin between them — a rename on either side would silently lose per-strategy cost attribution; the dashboard would keep displaying numbers, but with a stale schema.
+
+**Seam-vs-JSDOM architecture decision resolved as seam.** The original ICD #5 queueing rationale called the finding "browser-DOM-coupled" and suggested either a JSDOM-fake or a manager-side seam injection. Investigation found the coupling was architectural, not DOM-level (the event dispatches through the in-process `EventBus`, not `CustomEvent`/`window.dispatchEvent`) — the real blocker is that `manager.js` imports `core.js` which transitively pulls in `window`-bound modules, so a Node test can't `require(manager)` directly. The seam-side option fits the project: zero existing JSDOM uses (`grep` confirmed only comments in `_node-shim.mjs` + `test-message-virtualizer.js`), no `package.json` to declare a dev dependency in, and the prior-art at [`js/intelligence/retrieval/manager-helpers.js`](js/intelligence/retrieval/manager-helpers.js) already establishes the "pure extract for Node-testable bits" pattern. **The seam approach also stands as prior art for ICD #6 finding #3** (`MCPServerRegistry` + `bridge` shape-pinning tests), which is queued behind the next intentional bridge edit.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/intelligence/retrieval/turn-stats-shape.js`](js/intelligence/retrieval/turn-stats-shape.js) | NEW — 116 LOC, pure module (no `core.js` / `git.js` / DOM imports). Exports frozen `TURN_STATS_REQUIRED_KEYS` (`['conversationId', 'strategyStats']`), `TURN_STATS_OPTIONAL_KEYS` (`['cache_hit']`), `TURN_STATS_STRATEGY_SLOT_KEYS` (`['hits', 'tokens']`), and `validateTurnStatsPayload(payload) → {ok: true} \| {ok: false, reason}`. Validator covers: object-not-null, required-keys-present, no-extra-keys, `conversationId` is `string\|null`, `strategyStats` is non-empty object with `{hits: finite-number, tokens: finite-number}` slots, optional `cache_hit` is boolean. Mirrors the style of [`js/intelligence/cost/usage-shape.js`](js/intelligence/cost/usage-shape.js). |
+| [`js/intelligence/retrieval/manager.js`](js/intelligence/retrieval/manager.js) | EDIT — new import of `validateTurnStatsPayload`; new module-local `_emitTurnStats(payload)` seam (~16 LOC) that runs the validator and on `!ok` issues `console.warn('[retrieval] turn-stats payload shape divergence: ' + reason, payload)` — **still dispatches** via `EventBus.emit('retrieval:turn-stats', payload)` so a shape bug never silently drops cost attribution. The two existing dispatch sites (`_emitRetrievalTurnStats` line 829 + `_emitRetrievalCacheHit` line 844) now route through `_emitTurnStats(…)` instead of `EventBus.emit(…)`. Happy-path behavior identical; shape drift surfaces loudly. |
+| [`js/intelligence/cost/cost-recorder.js`](js/intelligence/cost/cost-recorder.js) | EDIT — new import of `validateTurnStatsPayload`; `_onRetrievalTurnStats` listener tightened from ad-hoc null/empty checks (lines 88–90 pre-edit) to a single `validateTurnStatsPayload(payload)` call. The producer-side seam is the warn site for shape divergence; the listener silently early-returns on `!ok` (production posture: don't double-warn). Semantic guard on a falsy `conversationId` preserved separately — "no active conversation" is a normal early-return path, not a shape issue. |
+| [`tests/test-retrieval-turn-stats-shape.mjs`](tests/test-retrieval-turn-stats-shape.mjs) | NEW — 18 subtests, no `_node-shim.mjs` import needed (pure module under test). Mirrors [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs) one-for-one: frozen-constants invariants (3), happy-path producer payload (1), cache-hit shape (1), `conversationId: null` accepted (1), required-keys-missing (2), extra-key no-extras invariant (1), strategy-slot validity (3), type strictness on numeric / boolean fields (3), optional cache_hit absence (1), null/array rejection (2). |
+| [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md) | EDIT — §"Code-aware findings" #3 struck through with a resolution note pointing to the new shape module + test; §"Diagnostics axis" cross-references `turn-stats-shape.js` as the single source of truth; §"Open invariants" entry struck through. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — header advance (current released 2.61.0 → 2.62.0; new "Just shipped" lead-in with the seam-decision summary); "Now" row tightened (ICD #5 (b2) removed — only ICD #6 #2 SSE + #3 shape-pinning remain queued); new "Just shipped (2.62.0)" row; §"Re-evaluation cadence" `RE-EVAL following 2.52.0` summary updated to mark all three findings ✅ resolved. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.61.0'` → `'2.62.0'`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted to `[2.62.0]`. |
+
+**Closes:** ICD #5 finding (b2) (`docs/ICD-retrieval-manager.md` §"Code-aware findings"). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-*.mjs` — full Node suite 3501 pass / 1 skipped / 0 fail. New `test-retrieval-turn-stats-shape.mjs` (18 subtests) passes; existing `test-cost-recorder.mjs` (14 subtests, exercises `_onRetrievalTurnStats` via `__test` namespace) continues to pass — the validator's early-return preserves the prior null/empty-input behavior.
+- Version coherence: [`js/version.js`](js/version.js) at `'2.62.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.62.0)" row.
+- Audit pass: `grep -n "EventBus.emit('retrieval:turn-stats'" js/intelligence/retrieval/manager.js` returns one site (the seam itself); the two prior call sites at 829 + 844 now read `_emitTurnStats(…)`.
+- Browser smoke (manual): `tests/index.html` + retrieval enabled → trigger `find_relevant_files` → confirm no console.warn for shape divergence in production happy path → cost dashboard's per-strategy rows still populate.
+
 ## [2.61.0] - 2026-05-17
 
 ### Changed — `server.roles` dead-letter docstring + Settings copy honesty (ICD #6 finding #1)

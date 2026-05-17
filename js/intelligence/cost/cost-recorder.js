@@ -28,6 +28,7 @@ import {
 } from './cost-store.js';
 import { extractUsage } from './usage-shape.js';
 import { checkThresholds, pickWorse } from './budget.js';
+import { validateTurnStatsPayload } from '../retrieval/turn-stats-shape.js';
 
 let _initialized = false;
 
@@ -85,11 +86,15 @@ export function init() {
  * @param {{conversationId: string|null, strategyStats: Object<string, {hits: number, tokens: number}>}} payload
  */
 function _onRetrievalTurnStats(payload) {
-    if (!payload || !payload.conversationId || !payload.strategyStats) return;
-    const stats = payload.strategyStats;
-    if (typeof stats !== 'object' || Object.keys(stats).length === 0) return;
+    // Producer-side `_emitTurnStats` at `../retrieval/manager.js` is the warn
+    // site for shape divergence; the listener silently early-returns on a
+    // null `conversationId` (no active conversation — nothing to attribute)
+    // or any shape failure flagged by the shared validator.
+    if (!payload || !payload.conversationId) return;
+    const result = validateTurnStatsPayload(payload);
+    if (!result.ok) return;
     _pendingByStrategy.set(payload.conversationId, {
-        byStrategy: stats,
+        byStrategy: payload.strategyStats,
         ts: Date.now(),
     });
 }

@@ -38,6 +38,7 @@ import { createThematicStrategy } from './strategies/thematic.js';
 import { compose } from './composer.js';
 import { buildBM25Index } from './bm25-indexer.js';
 import { buildParaphraserFromSettings } from './query-paraphraser.js';
+import { validateTurnStatsPayload } from './turn-stats-shape.js';
 import { createParaphraseIdbCache } from './paraphrase-cache-idb.js';
 import { buildExpanderFromSettings } from './query-expander.js';
 import { createExpanderIdbCache } from './expander-cache-idb.js';
@@ -826,7 +827,7 @@ function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser, ha
 
     if (Object.keys(strategyStats).length === 0) return;
 
-    EventBus.emit('retrieval:turn-stats', {
+    _emitTurnStats({
         conversationId: convId,
         strategyStats,
     });
@@ -841,13 +842,30 @@ function _emitRetrievalTurnStats(composeResult, tokensBefore, hasParaphraser, ha
 function _emitRetrievalCacheHit() {
     const convId = ConversationManager.getActiveId();
     if (!convId) return;
-    EventBus.emit('retrieval:turn-stats', {
+    _emitTurnStats({
         conversationId: convId,
         cache_hit: true,
         strategyStats: {
             cache: { hits: 1, tokens: 0 },
         },
     });
+}
+
+/**
+ * Single dispatch seam for `retrieval:turn-stats`. Validates the payload
+ * against [`turn-stats-shape.js`](turn-stats-shape.js) before dispatch and
+ * surfaces shape divergence as a `console.warn` — but still dispatches so
+ * a shape bug never silently drops cost attribution. Pinned by
+ * [`tests/test-retrieval-turn-stats-shape.mjs`](../../../tests/test-retrieval-turn-stats-shape.mjs).
+ *
+ * @param {import('./turn-stats-shape.js').TurnStatsPayload} payload
+ */
+function _emitTurnStats(payload) {
+    const result = validateTurnStatsPayload(payload);
+    if (!result.ok) {
+        console.warn(`[retrieval] turn-stats payload shape divergence: ${result.reason}`, payload);
+    }
+    EventBus.emit('retrieval:turn-stats', payload);
 }
 
 function _trackQuery() {

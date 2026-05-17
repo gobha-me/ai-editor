@@ -103,7 +103,7 @@ The single entry-point for query-time retrieval. Each step is a documented escap
 - `context:fileRemoved` `{path}`
 - `context:pauseChanged` `{paused, manual, auto, indexing, progress}`
 
-**Per-query attribution event.** `retrieval:turn-stats` ([`manager.js:837`](../js/intelligence/retrieval/manager.js)) — single producer, single consumer ([`cost-recorder.js`](../js/intelligence/cost/cost-recorder.js)). Shape: `{conversationId, strategyStats: Object<name, {hits, tokens}>, cache_hit?: boolean}`. The `paraphrase` / `expansion` slot is mutually exclusive and present even on zero tokens (cache hit) so the dashboard reflects that the pre-pass was active for the turn.
+**Per-query attribution event.** `retrieval:turn-stats` ([`manager.js:837`](../js/intelligence/retrieval/manager.js)) — single producer, single consumer ([`cost-recorder.js`](../js/intelligence/cost/cost-recorder.js)). Shape: `{conversationId, strategyStats: Object<name, {hits, tokens}>, cache_hit?: boolean}` — extracted as the single source of truth to [`turn-stats-shape.js`](../js/intelligence/retrieval/turn-stats-shape.js) (2.62.0); both sides validate against `validateTurnStatsPayload`. The `paraphrase` / `expansion` slot is mutually exclusive and present even on zero tokens (cache hit) so the dashboard reflects that the pre-pass was active for the turn.
 
 **`getStats()` shape.** Synchronous, pure-read getter consumed by the LLM Debug Indexer panel: `{filesIndexed, project, isIndexing, enabled, queryCount, lastQueried, cache: {queryCacheHits, queryCacheMisses, queryCacheSize, indexFingerprint}}`. Field set additive — new diagnostic fields land here; never remove a key.
 
@@ -127,7 +127,7 @@ The single entry-point for query-time retrieval. Each step is a documented escap
 
 - **No test pins the manager's public surface shape.** `Object.keys(RetrievalManager).sort()` could regress (a renamed method, a silently dropped getter) and only the production call sites would surface. ICD #4 cited the same gap for `BASE_GIT_PROVIDER`; same shape applies here.
 - **No test pins the `context:*` event names against listener registration.** A renamed emit site without a matching listener rename would silently break the status indicator + cost recorder.
-- **No test asserts the `retrieval:turn-stats` payload shape.** The cost-recorder reads `strategyStats` keys; a producer-side rename would silently lose attribution.
+- ~~**No test asserts the `retrieval:turn-stats` payload shape.** The cost-recorder reads `strategyStats` keys; a producer-side rename would silently lose attribution.~~ ✅ **resolved 2.62.0** — payload contract extracted to [`turn-stats-shape.js`](../js/intelligence/retrieval/turn-stats-shape.js); producer-side seam `_emitTurnStats` and consumer-side listener both call `validateTurnStatsPayload`; new [`tests/test-retrieval-turn-stats-shape.mjs`](../tests/test-retrieval-turn-stats-shape.mjs) pins the contract (18 subtests).
 - ~~**The `@ts-ignore` count signals typedef drift.** 12 `@ts-ignore` annotations across [`manager.js`](../js/intelligence/retrieval/manager.js) cluster on `store.*` calls — the store's typedef declares fewer methods than the store object actually exports. See code-aware finding #2.~~ ✅ **resolved 2.59.0** — `ChunkStore` typedef widened with one `@property` for `getAllChunksForCollection`; all 12 `@ts-ignore` annotations removed; new [`tests/test-chunk-store-shape.mjs`](../tests/test-chunk-store-shape.mjs) pins the typedef-vs-runtime contract.
 
 ## Code-aware findings (feed back to ROADMAP as 2.53.0+ rows)
@@ -164,13 +164,13 @@ Historical record preserved below.
 
 **Why this is queued, not promoted:** The fix is mechanical but touches a typedef that downstream typedefs reference; needs a careful one-pass sweep to land in a single PR. Worth doing during the next time someone touches the store seam; not worth queue-jumping the next code minor.
 
-### 3. `retrieval:turn-stats` event has no shape-pinning test
+### ~~3. `retrieval:turn-stats` event has no shape-pinning test~~ ✅ shipped 2.62.0
+
+✅ **Resolved at 2.62.0.** Rather than the JSDOM-fake path the original finding suggested, the contract was extracted to a Node-importable pure module — [`turn-stats-shape.js`](../js/intelligence/retrieval/turn-stats-shape.js) — exporting frozen key constants (`TURN_STATS_REQUIRED_KEYS`, `TURN_STATS_OPTIONAL_KEYS`, `TURN_STATS_STRATEGY_SLOT_KEYS`) and `validateTurnStatsPayload(payload)`. Both sides now call through it: the producer at [`manager.js`](../js/intelligence/retrieval/manager.js) `_emitTurnStats` warns loudly on shape divergence (still dispatching to avoid dropping attribution on a shape bug); the consumer at [`cost-recorder.js`](../js/intelligence/cost/cost-recorder.js) `_onRetrievalTurnStats` silently early-returns on `!ok`. The new [`tests/test-retrieval-turn-stats-shape.mjs`](../tests/test-retrieval-turn-stats-shape.mjs) (18 subtests, no `_node-shim.mjs` needed — pure module under test) pins the contract one-for-one with [`tests/test-provider-capabilities-shape.mjs`](../tests/test-provider-capabilities-shape.mjs)'s shape. The seam-vs-JSDOM architecture decision called for in the original queueing rationale resolved as **seam** — aligns with the `manager-helpers.js` precedent (pure extract, Node-importable) and avoids the JSDOM dev-dependency under the project's no-`package.json` constraint.
+
+Historical record preserved below.
 
 Single producer ([`manager.js:837`](../js/intelligence/retrieval/manager.js)); single consumer ([`cost-recorder.js`](../js/intelligence/cost/cost-recorder.js)). The cost recorder reads `payload.strategyStats.*` keys but no test asserts the producer-consumer contract. A future rename on either side would silently lose paraphrase/expansion attribution; the cost dashboard would keep displaying numbers, but with a stale schema.
-
-**Suggested fix shape (queued, not promoted):** Mirror the [`tests/test-provider-capabilities-shape.mjs`](../tests/test-provider-capabilities-shape.mjs) idiom from ICD #4 — a pinning test that exercises `findRelevantFiles` under a mock EventBus, captures the emitted payload, and asserts the expected key set. Same idiom catches all four `context:index*` events too if widened.
-
-**Why this is queued, not promoted:** Browser-DOM-coupled. Manager imports `core.js` which assumes `window`; node-test plumbing requires a JSDOM fake or a manager-side seam injection that doesn't exist today. Worth queuing for the same slot that lands code-aware finding #1 (resolver pattern).
 
 ### Other observations (not promoted)
 
