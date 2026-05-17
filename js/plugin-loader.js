@@ -21,12 +21,25 @@ import { Plugins, Storage, EventBus } from './core.js';
 const STORAGE_KEY = 'installedPlugins';
 
 /**
+ * @typedef {Object} InvisibleUnicodeFinding
+ * @property {number} codepoint - Unicode codepoint
+ * @property {string} name      - Human-readable codepoint name
+ * @property {number} line      - 1-based line in source
+ * @property {number} col       - 1-based column in source
+ */
+
+/**
  * @typedef {Object} InstalledPlugin
  * @property {string} url       - Source URL
  * @property {string} pluginId  - Registered plugin ID
  * @property {string} name      - Human-readable name
  * @property {string} installedAt - ISO timestamp
  * @property {string} [error]   - Last load error if any
+ * @property {InvisibleUnicodeFinding[]} [invisibleUnicodeFindings]
+ *   Findings captured at install time when the user bypassed the invisible-Unicode
+ *   pre-flight scan. Opt-in / absent on plugins installed pre-2.65.0 + on clean
+ *   installs (back-compat automatic). Audit-visibility surface only — not consulted
+ *   at boot-load. See [`docs/ICD-plugin-lifecycle.md`](../docs/ICD-plugin-lifecycle.md) §"Code-aware findings #3".
  */
 
 /**
@@ -43,6 +56,34 @@ export function getInstalledPlugins() {
  */
 function _saveList(list) {
     Storage.set(STORAGE_KEY, list);
+}
+
+/**
+ * Build a persisted `InstalledPlugin` record. Extracted so the persistence-
+ * completeness contract — `invisibleUnicodeFindings` is omitted on clean
+ * installs and present with the four-key shape on bypass-installs — can be
+ * regression-tested without stubbing blob-URL dynamic imports (which don't
+ * work under Node).
+ *
+ * Strips `index` + `char` from scan results; the persisted shape is the
+ * four audit-relevant keys (`codepoint`, `name`, `line`, `col`). The full
+ * scan shape lives at [`security/invisible-unicode.js`](./security/invisible-unicode.js).
+ *
+ * @param {{url: string, pluginId: string, name: string, installedAt: string,
+ *          invisibleFindings?: Array<{codepoint: number, name: string, line: number, col: number}>}} fields
+ * @returns {InstalledPlugin}
+ */
+export function _buildInstalledRecord({ url, pluginId, name, installedAt, invisibleFindings }) {
+    const record = { url, pluginId, name, installedAt, error: null };
+    if (Array.isArray(invisibleFindings) && invisibleFindings.length > 0) {
+        record.invisibleUnicodeFindings = invisibleFindings.map(f => ({
+            codepoint: f.codepoint,
+            name: f.name,
+            line: f.line,
+            col: f.col,
+        }));
+    }
+    return record;
 }
 
 /**
@@ -87,17 +128,18 @@ export async function installPlugin(url, options = {}) {
         }
 
         // Invisible-Unicode scan — gate before exec on a tampered source.
-        if (!options.confirmedInvisibleUnicode) {
-            const { scan } = await import('./security/invisible-unicode.js');
-            const findings = scan(source);
-            if (findings.length > 0) {
-                return {
-                    success: false,
-                    requiresConfirmation: true,
-                    invisibleUnicodeFindings: findings,
-                    error: `Source contains ${findings.length} invisible Unicode character(s) — review before installing`
-                };
-            }
+        // Always run so the bypass-install path can persist findings for audit
+        // (the unconfirmed path short-circuits; the confirmed path falls through
+        // to persistence below with `invisibleFindings` carrying the captured shape).
+        const { scan } = await import('./security/invisible-unicode.js');
+        const invisibleFindings = scan(source);
+        if (invisibleFindings.length > 0 && !options.confirmedInvisibleUnicode) {
+            return {
+                success: false,
+                requiresConfirmation: true,
+                invisibleUnicodeFindings: invisibleFindings,
+                error: `Source contains ${invisibleFindings.length} invisible Unicode character(s) — review before installing`
+            };
         }
 
         // Load via blob URL to avoid CORS issues with import()
@@ -126,13 +168,13 @@ export async function installPlugin(url, options = {}) {
         await Plugins.init(newId);
 
         // Save to storage
-        existing.push({
+        existing.push(_buildInstalledRecord({
             url,
             pluginId: newId,
             name,
             installedAt: new Date().toISOString(),
-            error: null
-        });
+            invisibleFindings,
+        }));
         _saveList(existing);
 
         EventBus.emit('plugin:installed', { url, pluginId: newId, name });

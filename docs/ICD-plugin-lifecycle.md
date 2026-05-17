@@ -169,7 +169,7 @@ The ICD does not yet pin these. They are queued for a follow-up tightening sessi
 
 ## Code-aware findings
 
-These three items surfaced during ICD authoring. Each was a candidate for a `[strong]`-band roadmap row in the next code minor (2.64.0+). Finding #1 ✅ resolved at 2.64.0 (single-file fix in `Plugins.setEnabled` mirroring the first-enable init antibody one-for-one). Finding #3 remains queued as a single-file mechanical fix mirroring the 2.50.0 persistence-completeness shape; finding #2 still needs a tightening session.
+These three items surfaced during ICD authoring. Each was a candidate for a `[strong]`-band roadmap row in the next code minor (2.64.0+). Finding #1 ✅ resolved at 2.64.0 (single-file fix in `Plugins.setEnabled` mirroring the first-enable init antibody one-for-one). Finding #3 ✅ resolved at 2.65.0 (two-file fix in `plugin-loader.js` + `settings/plugins-tab.js` mirroring the 2.50.0 persistence-completeness shape one-for-one). Finding #2 still needs a tightening session.
 
 ### ~~Finding #1 [strong] — `destroy()` hook is declared in the contract but never invoked~~ ✅ resolved at 2.64.0
 
@@ -197,7 +197,10 @@ Three failure modes the ICD authoring surfaced:
 
 **Band**: `[medium]`. The decision is non-mechanical — it touches the user-visible profile contract. Should land in a tightening session, then a code minor; not a single-PR fix.
 
-### Finding #3 [strong] — invisible-Unicode scan findings not persisted to `InstalledPlugin` record
+### ~~Finding #3 [strong] — invisible-Unicode scan findings not persisted to `InstalledPlugin` record~~ ✅ resolved at 2.65.0
+
+> **Resolved 2.65.0** — opt-in `invisibleUnicodeFindings?: Array<{codepoint, name, line, col}>` added to the `InstalledPlugin` record; persisted on the bypass-install path via `_buildInstalledRecord`; Settings → Plugins external-row gains a `⚠ N flagged at install` badge with per-finding tooltip. Persistence-completeness contract pinned at [`tests/test-plugin-loader-invisible-unicode-persist.mjs`](../tests/test-plugin-loader-invisible-unicode-persist.mjs) (5 subtests). Field is omitted on clean installs + absent on pre-2.65.0 records — back-compat automatic.
+
 
 `installPlugin(url)` runs the invisible-Unicode scan ([`plugin-loader.js:91`](../js/plugin-loader.js)); on non-empty findings, returns `{requiresConfirmation: true, invisibleUnicodeFindings: [...]}` to the UI, which renders a band with per-finding line/col/codepoint + "Install anyway" button ([`plugins-tab.js:395`](../js/settings/plugins-tab.js)). If the user confirms, `installPlugin` re-runs with `{confirmedInvisibleUnicode: true}` — bypassing the scan. The bypass-and-install succeeds; the record at [`plugin-loader.js:129–135`](../js/plugin-loader.js) carries `error: null`. **The findings that triggered the prompt are not persisted to the `InstalledPlugin` record.**
 

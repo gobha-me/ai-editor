@@ -123,6 +123,12 @@ export function populatePluginsTab() {
             const statusIcon = hasError
                 ? `<span style="color: var(--error);" title="Load error">${Icon.AlertTriangle}</span>`
                 : '<span style="color: var(--success);" title="Loaded">●</span>';
+            // Invisible-Unicode findings persisted at install time (ICD #7 #3 / 2.65.0)
+            // — opt-in field, surfaced inline so audit doesn't require diving into storage.
+            const findings = Array.isArray(entry.invisibleUnicodeFindings) ? entry.invisibleUnicodeFindings : [];
+            const flaggedIcon = findings.length > 0
+                ? `<span style="color: var(--warning, var(--error)); margin-left: 0.4rem;" title="${escapeAttr(_formatFindingsTooltip(findings))}">${Icon.AlertTriangle} ${findings.length} flagged at install</span>`
+                : '';
             const meta = hasError
                 ? `<span style="color: var(--error);">Error: ${escapeHtml(entry.error)}</span>`
                 : escapeHtml(entry.url);
@@ -130,7 +136,7 @@ export function populatePluginsTab() {
                 <div class="connection-card" data-ext-plugin-url="${escapeAttr(entry.url)}">
                     <div class="connection-card-icon">${Icon.Box}</div>
                     <div class="connection-card-info">
-                        <div class="connection-card-label">${statusIcon} ${escapeHtml(entry.name || entry.pluginId || 'Unknown')}</div>
+                        <div class="connection-card-label">${statusIcon} ${escapeHtml(entry.name || entry.pluginId || 'Unknown')}${flaggedIcon}</div>
                         <div class="connection-card-meta plugin-external-meta">${meta}</div>
                     </div>
                     <div class="connection-card-actions">
@@ -381,6 +387,26 @@ function _wireInstallButton(container) {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') doInstall();
     });
+}
+
+/**
+ * Format persisted `invisibleUnicodeFindings` entries into a single-line
+ * tooltip string (`line:col U+XXXX (name); ...`). Caps at 8 entries so a
+ * pathologically-flagged install doesn't blow up the tooltip; the badge
+ * count remains accurate either way.
+ *
+ * @param {Array<{codepoint: number, name: string, line: number, col: number}>} findings
+ * @returns {string}
+ */
+function _formatFindingsTooltip(findings) {
+    const cap = 8;
+    const head = findings.slice(0, cap).map(f => {
+        const cp = `U+${Number(f.codepoint).toString(16).toUpperCase().padStart(4, '0')}`;
+        return `${f.line}:${f.col} ${cp} (${f.name})`;
+    }).join('; ');
+    return findings.length > cap
+        ? `${head}; +${findings.length - cap} more`
+        : head;
 }
 
 /**

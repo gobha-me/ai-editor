@@ -4,6 +4,42 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.65.0] - 2026-05-17
+
+### Fixed — persist invisible-Unicode scan findings to `InstalledPlugin` record (ICD #7 finding #3)
+
+Closes the second of the three code-aware findings from `RE-EVAL following 2.58.0` (finding #1 shipped at 2.64.0; finding #2 still blocked on a tightening decision). Pre-2.65.0, the install-time invisible-Unicode pre-flight at [`js/plugin-loader.js:91`](js/plugin-loader.js) returned `{requiresConfirmation: true, invisibleUnicodeFindings: [...]}` to the UI for the warning band, but when the user clicked "Install anyway" the loader re-ran with `{confirmedInvisibleUnicode: true}` and the findings were **discarded**. The persisted `InstalledPlugin` record at [`js/plugin-loader.js:129-135`](js/plugin-loader.js) carried `error: null` — an operator auditing Settings → Plugins a week later had no way to tell which externals had been flagged at install time. The bypass decision was invisible.
+
+**The 2.50.0 capabilities-shape persistence-completeness idiom applied to plugin install.** `InstalledPlugin` gains an opt-in `invisibleUnicodeFindings?: Array<{codepoint, name, line, col}>` field (`InvisibleUnicodeFinding` JSDoc typedef added alongside). The scan is now run once unconditionally at the top of `installPlugin`; the unconfirmed path short-circuits with the rejection envelope as before, the confirmed (bypass) path falls through to a new `_buildInstalledRecord({url, pluginId, name, installedAt, invisibleFindings})` helper that attaches the four-key audit subset (`index` + `char` from the scan shape are deliberately stripped — not audit-relevant). Field is omitted entirely on clean installs and absent on pre-2.65.0 records, so back-compat is automatic (the rendering path checks `Array.isArray(entry.invisibleUnicodeFindings)` before reading length).
+
+**Helper extraction over end-to-end-stubbing.** The bypass-install path can't be exercised under Node because dynamic `import()` of a blob URL doesn't work there, so the persistence-completeness contract is tested via the pure `_buildInstalledRecord` helper plus an `installPlugin` rejection-path call with `fetch` stubbed. Five subtests at [`tests/test-plugin-loader-invisible-unicode-persist.mjs`](tests/test-plugin-loader-invisible-unicode-persist.mjs) cover: clean-install omission; undefined-input omission; four-key shape with `index`/`char` stripped; round-trip via Storage with mixed legacy + post-2.65.0 records; rejection-path returns findings unchanged + persists nothing.
+
+**Settings → Plugins audit affordance.** The "Installed from URL" row in [`js/settings/plugins-tab.js:118-145`](js/settings/plugins-tab.js) gains an inline `⚠ N flagged at install` badge whenever the persisted record carries findings. The badge `title` tooltip lists per-finding `line:col U+XXXX (name)` for the first 8 entries (capped to keep the tooltip bounded; the badge count remains accurate). New module-local `_formatFindingsTooltip` helper builds the string. No new event wiring — tooltip-only kept the surface small.
+
+**Naming alignment.** The ICD §"Fix shape" used `invisibleUnicodeFindings` (matches the existing `installPlugin` return-shape key); the ROADMAP row mentioned `invisibleUnicodeWarnings`. This ship aligns on `Findings` everywhere — drift fixed in the ROADMAP entry below.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/plugin-loader.js`](js/plugin-loader.js) | EDIT — `InvisibleUnicodeFinding` typedef + `InstalledPlugin` typedef gains opt-in `invisibleUnicodeFindings` field; scan moved to unconditional run + rejection path retained; new exported `_buildInstalledRecord` helper attaches the four-key audit subset; persist call site uses the helper. |
+| [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) | EDIT — external-plugin row renders `⚠ N flagged at install` badge with per-finding tooltip when `entry.invisibleUnicodeFindings?.length > 0`; new module-local `_formatFindingsTooltip` helper (caps at 8 entries). |
+| [`tests/test-plugin-loader-invisible-unicode-persist.mjs`](tests/test-plugin-loader-invisible-unicode-persist.mjs) | NEW — 5 subtests pinning helper shape + Storage round-trip + `installPlugin` rejection path. Constructs invisible-Unicode chars via `String.fromCodePoint(0x200B)` etc. to avoid tripping the CI invisible-Unicode lint. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.64.0'` → `'2.65.0'`. |
+| [`docs/ICD-plugin-lifecycle.md`](docs/ICD-plugin-lifecycle.md) | EDIT — §"Code-aware findings" #3 struck through with resolution note pointing to 2.65.0 + the new test. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strikes through finding #3 sub-bullet in the "Now" row; adds "Just shipped (2.65.0)" row above 2.64.0; current released bumped 2.64.0 → 2.65.0. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Closes:** ICD #7 finding #3 ([`docs/ICD-plugin-lifecycle.md`](docs/ICD-plugin-lifecycle.md) §"Code-aware findings"). No ticket closure — finding tracked in the ICD + ROADMAP only.
+
+**Verification:**
+
+- `node --test tests/test-plugin-loader-invisible-unicode-persist.mjs` — 5/5 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite expected 3527 pass / 1 skipped / 0 fail (3522 baseline + 5 new subtests).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.65.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.65.0)" row.
+- Adjacent plugin suites green: `tests/test-plugin-lifecycle.mjs`, `tests/test-plugin-modal-dispatch.mjs`, `tests/test-plugin-tools-tracker.mjs`, `tests/test-profile-plugin-overlay.mjs`.
+- Browser verify: install a plugin via URL with a `String.fromCodePoint(0x200B)`-laden source, click "Install anyway", refresh Settings → Plugins, confirm `⚠ 1 flagged at install` badge + hover tooltip.
+
 ## [2.64.0] - 2026-05-17
 
 ### Fixed — invoke declared `destroy()` plugin hook (ICD #7 finding #1)
