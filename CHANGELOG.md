@@ -4,6 +4,35 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.63.0] - 2026-05-17
+
+### Added — Public-surface shape-pinning tests for MCP bridge + registry + protocol (ICD #6 finding #3)
+
+Closes the last open `[strong]`-band code-aware finding from `RE-EVAL following 2.55.0` (the first, `server.roles` dead-letter docstring, shipped 2.61.0; the second, SSE transport plumbed-but-falls-through, stays queued behind the honest-reject vs implement-real-SSE architecture decision and pairs with github#27 Phase 2 OAuth). The MCP layer's three public-export surfaces — [`bridge.js`](js/mcp/bridge.js) (5 exports + 5 `__test` keys), [`registry.js`](js/mcp/registry.js) (`MCPServerRegistry` 9-method object + `LEGACY_GROUP_TAGS` constant), [`protocol.js`](js/mcp/protocol.js) (5 exports + 5 `__test` keys) — had no test pinning their `Object.keys(...).sort()`. A renamed method, a deleted getter, or a refactor that splits an export would only surface at production call sites; same gap ICD #4 cited for `BASE_GIT_PROVIDER` (resolved at 2.50.0 via [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)) and ICD #5 cited for `RetrievalManager` (still open).
+
+**Capabilities-precedent shape, not turn-stats-precedent shape.** The 2.62.0 row's seam-idiom (validator at a producer seam + frozen-key constants extracted to a pure Node-importable module) was prior art for "EventBus-coupled producer/consumer shape pinning" — that pattern fit ICD #5 (b2) because the two sides had no compile-time link. ICD #6 finding #3 is the simpler case: the shape lives in the module exports themselves. Direct `Object.keys(module).sort()` deepEqual against a frozen expected list is the right idiom; same pattern as [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs). **Zero production-file edits** — the modules under test are the source of truth for their own shape; any edit there would defeat the anti-regression purpose. `LEGACY_GROUP_TAGS` deliberately NOT `Object.freeze`d in production (would be a separate intentional change); the test pins membership only.
+
+The new test bundles all three finding #3 deliverables (bridge / registry / protocol) into one file (sanctioned by ICD §"Code-aware findings #3": *"or a single combined file"*), and also resolves the first three §"Open invariants" entries: no registry surface pin, no bridge exports pin, no positive-shape pin for `makeRegistration`. The fourth invariant (`MCPServerRegistry` runtime-vs-typedef pin, the ICD #5 (b1) idiom) stays out of scope here — `MCPServerRegistry` has no JSDoc typedef today, so there's nothing to widen.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`tests/test-mcp-public-surface-shape.mjs`](tests/test-mcp-public-surface-shape.mjs) | NEW — ~245 LOC, **17 subtests**. Imports `_node-shim.mjs` because `bridge.js` transitively pulls `chat/task-state.js → core.js` (existing [`tests/test-mcp-bridge.mjs:20`](tests/test-mcp-bridge.mjs) proves this works under Node; precedent [`tests/test-provider-capabilities-shape.mjs:19`](tests/test-provider-capabilities-shape.mjs) also imports the shim). Subtest breakdown: module-level export keys (4 — bridge, registry-module, MCPServerRegistry methods, protocol); `__test` namespace keys (2 — bridge.__test, protocol.__test); `LEGACY_GROUP_TAGS` membership (1); record schemas (2 — live 10-key + persisted 7-key via `addServer()` → `serialize()` round-trip); bridge naming invariants (3 — `namespacedName('demo', 'echo') === 'mcp__demo__echo'` + `isOwnedBy` positive/negative); `makeRegistration` definition shape (2 — top-level `{category, function, type}` + `.function` `{description, name, parameters}`); `testConnection` envelope (2 — success `{ok, serverInfo, toolCount}` + failure `{error, ok}` via tight `globalThis.fetch` stub per the [`tests/test-mcp-bridge.mjs`](tests/test-mcp-bridge.mjs) idiom); transport coercion (1 — bogus → `streamable-http` + `'sse'` preserved verbatim, pins the `VALID_TRANSPORTS` membership). Test isolation: subtests that touch state call `MCPServerRegistry.__test_reset()` + `protocol.__test.resetState()` together per ICD §"Other observations" guidance. |
+| [`docs/ICD-mcp-bridge.md`](docs/ICD-mcp-bridge.md) | EDIT — §"Code-aware findings #3" struck through with resolution note pointing to the new test; §"Open invariants" first three bullets struck through (registry public surface, bridge exports, registration definition positive-shape — all three resolved in one shot). |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — header advance (current released 2.62.0 → 2.63.0); "Now" row tightened (finding #3 clause removed — only ICD #6 finding #2 SSE transport remains queued, still blocked on the architecture decision); new "Just shipped (2.63.0)" row above the 2.62.0 row; §"Re-evaluation cadence" `RE-EVAL following 2.55.0` summary updated (#3 resolved). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.62.0'` → `'2.63.0'`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted to `[2.63.0]` (was empty). |
+
+**Closes:** ICD #6 finding #3 + §"Open invariants" bullets 1–3 ([`docs/ICD-mcp-bridge.md`](docs/ICD-mcp-bridge.md)). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-mcp-public-surface-shape.mjs` — 17/17 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite **3518 pass / 1 skipped / 0 fail** (3501 from 2.62.0 + 17 new subtests). The 1-skip is the long-standing JSDOM-skip in `test-message-virtualizer.js`.
+- Version coherence: [`js/version.js`](js/version.js) at `'2.63.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.63.0)" row.
+- Audit pass: `grep -n "Object.keys(MCPServerRegistry)\|Object.keys(bridge)\|Object.keys(protocol)" tests/` returns exactly one consumer (the new file); none of the production modules in `js/mcp/` were edited.
+
 ## [2.62.0] - 2026-05-17
 
 ### Changed — `retrieval:turn-stats` shape contract extracted + pinned (ICD #5 finding (b2))

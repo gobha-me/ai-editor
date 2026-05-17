@@ -119,9 +119,9 @@ The discovery surface answers "how does a user find a server to add?" — orthog
 
 ### Open invariants (not asserted today)
 
-- **No test pins the `MCPServerRegistry` public surface shape.** `Object.keys(MCPServerRegistry).sort()` could regress (a renamed method, a silently-dropped getter) and only the production call sites would surface. Same gap ICD #4 cited for `BASE_GIT_PROVIDER` (resolved at 2.50.0 via `tests/test-provider-capabilities-shape.mjs`); same shape applies here. See §Code-aware findings #3.
-- **No test pins `bridge.js`'s public exports.** Same gap; the four-export contract `{connect, disconnect, disconnectAll, getRegisteredToolNames}` + the `__test` introspection seam could regress silently.
-- **No test asserts the registration definition shape over time.** [`tests/test-mcp-bridge.mjs:259`](../tests/test-mcp-bridge.mjs) pins the post-2.54.0 absence of `roles` / `_registeredRoles`; it does not pin the positive-shape (`{type: 'function', function: {name, description, parameters}, category}`). A registration shape drift (e.g. moving `category` into `function` per OpenAPI evolution) would silently break the LLM debug modal's grouping without a test.
+- ~~**No test pins the `MCPServerRegistry` public surface shape.**~~ ✅ Resolved at 2.63.0 via [`tests/test-mcp-public-surface-shape.mjs`](../tests/test-mcp-public-surface-shape.mjs) — pins `Object.keys(MCPServerRegistry).sort()` against the 9-method surface + `Object.keys(registry-module).sort()` against the `{MCPServerRegistry, LEGACY_GROUP_TAGS}` two-export module shape.
+- ~~**No test pins `bridge.js`'s public exports.**~~ ✅ Resolved at 2.63.0 via the same file — pins the five-export contract `{__test, connect, disconnect, disconnectAll, getRegisteredToolNames}` + the five-key `__test` introspection seam `{flattenCallResult, isOwnedBy, makeRegistration, namespacedName, reset}`.
+- ~~**No test asserts the registration definition shape over time.**~~ ✅ Resolved at 2.63.0 via the same file — pins `makeRegistration(server, mcpTool).definition` as `{category, function, type}` and `.function` as `{description, name, parameters}`. [`tests/test-mcp-bridge.mjs:259`](../tests/test-mcp-bridge.mjs) continues to pin the post-2.54.0 absence of `roles` / `_registeredRoles` (disjoint scope — that's the negative-shape pin).
 
 ## Code-aware findings (feed back to ROADMAP as 2.61.0+ rows)
 
@@ -161,18 +161,11 @@ But `rpc()` ([`protocol.js:151`](../js/mcp/protocol.js)) actually does **not** d
 
 **Why this is queued, not promoted:** The current behavior is "silently maybe-works" depending on the server's tolerance for non-spec POSTs. Until a real user files a connection failure tied to SSE strictness, the cost-of-fixing exceeds the cost-of-documenting. Worth pairing with Phase 1.5 OAuth implementation when that DESIGN doc lands.
 
-### 3. No shape-pinning test for `MCPServerRegistry` or `bridge` public surfaces
+### 3. ~~No shape-pinning test for `MCPServerRegistry` or `bridge` public surfaces~~ ✅ Resolved at 2.63.0
 
-`Object.keys(MCPServerRegistry).sort()` and `Object.keys(bridge).sort()` could regress silently — a renamed method, a deleted getter, a refactor that splits an export — and only production call sites would surface the break. Same gap ICD #4 cited for `BASE_GIT_PROVIDER` (resolved at 2.50.0 via [`tests/test-provider-capabilities-shape.mjs`](../tests/test-provider-capabilities-shape.mjs)) and ICD #5 cited for `RetrievalManager` (still open).
+~~`Object.keys(MCPServerRegistry).sort()` and `Object.keys(bridge).sort()` could regress silently — a renamed method, a deleted getter, a refactor that splits an export — and only production call sites would surface the break.~~ **Resolved 2026-05-17** via [`tests/test-mcp-public-surface-shape.mjs`](../tests/test-mcp-public-surface-shape.mjs) — 17 subtests, one combined file (per the original suggestion). Pinned: bridge module exports (5 + 5 `__test` keys), registry module exports (`MCPServerRegistry` 9-method object + `LEGACY_GROUP_TAGS` constant), protocol module exports (5 + 5 `__test` keys), `LEGACY_GROUP_TAGS` 5-tag membership, live record schema (10 keys via `addServer()` round-trip), persisted record schema (7 keys via `serialize()` round-trip), `makeRegistration` definition shape (positive: `{category, function, type}` + `.function` `{description, name, parameters}`), `namespacedName` + `isOwnedBy` invariants, `testConnection` envelope shape (success + failure), transport coercion (`VALID_TRANSPORTS` defaults bogus → `streamable-http`; `'sse'` preserved verbatim).
 
-**Suggested fix shape (queued, not promoted):** Add `tests/test-mcp-bridge-shape.mjs` and `tests/test-mcp-registry-shape.mjs` (or a single combined file) pinning:
-- `bridge`: `{connect, disconnect, disconnectAll, getRegisteredToolNames, __test}` — exactly five exports.
-- `MCPServerRegistry`: the 10-method surface (`loadServers, addServer, updateServer, removeServer, getServer, listServers, testConnection, serialize, __test_reset`) — exactly nine plus the constant.
-- `protocol`: `{initialize, toolsList, toolsCall, abort, __test}` — exactly five.
-
-Same idiom as `test-provider-capabilities-shape.mjs`; ~60 LOC across three exports; node-test compatible (no DOM coupling for the protocol + registry; bridge imports `ToolRegistry` which is already node-loadable).
-
-**Why this is queued, not promoted:** Mechanical; not blocking anything. Worth bundling with the next intentional bridge edit (e.g. the finding #1 docstring fix above) so the shape-pin lands alongside a real change rather than as standalone churn.
+**Idiom chosen:** capabilities-precedent (direct `Object.keys(module).sort()` deepEqual), not turn-stats-precedent (validator at a producer seam). Justification: this is a public-export shape pin, not a cross-module payload contract — the shape lives in the module exports themselves; there is no EventBus-coupled producer/consumer pair to mediate between. **Zero production-file edits**: the modules under test stay the source of truth for their own shape; any edit there would defeat the anti-regression purpose. `LEGACY_GROUP_TAGS` deliberately NOT `Object.freeze`d in production (would be a separate intentional change); the test pins membership only.
 
 ### Other observations (not promoted)
 
