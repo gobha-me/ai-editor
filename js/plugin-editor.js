@@ -16,6 +16,7 @@ import { State, Storage, Plugins, EventBus } from './core.js';
 import { registerTabRenderer } from './tab-manager.js';
 import { CM, loadCodeMirror, getLanguageExtension } from './editor/setup.js';
 import { escapeHtml, escapeAttr } from './utils/html.js';
+import { resolvePluginConfig, getActiveProfileName } from './profiles/resolve.js';
 
 // ============================================
 // STORAGE
@@ -142,6 +143,37 @@ export async function openPluginEditor(pluginId = null) {
 }
 
 // ============================================
+// PLUGIN-DEV CAPABILITY OVERLAY (2.66.0)
+// ============================================
+// The plugin-editor tab used to auto-switch the global profile to
+// `plugin-dev.v1` on activation (`State.settings.profile` mutated via a
+// `tab:switched` listener, predating per-chat binding (2.8.0) + the 2.58.0
+// `plugin.enabled` capability overlay). ICD-plugin-lifecycle finding #2
+// retired that mechanism at 2.66.0 — the overlay (Settings → Tools →
+// Plugin development mode) is now the sole non-destructive admission path
+// for the 5-tool plugin-dev cohort. The banner below surfaces the overlay
+// from inside the plugin editor so the user doesn't need to leave the tab
+// to flip it on. Mirrors the `_readPlugin` / `_persistPlugin` shape at
+// [`js/settings/tools-tab.js`](settings/tools-tab.js) — no new persistence
+// keys, no new event channels.
+
+function _readPluginOverlayEnabled() {
+    const profileName = getActiveProfileName(State?.settings);
+    const cfg = resolvePluginConfig(profileName);
+    const overlay = (State.settings && State.settings.plugin) || {};
+    return typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled === true;
+}
+
+function _enablePluginOverlay() {
+    if (!State.settings.plugin || typeof State.settings.plugin !== 'object') {
+        State.settings.plugin = {};
+    }
+    State.settings.plugin.enabled = true;
+    Storage.set('settings', State.settings);
+    EventBus.emit('settings:changed', { section: 'plugin', patch: { enabled: true } });
+}
+
+// ============================================
 // TAB RENDERER
 // ============================================
 
@@ -177,9 +209,17 @@ async function renderPluginEditorTab(container, tab) {
     const pluginLabel = tab.pluginId
         ? escapeHtml(tab.pluginName || tab.pluginId)
         : 'New Plugin';
+    const overlayOn = _readPluginOverlayEnabled();
+    const overlayBanner = overlayOn ? '' : `
+        <div class="plugin-editor-overlay-banner" id="pluginEditorOverlayBanner" role="status" style="padding: 8px 12px; background: var(--warning-bg, #3a2e10); border-bottom: 1px solid var(--border-color, #444); display: flex; gap: 12px; align-items: center; font-size: 13px;">
+            <span style="flex: 1;">Plugin development mode is off. Enable it to let the LLM call <code>read_plugin_source</code>, <code>write_plugin_source</code>, <code>run_plugin</code>, <code>list_user_plugins</code>, and <code>read_docs</code> on your active profile.</span>
+            <button type="button" class="btn btn-primary" id="pluginEditorOverlayEnable">Enable</button>
+        </div>
+    `;
 
     container.innerHTML = `
         <div class="plugin-editor-tab-content">
+            ${overlayBanner}
             <div class="plugin-editor-toolbar">
                 <div class="plugin-editor-title">
                     <span class="plugin-editor-icon">🧩</span>
@@ -266,6 +306,11 @@ async function renderPluginEditorTab(container, tab) {
     container.querySelector('#pluginEditorRun')?.addEventListener('click', () => _doRun(tab));
     container.querySelector('#pluginEditorTemplate')?.addEventListener('click', () => _doTemplate(tab));
     container.querySelector('#pluginEditorDelete')?.addEventListener('click', () => _doDelete(tab));
+    container.querySelector('#pluginEditorOverlayEnable')?.addEventListener('click', () => {
+        _enablePluginOverlay();
+        container.querySelector('#pluginEditorOverlayBanner')?.remove();
+        window.showToast?.('Plugin development mode enabled', 'success');
+    });
 
     // Focus the editor
     _pluginEditorView.focus();
@@ -441,47 +486,9 @@ export async function loadUserPlugins() {
 
 registerTabRenderer('plugin-editor', renderPluginEditorTab);
 
-// ============================================
-// AUTO-PROFILE SWITCHING
-// ============================================
-// When a plugin-editor tab becomes active, auto-switch to plugin-dev.v1.
-// When switching away, restore the previously-selected profile.
-//
-// 2.0.0 — slice 3 flip. Pre-2.0.0 this auto-switched
-// `State.settings.role` between the user's saved role and `'plugin-dev'`;
-// now it switches `State.settings.profile` between the saved value
-// (which may be `null` if the picker was untouched) and `'plugin-dev.v1'`.
-// `_syncProfileUI` updates the picker `<select>` so the Settings tab
-// stays in sync if it's open.
-
-let _savedProfile = null;
-
-function _syncProfileUI(profileName) {
-    const select = /** @type {HTMLSelectElement|null} */ (document.getElementById('settingProfilePicker'));
-    if (select) {
-        select.value = profileName || '';
-    }
-}
-
-EventBus.on('tab:switched', ({ tab }) => {
-    const isPluginTab = tab?.type === 'plugin-editor';
-    const currentProfile = State.settings.profile || null;
-
-    if (isPluginTab && currentProfile !== 'plugin-dev.v1') {
-        // Entering plugin editor — save current profile and switch
-        _savedProfile = currentProfile;
-        State.settings.profile = 'plugin-dev.v1';
-        Storage.set('settings', State.settings);
-        _syncProfileUI('plugin-dev.v1');
-        EventBus.emit('profile:changed', { profile: 'plugin-dev.v1', auto: true });
-        console.log(`[plugin-editor] Auto-switched profile: ${_savedProfile} → plugin-dev.v1`);
-    } else if (!isPluginTab && currentProfile === 'plugin-dev.v1') {
-        // Leaving plugin editor — restore previous profile
-        State.settings.profile = _savedProfile;
-        Storage.set('settings', State.settings);
-        _syncProfileUI(_savedProfile);
-        EventBus.emit('profile:changed', { profile: _savedProfile, auto: true });
-        console.log(`[plugin-editor] Restored profile: plugin-dev.v1 → ${_savedProfile}`);
-        _savedProfile = null;
-    }
-});
+// 2.66.0 — the auto-profile-switch on `tab:switched` retired here.
+// Pre-2.66.0 this listener mutated `State.settings.profile` to
+// `'plugin-dev.v1'` on tab enter + restored on leave. ICD-plugin-lifecycle
+// finding #2 documented three failure modes (per-chat binding divergence,
+// capability-overlay redundancy, restore-target staleness); the in-tab
+// overlay banner above is the replacement affordance.

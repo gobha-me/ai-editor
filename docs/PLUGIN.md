@@ -72,7 +72,7 @@ The fastest way to create a plugin — no external tools needed:
 
 Built-in plugins use the same `window.AIEditor` API as external plugins.
 
-**LLM assistance:** When a plugin editor tab is active, the chat role auto-switches to **Plugin Developer**, which gives the LLM the full SDK reference and dedicated tools (`read_plugin_source`, `write_plugin_source`, `run_plugin`) to read and edit your plugin directly.
+**LLM assistance:** When you want the LLM to help author plugins, enable **Plugin development mode** in Settings → Tools — or click the banner shown at the top of the plugin editor tab when the mode is off. This admits the plugin-dev tool cohort (`read_plugin_source`, `write_plugin_source`, `run_plugin`, `list_user_plugins`, `read_docs`) onto your active profile without changing anything else, so you keep your conversation's system prompt, budget, and scratchpad intact.
 
 **Settings export:** User-created plugin source code is included in Settings → Export, so you can transfer plugins between browsers or back them up.
 
