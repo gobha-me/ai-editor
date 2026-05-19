@@ -4,9 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Docs — `RE-EVAL following 2.61.0` (eighth re-eval slot; doc-only, no version bump)
+## [2.67.0] - 2026-05-19
 
-Eighth Plinth-methodology re-evaluation slot — anchored at the 3-code-minor cadence-from-anchor rule (3 minors past 2.58.0 = 2.61.0); overdue by 5 minors past anchor (2.61.0 → 2.66.0 shipped without firing the slot), same shape as the sixth + seventh slots. Doc-only — **no version bump**, deliverables accumulate in this `[Unreleased]` block until an absorption release per the policy refinement adopted at `RE-EVAL following 2.46.0` (Decision §14 sub-clause).
+### Added — Profiles namespace public-surface shape-pinning test (ICD #8 finding #2)
+
+Closes the one `[strong]`-band code-aware finding from `RE-EVAL following 2.61.0` (the other, finding #1 `[medium]` — three short-circuit resolvers bypass `resolveProfile` — stays queued pre-emptive; today no production profile inherits via `base: 'coder.v1'` so the short-circuit works, and the fix touches user-observable runtime so a tightening session ahead of the code session keeps the change conservative). The profiles registry + resolver bank's public-export surface had no test pinning `Object.keys(Profiles).sort()` or the resolver-bank module shape. A renamed `Profiles` method, a deleted resolver, or a refactor that splits an export would only surface at production call sites ([`js/tools/registry.js`](js/tools/registry.js), [`js/prompts.js`](js/prompts.js), [`js/chat/handlers.js`](js/chat/handlers.js) all read by name); same gap ICD #4 cited for `BASE_GIT_PROVIDER` (resolved at 2.50.0 via [`tests/test-provider-capabilities-shape.mjs`](tests/test-provider-capabilities-shape.mjs)) and ICD #6 cited for `MCPServerRegistry` + `bridge` + `protocol` (resolved at 2.63.0 via [`tests/test-mcp-public-surface-shape.mjs`](tests/test-mcp-public-surface-shape.mjs)).
+
+**Capabilities-precedent idiom — direct `Object.keys(...).sort()` deepEqual against a frozen expected list.** Not the 2.62.0 turn-stats validator-at-a-seam shape (that pattern fits cross-module payload contracts; this is a public-export shape pin, the shape lives in the module exports themselves). **Zero production-file edits** — the modules under test are the source of truth for their own shape; any edit there would defeat the anti-regression purpose. Same call-out as the 2.63.0 `LEGACY_GROUP_TAGS` note (`PLUGIN_TOOL_NAMES` is already `Object.freeze`d in production at [`js/profiles/resolve.js:444`](js/profiles/resolve.js), so the test asserts that property without forcing a production change).
+
+The new test resolves ICD #8 finding #2 and pins ICD §"Open invariants" #3 (`Profiles.list()` insertion-order). The five remaining ICD #8 open invariants (#1 short-circuit resolvers, #2 `'<overlay>'` synthetic-admitter dual path, #4 advanced-view picker parked, #5 migration-table not future-proof) stay open per the ICD's documented rationale.
+
+**Absorption release.** This minor absorbs the `[Unreleased]` `Docs — RE-EVAL following 2.61.0` deliverables (ICD #8 authored + ARCHITECTURE.md catch-up sync 2.63.0 → 2.66.0 + ROADMAP paper-half drift fixes), per the cadence pattern shipped at 2.50.0 / 2.59.0 / 2.60.0 / 2.61.0 / 2.64.0.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`tests/test-profile-registry-shape.mjs`](tests/test-profile-registry-shape.mjs) | NEW — ~140 LOC, **9 subtests**. Imports `js/profiles/registry.js` (wildcard + named `Profiles`) and `js/profiles/resolve.js` (wildcard + named `PLUGIN_TOOL_NAMES`); no `_node-shim.mjs` needed (pure profile modules). Subtest breakdown: module-level export keys (2 — registry 6-name surface, resolve 13-name surface); `Profiles` namespace 5-method shape (1) + every-method-is-a-function probe (1); `BY_NAME` membership via `Profiles.has` for the 10 known profile names + negative pins for `'unknown.v1'` and `'__proto__'` (1); `Profiles.list()` order `['chat.v1', 'coder.v1', 'kb.v1']` (1) + every-entry `{description, label, name}` shape with type probes (1); `PLUGIN_TOOL_NAMES` `Object.isFrozen` (1) + 5-name membership (1). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.66.0'` → `'2.67.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strike through finding #2 sub-bullet in the "Now" row; new "Just shipped (2.67.0)" row above the RE-EVAL #8 row; current released bumped 2.66.0 → 2.67.0; §"Per-subsystem ICD backfill program" #8 row finding #2 marked ✅; strikethrough roll-forward to maintain the 3-code-minor + 1-re-eval visible window (2.64.0 falls off the bottom). |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — test count bump (3531 → 3540) and Testing & CI line item for the new shape-pin test. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` `Docs — RE-EVAL following 2.61.0` block promoted into this section below. |
+
+**Closes:** ICD #8 finding #2 ([`docs/ICD-profiles-registry.md`](docs/ICD-profiles-registry.md) §"Code-aware findings"). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-profile-registry-shape.mjs` — 9/9 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite expected 3540 pass / 1 skipped / 0 fail (3531 baseline from 2.66.0 + 9 new subtests).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.67.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.67.0)" row.
+- Anti-regression sanity: temporarily renaming `Profiles.get` → `Profiles.fetchProfile` in `js/profiles/registry.js` makes the namespace-shape subtest fail loudly; reverted before commit.
+- Audit pass: `grep -n "Object.keys(Profiles)\|Object.keys(registryModule)\|Object.keys(resolveModule)" tests/` returns exactly one consumer (the new file); none of the production modules in `js/profiles/` were edited.
+
+### Docs — `RE-EVAL following 2.61.0` (eighth re-eval slot; absorbed into 2.67.0 per cadence)
+
+Eighth Plinth-methodology re-evaluation slot — anchored at the 3-code-minor cadence-from-anchor rule (3 minors past 2.58.0 = 2.61.0); overdue by 5 minors past anchor (2.61.0 → 2.66.0 shipped without firing the slot), same shape as the sixth + seventh slots. Per Decision §14 sub-clause: re-eval deliverables accumulated in `[Unreleased]` without a version slot; absorbed into 2.67.0 above per the 2.61.0 / 2.64.0 absorption pattern.
 
 **Code-aware half: ICD #8 authored.** [`docs/ICD-profiles-registry.md`](docs/ICD-profiles-registry.md) (NEW) — the post-2.54.0 profile-side admission contract + inheritance composition + resolver pattern across `js/profiles/`. Covers [`registry.js`](js/profiles/registry.js) (`Profiles` namespace — `get` / `has` / `list` / `filterTools` / `findAdmittingProfiles`; 310 LOC) + [`inheritance.js`](js/profiles/inheritance.js) (`resolveProfile` + `admit_add` / `admit_remove` operators; 198 LOC) + [`resolve.js`](js/profiles/resolve.js) (9 `resolve*Config` helpers + `getActiveProfileName` + `pickProfileName` + `PLUGIN_TOOL_NAMES`; 535 LOC) + [`profile-contract.js`](js/profiles/profile-contract.js) (`Profile` typedef + `isProfile`; 216 LOC) + [`migration.js`](js/profiles/migration.js) (`migrateRoleToProfile` 5-row table; 95 LOC) + [`diff.js`](js/profiles/diff.js) (raw/resolved differ; 291 LOC) + [`task-ledger.js`](js/profiles/task-ledger.js) (212 LOC) + [`index.js`](js/profiles/index.js) (85 LOC; barrel) + 10 profile data files (3 picker-promoted: chat.v1 / coder.v1 / kb.v1 + 7 synthetic: subagent.v1 / plugin-dev.v1 / full.v1 / pm.v1 / reviewer.v1 / rp.v1 / chat_multi.v1). **18 files / ~3637 LOC under one ICD.** 5 classification axes (Declaration / Admission / Inheritance / Resolution / Diagnostics); three carve-outs (`'*'` bypass / `'<prefix>__*'` glob / `'<overlay>'` synthetic admitter from `findAdmittingProfiles`); three synthetic-profile rationales (legacy-migration / Phase 2 architectural / trust-boundary) distinguished; five open invariants noted at ICD-author time. Pairs with the now-superseded [`ICD-tool-registry.md`](docs/ICD-tool-registry.md) — that ICD documented the pre-2.54.0 tool-side boundary as historical record; this ICD pins the post-2.54.0 profile-side boundary that is the sole gate.
 
@@ -32,7 +64,7 @@ Eighth Plinth-methodology re-evaluation slot — anchored at the 3-code-minor ca
 
 - `node --test tests/test-*.mjs` — full Node suite expected 3531 pass / 1 skipped / 0 fail (no code changes; the test count carries through unchanged from 2.66.0).
 - Markdown sanity: spot-check that the new ICD's section headers, tables, and cross-references render correctly; spot-check that ROADMAP / ARCHITECTURE / CHANGELOG cross-doc links resolve (`ICD-profiles-registry.md`, prior ICDs, source paths under `js/profiles/`).
-- Version coherence: not exercised — no `js/version.js` bump (re-eval slots accumulate in `[Unreleased]` per the policy refinement adopted at the third slot; see Decision §14 sub-clause).
+- Version coherence: the re-eval slot itself did not bump `js/version.js`; absorbed into the 2.67.0 ship above which carries the version bump.
 
 ## [2.66.0] - 2026-05-17
 
