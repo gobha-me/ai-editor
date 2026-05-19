@@ -4,6 +4,43 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.68.0] - 2026-05-19
+
+### Changed — Align 3 short-circuit resolvers with `resolveProfile` (ICD #8 finding #1)
+
+Closes the one `[medium]`-band code-aware finding queued in `docs/ROADMAP.md` row 35 ("Now (next up)") from `RE-EVAL following 2.61.0`. Three resolver helpers in [`js/profiles/resolve.js`](js/profiles/resolve.js) — `resolveScriptAutomationConfig`, `resolvePreviewConfig`, `resolvePluginConfig` — short-circuited on `profileName === 'coder.v1' ? CODER_V1 : CHAT_V1` instead of routing through `resolveProfile` like the other six `resolve*Config` helpers. The bypass was safe at the time (only `coder.v1` / `chat.v1` declared these blocks and no production profile inherited via `base: 'coder.v1'`), but it was a latent correctness gap — when a profile inherits via `base: 'coder.v1'` (the natural pull is the 2.0.x stabilization advanced-view picker), the short-circuit silently drops the inheritance walk and returns chat.v1 defaults instead of the coder.v1 value-case. Pre-emptive alignment removes that landmine and brings the resolver bank to a uniform 9-helper shape.
+
+**Pattern parity — every helper now follows the same path.** `Profiles.has(name)` validation + `chat.v1` defensive fallback with `console.warn` on unknown names + `Profiles.get(name)` → `resolveProfile(leaf, profileLookup)` → read the block off `resolved.*` → return shape with `profileName: resolved.name`. Identical to `resolveCompressionConfig` (1.17.0), `resolveMemoryConfig` (1.18.0), `resolveTools` (1.19.0), `resolveRetrievalConfig` (1.20.0), `resolveTaskLedgerConfig` (2.53.0), `resolveSubAgentConfig` (2.49.0.0). The `CODER_V1` / `CHAT_V1` imports at the top of `resolve.js` retire — no helper bodies reference them anymore (the four remaining docstring mentions are historical context).
+
+**Three new sibling test files — one per helper, matching the [`test-profile-subagent-resolve.mjs`](tests/test-profile-subagent-resolve.mjs) convention.** Each pins the value-case (`coder.v1` for scriptAutomation / preview; no profile carries `plugin` today), the chat.v1 fallback, **the inheritance-walk invariant for every synthetic profile (the pin the roadmap explicitly called for** — pre-2.68.0 the short-circuit's `: CHAT_V1` branch made this an accident, post-2.68.0 it's the documented contract), the every-registered-profile clean-resolution walk, and the unknown-name / null-arg defensive fallbacks.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/profiles/resolve.js`](js/profiles/resolve.js) | EDIT — rewrite `resolveScriptAutomationConfig` (:396-409), `resolvePreviewConfig` (:423-430), `resolvePluginConfig` (:470-477) to use the `Profiles.has` → `Profiles.get` → `resolveProfile` chain; drop unused `CODER_V1` / `CHAT_V1` imports (:33-34); refresh 3 helper docstrings + trim the now-stale "short-circuit foil" callout in `resolveSubAgentConfig`'s docstring. |
+| [`tests/test-profile-scriptautomation-resolve.mjs`](tests/test-profile-scriptautomation-resolve.mjs) | NEW — 6 subtests covering coder.v1 value-case (`enabled: true`, timeout_ms 30000, max_output_bytes 262144), chat.v1 defaults, **synthetic-profile inheritance-walk pin** over `['pm.v1', 'reviewer.v1', 'plugin-dev.v1', 'full.v1', 'kb.v1', 'subagent.v1']`, every-registered-profile walk, unknown-name + null/undefined fallbacks. |
+| [`tests/test-profile-preview-resolve.mjs`](tests/test-profile-preview-resolve.mjs) | NEW — 6 subtests, same shape: coder.v1 value-case (`enabled: true`), chat.v1 default, synthetic-profile inheritance-walk pin, every-registered-profile walk, fallbacks. |
+| [`tests/test-profile-plugin-resolve.mjs`](tests/test-profile-plugin-resolve.mjs) | NEW — 6 subtests, same shape. No profile carries a `plugin` block today (gitea#442: opt-in via Settings overlay only); every profile resolves to `enabled: false`, including coder.v1. The inheritance-walk pin proves the resolver is *positioned* to pick up a future `plugin: { enabled: true }` block on a base profile without further surface change. |
+| [`tests/fixtures/profiles/*.snapshot.json`](tests/fixtures/profiles/) | REGEN (7 files: `chat_multi.v1` / `full.v1` / `kb.v1` / `plugin-dev.v1` / `pm.v1` / `reviewer.v1` / `rp.v1`) — the `subsystem_dispatch.script_automation.profileName` + `subsystem_dispatch.preview.profileName` fields flip from the pre-2.68.0 mislabel `'chat.v1'` (the short-circuit's `: CHAT_V1` branch returned the chat.v1 *literal* and reported its name) to the correct leaf name. This is the documented `profileName` shape per `resolveCompressionConfig`'s docstring (*"reflects the leaf, not the inheritance base"*); the fixtures pinned the bug. Regenerated via `node tests/update-profile-fixtures.mjs` per the harness's sanctioned regen path. |
+| [`tests/test-preview-tools.mjs`](tests/test-preview-tools.mjs) | EDIT — the existing "non-coder profiles" loop test split into two: registered non-coder profiles now assert `profileName === leaf` (the correct shape); a sibling test asserts null / undefined / '' / `'unknown'` falls back to `chat.v1` with warn suppressed. |
+| [`tests/test-script-tools.mjs`](tests/test-script-tools.mjs) | EDIT — same split as above for `resolveScriptAutomationConfig`. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.67.0'` → `'2.68.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strike through finding #1 in the "Now (next up)" row; new "Just shipped (2.68.0)" row above the "Just shipped (2.67.0)" row; current-released bumped; §"Per-subsystem ICD backfill program" #8 row finding #1 marked ✅; strikethrough roll-forward to keep the 3-code-minor + 1-re-eval visible window. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — test count bump (3540 → 3558) and Testing & CI line item for the 3 new resolver test files. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Closes:** ICD #8 finding #1 ([`docs/ICD-profiles-registry.md`](docs/ICD-profiles-registry.md) §"Code-aware findings"). No ticket closure — finding was tracked in the ICD + ROADMAP, not as a gitea/github issue. With this and finding #2 (2.67.0) shipped, ICD #8's `[strong]` + `[medium]` code-aware findings are both resolved; the 4 remaining open invariants (#2 `'<overlay>'` synthetic-admitter dual path, #4 advanced-view picker parked, #5 migration-table not future-proof, plus #3 ✅ at 2.67.0) stay open per the ICD's documented rationale.
+
+**Verification:**
+
+- `node --test tests/test-profile-scriptautomation-resolve.mjs tests/test-profile-preview-resolve.mjs tests/test-profile-plugin-resolve.mjs` — 18/18 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite expected 3560 pass / 1 skipped / 0 fail (3540 baseline from 2.67.0 + 18 new subtests + 2 existing tests split into 4 to separate the registered-vs-fallback paths).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.68.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.68.0)" row + ARCHITECTURE test count line.
+- Anti-regression sanity: a synthetic profile with `base: 'coder.v1'` and no own `scriptAutomation` / `preview` blocks resolves with `enabled: true` for both — confirms the inheritance walk picks up coder.v1's value-case, exactly the failure mode the pre-2.68.0 short-circuit would have hit. (Verified inline ahead of commit; not added as a permanent test because the only callers that can ever see this path are user-authored profiles via Phase 4's authoring API.)
+- Import audit: `grep -n "CODER_V1\|CHAT_V1" js/profiles/resolve.js` drops from 9 matches (2 imports + 3 helper bodies + 4 docstring) to 4 (docstring-only, historical-context references in pre-existing comments at lines 9, 25, 315, 319).
+- Shape-pin still passes: [`tests/test-profile-registry-shape.mjs`](tests/test-profile-registry-shape.mjs) — no exports added or removed; the 2.67.0 shape-pin's 13-name resolve-module surface stays intact.
+
 ## [2.67.0] - 2026-05-19
 
 ### Added — Profiles namespace public-surface shape-pinning test (ICD #8 finding #2)

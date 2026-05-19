@@ -174,11 +174,11 @@
       "enabled": false,
       "timeout_ms": 30000,
       "max_output_bytes": 262144,
-      "profileName": "chat.v1"
+      "profileName": "rp.v1"
     },
     "preview": {
       "enabled": false,
-      "profileName": "chat.v1"
+      "profileName": "rp.v1"
     }
   }
 }

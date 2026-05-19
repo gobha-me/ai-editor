@@ -248,12 +248,32 @@ test('resolveScriptAutomationConfig returns coder.v1 defaults for coder.v1', () 
     assert.equal(cfg.profileName, 'coder.v1');
 });
 
-test('resolveScriptAutomationConfig returns chat.v1 defaults for non-coder profiles', () => {
-    for (const profileName of [null, undefined, '', 'chat.v1', 'reviewer.v1', 'pm.v1', 'plugin-dev.v1', 'full.v1', 'unknown']) {
+test('resolveScriptAutomationConfig returns disabled defaults with leaf profileName for registered non-coder profiles', () => {
+    // 2.68.0 (ICD #8 finding #1) — resolver no longer short-circuits;
+    // the inheritance walk preserves the leaf name. Pre-2.68.0 every
+    // non-coder branch returned `profileName: 'chat.v1'` (the short-
+    // circuit's `: CHAT_V1` mislabel).
+    for (const profileName of ['chat.v1', 'reviewer.v1', 'pm.v1', 'plugin-dev.v1', 'full.v1']) {
         const cfg = resolveScriptAutomationConfig(profileName);
         assert.equal(cfg.enabled, false, `profile ${JSON.stringify(profileName)} is disabled by default`);
         assert.equal(cfg.timeout_ms, 30000);
         assert.equal(cfg.max_output_bytes, 262144);
-        assert.equal(cfg.profileName, 'chat.v1');
+        assert.equal(cfg.profileName, profileName, `${profileName} preserves leaf name`);
+    }
+});
+
+test('resolveScriptAutomationConfig falls back to chat.v1 for null/undefined/empty/unregistered', () => {
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+        for (const profileName of [null, undefined, '', 'unknown']) {
+            const cfg = resolveScriptAutomationConfig(profileName);
+            assert.equal(cfg.enabled, false, `arg ${JSON.stringify(profileName)} disabled`);
+            assert.equal(cfg.timeout_ms, 30000);
+            assert.equal(cfg.max_output_bytes, 262144);
+            assert.equal(cfg.profileName, 'chat.v1');
+        }
+    } finally {
+        console.warn = origWarn;
     }
 });

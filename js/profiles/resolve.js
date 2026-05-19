@@ -30,8 +30,6 @@
  * @module profiles/resolve
  */
 
-import { CODER_V1 } from './coder-v1.js';
-import { CHAT_V1 } from './chat-v1.js';
 import { resolveProfile } from './inheritance.js';
 import { Profiles } from './registry.js';
 import {
@@ -380,22 +378,39 @@ export function resolveDefaultRememberScope(settings) {
 
 /**
  * Resolve the LLM-authored automation (Tier-0 Worker) config for the
- * active profile. Coder gets the value-case `enabled: true`; every
- * other profile inherits chat.v1's `enabled: false`. Settings overlay
- * can flip either direction at runtime via
+ * active profile. Reads `profile.scriptAutomation` from the *resolved*
+ * profile (deep-merge of the named profile on top of its `base` chain)
+ * via `resolveProfile`. Coder gets the value-case `enabled: true`;
+ * every other profile inherits chat.v1's `enabled: false`. Settings
+ * overlay can flip either direction at runtime via
  * `State.settings.scriptAutomation` (see `js/settings/tools-tab.js`).
  *
- * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0; profile-keyed
- * now. `coder.v1` matches the pre-2.0.0 `role === 'coder'` short-
- * circuit; everything else (including the four synthetic profiles)
- * falls through to `CHAT_V1`'s defaults.
+ * **2.68.0 — ICD #8 finding #1.** Was a short-circuit
+ * (`profileName === 'coder.v1' ? CODER_V1 : CHAT_V1`) pre-2.68.0; that
+ * worked only because the `scriptAutomation` block lived solely on
+ * `coder.v1` / `chat.v1` and no production profile inherited via
+ * `base: 'coder.v1'`. Aligned with the other `resolveProfile`-routed
+ * helpers ahead of the 2.0.x advanced-view picker that may introduce
+ * such inheritance.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; production callers pass a `Profiles.has`-registered name.
  *
  * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
  * @returns {{ enabled: boolean, timeout_ms: number, max_output_bytes: number, profileName: string }}
  */
 export function resolveScriptAutomationConfig(profileName) {
-    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
-    const cfg = profile.scriptAutomation || {};
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = Profiles.get(name);
+    const resolved = resolveProfile(leaf, profileLookup);
+    const cfg = resolved.scriptAutomation || {};
+
     return {
         enabled: cfg.enabled === true,
         timeout_ms: Number.isInteger(cfg.timeout_ms) && cfg.timeout_ms > 0
@@ -404,28 +419,45 @@ export function resolveScriptAutomationConfig(profileName) {
         max_output_bytes: Number.isInteger(cfg.max_output_bytes) && cfg.max_output_bytes > 0
             ? cfg.max_output_bytes
             : 262144,
-        profileName: profile.name,
+        profileName: resolved.name,
     };
 }
 
 /**
  * Resolve the in-editor preview (Tier 1 sandboxed iframe) config for
- * the active profile. Mirrors `resolveScriptAutomationConfig` byte-
- * for-byte in shape — same `coder.v1` short-circuit, same chat.v1
- * fallback. Settings overlay (`State.settings.preview`) wins when set.
+ * the active profile. Reads `profile.preview` from the *resolved*
+ * profile (deep-merge of the named profile on top of its `base` chain)
+ * via `resolveProfile`. Coder gets the value-case `enabled: true`;
+ * every other profile inherits chat.v1's `enabled: false`. Settings
+ * overlay (`State.settings.preview`) wins when set.
  *
- * **2.0.0 — slice 3 flip.** Was role-keyed pre-2.0.0; profile-keyed
- * now.
+ * **2.68.0 — ICD #8 finding #1.** Was a short-circuit
+ * (`profileName === 'coder.v1' ? CODER_V1 : CHAT_V1`) pre-2.68.0;
+ * aligned with the other `resolveProfile`-routed helpers ahead of the
+ * 2.0.x advanced-view picker that may introduce profile inheritance via
+ * `base: 'coder.v1'`.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; production callers pass a `Profiles.has`-registered name.
  *
  * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
  * @returns {{ enabled: boolean, profileName: string }}
  */
 export function resolvePreviewConfig(profileName) {
-    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
-    const cfg = profile.preview || {};
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = Profiles.get(name);
+    const resolved = resolveProfile(leaf, profileLookup);
+    const cfg = resolved.preview || {};
+
     return {
         enabled: cfg.enabled === true,
-        profileName: profile.name,
+        profileName: resolved.name,
     };
 }
 
@@ -451,10 +483,11 @@ export const PLUGIN_TOOL_NAMES = Object.freeze([
 
 /**
  * Resolve the `plugin.enabled` capability-overlay flag for a given
- * profile. Mirrors `resolvePreviewConfig` byte-for-byte in shape — same
- * `coder.v1` short-circuit, same `chat.v1` fallback, same
- * `cfg.enabled === true` check. Settings overlay
- * (`State.settings.plugin`) wins when set.
+ * profile. Reads `profile.plugin` from the *resolved* profile (deep-
+ * merge of the named profile on top of its `base` chain) via
+ * `resolveProfile`. No production profile carries a `plugin` block
+ * today — every profile resolves to `enabled: false`. Settings overlay
+ * (`State.settings.plugin`) is the only flip surface.
  *
  * **2.58.0 (gitea#442).** Decision settled in
  * [`docs/discussion/plugin-dev-mode-vs-profile.md`](../../docs/discussion/plugin-dev-mode-vs-profile.md):
@@ -464,15 +497,34 @@ export const PLUGIN_TOOL_NAMES = Object.freeze([
  * profile is active, preserving the user's working state (system prompt,
  * budget, scratchpad, ledger) instead of forcing a profile switch.
  *
+ * **2.68.0 — ICD #8 finding #1.** Was a short-circuit
+ * (`profileName === 'coder.v1' ? CODER_V1 : CHAT_V1`) pre-2.68.0;
+ * aligned with the other `resolveProfile`-routed helpers ahead of the
+ * 2.0.x advanced-view picker that may introduce profile inheritance.
+ * When a future profile declares a `plugin: { enabled: true }` block,
+ * inheritors get it via the inheritance walk.
+ *
+ * Unknown profile names fall back to `chat.v1` with a warn — defensive
+ * only; production callers pass a `Profiles.has`-registered name.
+ *
  * @param {string|null|undefined} profileName  e.g. from `ConversationManager.getEffectiveProfileName()`.
  * @returns {{ enabled: boolean, profileName: string }}
  */
 export function resolvePluginConfig(profileName) {
-    const profile = profileName === 'coder.v1' ? CODER_V1 : CHAT_V1;
-    const cfg = profile.plugin || {};
+    const name = typeof profileName === 'string' && Profiles.has(profileName)
+        ? profileName
+        : 'chat.v1';
+    if (name !== profileName) {
+        console.warn(`[profiles/resolve] unknown profileName '${profileName}'; falling back to chat.v1`);
+    }
+
+    const leaf = Profiles.get(name);
+    const resolved = resolveProfile(leaf, profileLookup);
+    const cfg = resolved.plugin || {};
+
     return {
         enabled: cfg.enabled === true,
-        profileName: profile.name,
+        profileName: resolved.name,
     };
 }
 
@@ -481,14 +533,11 @@ export function resolvePluginConfig(profileName) {
  *
  * **2.49.0.0 — slice 1 of github#24 Phase 1.** Reads the `subagent`
  * block from the *resolved* profile (deep-merge of the named profile
- * on top of its `base` chain) via `resolveProfile`. The merge shape
- * matters here in a way it does not for `resolveScriptAutomationConfig`
- * — that helper's `coder.v1` short-circuit works because the
- * `scriptAutomation` block lives only on `coder.v1` / `chat.v1`. The
- * `subagent` block lives on `subagent.v1` (Phase 1's only carrier);
- * future profiles inheriting from `subagent.v1` (e.g.
- * `subagent_reviewer.v1`) need the inheritance walk to pick up the
- * block.
+ * on top of its `base` chain) via `resolveProfile`. The `subagent`
+ * block lives on `subagent.v1` (Phase 1's only carrier); future
+ * profiles inheriting from `subagent.v1` (e.g. `subagent_reviewer.v1`)
+ * need the inheritance walk to pick up the block — same shape as every
+ * other `resolve*Config` helper since 2.68.0 (ICD #8 finding #1).
  *
  * Unknown profile names fall back to `chat.v1` with a warn — same
  * shape as the other `resolve*Config` helpers above. `chat.v1` has no
