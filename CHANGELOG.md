@@ -4,6 +4,36 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.75.0] - 2026-05-20
+
+### Added — `editorInstance` destroy-then-replace contract test (ICD #9 finding #1)
+
+New [`tests/test-editor-lifecycle.mjs`](tests/test-editor-lifecycle.mjs) (~165 LOC incl. docstring, **4 subtests**) source-scans [`js/editor/instance.js`](js/editor/instance.js)'s `createEditor` body + module-scope declarations. Idiom mirrors [`tests/test-editor-compartment-ordering.mjs`](tests/test-editor-compartment-ordering.mjs) (2.72.0) one-for-one — reuses `stripComments` + `extractCreateEditorBody` + a sibling `findSingleMatch` helper that asserts the regex hits exactly once in the function body.
+
+The pinned invariants:
+
+1. `editorInstance.destroy()` is called inside `createEditor` **before** `editorInstance = new CM.EditorView(...)`. The destroy-then-replace contract requires the prior CM6 view to release its DOM + EventBus subscriptions before its module-scope binding is rebound; otherwise the prior view leaks (its lifetime exceeds its identity) and any listeners it owned double-fire on subsequent transactions.
+2. `lineNumberCompartment = ... new CM.Compartment()` reassignment exists exactly once in the `createEditor` body. The count assertion is load-bearing — the prior Compartment becomes GC-eligible at this rebind because no live view holds it.
+3. Sibling pin for `keymapCompartment`.
+4. **Forward-evolution guard** — `^let lineNumberCompartment = null;$` AND `^let keymapCompartment = null;$` exist at module scope (left-anchored). Promoting either to `const` (breaks reassignment) or moving inside `createEditor` as a function-local (changes the GC mechanism from "module-scope rebind" to "function-local out-of-scope") both demand a paired ICD + test update; the guard prevents either refactor landing silently.
+
+Pre-emptive — no live bug, but the destroy-then-replace contract was the most easily-broken invariant in the editor module. Closes ICD #9 §"Code-aware findings #1" + §"Open invariants" bullets 1 + 4. **Zero production-code edits.**
+
+### Docs — ICD #9 finding #1 wording corrected to match actual code
+
+[`docs/ICD-editor-instance.md`](docs/ICD-editor-instance.md) §Finding #1 originally described the Compartments as function-local with a "negative grep at module-scope `let`" fix-shape. The actual code declares both Compartments as **module-scope `let`s** at [`instance.js:30,32`](js/editor/instance.js) and reassigns them inside `createEditor` at [`instance.js:74,82`](js/editor/instance.js); the "negative grep" would fail against current code. The rewrite documents the actual destroy-then-replace mechanism (module-scope rebind, prior Compartment GC-eligible at the next `createEditor` call) and names the forward-evolution guard. Finding-heading strikethrough idiom matches [`docs/ICD-retrieval-manager.md`](docs/ICD-retrieval-manager.md)'s precedent for shipped findings.
+
+### Docs — `RE-EVAL following 2.64.0` cohort closure
+
+ICD #9 finding #1 was the last `[medium]`-band cohort item ready to ship. The cohort now stands at:
+
+- #2 (`[strong] [S]`) ✅ shipped 2.72.0 — compartment-ordering invariant source-scan pin
+- #4 (`[strong] [S]`) ✅ shipped 2.72.0 — `refreshGhostText` barrel export + ghost-text-settings live bug fix
+- #1 (`[medium]`) ✅ shipped 2.75.0 — destroy-then-replace contract test (this slice)
+- #3 (`[medium]`) queued behind a real-leak signal in [`issue-detail.js`](js/issue-detail.js) + [`plugin-editor.js`](js/plugin-editor.js) custom tab renderers — promotes to `[strong]` if a leak surfaces
+
+`RE-EVAL following 2.67.0` is overdue by 5 minors past anchor (doc-only, accumulates in `[Unreleased]`); ICD #6 finding #2 (SSE transport) remains blocked on an architecture decision pairing naturally with github#27 Phase 2 OAuth when that DESIGN doc lands.
+
 ## [2.74.0] - 2026-05-20
 
 ### Fixed — GitLab parity cohort closure for `createBranch` idempotency + `getPullRequest` draft passthrough
