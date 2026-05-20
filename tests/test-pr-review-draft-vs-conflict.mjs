@@ -2,17 +2,21 @@
 /**
  * Tests for gitea#466 — distinguish draft PRs from merge conflicts.
  *
- * Background: Gitea (and GitHub) return `mergeable: false` for both
- * (a) draft PRs (intentionally merge-blocked by `draft: true`) and
- * (b) genuine merge conflicts. Pre-2.73.0, the PR review surface
- * conflated the two and rendered every draft PR as `⚠️ Resolve
- * conflicts`. The fix passes `draft: boolean` through both providers
- * and gates the resolve-conflicts CTA on `!isDraft`.
+ * Background: Gitea (and GitHub + GitLab) return `mergeable: false` /
+ * `merge_status: 'cannot_be_merged'` for both (a) draft PRs
+ * (intentionally merge-blocked by `draft: true`) and (b) genuine merge
+ * conflicts. Pre-2.73.0, the PR review surface conflated the two and
+ * rendered every draft PR as `⚠️ Resolve conflicts`. The fix passes
+ * `draft: boolean` through every provider and gates the resolve-conflicts
+ * CTA on `!isDraft`. The GitLab translator normalizes both modern
+ * (`draft`) and pre-deprecation (`work_in_progress`) MR fields at the
+ * provider boundary so consumers stay provider-agnostic.
  *
  * Two layers tested:
- *   1. Provider passthrough — gitea + github `getPullRequest()` return
- *      `draft` on the PR object. Uses the per-test merged-provider-clone
- *      stub from [`tests/test-pr-review-provider-shape.mjs`](./test-pr-review-provider-shape.mjs).
+ *   1. Provider passthrough — gitea + github + gitlab `getPullRequest()`
+ *      return `draft` on the PR object. Uses the per-test
+ *      merged-provider-clone stub from
+ *      [`tests/test-pr-review-provider-shape.mjs`](./test-pr-review-provider-shape.mjs).
  *   2. PrMergeControls gate — source-scan idiom (mirrors
  *      [`tests/test-plugin-editor-auto-switch-retired.mjs`](./test-plugin-editor-auto-switch-retired.mjs)
  *      + [`tests/test-editor-compartment-ordering.mjs`](./test-editor-compartment-ordering.mjs))
@@ -20,7 +24,7 @@
  *      not directly Node-importable. The gate logic is small enough
  *      that a pin on the source string is the right anti-regression.
  *
- * @since 2.73.0 (gitea#466)
+ * @since 2.73.0 (gitea#466 — Gitea + GitHub); 2.74.0 (GitLab cohort closure)
  */
 
 import './_node-shim.mjs';
@@ -32,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { BASE_GIT_PROVIDER } from '../js/git-providers/base.js';
 import giteaProvider from '../js/git-providers/gitea.js';
 import githubProvider from '../js/git-providers/github.js';
+import gitlabProvider from '../js/git-providers/gitlab.js';
 
 function mergedClone(provider) {
     return { ...BASE_GIT_PROVIDER, ...provider };
@@ -61,6 +66,33 @@ function giteaPrPayload({ draft, mergeable = true } = {}) {
         created_at: '2026-05-19T00:00:00Z',
         updated_at: '2026-05-19T00:00:00Z',
         html_url: 'https://example.com/pulls/465',
+    };
+}
+
+/**
+ * Minimal GitLab-shape MR payload. GitLab uses different field names
+ * (`iid` / `source_branch` / `target_branch` / `merge_status` /
+ * `author.username` / `web_url`) and carries `draft` on modern versions
+ * + `work_in_progress` on older versions — both overridable per-test.
+ */
+function gitlabMrPayload({ draft, work_in_progress, merge_status = 'can_be_merged' } = {}) {
+    return {
+        iid: 465,
+        title: 'WIP: refactor compositor',
+        description: 'body',
+        state: 'opened',
+        source_branch: 'feature/x',
+        target_branch: 'main',
+        sha: 'abc123',
+        diff_refs: { head_sha: 'abc123' },
+        merge_status,
+        draft,
+        work_in_progress,
+        author: { username: 'someone' },
+        changes_count: '1',
+        created_at: '2026-05-20T00:00:00Z',
+        updated_at: '2026-05-20T00:00:00Z',
+        web_url: 'https://example.com/mr/465',
     };
 }
 
@@ -115,6 +147,57 @@ test('GitHub: getPullRequest returns draft: false when API omits draft field (ba
     merged.request = async () => giteaPrPayload({ draft: undefined });
     const result = await merged.getPullRequest(FAKE_CONN, 'o', 'r', 465);
     assert.equal(result.draft, false);
+});
+
+// ============================================
+// GitLab — draft passthrough with version normalization
+// ============================================
+
+test('GitLab: getPullRequest returns draft: true when MR payload has draft: true', async () => {
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => gitlabMrPayload({
+        draft: true,
+        work_in_progress: false,
+        merge_status: 'cannot_be_merged',
+    });
+    const result = await merged.getPullRequest(FAKE_CONN, 'o', 'r', 465);
+    assert.equal(result.draft, true);
+    assert.equal(result.mergeable, false,
+        'GitLab also collapses draft + conflict into cannot_be_merged; draft is the disambiguator');
+});
+
+test('GitLab: getPullRequest returns draft: true when MR payload has work_in_progress: true (older GitLab)', async () => {
+    // Older GitLab versions expose `work_in_progress: boolean` rather
+    // than `draft: boolean`. The translator normalizes both fields so
+    // consumers stay version-agnostic.
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => gitlabMrPayload({
+        draft: undefined,
+        work_in_progress: true,
+    });
+    const result = await merged.getPullRequest(FAKE_CONN, 'o', 'r', 465);
+    assert.equal(result.draft, true);
+});
+
+test('GitLab: getPullRequest returns draft: false when both flags are explicitly false', async () => {
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => gitlabMrPayload({
+        draft: false,
+        work_in_progress: false,
+    });
+    const result = await merged.getPullRequest(FAKE_CONN, 'o', 'r', 465);
+    assert.equal(result.draft, false);
+});
+
+test('GitLab: getPullRequest returns draft: false when both flags absent (back-compat)', async () => {
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => gitlabMrPayload({
+        draft: undefined,
+        work_in_progress: undefined,
+    });
+    const result = await merged.getPullRequest(FAKE_CONN, 'o', 'r', 465);
+    assert.equal(result.draft, false,
+        'undefined → false coercion via `=== true` on both fields lets consumers treat the field as always-boolean');
 });
 
 // ============================================

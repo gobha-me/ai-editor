@@ -60,6 +60,23 @@ function encodePath(path) {
     return encodeURIComponent(path);
 }
 
+/**
+ * Returns true when an error thrown by the GitLab API represents a
+ * branch-already-exists outcome on a `POST /projects/:id/repository/branches`
+ * call. GitLab returns 400 with the message `Branch already exists`
+ * (verbatim — case-sensitive in the `parsed.message` field) for this
+ * case. Match on the canonical phrase only; status-only matching would
+ * swallow unrelated 400 validation errors. Mirrors the GitHub idiom —
+ * GitLab's canonical message does not include the branch name, so a
+ * name-required guard (the Gitea approach) would silently never fire
+ * in production.
+ */
+function isGitlabBranchAlreadyExistsError(err) {
+    if (!err || err.status !== 400) return false;
+    const msg = err.message || '';
+    return msg.includes('Branch already exists');
+}
+
 // ============================================
 // PROVIDER DEFINITION
 // ============================================
@@ -255,12 +272,24 @@ const gitlabProvider = {
     },
 
     async createBranch(connection, owner, repo, name, from = 'main') {
-        await this.request(connection, 'POST',
-            `/projects/${projectId(owner, repo)}/repository/branches`, {
-                branch: name,
-                ref: from
+        try {
+            await this.request(connection, 'POST',
+                `/projects/${projectId(owner, repo)}/repository/branches`, {
+                    branch: name,
+                    ref: from
+                }
+            );
+        } catch (err) {
+            // Idempotency: GitLab returns 400 with `Branch already exists`
+            // when the target ref is already present. Treat as success —
+            // the branch is in the wanted end-state. `git:branchCreated`
+            // deliberately not emitted on this path (see base.js
+            // createBranch contract).
+            if (isGitlabBranchAlreadyExistsError(err)) {
+                return name;
             }
-        );
+            throw err;
+        }
         EventBus.emit('git:branchCreated', { connectionId: connection.id, owner, repo, name });
         return name;
     },
@@ -739,6 +768,12 @@ const gitlabProvider = {
             head: mr.source_branch,
             headSha: mr.sha || mr.diff_refs?.head_sha || '',
             base: mr.target_branch,
+            // Normalize draft flag across GitLab versions: modern GitLab
+            // exposes `draft: boolean`; older GitLab exposes
+            // `work_in_progress: boolean`. The `=== true` coercion lets
+            // consumers treat the field as always-boolean (undefined →
+            // false back-compat per base.js PullRequestData typedef).
+            draft: mr.draft === true || mr.work_in_progress === true,
             mergeable: mr.merge_status === 'can_be_merged',
             merged: mr.state === 'merged',
             user: mr.author?.username,

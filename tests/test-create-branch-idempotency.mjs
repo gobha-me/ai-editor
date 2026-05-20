@@ -1,13 +1,14 @@
 // @ts-check
 /**
  * Tests for the idempotent-on-existing-ref contract of `createBranch`
- * on the Gitea + GitHub providers. The base-interface jsdoc at
+ * on the Gitea + GitHub + GitLab providers. The base-interface jsdoc at
  * [`js/git-providers/base.js`](../js/git-providers/base.js) pins the
  * contract: when the target ref already exists on the remote, the call
  * MUST resolve successfully and return the branch name rather than
  * throw. Each remote provider translates its own error envelope for
  * this case (Gitea: 500 + `PushRejected` / `reference already exists`;
- * GitHub: 422 + `Reference already exists`) into the idempotent path.
+ * GitHub: 422 + `Reference already exists`; GitLab: 400 + `Branch
+ * already exists`) into the idempotent path.
  *
  * `git:branchCreated` is emitted only on the genuine-creation path —
  * the existing-ref path stays silent so downstream listeners don't
@@ -16,7 +17,7 @@
  * Mirrors the per-test merged-provider-clone stub idiom from
  * [`tests/test-pr-review-provider-shape.mjs`](./test-pr-review-provider-shape.mjs).
  *
- * @since 2.69.0
+ * @since 2.69.0 (Gitea + GitHub); 2.74.0 (GitLab cohort closure)
  */
 
 import './_node-shim.mjs';
@@ -26,6 +27,7 @@ import assert from 'node:assert/strict';
 import { BASE_GIT_PROVIDER } from '../js/git-providers/base.js';
 import giteaProvider from '../js/git-providers/gitea.js';
 import githubProvider from '../js/git-providers/github.js';
+import gitlabProvider from '../js/git-providers/gitlab.js';
 import { EventBus } from '../js/core.js';
 
 function mergedClone(provider) {
@@ -242,6 +244,84 @@ test('GitHub: createBranch propagates non-422 errors unchanged', async () => {
             return { commit: { sha: 'deadbeefcafe' } };
         }
         const err = new Error('GitHub: not found');
+        // @ts-ignore
+        err.status = 404;
+        throw err;
+    };
+    await assert.rejects(
+        () => merged.createBranch(FAKE_CONN, 'o', 'r', BRANCH, 'main'),
+        /not found/
+    );
+});
+
+// ============================================
+// GitLab — happy path (genuine creation emits event)
+// ============================================
+
+test('GitLab: createBranch on a fresh ref returns name and emits git:branchCreated', async () => {
+    const merged = mergedClone(gitlabProvider);
+    let captured = null;
+    merged.request = async (_conn, method, endpoint, data) => {
+        captured = { method, endpoint, data };
+        return { name: BRANCH };
+    };
+
+    const events = await captureBranchCreatedEvents(async () => {
+        const result = await merged.createBranch(FAKE_CONN, 'o', 'r', BRANCH, 'main');
+        assert.equal(result, BRANCH);
+    });
+
+    assert.equal(captured.method, 'POST');
+    // GitLab URL-encodes owner/repo as a single path segment.
+    assert.equal(captured.endpoint, '/projects/o%2Fr/repository/branches');
+    assert.deepEqual(captured.data, { branch: BRANCH, ref: 'main' });
+    assert.equal(events.length, 1);
+    assert.equal(events[0].name, BRANCH);
+});
+
+// ============================================
+// GitLab — idempotency on existing ref
+// ============================================
+
+test('GitLab: createBranch swallows 400 + Branch already exists, returns name', async () => {
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => {
+        // Verbatim shape of the production 400 body — GitLab's canonical
+        // message does not include the branch name, mirroring GitHub.
+        const err = new Error('GitLab: Branch already exists');
+        // @ts-ignore — provider error shape carries `status` on a plain Error
+        err.status = 400;
+        throw err;
+    };
+
+    const events = await captureBranchCreatedEvents(async () => {
+        const result = await merged.createBranch(FAKE_CONN, 'o', 'r', BRANCH, 'main');
+        assert.equal(result, BRANCH);
+    });
+    // The existing-ref path is silent — no event fires.
+    assert.equal(events.length, 0);
+});
+
+test('GitLab: createBranch does NOT swallow unrelated 400 validation errors', async () => {
+    // A 400 without the canonical marker is a real validation failure
+    // and MUST propagate.
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => {
+        const err = new Error('GitLab: 400 validation failed — invalid ref name');
+        // @ts-ignore
+        err.status = 400;
+        throw err;
+    };
+    await assert.rejects(
+        () => merged.createBranch(FAKE_CONN, 'o', 'r', BRANCH, 'main'),
+        /validation failed/
+    );
+});
+
+test('GitLab: createBranch propagates non-400 errors unchanged', async () => {
+    const merged = mergedClone(gitlabProvider);
+    merged.request = async () => {
+        const err = new Error('GitLab: not found');
         // @ts-ignore
         err.status = 404;
         throw err;

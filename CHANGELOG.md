@@ -4,6 +4,24 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.74.0] - 2026-05-20
+
+### Fixed — GitLab parity cohort closure for `createBranch` idempotency + `getPullRequest` draft passthrough
+
+Closes the two `[medium]`-band GitLab-translator adjacencies queued in [`docs/ROADMAP.md`](docs/ROADMAP.md)'s Now row since 2.70.0 + 2.73.0. Both were deferred to keep those fixes surgical (`base.js` pinned the contracts; `gitlab.js` translation was left to a cohort-closure minor). This is that minor. Mirrors the 2.50.0 ICD #4 conservative cohort-closure pattern.
+
+**Fix 1 — GitLab `createBranch` idempotency on existing ref.** Mirrors the 2.70.0 fix that handled Gitea (500 + `PushRejected` / `reference already exists`) and GitHub (422 + `Reference already exists`). GitLab returns **400 + `Branch already exists`**. New private helper `isGitlabBranchAlreadyExistsError(err)` at [`js/git-providers/gitlab.js`](js/git-providers/gitlab.js) matches `err.status === 400` AND `err.message` contains the canonical phrase. Helper signature mirrors GitHub's (no `branchName` parameter) rather than Gitea's — GitLab's canonical message does not include the branch name in production, so a name-required guard would silently never fire. [`createBranch`](js/git-providers/gitlab.js) wraps the request in try/catch: on caught error, returns `name` silently (no event) if the helper matches, else rethrows. `git:branchCreated` emits only on the genuine-creation path per the [`base.js`](js/git-providers/base.js) contract.
+
+**Fix 2 — GitLab `getPullRequest` draft passthrough.** Mirrors the 2.73.0 fix that added `draft: pr.draft === true` to Gitea + GitHub `getPullRequest`. GitLab's [`getPullRequest`](js/git-providers/gitlab.js) now returns `draft: mr.draft === true || mr.work_in_progress === true` — normalizing both the modern (`draft`) and pre-deprecation (`work_in_progress`) MR fields at the translator boundary so PR-review consumers stay version-agnostic. The `=== true` coercion on both fields preserves the `undefined → false` back-compat that the [`PullRequestData`](js/git-providers/base.js) typedef pins. GitLab also collapses draft + conflict into `merge_status: 'cannot_be_merged'`, matching Gitea/GitHub — `draft` is the disambiguator that lets [`PrMergeControls`](js/pr-review/PrMergeControls.js) gate the `⚠️ Resolve conflicts` CTA on `!isDraft`.
+
+**Zero edits to [`base.js`](js/git-providers/base.js)** — the `createBranch` jsdoc already explicitly cites GitLab's 400 envelope (added at 2.70.0); the `PullRequestData.draft` typedef row was added at 2.73.0. Both contract pins anticipated this closure.
+
+### Added — GitLab subtest coverage in two existing test files
+
+[`tests/test-create-branch-idempotency.mjs`](tests/test-create-branch-idempotency.mjs) extends from 11 → 15 subtests with 4 GitLab cases: fresh-ref emits event / 400 + canonical phrase swallowed + silent event / unrelated 400 propagates / non-400 propagates. Reuses the existing `captureBranchCreatedEvents` + `FAKE_CONN` + `mergedClone` infrastructure unchanged. The GitLab section is 1 subtest shorter than Gitea's (5) because GitLab's canonical phrase is specific enough that the helper drops the branch-name belt-and-braces, matching GitHub's 4-subtest pattern.
+
+[`tests/test-pr-review-draft-vs-conflict.mjs`](tests/test-pr-review-draft-vs-conflict.mjs) extends from 11 → 15 subtests with 4 GitLab cases plus a new `gitlabMrPayload({ draft, work_in_progress, merge_status })` helper mirroring `giteaPrPayload`. Coverage: `draft: true` passthrough + `work_in_progress: true` normalization (older GitLab) + both-flags-false back-compat + both-flags-absent back-compat. Base typedef pin (`@property {boolean} [draft]`) and PrMergeControls source-scan tests (`isDraft` / `!isDraft` / `pr-dock__notice` / `disabled={merging || isDraft}`) are GitLab-agnostic — unchanged.
+
 ## [2.73.0] - 2026-05-20
 
 ### Fixed — Draft PRs render as merge conflicts (gitea#466)
