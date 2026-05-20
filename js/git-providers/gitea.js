@@ -969,44 +969,99 @@ const giteaProvider = {
         }));
     },
 
+    /**
+     * Gitea's Compare schema is intentionally minimal: `{ commits,
+     * total_commits }` only. The `definitions.Compare` in the upstream
+     * swagger spec has no `files` property — verified against Gitea
+     * 1.25 — and never has, across every released version. So
+     * `compareRefs` cannot populate per-file patches on Gitea the way
+     * it can on GitHub. Consumers that need patch text already cascade
+     * through their own fallbacks:
+     *   - release-manager → per-commit `getCommitDiff` (line 199-236
+     *     of [`js/release-manager.js`](../release-manager.js))
+     *   - PR Review → `getPullRequestDiff` → /pulls/{n}.diff (line
+     *     154-170 of [`js/pr-review/PrReviewSurface.js`](../pr-review/PrReviewSurface.js))
+     * Consumers that only need the changed-path set
+     * (retrieval delta-indexer via `getChangedFilesBetween`) get the
+     * paths from `commits[].files` via the override below.
+     */
     async compareRefs(connection, owner, repo, base, head) {
         const result = await this.request(connection, 'GET',
             `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`
         );
 
-        // Debug: log response shape
-        const keys = Object.keys(result || {});
-        console.log('[Gitea] Compare response keys:', keys);
-        console.log(`[Gitea] Compare: commits=${(result.commits || []).length}, total_commits=${result.total_commits}, files field exists=${result.files !== undefined}, files count=${(result.files || []).length}`);
-        if ((result.commits || []).length === 0) {
+        if ((result?.commits || []).length === 0) {
+            // Empty commits usually means a misconfigured ref name or
+            // a token without read access — surface a one-line snippet
+            // to make that diagnosable.
             console.log('[Gitea] Compare returned 0 commits. Response snippet:', JSON.stringify(result).slice(0, 300));
         }
 
-        const commits = (result.commits || []).map(c => ({
+        const commits = (result?.commits || []).map(c => ({
             sha: c.sha,
             message: c.commit?.message || c.message || '',
             author: c.commit?.author?.name || c.author?.login || 'unknown',
             date: c.commit?.author?.date || c.created || ''
         }));
 
-        // Gitea versions vary on where file data lives
-        const rawFiles = result.files || result.changed_files || result.diffs || [];
-        if (rawFiles.length === 0 && result.files !== undefined) {
-            console.log('[Gitea] Compare returned files field but it is empty');
-        }
-        if (rawFiles.length === 0 && result.files === undefined) {
-            console.log('[Gitea] Compare response has no "files" field. Available:', Object.keys(result));
-        }
+        return { commits, files: [], totalCommits: result?.total_commits ?? commits.length };
+    },
 
-        const files = rawFiles.map(f => ({
-            filename: f.filename || f.new_path || f.old_path || f.name || '',
-            status: f.status || (f.new_file ? 'added' : f.deleted_file ? 'removed' : 'modified'),
-            additions: f.additions || 0,
-            deletions: f.deletions || 0,
-            patch: f.patch || f.diff || ''
-        }));
+    /**
+     * Override the base default (which unions `compareRefs(A,B).files`
+     * and `compareRefs(B,A).files`) — on Gitea those file arrays are
+     * always empty (see `compareRefs` docstring). Instead read
+     * `commits[].files` directly from each /compare round-trip. Gitea's
+     * `CommitAffectedFiles` carries `{ filename, status }` only (no
+     * patch text, no additions/deletions), which is exactly what the
+     * retrieval delta-indexer needs.
+     *
+     * Returns:
+     *   - `[]` when both compares show zero commits (branches identical)
+     *   - `Array<string>` of unique changed paths when at least one commit
+     *     in either direction exposes a `files` array
+     *   - `null` when commits exist but no commit carries a `files` array
+     *     (server omitted them — caller falls back to a full re-walk
+     *     rather than silently cloning a stale index)
+     *   - `null` on any compare-round-trip error
+     *
+     * @since 2.69.0
+     */
+    async getChangedFilesBetween(connection, owner, repo, branchA, branchB) {
+        if (!branchA || !branchB || branchA === branchB) return [];
+        try {
+            const [aToB, bToA] = await Promise.all([
+                this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/compare/${encodeURIComponent(branchA)}...${encodeURIComponent(branchB)}`),
+                this.request(connection, 'GET',
+                    `/repos/${owner}/${repo}/compare/${encodeURIComponent(branchB)}...${encodeURIComponent(branchA)}`),
+            ]);
 
-        return { commits, files, totalCommits: result.total_commits ?? commits.length };
+            const paths = new Set();
+            let sawAnyFilesArray = false;
+            let totalCommits = 0;
+            for (const direction of [aToB, bToA]) {
+                const commitList = direction?.commits || [];
+                totalCommits += commitList.length;
+                for (const c of commitList) {
+                    if (Array.isArray(c?.files)) {
+                        sawAnyFilesArray = true;
+                        for (const f of c.files) {
+                            const name = f?.filename;
+                            if (typeof name === 'string' && name.length > 0) {
+                                paths.add(name);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (totalCommits === 0) return [];
+            if (!sawAnyFilesArray) return null;
+            return Array.from(paths);
+        } catch {
+            return null;
+        }
     },
 
     async listReleases(connection, owner, repo) {

@@ -118,11 +118,14 @@ export function PrReviewSurface({ owner, repo, prNumber, onClose }) {
                 setData(d => ({ ...d, pr, loading: false }));
 
                 // `compareRefs(base, head)` is the source of truth for the
-                // PR-scoped commits AND a reliable fallback for per-file
-                // patches: Gitea's /pulls/{n}/files endpoint omits `patch`
-                // for many real-world PRs (size-dependent quirk), while the
-                // /compare endpoint includes it. Doing one extra round-trip
-                // is the right trade vs. silently-empty diffs.
+                // PR-scoped commits. On GitHub it ALSO carries a per-file
+                // patch array (which backfills patches missing from
+                // /pulls/{n}/files); on Gitea its `files` is always `[]`
+                // (the Compare schema has no `files` field — see the
+                // `compareRefs` docstring in [`gitea.js`](../git-providers/gitea.js)).
+                // The compare round-trip stays unconditional because the
+                // GitHub backfill is the cheap path; Gitea cascades through
+                // the /pulls/{n}.diff fallback below.
                 const [files, comments, ci, compare] = await Promise.all([
                     Git.getPullRequestFiles(owner, repo, prNumber).catch(() => []),
                     Git.getPullRequestComments(owner, repo, prNumber).catch(() => []),

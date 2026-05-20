@@ -4,6 +4,52 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.69.0] - 2026-05-19
+
+### Fixed — Gitea `compareRefs` cargo-cult `files`-field expectation + silent-empty retrieval delta-index
+
+Closes a long-standing miscalibration between `js/git-providers/gitea.js`'s `compareRefs` and the Gitea API. A 2.68.0 user trace ([reported 2026-05-19](https://github.com/anthropics/apps/issues/N/A)) surfaced three console.log lines firing 9+ times across a short branch-navigation session:
+
+```
+[Gitea] Compare response keys: [ "total_commits", "commits" ]
+[Gitea] Compare: commits=N, total_commits=N, files field exists=false, files count=0
+[Gitea] Compare response has no "files" field. Available: [ "total_commits", "commits" ]
+```
+
+**Root cause — schema, not version drift.** Gitea's `Compare` struct in [`definitions.Compare`](https://docs.gitea.com/api/) carries only `commits + total_commits` — **no `files` property has ever existed in any released Gitea version**. Verified against the live swagger at `https://git.gobha.me/swagger.v1.json` (Gitea 1.25.4): `responses.Compare → definitions.Compare = { commits, total_commits }` only. The pre-2.69.0 code shipped with the wrong mental model (per-commit-affected `files` array on `compareRefs`, the way GitHub's `/compare` returns it). Three console.log lines were debug instrumentation left in from the investigation that originally surfaced the mismatch — they fired unconditionally on every compare call, which is every PR Review surface load + every branch-switch via `getChangedFilesBetween` (two compares per switch, hence the 9× count in a short session).
+
+**The silent-empty cost — retrieval delta-index on branch switch.** Two of the three consumers had their own fallbacks already: `release-manager.js:199-236` cascades through per-commit `getCommitDiff` when `compare.files` is empty; `PrReviewSurface.js:154-170` cascades through `/pulls/{n}.diff` for missing patches. The third consumer — `BASE_GIT_PROVIDER.getChangedFilesBetween` ([`base.js:718`](js/git-providers/base.js)) — unions `compareRefs(A,B).files ∪ compareRefs(B,A).files` to feed the retrieval delta-indexer ([`tryDeltaIndexFromBranch`](js/intelligence/retrieval/manager-helpers.js:199)). On Gitea that union was always `[]`, so the delta-indexer treated every branch switch as "no files changed" → cloned the previous branch's index instead of re-embedding the actually-changed paths. **The previously-shipped delta-index optimization was silently broken on Gitea** since `getChangedFilesBetween` (1.12.0+) landed; the cloned-index path is wrong when files genuinely differ between branches.
+
+**Fix shape.** Three coordinated edits, no new public-API surface, one new provider override:
+
+1. **`compareRefs` on Gitea drops the wrong expectation + the noisy diagnostic.** Returns `{ commits, files: [], totalCommits }` unconditionally; the three repeated console.logs are gone. The **"0 commits"** log stays — that path surfaces ACL / bad-ref misconfigurations that the API otherwise returns silently, which is the one piece of debug output worth keeping.
+2. **`getChangedFilesBetween` Gitea override.** Reads `commits[].files` directly from each /compare round-trip (Gitea's `CommitAffectedFiles` schema = `{ filename, status }` — no patch text, no additions/deletions, but exactly what the retrieval delta-indexer needs). Unions paths across both compare directions for 3-dot diff symmetry. **Returns `null` (not `[]`) when commits exist but no commit carries a `files` array** — that's the caller's "fall back to full re-walk" signal per the base contract at [`base.js:706-710`](js/git-providers/base.js); the pre-2.69.0 behavior silently returned `[]` (= "branches identical content-wise"), which is the misclassification. Returns `[]` only when both directions show zero commits (genuinely identical refs).
+3. **PR Review surface comment correction.** [`PrReviewSurface.js:120-127`](js/pr-review/PrReviewSurface.js) previously called /compare "a reliable fallback for per-file patches" — that's accurate for GitHub but never was for Gitea (where `compare.files` is unconditionally `[]`). The comment now distinguishes the GitHub backfill (cheap, kept) from the Gitea cascade (which routes through the /pulls/{n}.diff fallback below).
+
+**Decision rationale on the null-vs-recursive-getCommitDiff fork.** The cheap path is sufficient on Gitea versions that populate `commits[].files` in /compare; for versions that don't, falling back to a full re-walk is correct (the delta-indexer's `null`-handling already does this — see [`manager-helpers.js:218-219`](js/intelligence/retrieval/manager-helpers.js)). The alternative — per-commit `getCommitDiff` round-trips inside `getChangedFilesBetween` — would scale O(N) with branch divergence (50 commits behind = 50 extra round-trips) just to enumerate paths the full re-walk would re-discover anyway. Per-commit cascade stays available where the patch text actually matters (release-manager); for paths-only, the cheap-or-null seam is the right tradeoff.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/git-providers/gitea.js`](js/git-providers/gitea.js) | EDIT — `compareRefs` (:972-1010 pre-edit → :972-1010 post-edit) drops 3 console.log lines (response-keys / files-field-exists / no-files-field branches) and the `result.changed_files \|\| result.diffs` cargo cult; keeps the "0 commits" snippet for ACL diagnosis; returns `files: []` with a new docstring explaining the schema constraint + the existing patch-cascade paths for release-manager / PR Review. NEW `getChangedFilesBetween` override below — reads `commits[].files`, returns `[]` / paths / null per the three-way semantic above. |
+| [`js/pr-review/PrReviewSurface.js`](js/pr-review/PrReviewSurface.js) | EDIT — comment block at :120-127 rewritten. Pre-2.69.0 it called compareRefs "a reliable fallback for per-file patches" universally; post-2.69.0 it distinguishes the GitHub backfill (where compare *does* carry patches) from the Gitea cascade (where the /pulls/{n}.diff fallback at :154-170 is the actual path). |
+| [`js/git-providers/base.js`](js/git-providers/base.js) | EDIT — `compareRefs` docstring (:649-655 pre-edit) gains a paragraph documenting the provider-shaped `files` field: GitHub returns top-level patches; Gitea's schema has no `files` field and consumers cascade through per-commit / /pulls/{n}.diff / `getChangedFilesBetween`. Same kind of provider-shape callout as the existing one for `getPullRequestDiff` at :444-449. |
+| [`tests/test-gitea-compare.mjs`](tests/test-gitea-compare.mjs) | NEW — 14 subtests, ~210 LOC, **zero network** (stubs `request` on `Object.create(giteaProvider)`). compareRefs: 4 (shape pin against `{ total_commits, commits }` response → `files: []` / commits mapped / totalCommits derived; **silence on the normal path** — pre-2.69.0 the trace had 3× console.log per call, the test asserts `logs.length === 0`; 0-commit diagnostic still fires for ACL diagnosis; null/undefined response tolerance). getChangedFilesBetween: 10 (same-branch / missing-arg short-circuits, both-direction union, identical-refs `[]`, no-files-array `null` (forces safe re-walk), null-tolerant filename filter, Promise.all error short-circuit, mixed populated/unpopulated commits, correct base/head pairs on both /compare calls, URL-encoding of special chars in branch names). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.68.0'` → `'2.69.0'`. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — test count bump (3560 → 3574) and Testing & CI line item for the new gitea-compare shape pin + override. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Closes:** the recurring "Gitea compare response has no files field" diagnostic from the 2.68.0 user trace 2026-05-19. No ticket — surfaced as a session-level investigation request, not as a gitea/github issue.
+
+**Verification:**
+
+- `node --test tests/test-gitea-compare.mjs` — 14/14 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite 3574 pass / 1 skipped / 0 fail (3560 baseline from 2.68.0 + 14 new subtests, no other test counts disturbed).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.69.0'` matches CHANGELOG section heading + ARCHITECTURE test count line.
+- Anti-regression sanity: the previously-shipped [`test-git-changed-files-between.mjs`](tests/test-git-changed-files-between.mjs) (base default impl) still passes — the override on Gitea doesn't disturb the base contract that GitLab + Local + any future provider still inherit. The base default's contract docstring (returns `null` to mean "fall back to full re-walk", `[]` to mean "branches differ by zero files") is now respected by the Gitea override, where pre-2.69.0 it returned `[]` even when paths weren't determinable.
+- Server-version probe: `curl https://git.gobha.me/api/v1/version` → `{"version":"1.25.4"}`; `curl https://git.gobha.me/swagger.v1.json | jq '.definitions.Compare'` → `{ commits, total_commits }` only — confirming the schema is the root cause across every supported Gitea version, not a 1.25-specific drift.
+
 ## [2.68.0] - 2026-05-19
 
 ### Changed — Align 3 short-circuit resolvers with `resolveProfile` (ICD #8 finding #1)

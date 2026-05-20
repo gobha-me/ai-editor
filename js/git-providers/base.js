@@ -647,6 +647,16 @@ const BASE_GIT_PROVIDER = {
 
     /**
      * Compare two refs and return the commits and file changes between them.
+     *
+     * **`files` is provider-shaped.** GitHub's /compare returns a top-level
+     * `files` array with full patches; Gitea's `Compare` schema only has
+     * `commits + total_commits` (no `files` field — verified against
+     * Gitea 1.25 swagger). Gitea callers that need patches cascade through
+     * per-commit `getCommitDiff` (release-manager) or /pulls/{n}.diff
+     * ([`getPullRequestDiff`](#getPullRequestDiff), used by PR Review);
+     * callers that only need the changed-path set use
+     * `getChangedFilesBetween` (Gitea overrides it to read `commits[].files`).
+     *
      * @param {GitConnection} connection
      * @param {string} owner
      * @param {string} repo
