@@ -37,6 +37,23 @@ function base64ToUtf8(str) {
     }
 }
 
+/**
+ * Returns true when an error thrown by the Gitea API represents a
+ * branch-already-exists outcome on a `POST /repos/{owner}/{repo}/branches`
+ * call. Gitea returns 500 with a body that includes both `PushRejected`
+ * and the message `reference already exists`; either marker is treated
+ * as the existing-ref signal so a provider-side message tweak doesn't
+ * silently regress the idempotency path. The branch name is also
+ * required to appear in the body so an unrelated `PushRejected` (e.g.
+ * a hook failure) doesn't get swallowed.
+ */
+function isGiteaBranchAlreadyExistsError(err, branchName) {
+    if (!err || err.status !== 500) return false;
+    const msg = err.message || '';
+    const matchesMarker = msg.includes('reference already exists') || msg.includes('PushRejected');
+    return matchesMarker && msg.includes(branchName);
+}
+
 // ============================================
 // PROVIDER DEFINITION
 // ============================================
@@ -199,10 +216,22 @@ const giteaProvider = {
     },
 
     async createBranch(connection, owner, repo, name, from = 'main') {
-        await this.request(connection, 'POST', `/repos/${owner}/${repo}/branches`, {
-            new_branch_name: name,
-            old_branch_name: from
-        });
+        try {
+            await this.request(connection, 'POST', `/repos/${owner}/${repo}/branches`, {
+                new_branch_name: name,
+                old_branch_name: from
+            });
+        } catch (err) {
+            // Idempotency: Gitea returns 500 with a `PushRejected` /
+            // `reference already exists` body when the target ref is
+            // already present. Treat as success — the branch is in the
+            // wanted end-state. `git:branchCreated` deliberately not
+            // emitted on this path (see base.js createBranch contract).
+            if (isGiteaBranchAlreadyExistsError(err, name)) {
+                return name;
+            }
+            throw err;
+        }
         EventBus.emit('git:branchCreated', { connectionId: connection.id, owner, repo, name });
         return name;
     },

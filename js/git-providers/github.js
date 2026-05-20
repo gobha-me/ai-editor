@@ -42,6 +42,20 @@ function base64ToUtf8(str) {
     }
 }
 
+/**
+ * Returns true when an error thrown by the GitHub API represents a
+ * reference-already-exists outcome on a `POST /repos/{owner}/{repo}/git/refs`
+ * call. GitHub returns 422 with the message `Reference already exists`
+ * (verbatim — case-sensitive in the `parsed.message` field) for this
+ * case. Match on the canonical phrase only; status-only matching would
+ * swallow unrelated 422 validation errors.
+ */
+function isGithubReferenceAlreadyExistsError(err) {
+    if (!err || err.status !== 422) return false;
+    const msg = err.message || '';
+    return msg.includes('Reference already exists');
+}
+
 // ============================================
 // PROVIDER DEFINITION
 // ============================================
@@ -243,10 +257,22 @@ const githubProvider = {
         );
         const sha = branches.commit.sha;
 
-        await this.request(connection, 'POST', `/repos/${owner}/${repo}/git/refs`, {
-            ref: `refs/heads/${name}`,
-            sha
-        });
+        try {
+            await this.request(connection, 'POST', `/repos/${owner}/${repo}/git/refs`, {
+                ref: `refs/heads/${name}`,
+                sha
+            });
+        } catch (err) {
+            // Idempotency: GitHub returns 422 with `Reference already
+            // exists` when the target ref is already present. Treat as
+            // success — the branch is in the wanted end-state.
+            // `git:branchCreated` deliberately not emitted on this
+            // path (see base.js createBranch contract).
+            if (isGithubReferenceAlreadyExistsError(err)) {
+                return name;
+            }
+            throw err;
+        }
         EventBus.emit('git:branchCreated', { connectionId: connection.id, owner, repo, name });
         return name;
     },

@@ -241,6 +241,28 @@ const BASE_GIT_PROVIDER = {
         notSupported(this.name, 'listBranches');
     },
 
+    /**
+     * Create a branch `name` pointing at the tip of `from`.
+     *
+     * **Idempotent on existing-ref.** When the target ref already exists
+     * on the remote, the call MUST resolve successfully and return the
+     * same shape as a fresh creation (the branch name) rather than throw.
+     * Concrete providers translate their own error envelopes for this
+     * case (Gitea: 500 + `PushRejected ... reference already exists`;
+     * GitHub: 422 + `Reference already exists`; GitLab: 400 +
+     * `Branch already exists`) and short-circuit through the idempotent
+     * path. The `git:branchCreated` EventBus channel is emitted only on
+     * the genuine-creation path — the existing-ref path is silent so
+     * downstream listeners don't fire a "created" reaction for a branch
+     * that was already present.
+     *
+     * @param {GitConnection} connection
+     * @param {string} owner
+     * @param {string} repo
+     * @param {string} name - Branch to create
+     * @param {string} [from='main'] - Source ref (branch, tag, sha)
+     * @returns {Promise<string>} The created (or pre-existing) branch name.
+     */
     async createBranch(connection, owner, repo, name, from = 'main') {
         notSupported(this.name, 'createBranch');
     },

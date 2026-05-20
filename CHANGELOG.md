@@ -4,6 +4,38 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.70.0] - 2026-05-20
+
+### Fixed — `createBranch` is idempotent on existing-ref (Gitea 500 / GitHub 422)
+
+A 2.68.0 user trace caught the issue-detail "Start work on issue #221" path throwing a wall of red text after a successful retry: [`js/issue-detail.js:738`](js/issue-detail.js) called [`Git.createBranch`](js/git.js); Gitea returned **500** with `PushRejected ... cannot lock ref 'refs/heads/issue/221-...': reference already exists` because the branch was created on a prior attempt; the 500 propagated to the user as "Failed to start work on issue" with the full git stack — even though the system was already in the wanted end-state (the branch existed, the downstream retrieval-index copy succeeded against the cache). Same idempotency-gap shape as the plugin lifecycle `destroy()` first-time-disable antibody (2.64.0) and the edit-tool stale-cache antibody (PR #355) — the operation has reached the wanted end-state but the call site sees a thrown error.
+
+**Contract-pin on the seam first, then per-provider translation.** [`js/git-providers/base.js`](js/git-providers/base.js) `createBranch` jsdoc now declares the idempotent-on-existing-ref contract explicitly — when the target ref already exists, the call MUST resolve with the branch name rather than throw, and the `git:branchCreated` EventBus channel emits only on the genuine-creation path so downstream listeners don't fire a "created" reaction for a branch that was already present. Two concrete-provider translations follow: [`gitea.js`](js/git-providers/gitea.js) adds a private `isGiteaBranchAlreadyExistsError(err, branchName)` helper that matches `err.status === 500` AND (`'reference already exists'` OR `'PushRejected'`) AND the target branch name appears in the body — the branch-name guard prevents an unrelated `PushRejected` (e.g. a hook failure on a different ref) from being silently swallowed; [`github.js`](js/git-providers/github.js) adds the sibling `isGithubReferenceAlreadyExistsError(err)` matching `err.status === 422` AND `'Reference already exists'` (canonical phrase). Both `createBranch` bodies wrap the POST call in try/catch and short-circuit through the idempotent path when the helper matches; the get-source-SHA leg on GitHub stays outside the try since it's a separate operation.
+
+**Out of scope.** GitLab's `createBranch` ([`gitlab.js:257`](js/git-providers/gitlab.js)) returns 400 with `Branch already exists` for the same case but is not patched in this minor — the base.js contract pin documents the expectation; GitLab idempotency mirrors as a follow-up under a separate ticket so the surgical fix lands without sweeping a third provider that wasn't in the user-trace. Mirrors the conservative 2.50.0 ICD #4 cohort-closure pattern (the `getCommitDiff` promotion + the `resolveReviewThread` queue-then-demote stayed disjoint).
+
+**No issue-detail callsite change.** [`js/issue-detail.js:738`](js/issue-detail.js) `startWorkOnIssue` already runs the post-create branch-list refresh + retrieval-index copy outside the create-then-refresh sequence; with the idempotency fix, the existing-branch-on-remote case follows the same success path the existing-branch-in-`State.branches` case already takes.
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`js/git-providers/base.js`](js/git-providers/base.js) | EDIT — `createBranch` jsdoc rewrite (~244–262): documents the idempotent-on-existing-ref contract + names the three concrete error envelopes (Gitea 500 / GitHub 422 / GitLab 400) + pins the `git:branchCreated` silent-on-existing-ref rule. Body unchanged (`notSupported` default stands). |
+| [`js/git-providers/gitea.js`](js/git-providers/gitea.js) | EDIT — `createBranch` wraps the POST in try/catch + short-circuits through new `isGiteaBranchAlreadyExistsError(err, branchName)` helper (module-private, 8 LOC); helper requires `status === 500` AND (`'reference already exists'` OR `'PushRejected'`) AND `branchName` in body — branch-name guard prevents an unrelated `PushRejected` from getting swallowed. `EventBus.emit('git:branchCreated', …)` runs only on the genuine-creation path (after the await, outside the catch). |
+| [`js/git-providers/github.js`](js/git-providers/github.js) | EDIT — `createBranch` wraps the POST in try/catch + short-circuits through new `isGithubReferenceAlreadyExistsError(err)` helper (module-private, 5 LOC); helper requires `status === 422` AND `'Reference already exists'` in the message. The get-source-SHA GET stays outside the try (separate operation; GET 404 must still propagate). `EventBus.emit('git:branchCreated', …)` runs only on the genuine-creation path. |
+| [`tests/test-create-branch-idempotency.mjs`](tests/test-create-branch-idempotency.mjs) | NEW — **11 subtests**, mirrors the per-test merged-provider-clone stub idiom from [`tests/test-pr-review-provider-shape.mjs`](tests/test-pr-review-provider-shape.mjs). Gitea cohort: happy path emits `git:branchCreated` (1) + idempotent on `PushRejected` + `reference already exists` body (1) + idempotent on `PushRejected`-only marker (1) + non-marker 500 propagates (1) + `PushRejected` for a *different* branch name propagates (1) + non-500 propagates (1). GitHub cohort: happy path emits `git:branchCreated` (1) + idempotent on `Reference already exists` (1) + non-matching 422 propagates (1) + non-422 propagates (1). Base contract: source-scan jsdoc pin asserts the `idempotent` + `already exists` language survives in [`base.js`](js/git-providers/base.js) (1). New `captureBranchCreatedEvents` helper wraps the EventBus subscribe/unsubscribe with try/finally so cross-test pollution is impossible. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.69.0'` → `'2.70.0'`. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — new "Just shipped (2.70.0)" row above the 2.69.0 row; current-released bumped. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — test count bump (3574 → 3585) and Testing & CI line item for the new `test-create-branch-idempotency.mjs` file. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**Verification:**
+
+- `node --test tests/test-create-branch-idempotency.mjs` — 11/11 pass standalone.
+- `node --test tests/test-*.mjs` — full Node suite 3585 pass / 1 skipped / 0 fail (3574 baseline from 2.69.0 + 11 new subtests).
+- Version coherence: [`js/version.js`](js/version.js) at `'2.70.0'` matches CHANGELOG section heading + ROADMAP "Just shipped (2.70.0)" row + ARCHITECTURE test count line.
+- Manual user-trace replay (against the captured Gitea 500 body shape): the existing-ref path returns `name` instead of throwing; `git:branchCreated` does NOT fire on that path (verified via `captureBranchCreatedEvents` assertion); the four negative paths (non-marker 500, mismatched-branch `PushRejected`, non-500 status, non-matching 422) still throw verbatim so the helper can't silently swallow real failures.
+
 ## [2.69.0] - 2026-05-19
 
 ### Fixed — Gitea `compareRefs` cargo-cult `files`-field expectation + silent-empty retrieval delta-index
