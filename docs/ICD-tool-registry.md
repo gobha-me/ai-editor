@@ -116,13 +116,30 @@ Eleven exports across the seam carry these five axes. The asymmetry (5 axes × 1
 
 **Delegation:** Calls `Profiles.filterTools(this.definitions, name)`. The 2.0.0 slice-3 flip renamed this from `getToolsForRole(roleId)`; the legacy-alias deprecation shim **was retired** but the registry's class docstring still claims it "is preserved below" — see §"Code-aware findings".
 
-### `ToolRegistry.filterReadOnly(defs)` ([registry.js:295](../js/tools/registry.js))
+### `ToolRegistry.filterReadOnly(defs)` ([registry.js:437](../js/tools/registry.js))
 
 **Signature:** `(ToolDefinition[]) → ToolDefinition[]`. Sync. Pure.
 
-**Orthogonal to admission.** Plan Mode (github#25) wants a tool subset constrained to non-mutating reads regardless of profile-level admission. Filter rule: `def.readOnly === true` admits; any other value (including `undefined`) denies. **Default-mutating is the safe default** — opt-in, not opt-out. MCP tools land without the flag and therefore can't be invoked while planning.
+**Orthogonal to admission.** Plan Mode (github#25) wants a tool subset constrained to non-mutating reads regardless of profile-level admission. **2.76.0 (gitea#480)** migrated the filter rule: source of truth shifted from the opt-in `def.readOnly === true` flag to `side_effects` classification consulted via `getSideEffectByName` ([`js/intelligence/tools/side-effects.js`](../js/intelligence/tools/side-effects.js)). Admit-when: `side_effects === 'read'` OR name in the session-write allowlist (`scratchpad_write`, `todo_write`, the five preview action tools). **Fail-closed default** — names without a classification (including MCP-bridged tools, future tools missing a catalog entry) drop to `'external'` and are denied. The pre-2.76.0 default-mutating safety property is preserved; the new floor is stricter because it also catches tools that simply forgot to declare `readOnly: true` (the gitea#480 culprit).
 
-**Composition:** Applied on top of role-filtered output, never as a substitute. The caller (`buildPlanModeTools` in `js/llm/api.js`) chains `getToolsForProfile(p)` → `filterReadOnly(defs)` → the OpenAI tool-array.
+**Composition:** Applied on top of role-filtered output, never as a substitute. The caller (`applyPlanModeFilter` in [`js/llm/api.js`](../js/llm/api.js)) chains `getToolsForProfile(p)` → `filterReadOnly(defs)` → the OpenAI tool-array.
+
+### `ToolRegistry.checkPlanModeAccess(name)` ([registry.js:232](../js/tools/registry.js))
+
+**Signature:** `(string) → { allowed: boolean, reason?: string, sideEffect?: string }`. Sync. Pure (reads global `getPlanMode()` state).
+
+**Authoritative dispatch-side gate** (2.76.0 / gitea#480). Pre-2.76.0 the only plan-mode filter was the LLM-visible tool list; calls reaching dispatch via cached tool messages, sub-agent loops, plugin shims, or stale assistant-turn context had no second check. The new gate runs at the top of `executeWithProfile` **before** the role check — short-circuits with a rejection envelope whose `error` string names the tool's `side_effects` class and points at `submit_plan_for_approval` (same envelope shape as `checkRoleAccessForProfile` rejection so the chat-loop discriminator at `handlers.js` works identically).
+
+**Logic:**
+1. `getPlanMode()` falsy → return `{ allowed: true }` unconditionally.
+2. Name in `PLAN_MODE_SESSION_WRITE_ALLOWLIST` → return `{ allowed: true }`. Allowlist covers session-local writes that should stay admitted while planning (`scratchpad_write`, `todo_write`, the five preview action tools — all session-scoped, no repo/file/remote effect).
+3. `getSideEffectByName(name) === 'read'` → return `{ allowed: true }`.
+4. Else return `{ allowed: false, sideEffect, reason }`.
+
+**Invariants:**
+- When plan mode is off, this function is byte-equivalent to `() → { allowed: true }` — no behavior change to existing call paths.
+- Fail-closed default applies to unknown names (MCP-bridged tools, future tools without classifications). Conservative-correct: blocking is recoverable, allowing isn't.
+- Composes with the list-side filter via shared allowlist + `getSideEffectByName` — list-side and dispatch-side cannot disagree.
 
 ### `ToolRegistry.getStats()` ([registry.js:311](../js/tools/registry.js))
 

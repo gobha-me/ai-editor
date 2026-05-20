@@ -40,6 +40,34 @@ import { Profiles } from '../profiles/registry.js';
 import { PLUGIN_TOOL_NAMES } from '../profiles/resolve.js';
 import { ConversationManager } from '../chat/conversations.js';
 import { scanForInvisible } from '../security/untrusted-wrap.js';
+import { getPlanMode } from '../chat/state.js';
+import { getSideEffectByName } from '../intelligence/tools/side-effects.js';
+
+/**
+ * 2.76.0 (gitea#480) — plan-mode allowlist for tools whose `side_effects`
+ * classification is `'write'` but whose effect stays inside the current
+ * chat session (no file, repo, or remote mutation). Without this carve-out,
+ * a strict `side_effects === 'read'` rule would block the planning LLM
+ * from using its own working-memory surface. Kept deliberately tight —
+ * `scratchpad_clear` is intentionally excluded (destructive bulk-drop),
+ * mirroring the pre-fix posture pinned by `tests/test-plan-mode.mjs`.
+ *
+ * @type {Set<string>}
+ */
+const PLAN_MODE_SESSION_WRITE_ALLOWLIST = new Set([
+    'scratchpad_write',
+    'todo_write',
+    // Preview action tools — mutate sandboxed iframe DOM / start-stop
+    // the preview server; no repo / file / remote effect. Admitted in
+    // plan mode to preserve pre-2.76.0 behavior (these were registered
+    // with the legacy `readOnly: true` flag). See the matching
+    // classification block in `js/intelligence/tools/side-effects.js`.
+    'preview_click',
+    'preview_fill',
+    'preview_resize',
+    'preview_start',
+    'preview_stop',
+]);
 
 // 10 MB soft cap — any larger payload (pathological MCP return, oversized
 // read_file) skips the invisible-Unicode scan to avoid blocking the main
@@ -212,6 +240,53 @@ export const ToolRegistry = {
     },
 
     /**
+     * Check whether plan mode admits a given tool.
+     *
+     * **2.76.0 (gitea#480) — authoritative dispatch-side gate.** Pre-2.76.0
+     * the only plan-mode filter was the LLM-visible tool list (`applyPlanModeFilter`
+     * in `js/llm/api.js`), keyed on the opt-in `readOnly: true` flag. Two
+     * write tools (`write_file`, `create_pull_request`) shipped without
+     * the flag *and* the dispatch path had no second check, so a model
+     * call that landed via cache / sub-agent / stale tool-message would
+     * execute without gating. Real incident: PR #259 created on
+     * `xcaliber/HTML-Games` while plan mode was active.
+     *
+     * The fix shifts the source of truth to `side_effects` (already
+     * classified per tool in `js/intelligence/tools/side-effects.js`).
+     * Admit-when-planMode: `side_effects === 'read'` OR name in the
+     * session-write allowlist (`scratchpad_write`, `todo_write`).
+     * Fail-closed default catches future tools without a classification
+     * (including MCP-bridged tools, which surface as `'external'`).
+     *
+     * When plan mode is OFF this method returns `{ allowed: true }`
+     * unconditionally — the role/profile gate downstream is the only
+     * filter that applies.
+     *
+     * @param {string} name Tool name
+     * @returns {{ allowed: boolean, reason?: string, sideEffect?: string }}
+     */
+    checkPlanModeAccess(name) {
+        if (!getPlanMode()) {
+            return { allowed: true };
+        }
+        if (PLAN_MODE_SESSION_WRITE_ALLOWLIST.has(name)) {
+            return { allowed: true };
+        }
+        const sideEffect = getSideEffectByName(name);
+        if (sideEffect === 'read') {
+            return { allowed: true };
+        }
+        return {
+            allowed: false,
+            sideEffect,
+            reason: `Tool '${name}' is blocked in plan mode (side_effects='${sideEffect}'). ` +
+                    `Plan mode admits read-only tools plus a small session-write allowlist ` +
+                    `(scratchpad_write, todo_write); submit your plan via submit_plan_for_approval ` +
+                    `to leave plan mode and run mutating tools.`
+        };
+    },
+
+    /**
      * Execute a registered tool by name under an explicit profile.
      *
      * **2.49.0.0 — slice 1 of github#24 Phase 1.** Additive entry-point
@@ -233,6 +308,21 @@ export const ToolRegistry = {
      * @returns {Promise<Object>}
      */
     async executeWithProfile(name, args, profileName) {
+        // === PLAN MODE ENFORCEMENT (dispatch-side gate) ===
+        // 2.76.0 (gitea#480) — runs before profile/role check so a
+        // blocked-in-plan-mode tool returns the plan-mode reason rather
+        // than a misleading profile-violation reason. The list-side
+        // `applyPlanModeFilter` in `js/llm/api.js` is the first gate
+        // (cheaper — never sends the tool to the model); this is the
+        // authoritative second gate that catches calls landing via
+        // cached tool messages, sub-agent paths, or MCP shims that
+        // bypass the list filter.
+        const planAccess = this.checkPlanModeAccess(name);
+        if (!planAccess.allowed) {
+            console.warn(`[ToolRegistry] 🚫 Plan mode block: ${name} (side_effects='${planAccess.sideEffect}')`);
+            return { error: planAccess.reason };
+        }
+
         // === ROLE ENFORCEMENT (server-side gate) ===
         const access = this.checkRoleAccessForProfile(name, profileName);
         if (!access.allowed) {
@@ -337,25 +427,42 @@ export const ToolRegistry = {
     },
 
     /**
-     * Filter a tool-definition list down to read-only entries. Used by
-     * Plan Mode (github#25) to constrain what the LLM can call while a
-     * plan is being assembled. The filter is applied on top of role
-     * filtering / Composer admission — i.e. callers pass the list they
-     * would otherwise send to the LLM, and this drops any tool whose
-     * definition lacks an explicit `readOnly: true` flag.
+     * Filter a tool-definition list down to entries admitted by plan mode.
+     * Used by `applyPlanModeFilter` in `js/llm/api.js` to constrain the
+     * LLM's tool catalog while a plan is being assembled.
      *
-     * Default-mutating is the safe default: a tool author who forgets
-     * to declare read-only-ness loses plan-mode admission, not the
-     * other way around (opt-in, not opt-out). MCP tools land without
-     * this flag and therefore can't be invoked while planning, which
-     * is the conservative choice — most MCP servers expose write
-     * actions, and the registry can't introspect their semantics.
+     * **2.76.0 (gitea#480) — migrated from `readOnly === true` to
+     * `side_effects`.** Pre-2.76.0 the filter consulted the opt-in
+     * `readOnly: true` flag on each definition; that flag was missed on
+     * `write_file` + `create_pull_request` and the dispatch path had no
+     * second check, so the gate could be bypassed. The source of truth
+     * is now `js/intelligence/tools/side-effects.js`, consulted via
+     * `checkPlanModeAccess(name)`. The `readOnly` field on definitions
+     * stays as a documentation axis but no longer gates behavior.
+     *
+     * Fail-closed semantics: tools without a `side_effects` entry
+     * default to `'external'` and are dropped (including MCP-bridged
+     * tools, which can't be classified without server-specific
+     * introspection — the conservative correct outcome).
+     *
+     * Name preserved for compatibility — `js/llm/api.js` and any other
+     * consumer of the public surface (per `docs/ICD-tool-registry.md`)
+     * continue to call `filterReadOnly`. The function is no longer
+     * planMode-state-sensitive: it always returns the plan-mode-admitted
+     * subset regardless of whether plan mode is active. Callers gate on
+     * `getPlanMode()` themselves before deciding whether to apply the
+     * filter at all.
      *
      * @param {ToolDefinition[]} defs
      * @returns {ToolDefinition[]}
      */
     filterReadOnly(defs) {
-        return defs.filter(tool => tool && tool.readOnly === true);
+        return defs.filter(tool => {
+            const name = tool?.function?.name;
+            if (typeof name !== 'string') return false;
+            if (PLAN_MODE_SESSION_WRITE_ALLOWLIST.has(name)) return true;
+            return getSideEffectByName(name) === 'read';
+        });
     },
     
     /**

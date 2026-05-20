@@ -23,6 +23,7 @@
 
 import { ToolRegistry } from '../../tools/registry.js';
 import { computeToolID } from './tool-id.js';
+import { SIDE_EFFECTS_BY_NAME, getSideEffectByName } from './side-effects.js';
 
 /**
  * @typedef {import('./contracts.js').ToolDef} ToolDef
@@ -145,86 +146,12 @@ const CATEGORY_BY_NAME = {
     'run_code': 'eval',
 };
 
-/**
- * Side-effect classification by tool name. Read tools observe; write
- * tools mutate local state; external tools touch a remote system.
- * Irreversible is reserved for tools we want to flag at consent time
- * (delete_file is technically recoverable via Git, so it is `"write"`).
- *
- * Tools not listed default to `"read"` — the conservative default is
- * the most-restrictive one for *consent*, but the least-restrictive for
- * *gating*; here the lookup result feeds the model's awareness of what
- * a tool will do, so defaulting to `"read"` would be misleading. We
- * default to `"external"` instead so unknown tools surface as
- * "needs caution" until classified.
- *
- * @type {Object.<string, SideEffectClass>}
- */
-const SIDE_EFFECTS_BY_NAME = {
-    'read_file': 'read',
-    'read_lines': 'read',
-    'read_current_file': 'read',
-    'read_function': 'read',
-    'open_file': 'read',
-    'list_open_tabs': 'read',
-    'scan_file': 'read',
-    'find_references': 'read',
-    'search_in_files': 'read',
-    'list_dirty_files': 'read',
-    'list_projects': 'read',
-    'get_project_tree': 'read',
-    'peek_project_tree': 'read',
-    'peek_project_file': 'read',
-    'peek_read_lines': 'read',
-    'list_issues': 'read',
-    'read_issue': 'read',
-    'list_pull_requests': 'read',
-    'read_pull_request': 'read',
-    'get_ci_status': 'read',
-    'get_ci_logs': 'read',
-    'find_relevant_files': 'read',
-    'get_embeddings_status': 'read',
-    'memory_recall': 'read',
-    'scratchpad_read': 'read',
-    'read_plugin_source': 'read',
-    'list_user_plugins': 'read',
-    'read_docs': 'read',
-    'list_tool_categories': 'read',
-    'list_tools_by_category': 'read',
-    'find_tool': 'read',
-    'ask_user': 'read',
-    'submit_plan_for_approval': 'read',
-    'read_approved_plan': 'read',
-
-    'edit_file': 'write',
-    'replace_lines': 'write',
-    'insert_lines': 'write',
-    'delete_lines': 'write',
-    'replace_selection': 'write',
-    'insert_at_cursor': 'write',
-    'goto_line': 'write',
-    'select_range': 'write',
-    'memory_remember': 'write',
-    'memory_revise': 'write',
-    'scratchpad_write': 'write',
-    'scratchpad_clear': 'write',
-    'write_plugin_source': 'write',
-    'index_project': 'write',
-    'set_active_project': 'write',
-
-    'create_file': 'external',
-    'delete_file': 'external',
-    'write_file': 'external',
-    'commit_files': 'external',
-    'create_pull_request': 'external',
-    'add_pr_review': 'external',
-    'merge_pull_request': 'external',
-    'create_issue': 'external',
-    'update_issue': 'external',
-    'add_issue_comment': 'external',
-    'run_plugin': 'external',
-    'run_code': 'external',
-};
+// 2.76.0 (gitea#480) — `SIDE_EFFECTS_BY_NAME` + lookup lifted to
+// `./side-effects.js` so the tool-registry dispatch gate can read the
+// same classification without forming an import cycle (catalog.js itself
+// depends on `ToolRegistry.getDefinitions`). `getSideEffectByName` below
+// is the single lookup; the table itself is re-imported above for
+// test-seam access only.
 
 /**
  * One-line descriptions for each category, used by the `list_tool_categories`
@@ -289,20 +216,6 @@ function deriveCategory(name) {
 }
 
 /**
- * Derive a `SideEffectClass` for a tool whose name is not in
- * `SIDE_EFFECTS_BY_NAME`. Defaults to `"external"` — the most
- * informative-when-wrong choice, since "needs caution" beats
- * "looks safe" for unclassified tools.
- *
- * @param {string} name
- * @returns {SideEffectClass}
- */
-function deriveSideEffects(name) {
-    if (name in SIDE_EFFECTS_BY_NAME) return SIDE_EFFECTS_BY_NAME[name];
-    return 'external';
-}
-
-/**
  * Build a `ToolDef` from one entry in `ToolRegistry.definitions`.
  * Pure derivation — no IO, no mutation of the source registry.
  *
@@ -340,7 +253,7 @@ function defToToolDef(def) {
     const metadata = {
         version: TOOL_VERSION,
         authorization,
-        side_effects: deriveSideEffects(name),
+        side_effects: getSideEffectByName(name),
         cost_estimate,
         short_cost,
         examples: null,
@@ -526,7 +439,11 @@ export const _testing = {
     defToToolDef,
     defToToolSummary,
     deriveCategory,
-    deriveSideEffects,
+    // 2.76.0 (gitea#480) — `deriveSideEffects` lifted to `./side-effects.js`
+    // and renamed `getSideEffectByName`. Re-exposed here under the legacy
+    // name so existing unit tests don't have to chase the rename.
+    deriveSideEffects: getSideEffectByName,
+    SIDE_EFFECTS_BY_NAME,
     approxTokens,
     CATEGORY_DESCRIPTIONS,
     PROFILE_NAMESPACE,

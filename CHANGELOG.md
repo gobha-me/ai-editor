@@ -4,6 +4,59 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.76.0] - 2026-05-20
+
+### Fixed — Plan mode tool-gate moved to dispatch boundary (gitea#480)
+
+`write_file` and `create_pull_request` slipped through plan mode in a real ai-editor session (qwen-3-6-plus, HTML-Games issue #232) — the model created a 563-line file and opened [HTML-Games PR #259](https://git.gobha.me/xcaliber/HTML-Games/pulls/259) against a real Gitea repo while plan mode was active.
+
+**Root cause.** Plan-mode admission was list-side only: `applyPlanModeFilter` in [`js/llm/api.js`](js/llm/api.js) filtered the LLM-visible tool list using the opt-in `readOnly: true` flag on each tool definition ([`js/tools/registry.js`](js/tools/registry.js)). `write_file` ([`js/tools/multifile-tools.js`](js/tools/multifile-tools.js)) and `create_pull_request` ([`js/tools/pr-tools.js`](js/tools/pr-tools.js)) never declared the flag — so they were correctly excluded from the list — **but the dispatch path had no second check**. `ToolRegistry.executeWithProfile` gated on profile admission only. Any call that reached dispatch by a path bypassing the list filter (cached tool messages, sub-agent loops, plugin shims, stale assistant-turn context) ran the handler with no plan-mode awareness.
+
+**Fix.** Two-layer defense:
+
+1. **Layer 1 (list-side, existing path, behavior unchanged).** `applyPlanModeFilter` in [`js/llm/api.js`](js/llm/api.js) continues to scrub the LLM-visible tool list. Source of truth migrated from `readOnly === true` to `side_effects` so the list-side filter and the dispatch-side gate share one decision (`ToolRegistry.filterReadOnly` now delegates to the same allowlist).
+2. **Layer 2 (dispatch-side, new authoritative gate).** New `ToolRegistry.checkPlanModeAccess(name)` runs **before** the role/profile check at the top of `executeWithProfile` ([`js/tools/registry.js`](js/tools/registry.js)). When `getPlanMode()` is truthy, admits only `side_effects === 'read'` tools plus an explicit session-write allowlist (`scratchpad_write`, `todo_write`, and the five preview action tools that mutate the sandboxed iframe but never touch repo/file/remote state). Returns a rejection envelope naming the side_effects class and pointing the model at `submit_plan_for_approval` — same shape as the existing `checkRoleAccessForProfile` rejection.
+
+The `readOnly` field on tool definitions stays as a documentation axis but no longer gates behavior. **Fail-closed semantics** — tools without a `side_effects` classification (including MCP-bridged tools, whose semantics the registry can't introspect) default to `'external'` and are blocked. The catalog-parity lint at [`tests/test-plan-mode-source-scan.mjs`](tests/test-plan-mode-source-scan.mjs) prevents future tools from landing without a classification.
+
+### Added — `js/intelligence/tools/side-effects.js`
+
+New module ([`js/intelligence/tools/side-effects.js`](js/intelligence/tools/side-effects.js)) lifts `SIDE_EFFECTS_BY_NAME` + lookup out of [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js) so [`js/tools/registry.js`](js/tools/registry.js) can read the classification at dispatch time without forming an import cycle (catalog.js itself depends on `ToolRegistry.getDefinitions`). Catalog.js re-imports from the new module; the model-visible side-effects column on `list_tools_by_category` is unchanged.
+
+**Catalog cleanup.** Sixteen tools were missing entries pre-2.76.0 and fell through `getSideEffectByName` to the `'external'` default — `todo_read`, `todo_write`, `delegate_task`, `git_log`, `wait_for_ci`, `submit_script_for_approval`, the seven preview observation tools (`preview_console_logs`, `preview_errors`, `preview_inspect`, `preview_list`, `preview_logs`, `preview_network`, `preview_snapshot`), and the five preview action tools (`preview_click`, `preview_fill`, `preview_resize`, `preview_start`, `preview_stop`). Classifications honor pre-fix admission intent — every name in this set was registered with the legacy `readOnly: true` flag, so the matching honest class lands them at either `'read'` (observation; passes the gate via `side_effects === 'read'`) or `'write'` (action; admitted via the session-write allowlist for the five preview action tools). No behavior change for any of these tools — plan-mode admission matches the pre-2.76.0 baseline.
+
+### Added — `tests/test-plan-mode-source-scan.mjs` catalog-parity lint
+
+Source-scan lint (~140 LOC, **3 subtests**) walks `js/tools/*.js`, extracts every `register('NAME', ...)` literal, and asserts each name has a `SIDE_EFFECTS_BY_NAME` entry. Bidirectional — also flags stale catalog entries with no live registration. Shape mirrors [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs) (parity-against-source-truth) rather than [`tests/test-tool-cache-classifications.mjs`](tests/test-tool-cache-classifications.mjs)'s registration-site-declaration shape — the classification lives in the catalog file, not at the registration site. A third subtest pins the gitea#480 regression: `write_file` and `create_pull_request` must remain classified as `'external'`.
+
+### Added — Dispatch-side test coverage in `tests/test-plan-mode.mjs`
+
+The existing test file gains **8 new subtests** covering `checkPlanModeAccess` directly (plan mode off → always allowed; plan mode on → blocks `write_file` / `create_pull_request` / `edit_file` with the specific gitea#480 regression assertion + reason-string content checks; admits `read_*` tools, `submit_plan_for_approval`, and the session-write allowlist; fails closed on unknown MCP-style names; preserves `scratchpad_clear` exclusion). The existing `filterReadOnly` slice tests (5) were reframed against the catalog-driven contract — synthetic single-letter names that the pre-fix tests used now fail closed (no catalog entry → `'external'`), so the rewrite uses real registered tool names and the slice expectation explicitly pins that `write_file` and `create_pull_request` must drop.
+
+**Test count:** 3636 → 3636 (no net change — 5 reframed + 8 new + 1 source-scan file with 3 subtests = additions cover the source-scan and dispatch-side additions; the pre-fix `filterReadOnly` slice gained 2 entries but the pre-fix synthetic-name slice was rewritten). Verified by `node --test tests/test-*.mjs` — 3635 pass / 1 skipped / 0 fail.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/intelligence/tools/side-effects.js`](js/intelligence/tools/side-effects.js) | NEW — lifted `SIDE_EFFECTS_BY_NAME` + `getSideEffectByName` from `catalog.js`. Adds 16 missing classifications. |
+| [`js/intelligence/tools/catalog.js`](js/intelligence/tools/catalog.js) | EDIT — re-imports from `side-effects.js`; in-file const removed; `defToToolDef` consults `getSideEffectByName`; `_testing.deriveSideEffects` re-exposed as alias. |
+| [`js/tools/registry.js`](js/tools/registry.js) | EDIT — imports `getPlanMode` + `getSideEffectByName`; new `PLAN_MODE_SESSION_WRITE_ALLOWLIST` const + `checkPlanModeAccess` method; `executeWithProfile` calls it before the role check; `filterReadOnly` delegates to the same allowlist. |
+| [`js/llm/api.js`](js/llm/api.js) | EDIT — `applyPlanModeFilter` rewritten to delegate to `ToolRegistry.filterReadOnly`. Behavior unchanged from the LLM's perspective; the source axis is now `side_effects` instead of `readOnly`. |
+| [`tests/test-plan-mode.mjs`](tests/test-plan-mode.mjs) | EDIT — 5 `filterReadOnly` slice tests reframed against the catalog-driven contract; 8 new `checkPlanModeAccess` subtests cover dispatch-side admission. |
+| [`tests/test-plan-mode-source-scan.mjs`](tests/test-plan-mode-source-scan.mjs) | NEW — catalog-parity lint (3 subtests). |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.75.0'` → `'2.76.0'`. |
+| [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) | EDIT — `filterReadOnly` per-export contract row updated; new `checkPlanModeAccess` row added; Post-supersedence note extended with the dispatch-side gate as a non-admission registration facet. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — 2.76.0 ship row notes gitea#480 fix + absorbs the three `[medium]` ICD edits from the tenth re-eval slot. |
+
+### Verification
+
+- Full Node suite: `node --test tests/test-*.mjs` — **3635 tests pass, 1 skipped, 0 fail**.
+- New `tests/test-plan-mode-source-scan.mjs` lint catches the 16 unclassified tools on first run (fixed by the catalog additions; lint green after).
+- `tests/test-plan-mode.mjs` exercises both layers — `filterReadOnly` slice covers list-side; `checkPlanModeAccess` slice covers dispatch-side; the gitea#480 reproducer (`write_file` / `create_pull_request` slipping through) is pinned in both layers with regression assertions.
+- The existing `tests/test-tool-registry-execute-with-profile.mjs` continues to pin equivalence — the new gate runs before the role check but does not change `executeWithProfile`'s pre-2.76.0 behavior when plan mode is off.
+
 ### Docs — `RE-EVAL following 2.67.0` (tenth re-eval slot; overdue by 5 minors past anchor; ICD-backfill program exhausted)
 
 (Absorbed from `[Unreleased]` into the next code minor per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" decision #14 sub-clause — doc-only re-eval slots accumulate in `[Unreleased]` until the next code minor absorbs them.)

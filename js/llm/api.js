@@ -1033,24 +1033,22 @@ export const LLMTools = {
         }
 
         // Plan Mode (github#25) — applied at the end of whichever branch
-        // assembles the result. The filter is name-based because the
-        // Composer's renderForLLM output is OpenAI-shape and strips the
-        // registry's `readOnly` flag; we look up read-only-ness in the
-        // registry by tool name to stay consistent across both paths.
+        // assembles the result.
+        //
+        // **2.76.0 (gitea#480)** — source of truth migrated from the
+        // opt-in `readOnly: true` flag to `side_effects` classification
+        // (via `ToolRegistry.filterReadOnly`, which now delegates to
+        // `js/intelligence/tools/side-effects.js`). The list-side filter
+        // here is the first gate; the authoritative second gate at
+        // `ToolRegistry.executeWithProfile` catches any call that lands
+        // via cached tool messages or sub-agent paths that bypass list
+        // filtering. Name `applyPlanModeFilter` and shape preserved so
+        // the downstream filter chain composes unchanged.
         const planMode = getPlanMode();
-        const readOnlyNames = planMode
-            ? new Set(defs.filter(d => d.readOnly === true).map(d => d.function?.name).filter(Boolean))
-            : null;
         const applyPlanModeFilter = (toolList) => {
-            if (!planMode || !readOnlyNames) return toolList;
-            const filtered = toolList.filter(t => {
-                // Legacy path: raw registry def with `function.name`. Composer
-                // path: OpenAI shape `{type, function: {name, ...}}`. Both
-                // expose the name in the same place.
-                const name = t?.function?.name;
-                return typeof name === 'string' && readOnlyNames.has(name);
-            });
-            console.log('[LLMTools] Plan Mode active — filtered to', filtered.length, '/', toolList.length, 'read-only tools');
+            if (!planMode) return toolList;
+            const filtered = ToolRegistry.filterReadOnly(toolList);
+            console.log('[LLMTools] Plan Mode active — filtered to', filtered.length, '/', toolList.length, 'plan-mode-admitted tools');
             return filtered;
         };
 

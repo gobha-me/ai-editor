@@ -172,30 +172,66 @@ test('cancelToolLoop releases pending plan approval', async () => {
 });
 
 // ============================================
-// Read-only filter
+// Plan-mode-admitted filter (filterReadOnly)
 // ============================================
+//
+// **2.76.0 (gitea#480)** — `filterReadOnly` migrated from the opt-in
+// `readOnly: true` flag to `side_effects` classification (sourced from
+// `js/intelligence/tools/side-effects.js`). Test names retained — the
+// public surface name is unchanged — but the assertions exercise the
+// new catalog-driven contract. Synthetic single-letter tool names that
+// the pre-2.76.0 tests used now fail-closed (no catalog entry → defaults
+// to `'external'`), so this rewrite uses real registered tool names.
 
-test('ToolRegistry.filterReadOnly drops entries lacking readOnly: true', () => {
+test('ToolRegistry.filterReadOnly drops tools whose side_effects ≠ read (and not session-write allowlisted)', () => {
     const defs = [
-        { function: { name: 'a' }, readOnly: true },
-        { function: { name: 'b' }, readOnly: false },
-        { function: { name: 'c' } }, // unset
-        { function: { name: 'd' }, readOnly: true },
+        { function: { name: 'read_file' } },          // 'read' — admit
+        { function: { name: 'edit_file' } },          // 'write' — drop
+        { function: { name: 'create_pull_request' } },// 'external' — drop
+        { function: { name: 'list_projects' } },      // 'read' — admit
     ];
     const out = ToolRegistry.filterReadOnly(defs);
-    assert.deepEqual(out.map(d => d.function.name), ['a', 'd']);
+    assert.deepEqual(out.map(d => d.function.name), ['read_file', 'list_projects']);
 });
 
 test('ToolRegistry.filterReadOnly preserves order', () => {
     const defs = [
-        { function: { name: 'r1' }, readOnly: true },
-        { function: { name: 'w1' } },
-        { function: { name: 'r2' }, readOnly: true },
-        { function: { name: 'w2' } },
-        { function: { name: 'r3' }, readOnly: true },
+        { function: { name: 'read_file' } },          // admit
+        { function: { name: 'edit_file' } },          // drop
+        { function: { name: 'read_lines' } },         // admit
+        { function: { name: 'write_file' } },         // drop
+        { function: { name: 'get_project_tree' } },   // admit
     ];
     const out = ToolRegistry.filterReadOnly(defs);
-    assert.deepEqual(out.map(d => d.function.name), ['r1', 'r2', 'r3']);
+    assert.deepEqual(out.map(d => d.function.name), ['read_file', 'read_lines', 'get_project_tree']);
+});
+
+test('ToolRegistry.filterReadOnly fails closed: unknown tool names are dropped', () => {
+    // A name with no side_effects classification (incl. MCP-bridged tools
+    // and any future tool registered without a catalog entry) is treated
+    // as 'external' → not admitted. This is the regression test for the
+    // gitea#480 root cause: the pre-2.76.0 filter let unclassified tools
+    // slip through; the catalog-driven filter blocks them.
+    const defs = [
+        { function: { name: 'read_file' } },              // admit
+        { function: { name: 'mcp__unknown_server__do' } },// unknown → drop
+        { function: { name: 'totally_made_up_tool' } },   // unknown → drop
+        { function: { name: 'scratchpad_write' } },       // allowlisted → admit
+    ];
+    const out = ToolRegistry.filterReadOnly(defs);
+    assert.deepEqual(out.map(d => d.function.name), ['read_file', 'scratchpad_write']);
+});
+
+test('ToolRegistry.filterReadOnly tolerates malformed entries', () => {
+    // Defensive: nulls / missing function shape are dropped without throwing.
+    const defs = [
+        null,
+        { /* no function */ },
+        { function: {} /* no name */ },
+        { function: { name: 'read_file' } },
+    ];
+    const out = ToolRegistry.filterReadOnly(defs);
+    assert.deepEqual(out.map(d => d.function.name), ['read_file']);
 });
 
 // ============================================
@@ -334,22 +370,35 @@ test('registerPlanTools registers read_approved_plan as readOnly (gitea#424 — 
     assert.deepEqual(entry.definition.function.parameters.required, []);
 });
 
-test('Plan Mode filter (filterReadOnly) admits scratchpad_write + todo_write but drops memory_write', () => {
-    // End-to-end check on the same name-based filter that LLMTools.getToolsForRole
-    // uses. We build a representative slice of the OpenAI-shape tool array that
-    // would reach the LLM, mark each entry with the registry's readOnly bit,
-    // and assert the post-filter set.
+test('Plan Mode filter (filterReadOnly) admits scratchpad_write + todo_write but drops scratchpad_clear / edit_file / write_file', () => {
+    // End-to-end check on the same filter that LLMTools.getToolsForRole
+    // uses to build the LLM's tool catalog under plan mode. As of 2.76.0
+    // (gitea#480) the filter no longer consults the per-tool `readOnly`
+    // flag; it consults `side_effects` from the catalog plus the
+    // session-write allowlist in `js/tools/registry.js`. The expected
+    // admission set is unchanged from the pre-2.76.0 baseline — only the
+    // source of truth moved — so we keep the same expected output and
+    // strip the now-irrelevant `readOnly: true` markers from the slice.
+    //
+    // The slice also includes `write_file` + `create_pull_request` to pin
+    // the gitea#480 regression: pre-fix they passed the list filter (they
+    // never declared `readOnly: true`, so the old `filter(d => d.readOnly === true)`
+    // semantic correctly dropped them at the list layer — the bug was on
+    // the *dispatch* side); under the new catalog-driven semantic they
+    // still drop here, which is the conservative-correct outcome.
     const slice = [
-        { type: 'function', function: { name: 'scratchpad_read'  }, readOnly: true },
-        { type: 'function', function: { name: 'scratchpad_write' }, readOnly: true },  // 1.11.1 admit
-        { type: 'function', function: { name: 'scratchpad_clear' } },                  // intentionally dropped
-        { type: 'function', function: { name: 'todo_read'        }, readOnly: true },
-        { type: 'function', function: { name: 'todo_write'       }, readOnly: true },  // 1.11.1 admit
-        { type: 'function', function: { name: 'memory_recall'    }, readOnly: true },
-        { type: 'function', function: { name: 'memory_write'     } },                  // stays blocked
-        { type: 'function', function: { name: 'edit_file'        } },                  // stays blocked
-        { type: 'function', function: { name: 'submit_plan_for_approval' }, readOnly: true },  // github#25
-        { type: 'function', function: { name: 'read_approved_plan' }, readOnly: true },        // gitea#424 (2.52.0)
+        { type: 'function', function: { name: 'scratchpad_read'  } },                  // 'read' → admit
+        { type: 'function', function: { name: 'scratchpad_write' } },                  // allowlist → admit
+        { type: 'function', function: { name: 'scratchpad_clear' } },                  // 'write' not allowlisted → drop
+        { type: 'function', function: { name: 'todo_read'        } },                  // 'read' (added 2.76.0) → admit
+        { type: 'function', function: { name: 'todo_write'       } },                  // allowlist → admit
+        { type: 'function', function: { name: 'memory_recall'    } },                  // 'read' → admit
+        { type: 'function', function: { name: 'memory_remember'  } },                  // 'write' not allowlisted → drop
+        { type: 'function', function: { name: 'edit_file'        } },                  // 'write' not allowlisted → drop
+        { type: 'function', function: { name: 'write_file'       } },                  // 'external' (gitea#480) → drop
+        { type: 'function', function: { name: 'create_pull_request' } },               // 'external' (gitea#480) → drop
+        { type: 'function', function: { name: 'submit_plan_for_approval' } },          // 'read' → admit
+        { type: 'function', function: { name: 'read_approved_plan' } },                // 'read' → admit
     ];
     const out = ToolRegistry.filterReadOnly(slice).map(d => d.function.name);
     assert.deepEqual(out.sort(), [
@@ -362,6 +411,139 @@ test('Plan Mode filter (filterReadOnly) admits scratchpad_write + todo_write but
         'todo_write',
     ].sort());
     assert.ok(!out.includes('scratchpad_clear'));
-    assert.ok(!out.includes('memory_write'));
+    assert.ok(!out.includes('memory_remember'));
     assert.ok(!out.includes('edit_file'));
+    assert.ok(!out.includes('write_file'), 'write_file must NOT slip through plan mode (gitea#480)');
+    assert.ok(!out.includes('create_pull_request'), 'create_pull_request must NOT slip through plan mode (gitea#480)');
+});
+
+// ============================================
+// Dispatch-side plan-mode gate (gitea#480 — 2.76.0)
+// ============================================
+//
+// The list-side filter (filterReadOnly above) is the first gate. The
+// authoritative second gate is in `ToolRegistry.executeWithProfile`,
+// which calls `checkPlanModeAccess(name)` before dispatching to the
+// handler. This catches calls that reach dispatch by paths bypassing
+// the list filter (cached tool messages, sub-agent paths, MCP shims).
+//
+// We exercise `checkPlanModeAccess` directly rather than going through
+// `execute` to keep the unit pure (no real handler registration, no
+// State/IDB side effects). The `executeWithProfile` integration is
+// covered by `tests/test-tool-registry-execute-with-profile.mjs`.
+
+test('checkPlanModeAccess: plan mode OFF → always allowed', () => {
+    reset();
+    assert.equal(getPlanMode(), false);
+    for (const name of ['read_file', 'write_file', 'create_pull_request', 'mcp__x__do']) {
+        const r = ToolRegistry.checkPlanModeAccess(name);
+        assert.equal(r.allowed, true, `${name} should be allowed when plan mode is off`);
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → blocks write_file (gitea#480 regression)', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('write_file');
+        assert.equal(r.allowed, false);
+        assert.equal(r.sideEffect, 'external');
+        assert.match(r.reason, /plan mode/i);
+        assert.match(r.reason, /write_file/);
+        assert.match(r.reason, /submit_plan_for_approval/);
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → blocks create_pull_request (gitea#480 regression)', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('create_pull_request');
+        assert.equal(r.allowed, false);
+        assert.equal(r.sideEffect, 'external');
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → blocks edit_file (write classification)', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('edit_file');
+        assert.equal(r.allowed, false);
+        assert.equal(r.sideEffect, 'write');
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → admits read tools', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        for (const name of ['read_file', 'read_lines', 'get_project_tree', 'list_projects', 'read_docs', 'list_user_plugins']) {
+            const r = ToolRegistry.checkPlanModeAccess(name);
+            assert.equal(r.allowed, true, `${name} should be admitted in plan mode (side_effects=read)`);
+        }
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → admits session-write allowlist (scratchpad_write, todo_write)', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        for (const name of ['scratchpad_write', 'todo_write']) {
+            const r = ToolRegistry.checkPlanModeAccess(name);
+            assert.equal(r.allowed, true, `${name} should be admitted in plan mode (session-write allowlist)`);
+        }
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → admits submit_plan_for_approval (workflow entry)', () => {
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('submit_plan_for_approval');
+        assert.equal(r.allowed, true);
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → fail-closed on unknown tool (MCP-style name)', () => {
+    // The dispatch-side gate must fail closed on names without a
+    // side_effects classification so a future tool registered without
+    // a catalog entry can't bypass the gate. MCP-bridged tools also fall
+    // into this bucket — the registry can't introspect their semantics.
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('mcp__some_server__do_thing');
+        assert.equal(r.allowed, false);
+        assert.equal(r.sideEffect, 'external');
+    } finally {
+        reset();
+    }
+});
+
+test('checkPlanModeAccess: plan mode ON → blocks scratchpad_clear (intentional)', () => {
+    // scratchpad_clear is session-local but destructive bulk-drop; the
+    // pre-2.76.0 baseline excluded it from the readOnly flag, and the
+    // new gate preserves that exclusion by leaving it off the allowlist.
+    reset();
+    setPlanMode(true);
+    try {
+        const r = ToolRegistry.checkPlanModeAccess('scratchpad_clear');
+        assert.equal(r.allowed, false);
+        assert.equal(r.sideEffect, 'write');
+    } finally {
+        reset();
+    }
 });
