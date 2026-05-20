@@ -73,6 +73,9 @@ export function registerPlanTools(registry) {
             },
         },
         readOnly: true,
+        // USER_PAUSE tool — every invocation must reach the user; a cache
+        // hit would silently short-circuit the approval card.
+        cache: 'never',
     });
 
     registry.register('read_approved_plan', async () => {
@@ -93,5 +96,8 @@ export function registerPlanTools(registry) {
             },
         },
         readOnly: true,
+        // No args; reads the just-approved plan slot which is set by the
+        // companion user-pause tool. Args-keyed cache would collide.
+        cache: 'never',
     });
 }

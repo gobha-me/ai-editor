@@ -4,7 +4,72 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.71.0] - 2026-05-20
+
+### Fixed — `list_dirty_files` dup-cache survived intervening `edit_file` mutations (gitea#472)
+
+**The bug.** Live dogfood repro from 2026-05-20 against `xcaliber/HTML-Games` issue #223 (`oregon-trail/js/resources.js`), model `qwen-3-6-plus`: the model called `list_dirty_files` → `{files: []}`, then ran two `edit_file` calls on `resources.js`, then called `list_dirty_files` again → still `{files: [], _cached: true, _cache_note: "[Cached across requests — same list_dirty_files call with identical arguments. Data above is from the prior call; it is still current (no mutation invalidated it).]"}`. The model trusted the cached "clean" state and opened PR #244 without committing; user had to manually request `commit_files`, which then succeeded against the actually-dirty `resources.js`.
+
+**Root cause** — `[js/chat/cache-invalidation.js](js/chat/cache-invalidation.js)` `invalidateCachesForPath()` evicts `toolActionLog` entries via path-equality (`entry.args.path === affectedPath`). `list_dirty_files` is a no-arg whole-repo aggregating read, so the equality check is always false and the cached entry survives every mutation. The same gap exists in the same-request `toolCallCache` walk's `startsWith('read_current_file|')` check.
+
+**Why this is the fourth instance** of the same recurring pattern (memory `project_edit_file_stale_cache_deadlock.md`):
+
+| # | Surfaced | Tool | Fix shape |
+|---|---|---|---|
+| 1 | gitea#301 (1.7.1) | `edit_file` ↔ `read_lines` | path-keyed invalidator |
+| 2 | github#39 (1.X) | `preview_stop` ↔ `preview_start` cached envelope | `invalidateCachesForPreviewMutation` |
+| 3 | 2.10.0 / Tier 3a | `preview_click` etc. ↔ stale `preview_snapshot` | extend `PREVIEW_MUTATING_TOOLS` |
+| 4 | **gitea#472 (this fix)** | `edit_file` ↔ `list_dirty_files` | structural lift of cache classification onto `ToolDefinition` |
+
+Every prior fix patched the symptom in `cache-invalidation.js` or hand-listed the tool in `[STATEFUL_READ_TOOLS](js/chat/tool-classifications.js)`. The classification arrays live one or two files away from where tools are registered (`[js/tools/*.js](js/tools/)`); authors of new tools don't see them. **Next `list_*` / `find_*` / `get_*_status` tool reopens the wound.**
+
+### Changed — Cache classification lifted onto `ToolDefinition` (structural fix retires the whack-a-mole)
+
+`[ToolDefinition.cache](js/tools/registry.js)` — new field on the descriptor passed to `[ToolRegistry.register()](js/tools/registry.js)`. Two values: `'by-args'` (default — pure function of args; existing dup-cache + path/preview invalidation behavior unchanged) or `'never'` (bypass both same-request `toolCallCache` and cross-request `toolActionLog` dup hits). The decision lives next to the tool, where the author is already thinking about its semantics.
+
+**Runtime hookup.** `[js/chat/tool-loop-core.js#L336](js/chat/tool-loop-core.js)` switched from `STATEFUL_READ_TOOLS.includes(toolName)` to `isStatefulRead(toolName)` — the new helper in `[tool-classifications.js](js/chat/tool-classifications.js)` unions the legacy hand-list with the registry-driven `cache: 'never'` set. The `buildToolActionLogEntry` call (line 511) was updated to pass `getStatefulReadToolsLive()` (also new) so the cross-request `result` persistence gate honors the registry-driven decisions too. The legacy `STATEFUL_READ_TOOLS` const is preserved unchanged as a documented baseline; existing tests that import it (`[test-tool-classifications.mjs](tests/test-tool-classifications.mjs)`, `[test-tool-loop-core-cache.mjs](tests/test-tool-loop-core-cache.mjs)`) continue to pass.
+
+**Audit pass — 13 tools migrated to `cache: 'never'`** at their registration site (the legacy 2 + 11 stale-prone aggregating reads):
+
+| Tool | File | Why |
+|---|---|---|
+| `read_current_file` | [`file-tools.js`](js/tools/file-tools.js) | Active-file state (legacy STATEFUL_READ_TOOLS) |
+| `ask_user` | [`ask-user-tools.js`](js/tools/ask-user-tools.js) | User response (legacy STATEFUL_READ_TOOLS) |
+| **`list_dirty_files`** | [`commit-tools.js`](js/tools/commit-tools.js) | **The fix for gitea#472.** FS dirty state, no args |
+| `list_open_tabs` | [`file-tools.js`](js/tools/file-tools.js) | Tab manager state, no args |
+| `list_user_plugins` | [`plugin-tools.js`](js/tools/plugin-tools.js) | Installed-plugin state, no args |
+| `find_tool` | [`meta-tools.js`](js/tools/meta-tools.js) | Catalog mutates at runtime (MCP / plugin install) |
+| `get_embeddings_status` | [`context-tools.js`](js/tools/context-tools.js) | Indexer state, no args |
+| `find_relevant_files` | [`context-tools.js`](js/tools/context-tools.js) | Index state mutates as files edit |
+| `get_ci_status` | [`ci-tools.js`](js/tools/ci-tools.js) | Remote CI status advances between calls |
+| `get_ci_logs` | [`ci-tools.js`](js/tools/ci-tools.js) | Remote logs land asynchronously |
+| `wait_for_ci` | [`ci-tools.js`](js/tools/ci-tools.js) | Polling tool — caching defeats the purpose |
+| `list_pull_requests` | [`pr-tools.js`](js/tools/pr-tools.js) | Remote state + in-session mutators |
+| `list_issues` | [`issue-tools.js`](js/tools/issue-tools.js) | Remote state + in-session mutators |
+| `git_log` | [`git-log-tools.js`](js/tools/git-log-tools.js) | `commit_files` would leave stale log |
+| `list_projects` | [`project-tools.js`](js/tools/project-tools.js) | `set_active_project` mutates pointer |
+| `preview_list` | [`preview-tools.js`](js/tools/preview-tools.js) | `preview_start` adds to set but isn't a preview-mutator |
+| `submit_plan_for_approval` | [`plan-tools.js`](js/tools/plan-tools.js) | USER_PAUSE — must mount approval card |
+| `read_approved_plan` | [`plan-tools.js`](js/tools/plan-tools.js) | Reads pending plan slot |
+| `submit_script_for_approval` | [`script-tools.js`](js/tools/script-tools.js) | USER_PAUSE — sandbox approval card |
+| `delegate_task` | [`subagent-tools.js`](js/tools/subagent-tools.js) | USER_PAUSE — sub-agent run + approval card |
+
+### Added — Lint guard that retires the whack-a-mole
+
+`[tests/test-tool-cache-classifications.mjs](tests/test-tool-cache-classifications.mjs)` (new) — source-scans every `[js/tools/*.js](js/tools/)` registration block and asserts four properties:
+
+1. **Migration completeness** — every name in the legacy `STATEFUL_READ_TOOLS` const must have `cache: 'never'` at its registration site.
+2. **No-whack-a-mole guard** — every tool whose name matches a stale-prone shape (`list_*`, `find_*`, `get_*`, `*_status`, `*_logs`) MUST declare `cache:` explicitly (or be added to a small `STALE_PRONE_NAME_ALLOWLIST` with justification). New aggregating reads cannot land without the author touching cache classification.
+3. **gitea#472 fix lock-in** — `list_dirty_files` is registered with `cache: 'never'`.
+4. **Value constraint** — every declared `cache:` value is one of `'by-args' | 'never'`.
+
+Pattern mirrors `[tests/test-chat-tool-name-literals.mjs](tests/test-chat-tool-name-literals.mjs)` (the source-scan idiom called out in `[docs/ROADMAP.md](docs/ROADMAP.md)` §Now / Next finding #2): scan source, regex-extract, cross-reference against a canonical set. Same anti-drift property without pulling in the DOM/State/EventBus dependency graph.
+
+`[tests/test-handlers-cache-invalidation.mjs](tests/test-handlers-cache-invalidation.mjs)` — two new tests pin the gitea#472 helper-side behavior: the path-keyed invalidator correctly *does not* evict a no-arg `list_dirty_files` entry (the bypass happens upstream at the tool-loop call site), and the existing WRITE_TOOLS preservation rule still holds when `list_dirty_files` shares the log with `edit_file`.
+
 ### Docs — `RE-EVAL following 2.64.0` (ICD #9 editor instance + tab-manager)
+
+(Absorbed from `[Unreleased]` into this release per `[docs/ROADMAP.md](docs/ROADMAP.md)` §"Re-evaluation cadence" decision #14 sub-clause — doc-only re-eval slots accumulate in `[Unreleased]` until the next code minor absorbs them.)
 
 Ninth re-eval slot per the methodology's 3-code-minor cadence (anchor: 2.61.0; ran at 2.68.0, 4 past anchor — **the first slot since methodology adoption to fire before the canonical 5-minor overdue mark**). Doc-only — no version bump per the policy refinement adopted at the third slot ([`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"). Accumulates here in `[Unreleased]` until the next code minor absorbs the docs. Post-merge note: 2.69.0 + 2.70.0 (the two findings spawned during this slot's session — Gitea `compareRefs` cargo-cult + `createBranch` idempotency) shipped independently after the slot ran; both are documented as their own entries below.
 

@@ -500,7 +500,12 @@ export function registerScanTools(registry) {
                 required: ['symbol']
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Aggregates across all text files matching scope. Any
+        // file mutation between calls invalidates the reference set;
+        // the path-keyed cache can't match the no-path argument shape.
+        // Same shape as gitea#472.
+        cache: 'never',
     });
 
     // ========================================

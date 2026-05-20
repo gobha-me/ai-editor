@@ -53,7 +53,12 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // No args; result depends on connection state + active-project
+        // pointer, both of which `set_active_project` mutates within the
+        // session. Cache would surface the wrong "current_project" after
+        // a project switch.
+        cache: 'never',
     });
 
     // ========================================
@@ -153,7 +158,11 @@ export function registerProjectTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Tree changes on create_file / delete_file. The path-keyed
+        // invalidator only fires for the exact path; a `get_project_tree`
+        // cached on `path: ''` wouldn't be evicted by `create_file({path: 'foo/bar.js'})`.
+        cache: 'never',
     });
 
     // ========================================

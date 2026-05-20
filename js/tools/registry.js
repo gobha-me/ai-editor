@@ -21,10 +21,11 @@
 
 /**
  * @typedef {Object} ToolDefinition
- * @property {'function'}         type
- * @property {ToolFunctionSchema} function
- * @property {boolean}            [readOnly]        - True if the tool reads only and never mutates files / repo / persistent state. Used by Plan Mode (github#25) to filter the LLM's tool catalog. Default: undefined ⇒ treated as mutating (safe default — opt-in to read-only).
- * @property {string}             [category]        - Category id used by the catalog adapter (e.g. `'mcp.<serverId>'`).
+ * @property {'function'}             type
+ * @property {ToolFunctionSchema}     function
+ * @property {boolean}                [readOnly]   - True if the tool reads only and never mutates files / repo / persistent state. Used by Plan Mode (github#25) to filter the LLM's tool catalog. Default: undefined ⇒ treated as mutating (safe default — opt-in to read-only).
+ * @property {string}                 [category]   - Category id used by the catalog adapter (e.g. `'mcp.<serverId>'`).
+ * @property {'by-args' | 'never'}    [cache]      - Cache eligibility for the dup-detection layer (2.71.0 / gitea#472). `'by-args'` (default): result is a pure function of (toolName, args) — same-args calls served from cache; mutations to referenced paths / preview state invalidate via the existing FILE_MUTATING_TOOLS / PREVIEW_MUTATING_TOOLS walks. `'never'`: result depends on hidden state (active file, FS dirty state, remote CI status, iframe DOM, indexer state, user response, etc.) — bypass both same-request `toolCallCache` and cross-request `toolActionLog` dup hits. Required for any tool that aggregates over repo/remote state, takes no args but returns variable data, or otherwise reads state not captured by args. The lint test in [`tests/test-tool-cache-classifications.mjs`](../../tests/test-tool-cache-classifications.mjs) forces conscious classification at registration time so the next `list_X` tool doesn't reopen the gitea#301 / #472 wound.
  */
 
 /**
@@ -127,6 +128,27 @@ export const ToolRegistry = {
             try { EventBus.emit('tools:unregistered', { name }); } catch { /* swallow */ }
         }
         return removed;
+    },
+
+    /**
+     * Cache eligibility class for a registered tool (2.71.0 / gitea#472).
+     *
+     * Lifts the dup-cache classification onto the tool descriptor so the
+     * decision lives next to the registration site rather than in a
+     * hand-maintained array in `js/chat/tool-classifications.js`. The
+     * legacy `STATEFUL_READ_TOOLS` const documents the pre-2.71.0
+     * baseline; the runtime check at `tool-loop-core.js` (`isStatefulRead`)
+     * unions the legacy const with this registry-driven set.
+     *
+     * @param {string} name
+     * @returns {'by-args' | 'never'} `'never'` if the tool was registered
+     *   with `cache: 'never'`. Default `'by-args'` covers status-quo behavior
+     *   (pure function of args; invalidation handled by the existing
+     *   FILE_MUTATING_TOOLS / PREVIEW_MUTATING_TOOLS walks).
+     */
+    getCacheClass(name) {
+        const def = this.definitions.find(d => d.function?.name === name);
+        return def?.cache === 'never' ? 'never' : 'by-args';
     },
 
     /**

@@ -72,7 +72,11 @@ export function registerIssueTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Remote issue state mutates outside the session AND from inside
+        // it (`create_issue` / `update_issue` / `add_issue_comment`).
+        // Cache would hide the just-opened/closed issue from a re-list.
+        cache: 'never',
     });
 
     // ========================================

@@ -208,12 +208,27 @@ export const MUTATING_TOOLS = Object.freeze([
  *
  * Surfaced 2026-05-06 testing PR #293 against issue #23 (qwen-3-6-plus).
  *
+ * **2.71.0 — registry lift (gitea#472).** This const is now the *legacy
+ * snapshot* of pre-registry stateful reads. New tools that bypass the
+ * dup-cache declare `cache: 'never'` at their `ToolRegistry.register()`
+ * call site rather than being added here — see `ToolDefinition.cache` in
+ * [`js/tools/registry.js`](../tools/registry.js). The runtime check
+ * (`isStatefulRead()` below) unions this const with the registry-driven
+ * set so both sources contribute. The lint test in
+ * [`tests/test-tool-cache-classifications.mjs`](../../tests/test-tool-cache-classifications.mjs)
+ * enforces conscious classification at registration time — kills the
+ * recurring whack-a-mole pattern documented at `project_edit_file_stale_cache_deadlock.md`.
+ *
  * @type {readonly string[]}
  */
 export const STATEFUL_READ_TOOLS = Object.freeze([
     'read_current_file',
     'ask_user',
 ]);
+
+// `isStatefulRead()` + `getStatefulReadToolsLive()` live in `cache-policy.js`
+// to keep THIS module pure-data (no registry import → no transitive
+// browser-globals chain). See [`js/chat/cache-policy.js`](./cache-policy.js).
 
 /**
  * Tools that legitimately run longer than the standard tool timeout. The

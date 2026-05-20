@@ -228,6 +228,9 @@ export function registerPluginTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // No args; depends on installed-plugin state (Plugins.list +
+        // localStorage user-plugin entries). Same shape as gitea#472.
+        cache: 'never',
     });
 }

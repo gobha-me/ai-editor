@@ -167,5 +167,9 @@ export function registerSubAgentTools(registry) {
             },
         },
         readOnly: true,
+        // USER_PAUSE tool — every invocation mounts an approval card and
+        // runs a real sub-agent loop on success. Cache hit would short-
+        // circuit both the approval AND the sub-agent run.
+        cache: 'never',
     });
 }

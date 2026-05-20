@@ -162,6 +162,10 @@ async function indexProject({ force }) {
 ToolRegistry.register('find_relevant_files', findRelevantFiles, {
     type: 'function',
     readOnly: true,
+    // Args-keyed in shape, but the underlying retrieval index mutates as
+    // files are edited / added / removed within the session. An args-keyed
+    // cache hit would return pre-edit relevance against post-edit truth.
+    cache: 'never',
     function: {
         name: 'find_relevant_files',
         description: 'Find semantically relevant files for a query using embeddings. Use this BEFORE reading files to dramatically reduce token usage. Returns the top N most relevant files based on their content and purpose.',
@@ -186,6 +190,9 @@ ToolRegistry.register('find_relevant_files', findRelevantFiles, {
 ToolRegistry.register('get_embeddings_status', getEmbeddingsStatus, {
     type: 'function',
     readOnly: true,
+    // No args; depends on indexer progress / configured embedder state.
+    // Same shape as gitea#472.
+    cache: 'never',
     function: {
         name: 'get_embeddings_status',
         description: 'Get the current status of the embeddings system, including number of files indexed and configuration',

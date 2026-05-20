@@ -134,7 +134,11 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Remote state mutates outside the session AND from inside it
+        // (`create_pull_request` / `merge_pull_request`). Cache would
+        // hide the just-opened or just-merged PR from a subsequent list.
+        cache: 'never',
     });
 
     // ========================================
@@ -430,7 +434,10 @@ export function registerPRTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Sibling of the ci-tools.js registration — same justification:
+        // remote CI state advances between calls.
+        cache: 'never',
     });
 
     // ========================================
@@ -552,6 +559,9 @@ Use get_ci_status first to see which checks passed/failed, then get_ci_logs to r
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Sibling of the ci-tools.js registration — same justification:
+        // remote CI logs land asynchronously after the run.
+        cache: 'never',
     });
 }

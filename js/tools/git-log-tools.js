@@ -115,7 +115,11 @@ ToolRegistry.register('git_log', gitLog, {
             required: []
         }
     },
-    readOnly: true
+    readOnly: true,
+    // Remote/local git history extends across commits made within the
+    // session. `commit_files` would otherwise leave a stale args-keyed
+    // git_log envelope hiding the new commit from the next call.
+    cache: 'never',
 });
 
 export { gitLog };

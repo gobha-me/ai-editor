@@ -127,5 +127,9 @@ export function registerAskUserTools(registry) {
         // file or repo state. The LLM may need to ask clarifying
         // questions before producing a plan.
         readOnly: true,
+        // Result depends on the user's response — same args may
+        // legitimately yield different answers across the conversation.
+        // Migrated from the legacy `STATEFUL_READ_TOOLS` hand-list.
+        cache: 'never',
     });
 }

@@ -69,6 +69,10 @@ async function getCiStatus({ ref }) {
 }
 
 ToolRegistry.register('get_ci_status', getCiStatus, {
+    // Remote CI state advances between calls — `pending → success/failure`
+    // transitions inside one session would be hidden by an args-keyed
+    // cache hit. Never cache.
+    cache: 'never',
     type: 'function',
     function: {
         name: 'get_ci_status',
@@ -145,6 +149,9 @@ async function waitForCi({ ref, timeoutMs }) {
 }
 
 ToolRegistry.register('wait_for_ci', waitForCi, {
+    // Polling tool — every invocation is its own real-time observation.
+    // Caching defeats the entire purpose.
+    cache: 'never',
     type: 'function',
     function: {
         name: 'wait_for_ci',
@@ -255,6 +262,10 @@ async function getCiLogs({ ref, jobName }) {
 }
 
 ToolRegistry.register('get_ci_logs', getCiLogs, {
+    // Remote CI logs land asynchronously after the run completes — a
+    // cached "logs unavailable" envelope would deadlock the failure-
+    // diagnosis workflow.
+    cache: 'never',
     type: 'function',
     function: {
         name: 'get_ci_logs',

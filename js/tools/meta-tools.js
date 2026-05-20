@@ -227,6 +227,11 @@ export function registerMetaTools(registry) {
             },
         },
         readOnly: true,
+        // Args-keyed in shape, but the underlying catalog mutates at
+        // runtime (MCP register/unregister, plugin install). Treat as
+        // never-cached so the model sees fresh ranking after catalog
+        // changes within a session.
+        cache: 'never',
     });
 }
 

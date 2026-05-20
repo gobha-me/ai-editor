@@ -503,6 +503,74 @@ test('findMatchingCrossRequestEntry handles empty / non-array toolActionLog', ()
     assert.equal(findMatchingCrossRequestEntry({ toolName: 'x', args: {} }), undefined);
 });
 
+// ============================================================================
+// gitea#472 (2.71.0) — `list_dirty_files` is a no-arg aggregating read.
+// The path-keyed `invalidateCachesForPath` invalidator can't match
+// no-arg entries; pre-2.71.0 the dup-cache held a stale `{files: []}`
+// envelope across intervening `edit_file` calls. The 2.71.0 fix moves
+// classification onto the tool descriptor (`cache: 'never'`) so the
+// dup-check at `tool-loop-core.js:336` short-circuits before the
+// helper ever runs.
+//
+// The cache-invalidation helper itself is unchanged; the fix is
+// upstream of it. These tests assert that the helper's behavior is
+// still correct for the *path-aware* case — list_dirty_files entries
+// land in `toolActionLog` (without `result`, because the registration
+// declares `cache: 'never'` which `buildToolActionLogEntry` honors),
+// but they survive path-keyed invalidation because they have no args.
+// The bypass happens earlier, at `isStatefulRead(toolName)`, which the
+// `test-tool-cache-classifications.mjs` lint covers.
+// ============================================================================
+
+test('list_dirty_files entry survives same-path edit_file invalidation (no-args, path-keyed walk misses it)', () => {
+    // Demonstrates the gitea#472 pre-fix state: invalidateCachesForPath
+    // does NOT evict the entry because args.path is undefined. The fix
+    // lives upstream (registry-driven `cache: 'never'` → skipCache=true
+    // at the tool-loop call site), NOT in this helper.
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'list_dirty_files', args: {}, resultSummary: '0 dirty files', success: true },
+    ];
+
+    const r = invalidateCachesForPath({
+        toolName: 'edit_file',
+        args: { path: 'js/somewhere.js' },
+        toolCallCache,
+        toolActionLog,
+        WRITE_TOOLS,
+    });
+
+    // The path-keyed walk legitimately misses the no-arg list_dirty_files entry.
+    assert.equal(r.evictedLog, 0, 'path-keyed invalidation cannot match a no-arg entry');
+    assert.equal(toolActionLog.length, 1, 'entry survives — the fix is the upstream cache bypass, not the invalidator');
+    assert.equal(toolActionLog[0].tool, 'list_dirty_files');
+});
+
+test('list_dirty_files entry can still be evicted via WRITE_TOOLS preservation rule (history)', () => {
+    // Just to confirm we haven't accidentally broken the existing
+    // "WRITE_TOOLS entries are preserved" property — list_dirty_files
+    // is not a WRITE tool, so it follows the same survival/eviction
+    // rules as any other read tool.
+    const toolCallCache = new Map();
+    const toolActionLog = [
+        { tool: 'list_dirty_files', args: {}, resultSummary: '0 files', success: true },
+        { tool: 'edit_file', args: { path: 'a.js' }, resultSummary: 'replaced 1-2', success: true },
+    ];
+
+    const r = invalidateCachesForPath({
+        toolName: 'edit_file',
+        args: { path: 'a.js' },
+        toolCallCache,
+        toolActionLog,
+        WRITE_TOOLS,
+    });
+
+    // edit_file (a WRITE_TOOL) is preserved as informational history;
+    // list_dirty_files has no path-match so it survives too. Both stay.
+    assert.equal(r.evictedLog, 0);
+    assert.equal(toolActionLog.length, 2);
+});
+
 test('findMatchingCrossRequestEntry honors the lookback window', () => {
     const toolActionLog = [];
     // 35 entries with the matching args; only the most-recent 30 should be searched

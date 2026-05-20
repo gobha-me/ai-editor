@@ -172,7 +172,13 @@ ToolRegistry.register('list_dirty_files', listDirtyFiles, {
             required: []
         }
     },
-    readOnly: true
+    readOnly: true,
+    // gitea#472 — repo-wide aggregating read with no args. Result depends
+    // on FS dirty state that any FILE_MUTATING_TOOLS call can change; the
+    // path-keyed invalidator in `cache-invalidation.js` can't match a no-arg
+    // entry, so the dup-cache held a stale `{files: []}` envelope across
+    // intervening `edit_file` calls (live dogfood repro, 2026-05-20).
+    cache: 'never',
 });
 
 export { commitFiles, listDirtyFiles };

@@ -73,7 +73,10 @@ export function registerFileTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // Result depends on hidden state (which tab is active). Migrated
+        // from the legacy `STATEFUL_READ_TOOLS` hand-list at 2.71.0.
+        cache: 'never',
     });
 
     // NOTE: read_lines is now in scan-tools.js with enhanced features (context_lines parameter)
@@ -227,6 +230,9 @@ export function registerFileTools(registry) {
                 required: []
             }
         },
-        readOnly: true
+        readOnly: true,
+        // No args; result depends on tab-manager state (open / dirty /
+        // active set). Same shape as gitea#472 `list_dirty_files`.
+        cache: 'never',
     });
 }

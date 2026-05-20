@@ -97,5 +97,11 @@ export function registerScriptTools(registry) {
             },
         },
         readOnly: true,
+        // USER_PAUSE tool — every invocation needs a fresh sandbox run +
+        // user approval; a cache hit would return last-script output for
+        // a different script. Args-keyed cache would actually be okay
+        // here (identical source ⇒ similar output) but the approval card
+        // must surface; staying conservative.
+        cache: 'never',
     });
 }

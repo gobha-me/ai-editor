@@ -139,6 +139,13 @@ export function registerPreviewTools(registry) {
             },
         },
         readOnly: true,
+        // No args; depends on the live preview-server set. The
+        // PREVIEW_MUTATING_TOOLS invalidator already evicts stale entries
+        // on stop/click/fill/resize, but `preview_start` is intentionally
+        // NOT a preview-mutator (would defeat its own dup-refusal); a
+        // start → list pair would still hit the cached envelope hiding
+        // the new server. Same shape as gitea#472.
+        cache: 'never',
     });
 
     // Tier 2 (2.7.0) — capture surfaces. The shim injected by the SW
@@ -183,6 +190,11 @@ export function registerPreviewTools(registry) {
             },
         },
         readOnly: true,
+        // Per-`serverId` buffer that PREVIEW_MUTATING_TOOLS clears on
+        // stop/click/fill/resize. Args-keyed cache is correct between
+        // mutator calls; the registered invalidator handles staleness.
+        // Explicit 'by-args' satisfies the lint and pins the intent.
+        cache: 'by-args',
     });
 
     registry.register('preview_errors', async (args) => {
@@ -250,6 +262,10 @@ export function registerPreviewTools(registry) {
             },
         },
         readOnly: true,
+        // SW route-stage buffer, same shape as `preview_console_logs`.
+        // PREVIEW_MUTATING_TOOLS clears the buffer on stop/click/fill/resize;
+        // args-keyed cache is correct between those calls.
+        cache: 'by-args',
     });
 
     registry.register('preview_network', async (args) => {

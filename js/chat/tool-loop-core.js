@@ -41,6 +41,7 @@ import {
     USER_PAUSE_TOOLS,
     canonicalArgsKey,
 } from './tool-classifications.js';
+import { isStatefulRead, getStatefulReadToolsLive } from './cache-policy.js';
 import { buildRefusalPayload } from './refusal-hints.js';
 import { Catalog } from '../intelligence/tools/index.js';
 import { getContextScale } from '../llm.js';
@@ -333,7 +334,11 @@ export async function runToolLoop(context, hooks, transport) {
                 const cacheKey = toolName + '|' + canonicalArgsKey(args);
                 const cachedResult = toolCallCache.get(cacheKey);
 
-                const skipCache = STATEFUL_READ_TOOLS.includes(toolName);
+                // 2.71.0 (gitea#472) — `isStatefulRead` unions the legacy
+                // `STATEFUL_READ_TOOLS` const with the registry-driven
+                // `cache: 'never'` set. New tools that bypass dup-cache
+                // declare it at their `ToolRegistry.register()` call site.
+                const skipCache = isStatefulRead(toolName);
 
                 let crossRequestDuplicate = false;
                 if (!skipCache && !WRITE_TOOLS.includes(toolName) && context.toolActionLog && context.toolActionLog.length > 0) {
@@ -508,7 +513,10 @@ export async function runToolLoop(context, hooks, transport) {
                     toolResult,
                     resultSummary,
                     WRITE_TOOLS,
-                    STATEFUL_READ_TOOLS,
+                    // 2.71.0 (gitea#472) — pass the live union so tools
+                    // declaring `cache: 'never'` at registration are also
+                    // excluded from cross-request `result` persistence.
+                    STATEFUL_READ_TOOLS: getStatefulReadToolsLive(),
                 }));
                 // Bound the log to 50 entries. Splice in place so the
                 // injected reference (wrapper: `State.toolActionLog`)
