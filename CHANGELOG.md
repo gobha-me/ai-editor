@@ -4,6 +4,47 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — `RE-EVAL following 2.64.0` (ICD #9 editor instance + tab-manager)
+
+Ninth re-eval slot per the methodology's 3-code-minor cadence (anchor: 2.61.0; ran at 2.68.0, 4 past anchor — **the first slot since methodology adoption to fire before the canonical 5-minor overdue mark**). Doc-only — no version bump per the policy refinement adopted at the third slot ([`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"). Accumulates here in `[Unreleased]` until the next code minor absorbs the docs. Post-merge note: 2.69.0 + 2.70.0 (the two findings spawned during this slot's session — Gitea `compareRefs` cargo-cult + `createBranch` idempotency) shipped independently after the slot ran; both are documented as their own entries below.
+
+**ICD #9 authored.** [`docs/ICD-editor-instance.md`](docs/ICD-editor-instance.md) — the last named ICD-backfill target. Covers the editor-instance + tab-manager subsystem: [`js/editor/instance.js`](js/editor/instance.js) (953 LOC; `editorInstance` singleton + `createEditor` boot + 22 named exports across content / cursor / line-range / Compartment-toggle surfaces) + [`js/editor/setup.js`](js/editor/setup.js) (436 LOC; 79-field `CM` namespace + vendor/CDN fallback `loadCodeMirror` + `getLanguageExtension` 17-language dispatch) + [`js/editor/ghost-text.js`](js/editor/ghost-text.js) (551 LOC; `idle → requesting → showing → idle` state machine + 12 exports + Tab/Esc keymap with indent carve-out + `?ghostText=off` URL kill-switch) + [`js/editor/blame-gutter.js`](js/editor/blame-gutter.js) (251 LOC; data-driven Compartment) + [`js/editor/invisible-unicode-decoration.js`](js/editor/invisible-unicode-decoration.js) (215 LOC; per-file Compartment) + [`js/editor/file-utils.js`](js/editor/file-utils.js) (217 LOC; pure text/binary detection) + [`js/editor/diff.js`](js/editor/diff.js) (51 LOC; line-by-line diff) + [`js/editor.js`](js/editor.js) (48 LOC; selective re-export barrel) + [`js/tab-manager.js`](js/tab-manager.js) (261 LOC; typed-tab dispatch over file / issue / plugin-editor). 9 files / ~2983 LOC under one ICD. 5 classification axes (Loading / Lifecycle / Editing / Decoration / Tabbing); the keymap-compartment-before-basicSetup ordering invariant pinned as the most load-bearing line in the ICD; ghost-text state machine pinned across six transitions; two coordinate systems documented (character-offset for selection ops + 1-indexed line/col for range ops); seven open invariants noted at ICD-author time.
+
+**Cross-references** ICD #3 (the LLM editing-tool consumers of `applyEdit` / `replaceRange` / `insertAtLine` / `deleteRange` — admission via ICD #8's `coder.v1.tools.admit`) + ICD #7 ([`js/plugin-editor.js`](js/plugin-editor.js) reuses `CM` namespace + `loadCodeMirror` + `getLanguageExtension` for its own per-plugin CM instance; the `'plugin-editor'` tab type is dispatched by this ICD's tab manager).
+
+**ARCHITECTURE.md catch-up sync 2.66.0 → 2.68.0** (2-minor delta — small; the eighth re-eval did the 2.63.0 → 2.66.0 lift). Header bump + 2.67.0 `Profiles` namespace shape-pin + 2.68.0 9-helper resolver alignment summary + new Editor Layer section pointing to ICD #9 + ICD #9 row in hierarchy table.
+
+**Four code-aware findings surfaced, queued for next code minor cohort:**
+
+| # | Band | Summary |
+|---|---|---|
+| 1 | `[medium]` | Per-instance Compartments (`lineNumberCompartment`, `keymapCompartment`) + `editorInstance` lack a destroy-then-replace contract test. Pre-emptive — the lifecycle invariant has no regression test today. |
+| 2 | `[strong] [S]` | Compartment-ordering invariant in `createEditor` not pinned. Source-scan test mirroring [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs) — the highest-anti-regression-value finding in this cohort (reordering would silently silence Vim mode + ghost-text Tab/Esc bindings). |
+| 3 | `[medium]` | Custom tab renderer has no cleanup callback in `tab-manager.js#closeTab`. Mirrors the pre-2.64.0 plugin-lifecycle `destroy()` finding. Promotes to `[strong]` on real-leak signal in one of the two production renderers ([`js/issue-detail.js`](js/issue-detail.js), [`js/plugin-editor.js`](js/plugin-editor.js)). |
+| 4 | `[strong] [S]` | `refreshGhostText` missing from the [`js/editor.js`](js/editor.js) barrel. Every other Compartment toggle (`setLineNumbersVisible`, `setKeybindingMode`, `setInvisibleUnicodeEnabled`) is re-exported; one-line mechanical addition + barrel shape-pin test mirroring `tests/test-profile-registry-shape.mjs`'s public-surface idiom. |
+
+The two `[strong] [S]` findings (#2 + #4) fold into one absorption code minor naturally; findings #1 + #3 stay queued behind their respective tightening conditions.
+
+**Translation.** The ICD-backfill program named target list (#1–#9) is now exhausted — every named subsystem has shipped its ICD. Subsequent re-evals run the paper + code-aware halves against the established 9 ICDs and surface new ICD candidates only if cross-ICD drift accumulates. Next re-eval slot: `RE-EVAL following 2.67.0` (3 code minors past 2.64.0 anchor; we're at 2.70.0, so 3 past the next anchor — slot is now on-cadence and due).
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/ICD-editor-instance.md`](docs/ICD-editor-instance.md) | NEW — ~280 LOC matching the ICD #7 + #8 density. Status banner + Purpose + Seam at a glance table (10 rows) + The five classification axes table + Per-axis contract (5 sections with invariants + code-citations) + Open invariants (7) + Code-aware findings (4 banded) + Forward-evolution rules + References. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — header line rewritten for ninth slot + 2.66.0 → 2.68.0 sync summary + four findings cohort summary. New "Just ran (RE-EVAL following 2.64.0)" row in Now/Next/Later table; "Now (next up)" row rewritten around the four queued findings; "Just ran (RE-EVAL following 2.61.0)" struck through (roll-forward to keep visible window manageable). §"Re-evaluation cadence" prose updated — `RE-EVAL following 2.64.0` row added; next slot anchored at `RE-EVAL following 2.67.0`. §"Per-subsystem ICD backfill program" — target #9 row promoted from "Remaining subsystem" to "✅ shipped" + program-exhausted note. §"Forward ICD presence check" table — new row for `RE-EVAL following 2.64.0`. Translation paragraph: "Eight re-evals" → "Nine re-evals" + ninth slot description appended. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — `Last sync: 2.66.0 → 2.68.0`; header banner rewritten for 2.67.0 + 2.68.0 callouts; new ICD #9 announcement. §"Editor Layer" section rewritten from a 4-line sketch into a full-shape description with file LOCs + 5-axis cross-reference + custom-renderer cleanup callback gap note. ICD #9 row added to the `ICD-*.md` hierarchy. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**No version bump.** No `js/version.js` edit. No production-code edit during the re-eval slot itself per the cadence policy — findings ship in subsequent code minors.
+
+**Verification:**
+
+- Full Node suite: `node --test tests/test-*.mjs` — **3585 pass / 1 skipped / 0 fail** (the post-merge 2.70.0 baseline; this entry adds no tests and changes no production code, so the test count is inherited from main).
+- Version coherence: [`js/version.js`](js/version.js) stays at `'2.70.0'` (the latest released entry in this CHANGELOG); the `[Unreleased]` accumulation pattern matches the 2.50.0 / 2.59.0 / 2.60.0 / 2.61.0 / 2.64.0 absorption-release cadence.
+- Markdown link integrity: every `[ICD-editor-instance.md](docs/ICD-editor-instance.md)` link resolves; every `file:line` citation in the new ICD points to a real line in the 2.68.0 tree (citations were authored at slot run-time; 2.69.0 + 2.70.0 ships only touched `js/git-providers/`, not the editor-instance surface).
+- ICD shape-parity: section headings against ICD #7 + ICD #8 match one-for-one (Status banner / Purpose / Seam at a glance / Five classification axes / Per-axis contract / Open invariants / Code-aware findings / Forward-evolution rules / References).
+
 ## [2.70.0] - 2026-05-20
 
 ### Fixed — `createBranch` is idempotent on existing-ref (Gitea 500 / GitHub 422)
