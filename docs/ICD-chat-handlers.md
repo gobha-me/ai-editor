@@ -14,13 +14,15 @@ Each row names the question a tool must answer to be classified on that axis.
 
 | Axis | Question | Exports |
 |---|---|---|
-| **Cache axis — dup-detection** | When the model calls this with identical args, should the same-request / cross-request dup-cache short-circuit? | `WRITE_TOOLS`, `STATEFUL_READ_TOOLS` |
+| **Cache axis — dup-detection** | When the model calls this with identical args, should the same-request / cross-request dup-cache short-circuit? | `WRITE_TOOLS`, `STATEFUL_READ_TOOLS`, **`isStatefulRead(name)` + `getStatefulReadToolsLive()` (2.71.0; live union of `STATEFUL_READ_TOOLS` with registry-driven `cache: 'never'` declarations on `ToolDefinition`)** |
 | **Cache axis — invalidation on success** | When this succeeds, which cached reads go stale and must be evicted? | `FILE_MUTATING_TOOLS`, `PREVIEW_MUTATING_TOOLS` (paired with `PREVIEW_READ_TOOLS`) |
 | **Envelope axis — dup-cache hit messaging** | When a cache hit IS served, is the right reassurance "your prior mutation succeeded" or the generic "don't re-call"? | `MUTATING_TOOLS` |
 | **FileOp axis — compression metadata** | For the upcoming Compression Rules (subsumption), does this fully replace a file or only edit a range? | `WHOLE_FILE_WRITE_TOOLS` |
 | **Timeout axis — tool-loop scheduling** | How long is the loop willing to wait before treating this as hung? | `LONG_RUNNING_TOOLS`, `USER_PAUSE_TOOLS` |
 
-Eight frozen exports total, plus the `canonicalArgsKey(args)` helper that produces the deep-stable JSON string used as `(toolName, sortedArgs)` cache keys throughout `handlers.js` and `cache-invalidation.js`. The asymmetry between axis count (5) and export count (8) is load-bearing: each axis encodes a distinct *question*, but two axes (Cache(dup), Cache(invalidation), Timeout) carry more than one export because they need to differentiate within the axis (read vs. write, file vs. preview, long-running vs. user-pause).
+Eight frozen exports + two live-accessor helpers (`isStatefulRead`/`getStatefulReadToolsLive`, added 2.71.0), plus the `canonicalArgsKey(args)` helper that produces the deep-stable JSON string used as `(toolName, sortedArgs)` cache keys throughout `tool-loop-core.js` and `cache-invalidation.js`. The asymmetry between axis count (5) and surface count (8 exports + 2 accessors) is load-bearing: each axis encodes a distinct *question*, but two axes (Cache(dup), Cache(invalidation), Timeout) carry more than one export because they need to differentiate within the axis (read vs. write, file vs. preview, long-running vs. user-pause).
+
+**The Cache(dup) axis grew a second source at 2.71.0** — gitea#472 was the fourth recurrence of the cache-classification whack-a-mole (after gitea#301 / github#39 / 2.10.0 Tier 3a). The fix lifted classification onto `ToolDefinition.cache: 'by-args' | 'never'` at the registration site in [`js/tools/*.js`](../js/tools/) so the decision lives next to the tool author, not one or two files away in `tool-classifications.js`. The legacy `STATEFUL_READ_TOOLS` const is preserved unchanged as a documented baseline; `isStatefulRead(name)` reads the union (legacy ∪ live-registry-derived) at consumer call-sites in [`tool-loop-core.js:336`](../js/chat/tool-loop-core.js) and [`tool-loop-core.js:511`](../js/chat/tool-loop-core.js). 20 tools migrated to `cache: 'never'` at their registration sites; 27 occurrences across 17 tool files.
 
 ## Per-export contract
 
@@ -160,7 +162,8 @@ When adding a new tool to `js/tools/`:
 2. **If the tool is a `MUTATING_TOOLS` candidate, confirm it does NOT belong in `WRITE_TOOLS`** — the cache-skip and envelope-messaging axes are disjoint by design.
 3. **Pure-read tools (no `State` access, no side effects) appear in zero exports.** That's the default; no action needed.
 4. **If the tool changes file content or the active file selection, add to `FILE_MUTATING_TOOLS` regardless of whether it's also in `WRITE_TOOLS`.** The cache-invalidation eviction is what gates the recurring deadlock pattern.
-5. **Run `node --test tests/test-tool-classifications.mjs`** — the disjointness invariants catch axis overlap bugs at CI time.
+5. **Cache classification at the registration site (2.71.0 lint guard).** Declare `cache: 'by-args' | 'never'` on the `ToolDefinition` passed to `ToolRegistry.register()`. Default is `'by-args'` (omittable — pure function of args, dup-cache short-circuits + path/preview invalidation applies). Use `'never'` for any tool whose result depends on hidden state, aggregates whole-FS / whole-IDB views, polls remote state, or carries USER_PAUSE semantics. **The lint guard [`test-tool-cache-classifications.mjs`](../tests/test-tool-cache-classifications.mjs) source-scans every `js/tools/*.js` registration block and REQUIRES explicit `cache:` declaration for tool names matching the stale-prone shape regexes `list_*` / `find_*` / `get_*` / `*_status` / `*_logs`** (an aggregating-name allowlist `STALE_PRONE_NAME_ALLOWLIST` is the deliberate escape hatch when a stale-shape name turns out to be a pure args function — authors must add to the allowlist with rationale, the guard rejects silent additions). The guard also pins migration completeness against `STATEFUL_READ_TOOLS` and the gitea#472 fix-lock on `list_dirty_files`.
+6. **Run `node --test tests/test-tool-classifications.mjs tests/test-tool-cache-classifications.mjs`** — the disjointness invariants catch axis overlap bugs at CI time; the cache-classifications lint catches stale-prone-name additions that forgot to classify.
 
 When changing axis membership for an existing tool:
 

@@ -4,6 +4,72 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — `RE-EVAL following 2.67.0` (tenth re-eval slot; overdue by 5 minors past anchor; ICD-backfill program exhausted)
+
+(Absorbed from `[Unreleased]` into the next code minor per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" decision #14 sub-clause — doc-only re-eval slots accumulate in `[Unreleased]` until the next code minor absorbs them.)
+
+Tenth re-eval slot per the methodology's 3-code-minor cadence (anchor: 2.67.0; ran at 2.75.0, 8 minors past anchor — overdue by 5 minors, same shape as slots #6/#7/#8 after slot #9 briefly fired on-cadence at 4-past-anchor). Doc-only — no version bump per the policy refinement adopted at the third slot ([`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence"). Accumulates here in `[Unreleased]` until the next code minor absorbs the docs.
+
+**No new ICD authored.** The ICD-backfill program named target list (#1–#9) was exhausted as of 2.68.0 — every named subsystem has shipped its ICD. This slot ran the paper-half + code-aware halves against the established 9 ICDs only, and surfaces new ICD candidates only if cross-ICD drift accumulates (none surfaced this slot — see "Findings" below).
+
+**ARCHITECTURE.md catch-up sync 2.68.0 → 2.75.0** — **8-minor delta, the largest single-slot lift to date** (slot #6 had the only prior 8-minor lift; slots #7/#8/#9 were 3/3/2 minors). Rolled in 7 minors of structural shape:
+
+| Minor | Highlight | ARCH touch |
+|---|---|---|
+| 2.69.0 | Gitea `compareRefs` schema-correction `files: []` shape pin + `getChangedFilesBetween` Gitea override; 14 subtests in [`test-gitea-compare.mjs`](tests/test-gitea-compare.mjs); silent-empty retrieval delta-index fix | §Git Layer › `git-providers/base.js` paragraph (new contract addition) |
+| 2.70.0 | `createBranch` idempotent-on-existing-ref contract (Gitea 500 + `PushRejected`/`reference already exists` + branch-name-in-body guard, GitHub 422 + `Reference already exists`); 11 subtests in [`test-create-branch-idempotency.mjs`](tests/test-create-branch-idempotency.mjs); `git:branchCreated` emits only on the genuine-creation path | §Git Layer › base.js (new contract addition) |
+| **2.71.0** | **Structural lift — `ToolDefinition.cache: 'by-args' \| 'never'` field** on registration site; retires the cache-classification whack-a-mole across four prior recurrences (gitea#301 / github#39 / 2.10.0 Tier 3a / gitea#472); 20 tools migrated; 27 occurrences across 17 tool files; new [`test-tool-cache-classifications.mjs`](tests/test-tool-cache-classifications.mjs) lint guard scans for stale-prone name shapes and rejects unclassified additions — **the load-bearing minor in the delta** | §LLM Layer › `tools/registry.js` paragraph (new `ToolDefinition.cache` field documentation); §"Testing & CI" surface roll-in |
+| 2.72.0 | ICD #9 cohort #2 + #4 — compartment-ordering invariant source-scan pin ([`test-editor-compartment-ordering.mjs`](tests/test-editor-compartment-ordering.mjs); 3 subtests) + `refreshGhostText` barrel export activation (silent live bug — [`persistence.js:92`](js/settings/persistence.js)'s `&&`-short-circuit masked the missing export so ghost-text settings persisted but never reconfigured the live CM6 compartment; [`test-editor-barrel-shape.mjs`](tests/test-editor-barrel-shape.mjs) capabilities-precedent pin, 4 subtests) | §Editor Layer prose (cohort status now 2/4 closed at slot ARCH-roll-in time) |
+| 2.73.0 | PR-review draft-vs-conflict disambiguation (gitea#466) — `pr.draft === true` passthrough on both Gitea + GitHub `getPullRequest()`; new `pr-dock__notice` draft element + merge-controls disable in [`PrMergeControls.js`](js/pr-review/PrMergeControls.js); `[base.js](js/git-providers/base.js)` `PullRequestData.draft` typedef row pins the disambiguation contract (11 subtests in [`test-pr-review-draft-vs-conflict.mjs`](tests/test-pr-review-draft-vs-conflict.mjs)) | §Touch 3 Surfaces › `pr-review/` paragraph (new draft-vs-conflict note); §Git Layer cross-reference |
+| 2.74.0 | GitLab parity cohort closure — `createBranch` idempotency (400 + canonical `Branch already exists` — no name guard) + `getPullRequest` draft passthrough normalizing modern `draft` + pre-deprecation `work_in_progress` MR fields (+8 subtests across the two suites) | Rolled into 2.70.0 / 2.73.0 line items |
+| 2.75.0 | ICD #9 finding #1 closure — `editorInstance` destroy-then-replace contract source-scan ([`test-editor-lifecycle.mjs`](tests/test-editor-lifecycle.mjs); 4 subtests pinning `editorInstance.destroy()` precedes rebind + Compartment-reassignment-once + module-scope `let` forward-evolution guard) | §Editor Layer prose (cohort status now 3/4 closed) |
+
+Header bump: `Last sync: 2.68.0` → `Last sync: 2.75.0` at [`docs/ARCHITECTURE.md:4`](docs/ARCHITECTURE.md). Test count refresh: **3622 / 3621 pass / 1 skipped / 0 fail** (was 3585 at 2.70.0 baseline cited in slot-#9). §"Testing & CI" surfaces a third settled idiom — **source-scan-precedent** (read file → `stripComments` → regex-anchor in extracted function body via `extractCreateEditorBody` + `findSingleMatch` helpers; 2.44.0 `test-chat-tool-name-literals.mjs` + 2.66.0 `test-plugin-editor-auto-switch-retired.mjs` + 2.71.0 `test-tool-cache-classifications.mjs` + 2.72.0 `test-editor-compartment-ordering.mjs` + 2.75.0 `test-editor-lifecycle.mjs`) — alongside capabilities-precedent (now 2.50.0 + 2.63.0 + 2.67.0 + 2.72.0) and turn-stats-precedent (2.62.0).
+
+**Code-aware halves surfaced three `[medium]`-band findings**, all doc-only mechanical edits to existing ICDs:
+
+| # | Band | ICD | Finding |
+|---|---|---|---|
+| 1 | `[medium]` | ICD #1 chat-handlers | Cache classification axis grew a second source at 2.71.0 — the registry-driven `ToolDefinition.cache: 'never'` field via `isStatefulRead(name)` + `getStatefulReadToolsLive()` accessors unions with the legacy `STATEFUL_READ_TOOLS` const. Documented at §"The five axes › Cache axis — dup-detection" + new §"Forward-evolution rules" item §5 about new aggregating-read tools requiring explicit `cache:` declaration per the 2.71.0 `STALE_PRONE_NAME_ALLOWLIST` lint guard. |
+| 2 | `[medium]` | ICD #3 tool-registry | Post-supersedence cross-reference note added under the §⚠️ Superseded banner: the 2.71.0 `ToolDefinition.cache` field is a non-admission registration facet that lives at the registration site; cross-reference to ICD #1 §"The five axes › Cache axis" + [`test-tool-cache-classifications.mjs`](tests/test-tool-cache-classifications.mjs) lint guard. The ICD's scope (admission contract) stays superseded — it does not absorb the new facets. |
+| 3 | `[medium]` | ICD #4 git-providers | Three contract addition entries added to §"Code-aware findings" (4/5/6) — all ✅ already shipped: #4 `compareRefs` Gitea schema-correction + `getChangedFilesBetween` Gitea override (2.69.0); #5 `createBranch` idempotent-on-existing-ref cohort across all 3 remote providers with per-provider error-detection translator helper-functions table (2.70.0 + 2.74.0); #6 `PullRequestData.draft` typedef passthrough cohort with per-provider field-expression table (2.73.0 + 2.74.0). |
+
+**No `[strong]`-band findings.** The program-just-finished hypothesis held: cross-ICD drift was minimal because the recent 2.69.0–2.75.0 ship-cohort was ICD-anchored throughout (each ship cross-referenced its anchoring ICD inline; the 2.71.0 structural lift correctly crossed multiple ICDs without spawning a new one, validating the methodology refinement that "subsequent re-evals surface new ICD candidates only if cross-ICD drift accumulates"). Slot #10 confirmed the hypothesis: zero new ICD candidates surfaced from a 9-ICD sweep against a 7-minor ship-cohort.
+
+**Paper-half drift fixes:**
+
+- ROADMAP header preamble flipped slot-#9 narrative for slot-#10 (overdue-by-5 framing reiterated; ICD-backfill exhausted reiterated; 8-minor delta callout)
+- `Just ran (RE-EVAL following 2.64.0)` row at [`docs/ROADMAP.md:41`](docs/ROADMAP.md) struck through to roll off the visible window
+- §"Now" row at [`docs/ROADMAP.md:35`](docs/ROADMAP.md) rewritten around the three new `[medium]` findings + carry-forward of ICD #9 #3 (leak-gated) + ICD #6 #2 (architecture-blocked on missing `docs/DESIGN-mcp-oauth.md`)
+- New `Just ran (RE-EVAL following 2.67.0)` row inserted above the 2.75.0 ship row
+- §"Re-evaluation cadence" prose: `RE-EVAL following 2.64.0` row appended with closure status of all 4 cohort findings (3 of 4 closed across 2.72.0 + 2.75.0; #3 still leak-gated); new `RE-EVAL following 2.67.0` row appended with slot-#10 narrative; next slot bumped from `RE-EVAL following 2.67.0` → `RE-EVAL following 2.70.0`
+- §"Forward ICD presence check" added new cohort-row for 2.69.0–2.75.0 ship cohort (absorbed via ARCH sync) + new row for `RE-EVAL following 2.67.0` itself
+- Translation paragraph at end of §"Forward ICD presence check" updated from "Nine re-evals" → "Ten re-evals" with slot-#10 narrative; third precedent shape-pinning idiom (source-scan-precedent) added alongside capabilities-precedent + turn-stats-precedent
+
+**Files:**
+
+| File | Change |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | EDIT — header `Last sync: 2.68.0` → `2.75.0`; preamble rewritten for slot-#10 narrative; Git Layer › `base.js` paragraph extended with three contract additions (compareRefs / createBranch / PullRequestData.draft); LLM Layer › `tools/registry.js` extended with `ToolDefinition.cache` field documentation; Editor Layer extended with destroy-then-replace contract + barrel `refreshGhostText` activation + ICD #9 cohort status "3 of 4 closed"; pr-review/ paragraph extended with draft-vs-conflict disambiguation note + cross-reference; Testing & CI test count 3585 → 3622 and rolled in 2.69.0–2.75.0 test additions + third settled idiom (source-scan-precedent). |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — see "Paper-half drift fixes" above. |
+| [`docs/ICD-chat-handlers.md`](docs/ICD-chat-handlers.md) | EDIT — §"The five axes › Cache axis — dup-detection" row extended with `isStatefulRead` + `getStatefulReadToolsLive` accessors + paragraph after the table describing the 2.71.0 `ToolDefinition.cache` lift; §"Forward-evolution rules" gained new item #5 (cache classification at registration site + `STALE_PRONE_NAME_ALLOWLIST` lint guard) + #6 (test invocation now also runs `test-tool-cache-classifications.mjs`). |
+| [`docs/ICD-tool-registry.md`](docs/ICD-tool-registry.md) | EDIT — §⚠️ Superseded banner gained §📎 Post-supersedence note describing non-admission registration facets continuing to evolve (2.71.0 `ToolDefinition.cache` field) with cross-reference to ICD #1 + [`test-tool-cache-classifications.mjs`](tests/test-tool-cache-classifications.mjs); ICD's scope (admission contract) stays superseded. |
+| [`docs/ICD-git-providers.md`](docs/ICD-git-providers.md) | EDIT — three new entries in §"Code-aware findings" (#4 / #5 / #6), all ✅ shipped; mirrors §3 `resolveReviewThread` resolved-entry style; #5 + #6 entries carry per-provider helper-function / field-expression tables. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. |
+
+**No version bump.** No [`js/version.js`](js/version.js) edit. No production-code edit during the re-eval slot itself per the cadence policy — findings ship in subsequent code minors (in this case, the three `[medium]` ICD edits are themselves the doc-only deliverable and land in this same slot's `[Unreleased]` block; no follow-up code minor needed for them).
+
+**Verification:**
+
+- Full Node suite: `node --test tests/test-*.mjs` — **3622 tests / 3621 pass / 1 skipped / 0 fail** (re-eval slot adds no tests and changes no production code; count carries through from the 2.75.0 baseline).
+- Version coherence: [`js/version.js`](js/version.js) stays at `'2.75.0'` (the latest released entry in this CHANGELOG); the `[Unreleased]` accumulation pattern matches the 2.50.0 / 2.59.0 / 2.60.0 / 2.61.0 / 2.64.0 / 2.67.0 absorption-release cadence.
+- Markdown link integrity: every new `[ICD-*.md]` / `[file:line]` citation resolves against the 2.75.0 tree.
+- ICD shape-parity: section headings stay consistent across edited ICDs; the new §"Code-aware findings" entries in ICD #4 (#4 / #5 / #6) mirror the §3 `resolveReviewThread` resolved-entry style one-for-one.
+- Security/theme lint: trivially green (no production-code edits — markdown content only; SECURITY.md / theme-token boundaries unchanged).
+- CHANGELOG check: `[Unreleased]` block is non-empty; latest dated heading is `## [2.75.0]` which matches [`js/version.js`](js/version.js).
+
+**Translation.** The ICD-backfill program named target list (#1–#9) remains exhausted; subsequent re-evals run the paper + code-aware halves against the established 9 ICDs and surface new ICD candidates only if cross-ICD drift accumulates. **Slot #10 was the first slot to validate the methodology's "no new ICD" promise** — a 7-minor ship-cohort across multiple subsystems (Git × 3, Tool × 1, Editor × 3, PR-review × 1) produced zero new ICD candidates because each ship was ICD-anchored from the start. Next re-eval slot: `RE-EVAL following 2.70.0` (3 code minors past 2.67.0 anchor; we're at 2.75.0 so 5 past anchor — already overdue by 2 minors at slot-#10 fire time).
+
 ## [2.75.0] - 2026-05-20
 
 ### Added — `editorInstance` destroy-then-replace contract test (ICD #9 finding #1)

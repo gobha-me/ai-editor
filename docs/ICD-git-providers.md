@@ -180,6 +180,40 @@ Authoring this ICD surfaced **three** drift items worth tracking. Per re-eval me
 
 **Resolution (2.60.0):** Demote option taken. The `resolveReviewThread` method removed from [`base.js`](../js/git-providers/base.js), the [`git.js`](../js/git.js) facade removed, and the lone `notSupported`-throw test at [`test-pr-review-provider-shape.mjs`](../tests/test-pr-review-provider-shape.mjs) removed. **The `threadResolve` capability flag is retained on the 6-flag matrix** — the slot still documents the intentional gap (Gitea has no first-class thread state; GitHub requires GraphQL), and a future GraphQL-capable provider re-adds the method behind that flag without re-litigating the shape pinned by [`test-provider-capabilities-shape.mjs`](../tests/test-provider-capabilities-shape.mjs). Mirrors the inverse rule applied at 2.50.0: `getCommitDiff` was *promoted* because it had real concrete-provider overrides; `resolveReviewThread` is *demoted* because it had none.
 
+### 4. ~~`compareRefs` Gitea returns no top-level `files` array — silent `getChangedFilesBetween` fall-through~~ ✅ resolved at 2.69.0
+
+~~Gitea's `Compare` schema omits the top-level `files` aggregate (commits carry per-commit `files`, but `compareRefs(a,b).files` returns `undefined`). The `BASE_GIT_PROVIDER.getChangedFilesBetween` functional default at [`base.js`](../js/git-providers/base.js) reads `result.files ?? []` — silently returning empty even when the diff had real changes. Pre-2.69.0 the silent fall-through fired 3× per call on every branch navigation; the retrieval delta-indexer treated empty as "no files changed" and skipped re-indexing.~~
+
+**Resolution (2.69.0):** [`gitea.js`](../js/git-providers/gitea.js) gains a Gitea-side `getChangedFilesBetween` override that unions `commits[].files` across both compare directions; `null` returned for the no-files-array safe-rewalk signal (preserve legacy fall-through) vs. `[]` for the genuine identical-content signal. 14 subtests at [`test-gitea-compare.mjs`](../tests/test-gitea-compare.mjs) pin `files: []` schema shape against the Gitea `Compare` API, normal-path log silence, 0-commit ACL/bad-ref diagnostic preservation, and the null-vs-empty disambiguation. Surfaced 2026-05-20 during a user-trace of branch navigation across a 12-commit-delta range.
+
+### 5. ~~`createBranch` throws on existing-ref — idempotency missing across all three remote providers~~ ✅ resolved at 2.70.0 + 2.74.0 cohort closure
+
+~~Pre-2.70.0, `createBranch(connection, owner, repo, name, sha)` propagated provider-side already-exists errors (Gitea 500 + `PushRejected ... reference already exists`; GitHub 422 + `Reference already exists`; GitLab 400 + `Branch already exists`) as wall-of-red EditorErrors. The 2.68.0 user-trace caught the issue-detail "Start work on issue #221" path throwing after a successful retry — the branch was created on the prior attempt, downstream retrieval-index copy succeeded against the cache, but the surface fired a "Failed to start work on issue" wall because the create call wasn't idempotent. Same idempotency-gap shape as the plugin `destroy()` first-time-disable antibody (2.64.0) and the edit-tool stale-cache antibody (PR #355).~~
+
+**Resolution (2.70.0 + 2.74.0):** `BASE_GIT_PROVIDER.createBranch` jsdoc now declares the idempotent-on-existing-ref contract: existing-ref returns `name` rather than throwing, and `git:branchCreated` emits only on the genuine-creation path so listeners don't fire a "created" reaction for a pre-existing branch. Per-provider error-detection translators added to each concrete provider:
+
+| Provider | Helper | Match conditions |
+|---|---|---|
+| Gitea | `isGiteaBranchAlreadyExistsError(err, branchName)` | `status === 500` AND (`'reference already exists'` OR `'PushRejected'`) AND branch name in body |
+| GitHub | `isGithubReferenceAlreadyExistsError(err)` | `status === 422` AND `'Reference already exists'` (no name guard — message canonical enough) |
+| GitLab | `isGitlabBranchAlreadyExistsError(err)` | `status === 400` AND `'Branch already exists'` (no name guard — GitLab's canonical message doesn't include the branch name in production, so a Gitea-style name-required guard would silently never fire) |
+
+15 subtests across the cohort at [`test-create-branch-idempotency.mjs`](../tests/test-create-branch-idempotency.mjs) (11 at 2.70.0 Gitea + GitHub + 4 at 2.74.0 GitLab; GitLab's count is 1 less than Gitea's 5 because the canonical phrase is specific enough to drop branch-name belt-and-braces). Mirrors the 2.50.0 ICD #4 conservative cohort-closure pattern (ship Gitea + GitHub surgical first; close GitLab in a follow-up minor when the typedef + helper shape is settled).
+
+### 6. ~~`PullRequestData.draft` not in typedef — `pr.mergeable === false` conflated draft state with merge conflict~~ ✅ resolved at 2.73.0 + 2.74.0 cohort closure
+
+~~Pre-2.73.0, both Gitea + GitHub `getPullRequest()` stripped `draft` from the API response before returning the PR object. The PR Review surface at [`PrMergeControls.js:128`](../js/pr-review/PrMergeControls.js) gated `⚠️ Resolve conflicts` on `pr.mergeable === false` alone — but draft PRs return `mergeable: false` with `merge_status: 'cannot_be_merged'` on all three providers as well, indistinguishably. User repro on gitea#466: draft `gitea#465` had a conflict-free merge but rendered as conflicted; removing the `WIP:` prefix flipped `mergeable` back to `true` and the warning cleared. **The disambiguation was structurally missing from the typedef.**~~
+
+**Resolution (2.73.0 + 2.74.0):** [`base.js`](../js/git-providers/base.js) `PullRequestData` typedef gains `@property {boolean} [draft]` row with docstring naming the disambiguation contract (`mergeable: false` ambiguity + back-compat semantics: `undefined → false`). Three providers' `getPullRequest()` pass it through with strict-boolean coercion:
+
+| Provider | Field expression | Notes |
+|---|---|---|
+| Gitea | `draft: pr.draft === true` | Single canonical field |
+| GitHub | `draft: pr.draft === true` | Single canonical field |
+| GitLab | `draft: mr.draft === true \|\| mr.work_in_progress === true` | Normalizes modern (`draft`) + pre-deprecation (`work_in_progress`) MR fields at the translator boundary so consumers stay version-agnostic |
+
+[`PrMergeControls.js`](../js/pr-review/PrMergeControls.js) gains `isDraft = pr?.draft === true` local; `showResolve` body gains `!isDraft`; new conditional render of a neutral `pr-dock__notice` "📝 Draft — not ready to merge" element when `isDraft`; merge-controls disabled (strategy select + delete-branch checkbox + merge button) so the user can't drive an attempt the remote will reject. 15 subtests across the cohort at [`test-pr-review-draft-vs-conflict.mjs`](../tests/test-pr-review-draft-vs-conflict.mjs) (11 at 2.73.0 Gitea + GitHub + 4 at 2.74.0 GitLab using a new `gitlabMrPayload({ draft, work_in_progress, merge_status })` helper mirroring `giteaPrPayload`).
+
 ### Other observations (not promoted)
 
 - **GitLab exposes a public `getWebUrl(connection)` not present on the base** ([`gitlab.js:95`](../js/git-providers/gitlab.js)). Used by GitLab's own `getWorkflowRunLogs` + `getCommits` to build web-facing URLs. Documented as provider-private extension; not promoting to base because the URL-stripping logic is GitLab-specific (other providers' base URLs and web URLs are already aligned).
