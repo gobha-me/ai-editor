@@ -65,6 +65,13 @@
  * @property {string}  head
  * @property {string}  base
  * @property {boolean} [mergeable]
+ * @property {boolean} [draft]    Draft / WIP state. When `true`, the
+ *   remote intentionally blocks merge — consumers MUST NOT classify
+ *   `mergeable === false` as a merge conflict on draft PRs (Gitea's
+ *   `mergeable: false` covers both conflict AND draft-block; only the
+ *   `draft` field disambiguates). Optional — absent on providers
+ *   pre-dating 2.73.0 / on `listMergeRequests` payloads. Treat
+ *   `undefined` as "not draft" for back-compat.
  * @property {string}  [url]
  */
 

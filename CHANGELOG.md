@@ -4,6 +4,33 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.73.0] - 2026-05-20
+
+### Fixed — Draft PRs render as merge conflicts (gitea#466)
+
+The PR review surface conflated two distinct meanings of `pr.mergeable === false`:
+
+1. **Gitea/GitHub draft state** — merge intentionally blocked by `draft: true`. Not a conflict.
+2. **Real merge conflict** — base/head can't be three-way merged.
+
+Both surfaced as `⚠️ Resolve conflicts` at [`js/pr-review/PrMergeControls.js:128`](js/pr-review/PrMergeControls.js), gated only by `pr.mergeable === false`. User repro from gitea#466: draft `gitea#465` had a conflict-free merge but rendered as conflicted; removing the `WIP:` prefix flipped `mergeable` back to `true` and the warning cleared.
+
+**Root cause.** [`gitea.js:getPullRequest`](js/git-providers/gitea.js) and [`github.js:getPullRequest`](js/git-providers/github.js) stripped `draft` from the API response before returning the PR object. The surface had no way to disambiguate.
+
+**Fix.** Pass `draft: pr.draft === true` through both providers' `getPullRequest()`. Gate `showResolve` on `!isDraft`. Render a neutral `pr-dock__notice` "📝 Draft — not ready to merge" element when `isDraft`. Disable the merge controls (strategy select, delete-branch checkbox, merge button) while draft so the user can't drive an attempt the remote will reject.
+
+The base typedef [`PullRequestData`](js/git-providers/base.js) gains an optional `@property {boolean} [draft]` row documenting the cross-provider contract — `undefined` MUST be treated as "not draft" so consumers compose against the field without per-provider conditional logic. The `=== true` coercion at the provider level enforces this from the producer side.
+
+**GitLab deferred** to keep the fix surgical. Same shape (`draft: boolean` on the GitLab MR object), queued as a `[medium]` follow-up in [`docs/ROADMAP.md`](docs/ROADMAP.md)'s Now row — fires on next user-visible GitLab draft-MR encounter. Mirrors the 2.70.0 conservative cohort-closure pattern.
+
+### Added — `tests/test-pr-review-draft-vs-conflict.mjs`
+
+New test file (**11 subtests**) covers the fix in two layers:
+
+1. **Provider passthrough** (6 subtests) — Gitea + GitHub `getPullRequest` returns `draft: true` / `draft: false` / `draft: false` (from undefined → back-compat). Per-test merged-provider-clone stubs from [`tests/test-pr-review-provider-shape.mjs`](tests/test-pr-review-provider-shape.mjs).
+2. **PrMergeControls source-scan** (4 subtests) — `isDraft` declaration is `pr?.draft === true`; `showResolve` body contains `!isDraft`; draft notice element is `pr-dock__notice` carrying "Draft" copy; merge button `disabled` includes `isDraft`. Source-scan idiom because `PrMergeControls.js` `await`s Preact at module top and is not directly Node-importable — mirrors [`tests/test-plugin-editor-auto-switch-retired.mjs`](tests/test-plugin-editor-auto-switch-retired.mjs) + [`tests/test-editor-compartment-ordering.mjs`](tests/test-editor-compartment-ordering.mjs).
+3. **Base typedef pin** (1 subtest) — `PullRequestData` typedef block contains `@property {boolean} [draft]` so the documented contract doesn't silently drift.
+
 ## [2.72.0] - 2026-05-20
 
 ### Fixed — Ghost-text settings changes silently failed to reach the live editor (ICD #9 finding #4)

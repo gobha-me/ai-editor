@@ -575,6 +575,7 @@ const giteaProvider = {
             headSha: pr.head.sha,
             base: pr.base.ref,
             mergeable: pr.mergeable,
+            draft: pr.draft === true,
             merged: pr.merged,
             user: pr.user.login,
             additions: pr.additions,

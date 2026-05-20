@@ -43,10 +43,14 @@ export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
     const [merging, setMerging] = useState(false);
     const confirmTimerRef = useRef(null);
 
-    // Show "Resolve conflicts" when the PR is unmergeable AND the
-    // active provider supports the resolver. Falls back gracefully on
-    // GitLab + Local where the capability flag is false.
-    const showResolve = pr && pr.mergeable === false && capabilities?.mergeConflictResolution === true;
+    // Draft PRs return `mergeable: false` as a draft-block signal, NOT
+    // a conflict (gitea#466). Disambiguate before deciding what to show.
+    const isDraft = pr?.draft === true;
+
+    // Show "Resolve conflicts" when the PR is unmergeable AND not a
+    // draft AND the active provider supports the resolver. Falls back
+    // gracefully on GitLab + Local where the capability flag is false.
+    const showResolve = pr && pr.mergeable === false && !isDraft && capabilities?.mergeConflictResolution === true;
 
     function handleResolveClick() {
         try {
@@ -118,6 +122,11 @@ export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
 
     return html`
         <div class="pr-dock__merge" role="group" aria-label="Merge controls">
+            ${isDraft && html`
+                <div class="pr-dock__notice" role="note">
+                    📝 Draft — not ready to merge
+                </div>
+            `}
             ${showResolve && html`
                 <button
                     type="button"
@@ -132,7 +141,7 @@ export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
                 class="pr-dock__select"
                 value=${strategy}
                 onChange=${(e) => setStrategy(e.target.value)}
-                disabled=${merging}
+                disabled=${merging || isDraft}
                 aria-label="Merge strategy">
                 <option value="squash">Squash</option>
                 <option value="merge">Merge</option>
@@ -143,7 +152,7 @@ export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
                     type="checkbox"
                     checked=${deleteBranch}
                     onChange=${(e) => setDeleteBranch(e.target.checked)}
-                    disabled=${merging}
+                    disabled=${merging || isDraft}
                 />
                 Delete branch
             </label>
@@ -151,7 +160,8 @@ export function PrMergeControls({ prNumber, pr, capabilities, onError }) {
                 type="button"
                 class=${'pr__btn ' + (confirming ? 'pr__btn--danger' : 'pr__btn--primary')}
                 onClick=${handleClick}
-                disabled=${merging}>
+                disabled=${merging || isDraft}
+                title=${isDraft ? 'Mark the PR as ready for review before merging' : ''}>
                 ${btnLabel}
             </button>
         </div>
