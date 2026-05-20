@@ -39,7 +39,9 @@ export {
     insertAtLine,
     deleteRange,
     // Text-based editing (used by replaceText internal API)
-    replaceText
+    replaceText,
+    // Ghost-text live reconfigure (called from settings persistence)
+    refreshGhostText
 } from './editor/instance.js';
 
 // File utilities

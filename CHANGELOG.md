@@ -4,6 +4,39 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.72.0] - 2026-05-20
+
+### Fixed — Ghost-text settings changes silently failed to reach the live editor (ICD #9 finding #4)
+
+The settings-persistence callsite at [`js/settings/persistence.js:92`](js/settings/persistence.js) has always called `m.refreshGhostText && m.refreshGhostText()` against the editor barrel module — but the barrel ([`js/editor.js`](js/editor.js)) never re-exported `refreshGhostText` from [`js/editor/instance.js`](js/editor/instance.js). The `&&` short-circuit silently masked the missing export: toggling any ghost-text setting (provider, model, debounce, hotkey, enabled) updated `State.settings.ghostText` and persisted to storage, but the live editor's CM6 compartment was never reconfigured. Users had to reload the editor to see settings changes take effect.
+
+**Fix.** One-line addition to [`js/editor.js`](js/editor.js) — `refreshGhostText` joins the named export list from `./editor/instance.js`. No production behavior change beyond activating the dormant callsite.
+
+The `m.refreshGhostText && m.refreshGhostText()` short-circuit guard is deliberately left in place — removing it would be a separate de-defensiveness pass; this PR keeps the fix surgical.
+
+### Added — Editor barrel public-surface shape pin (ICD #9 finding #4)
+
+New [`tests/test-editor-barrel-shape.mjs`](tests/test-editor-barrel-shape.mjs) (**4 subtests**) mirrors the `Object.keys(...).sort()` shape-pin idiom of [`tests/test-profile-registry-shape.mjs`](tests/test-profile-registry-shape.mjs) (2.67.0) and [`tests/test-mcp-public-surface-shape.mjs`](tests/test-mcp-public-surface-shape.mjs) (2.63.0):
+
+1. Headline pin — `refreshGhostText` is exported and is a function.
+2. Reference-equality pin — barrel `refreshGhostText` is the same object as the source-module export.
+3. Full module-level surface deep-equal — catches accidental future addition / removal of any barrel export.
+4. Per-export reference equality across a representative subset — catches the inverse drift (right name, wrapped value).
+
+Zero production-file edits in the test direction — the barrel stays the source of truth for its own shape. Closes ICD #9 §"Code-aware findings #4" + §"Open invariants" bullet 7.
+
+### Added — Compartment-ordering invariant source-scan pin (ICD #9 finding #2)
+
+New [`tests/test-editor-compartment-ordering.mjs`](tests/test-editor-compartment-ordering.mjs) (**3 subtests**) — source-scan idiom mirroring [`tests/test-chat-tool-name-literals.mjs`](tests/test-chat-tool-name-literals.mjs): read [`js/editor/instance.js`](js/editor/instance.js), `stripComments`, extract `createEditor` body via brace-depth walk, find the unique position of each landmark `extensions.push(...)` call and assert ordering.
+
+The pinned invariant: in `createEditor`, `extensions.push(keymapCompartment.of(...))` must precede `extensions.push(ghostTextCompartment.of(...))`, which in turn must precede `extensions.push(...CM.basicSetup)`. CM6 evaluates extensions in registration order and the first registration of a key binding wins. Reordering would silently silence Vim mode (basicSetup's `defaultKeymap` claims Esc/i/h/j/k/l) or ghost-text Tab/Esc accept-dismiss (basicSetup's `indentWithTab` claims Tab) — both failure modes invisible to every other test in the suite.
+
+The highest-anti-regression-value finding in the ICD #9 cohort per the re-eval call-out. Closes ICD #9 §"Code-aware findings #2" + §"Open invariants" bullet 2.
+
+### Docs — `RE-EVAL following 2.64.0` cohort progress
+
+Absorption release for the two `[strong] [S]` findings from the ninth re-eval slot. Findings #1 (`[medium]` — `editorInstance` destroy-then-replace contract) and #3 (`[medium]` — custom tab renderer cleanup callback) remain queued: #1 is pre-emptive (no live bug; awaits tightening session); #3 is gated on a real-leak signal in the two production renderers ([`issue-detail.js`](js/issue-detail.js), [`plugin-editor.js`](js/plugin-editor.js)) per the methodology's "decision-required" sub-clause. The GitLab `createBranch` idempotency adjacency (`[medium]`, mirrors the 2.70.0 Gitea + GitHub fix) also stays queued — fires on next user-visible GitLab "Start work on issue" against an existing remote ref. ICD #6 finding #2 (SSE transport) remains blocked on an architecture decision; pairs naturally with github#27 Phase 2 OAuth when that DESIGN doc lands.
+
 ## [2.71.0] - 2026-05-20
 
 ### Fixed — `list_dirty_files` dup-cache survived intervening `edit_file` mutations (gitea#472)
