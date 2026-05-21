@@ -19,7 +19,7 @@ import { RetrievalManager } from './intelligence/retrieval/manager.js';
 import { getCursorContext } from './editor.js';
 import { isConnectionDown } from './offline-indicator.js';
 import { wrapUntrusted, UNTRUSTED_KINDS } from './security/untrusted-wrap.js';
-import { getPlanMode } from './chat/state.js';
+import { getPlanMode, getApprovedPlan } from './chat/state.js';
 import { ToolRegistry } from './tools/registry.js';
 import { Catalog } from './intelligence/tools/catalog.js';
 
@@ -487,6 +487,26 @@ function buildSystemPrompt(opts = {}) {
         prompt += `\n- Work that produces edits — sub-agents are read-only by default.`;
         prompt += `\n- Tasks where you need to see the intermediate reasoning (use direct tool calls so you stay in the loop).`;
         prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation.`;
+    }
+
+    // gitea#478 (2.77.0) — durable approved-plan visibility. The slot
+    // (gitea#424, 2.52.0) was only readable on demand via
+    // `read_approved_plan`; live sessions showed models re-calling
+    // `submit_plan_for_approval` with substantially identical plans
+    // after the original plan-submission chat message aged out of the
+    // windowed context. Passive-push reminder here keeps the approved
+    // plan continuously visible until conversation switch
+    // (`clearApprovedPlan` in chat/conversations.js) wipes it. Lives
+    // BEFORE the plan-mode block so it survives the approval that
+    // lifts plan mode — that's exactly when the resubmit bug fires.
+    const approved = getApprovedPlan();
+    if (approved && typeof approved.plan === 'string' && approved.plan.length > 0) {
+        prompt += `\n\n<approved-plan-current>`;
+        prompt += `\nThe user already approved the following plan in this conversation. Implement against it. Do NOT re-submit a substantially identical plan via submit_plan_for_approval — both submissions waste the user's attention. If the work needs to grow beyond what was approved, ask the user in chat first.`;
+        prompt += `\n<plan approvedAt="${new Date(approved.approvedAt).toISOString()}">`;
+        prompt += `\n${approved.plan}`;
+        prompt += `\n</plan>`;
+        prompt += `\n</approved-plan-current>`;
     }
 
     // Plan Mode (github#25, 1.10.0) — when active, prepend a load-bearing

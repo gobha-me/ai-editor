@@ -4,6 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.77.0] - 2026-05-21
+
+### Fixed — Approved plan now durable across the context window (gitea#478)
+
+In a recent ai-editor live session (qwen-3-6-plus driving HTML-Games issue #230), the model called `submit_plan_for_approval` twice in one conversation with substantially identical plans. Both auto-approved. Between them: only `read_lines` and `scratchpad_write` calls — no scope change, no new information.
+
+**Root cause.** The approved-plan body lived only as a chat message at submit-time. After a handful of turns it slid past the windowing cut-off in `getCompressedContextMessages()` ([`js/chat/handlers.js`](js/chat/handlers.js)), while the `submit_plan_for_approval` tool description stayed freshly visible in the per-turn tool list. The model took the path of least resistance and re-submitted. The 2.52.0 fix (gitea#424) added a `read_approved_plan` tool that surfaces the slot on demand — that is *active-pull* and depended on the model choosing to call it. The bug is that under aging-context pressure, models reflexively re-invoke a visible tool that matches current intent rather than reach for a different one.
+
+**Fix.** Passive-push reminder. [`buildSystemPrompt`](js/prompts.js) (which is rebuilt per turn anyway) now appends an `<approved-plan-current>` block whenever [`getApprovedPlan()`](js/chat/state.js) is non-null. The block wraps the original plan body with an ISO-formatted `approvedAt` attribute and carries an anti-resubmit nudge: *"Implement against it. Do NOT re-submit a substantially identical plan via submit_plan_for_approval — both submissions waste the user's attention. If the work needs to grow beyond what was approved, ask the user in chat first."* The slot is still cleared on conversation switch by `clearApprovedPlan()` (existing behavior).
+
+Placement: the new block sits BEFORE the `PLAN MODE ACTIVE` block in [`js/prompts.js`](js/prompts.js) because the resubmit bug fires precisely AFTER approval lifts plan mode — the new block must survive that lift to be useful.
+
+`read_approved_plan` is kept for one release cycle as a redundant active-pull path; removal candidate once the passive-push soaks.
+
+### Added — Three system-prompt-injection subtests in `tests/test-approved-plan.mjs`
+
+- **Slot empty → block absent** (no `<approved-plan-current>` substring).
+- **Slot populated → block present, plan body verbatim, ISO `approvedAt`, anti-resubmit sentence.**
+- **Plan-mode-independent** — slot survives `setPlanMode(false)`; reminder block still injected; `PLAN MODE ACTIVE` block correctly absent.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/prompts.js`](js/prompts.js) | EDIT — imports `getApprovedPlan` alongside `getPlanMode`; appends `<approved-plan-current>` block before the plan-mode block when the slot is populated. ~12 lines. |
+| [`tests/test-approved-plan.mjs`](tests/test-approved-plan.mjs) | EDIT — imports `buildSystemPrompt`, `getPlanMode`, `setPlanMode`; adds 3 system-prompt-injection subtests. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.76.0'` → `'2.77.0'`. |
+
+### Verification
+
+- `node --test tests/test-approved-plan.mjs` — 16 tests pass (13 pre-existing + 3 new).
+- Full Node suite: `node --test tests/test-*.mjs` — green.
+- Browser manual: New chat → enable Plan Mode → approve a plan → run 6+ tool calls so the original plan chat message ages out → confirm outgoing chat request's system message contains the `<approved-plan-current>` tag → confirm the model does NOT call `submit_plan_for_approval` a second time. New Chat clears the slot.
+
 ## [2.76.0] - 2026-05-20
 
 ### Fixed — Plan mode tool-gate moved to dispatch boundary (gitea#480)

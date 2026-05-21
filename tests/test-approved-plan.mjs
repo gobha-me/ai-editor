@@ -36,8 +36,11 @@ import {
     getApprovedPlan,
     setApprovedPlan,
     clearApprovedPlan,
+    getPlanMode,
+    setPlanMode,
 } from '../js/chat/state.js';
 import { registerPlanTools } from '../js/tools/plan-tools.js';
+import { buildSystemPrompt } from '../js/prompts.js';
 
 function _reset() {
     if (getPendingPlanApproval()) cancelPlanApproval();
@@ -241,4 +244,62 @@ test('submit_plan_for_approval description discourages inlining production-ready
         'plan-parameter description names the intent framing');
     assert.ok(/do NOT inline/i.test(paramDesc) || /do not inline/i.test(paramDesc),
         'plan-parameter description includes the explicit "do not inline" guidance');
+});
+
+// ============================================
+// System-prompt injection (gitea#478 — 2.77.0)
+// ============================================
+//
+// The slot has been readable on-demand via `read_approved_plan` since
+// 2.52.0 (gitea#424), but live sessions showed models re-calling
+// `submit_plan_for_approval` with substantially identical plans after the
+// original plan-submission chat message aged out of the windowed context.
+// The passive-push reminder in `buildSystemPrompt` keeps the approved plan
+// continuously visible per turn, plus an anti-resubmit nudge.
+
+test('<approved-plan-current> block is absent when slot is empty (gitea#478)', () => {
+    _reset();
+    const prompt = buildSystemPrompt();
+    assert.ok(!prompt.includes('<approved-plan-current>'),
+        'no approved-plan block when slot is null');
+});
+
+test('<approved-plan-current> block is present + carries plan body + ISO approvedAt (gitea#478)', () => {
+    _reset();
+    setApprovedPlan({ plan: '# X\nstep 1', approvedAt: 1700000000000 });
+    try {
+        const prompt = buildSystemPrompt();
+        assert.ok(prompt.includes('<approved-plan-current>'),
+            'opening tag must appear after approval');
+        assert.ok(prompt.includes('</approved-plan-current>'),
+            'closing tag must appear after approval');
+        assert.ok(prompt.includes('step 1'),
+            'plan body must appear verbatim inside the block');
+        assert.ok(prompt.includes('2023-11-14T22:13:20.000Z'),
+            'approvedAt must serialize as ISO string');
+        assert.ok(/do NOT re-submit/i.test(prompt),
+            'anti-resubmit nudge (the load-bearing sentence) must be present');
+    } finally {
+        _reset();
+    }
+});
+
+test('<approved-plan-current> block survives independent of plan-mode state (gitea#478)', () => {
+    _reset();
+    // Post-approval state: plan mode lifts but the approved plan slot stays
+    // populated. The resubmit bug fires precisely in this window.
+    const wasPlanMode = getPlanMode();
+    try {
+        setPlanMode(false);
+        setApprovedPlan({ plan: 'P', approvedAt: 1 });
+        const prompt = buildSystemPrompt();
+        assert.equal(getPlanMode(), false, 'precondition: plan mode is off');
+        assert.ok(prompt.includes('<approved-plan-current>'),
+            'approved-plan block is independent of getPlanMode()');
+        assert.ok(!prompt.includes('--- PLAN MODE ACTIVE ---'),
+            'precondition: PLAN MODE ACTIVE block does not appear');
+    } finally {
+        setPlanMode(wasPlanMode);
+        _reset();
+    }
 });
