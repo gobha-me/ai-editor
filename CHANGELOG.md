@@ -4,6 +4,67 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.83.0] - 2026-05-21
+
+### Added — `js/chat/agent-loop-contracts.js` (post-`DESIGN-agent-loop.md`)
+
+[`docs/DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) landed 2026-05-21, naming the previously-unnamed agent-loop consumer surface that sits between the four admission subsystems (retrieval / memory / compression / tools) and the LLM: envelope-authorship rule, cache coordination (same-request + cross-request), dup-streak guard, no-progress guard, queued-input FIFO, user-pause Promise slot, stateful-read bypass, sub-agent inheritance.
+
+All these contracts are correctly implemented today, but scattered across four files in [`js/chat/`](js/chat/) with no single architectural home. Without a source-side citation point, future cache-deadlock / dup-loop / envelope-authorship disputes have to do archaeology against implementation — the canonical deadlock pattern of gitea#301 is exactly the kind of seam-bug this naming work prevents. Precedent: the 2.71.0 cache-classification structural lift (`ToolDefinition.cache: 'by-args'|'never'` lifted onto the registration site + source-scan lint test killed registration-time whack-a-mole). Same shape here — one new JSDoc-only module + lint test that kills future re-derivation drift.
+
+The new module is **JSDoc-only — no runtime exports.** Typedefs are nominal under `@ts-check`; consumers reference them via `import('./agent-loop-contracts.js').*` in JSDoc. This avoids the load-time cycle risk that [`cache-policy.js`](js/chat/cache-policy.js) already flags around `tool-classifications.js`. Contents:
+
+- **Authorship Rule classification table** — verbatim from [`DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) §"The Authorship Rule" (10-row markdown table). The rule that disambiguates loop-authored vs. tool-authored envelope fields.
+- **`@typedef EnvelopeShape`** — union over `SuccessEnvelope`, `RefusedEnvelope`, `CachedEnvelope`, `PartialEnvelope`. Discrimination is by **flag-presence** (`_refused: true` / `_cached: true` / `_partial: true`), which matches what the runtime actually emits today. No `kind` discriminator field is added to runtime envelopes by this PR — that would be a behavior change.
+- **`@typedef LoopState`** — `noProgressStreak`, `roundCount`, `duplicateStreak` (Map), `toolCallCache` (same-request LRU), `toolActionLog` (cross-request), `queuedInputFIFO`, `userPausePromise`. References the constants `NO_PROGRESS_LIMIT` / `HARD_CAP` / `DUP_REFUSE_THRESHOLD` at [`tool-loop-core.js:48-50`](js/chat/tool-loop-core.js#L48); does NOT re-declare them (out of scope).
+- **`@typedef CacheResult`** — describes the two-step lookup pattern in source today (same-request `Map.get(cacheKey)` then cross-request `findMatchingCrossRequestEntry`). Documented as a contract concept; a future refactor that lifts the lookups into a unified `lookupCache()` helper would formalize the runtime shape below the typedef.
+- **`@typedef DupStreakPolicy`** — `threshold`, `callKeyHash` (matches `toolName + '|' + canonicalArgsKey(args)` at [`tool-loop-core.js:333`](js/chat/tool-loop-core.js#L333)), `intervening_progress_resets`.
+
+`PartialEnvelope` is documented even though **no current emitter exists** — that's the whole point of centralizing. Naming the un-emitted shape gives future soft-budget work a named contract to land against without synthesizing a fake emitter today.
+
+### Added — `tests/test-agent-loop-contracts-citation.mjs` (source-scan lint)
+
+Mirrors the source-scan precedent in [`tests/test-edit-tracker-read-tool-contract.mjs`](tests/test-edit-tracker-read-tool-contract.mjs) (2.79.0): read each of the four consumer files as text; assert the literal substring `agent-loop-contracts` appears. Don't validate JSDoc parse (the project has no TS toolchain). Seven subtests total — one each for the four consumers, plus three for the new module itself (file existence + presence of the load-bearing `DESIGN-agent-loop.md` and `Authorship Rule` literals). Centralization without a test rots; this lint locks the citation in place across the four-consumer set.
+
+### Changed — Four consumers cite `./agent-loop-contracts.js`
+
+Each consumer file got a `@see ./agent-loop-contracts.js` in its module header, plus `@returns`/`@type` JSDoc on the envelope-construction sites that reference the new typedefs. **No code-path changes** — JSDoc only.
+
+| File | Edit |
+|---|---|
+| [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) | Module header gains `@see ./agent-loop-contracts.js` + one-sentence note that the loop authors `EnvelopeShape` per the Authorship Rule. Three envelope-construction sites (refused at L388, cross-request cached at L398, same-request cached at L404) get `@type {import('./agent-loop-contracts.js').*Envelope}` JSDoc. |
+| [`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js) | Module header gains `@see` pointer. `findMatchingCrossRequestEntry` `@returns` documents the consumer-wraps-it-into-`CachedEnvelope` flow. `buildCrossRequestCacheResult` `@returns` is `import('./agent-loop-contracts.js').CachedEnvelope`. |
+| [`js/chat/cache-policy.js`](js/chat/cache-policy.js) | Module header gains `@see` + a paragraph naming the stateful-read bypass as the cache-key composition arm of the agent-loop contract per design §"Cache-Key Composition + Stateful Reads." |
+| [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) | Module header gains `@see` + a paragraph naming `buildRefusalPayload` as the `RefusedEnvelope` author. `buildRefusalPayload` `@returns` is `import('./agent-loop-contracts.js').RefusedEnvelope`. |
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/chat/agent-loop-contracts.js`](js/chat/agent-loop-contracts.js) | NEW — JSDoc-only typedefs + Authorship Rule table + module header. No runtime exports. |
+| [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) | EDIT — JSDoc only (module header + 3 envelope-site `@type` annotations). |
+| [`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js) | EDIT — JSDoc only (module header + 2 `@returns`). |
+| [`js/chat/cache-policy.js`](js/chat/cache-policy.js) | EDIT — JSDoc only (module header). |
+| [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) | EDIT — JSDoc only (module header + `buildRefusalPayload` `@returns`). |
+| [`tests/test-agent-loop-contracts-citation.mjs`](tests/test-agent-loop-contracts-citation.mjs) | NEW — 7 subtests (4 consumer citation lints + 3 contracts-module self-checks). |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.82.0'` → `'2.83.0'`. |
+
+### Verification
+
+- `node --test tests/test-*.mjs` — full Node suite green; the new citation lint passes.
+- `node --test tests/test-agent-loop-contracts-citation.mjs` — 7 subtests pass in isolation.
+- `git diff --stat` shows no lines removed from the loop body in `tool-loop-core.js` — only header + 3 inline `@type` JSDoc additions; the cache/refusal/dup-streak code paths are untouched.
+- Browser smoke: opened the editor, ran a one-turn tool call (`read_file`), confirmed no console errors and normal envelope flow. No UI to verify — behavior is unchanged — but an import-graph break would surface here.
+- Coherence: bumped `js/version.js` + promoted `[Unreleased]` in the same PR per the standing rule.
+
+### Not in scope
+
+- Moving `NO_PROGRESS_LIMIT` / `HARD_CAP` / `DUP_REFUSE_THRESHOLD` out of `tool-loop-core.js`. That would be an import shuffle with cycle risk — behavior-adjacent and out of scope for "no behavior change."
+- Adding a runtime export from the new module. JSDoc-only is sufficient and avoids load-time cycle risk.
+- Authoring a `PartialEnvelope` emitter. The design lists it; production emits 3 of 4 shapes; naming the 4th here is exactly the centralization payload.
+- The Compression Rule 3/4 coverage-probe (the *other* `[medium]` 2.83.0 candidate per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Parallel work streams"). Left for the next slot.
+
 ## [2.82.0] - 2026-05-21
 
 ### Fixed — Anti-loop refusal no longer suggests functionally-unrelated tools (gitea#488)

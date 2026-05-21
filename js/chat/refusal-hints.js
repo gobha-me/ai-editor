@@ -9,6 +9,15 @@
  * next-action guidance so weak models can break out of the loop without
  * escalating to a more expensive tier.
  *
+ * `buildRefusalPayload` here authors the `RefusedEnvelope` shape
+ * (`kind: 'refused', _refused: true`) named in
+ * `./agent-loop-contracts.js`. The per-tool `next_action_hint` registry
+ * is the loop-side concatenation feed for that envelope per
+ * `DESIGN-agent-loop.md` §"The Authorship Rule" — see also
+ * `./agent-loop-contracts.js` for the source-side citation point.
+ *
+ * @see ./agent-loop-contracts.js
+ *
  * Origin: Grok-4-3 looped 7+ times on `get_ci_status` against a fresh branch
  * with no PR (HTML-Games dogfood, 2026-05-07). The result was structurally
  * "success" but informationally empty; the model treated empty as "I haven't
@@ -74,7 +83,7 @@ const STRONG_THRESHOLD = 3;
  * @param {string} toolName
  * @param {number} streak
  * @param {{ lastUserMessage?: string }} [opts]
- * @returns {{ error: string, _refused: true, last_user_message?: string }}
+ * @returns {import('./agent-loop-contracts.js').RefusedEnvelope}  Loop-authored `kind: 'refused'` envelope; tool was not invoked.
  */
 export function buildRefusalPayload(toolName, streak, opts = {}) {
     if (streak < STRONG_THRESHOLD) {

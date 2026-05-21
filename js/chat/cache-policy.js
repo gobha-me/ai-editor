@@ -11,7 +11,16 @@
  * that needs `isStatefulRead` or `getStatefulReadToolsLive` must
  * `import './_node-shim.mjs'` first.
  *
+ * The stateful-read bypass implemented here is the cache-key composition
+ * arm of the agent-loop contract — `DESIGN-agent-loop.md`
+ * §"Cache-Key Composition + Stateful Reads." Tools whose result depends
+ * on hidden state outside args (e.g. `read_current_file` reading
+ * `State.currentFile.path`) bypass both `LoopState` caches; the
+ * `cache: 'never'` classification on `ToolDef` is what the loop reads
+ * to decide.
+ *
  * @module chat/cache-policy
+ * @see ./agent-loop-contracts.js
  */
 
 import { STATEFUL_READ_TOOLS } from './tool-classifications.js';

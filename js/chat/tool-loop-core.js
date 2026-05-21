@@ -21,6 +21,16 @@
  * `canonicalArgsKey`, `buildRefusalPayload`, the
  * cache-invalidation helpers, `validateAndCleanHistory`) directly — none
  * touch DOM or `State.*` in a way that breaks the sub-agent caller.
+ *
+ * This module is the loop body that authors `EnvelopeShape` per the
+ * Authorship Rule and owns the `LoopState` counters
+ * (`duplicateStreak`, the same-request `toolCallCache`, the cross-request
+ * `toolActionLog`). The constants `NO_PROGRESS_LIMIT`, `HARD_CAP`, and
+ * `DUP_REFUSE_THRESHOLD` live just below. The shape contracts those
+ * constants drive are documented in `./agent-loop-contracts.js`
+ * (`DESIGN-agent-loop.md` source-side citation point).
+ *
+ * @see ./agent-loop-contracts.js
  */
 
 import { executeToolCall, parseTextToolCalls } from './tools.js';
@@ -375,6 +385,7 @@ export async function runToolLoop(context, hooks, transport) {
                         }
                         return '';
                     })();
+                    /** @type {import('./agent-loop-contracts.js').RefusedEnvelope} */
                     toolResult = buildRefusalPayload(toolName, streak, {
                         lastUserMessage: _lastUserMsg,
                     });
@@ -384,11 +395,13 @@ export async function runToolLoop(context, hooks, transport) {
                         toolName,
                         args,
                     });
+                    /** @type {import('./agent-loop-contracts.js').CachedEnvelope} */
                     toolResult = buildCrossRequestCacheResult({ toolName, lastEntry, MUTATING_TOOLS });
                     if (lastEntry?.result) {
                         console.log(`[TOOL-LOOP] Cross-request cache hit (full payload) for ${toolName}`);
                     }
                 } else if (cachedResult && !skipCache && !WRITE_TOOLS.includes(toolName)) {
+                    /** @type {import('./agent-loop-contracts.js').CachedEnvelope} */
                     toolResult = {
                         ...cachedResult,
                         _cached: true,

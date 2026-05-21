@@ -16,6 +16,13 @@
  * real dogfood sessions (gitea#301).
  *
  * This helper does both walks. Pure: no module-level state, no globals.
+ *
+ * `buildCrossRequestCacheResult` here authors the `CachedEnvelope` shape
+ * (`kind: 'cached', source: 'cross-request'`) named in
+ * `./agent-loop-contracts.js` (the source-side citation point for
+ * `DESIGN-agent-loop.md`).
+ *
+ * @see ./agent-loop-contracts.js
  */
 
 import {
@@ -126,7 +133,7 @@ export function invalidateCachesForPath({
  * @param {string} params.toolName
  * @param {object} params.args
  * @param {number} [params.lookback=30]  Most-recent N entries to scan; mirrors handlers.js.
- * @returns {object|undefined}
+ * @returns {object|undefined}  Raw action-log entry; consumer wraps it into a `CachedEnvelope` via `buildCrossRequestCacheResult` (see `./agent-loop-contracts.js`).
  */
 export function findMatchingCrossRequestEntry({ toolActionLog, toolName, args, lookback = 30 }) {
     if (!Array.isArray(toolActionLog) || toolActionLog.length === 0) return undefined;
@@ -227,7 +234,7 @@ export function buildToolActionLogEntry({
  * @param {string} params.toolName
  * @param {object|undefined} params.lastEntry   Result of `findMatchingCrossRequestEntry`.
  * @param {readonly string[]} params.MUTATING_TOOLS
- * @returns {object}
+ * @returns {import('./agent-loop-contracts.js').CachedEnvelope}  `kind: 'cached', source: 'cross-request'`.
  */
 export function buildCrossRequestCacheResult({ toolName, lastEntry, MUTATING_TOOLS }) {
     const isMutating = Array.isArray(MUTATING_TOOLS) && MUTATING_TOOLS.includes(toolName);
