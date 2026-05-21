@@ -80,23 +80,40 @@ const STRONG_THRESHOLD = 3;
  * module-header note for the gitea#488 field replay that motivated the
  * removal.
  *
+ * 2.86.0 (gitea#496) — the tool-loop now also tracks a same-name streak
+ * (args-independent). When that counter trips and the args-exact streak
+ * did not, the loop passes `opts.variedArgs = true`. The envelope swaps
+ * "identical args" for "varying args" and the second off-ramp from
+ * "change at least one argument" to "call a different tool entirely"
+ * so the refusal prose reads truthfully on either trigger.
+ *
  * @param {string} toolName
  * @param {number} streak
- * @param {{ lastUserMessage?: string }} [opts]
+ * @param {{ lastUserMessage?: string, variedArgs?: boolean }} [opts]
  * @returns {import('./agent-loop-contracts.js').RefusedEnvelope}  Loop-authored `kind: 'refused'` envelope; tool was not invoked.
  */
 export function buildRefusalPayload(toolName, streak, opts = {}) {
+    const variedArgs = opts.variedArgs === true;
+    const argsClause = variedArgs ? 'with varying args' : 'with identical args';
+
     if (streak < STRONG_THRESHOLD) {
         return {
-            error: `REFUSED: ${toolName} called ${streak} consecutive times with identical args. ${getRefusalHint(toolName)}`,
+            error: `REFUSED: ${toolName} called ${streak} consecutive times ${argsClause}. ${getRefusalHint(toolName)}`,
             _refused: true,
         };
     }
 
+    const secondOfframp = variedArgs
+        ? 'or call a different tool entirely.'
+        : 'or change at least one argument before retrying.';
+    const noRetryLine = variedArgs
+        ? `Do not call ${toolName} again — varying args has not produced progress.`
+        : `Do not call ${toolName} again with these arguments.`;
+
     const error =
-        `STOP. You have called ${toolName} ${streak} consecutive times with identical args — the registry is REFUSING to execute it.` +
-        ` Respond to the user with what you already have, or change at least one argument before retrying.` +
-        ` Do not call ${toolName} again with these arguments.`;
+        `STOP. You have called ${toolName} ${streak} consecutive times ${argsClause} — the registry is REFUSING to execute it.` +
+        ` Respond to the user with what you already have, ${secondOfframp}` +
+        ` ${noRetryLine}`;
 
     /** @type {{error: string, _refused: true, last_user_message?: string}} */
     const out = { error, _refused: true };

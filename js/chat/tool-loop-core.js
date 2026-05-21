@@ -58,6 +58,14 @@ import { getContextScale } from '../llm.js';
 const NO_PROGRESS_LIMIT = 3;
 const HARD_CAP = 100;
 const DUP_REFUSE_THRESHOLD = 3;
+// gitea#496 — same-tool-name streak guard (independent of args).
+// Fires when a model defeats the per-(tool, args) DUP_REFUSE_THRESHOLD by
+// varying one byte of arguments each call. Threshold is intentionally
+// higher than DUP_REFUSE_THRESHOLD: exact-arg repeat is a stronger signal
+// than name-only repeat, so the existing guard should still trip first
+// on the cleaner case. Legitimate exploration (5 different files in a row)
+// off-ramps by interleaving any non-same tool call.
+const SAME_TOOL_REFUSE_THRESHOLD = 5;
 
 const _NOOP = () => {};
 // Default round-commit preserves the round's text in `lastRoundContent`
@@ -203,6 +211,12 @@ export async function runToolLoop(context, hooks, transport) {
 
     const toolCallCache = new Map();
     const duplicateStreak = new Map();
+    // gitea#496 — sibling counter to `duplicateStreak`. Keyed by tool name
+    // alone (no args), so a model varying one arg byte per call still trips
+    // the OR-gate at `SAME_TOOL_REFUSE_THRESHOLD`. Tracked across all
+    // rounds in this request; reset when a different tool is invoked.
+    let lastInvokedToolName = null;
+    let sameToolStreak = 0;
     let _hasRetried = false;  // request-scoped one-shot; do not hoist.
 
     // The caller mounts the initial stream placeholder (parent wrapper:
@@ -369,9 +383,29 @@ export async function runToolLoop(context, hooks, transport) {
                 const streak = isDup ? (duplicateStreak.get(cacheKey) || 0) + 1 : 0;
                 duplicateStreak.set(cacheKey, streak);
 
+                // gitea#496 — same-name streak (args-independent). Tripping
+                // a different tool resets to 1; consecutive same-name calls
+                // grow monotonically across rounds.
+                if (toolName === lastInvokedToolName) {
+                    sameToolStreak++;
+                } else {
+                    sameToolStreak = 1;
+                }
+                lastInvokedToolName = toolName;
+
+                const exactArgsRefuse = isDup && streak >= DUP_REFUSE_THRESHOLD;
+                const sameToolRefuse = sameToolStreak >= SAME_TOOL_REFUSE_THRESHOLD;
+
                 let toolResult;
-                if (isDup && streak >= DUP_REFUSE_THRESHOLD) {
-                    console.warn(`[TOOL-LOOP] Refusing duplicate ${toolName} (streak=${streak})`);
+                if (exactArgsRefuse || sameToolRefuse) {
+                    // Report whichever streak actually tripped; if both, the
+                    // larger keeps the prose truthful. `variedArgs` flag
+                    // toggles refusal-hint text from "identical args" to
+                    // "varying args" so the envelope doesn't lie when only
+                    // the same-tool counter fired.
+                    const effectiveStreak = Math.max(streak, sameToolStreak);
+                    const variedArgs = sameToolRefuse && !exactArgsRefuse;
+                    console.warn(`[TOOL-LOOP] Refusing ${toolName} (exactArgsStreak=${streak}, sameToolStreak=${sameToolStreak}, variedArgs=${variedArgs})`);
                     const _lastUserMsg = (() => {
                         for (let i = messages.length - 1; i >= 0; i--) {
                             const m = messages[i];
@@ -386,8 +420,9 @@ export async function runToolLoop(context, hooks, transport) {
                         return '';
                     })();
                     /** @type {import('./agent-loop-contracts.js').RefusedEnvelope} */
-                    toolResult = buildRefusalPayload(toolName, streak, {
+                    toolResult = buildRefusalPayload(toolName, effectiveStreak, {
                         lastUserMessage: _lastUserMsg,
+                        variedArgs,
                     });
                 } else if (crossRequestDuplicate) {
                     const lastEntry = findMatchingCrossRequestEntry({

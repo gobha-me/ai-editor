@@ -4,6 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.86.0] - 2026-05-21
+
+### Fixed — anti-loop guard defeated by 1-line arg variation (gitea#496)
+
+Field replay against the editor (qwen-3-6-plus on 2.84.0, 2026-05-21): a planning → read → re-read loop ran indefinitely because the duplicate-streak guard was keyed by `(toolName, canonicalArgsKey(args))`. The model varied one arg byte per call (`{path:'foo.js'}` → `{path:'foo.js', limit:100}` → `{path:'foo.js', limit:200}` → …), so the exact cacheKey never repeated, `isDup` stayed false, and the streak counter reset to 0 every call. The 2.82.0 refusal-text update (gitea#488) and the 2.85.0 Rule 3/4 probe surfaced the symptom (loop classified as `direct` dispatch path) but the guard itself never fired — the trigger condition was the problem, not the prose.
+
+**Fix.** Add a sibling counter `sameToolStreak` keyed by tool name alone, independent of args. Trips at `SAME_TOOL_REFUSE_THRESHOLD = 5` — intentionally higher than the args-exact threshold of 3, so the cleaner identical-args signal still fires first when it applies. OR-gate at the refusal check: refuse if **either** the args-exact streak hits 3 **or** the same-name streak hits 5.
+
+**Refusal envelope prose.** When the same-name guard fires alone (args genuinely varied), the loop passes `opts.variedArgs = true` to [`buildRefusalPayload`](js/chat/refusal-hints.js). The envelope prose swaps:
+- `"with identical args"` → `"with varying args"`
+- `"or change at least one argument before retrying"` → `"or call a different tool entirely"`
+- `"Do not call X again with these arguments"` → `"Do not call X again — varying args has not produced progress"`
+
+The legacy path (variedArgs absent / false) is preserved byte-for-byte; existing [`tests/test-tool-loop-suggestions.mjs`](tests/test-tool-loop-suggestions.mjs) passes unmodified.
+
+**Counter lifetime.** `sameToolStreak` is request-scoped (declared inside `runToolLoop` alongside `duplicateStreak`). It increments when `toolName === lastInvokedToolName` and resets to 1 when a different tool name is invoked. Legitimate exploration (5 different files in a row) trips the guard, but the off-ramp is simply "interleave any other tool call" — same shape as the existing exact-args guard. Threshold of 5 leaves room for typical batched read-then-search-then-read patterns.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) | EDIT — new `SAME_TOOL_REFUSE_THRESHOLD = 5` constant; `lastInvokedToolName` + `sameToolStreak` state declared next to `duplicateStreak`; per-call same-name increment / different-name reset; OR-gate at the refusal check; passes `effectiveStreak` (= `Math.max(streak, sameToolStreak)`) and `variedArgs` flag to `buildRefusalPayload`. |
+| [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) | EDIT — `buildRefusalPayload` gains `opts.variedArgs` flag; envelope prose branches on it; legacy path byte-identical when flag absent / false. Module-header note added pointing at gitea#496. |
+| [`js/chat/agent-loop-contracts.js`](js/chat/agent-loop-contracts.js) | EDIT — `RefusedEnvelope` typedef updated to name both trigger paths; `LoopState` typedef gains `sameToolStreak` + `lastInvokedToolName` fields; `DupStreakPolicy` typedef gains `thresholdSameName` field. JSDoc-only; no runtime behavior. |
+| [`tests/test-tool-loop-anti-loop.mjs`](tests/test-tool-loop-anti-loop.mjs) | NEW — 8 subtests pinning: variedArgs:true prose accuracy (no "identical args" lie); legacy variedArgs:false prose unchanged; gitea#496 scenario refuses on the 5th same-name varying-args call; threshold boundary (4 ok, 5 refuses); different tool name resets the streak; args-exact still trips at 3; same-tool fires when ONLY args vary. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — "Last updated" header bumps to 2026-05-21 with a 2.86.0 leader sentence. Preamble drift across 2.83.0 / 2.85.0 / 2.86.0 acknowledged but left for the next RE-EVAL slot to absorb. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.85.0'` → `'2.86.0'`. |
+
+### Verification
+
+- `node --test tests/test-tool-loop-anti-loop.mjs tests/test-tool-loop-suggestions.mjs` — 13 subtests green (8 new + 5 existing).
+- `node --test tests/test-*.mjs` — full Node suite expected green (+8 new tests).
+- Browser smoke: drive a synthetic loop (ask the model "read README.md three times with slightly different limits"); after 5 same-name `read_file` calls the refusal envelope fires with `_refused: true` and prose containing "varying args" (not "identical args").
+
 ## [2.85.0] - 2026-05-21
 
 ### Added — Rule 3/4 coverage measurement probe + log/debug pane button

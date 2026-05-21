@@ -100,15 +100,28 @@
  */
 
 /**
- * Tool was *not* invoked. The loop intercepted the call because the same
- * `(tool_name, sorted_args)` was issued `DUP_REFUSE_THRESHOLD` consecutive
- * times without intervening progress. Authored by `buildRefusalPayload`
- * in `./refusal-hints.js`.
+ * Tool was *not* invoked. The loop intercepted the call because EITHER:
+ *
+ *   (a) the same `(tool_name, sorted_args)` was issued `DUP_REFUSE_THRESHOLD`
+ *       consecutive times without intervening progress (the args-exact
+ *       streak — the original 1.7.1 guard), OR
+ *   (b) the same `tool_name` was issued `SAME_TOOL_REFUSE_THRESHOLD`
+ *       consecutive times regardless of args (the same-name streak — added
+ *       at 2.86.0 for gitea#496, after qwen-3-6-plus defeated the (a) gate
+ *       by varying one byte of args per call).
+ *
+ * Both counters live at `./tool-loop-core.js`. The (a) streak resets on a
+ * cache miss; the (b) streak resets when a different tool name is invoked.
+ * Authored by `buildRefusalPayload` in `./refusal-hints.js`.
+ *
+ * When (b) fires alone, the loop sets `opts.variedArgs = true` so the
+ * envelope prose swaps "identical args" for "varying args" and the
+ * second off-ramp for "call a different tool entirely."
  *
  * The `error` string concatenates the loop's diagnostic with the per-tool
  * `next_action_hint` from the hints registry below `STRONG_THRESHOLD`, or
  * with the imperative STOP prose at `streak >= STRONG_THRESHOLD` (which
- * the dup-streak guard fires when the loop reaches `DUP_REFUSE_THRESHOLD`).
+ * the dup-streak guard fires when the loop reaches either threshold).
  * Cheap-tier models reliably pick up the recovery path when the hint is
  * specific.
  *
@@ -203,15 +216,18 @@
  * session is one loop instance; a test runner is another; a sub-agent is
  * a child loop instance with its own configuration but the same contract.
  *
- * The constants `NO_PROGRESS_LIMIT`, `HARD_CAP`, `DUP_REFUSE_THRESHOLD`
- * live at the top of `./tool-loop-core.js`. They are NOT re-declared
- * here — keeping them at the loop-body site keeps this module pure
- * documentation and avoids an import-shuffle behavior change.
+ * The constants `NO_PROGRESS_LIMIT`, `HARD_CAP`, `DUP_REFUSE_THRESHOLD`,
+ * and `SAME_TOOL_REFUSE_THRESHOLD` live at the top of `./tool-loop-core.js`.
+ * They are NOT re-declared here — keeping them at the loop-body site keeps
+ * this module pure documentation and avoids an import-shuffle behavior
+ * change.
  *
  * @typedef {object} LoopState
  * @property {number} noProgressStreak     Rounds in a row with no successful tool invocation and no drained input. Reset on progress.
  * @property {number} roundCount           Monotonic round counter; `HARD_CAP` terminates.
- * @property {Map<string, number>} duplicateStreak  Per-`callKeyHash` consecutive-identical counter.
+ * @property {Map<string, number>} duplicateStreak  Per-`callKeyHash` consecutive-identical counter (args-exact).
+ * @property {number} sameToolStreak       Consecutive same-name calls (args-independent). Trips `SAME_TOOL_REFUSE_THRESHOLD`. gitea#496.
+ * @property {string|null} lastInvokedToolName  Most recent `toolName` seen by the loop; resets `sameToolStreak` when a different name is invoked.
  * @property {Map<string, object>} toolCallCache    Same-request LRU; key = `callKeyHash`.
  * @property {Array<object>} toolActionLog          Cross-request action log; bounded ~50 entries.
  * @property {Array<object>} [queuedInputFIFO]      User input typed during the previous round; drained at iteration boundary.
@@ -256,21 +272,29 @@
 /* -------------------------------------------------------------------------- */
 
 /**
- * Configuration for the duplicate-streak guard. The guard counts
- * consecutive identical `(tool_name, sorted_args)` invocations and fires
- * a `RefusedEnvelope` once `threshold` is reached without intervening
- * progress.
+ * Configuration for the duplicate-streak guards. As of 2.86.0 there are
+ * two — both produce a `RefusedEnvelope` on the OR-gate.
  *
- * `callKeyHash` matches the existing hash composition at
- * `tool-loop-core.js:333` — `toolName + '|' + canonicalArgsKey(args)`.
+ *   (a) Args-exact streak: counts consecutive identical
+ *       `(tool_name, sorted_args)` invocations and fires at
+ *       `DUP_REFUSE_THRESHOLD = 3`. `callKeyHash` matches the existing
+ *       composition at `tool-loop-core.js` — `toolName + '|' + canonicalArgsKey(args)`.
+ *
+ *   (b) Same-name streak (gitea#496): counts consecutive same-`tool_name`
+ *       invocations regardless of args and fires at
+ *       `SAME_TOOL_REFUSE_THRESHOLD = 5`. Catches the 1-byte-arg-variation
+ *       loop that defeats (a). When (b) fires alone, the loop passes
+ *       `opts.variedArgs = true` to `buildRefusalPayload` so the envelope
+ *       prose reads truthfully.
  *
  * `intervening_progress_resets`: a different tool call, a drained user
  * input, or any other forward progress (per design §"Forward progress")
- * resets the streak to zero. Without this, the guard fires too early on
- * legitimate retry patterns.
+ * resets streak (a) to zero. Streak (b) resets only on a different tool
+ * *name*.
  *
  * @typedef {object} DupStreakPolicy
- * @property {number} threshold                       e.g. `DUP_REFUSE_THRESHOLD = 3` in `./tool-loop-core.js`.
+ * @property {number} thresholdExactArgs              e.g. `DUP_REFUSE_THRESHOLD = 3` in `./tool-loop-core.js`.
+ * @property {number} thresholdSameName               e.g. `SAME_TOOL_REFUSE_THRESHOLD = 5` in `./tool-loop-core.js`. gitea#496.
  * @property {(toolName: string, args: object) => string} callKeyHash
  * @property {boolean} intervening_progress_resets
  */
