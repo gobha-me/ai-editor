@@ -23,6 +23,7 @@ import { ChatHistoryStore } from './history-store.js';
 import { removeConvCost } from '../intelligence/cost/cost-store.js';
 import { pickProfileName } from '../profiles/resolve.js';
 import { cancelToolLoop, clearApprovedPlan } from './state.js';
+import { clearAutoCommitted } from '../tools/_session-auto-commits.js';
 
 /** 2.49.0 — DESIGN-sub-agents.md §Risks line 536: bound transcript
  *  bloat by capping `tool_result` content per turn on persistence.
@@ -411,6 +412,8 @@ const ConversationManager = {
         // to the payload; a different conversation starts without the
         // prior thread's approved plan.
         clearApprovedPlan();
+        // gitea#486 (2.80.0) — drop the auto-committed tracker too.
+        clearAutoCommitted();
 
         // 2.49.0 — Sub-agent transcripts restore from per-conversation
         // payload. Pre-2.49.0 payloads have no `subagentTranscripts` field;
@@ -452,6 +455,8 @@ const ConversationManager = {
         // gitea#424 (2.52.0) — drop the approved-plan slot so a new chat
         // doesn't inherit the prior conversation's plan body.
         clearApprovedPlan();
+        // gitea#486 (2.80.0) — drop the auto-committed tracker too.
+        clearAutoCommitted();
         // 2.49.0 — clear sub-agent transcripts for the new conversation.
         if (State.subagents) {
             State.subagents.transcripts = {};
@@ -527,6 +532,8 @@ const ConversationManager = {
                 State.todo = [];
                 // gitea#424 (2.52.0) — drop the approved-plan slot too.
                 clearApprovedPlan();
+                // gitea#486 (2.80.0) — drop the auto-committed tracker too.
+                clearAutoCommitted();
                 // 2.49.0 — clear in-memory sub-agent transcripts so the
                 // panel doesn't surface stale data from the deleted
                 // conversation.

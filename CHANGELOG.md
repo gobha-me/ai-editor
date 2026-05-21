@@ -4,6 +4,39 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.80.0] - 2026-05-21
+
+### Fixed — `commit_files` now surfaces write_file-auto-committed files via `created` array (gitea#486)
+
+`write_file` for new files at [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) calls `Git.createFile()` — which is a one-file Git commit, separate from any subsequent `commit_files` call. The file enters the tree, **not** as a dirty tab. When `commit_files` at [`js/tools/commit-tools.js`](js/tools/commit-tools.js) later filters `State.openTabs` by `t.dirty`, it only sees the *modifications* (write_file-on-existing + edit_file paths leave a dirty tab). The response then reports only the dirty paths.
+
+Field evidence: a qwen-3-6-plus session against `xcaliber/HTML-Games` issue #238 (2026-05-21, ai-editor v2.77.0) made 4 `write_file` calls — 2 new files (374 + 354 lines) and 2 overwrites. `commit_files` returned `committed: [2 files]`; the resulting PR ([HTML-Games #277](https://git.gobha.me/xcaliber/HTML-Games/pulls/277)) had `changed_files: 4` because the 2 new files were committed earlier as separate one-file `Create X` commits. The model — operating off the `commit_files` response, not its tool history — assumed the 2 new files were uncommitted and spent **5+ turns** re-opening them via `read_file`, looping `list_dirty_files` (which itself fired the consecutive-identical anti-loop refusal — gitea#488), and ultimately opening the PR on faith.
+
+**Fix shape, four pieces.** (1) New module [`js/tools/_session-auto-commits.js`](js/tools/_session-auto-commits.js) (~30 LOC) keeps a session-scoped `Set<string>` with three exports: `recordAutoCommit(path)` (idempotent), `getAutoCommittedSinceLastReport()` (returns array + drains the set), `clearAutoCommitted()` (full clear). (2) [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) `write_file` new-file branch calls `recordAutoCommit(path)` after `Git.createFile` succeeds; response gains `committed: true` + `commit_message: 'Create ${path}'` so the model has the signal at write-time too. (3) [`js/tools/commit-tools.js`](js/tools/commit-tools.js) `commit_files` drains the tracker into `response.created` on the success path AND on the "no dirty files" early return (so pure-new-file sessions still see the signal). (4) [`js/chat/conversations.js`](js/chat/conversations.js) calls `clearAutoCommitted()` at the same three sites that call `clearApprovedPlan()` (conversation switch, new chat, conversation delete) — exact lifecycle precedent.
+
+**Why a separate `created` field, not folding into `committed`.** The two arrays describe different events: `committed` is what THIS `commit_files` call flushed; `created` is what `write_file` auto-committed earlier in the session. Folding them would erase the distinction; the model genuinely needs both to understand the branch state.
+
+### Added — `tests/test-session-auto-commits.mjs` source-scan lint
+
+4 subtests: (a) `record + get` drains (second `get` returns `[]`); (b) `recordAutoCommit` is idempotent within a session (same path 3× → 1 entry); (c) `clearAutoCommitted` empties the set unconditionally; (d) source-scan lint asserts `commit_files` handler body calls `getAutoCommittedSinceLastReport(` — same precedent shape as 2.79.0's [`tests/test-edit-tracker-read-tool-contract.mjs`](tests/test-edit-tracker-read-tool-contract.mjs) (read file → `stripComments` → named-function brace-walk → regex-anchor in extracted body). Handles the named-function-reference registration pattern (`ToolRegistry.register('commit_files', commitFiles, ...)`) — mirrors 2.78.0's [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) handler-resolution helpers.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/tools/_session-auto-commits.js`](js/tools/_session-auto-commits.js) | NEW — session-scoped Set + 3 exports. |
+| [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) | EDIT — `write_file` new-file branch records the path + response gains `committed`/`commit_message`. |
+| [`js/tools/commit-tools.js`](js/tools/commit-tools.js) | EDIT — `commit_files` drains tracker into `response.created` on success + on "no dirty files" early return. |
+| [`js/chat/conversations.js`](js/chat/conversations.js) | EDIT — `clearAutoCommitted()` paired with the three existing `clearApprovedPlan()` sites. |
+| [`tests/test-session-auto-commits.mjs`](tests/test-session-auto-commits.mjs) | NEW — 4 subtests (3 behavior + 1 source-scan lint). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.79.0'` → `'2.80.0'`. |
+
+### Verification
+
+- `node --test tests/test-session-auto-commits.mjs` — 4 subtests pass.
+- Full Node suite: `node --test tests/test-*.mjs` — 3649 tests pass, 1 skipped, 0 fail (no regression: existing `commit_files` consumers don't care about extra fields; T1 conformance lint untouched — `committed`/`failed`/`error`/`code` shapes are unchanged).
+- Coherence: version-coherence lint passes (version bump + CHANGELOG `[Unreleased]` promotion in the same PR).
+
 ## [2.79.0] - 2026-05-21
 
 ### Fixed — `read_file` now refreshes the staleness clock (gitea#485)

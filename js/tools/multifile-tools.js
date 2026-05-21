@@ -11,6 +11,7 @@ import { State, EventBus } from '../core.js';
 import { replaceRange, insertAtLine, deleteRange } from '../editor.js';
 import { Git } from '../git.js';
 import { EditTracker } from './edit-tracker.js';
+import { recordAutoCommit } from './_session-auto-commits.js';
 
 // ============================================
 // HELPERS
@@ -395,11 +396,16 @@ export function registerMultiFileTools(registry) {
 
         } else {
             // --- New file: create via Git API, then open in editor ---
+            // gitea#486 — Git.createFile is a one-file commit, separate from
+            // any subsequent commit_files call. Record the path in the
+            // session tracker so commit_files can surface it under `created`.
+            const commitMessage = `Create ${path}`;
             try {
-                await Git.createFile(owner, repo, path, content, `Create ${path}`, branch);
+                await Git.createFile(owner, repo, path, content, commitMessage, branch);
             } catch (err) {
                 return { error: `Failed to create '${path}': ${err.message}`, code: 'write_error' };
             }
+            recordAutoCommit(path);
 
             // Refresh tree so the new file appears
             EventBus.emit('tree:refresh');
@@ -419,8 +425,10 @@ export function registerMultiFileTools(registry) {
             return {
                 success: true, path,
                 created: true,
+                committed: true,
+                commit_message: commitMessage,
                 line_count: lineCount,
-                message: `Created ${path} (${lineCount} lines) and opened in editor.`
+                message: `Created ${path} (${lineCount} lines). Committed as separate commit; opened in editor.`
             };
         }
     }, {

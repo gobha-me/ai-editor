@@ -10,6 +10,7 @@ import { ToolRegistry } from './registry.js';
 import { State, EventBus, Storage } from '../core.js';
 import { batchSaveFiles } from '../git.js';
 import { generateCommitMessage, stripThinkBlocks } from '../llm.js';
+import { getAutoCommittedSinceLastReport } from './_session-auto-commits.js';
 
 // ============================================
 // commit_files
@@ -30,10 +31,19 @@ async function commitFiles({ paths, message }) {
     let dirtyTabs = State.openTabs.filter(t => t.dirty);
 
     if (dirtyTabs.length === 0) {
-        return {
+        // gitea#486 — even with no dirty tabs, write_file new-file calls
+        // may have auto-committed files earlier in the session. Drain the
+        // tracker so the model sees them instead of "all saved" alone.
+        const autoCommitted = getAutoCommittedSinceLastReport();
+        const response = {
             success: false,
             message: 'No dirty files to commit. All open files are already saved.'
         };
+        if (autoCommitted.length > 0) {
+            response.created = autoCommitted;
+            response.message = `No dirty files to commit, but ${autoCommitted.length} file(s) were auto-committed earlier in this session by write_file.`;
+        }
+        return response;
     }
 
     // Optionally filter to specific paths
@@ -93,6 +103,15 @@ async function commitFiles({ paths, message }) {
             committed: results.map(r => r.path),
             failed: errors.map(e => ({ path: e.path, error: e.message || String(e) }))
         };
+
+        // gitea#486 — surface paths auto-committed by write_file's new-file
+        // branch since the last commit_files call, so the model sees the
+        // full picture instead of just the dirty-tab paths flushed by THIS
+        // call.
+        const autoCommitted = getAutoCommittedSinceLastReport();
+        if (autoCommitted.length > 0) {
+            response.created = autoCommitted;
+        }
 
         if (errors.length > 0) {
             response.warning = `${errors.length} file(s) failed to commit`;
