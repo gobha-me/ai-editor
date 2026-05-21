@@ -18,7 +18,7 @@
  * gate on `coder.v1`) is the load-bearing thing being decoupled. The
  * core is allowed to import other near-pure modules (`executeToolCall`,
  * `parseTextToolCalls`, `enrichToolResultTurn`, `getContextScale`,
- * `canonicalArgsKey`, `buildRefusalPayload`, `Catalog.listAll`, the
+ * `canonicalArgsKey`, `buildRefusalPayload`, the
  * cache-invalidation helpers, `validateAndCleanHistory`) directly — none
  * touch DOM or `State.*` in a way that breaks the sub-agent caller.
  */
@@ -43,7 +43,6 @@ import {
 } from './tool-classifications.js';
 import { isStatefulRead, getStatefulReadToolsLive } from './cache-policy.js';
 import { buildRefusalPayload } from './refusal-hints.js';
-import { Catalog } from '../intelligence/tools/index.js';
 import { getContextScale } from '../llm.js';
 
 const NO_PROGRESS_LIMIT = 3;
@@ -363,16 +362,6 @@ export async function runToolLoop(context, hooks, transport) {
                 let toolResult;
                 if (isDup && streak >= DUP_REFUSE_THRESHOLD) {
                     console.warn(`[TOOL-LOOP] Refusing duplicate ${toolName} (streak=${streak})`);
-                    const _catalogList = (() => {
-                        try {
-                            return Catalog.listAll().map(td => ({
-                                name: td.name,
-                                category: td.category,
-                            }));
-                        } catch (_) {
-                            return [];
-                        }
-                    })();
                     const _lastUserMsg = (() => {
                         for (let i = messages.length - 1; i >= 0; i--) {
                             const m = messages[i];
@@ -387,7 +376,6 @@ export async function runToolLoop(context, hooks, transport) {
                         return '';
                     })();
                     toolResult = buildRefusalPayload(toolName, streak, {
-                        catalog: _catalogList,
                         lastUserMessage: _lastUserMsg,
                     });
                 } else if (crossRequestDuplicate) {

@@ -4,6 +4,51 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.82.0] - 2026-05-21
+
+### Fixed — Anti-loop refusal no longer suggests functionally-unrelated tools (gitea#488)
+
+When a model called the same tool ≥3 consecutive times with identical args, the dup-streak guard in [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) returned a refusal envelope from [`buildRefusalPayload`](js/chat/refusal-hints.js) that included a `suggestions: [string[]]` field — 5 tool names picked deterministically by FNV-1a-seeded shuffle over the catalog's off-category tools. The picker had no functional or semantic awareness; it could only filter by category and by self-exclusion. So any name it produced was a guess.
+
+Field evidence (qwen-3-6-plus against `xcaliber/HTML-Games` issue #238, ai-editor v2.77.0, 2026-05-21): `list_dirty_files` looped after the model failed to recognize that the cached result was already current (the underlying cause for that loop was the `commit_files` reporting gap closed at 2.80.0). The streak-≥3 refusal arrived with `suggestions: [list_pull_requests, peek_project_file, preview_network, read_plugin_source, scratchpad_clear]`. None of the five answers "what's dirty in the working tree?" The model took the bait, called several of them, then gave up and opened the PR on faith. The misleading suggestions cost extra turns on top of the original loop. Per the issue body: *"A bad suggestion is worse than no suggestion."*
+
+**Fix.** Remove `suggestions` entirely. Of the three options the issue raised (drop, curate per-tool, replace with action prose), drop is the smallest-surface choice and matches the project ethos of not adding maintenance burden that goes stale. The existing prose already names one off-ramp (*"respond to the user with what you already have"*); the new prose adds a second off-ramp the guard actually admits — *"change at least one argument before retrying"* — since the dup-guard keys on canonical args, not on tool name.
+
+**New strong-refusal prose** (streak ≥ 3, in [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js)):
+
+> `STOP. You have called <tool> N consecutive times with identical args — the registry is REFUSING to execute it. Respond to the user with what you already have, or change at least one argument before retrying. Do not call <tool> again with these arguments.`
+
+`_refused: true` and `last_user_message` (when supplied) are kept verbatim — useful signals unrelated to the suggestion-quality bug. The soft envelope at streak < 3 is unchanged. The picker helpers (`_hash32`, `_pickDeterministic`, `SUGGEST_COUNT`) are deleted from [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) along with the `catalog` option. The matching call-site IIFE that snapshotted `Catalog.listAll()` for the picker is removed from [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js); the `Catalog` import is now unused there and dropped.
+
+### Changed — `tests/test-tool-loop-suggestions.mjs` regression specs inverted
+
+- Spec 2 (was: streak ≥ 3 carries ≥5 off-category suggestions) → now asserts `suggestions` is **absent** at streaks 3 / 4 / 7 and pins the new "change at least one argument" phrasing as a regression anchor against future passive-message drift. Also asserts the old `Try one of:` segment is gone.
+- Spec 3 (was: deterministic same-offender suggestions across retries) — **deleted**, no longer applicable.
+- "Different offenders yield different suggestion seeds" sanity check — **deleted**.
+- Empty-catalog and missing-offender edge tests — **deleted** (the function no longer consults the catalog).
+- Simulated 4-call test — kept; assertions adjusted from `suggestions present at streaks 3/4` to `no suggestions on any streak; STOP prose on streaks 3/4`.
+- `lastUserMessage` trimmed/absent edge — kept verbatim.
+- New "opts absent entirely" test pins that the function tolerates a missing opts bag (the dispatch path always supplies one, but the function is documented for direct testability).
+
+The file name stays `test-tool-loop-suggestions.mjs` to minimize cross-reference churn; the module-doc and the test descriptions narrate the gitea#488 inversion.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/chat/refusal-hints.js`](js/chat/refusal-hints.js) | EDIT — `_hash32`, `_pickDeterministic`, `SUGGEST_COUNT` deleted. `buildRefusalPayload` drops the `catalog` option and the suggestions branch; strong prose gains "change at least one argument before retrying" off-ramp. Module-doc + JSDoc refreshed with gitea#488 rationale. `_testing` export trimmed to `STRONG_THRESHOLD`. |
+| [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) | EDIT — `Catalog` import removed (unused after change); the `_catalogList` IIFE in the streak-≥-threshold branch removed; `buildRefusalPayload` call now passes only `lastUserMessage`. Header comment trimmed (`Catalog.listAll` reference). |
+| [`tests/test-tool-loop-suggestions.mjs`](tests/test-tool-loop-suggestions.mjs) | EDIT — specs inverted per above; `FIXTURE_CATALOG` and `VALID_NAMES` deleted with the catalog-using assertions. Module-doc rewritten to narrate the gitea#488 contract. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.81.0'` → `'2.82.0'`. |
+
+### Verification
+
+- `node --test tests/test-tool-loop-suggestions.mjs` — refactored suite passes.
+- Full Node suite: `node --test tests/test-*.mjs` — green (no other test imports the removed test-seam exports; `tests/test-refusal-hints.mjs` only consumes `getRefusalHint`).
+- Coherence: version-coherence lint passes (version bump + CHANGELOG `[Unreleased]` promotion in the same PR).
+- Behavior change is observable only when the dup-streak guard fires (streak ≥ 3) — the refusal envelope narrows from `{error, _refused, suggestions?, last_user_message?}` to `{error, _refused, last_user_message?}`. No production consumer reads `suggestions` (search across `js/` confirms it was emitted, never inspected by name).
+
 ## [2.81.0] - 2026-05-21
 
 ### Fixed — `search_in_files` no longer fails silently when truncated (gitea#487)
