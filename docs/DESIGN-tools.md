@@ -43,7 +43,7 @@ The thesis of this document is that tool admission is its own subsystem because:
 - A marketplace of community tools in v1.
 - Cross-session tool ledger persistence (tools admitted in yesterday's task are not auto-admitted today).
 - Per-user dynamic tool installation. Tools belong to the profile; users do not add tools mid-session.
-- Tool *output* admission rules — that is conversation history, governed by `DESIGN-compression.md`.
+- **Loop-authored envelope construction.** The agent loop (`DESIGN-agent-loop.md`) wraps tool returns in envelopes (`success` / `refused` / `cached` / `partial`) based on loop state; envelope authorship is not a Tools concern. Tools *may* return structured failure shapes from their own logic (e.g., a tool whose precondition isn't met); those shapes pass through the loop unchanged inside the `success` envelope and are tool internals, not Tools-subsystem-architectural. The envelope-bearing Turn that results from each invocation is admitted into the conversation buffer per the trust contract; subsequent compression of that Turn is governed by `DESIGN-compression.md`.
 - A unified tool-call standard. We assume the LLM provider's native tool-calling mechanism. (MCP and similar protocols are concerns at the surface layer, not here.)
 
 ---
@@ -56,6 +56,7 @@ The correct starting point is *exclusion*. The model sees, by default:
 
 - The meta-tools (the discovery interface).
 - The profile's `static` set (the small core that's always loaded).
+- Any persona overlay (optional, per `DESIGN-persona.md`).
 - Any tool already admitted during this task (sticky).
 
 Everything else is unseen until something — model action, profile rule, explicit pin — justifies admitting it.
@@ -63,11 +64,12 @@ Everything else is unseen until something — model action, profile rule, explic
 This inverts a load-bearing default and produces a strict ordering:
 
 1. **Static admission** — profile-declared tools, always present.
-2. **Sticky admission** — tools used earlier in this task, retained.
-3. **Discovery admission** — tools loaded via the model's discovery calls.
-4. **Eviction** — when the tool budget is exceeded, the longest-unused non-static tools are evicted with diagnostics.
+2. **Persona overlay admission** — tools contributed by the active Persona, if any. Same priority tier as static; admitted alongside profile-static tools, with diagnostics distinguishing the authoring source. Subject to the same authorization filters as any other admission. See `DESIGN-persona.md`.
+3. **Sticky admission** — tools used earlier in this task, retained.
+4. **Discovery admission** — tools loaded via the model's discovery calls.
+5. **Eviction** — when the tool budget is exceeded, the longest-unused non-static, non-persona-overlay tools are evicted with diagnostics.
 
-The first three are deliberate; the fourth is the safety net.
+The first four are deliberate; the fifth is the safety net.
 
 This ordering is the discipline. A tools subsystem that loads everything by default is doing zero useful work — it is just a tool catalog plus a passthrough.
 
@@ -154,7 +156,20 @@ AuthSpec {
 - `short_cost` and `cost_estimate` (full) make the lazy-schema-expansion strategy possible. A tool can be admitted in "short" form (name + description, ~50 tokens) until the model commits to calling it; the full schema loads on first attempted call.
 - `category` uses dot-notation hierarchy so the categorical-discovery strategy can navigate a tree without needing a separate tree representation. (Same trick as retrieval's structural metadata: the hierarchy is the transitive closure of the field.)
 - `side_effects` is enforced at the authorization layer but is also visible to the model so it knows which tools require consent before invocation.
+
+  The agent loop derives several runtime classifications from `side_effects`: which tools its cache may serve hits for (read-only tools cache cleanly; mutating tools cache to *prevent* unintended re-invocation but the cache-hit narration tells the model "the mutation already happened, do not retry"); which tools bypass cache entirely (none, by side-effects alone — see `DESIGN-agent-loop.md` for the orthogonal stateful-read axis); which tools the loop will *invalidate* cache entries for after invocation (the file-mutating subset). Source of truth is `ToolDef.side_effects`; the loop's lists are derived views.
 - `superseded_by` enables tool migrations without breaking existing task ledgers — old tool IDs remain referable in the audit trail.
+
+### Tool-authored failure shape contract
+
+A tool that rejects its input or fails its own precondition must return a structured failure shape, not a flat error string. The loop wraps the return in `success(payload)` (per `DESIGN-agent-loop.md` — the tool *ran* and produced a structured outcome) without interpreting it. The shape itself is the tool's own design, but the architecture commits to two contract requirements:
+
+1. **Named failure reason.** Every failure shape carries a `error` (or `failure_code`) field with a stable, machine-readable identifier — not a free-form sentence. The identifier names the constraint that failed (`stale_lines`, `path_not_found`, `precondition_indexer_not_ready`, `schema_validation_failed`), not the human-readable narration. Stability matters because the loop's per-tool `next_action_hint` registry (`DESIGN-agent-loop.md` §"Envelope Shapes") keys on this identifier.
+2. **Recovery-sufficient payload.** The shape carries enough additional fields to enable the model (or the loop) to construct a recovery path without re-querying the tool just to learn what went wrong. For schema/validation failures, this means echoing the parsed argument shape the tool actually saw alongside the constraint that failed. For staleness failures, the current value of the staleness predicate (e.g., the actual file content at the rejected line range). For readiness failures, the readiness state (`coverage: 0.06`, `expected_ready_at: ...`). The minimum bar is: a reader of the failure shape can identify the recovery action without a second tool call.
+
+The architecture is deliberately not prescriptive about *which* fields a given tool surfaces — that is the tool's own design. It is prescriptive about the two contract requirements above. A tool that returns `{error: "validation failed"}` with no further structure fails this contract regardless of how technically correct the rejection was. The cost of opaque rejection lands on the loop as extra rounds; the contract pushes that cost back to the tool, where it can be paid once at tool-author time instead of every invocation at runtime.
+
+Tools that *did not run* (the loop intercepted before invocation — cache hit, refused, partial) do not produce these shapes; the loop's envelope shapes (`cached`, `refused`, `partial`) cover those cases. This contract applies only to envelopes the loop emits as `success(payload)` where the payload happens to be a tool-authored failure.
 
 ### ToolRequest / ToolAdmissionResult
 
@@ -181,7 +196,7 @@ AdmittedTool {
   tool_id:    ToolID
   form:       "short" | "full"
   rendered:   string                      // the text to inject into the prompt
-  source:     "static" | "sticky" | "discovery" | "evicted-and-rebid"
+  source:     "static" | "persona_overlay" | "sticky" | "discovery" | "evicted-and-rebid"
 }
 
 DiscoveryCall {
@@ -220,20 +235,6 @@ The catalog is the registry of all `ToolDef`s available to a profile. It is shar
 - Frequency-of-use queries (per profile, per task, per user — depending on telemetry).
 
 Catalog management (adding, deprecating, upgrading tools) happens at the profile level. Profiles compose their catalogs from their static set plus any discoverable tools they grant access to. A KB profile may have a catalog of 5 tools; a coder profile may have 200.
-
-### MCP-bridged tools (1.4.2)
-
-Model Context Protocol servers are **catalog producers**, not static-set members. The bundled `plugins/mcp-bridge.js` calls `Plugins.registerMCPServer({id, url, token, transport})`; the bridge handshakes with the server, calls `tools/list`, and registers each advertised tool into `ToolRegistry` under the canonical name `mcp__<serverId>__<toolName>` with `category: 'mcp.<serverId>'`. The Catalog is a read-only adapter over `ToolRegistry`, so MCP tools become first-class `ToolDef`s automatically — no Catalog mutation needed.
-
-MCP tools are **never** added to a profile's `tools.static` array. They reach the model only through the existing discovery + sticky paths:
-
-- `find_tool("send slack message")` → semantic match against `mcp.<id>` entries.
-- `list_tools_by_category("mcp")` → categorical browsing of all bridged servers.
-- After first invocation, the tool stays admitted via `task_ledger.tool_admissions[]` for the rest of the task.
-
-This preserves the §1.4.0 admissibility win: connecting an MCP server costs ~0 baseline tokens. Disconnect (server removed in Settings, or `?mcpBridge=off`) calls `ToolRegistry.unregister(name)` for each registered name, aborts in-flight `tools/call` requests, and sweeps `task_ledger.tool_admissions[]` so orphaned sticky entries don't accumulate.
-
-Browser-only constraint: HTTP transports only (Streamable HTTP per current MCP spec; SSE for legacy servers). Stdio servers require a backend relay, which is out of scope for the 1.x → 2.0 arc.
 
 ---
 

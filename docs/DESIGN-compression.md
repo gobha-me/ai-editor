@@ -212,6 +212,20 @@ The compression layer never mutates turn IDs. It produces a new list of turns (s
 
 ---
 
+## Trust Label Propagation
+
+Compression is the subsystem most likely to *lose* provenance information if it isn't careful, because it transforms many turns into fewer turns — and every transformation is an opportunity for the resulting Turn to look like it came from a single trusted source when in fact it was synthesized from a mix of sources with varying trust. The umbrella's Trust Labels contract (`DESIGN-intelligence.md` §"Trust Labels on Admitted Content") gives compression three responsibilities:
+
+- **Evicted Turns: label preserved in diagnostics.** When the pipeline evicts a turn (Rules 1–4), the evicted turn's label is recorded in the diagnostics surface alongside the eviction reason. The turn itself no longer enters the prompt, but its provenance remains auditable. This is what makes "Rule 3 consumed turns 47–53" a reviewable claim rather than an opaque deletion.
+- **Summarized Turns: derived label.** When Rule 5 summarizes a span, the resulting synthesized Turn carries a `derivation` field listing the labels of every constituent turn. The summary Turn's own `trust_tier` defaults to the *lowest* tier among its sources unless operator policy explicitly elevates it. This is the load-bearing default — it prevents summarization laundering, where a span containing both Admin policy and untrusted tool output becomes a single Turn that looks Admin-tier.
+- **Surviving Turns: label unchanged.** A turn that survives compression carries the same label it had on entry. Compression does not rewrite labels on surviving Turns; only synthesized Turns get new labels.
+
+Compression's diagnostics include label propagation as a first-class field: every produced Turn records (a) whether it survived or was synthesized, (b) the labels of its constituents if synthesized, (c) the resulting label, and (d) the policy that selected the resulting trust tier (default-to-lowest, operator-elevated, etc.). This makes the trust contract falsifiable in the same way Rule 5's existence is — the diagnostics surface tells you exactly what authority each piece of admitted content carries after compression.
+
+The architecture does not commit to a specific derivation algorithm beyond the lowest-tier default. Implementations may compose labels by other functions (most-common authority, conservative-and-flagged, etc.) provided the policy is operator-configured and recorded in diagnostics. What the architecture does commit to: **a summarized Turn never silently inherits a higher trust tier than any of its sources.**
+
+---
+
 ## The Five Rules
 
 ### Rule 1: Subsumption

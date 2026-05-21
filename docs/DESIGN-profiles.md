@@ -138,26 +138,96 @@ A profile may name a `base` profile. At validation time, the resolved profile is
 
 The five canonical profiles all inherit from a common `base.v1` that supplies sensible defaults for fields no surface has reason to override.
 
-#### Tool admission (gitea#438 / 2.54.0)
+---
 
-Profiles enumerate the tools they admit by **explicit name** in `tools.admit`. The pre-2.54.0 model (tools self-tagged with `roles:` arrays; profiles intersected via `tools.allowed_groups`) was inverted because tag overlap was invisible at the gate — tools could silently elect into profiles that didn't want them (e.g. `create_issue` reachable from `chat.v1` via an invisible `'pm'` tag), and tools tagged `'plugin-dev'` could be admitted by zero picker profiles without the contributor noticing.
+## Prompt Assembly
 
-The contract:
+The Profile is the **assembler** of the final prompt sent to the LLM. The assembler role is load-bearing and distinct from the author role: the Profile owns slot order and position; it does not author the content of most slots.
 
-- `tools.admit: string[]` — explicit list of tool names this profile admits.
-- `'*'` as a single entry — full-access bypass (used by `full.v1` only).
-- `'<prefix>__*'` glob entries — admit every tool whose name begins with `<prefix>__`. Used by every picker profile to admit MCP-bridge tools (named `mcp__<serverId>__<toolName>`) without enumerating each per-server tool.
+This distinction prevents a class of bug where a Profile that controls assembly silently rewrites content it shouldn't own — for example, a coder profile mutating retrieved code blocks during assembly, or a chat profile rewriting tool-result turns to "smooth" them. The architecture forbids this by separating who-decides-the-order from who-decides-the-content.
 
-For inherited profiles, two operators let a child narrow or widen its parent's admit list **without restating the full enumeration**:
+### The Slots
 
-- `tools.admit_add: string[]` — set-union added to the inherited admit.
-- `tools.admit_remove: string[]` — set-subtracted from the inherited admit.
+The assembled prompt consists of the following ordered slots:
 
-Resolution order: (1) `base.admit`; (2) subtract `child.admit_remove`; (3) union `child.admit_add`. If the child also supplies a literal `tools.admit`, that wins wholesale and operators are warned-then-ignored. Operator keys never appear on the resolved profile — they're consumed during the merge.
+| Slot | Authored by | Notes |
+|---|---|---|
+| System prompt | Multiple authoring sources (see below) | Behavioral framing, identity, policy, operational directives. Multi-author. |
+| Retrieval blocks | Retrieval subsystem (per `DESIGN-retrieval.md`) | Composer-ordered. Profile does not reorder. |
+| Tool definitions | Tools subsystem (per `DESIGN-tools.md`) | Admitted set, in admission order. Profile does not filter. |
+| History | Compression subsystem (per `DESIGN-compression.md`) | Post-compaction. Profile does not re-edit. |
+| Task instruction | The current user message | Verbatim from input. Profile does not paraphrase. |
 
-The "narrowing-not-diverging" invariant: a child that uses only `admit_remove` can never widen its parent's admit. Parent always strictly bounds the child unless `admit_add` (or a literal `admit`) opts in explicitly. This is the load-bearing property — it makes profile-tree authoring (Phase 4) safe by default.
+The Profile decides:
 
-**Default OFF for new tools.** A newly-registered tool that no profile lists in its admit array will not be callable from any profile. The contributor cost is bounded: registry-side warning surfaces it (gitea#439). The alternative — default ON — was disqualified because it would silently widen `kb.v1`'s read-only safety property every time a side-effecting tool lands.
+- The **order** in which slots appear (attention-aware: high-importance content at the head and tail; tooling and history in the middle).
+- The **position** of each slot relative to others within the chosen order.
+- The **budget** allocated to each slot (from the budget shape in the contract above).
+- The **separators or framing** between slots (markdown headings, XML tags, plain newlines — implementation detail).
+
+The Profile does *not* decide what goes inside any slot it doesn't author. Retrieval owns its blocks; Tools owns its definitions; Compression owns its history. The Profile assembles them; it does not edit them.
+
+### The System Prompt Slot is Multi-Author
+
+The single most consequential commitment of the assembly contract: **the system prompt slot has multiple authoring sources** that merge into one slot before the prompt is sent to the model. The architecture commits to the slot existing and to merge being deterministic per implementation; it does not prescribe which authoring sources are valid in a given deployment, nor the merge order, nor the conflict-resolution policy.
+
+Common authoring sources (illustrative, not exhaustive):
+
+- **Admin contribution** — set by the platform vendor or deployment operator. Often the only contribution in single-tenant or strictly-controlled deployments. Carries policy constraints, safety guardrails, deployment-wide tone.
+- **User contribution** — set by the end user. Carries personal preferences, project-specific guidance. May be empty in deployments where users do not have system prompt authoring rights.
+- **Persona contribution** — set by whoever authored the active Persona (see `DESIGN-persona.md`). Carries identity, voice, character-specific behavioral framing.
+- **Profile directives** (optional, see below) — set by the Profile itself. Carries operational instructions about surface behavior (e.g., "after editing files in code mode, run the test suite"). Profile directives are *operational*, not *personality*; they belong to the Profile because they are surface-shaped, not identity-shaped.
+
+The architecture commits to:
+
+- The slot exists and has a defined position in the assembled prompt.
+- Merge is deterministic per implementation — the same set of contributions produces the same merged result.
+- Merge is auditable — diagnostics on the assembly step record which contributions were present and how they composed.
+- Each contribution carries a trust label (see `DESIGN-intelligence.md` §"Trust Labels on Admitted Content") that propagates through merge; lower-trust contributions cannot override higher-trust ones unless operator policy explicitly permits.
+
+The architecture does not commit to:
+
+- A specific merge order. Whether Admin precedes User precedes Persona, or Admin precedes Persona precedes User, or some other order — operator policy.
+- A specific conflict resolution. Whether later contributions override earlier ones, whether contributions concatenate, whether contradictions are flagged — operator policy.
+- Which authoring sources are valid in a deployment. A strict enterprise system may admit only Admin; a creative platform may admit all four; an RPG may admit Admin and Persona but not User.
+
+### Profile Directives (Distinct from System Prompt Personality)
+
+Some Profiles need to contribute operational instructions to the system prompt slot that are prompt-shaped but not personality-shaped:
+
+- "In code mode, run tests after editing."
+- "In RP mode, stay in character when the user breaks the fourth wall, then resume narrative."
+- "In KB mode, cite source IDs in line with retrieved blocks."
+
+These are **profile directives** — operational behavior the Profile contributes. They are part of the multi-author system prompt slot but distinct from Persona contributions because:
+
+- Profile directives apply uniformly to every Persona that runs on this Profile.
+- Profile directives are surface-shaped (the same code-profile directive applies whether the active Persona is "Senior Reviewer" or "Junior Pair").
+- Profile directives carry Profile-level trust (typically equal to Admin trust, or below depending on deployment policy).
+
+A Profile may have no directives at all (chat profiles often don't); when present, they merge into the system prompt slot alongside other contributions.
+
+### Assembly Order Is Profile-Shaped
+
+The default order most surfaces use is roughly:
+
+```
+[ system prompt ] [ tool definitions ] [ retrieval blocks ] [ history ] [ task instruction ]
+```
+
+This puts framing first, capabilities second, evidence third, conversation fourth, and the current ask last — exploiting the recency-and-primacy attention patterns documented in long-context research. The KB profile may invert retrieval and history (evidence is the point, history is secondary). The RP profile may suppress retrieval entirely some turns and rely on memory + persona prompt. These are profile decisions, not architectural ones.
+
+### Diagnostics
+
+The assembly step produces a diagnostics record per the umbrella's diagnostics principle. Required fields:
+
+- Which slots were assembled.
+- Which authoring sources contributed to the system prompt slot.
+- Token counts per slot (actual vs budget).
+- Trust labels carried into the assembled prompt.
+- Any contributions that were rejected (e.g., a User contribution discarded by Profile policy).
+
+The diagnostics are operator-readable and surface in the same diagnostics export as the other subsystems' surfaces.
 
 ---
 
@@ -509,6 +579,8 @@ RetrievalRequest {
 ## What This Document Commits To
 
 - **One profile per session.** No mid-session swap, no per-turn dispatch.
+- **Profile is the assembler, not the author.** Profile owns slot order, position, and budget. Retrieval, Memory, Compression, and Tools own the content of their respective slots; the Profile does not edit them during assembly.
+- **The system prompt slot is multi-author.** Admin, User, Persona, and (optional) Profile directives are common contributing sources. Merge is deterministic per implementation and auditable in diagnostics. Merge order and conflict resolution are operator policy, not architectural commitments.
 - **Schema-validated configuration.** Profile config is data; invalid profiles fail fast at session start.
 - **Profiles own per-task state.** The task ledger lives here. Subsystems consume it but do not own its lifecycle.
 - **Novelty over dedup for re-admission.** Pure suppression of seen chunks is wrong; admissibility decisions consider what aspect is now relevant.
@@ -517,105 +589,3 @@ RetrievalRequest {
 - **Five canonical profiles, opinionated.** Standard chat, multi-user chat, RP, coder, KB. New surfaces should fit into one or extend an existing one before becoming a sixth.
 
 These are the load-bearing decisions. Push back on any of them before building.
-
----
-
-## Appendix: Policy vs. Resolution
-
-> Added during 1.2.5 scoping (`docs/ROADMAP.md` §1.2.5 "Compression settings refresh"). Promoted from the compression panel to a profile-doc appendix because the distinction is broader than compression — it shapes how every token-count knob across the architecture should be persisted and displayed.
-
-**Configuration is intent (policy); parameters are resolution.**
-
-The user picks `Balanced`. That's *policy* — a stable, named choice that doesn't change when the user switches models. At session start, with the active model known, the system *resolves* policy into absolute parameters: token counts, turn counts, fractions of budget. The settings panel persists policy; the panel displays resolution. Switching models re-resolves. The intent does not move.
-
-This is what makes "auto-tune to your model's context window" possible. Without the distinction, every model switch becomes a settings re-tune by hand; with it, the user sets intent once and the system handles the math.
-
-The pattern should be the default for any token-count parameter anywhere in the architecture:
-
-| Subsystem | Policy (persisted) | Resolution (computed at session start) |
-|---|---|---|
-| Compression (1.2.5+) | `mode: balanced`, `rules.{subsumption, ...}: bool`, `preserve_recent: 4` (intent, in turns) | Per-rule budgets in tokens, summary trigger in tokens, max-summary-length carry-through |
-| Memory (1.3.0+) | `MemoryConfig.capacity_warnings: 0.8` (policy: warn at 80%) | The actual byte threshold against the IDB store size |
-| Tools (1.4.0+) | `tools.budget: 5000` (per design, policy expressed in tokens because the tool catalog is provider-agnostic) | Resolved tool admission set per-call |
-| Retrieval (1.5.0+) | Strategy weights (semantic 0.5, structural 0.3, thematic 0.2 — policy) | Per-strategy chunk quotas in tokens |
-
-Memory does this implicitly already (`MemoryConfig.capacity_warnings` is policy; byte counts at warning time are resolved against IDB). Compression's 1.2.5 panel is the first place the distinction is *named* in user-facing UI. Tools (1.4.0 budget = 5000 tokens) and Retrieval (1.5.0 strategy quotas) should follow the same shape when they ship.
-
-**Profile-schema implication for 2.0.** The current `Profile` typedef mixes policy values (e.g., `compression.mode`, `tools.budget`) with what should be resolved parameters (e.g., concrete per-rule eviction caps). This is fine through 1.x — the resolution math lives outside the persisted struct anyway. A future revision (likely 2.0 alongside the profile picker) should separate them explicitly: persisted `Profile` carries only policy; a `ResolvedProfile` is computed on every session load against the active model's window. This makes the "what's stored vs. what's running" distinction visible at the type level instead of requiring readers to know which fields are which.
-
-**Don't over-correct.** Some fields are inherently absolute and don't need resolution: `max_summary_length` in characters, role enum, plugin allow-list. Resolution applies to anything sized against context-window or store-capacity; it does not apply to anything sized against bytes-on-the-wire or count-of-things.
-
----
-
-## Appendix: Two-View Configuration — Preset and Advanced
-
-> Added during 1.2.5 scoping (`docs/ROADMAP.md` §1.2.5 "Compression settings refresh"). Promoted from the compression panel to a profile-doc appendix because the commitment shapes every settings panel from 1.2.5 forward — memory in 1.3.x, tools in 1.4.x, profiles in 2.0. Sister principle to "Policy vs. Resolution" above; together the two appendices describe how configuration is *stored* (policy) and how it is *exposed* (two views).
-
-**Configuration surfaces have two audiences and serve them with two views of the same underlying data, never two separate configurations.**
-
-- **Preset view** — named modes, intent-level. Aggressive / Balanced / Conservative. The user picks an *intent*; the system resolves it to parameters. This serves the 95% case where the user wants the system to do something sensible without thinking about it.
-- **Advanced view** — every individual knob, parameter-level, individually adjustable. The user can produce broken configurations because that's the price of admission for actually understanding the architecture. This serves the 5% case where the user is debugging, exploring, or has needs the presets don't cover.
-
-A **single, consistent toggle** moves between them. Both views are first-class — neither is a downgraded version of the other. Presets aren't "the easy version of the real settings"; advanced isn't "the experimental escape hatch." They are two projections of the same underlying configuration.
-
-### Why both, and why one toggle
-
-The alternative framings are all worse:
-
-| Framing | Failure mode |
-|---|---|
-| One surface, all knobs visible | Overwhelms the 95% who don't know what `preserve_recent` means and shouldn't have to. |
-| One surface, presets only | Tells the 5% to read source. Power users disengage; bug reports become "Balanced does something I don't want" with no way to express what. |
-| Presets in Settings, knobs in a dev console / debug panel | Splits the surface across two places. Power users context-switch. Discovery is bad. |
-| Per-feature "show advanced for this section" toggles | Fragments the convention. The user learns the toggle in compression, then has to re-learn it for memory. |
-
-The toggle keeps both surfaces in the same physical location and makes the relationship between them visible — the advanced view shows what the preset is *currently resolving to*, which is the most useful thing for a power user to see.
-
-### The contract
-
-Every configurable surface in the architecture commits to:
-
-1. **Two views, one toggle, same place.** The toggle has the same name, the same position, and the same mechanic in every settings panel. Compression in 1.2.5 establishes the convention; memory (1.3.x), tools (1.4.x), and profiles (2.0) inherit it.
-2. **Preset is sufficient for default operation.** A user who never opens advanced gets a working system. Advanced never holds load-bearing configuration that the preset can't express.
-3. **The two views are never inconsistent.** They are projections of the same persisted configuration. Editing in advanced shows up immediately in preset (as "Custom" if it no longer matches a named preset). Switching presets snaps every advanced knob to the new preset's defaults.
-4. **Both views show post-resolution numbers.** Following "Policy vs. Resolution" above: switching the model re-resolves intent into parameters; both the preset summary line and every advanced knob update to reflect the new resolution. Stored intent does not move.
-5. **Advanced annotates the *why*.** Each advanced knob carries its preset-derived default ("Default for Balanced: 4 turns") and the resolution input ("scales with context window"). Without annotations, advanced is just an overwhelming list; with them, it teaches the architecture.
-
-### What this rules out
-
-The two-view contract is a **top-down call about where configuration lives.** It rules out:
-
-- Separate "Developer mode" or "Debug settings" sections in any settings UI.
-- Hidden URL parameters that flip persistent settings (one-shot URL flags for transient overrides like `?compression=off` or `?memoryRepoMode=on` are fine — they don't write to settings storage; they're per-session debug shims).
-- "Experimental settings" sidebars or admin-only configuration paths.
-- Per-feature visibility hacks ("hide this knob unless `?advanced=1`"; "show this checkbox only on certain providers"). Every knob lives in either the preset view or the advanced view, deterministically, for every user.
-
-If something is configuration, it lives in the advanced view of the relevant panel. If it's not configuration, it lives in the LLM Debug modal (or another diagnostics surface). There is no third place. The single toggle does all the work that "developer settings" panels would otherwise do — and because there is one toggle, not three, the user learns the convention once.
-
-### Naming the toggle
-
-The toggle's label is itself part of the architectural commitment. Inconsistent labels across panels — "Show advanced options" in compression, "Power user mode" in memory, "Developer view" in tools — defeat the purpose. Pick one label at the first panel that ships the toggle (compression, 1.2.5) and use it everywhere thereafter. The choice itself is less important than the consistency; whichever the codebase prefers is fine, but commit once.
-
-### Cross-track adoption
-
-The pattern is being established in 1.2.5 because compression is the first subsystem with enough configurable surface area to need it. The track adoption schedule:
-
-| Subsystem | Track | What the preset view exposes | What the advanced view adds |
-|---|---|---|---|
-| Compression | 1.2.5 | Mode (Aggressive/Balanced/Conservative/Custom), max summary length | Per-rule toggles, `preserve_recent`, summary fallback threshold |
-| Memory | 1.3.x | Repo-mode toggle, agent-proposal frequency | Per-scope quotas, audit retention window, embedding cache size |
-| Tools | 1.4.x | Tool budget mode (default 5000 tokens), discovery vs. always-on toggle for static set | Per-category overrides, sticky-admission TTL, lazy-expansion threshold |
-| Profiles | 2.0 | Profile picker (named profile preset) | Forked profile definitions, raw `Profile` struct edits |
-
-Each track inherits the toggle name and position from compression (1.2.5). New tracks introduced after 2.0 do the same.
-
-### What this is *not*
-
-The two-view contract is not a UI style guide. It does not dictate the visual treatment of the toggle (radio? checkbox? expandable section? sidebar?). It does not dictate panel layout, control grouping, or copy. It commits only to:
-
-- Both views exist.
-- One toggle moves between them.
-- The toggle name is consistent across every settings panel.
-- The two views are projections of the same configuration, not separate configurations.
-
-Visual treatment is left to the design engagement (per ROADMAP §Decisions §10) and to whatever convention the existing codebase has settled on at the time of each panel's implementation.

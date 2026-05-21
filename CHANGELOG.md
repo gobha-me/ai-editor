@@ -4,6 +4,24 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — Intelligence-layer design-doc reconciliation (2026-05-21)
+
+Two-week Intelligence-Layer redesign pack landed: 5 canonical design docs replaced with evolved versions, 2 new architectural-surface docs added (`docs/DESIGN-persona.md`, `docs/DESIGN-agent-loop.md`), and the design-set index landed as `docs/DESIGN-INDEX.md` (the zip's `ARCHITECTURE.md` renamed to avoid colliding with the existing project-wide `docs/ARCHITECTURE.md` module-layer map).
+
+**Replaced** (zip versions): [`docs/DESIGN-intelligence.md`](docs/DESIGN-intelligence.md), [`docs/DESIGN-memory.md`](docs/DESIGN-memory.md), [`docs/DESIGN-profiles.md`](docs/DESIGN-profiles.md), [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md), [`docs/DESIGN-compression.md`](docs/DESIGN-compression.md).
+
+**Added**: [`docs/DESIGN-persona.md`](docs/DESIGN-persona.md) (identity composition above Profile — N/A for ai-editor's coder-only product, see §"What's out of scope" in [`docs/ROADMAP.md`](docs/ROADMAP.md)); [`docs/DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) (consumer surface below the four admission subsystems — names the envelope-authorship rule, cache-coordination contract, dup-streak / no-progress guards, queued-input FIFO, user-pause Promise slot, sub-agent inheritance — most of which exist in code today, scattered across `js/chat/`); [`docs/DESIGN-INDEX.md`](docs/DESIGN-INDEX.md) (the 8-doc set index).
+
+**T1 amendment folded** from the 2026-05-21 change pack into [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) Core Contracts as new sub-section "Tool-authored failure shape contract" (between `ToolDef` and `ToolRequest`). Optional cross-reference sentence added at [`docs/DESIGN-agent-loop.md:180`](docs/DESIGN-agent-loop.md). The contract requires structured failure shapes with a stable `error` identifier + recovery-sufficient payload — replaces opaque `{error: "validation failed"}` strings. Conformance-enforcement work queued as a `[medium]` ROADMAP item (see "T1 conformance" parallel work stream).
+
+**Archived**: [`docs/DESIGN-CHANGES-2026-05-21.md`](docs/DESIGN-CHANGES-2026-05-21.md) preserved as historical evidence (per the pack's own framing — change docs aren't canonical state but the W1–W3 watchlist lives in-pack as the record of deferral). Listed in [`docs/DESIGN-INDEX.md`](docs/DESIGN-INDEX.md) §"change documents."
+
+**Roadmap updates**: two new `[medium]` parallel-work-stream entries queued (T1 conformance enforcement; agent-loop contract centralization); coder-lens N/As appended to §"What's out of scope for the 2.x arc" (Persona stack; multi-author system prompt slot; RP / multi-user-shaped admission paths) — these are explicit non-goals scoped to ai-editor's 99%-coding product profile.
+
+**No version bump** — docs-only change accumulates in `[Unreleased]` per the [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) rule + [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" decision #14 sub-clause (doc-only / measurement-only changes accumulate until the next code minor absorbs them).
+
+**No code change** — this is a paper-only session. Implementation conformance to T1 and centralization of the agent-loop contracts both queued as follow-on PRs.
+
 ## [2.77.0] - 2026-05-21
 
 ### Fixed — Approved plan now durable across the context window (gitea#478)

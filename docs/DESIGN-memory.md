@@ -23,7 +23,7 @@ A memory existing is not the same as a memory being admitted. Memory creation go
 
 **Memory IS:**
 - Atomic key-value facts with embeddings for semantic retrieval.
-- Scoped and priority-ordered (`user > workspace` for Phase 1; `persona` and `organization` deferred — see *Implementation Phases* and the 2026-04-30 kickoff decisions below).
+- Scoped and priority-ordered (`user > persona > workspace > organization`).
 - Curated and explicit (created, updated, or confirmed by users, or by agents with consent).
 - Retrievable via the retrieval subsystem alongside documents and other context.
 - Optionally self-healing (agents can propose or directly maintain facts within guardrails).
@@ -51,46 +51,77 @@ The hybrid combines semantic power (via the retrieval subsystem's semantic and t
 
 ---
 
-## File Format & Conflict Resolution
-
-When the transparent file layer is enabled (opt-in via Settings → Memory), `workspace`-scope memories serialize to `.aieditor/memory/<category>.md` files using a **deterministic key-sorted YAML-frontmatter block** format. One memory record per block, delimited by `---`.
-
-**Format:**
-- One frontmatter block per record. Frontmatter keys are emitted in alphabetical order so byte-for-byte equivalent records produce byte-for-byte equivalent serializations.
-- Records inside a single category file are sorted by `key` so a workspace's commit history shows clean, semantic diffs rather than reorder-noise.
-- String values are JSON-encoded for unambiguous escaping; `value` may be any JSON-serializable type (string, number, object, array).
-- An index file `.aieditor/memory/index.md` lists the categories present and the record counts per file, refreshed at every projection write.
-
-**Merge conflict resolution:**
-- Two collaborators editing the same key on different branches (or the same user editing on two machines) produce **duplicate `key` values** within a category file when their branches merge. This is the visible artifact of a merge conflict.
-- The load-time resolver picks the record with the most-recent `updated_at`; the loser is dropped from the active set but remains visible in Git history for the user to inspect.
-- Conflict events surface in the Memory tab as `diagnostics.warnings` so the user can audit what was kept and what was dropped. There is no three-way smart merge — last-write-wins is deterministic and auditable.
-
-**Rationale.** Git-native persistence demands deterministic serialization so concurrent edits manifest as visible merge artifacts (duplicate keys) rather than silent data loss. The YAML format is human-readable; users can inspect, edit, and revert manually if needed.
-
----
-
 ## Data Model (Abstract)
 
 Core fields for each memory fact:
 
-- **scope**: `user`, `workspace` (Phase 1). `persona` and `organization` are deferred — see *Implementation Phases*.
-- **owner_id_or_workspace_id**: Single discriminator for the chosen scope. For `user` records this stores the per-origin user owner id (a stable lazy UUID resolved by `getOrCreateUserOwnerId()`); for `workspace` records it stores `${connectionId}/${owner}/${repo}`. One column → one compound index (`by_scope_owner_key`).
-- **key**: Short, unique identifier (e.g., `preferred_language`, `auth_approach`, `error_handling_style`). Canonicalized at write time (lowercase, trimmed, ≤256 chars).
-- **value**: The factual content. JSON-serializable.
+- **scope**: `user`, `persona`, `workspace`, `organization`
+- **owner_id** / **persona_id** / **workspace_id** / **org_id**: Context for the chosen scope.
+- **key**: Short, unique identifier (e.g., `preferred_language`, `auth_approach`, `error_handling_style`).
+- **value**: The factual content.
 - **category**: `preferences`, `decisions`, `project_context`, `domain_knowledge`, `workflow`.
-- **source**: `user_explicit`, `agent_proposed`, `inferred`. Drives the consent flow (agent-proposed proposals require user confirmation; the other two bypass the consent queue) and the UI affordance ("this might be wrong" pill on `agent_proposed` and `inferred`). **No `confidence` float** — `source` carries the same UI signal without going stale the moment the source context shifts.
-- **embedding**: Vector of `key: value`, generated via the shared embedding pipeline. Persisted as `number[]` for IDB structured-clone safety; callers wrap in `Float32Array.from()` only for cosine math.
-- **superseded_by**: Reference to a newer memory record (supports history and soft deletion). The "head" of a chain has `superseded_by === null`; semantic search and default `list()` return only heads.
-- **expires_at**: Optional TTL for ephemeral facts. `null` ≡ no expiry.
-- **updated_at**, **created_at**: Epoch milliseconds.
-- **md_path**: Reserved for the `.aieditor/memory/*.md` projection target (workspace-scope records only).
+- **source**: `user_explicit`, `agent_proposed`, `system_inferred`.
+- **confidence**: 0.0–1.0. `user_explicit` defaults to 1.0; `agent_proposed` defaults to 0.7–0.9.
+- **embedding**: Vector of `key: value`, generated via the shared embedding pipeline.
+- **superseded_by**: Reference to a newer memory record (supports history and soft deletion).
+- **expires_at**: Optional TTL for ephemeral facts.
+- **updated_at**, **created_at**.
 
-An audit log records every mutation (create, update/supersede, soft delete, expire) with actor, reason, and before/after snapshots. Audit entries persist in IDB store `memory_audit` with autoIncrement `seq` so global ordering is asserted by the schema, not by reconstruction.
+An audit log records every mutation (create, update/supersede, delete, expire) with actor, reason, and before/after values.
 
-**Scoping & Access.** Logical scopes determine retrieval priority and default visibility. AI Editor is single-user code-focused, so Phase 1 makes no commitment to RBAC groups; the future `organization` scope (deferred) is the natural seam for orthogonal group-based access control if/when shared deployments emerge.
+**Scoping & Access.** Logical scopes determine retrieval priority and default visibility. RBAC groups (additive permissions under least-privilege rules) control actual read/write authorization orthogonally. This avoids collision with RBAC group primitives while allowing fine-grained control (e.g., certain groups can read all workspace memories).
 
-Retrieval order places `user`-scope memories toward the head of the context window (high attention) and `workspace`-scope memories at secondary priority. The deferred `persona` and `organization` scopes would slot between the two and after `workspace` respectively when they ship.
+Retrieval order places high-confidence user/persona memories toward the head of the context window (high attention), with organization-level facts lower.
+
+---
+
+## Scope as a Tuple, Not an Enum
+
+The `scope` field above is the most common case, but it is shorthand. The underlying model is a tuple:
+
+```
+ScopeSpec {
+  writer:      WriterAuthority   // who has authority to create/update
+  visibility:  VisibilitySpec    // who can read; composable along multiple axes
+  persistence: PersistencePolicy // how long the record lives
+}
+```
+
+The four named scopes (`user`, `persona`, `workspace`, `organization`) are common compositions of this tuple. They exist as shorthand because they cover ~90% of cases and reading `scope: user` is friendlier than reading `(writer: user, visibility: user-only, persistence: persistent)`. The tuple grammar is what the architecture commits to; the enum is sugar over it.
+
+The `persona` writer (and `persona` as a visibility sub-axis) is defined fully in `DESIGN-persona.md`. Memory uses Persona as a scope value; it does not own the Persona concept.
+
+**Why three axes, not one.** Writer, visibility, and persistence are independent decisions that get conflated in casual description and cause real bugs when separated. A user-authored memo *about* an admin's policy decision has writer=user but visibility=admin-or-user; a Persona's private note about a specific user has writer=persona but visibility=persona-and-this-user-only; a session-scoped scratchpad has writer=user but persistence=this-session-only with no durable visibility at all. Single-axis scope cannot express these without straining.
+
+**Common compositions, with the enum mapping made explicit:**
+
+| Composition shorthand | Tuple | Notes |
+|---|---|---|
+| `user` (existing enum) | `(user, user-global, persistent)` | The user's personal memory across all their workspaces and Personas. |
+| `persona` (existing enum) | `(persona, persona-global, persistent)` | The Persona remembers across all its users and sessions. Shared-Persona RPG case. |
+| `workspace` (existing enum) | `(user-or-group, workspace-only, workspace-lifetime)` | Project-scoped memory; RBAC groups govern membership. |
+| `organization` (existing enum) | `(admin, org-wide, persistent)` | Org-level facts visible to all org members. |
+| `persona × user` | `(persona-or-user, this-persona-and-this-user-only, persistent)` | The Persona remembers things about *this* user, invisible to other users of the same Persona and to this user's other Personas. The counselor-confidence case. |
+| `persona × project` | `(persona-or-user, this-persona-in-this-project-only, project-lifetime)` | The Persona remembers project-specific facts when used inside a project. |
+| `user × project` | `(user-or-group, this-user-in-this-project-only, project-lifetime)` | The user's project-specific notes, invisible to other project members. |
+| `persona-transient` | `(persona, this-turn-only, no-persistence)` | Admitted into the working state for the current turn but never proposed for write. Useful for sensitive content that informs behavior without becoming durable. |
+| `session-transient` | `(user, this-session-only, session-lifetime)` | The session scratchpad. Survives the session, discarded at session end. |
+
+The table is illustrative, not exhaustive. Any well-formed tuple is a valid scope; operator policy decides which compositions are admitted in a given deployment.
+
+**The transient persistence axis.** The persistence axis explicitly includes `no-persistence` as a valid value. A record can be admitted into the working memory of the current turn (so the LLM sees it) without ever being written to the structured store. This is not a hack — it is a first-class scope policy. Use cases: sensitive content that should inform a single response but leave no trace; experimental drafts that may or may not become durable based on a later signal; one-shot context injections from an admin without polluting the user's memory.
+
+Transient records still go through the same admission and diagnostics machinery as persistent records; the only difference is that the write step is skipped. They still carry trust labels (see `DESIGN-intelligence.md` §"Trust Labels on Admitted Content"), still respect visibility policy, and still appear in the diagnostics surface as admitted-but-not-persisted.
+
+**Writer authority and "identity belongs to the creator."** The writer axis encodes the umbrella's identity-belongs-to-the-creator principle. The writer field names the authority that created the record; updates may come only from that authority (or, in composable cases, from any authority listed in the writer field). Cross-authority mutation is forbidden, exactly as for ChunkRefs, ToolDefs, and other atomic units.
+
+**Visibility composability.** The visibility axis composes along multiple sub-axes: user, persona, project, group, organization. A visibility spec is a logical conjunction of constraints across these sub-axes; admission filters records whose visibility constraints are all satisfied by the current admission context. RBAC groups (per the existing access discussion) plug into the group sub-axis without changing the grammar. **The model never sees scope metadata; it sees only admitted content.** Scope is enforced at admission time, not surfaced in the assembled prompt — Persona system prompts and Profile directives never have to reason about visibility because admission has already done the filtering.
+
+**Persistence policies.** Common values: `persistent` (default, durable across sessions), `session-lifetime` (alive while the session lives, discarded at session end), `workspace-lifetime` (alive while the workspace exists), `project-lifetime` (alive while the project exists), `ttl(duration)` (custom TTL via the existing `expires_at` field), `no-persistence` (transient). Operator policy decides which are valid in a deployment.
+
+**Relationship to the existing fields.** The existing data model (`owner_id`, `persona_id`, `workspace_id`, `org_id`, `expires_at`) already implements the tuple grammar — those fields are the encoding of writer, visibility, and persistence. The tuple grammar makes the conceptual model explicit; implementations need not restructure their storage to adopt it.
+
+**Multi-record write transactions.** Some operations naturally write multiple records under a single intent — the wiki-style "ingest touches many pages" pattern is the canonical example, where parsing one document produces facts that should land as a coherent set or not at all. The architecture commits to the tuple grammar applying per-record; whether multi-record writes are atomic across records is operator policy. Implementations that need atomicity should expose a transaction primitive at the API boundary; implementations that don't, accept per-record commit semantics. The single-writer rule applies per record, not per transaction.
 
 ---
 
@@ -147,7 +178,7 @@ The Transparent File Layer allows selective loading: an agent reads the index fi
 
 ```python
 memory.create(key, value, scope="user", category="preferences",
-              source="user_explicit")
+              source="user_explicit", confidence=1.0)
 
 memory.search(query, scope=None, limit=8)   # leverages retrieval subsystem
 
@@ -160,67 +191,17 @@ memory.propose_from_context(context)         # triggers agent proposal flow
 
 **LLM Tool Actions (via system tool-calling):**
 
-- `memory_remember(key, value, category, source)` — Propose or store a fact.
-- `memory_recall(query, scope)` — Explicit retrieval.
-- `memory_revise(key, new_value, reason)` — Self-healing update.
-
-**Consent & response contract.** `memory_remember` is **tool-result-honest** about whether the fact was actually stored:
-
-- `source='agent_proposed'` → returns `{status: 'pending_consent', candidate_id}`. The candidate is held in the in-memory consent queue; the chat consent card (PR #6) surfaces Accept / Edit / Dismiss to the user. The fact does not enter the store until the user accepts.
-- `source='user_explicit'` or `source='inferred'` → returns `{status: 'stored', id}` immediately. No consent prompt; the fact enters the store synchronously.
-
-This contract closes the agent-side hallucination path where a model would otherwise believe a proposal was stored merely because the tool returned successfully.
+- `memory:remember(key, value, category)` — Propose or store a fact.
+- `memory:recall(query, scope)` — Explicit retrieval.
+- `memory:revise(key, new_value, reason)` — Self-healing update.
 
 ---
 
 ## Management UI
 
-- **Settings → Memory tab** — List/edit personal and workspace memories, toggle the file layer (repo mode), view audit trail, export. Implemented in Preact + htm (PR #5; first Preact consumer per `docs/ROADMAP.md` §Decision 9).
-- **Inline `@memory` chip in chat** — Typing `@memory` opens a fuzzy picker of existing memories; selection inserts a `[memory:<key>]` markdown citation token at the trigger site (PR #8). Shares state with the Settings tab via `MEMORY_EVENTS`.
-- **Agent-proposed consent card** — When an agent calls `memory_remember` with `source='agent_proposed'`, the card mounts inline in the chat stream with Accept / Edit / Dismiss (PR #6, Touch 1 Flow 1).
-- **Commit modal "Memory updates" section** — On commit, pending `.aieditor/memory/*.md` writes show as a parallel section (Flow 3A) on non-protected branches; protected branches show the "Branch off & commit memory" escape hatch (Flow 3B) (PR #7).
-
-The deferred `organization` scope would add Organization Admin (global memories, bulk ops, moderation across groups) when it ships.
-
----
-
-## Git Integration & Auto-Staging
-
-When the user enables repo mode via Settings → Memory (opt-in toggle), `workspace`-scope memory mutations trigger **auto-staging** of the affected `.aieditor/memory/<category>.md` file for the next commit:
-
-- Auto-staging applies **only to non-protected branches** (Decision §4 in `docs/ROADMAP.md`). On protected branches the commit modal surfaces an escape hatch — "Branch off & commit memory" creates `memory/auto-YYYYMMDD` and commits there.
-- The commit modal displays a **Memory updates** section (Flow 3A) showing the staged files and per-file record counts; the user can deselect individual files before committing. Memory edits do not muddy the code-change signal — they live in their own panel, not as a banner.
-- The user can disable repo mode at any time. Disabling stops auto-staging; existing memories remain in the structured store but stop projecting to files. Re-enabling resumes projection from the current state of the store.
-
-This is the externally-tellable Git-native-memory story: a user opens a project on a new machine, pulls, and the repo's memories arrive with the code. There is no backend; Git is the transport.
-
----
-
-## UI Implementation Pattern
-
-The four Memory surfaces (Settings tab, `@memory` chip, consent card, commit-modal section) all follow the same Preact + htm pattern:
-
-- **Slot mounting.** Vanilla code creates a `<div id="…Slot…">` (or fixed-id root for singletons), then calls `mountPreact(slot, Component, props)` from `js/utils/preact-mount.js`. The helper returns a cleanup function that runs `render(null, slot)` to drop the tree.
-- **Effect-cleanup for subscriptions.** Components subscribe to `MEMORY_EVENTS` inside `useEffect`; the effect's return value unsubscribes. The mount-wrapper module owns the cleanup function and runs it on tab close / chat clear / conversation switch — no leaked listeners.
-- **Custom elements deferred.** `<memory-chip>` style custom-element registration adds shadow-DOM and slot-distribution complexity that doesn't pay off for AI Editor's single-process, single-surface model. Div slots stay the production pattern through 2.0; revisit only if reuse pressure emerges.
-
----
-
-## Chat Citation Wire Format
-
-When the user picks a memory from the `@memory` chip, a markdown reference token is inserted at the trigger site:
-
-```
-[memory:<key>]
-```
-
-The token is **visible to the LLM as literal text** and **resolved via the `memory_recall` tool** at the model's option. This shape was chosen over the alternatives because:
-
-- **No invisible structured tags.** A `data-memory-id` attribute on a hidden span is cleaner-looking but adds a render path, a serialization concern, and complicates copy/paste from chat history.
-- **No new render path.** The existing markdown renderer already handles the `[…]` syntax. A pill / hover-card affordance is a follow-up polish, not a 1.3.0 commitment.
-- **Auditable.** The token shows up verbatim in the conversation export, the session-replay archive (1.3.5), and the cost-dashboard transcript view.
-
-The chip never *resolves* the citation itself — it just inserts the token. Resolution happens when the model decides it needs the underlying value and calls `memory_recall(key)`.
+- **User Settings** — View/edit personal and persona memories, toggle agent proposals, view audit trails, search.
+- **Workspace Settings** — Manage workspace-scoped memories (for workspace owners/admins).
+- **Organization Admin** — Global memories, bulk operations, statistics, moderation across groups.
 
 ---
 
@@ -259,24 +240,17 @@ There are no silent memory mutations. Every change is audit-logged with actor an
 
 ## Implementation Phases
 
-**Phase 1 (1.3.0): Core CRUD + `user` & `workspace` Scopes + Transparent File Layer + Agent Proposals**
+**Phase 1: Core CRUD + User Scope + Retrieval Integration**
+Structured store, basic API, semantic retrieval, management UI, explicit creation only.
 
-What ships:
-- Structured store (`js/intelligence/memory/`) with IDB backend, embeddings, audit log.
-- Transparent file layer at `.aieditor/memory/{index,preferences,decisions,project_context,domain_knowledge,workflow}.md` for `workspace`-scope facts committed to the repo.
-- Three creation paths: `user_explicit` (Settings UI + `@memory` chip), `agent_proposed` (chat consent card with Accept / Edit / Dismiss), `inferred` (low-confidence, TTL-bounded).
-- Three LLM tools: `memory_remember`, `memory_recall`, `memory_revise`.
-- Settings → Memory tab with list/edit/audit views; chat `@memory` chip; commit-modal "Memory updates" section.
-- Agent proposals require explicit user consent (no silent writes).
+**Phase 2: Persona + Workspace Scopes + RBAC Integration**
+Priority chain, orthogonal group-based access control, context auto-injection via the retrieval Composer.
 
-**Phase 2 (deferred indefinitely): `persona` Scope**
-Dropped at 1.3.0 kickoff (2026-04-30). Revisit only if `user`-scope memory usage in production reveals cluster patterns that suggest persona-level curation would meaningfully reduce noise. Single-user code-focused editor + 2.0 ships `chat_multi.v1` and `rp.v1` profiles as stubs already, so persona is not load-bearing for the planned profile contract.
+**Phase 3: Agent Proposals, Self-Healing & Transparent File Layer**
+Consent flows, `memory.md` index plus domain files, read/write tools for agents, audit UI.
 
-**Phase 3 (1.3.x → 1.4.x): Self-Healing & Cross-Device Transport**
-Agents rewrite `.aieditor/memory/*.md` files within guardrails (`memory_revise` accepts a `reason`; revisions become audit entries). Cross-device session sync via Git follows the same opt-in toggle as memory's repo mode. Session replay format (1.3.4 in the post-renumbering roadmap) carries memory references through transcripts.
-
-**Phase 4 (post-2.0): `organization` Scope, Expiration Tuning, Advanced Features**
-Organization-level scopes with RBAC; clustering over memories via retrieval's thematic strategy; relevance decay; insights dashboard; bulk import; reconciliation tools. Gated on shared-deployment usage emerging.
+**Phase 4: Organization Scope, Expiration, Advanced Features**
+Clustering over memories (via retrieval's thematic strategy), relevance decay, insights dashboard, bulk import, reconciliation tools.
 
 ---
 
@@ -296,16 +270,17 @@ Organization-level scopes with RBAC; clustering over memories via retrieval's th
 ## What This Design Commits To
 
 - **Atomic facts, not chunks.** Memory records are key-value with embeddings, not slices of source material.
-- **Scope priority chain** as the conflict-resolution mechanism: `user > workspace` for Phase 1; `persona` deferred indefinitely; `organization` is post-2.0.
-- **Hybrid storage** (structured store + optional transparent file layer). `workspace`-scope memories project to `.aieditor/memory/<category>.md` deterministic key-sorted YAML-frontmatter blocks; merge conflicts manifest as duplicate keys resolved by latest `updated_at` and surfaced in `diagnostics.warnings`.
-- **Three creation paths**, all with explicit `source` (`user_explicit` / `agent_proposed` / `inferred`). No `confidence` float — `source` carries the UI signal without going stale.
-- **Tool-result-honest consent.** `memory_remember` with `source='agent_proposed'` returns `{status: 'pending_consent', candidate_id}`; the fact does not enter the store until user consent. `user_explicit` and `inferred` bypass the queue.
+- **Scope is a tuple, not an enum.** The underlying model is `(writer, visibility, persistence)`. The four named scopes (`user`, `persona`, `workspace`, `organization`) are common compositions; `persona × user`, `persona-transient`, and other tuples are also valid. Operator policy decides which compositions are admitted in a deployment.
+- **Scope priority chain** as the conflict-resolution mechanism for the common-enum cases: `user > persona > workspace > organization`. For tuple-grammar compositions, priority is determined by the writer authority and visibility specificity.
+- **Persistence includes `no-persistence`.** Transient records are first-class — admitted into the working turn but never written to the structured store. They still carry trust labels and respect visibility policy.
+- **Writer authority is single-source per record.** "Identity belongs to the creator" applies to MemoryRecord as to all other atomic units; cross-authority mutation is forbidden.
+- **Multi-record write atomicity is operator policy.** The architecture commits to the tuple grammar applying per-record; cross-record transactions are an implementation-level concern, not an architectural commitment.
+- **Hybrid storage** (structured store + optional transparent file layer).
+- **Three creation paths**, all with explicit `source` and `confidence`.
 - **Supersession, not deletion.** Updates produce new records; old records are marked superseded for audit.
 - **No autonomous mutation.** Agent-proposed facts require user consent. Compression cannot write to memory.
 - **Single embedding pipeline** shared with retrieval. No specialized memory embedder.
 - **Audit log on every mutation.**
 - **Library, not service.** Process-embedded; the structured store is the only shared state.
-- **Chat citation wire format.** `[memory:<key>]` markdown reference. The token is visible to the LLM; resolution happens via `memory_recall` at the model's option. No invisible structured tags.
-- **UI mounts via div slots + `mountPreact()`.** Custom elements deferred. The pattern is shared by the four Memory surfaces (Settings tab, `@memory` chip, consent card, commit modal).
 
 These are the load-bearing decisions. Push back on any of them before building.
