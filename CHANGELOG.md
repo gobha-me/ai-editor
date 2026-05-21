@@ -4,6 +4,20 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.81.0] - 2026-05-21
+
+### Fixed — `search_in_files` no longer fails silently when truncated (gitea#487)
+
+The handler at [`js/tools/search-tools.js`](js/tools/search-tools.js) hardcoded a 50-file cap inside the scan loop. A qwen-3-6-plus session against `xcaliber/HTML-Games` issue #238 (2026-05-21, ai-editor v2.77.0) called `search_in_files` to find a game's bootstrap code in a 343-file repo — the cap clipped the scan at 50, returned `results: []` plus `files_truncated: true` + a "narrow scope" hint, and the model treated the empty array as authoritative ("no matches") and moved on. The fail-closed shape (empty results + footnote) was indistinguishable from a real "not found" — the most expensive failure mode possible per the issue.
+
+**Fix, two pieces, both in [`js/tools/search-tools.js`](js/tools/search-tools.js).** (1) Raise the cap 50 → 500 via module-scope `const MAX_FILES = 500`. Existing `max_results` (default 20) still caps per-call work, so MAX_FILES just lets the scan see more candidates before the result ceiling hits — no token-cost regression. 500 covers HTML-Games with headroom and lands at the upper end of the issue's recommended 200–500 range. (2) Fail loud when truncated AND zero matches landed: branch on `files.length > MAX_FILES && results.length === 0` and return `{ error: 'Searched first 500 of N files with no matches…', code: 'search_truncated', query, files_searched, total_files_in_scope }` instead of the success envelope. Truncated **with** results keeps the current success+`files_truncated`+`hint` shape — the model has actionable matches; the hint is value-add. Untruncated path unchanged.
+
+The new `code: 'search_truncated'` follows the T1 tool-authored failure shape contract (2.78.0) — added to `VALID_CODES` in [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs).
+
+### Added — `tests/test-search-in-files-truncation.mjs` source-scan lint
+
+4 subtests, source-scan shape mirroring `tests/test-edit-tracker-read-tool-contract.mjs` (2.79.0): (a) module declares `const MAX_FILES = 500` at module scope; (b) handler body references `MAX_FILES` and no bare `slice(0, 50)` or `Math.min(files.length, 50)` literals remain (regression guard); (c) handler returns the refusal envelope (`code: 'search_truncated'`) on the truncated-empty branch; (d) truncated-with-results path still emits `files_truncated: true` + the conditional spread reads `files.length > MAX_FILES`. Behavior end-to-end remains exercised by the browser suite (`tests/index.html`) — the handler's transitive dependence on `State`/`Git`/`IgnoreManager` makes pure Node tests structural-only.
+
 ## [2.80.0] - 2026-05-21
 
 ### Fixed — `commit_files` now surfaces write_file-auto-committed files via `created` array (gitea#486)

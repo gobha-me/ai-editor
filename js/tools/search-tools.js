@@ -7,12 +7,19 @@ import { State } from '../core.js';
 import { Git } from '../git.js';
 import { IgnoreManager } from '../ignore.js';
 
+// gitea#487 — raised 50→500 at 2.81.0 to cover small/medium projects (the
+// original 50 clipped HTML-Games at 343 files, returning `results: []` plus
+// a "narrow scope" hint that the model treated as authoritative "no matches").
+// `max_results` (default 20) still caps per-call work, so larger MAX_FILES
+// just lets the scan see more candidates before that ceiling hits.
+const MAX_FILES = 500;
+
 /**
  * Register all search-related tools.
  * @param {Object} registry - ToolRegistry instance
  */
 export function registerSearchTools(registry) {
-    
+
     // ========================================
     // search_in_files
     // ========================================
@@ -41,7 +48,7 @@ export function registerSearchTools(registry) {
 
             const results = [];
             const queryLower = query.toLowerCase();
-            for (const file of files.slice(0, 50)) {
+            for (const file of files.slice(0, MAX_FILES)) {
                 if (results.length >= max_results) break;
                 try {
                     const fileData = await Git.getFile(owner, repo, file.path, branch);
@@ -60,16 +67,29 @@ export function registerSearchTools(registry) {
                     }
                 } catch (e) { /* skip unreadable files */ }
             }
+            // gitea#487 — fail loud on truncated-and-empty rather than
+            // returning `results: []` plus a footnote hint that the model
+            // skims past. Same `{ error, code }` envelope as the other
+            // tool-authored failure shapes (T1 contract, 2.78.0).
+            if (files.length > MAX_FILES && results.length === 0) {
+                return {
+                    error: `Searched first ${MAX_FILES} of ${files.length} files with no matches for "${query}". Narrow scope via 'path' parameter (e.g., path="js/tools/"), refine the query, or accept that the first ${MAX_FILES} files genuinely don't match.`,
+                    code: 'search_truncated',
+                    query,
+                    files_searched: MAX_FILES,
+                    total_files_in_scope: files.length
+                };
+            }
             return {
-                query, files_searched: Math.min(files.length, 50),
+                query, files_searched: Math.min(files.length, MAX_FILES),
                 total_files_in_scope: files.length,
                 results,
                 message: results.length > 0
                     ? `Found "${query}" in ${results.length} file(s)`
                     : `No matches for "${query}"`,
-                ...(files.length > 50 ? {
+                ...(files.length > MAX_FILES ? {
                     files_truncated: true,
-                    hint: `Only searched first 50 of ${files.length} files in scope. Use the 'path' parameter to narrow scope (e.g., path="js/tools/") for more targeted results.`
+                    hint: `Only searched first ${MAX_FILES} of ${files.length} files in scope. Use the 'path' parameter to narrow scope (e.g., path="js/tools/") for more targeted results.`
                 } : {}),
                 ...(results.length >= max_results ? {
                     results_capped: true,

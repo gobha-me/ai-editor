@@ -72,6 +72,7 @@ const VALID_CODES = new Set([
     'read_error',
     'write_error',
     'search_error',
+    'search_truncated',
     'ci_status_fetch_error',
     'ci_workflow_error',
     'ci_workflow_not_found',
