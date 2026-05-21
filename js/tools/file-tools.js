@@ -98,6 +98,12 @@ export function registerFileTools(registry) {
             const lineCount = lines.length;
             const MAX_LINES = 200;
 
+            // gitea#485: refresh the staleness clock on every read regardless
+            // of truncation or content source, so the next edit_file measures
+            // staleness from this read — not from a prior read whose content
+            // the model has already seen and superseded.
+            EditTracker.recordRead(path, 1, lineCount, lineCount);
+
             // For large files, truncate UNLESS full=true is explicitly requested
             if (!full && lineCount > MAX_LINES) {
                 const headCount = 120;

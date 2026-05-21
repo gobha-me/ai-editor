@@ -4,6 +4,25 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.79.0] - 2026-05-21
+
+### Fixed — `read_file` now refreshes the staleness clock (gitea#485)
+
+`read_file` at [`js/tools/file-tools.js`](js/tools/file-tools.js) was the one read tool that did NOT call `EditTracker.recordRead()` — its three siblings (`read_current_file` / `open_file` / `read_lines`) all do. Field evidence motivating the fix: a qwen-3-6-plus session against HTML-Games issue #238 burned **5.87M tokens / $3.78 / 149 requests** on a 4-file end-screen, an estimated 80% of which was wasted in a single 30+ iteration loop — every `read_file` returned full content but never reset `EditTracker.lastReads[path].timestamp`, so the next `edit_file` reported a monotonically-increasing `Last read was Xs ago` (717s → 728s → 739s → ... → 1313s) measured from the very first read. The model eventually gave up on `edit_file` and switched to `write_file`, which introduced its own bugs (see HTML-Games PR #278 hotfix).
+
+**Different shape than the cache-invalidation-on-mutation pattern** (4 instances → structurally resolved at 2.71.0 via `ToolDefinition.cache: 'never'`). This is a missing-call gap: `read_file` was added after its siblings and the `recordRead` call site was simply omitted — the docstring at [`js/tools/edit-tracker.js`](js/tools/edit-tracker.js) `recordRead` even listed the contract explicitly (`"Call this from read_lines, read_current_file, open_file"`) with `read_file` absent.
+
+**Fix shape, three pieces.** (1) [`js/tools/file-tools.js`](js/tools/file-tools.js) `read_file` handler — add `EditTracker.recordRead(path, 1, lineCount, lineCount)` right after `resolveFileContent` returns and the line count is known, before the truncation branch. Covers both cache-hit and cache-miss paths uniformly (the path resolution at [`js/tools/_file-content.js`](js/tools/_file-content.js) checks editor buffer → open tabs → remote in that order; the tracker doesn't care which source served the bytes). `recordRead` is idempotent (overwrites by path), so no guard is needed. (2) [`js/tools/edit-tracker.js`](js/tools/edit-tracker.js) `recordRead` docstring updated to list `read_file` alongside the other three call sites — the contract now matches the code. (3) New [`tests/test-edit-tracker-read-tool-contract.mjs`](tests/test-edit-tracker-read-tool-contract.mjs) (**4 subtests**) — source-scan mirroring [`tests/test-editor-compartment-ordering.mjs`](tests/test-editor-compartment-ordering.mjs) (2.72.0): for each of `read_file` / `read_current_file` / `open_file` / `read_lines`, brace-walk to extract the `registry.register('NAME', async (args) => { ... })` handler body and regex-anchor `EditTracker.recordRead(`. Pins all four call sites at once so a future rename or new read tool can't silently re-open the gap. Uses the settled source-scan-precedent idiom (`read file → stripComments → regex-anchor in extracted function body`).
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/tools/file-tools.js`](js/tools/file-tools.js) | EDIT — `read_file` handler calls `EditTracker.recordRead` after content resolution |
+| [`js/tools/edit-tracker.js`](js/tools/edit-tracker.js) | EDIT — `recordRead` docstring lists `read_file` in the call-site contract |
+| [`tests/test-edit-tracker-read-tool-contract.mjs`](tests/test-edit-tracker-read-tool-contract.mjs) | NEW — source-scan lint, 4 subtests (one per read tool) |
+| [`js/version.js`](js/version.js) | EDIT — `2.78.0` → `2.79.0` |
+
 ## [2.78.0] - 2026-05-21
 
 ### Added — T1 tool-authored failure shape conformance (sized roadmap slot)

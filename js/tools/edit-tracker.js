@@ -32,7 +32,8 @@ const EditTracker = {
     
     /**
      * Record a file read operation.
-     * Call this from read_lines, read_current_file, open_file.
+     * Call this from read_file, read_lines, read_current_file, open_file.
+     * (read_file added to call sites at 2.79.0 / gitea#485.)
      */
     recordRead(path, startLine = 1, endLine = null, totalLines = null) {
         if (!path) return;
