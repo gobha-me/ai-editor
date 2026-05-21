@@ -81,6 +81,7 @@ const VALID_CODES = new Set([
     'code_execution_error',
     'edit_error',
     'editor_open_failed',
+    'uncommitted_changes',
 ]);
 
 function stripComments(src) {

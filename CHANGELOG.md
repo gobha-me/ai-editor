@@ -4,6 +4,59 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.84.0] - 2026-05-21
+
+### Fixed — `create_pull_request` refuses with uncommitted changes (gitea#493)
+
+Closes the silent-stale-head failure mode from the 2026-05-21 HTML-Games #238 dogfood cluster — the fifth and final sibling of gitea#485 / #486 / #487 / #488 (shipped as 2.79–2.82). After the model called `commit_files` and immediately `create_pull_request`, any file still dirty in `State.openTabs` was silently NOT in the PR. The Git provider doesn't see CodeMirror-resident edits until `commit_files` flushes them, and [`pr-tools.js`](js/tools/pr-tools.js) checked only that a project was loaded and `head !== base`. Per the 2.80.0 session record: *"ultimately opened the PR on faith."*
+
+**Fix.** Insert a dirty-tab precondition at the top of the [`create_pull_request`](js/tools/pr-tools.js) handler, immediately after the no-project guard and before the head/base check. The check filters `State.openTabs` for `dirty` non-issue tabs (issue tabs carry no working-tree state) and returns the T1 failure envelope:
+
+```json
+{
+  "error": "Cannot create pull request: N file(s) have uncommitted changes (path1, ...). Call commit_files first, or revert the dirty tabs.",
+  "code": "uncommitted_changes",
+  "dirty_paths": ["path1", ...]
+}
+```
+
+`dirty_paths` serves the model's recovery step directly — no re-derivation needed. Ordering rationale: dirty-first because the bug class is stale-head silence; surfacing the refusal before any branch-resolution noise is the loudest possible signal (cheaper too — dirty-tab state is local and deterministic, head/base requires resolving `State.currentBranch` / `defaultBranch` fallbacks).
+
+`uncommitted_changes` is added to `VALID_CODES` in [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) — the closed set the loop's `next_action_hint` registry keys on. `create_pull_request` is **not** graduated to `T1_CONFORMANT_TOOLS` in this PR; the precedent set by gitea#487 / 2.81.0 (`search_in_files` gained `search_truncated` without graduation) and gitea#486 / 2.80.0 (`commit_files` reporting fix) is to land the targeted refusal without sweeping the other three existing return-error sites (no-project, head=base, generic Git failure). Full graduation is a separate out-of-scope refactor.
+
+**Out of scope per issue body.**
+- Auto-firing `commit_files` when `create_pull_request` finds dirty tabs (silent commits are worse than loud refusals — defer).
+- `allow_dirty: true` escape hatch (YAGNI until field evidence shows it's needed).
+- Same gap in adjacent PR tools (`update_pull_request`, etc.) — file separately if it exists there.
+
+### Added — `tests/test-pr-tools-uncommitted-changes.mjs` (source-scan lint)
+
+Mirrors the targeted-lint precedent from [`tests/test-search-in-files-truncation.mjs`](tests/test-search-in-files-truncation.mjs) (gitea#487 / 2.81.0). Four subtests against the `create_pull_request` handler body:
+
+1. Handler reads `State.openTabs` and filters on `.dirty` excluding `type === 'issue'`.
+2. Handler returns `code: 'uncommitted_changes'` on the dirty branch.
+3. Handler exposes `dirty_paths` field for model recovery.
+4. The dirty refusal site precedes the `headBranch === baseBranch` check (locks the ordering decision against drift in future refactors).
+
+The handler is browser-side (depends on `State` / `Git`), so the lint is structural — the browser smoke test covers full E2E.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/tools/pr-tools.js`](js/tools/pr-tools.js) | EDIT — `create_pull_request` gains the dirty-tab precondition (~14 LoC including comment). |
+| [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) | EDIT — `'uncommitted_changes'` added to `VALID_CODES`. |
+| [`tests/test-pr-tools-uncommitted-changes.mjs`](tests/test-pr-tools-uncommitted-changes.mjs) | NEW — 4-subtest source-scan lint. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.83.0'` → `'2.84.0'`. |
+
+### Verification
+
+- `node --test tests/test-pr-tools-uncommitted-changes.mjs` — 4 subtests green.
+- `node --test tests/test-tool-failure-shapes.mjs` — green (closed-set lint accepts the new code; `create_pull_request` not in `T1_CONFORMANT_TOOLS`, so its other return sites aren't audited).
+- `node --test tests/test-*.mjs` — full Node suite, no regressions.
+- Browser smoke: edit a file (tab dirty) → ask model to `create_pull_request` → refusal envelope renders in chat with the dirty path; no remote PR created. Then `commit_files`, retry → PR opens normally.
+
 ## [2.83.0] - 2026-05-21
 
 ### Added — `js/chat/agent-loop-contracts.js` (post-`DESIGN-agent-loop.md`)

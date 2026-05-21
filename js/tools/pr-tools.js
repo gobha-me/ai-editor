@@ -28,6 +28,22 @@ export function registerPRTools(registry) {
         if (!State.currentProject) {
             return { error: 'No project is currently loaded' };
         }
+
+        // gitea#493 — fail loud when tabs have uncommitted edits. Issue tabs
+        // (type === 'issue') aren't files and don't carry working-tree state.
+        // The Git provider doesn't see uncommitted tabs (CodeMirror-resident
+        // until commit_files flushes them) — so without this check, the PR
+        // opens against the last-committed head and silently misses dirty files.
+        const dirtyTabs = (State.openTabs || []).filter(t => t.dirty && t.type !== 'issue');
+        if (dirtyTabs.length > 0) {
+            const dirty_paths = dirtyTabs.map(t => t.path);
+            return {
+                error: `Cannot create pull request: ${dirty_paths.length} file(s) have uncommitted changes (${dirty_paths.join(', ')}). Call commit_files first, or revert the dirty tabs.`,
+                code: 'uncommitted_changes',
+                dirty_paths
+            };
+        }
+
         const { owner, repo } = State.currentProject;
 
         // Default head to current branch
