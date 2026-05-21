@@ -28,7 +28,7 @@ const TERMINAL_STATES = new Set(['success', 'failure', 'error', 'cancelled']);
 
 function projectOrError() {
     if (!State.currentProject) {
-        return { error: 'No project is currently loaded. Open a project first.' };
+        return { error: 'No project is currently loaded. Open a project first.', code: 'precondition_not_met' };
     }
     return State.currentProject;
 }
@@ -52,7 +52,7 @@ async function getCiStatus({ ref }) {
     const proj = projectOrError();
     if (proj.error) return proj;
     if (!ref || typeof ref !== 'string') {
-        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.' };
+        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.', code: 'schema_validation_failed' };
     }
     try {
         const status = await Git.getCommitStatus(proj.owner, proj.repo, ref);
@@ -64,7 +64,7 @@ async function getCiStatus({ ref }) {
             summary: summarizeStatuses(status.statuses || [])
         };
     } catch (e) {
-        return { error: `Could not fetch CI status for ${ref}: ${e.message || String(e)}` };
+        return { error: `Could not fetch CI status for ${ref}: ${e.message || String(e)}`, code: 'ci_status_fetch_error' };
     }
 }
 
@@ -96,7 +96,7 @@ async function waitForCi({ ref, timeoutMs }) {
     const proj = projectOrError();
     if (proj.error) return proj;
     if (!ref || typeof ref !== 'string') {
-        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.' };
+        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.', code: 'schema_validation_failed' };
     }
 
     const cap = Math.min(
@@ -176,17 +176,17 @@ async function getCiLogs({ ref, jobName }) {
     const proj = projectOrError();
     if (proj.error) return proj;
     if (!ref || typeof ref !== 'string') {
-        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.' };
+        return { error: 'Required argument "ref" (commit SHA or branch name) is missing.', code: 'schema_validation_failed' };
     }
 
     let runs;
     try {
         runs = await Git.listWorkflowRuns(proj.owner, proj.repo);
     } catch (e) {
-        return { error: `Could not list workflow runs: ${e.message || String(e)}` };
+        return { error: `Could not list workflow runs: ${e.message || String(e)}`, code: 'ci_workflow_error' };
     }
     if (!runs || runs.length === 0) {
-        return { error: 'No workflow runs visible to the active provider. CI Actions may be disabled for this repo.' };
+        return { error: 'No workflow runs visible to the active provider. CI Actions may be disabled for this repo.', code: 'ci_workflow_error' };
     }
 
     // Resolve ref → most-recent run for that SHA. ref may be a short SHA.
@@ -197,7 +197,7 @@ async function getCiLogs({ ref, jobName }) {
     });
     const candidate = matching[0] || runs[0];
     if (!candidate) {
-        return { error: `No workflow run found for ref ${ref}.` };
+        return { error: `No workflow run found for ref ${ref}.`, code: 'ci_workflow_not_found' };
     }
     const usedFallback = !matching.length;
 
@@ -205,12 +205,13 @@ async function getCiLogs({ ref, jobName }) {
     try {
         jobs = await Git.listWorkflowJobs(proj.owner, proj.repo, candidate.id);
     } catch (e) {
-        return { error: `Could not list jobs for run ${candidate.id}: ${e.message || String(e)}` };
+        return { error: `Could not list jobs for run ${candidate.id}: ${e.message || String(e)}`, code: 'ci_workflow_error' };
     }
     if (!jobs || jobs.length === 0) {
         return {
             run_id: candidate.id,
-            error: `Run ${candidate.id} has no jobs (yet). Status: ${candidate.status || 'unknown'}.`
+            error: `Run ${candidate.id} has no jobs (yet). Status: ${candidate.status || 'unknown'}.`,
+            code: 'ci_workflow_error'
         };
     }
 
@@ -220,7 +221,8 @@ async function getCiLogs({ ref, jobName }) {
         if (!job) {
             return {
                 run_id: candidate.id,
-                error: `No job named "${jobName}" in run ${candidate.id}. Available: ${jobs.map(j => j.name).join(', ')}.`
+                error: `No job named "${jobName}" in run ${candidate.id}. Available: ${jobs.map(j => j.name).join(', ')}.`,
+                code: 'ci_workflow_not_found'
             };
         }
     } else {
@@ -233,7 +235,7 @@ async function getCiLogs({ ref, jobName }) {
     try {
         logText = await Git.getJobLog(proj.owner, proj.repo, job.id);
     } catch (e) {
-        return { error: `Could not fetch log for job ${job.id}: ${e.message || String(e)}` };
+        return { error: `Could not fetch log for job ${job.id}: ${e.message || String(e)}`, code: 'ci_log_not_available' };
     }
     if (logText == null) {
         return {
@@ -241,7 +243,8 @@ async function getCiLogs({ ref, jobName }) {
             job_id: job.id,
             job_name: job.name,
             conclusion: job.conclusion,
-            error: 'Provider returned no log content. The job may still be running, or logs may have expired.'
+            error: 'Provider returned no log content. The job may still be running, or logs may have expired.',
+            code: 'ci_log_not_available'
         };
     }
 

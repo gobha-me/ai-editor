@@ -133,7 +133,7 @@ export function registerEvalTools(registry) {
 
     registry.register('run_code', async ({ code }) => {
         if (!code || !code.trim()) {
-            return { error: 'code is required' };
+            return { error: 'code is required', code: 'schema_validation_failed' };
         }
 
         // Timeout wrapper
@@ -150,6 +150,7 @@ export function registerEvalTools(registry) {
         if (result.error) {
             return {
                 error: result.error,
+                code: 'code_execution_error',
                 console_output: result.logs?.length ? result.logs.join('\n') : undefined
             };
         }

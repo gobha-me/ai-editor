@@ -171,6 +171,8 @@ The architecture is deliberately not prescriptive about *which* fields a given t
 
 Tools that *did not run* (the loop intercepted before invocation — cache hit, refused, partial) do not produce these shapes; the loop's envelope shapes (`cached`, `refused`, `partial`) cover those cases. This contract applies only to envelopes the loop emits as `success(payload)` where the payload happens to be a tool-authored failure.
 
+**Ai-editor concrete implementation.** The stable identifier is carried as a `code:` field alongside the existing human-readable `error:` field (the design's "(or `failure_code`)" clause). Rationale: the registry catch block at `js/tools/registry.js` already surfaces `EditorError` throws as `{error: msg, code: identifier}`, so tool-return failures share that envelope shape — a single key name across both rejection paths. The closed code set is owned by `tests/test-tool-failure-shapes.mjs` (T1 conformance lint, shipped 2.78.0) which enforces the contract on a `T1_CONFORMANT_TOOLS` allowlist; non-conformant tool handlers are graduated onto the allowlist in follow-on PRs.
+
 ### ToolRequest / ToolAdmissionResult
 
 ```

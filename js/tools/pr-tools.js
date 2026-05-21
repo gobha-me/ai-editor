@@ -397,7 +397,7 @@ export function registerPRTools(registry) {
     // ========================================
     registry.register('get_ci_status', async ({ ref }) => {
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
         const { owner, repo } = State.currentProject;
         const branch = ref || State.currentBranch;
@@ -416,7 +416,7 @@ export function registerPRTools(registry) {
                 }))
             };
         } catch (error) {
-            return { error: `Failed to get CI status for '${branch}': ${error.message}` };
+            return { error: `Failed to get CI status for '${branch}': ${error.message}`, code: 'ci_status_fetch_error' };
         }
     }, {
         type: 'function',
@@ -445,7 +445,7 @@ export function registerPRTools(registry) {
     // ========================================
     registry.register('get_ci_logs', async ({ run_id, job_id }) => {
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
         const { owner, repo } = State.currentProject;
         const { scale } = getContextScale();
@@ -455,7 +455,7 @@ export function registerPRTools(registry) {
             // If a specific job_id is provided, fetch just that job's log
             if (job_id) {
                 const log = await Git.getJobLog(owner, repo, job_id);
-                if (!log) return { error: `No logs available for job ${job_id}` };
+                if (!log) return { error: `No logs available for job ${job_id}`, code: 'ci_log_not_available' };
                 const trimmed = log.length > LOG_LIMIT
                     ? log.slice(-LOG_LIMIT) + '\n... (truncated, showing last ' + LOG_LIMIT + ' chars)'
                     : log;
@@ -468,7 +468,7 @@ export function registerPRTools(registry) {
                 // Default: find the most recent failed or running workflow run
                 const runs = await Git.listWorkflowRuns(owner, repo);
                 if (!runs || runs.length === 0) {
-                    return { error: 'No workflow runs found for this repository.' };
+                    return { error: 'No workflow runs found for this repository.', code: 'ci_workflow_error' };
                 }
                 // Prioritize: failed > running > most recent
                 const failed = runs.find(r => r.conclusion === 'failure');
@@ -491,6 +491,7 @@ export function registerPRTools(registry) {
                 return {
                     run_id: targetRunId,
                     error: 'Could not fetch job-level logs.',
+                    code: 'ci_log_not_available',
                     hint: 'Try providing a specific job_id, or view logs in the browser.',
                     url: runLogs?.url || null
                 };
@@ -535,7 +536,7 @@ export function registerPRTools(registry) {
                 log: logParts.join('\n\n')
             };
         } catch (error) {
-            return { error: `Failed to fetch CI logs: ${error.message}` };
+            return { error: `Failed to fetch CI logs: ${error.message}`, code: 'ci_log_not_available' };
         }
     }, {
         type: 'function',

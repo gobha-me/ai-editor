@@ -513,7 +513,7 @@ export function registerScanTools(registry) {
     // ========================================
     registry.register('read_lines', async ({ path, start_line, end_line, context_lines = 0 }) => {
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
 
         // 2.15.1 — coerce at boundary. Some models JSON-encode ints as strings
@@ -524,7 +524,7 @@ export function registerScanTools(registry) {
         const end_num   = Number(end_line);
         const ctx_num   = Number(context_lines);
         if (!Number.isFinite(start_num) || !Number.isFinite(end_num) || !Number.isFinite(ctx_num)) {
-            return { error: `start_line, end_line, and context_lines must be numbers (got start=${JSON.stringify(start_line)}, end=${JSON.stringify(end_line)}, ctx=${JSON.stringify(context_lines)})` };
+            return { error: `start_line, end_line, and context_lines must be numbers (got start=${JSON.stringify(start_line)}, end=${JSON.stringify(end_line)}, ctx=${JSON.stringify(context_lines)})`, code: 'schema_validation_failed' };
         }
 
         const branch = State.currentBranch || 'main';
@@ -540,11 +540,11 @@ export function registerScanTools(registry) {
             const end = Math.min(lines.length, end_num + ctx_num);
 
             if (start_num < 1 || start_num > lines.length) {
-                return { error: `Invalid start_line: ${start_num} (file has ${lines.length} lines)` };
+                return { error: `Invalid start_line: ${start_num} (file has ${lines.length} lines)`, code: 'schema_validation_failed', actual_file_line_count: lines.length };
             }
 
             if (end_num < start_num || end_num > lines.length) {
-                return { error: `Invalid end_line: ${end_num} (must be between ${start_num} and ${lines.length})` };
+                return { error: `Invalid end_line: ${end_num} (must be between ${start_num} and ${lines.length})`, code: 'schema_validation_failed', actual_file_line_count: lines.length };
             }
 
             // Extract lines (convert to 0-indexed)
@@ -567,9 +567,9 @@ export function registerScanTools(registry) {
             };
         } catch (error) {
             if (error.status === 404) {
-                return { error: `File not found: '${path}' does not exist on branch '${branch}'. Use get_project_tree to see available files.` };
+                return { error: `File not found: '${path}' does not exist on branch '${branch}'. Use get_project_tree to see available files.`, code: 'path_not_found' };
             }
-            return { error: `Failed to read lines from '${path}': ${error.message}` };
+            return { error: `Failed to read lines from '${path}': ${error.message}`, code: 'read_error' };
         }
     }, {
         type: 'function',

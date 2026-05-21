@@ -36,13 +36,13 @@ async function ensureFileActive(path) {
         await switchToTab(tabIdx);
         return State.currentFile?.path === path
             ? { ok: true }
-            : { ok: false, error: `Failed to switch to tab for '${path}'` };
+            : { ok: false, error: `Failed to switch to tab for '${path}'`, code: 'editor_open_failed' };
     }
 
     // Not open — check file tree and open it
     const inTree = State.fileTree?.find(f => f.path === path && f.type !== 'dir');
     if (!inTree) {
-        return { ok: false, error: `File not found: '${path}'. Use get_project_tree to see available files.` };
+        return { ok: false, error: `File not found: '${path}'. Use get_project_tree to see available files.`, code: 'path_not_found' };
     }
 
     if (window.onTreeItemClick) {
@@ -51,7 +51,7 @@ async function ensureFileActive(path) {
 
     return State.currentFile?.path === path
         ? { ok: true }
-        : { ok: false, error: `Failed to open '${path}' in editor` };
+        : { ok: false, error: `Failed to open '${path}' in editor`, code: 'editor_open_failed' };
 }
 
 /**
@@ -112,7 +112,8 @@ function _detectWrongShape(args) {
     if (keys.includes('operations') || keys.includes('ops') || keys.includes('op')) {
         return {
             error: `edit_file does not accept '${keys.includes('operations') ? 'operations' : keys.includes('ops') ? 'ops' : 'op'}'. It takes a single op at the top level.`,
-            hint: `edit_file takes a single op at the top level: ${correctShape}. The "operations" / batched-ops shape does not exist on this tool — call edit_file once per change.`
+            hint: `edit_file takes a single op at the top level: ${correctShape}. The "operations" / batched-ops shape does not exist on this tool — call edit_file once per change.`,
+            code: 'schema_validation_failed'
         };
     }
 
@@ -125,7 +126,8 @@ function _detectWrongShape(args) {
     if (keys.includes('edits')) {
         const result = {
             error: `edit_file does not accept 'edits'. It takes a single op at the top level.`,
-            hint: `edit_file takes a single op at the top level: ${correctShape}. The "edits" / batched-array shape does not exist on this tool — call edit_file once per change with the fields at the top level.`
+            hint: `edit_file takes a single op at the top level: ${correctShape}. The "edits" / batched-array shape does not exist on this tool — call edit_file once per change with the fields at the top level.`,
+            code: 'schema_validation_failed'
         };
         let firstEntry = null;
         if (Array.isArray(args.edits)) {
@@ -148,7 +150,8 @@ function _detectWrongShape(args) {
             : 'content';
         return {
             error: `edit_file does not accept '${wrong}'. The content parameter is named 'new_content'.`,
-            hint: `edit_file shape: ${correctShape}. Rename '${wrong}' → 'new_content'.`
+            hint: `edit_file shape: ${correctShape}. Rename '${wrong}' → 'new_content'.`,
+            code: 'schema_validation_failed'
         };
     }
 
@@ -181,19 +184,19 @@ export function registerMultiFileTools(registry) {
 
         let { path, operation, start_line, end_line, after_line, new_content } = args || {};
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
 
         // Auto-open the target file
-        const { ok, error } = await ensureFileActive(path);
-        if (!ok) return { error };
+        const { ok, error, code: openCode } = await ensureFileActive(path);
+        if (!ok) return { error, code: openCode };
 
         // Validate operation
         const op = (operation || 'replace').toLowerCase();
 
         if (op === 'replace') {
             if (start_line == null || end_line == null || new_content == null) {
-                return { error: 'replace requires start_line, end_line, and new_content' };
+                return { error: 'replace requires start_line, end_line, and new_content', code: 'schema_validation_failed' };
             }
 
             // 2.15.1 — coerce at boundary; see read_lines for the same trap.
@@ -209,12 +212,16 @@ export function registerMultiFileTools(registry) {
                         (staleCheck.suggestedStartLine
                             ? `💡 Content may now be at lines ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}.`
                             : '') +
-                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
+                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : ''),
+                    code: 'stale_lines',
+                    suggested_start_line: staleCheck.suggestedStartLine ?? null,
+                    suggested_end_line: staleCheck.suggestedEndLine ?? null,
+                    current_content_window: win
                 };
             }
 
             const result = replaceRange(start_line, end_line, new_content);
-            if (result.error) return result;
+            if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'replace', start_line, end_line, result.lineDelta);
             const ctx = _getEditContext(start_line, result.newLineCount, result.totalLines);
@@ -235,7 +242,7 @@ export function registerMultiFileTools(registry) {
             let insertAfter = after_line ?? start_line ?? 0;
             insertAfter = Number(insertAfter);
             if (new_content == null) {
-                return { error: 'insert requires new_content (and after_line or start_line)' };
+                return { error: 'insert requires new_content (and after_line or start_line)', code: 'schema_validation_failed' };
             }
 
             const staleCheck = EditTracker.checkStale(path, insertAfter);
@@ -246,12 +253,16 @@ export function registerMultiFileTools(registry) {
                         (staleCheck.suggestedStartLine
                             ? `💡 Insertion point may now be at line ${staleCheck.suggestedStartLine}.`
                             : '') +
-                        (win ? `\n\nCurrent content at the suggested insertion point (live, no read_lines needed):\n${win}` : '')
+                        (win ? `\n\nCurrent content at the suggested insertion point (live, no read_lines needed):\n${win}` : ''),
+                    code: 'stale_lines',
+                    suggested_start_line: staleCheck.suggestedStartLine ?? null,
+                    suggested_end_line: staleCheck.suggestedStartLine ?? null,
+                    current_content_window: win
                 };
             }
 
             const result = insertAtLine(insertAfter, new_content);
-            if (result.error) return result;
+            if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'insert', insertAfter, insertAfter, result.newLineCount);
             const ctx = _getEditContext(insertAfter + 1, result.newLineCount, result.totalLines);
@@ -267,7 +278,7 @@ export function registerMultiFileTools(registry) {
 
         } else if (op === 'delete') {
             if (start_line == null || end_line == null) {
-                return { error: 'delete requires start_line and end_line' };
+                return { error: 'delete requires start_line and end_line', code: 'schema_validation_failed' };
             }
 
             // 2.15.1 — coerce at boundary; see read_lines for the same trap.
@@ -282,12 +293,16 @@ export function registerMultiFileTools(registry) {
                         (staleCheck.suggestedStartLine
                             ? `💡 Lines may now be at ${staleCheck.suggestedStartLine}-${staleCheck.suggestedEndLine}.`
                             : '') +
-                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : '')
+                        (win ? `\n\nCurrent content at the suggested range (live, no read_lines needed):\n${win}` : ''),
+                    code: 'stale_lines',
+                    suggested_start_line: staleCheck.suggestedStartLine ?? null,
+                    suggested_end_line: staleCheck.suggestedEndLine ?? null,
+                    current_content_window: win
                 };
             }
 
             const result = deleteRange(start_line, end_line);
-            if (result.error) return result;
+            if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'delete', start_line, end_line, -result.deletedCount);
             const ctx = _getEditContext(start_line, 0, result.totalLines);
@@ -302,7 +317,7 @@ export function registerMultiFileTools(registry) {
             };
 
         } else {
-            return { error: `Unknown operation '${operation}'. Use 'replace', 'insert', or 'delete'.` };
+            return { error: `Unknown operation '${operation}'. Use 'replace', 'insert', or 'delete'.`, code: 'schema_validation_failed' };
         }
     }, {
         type: 'function',
@@ -348,10 +363,10 @@ export function registerMultiFileTools(registry) {
     // ========================================
     registry.register('write_file', async ({ path, content }) => {
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
         if (content == null) {
-            return { error: 'content is required' };
+            return { error: 'content is required', code: 'schema_validation_failed' };
         }
 
         const { owner, repo } = State.currentProject;
@@ -360,14 +375,14 @@ export function registerMultiFileTools(registry) {
 
         if (inTree) {
             // --- Existing file: open and replace all content ---
-            const { ok, error } = await ensureFileActive(path);
-            if (!ok) return { error };
+            const { ok, error, code: openCode } = await ensureFileActive(path);
+            if (!ok) return { error, code: openCode };
 
             const totalLines = State.editorContent.split('\n').length;
 
             // Replace entire file content
             const result = replaceRange(1, totalLines, content);
-            if (result.error) return result;
+            if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'replace', 1, totalLines, result.lineDelta);
 
@@ -383,7 +398,7 @@ export function registerMultiFileTools(registry) {
             try {
                 await Git.createFile(owner, repo, path, content, `Create ${path}`, branch);
             } catch (err) {
-                return { error: `Failed to create '${path}': ${err.message}` };
+                return { error: `Failed to create '${path}': ${err.message}`, code: 'write_error' };
             }
 
             // Refresh tree so the new file appears

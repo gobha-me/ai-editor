@@ -18,7 +18,7 @@ export function registerSearchTools(registry) {
     // ========================================
     registry.register('search_in_files', async ({ query, path = '', max_results = 20, compact = true }) => {
         if (!State.currentProject) {
-            return { error: 'No project is currently loaded' };
+            return { error: 'No project is currently loaded', code: 'precondition_not_met' };
         }
         const { owner, repo } = State.currentProject;
         const branch = State.currentBranch || 'main';
@@ -77,7 +77,7 @@ export function registerSearchTools(registry) {
                 } : {})
             };
         } catch (error) {
-            return { error: `Search failed: ${error.message}` };
+            return { error: `Search failed: ${error.message}`, code: 'search_error' };
         }
     }, {
         type: 'function',

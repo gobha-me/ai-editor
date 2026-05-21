@@ -33,7 +33,8 @@ export function registerPluginTools(registry) {
         const result = _getActivePluginTab();
         if (!result) {
             return {
-                error: 'No plugin editor tab is active. Open a plugin editor tab first (Settings → Plugins → Create Plugin, or edit an existing user plugin).'
+                error: 'No plugin editor tab is active. Open a plugin editor tab first (Settings → Plugins → Create Plugin, or edit an existing user plugin).',
+                code: 'precondition_not_met'
             };
         }
         const { tab } = result;
@@ -68,11 +69,12 @@ export function registerPluginTools(registry) {
         const result = _getActivePluginTab();
         if (!result) {
             return {
-                error: 'No plugin editor tab is active. Open a plugin editor tab first.'
+                error: 'No plugin editor tab is active. Open a plugin editor tab first.',
+                code: 'precondition_not_met'
             };
         }
         if (!source || typeof source !== 'string') {
-            return { error: 'source parameter is required and must be a string containing the full plugin source code.' };
+            return { error: 'source parameter is required and must be a string containing the full plugin source code.', code: 'schema_validation_failed' };
         }
 
         const { tab } = result;
@@ -114,12 +116,12 @@ export function registerPluginTools(registry) {
     registry.register('run_plugin', async () => {
         const result = _getActivePluginTab();
         if (!result) {
-            return { error: 'No plugin editor tab is active.' };
+            return { error: 'No plugin editor tab is active.', code: 'precondition_not_met' };
         }
         const { tab } = result;
         const source = tab.source;
         if (!source) {
-            return { error: 'Plugin source is empty. Write source first with write_plugin_source.' };
+            return { error: 'Plugin source is empty. Write source first with write_plugin_source.', code: 'precondition_not_met' };
         }
 
         // Extract ID and name from source
@@ -172,8 +174,8 @@ export function registerPluginTools(registry) {
             };
         } catch (err) {
             return {
-                success: false,
                 error: `Plugin execution failed: ${err.message}`,
+                code: 'plugin_execution_error',
                 pluginId: id,
                 note: 'Source was saved to storage but failed to execute. Fix the error and try again.'
             };

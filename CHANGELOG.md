@@ -4,7 +4,25 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Docs — Intelligence-layer design-doc reconciliation (2026-05-21)
+## [2.78.0] - 2026-05-21
+
+### Added — T1 tool-authored failure shape conformance (sized roadmap slot)
+
+The 2026-05-21 intelligence-layer redesign pack folded the **T1 tool-authored failure shape contract** into [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) §"Tool-authored failure shape contract": every tool-side rejection must carry a stable, machine-readable identifier alongside the human-readable narration — not a free-form sentence. The roadmap entry sized this as a single PR (see now-strikethrough'd row in [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Parallel work streams"). Field evidence motivating the work: opaque rejections cost 4–6 extra turns per dogfood session because the model has to re-read the narration each turn to infer recovery.
+
+**Concrete shape decision.** `code:` field carries the stable identifier; `error:` retains the existing human-readable narration. Rationale: the registry catch block at [`js/tools/registry.js`](js/tools/registry.js) already surfaces `EditorError` throws as `{error: msg, code: identifier}`, so tool-return failures now share one envelope shape with tool-throw failures. Pinned in [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) as the ai-editor concrete implementation of the design's "`error` (or `failure_code`)" clause.
+
+**Conformant handlers (11 tools).** `edit_file` ([`js/tools/multifile-tools.js`](js/tools/multifile-tools.js)), `write_file` (same file), `read_lines` ([`js/tools/scan-tools.js`](js/tools/scan-tools.js)), `search_in_files` ([`js/tools/search-tools.js`](js/tools/search-tools.js)), `get_ci_status` / `wait_for_ci` / `get_ci_logs` ([`js/tools/ci-tools.js`](js/tools/ci-tools.js) — plus the duplicate-registration sites in [`js/tools/pr-tools.js`](js/tools/pr-tools.js) for `get_ci_status` and `get_ci_logs`), `read_plugin_source` / `write_plugin_source` / `run_plugin` ([`js/tools/plugin-tools.js`](js/tools/plugin-tools.js)), `run_code` ([`js/tools/eval-tools.js`](js/tools/eval-tools.js)). Helpers that conformant handlers delegate to (`ensureFileActive` and `_detectWrongShape` in `multifile-tools.js`; `projectOrError` in `ci-tools.js`) also carry codes so propagation via `return helper(...)` preserves the contract.
+
+**Closed code set** (`VALID_CODES` in the lint): `stale_lines`, `schema_validation_failed`, `precondition_not_met`, `path_not_found`, `read_error`, `write_error`, `search_error`, `ci_status_fetch_error`, `ci_workflow_error`, `ci_workflow_not_found`, `ci_log_not_available`, `plugin_execution_error`, `code_execution_error`, `edit_error`, `editor_open_failed`. New codes need both a recovery-shape note at the return site and an entry in this set.
+
+**Recovery-sufficient payload additions.** `edit_file` stale-line returns now carry `suggested_start_line` / `suggested_end_line` / `current_content_window` as named fields (previously embedded in narration text only); `read_lines` schema-validation returns carry `actual_file_line_count`. `run_plugin`'s execution-failure shape dropped the hybrid `success: false` field per [`docs/DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) §"Envelope Shapes" (envelope authorship is the loop's, not the tool's).
+
+### Added — `tests/test-tool-failure-shapes.mjs` source-scan lint
+
+New ~340-LOC source-scan lint mirroring [`tests/test-plan-mode-source-scan.mjs`](tests/test-plan-mode-source-scan.mjs)'s shape. Walks `js/tools/*.js`, resolves each `register('NAME', HANDLER, ...)` to its handler body (handles both inline-arrow and named-function-reference patterns — the latter is the `ci-tools.js` shape), and asserts every `return { ... error: ... }` site in a `T1_CONFORMANT_TOOLS` handler also carries a `code:` field from `VALID_CODES`. **3 subtests:** (a) all conformant handlers have structured returns; (b) all `code:` values are in `VALID_CODES`; (c) `edit_file` carries `code: 'stale_lines'` at ≥3 sites (replace, insert, delete — pins the 4–6-extra-turns regression).
+
+### Docs — Intelligence-layer design-doc reconciliation (2026-05-21, absorbed)
 
 Two-week Intelligence-Layer redesign pack landed: 5 canonical design docs replaced with evolved versions, 2 new architectural-surface docs added (`docs/DESIGN-persona.md`, `docs/DESIGN-agent-loop.md`), and the design-set index landed as `docs/DESIGN-INDEX.md` (the zip's `ARCHITECTURE.md` renamed to avoid colliding with the existing project-wide `docs/ARCHITECTURE.md` module-layer map).
 
@@ -12,15 +30,34 @@ Two-week Intelligence-Layer redesign pack landed: 5 canonical design docs replac
 
 **Added**: [`docs/DESIGN-persona.md`](docs/DESIGN-persona.md) (identity composition above Profile — N/A for ai-editor's coder-only product, see §"What's out of scope" in [`docs/ROADMAP.md`](docs/ROADMAP.md)); [`docs/DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) (consumer surface below the four admission subsystems — names the envelope-authorship rule, cache-coordination contract, dup-streak / no-progress guards, queued-input FIFO, user-pause Promise slot, sub-agent inheritance — most of which exist in code today, scattered across `js/chat/`); [`docs/DESIGN-INDEX.md`](docs/DESIGN-INDEX.md) (the 8-doc set index).
 
-**T1 amendment folded** from the 2026-05-21 change pack into [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) Core Contracts as new sub-section "Tool-authored failure shape contract" (between `ToolDef` and `ToolRequest`). Optional cross-reference sentence added at [`docs/DESIGN-agent-loop.md:180`](docs/DESIGN-agent-loop.md). The contract requires structured failure shapes with a stable `error` identifier + recovery-sufficient payload — replaces opaque `{error: "validation failed"}` strings. Conformance-enforcement work queued as a `[medium]` ROADMAP item (see "T1 conformance" parallel work stream).
+**T1 amendment folded** from the 2026-05-21 change pack into [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) Core Contracts as new sub-section "Tool-authored failure shape contract" (between `ToolDef` and `ToolRequest`). Optional cross-reference sentence added at [`docs/DESIGN-agent-loop.md:180`](docs/DESIGN-agent-loop.md). 2.78.0 closes the conformance gap for the 11 high-churn tools above; pending tool files graduate onto `T1_CONFORMANT_TOOLS` in follow-on PRs.
 
 **Archived**: [`docs/DESIGN-CHANGES-2026-05-21.md`](docs/DESIGN-CHANGES-2026-05-21.md) preserved as historical evidence (per the pack's own framing — change docs aren't canonical state but the W1–W3 watchlist lives in-pack as the record of deferral). Listed in [`docs/DESIGN-INDEX.md`](docs/DESIGN-INDEX.md) §"change documents."
 
-**Roadmap updates**: two new `[medium]` parallel-work-stream entries queued (T1 conformance enforcement; agent-loop contract centralization); coder-lens N/As appended to §"What's out of scope for the 2.x arc" (Persona stack; multi-author system prompt slot; RP / multi-user-shaped admission paths) — these are explicit non-goals scoped to ai-editor's 99%-coding product profile.
+**Roadmap updates**: T1 conformance row marked ✅ shipped 2.78.0; remaining `[medium]` parallel-work-stream entry (agent-loop contract centralization) still queued; coder-lens N/As appended to §"What's out of scope for the 2.x arc" (Persona stack; multi-author system prompt slot; RP / multi-user-shaped admission paths) — these are explicit non-goals scoped to ai-editor's 99%-coding product profile.
 
-**No version bump** — docs-only change accumulates in `[Unreleased]` per the [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) rule + [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Re-evaluation cadence" decision #14 sub-clause (doc-only / measurement-only changes accumulate until the next code minor absorbs them).
+### Files
 
-**No code change** — this is a paper-only session. Implementation conformance to T1 and centralization of the agent-loop contracts both queued as follow-on PRs.
+| File | Change |
+|---|---|
+| [`js/tools/multifile-tools.js`](js/tools/multifile-tools.js) | EDIT — `edit_file` / `write_file` failure returns + `_detectWrongShape` / `ensureFileActive` helpers carry `code:`. Stale-line returns gain `suggested_start_line` / `suggested_end_line` / `current_content_window` named fields. |
+| [`js/tools/scan-tools.js`](js/tools/scan-tools.js) | EDIT — `read_lines` failure returns carry `code:`; invalid-line cases gain `actual_file_line_count`. |
+| [`js/tools/search-tools.js`](js/tools/search-tools.js) | EDIT — `search_in_files` failure returns carry `code:`. |
+| [`js/tools/ci-tools.js`](js/tools/ci-tools.js) | EDIT — `projectOrError` helper + `get_ci_status` / `wait_for_ci` / `get_ci_logs` carry codes (`precondition_not_met`, `schema_validation_failed`, `ci_status_fetch_error`, `ci_workflow_error`, `ci_workflow_not_found`, `ci_log_not_available`). |
+| [`js/tools/pr-tools.js`](js/tools/pr-tools.js) | EDIT — duplicate `get_ci_status` / `get_ci_logs` registrations in this file refactored to match `ci-tools.js`. (The two files register the same tool names; whichever loads last wins. Both code paths must stay conformant.) |
+| [`js/tools/plugin-tools.js`](js/tools/plugin-tools.js) | EDIT — `read_plugin_source` / `write_plugin_source` / `run_plugin` carry codes; `run_plugin` catch-block hybrid `{success: false}` shape normalized to `{error, code}`. |
+| [`js/tools/eval-tools.js`](js/tools/eval-tools.js) | EDIT — `run_code` failure returns carry `code:` (`schema_validation_failed` for empty input; `code_execution_error` for sandbox failures / timeouts). |
+| [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) | NEW — source-scan lint with 3 subtests. |
+| [`docs/DESIGN-tools.md`](docs/DESIGN-tools.md) | EDIT — §"Tool-authored failure shape contract" gains the ai-editor concrete-implementation paragraph (`code:` field choice + lint pointer). |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — T1 conformance row struck through; closure summary added. |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; absorbs the 2026-05-21 intelligence-layer docs pack from `[Unreleased]`. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.77.0'` → `'2.78.0'`. |
+
+### Verification
+
+- `node --test tests/test-tool-failure-shapes.mjs` — 3 subtests pass.
+- Full Node suite: `node --test tests/test-*.mjs` — green (no regression; the registry catch block is unchanged so existing `{error: msg, code}` consumers see the same envelope shape from both throw and return paths).
+- Coherence: version-coherence lint passes (CHANGELOG promotion + version bump in same PR).
 
 ## [2.77.0] - 2026-05-21
 
