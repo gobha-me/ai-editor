@@ -4,6 +4,90 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.85.0] - 2026-05-21
+
+### Added — Rule 3/4 coverage measurement probe + log/debug pane button
+
+Per [`docs/ROADMAP.md`](docs/ROADMAP.md) §"Parallel work streams" — the second of the two `[medium]`-band sized parallel-work entries (the first, agent-loop contract centralization, shipped at 2.83.0). Prerequisite to clearing the Rule 3 (Consumption) + Rule 4 (Resolution) deferrals under §"Deferred / parked" → Compression — the gate is "≥95% `tool_result_for` coverage on production sessions across ≥10 coder.v1 sessions" (ROADMAP line 279). Until this PR there was no mechanism to measure that gate; the report this probe produces **is** the evidence Rule 3 ships against.
+
+**New module.** [`js/chat/rule3-coverage-probe.js`](js/chat/rule3-coverage-probe.js) — pure (no State / EventBus / DOM imports). Exports `probeRule3Coverage(history, opts) → Rule3Report`, `formatRule3ReportMarkdown(report) → string`, `formatRule3ReportJSON(report) → string`, `summarizeRule3Coverage(report) → string`, and the frozen `CURRENT_DISPATCH_PATHS` set.
+
+**Why a new module, not an extension of [`js/chat/metadata-probe.js`](js/chat/metadata-probe.js).** The existing probe is a 122-LoC 1.1.0-era frozen-shape presence counter pinned by [`tests/test-metadata-coverage.mjs`](tests/test-metadata-coverage.mjs); it runs on `?debug=metadata` boot and reports field presence only. The new probe adds three orthogonal axes (resolution lookup, dispatch-path inference, historical-path flagging) and a 3-bucket gate computation. Folding both into one file would invert the existing test set. Sibling modules.
+
+**Three-bucket classifier.** For each `role: 'tool'` turn, the probe classifies:
+- **a — populated AND resolves:** `tool_result_for` is a non-empty string and matches a `tool_calls[].id` on a prior assistant turn. Counts toward the gate numerator.
+- **b — present but unresolvable:** field present but null/empty/string-but-no-matching-call. Real coverage gap; counts toward the denominator only.
+- **c — field absent entirely:** pre-contract turn from before the field was wired. Informational; excluded from the gate per the ROADMAP entry's cross-revision-tolerance design.
+
+Resolution lookup uses a forward-pass `Map<tool_call_id, assistant_idx>` built once (O(N) total, not O(N²)).
+
+**Dispatch-path inference.** `inferDispatchPath(turn, idx, history)` walks 9 named paths via first-match-wins on existing runtime flags — no new field added at any emission site (that's the cross-revision-tolerance design):
+
+| Path | Discriminator |
+|---|---|
+| `refused-envelope` | `_refused: true` flag in content ([`js/chat/refusal-hints.js`](js/chat/refusal-hints.js)) |
+| `partial-envelope` | `_partial: true` (spec-only today; recognized for forward-compat) |
+| `cross-request-cache-hit` | `_cached: true` + `_cache_note` matches cross-request marker regex |
+| `same-request-cache-hit` | `_cached: true` without cross-request marker ([`js/chat/cache-invalidation.js`](js/chat/cache-invalidation.js)) |
+| `tier0-sandbox` | `_tier0: true` (no current emitter; recognized for future emitters) |
+| `mcp-bridged` | tool name prefix `mcp__` per [`js/mcp/bridge.js`](js/mcp/bridge.js) naming |
+| `sub-agent` | tool name `delegate_task` per [`js/tools/subagent-tools.js`](js/tools/subagent-tools.js) |
+| `plan-mode-post-approval` | prior turn within 5-back has `plan_mode_exit: true` or `metadata.plan_approved === true` |
+| `direct` | fallback when nothing above matches |
+
+Non-JSON content falls through to `'direct'` (defensive — never throws). Nested envelopes resolve by outermost flag (a `_cached` wrapper around a `_refused` payload reads as cached — the wrapper records the actual delivery path).
+
+**Historical-path flagging.** `CURRENT_DISPATCH_PATHS` is a frozen `Set` in the probe module with a maintainer doc-comment: when retiring a dispatch-path emitter, remove its name. Observed paths absent from the set get `is_historical: true` on their `by_path` row and are excluded from the gate roll-up; they're listed in `_historical_paths_flagged`. Browser-resident probes can't grep `js/` at runtime, so the frozen constant is the lightest cross-revision-tolerant signal — compatible with the project's no-build constraint.
+
+**Gate computation.** `gate.pct = passing_count / eligible_count * 100` where `eligible_count = a + b` (c-bucket excluded; historical-path rows also excluded). `passes = pct >= threshold` with `threshold` defaulting to 95 (overridable via `opts.threshold` for testing). `pct: null` when `eligible_count === 0`.
+
+**Markdown formatter** ([`formatRule3ReportMarkdown`](js/chat/rule3-coverage-probe.js)) produces a stable header (`## Rule 3/4 coverage probe`), summary line, gate verdict (`PASSES`/`FAILS`/`no eligible turns`), per-path table, detected-paths list, and an optional historical-paths warning section. Stable enough for paste-into-issue flows and snapshot pinning.
+
+**JSON formatter** sorts top-level keys for byte-stable output across two runs on the same history.
+
+### Added — Debug-pane button
+
+[`js/debug-slideout.js`](js/debug-slideout.js) Logs tab body gains a `Run Rule 3/4 probe` chip next to the existing level-filter chips. **Not** the head row (already 4 icon buttons — Pause/Copy/Clear/Close — Touch 2 budget tight). **Not** a new tab (no other Coverage-tab content to justify the surface). **Not** the AI tab (Rule 3 is turn-store coverage, semantically distinct from AI request instrumentation).
+
+Click handler dynamic-imports the probe (lazy load — the module isn't pulled until the user actually clicks), runs against `State.chatHistory`, stashes the markdown + JSON in module-locals (`_rule3ReportMarkdown` / `_rule3ReportJSON`), and re-renders the panel. The report appears in a `<pre>` block below the log rows with two follow-up chips: `Copy JSON` (clipboard write via the existing `navigator.clipboard` + `showToast` idiom at [`js/debug-slideout.js`](js/debug-slideout.js) `copyDiagnosticBundle`) and `Clear` (drops the in-memory report).
+
+Same `setTimeout(...,0)` bind-button idiom already in use for the level-filter chips (and at `_wireIndexerBtn`). No new CSS (reuses `debug__chip` + `debug__bar` + `debug__log`).
+
+`__test_resetState` clears the probe state alongside the other module-locals, preserving test-seam parity.
+
+### Added — `tests/test-rule3-coverage-probe.mjs`
+
+Pure-Node test suite mirroring [`tests/test-metadata-coverage.mjs`](tests/test-metadata-coverage.mjs) shape — **37 subtests**. Cases: empty/null/non-array inputs (no throw, gate not passing); three-bucket classification (a/b/c) in a single fixture; `tool_result_for: null` / `''` → bucket b (not c — field present); per-path discriminator (refused / partial / cached / cross-cached / mcp-prefix / delegate_task / `_tier0` / plan-mode-marker via two shapes / plan-mode-outside-lookback → `direct` / direct fallback / malformed-JSON → `direct` / nested-envelopes outer-flag-wins); gate computation (19a+1b → 95.0 pass, 18a+2b → 90.0 fail, 0 eligible → `pct: null`); threshold override via opts; `CURRENT_DISPATCH_PATHS` membership pin (frozen + sorted-snapshot — removing a path requires a deliberate test edit); `is_historical` contract matches `!CURRENT_DISPATCH_PATHS.has(path)`; per-path `by_path` row tracks a/b/c/total/gate_pct; per-path `gate_pct: null` for c-only paths; read-only discipline (probe doesn't mutate input); samples capped by `opts.sampleLimit`; sample row carries `index` + `bucket` + `path`; markdown formatter stable header + `FAILS` verdict path + null-report fallback; JSON formatter deterministic key order; `summarizeRule3Coverage` one-line output.
+
+**No browser test for the button wiring.** The `setTimeout`-bind-button pattern at the existing `_wireIndexerBtn` ([`js/debug-slideout.js`](js/debug-slideout.js)) has no Node test today either; the new button rides the same convention. Manual smoke per §Verification catches regressions.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/chat/rule3-coverage-probe.js`](js/chat/rule3-coverage-probe.js) | NEW — probe module (~310 LoC including JSDoc + 4 helpers + 5 exports + frozen `CURRENT_DISPATCH_PATHS`). |
+| [`js/debug-slideout.js`](js/debug-slideout.js) | EDIT — `_renderLogs()` body gains `Run Rule 3/4 probe` chip + dynamic-import handler + `<pre>` output block + Copy/Clear chips; `__test_resetState` clears probe state. |
+| [`tests/test-rule3-coverage-probe.mjs`](tests/test-rule3-coverage-probe.mjs) | NEW — 37 subtests pinning gate computation, dispatch-path inference, historical-path detection, formatter stability. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — strike the "Rule 3/4 coverage measurement probe" row in §"Parallel work streams" with closure summary; Rule 3 / Rule 4 deferrals stay open (gated on the *measurement*, not on this probe). |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry; `[Unreleased]` promoted. |
+| [`js/version.js`](js/version.js) | EDIT — `'2.84.0'` → `'2.85.0'`. |
+
+### Verification
+
+- `node --test tests/test-rule3-coverage-probe.mjs` — 37 subtests green.
+- `node --test tests/test-metadata-coverage.mjs` — untouched probe still green.
+- `node --test tests/test-*.mjs` — full Node suite, **3698 pass / 1 skipped / 0 fail** (no regressions; +37 tests vs. 2.84.0's 3661 pass).
+- Browser smoke: drive a one-turn `read_file` → open debug slideout → click `Run Rule 3/4 probe` in Logs tab → report shows 1 direct turn / gate=100% / passes=true; click `Copy JSON` → toast confirms clipboard write; click `Clear` → output drops.
+- Coherence: version-coherence lint passes (`js/version.js` bumped + `[Unreleased]` promoted in same PR per `feedback_version_bump`).
+
+### Not in scope
+
+- **Rule 3 / Rule 4 themselves.** Probe measures; rules ship after ≥10-session corpus measurement against the 95% gate.
+- **Backfilling a `dispatch_path` field** at every emission site. The probe infers from existing flags — that *is* the cross-revision tolerance design from the ROADMAP entry.
+- **UI for path selection / date-range / per-session aggregation.** One button → one report covering current `State.chatHistory`. Multi-session aggregation is the user's job (run probe across sessions, eyeball the reports).
+- **Verifying resolution across compressed history.** Rule 3 has not shipped; nothing to compress against. Walks raw `chatHistory` only.
+- **Auto-run on boot.** `?debug=metadata` stays bound to the existing `metadata-probe.js`; the new probe is button-triggered only (sessions-corpus tool, not per-session telemetry).
+
 ## [2.84.0] - 2026-05-21
 
 ### Fixed — `create_pull_request` refuses with uncommitted changes (gitea#493)

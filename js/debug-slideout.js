@@ -297,6 +297,13 @@ function _renderLogs() {
             </div>`;
         }).reverse().join('');
 
+    const rule3Out = _rule3ReportMarkdown
+        ? `<div class="debug__rule3-out"><pre>${escapeHtml(_rule3ReportMarkdown)}</pre>
+            <button type="button" class="debug__chip" id="debugRule3CopyBtn">Copy JSON</button>
+            <button type="button" class="debug__chip" id="debugRule3ClearBtn">Clear</button>
+        </div>`
+        : '';
+
     setTimeout(() => {
         document.querySelectorAll('[data-log-level]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -304,14 +311,55 @@ function _renderLogs() {
                 _renderActive();
             });
         });
+        document.getElementById('debugRule3RunBtn')?.addEventListener('click', _runRule3Probe);
+        document.getElementById('debugRule3CopyBtn')?.addEventListener('click', _copyRule3Report);
+        document.getElementById('debugRule3ClearBtn')?.addEventListener('click', () => {
+            _rule3ReportMarkdown = '';
+            _rule3ReportJSON = '';
+            _renderActive();
+        });
     }, 0);
 
     return `
         <div class="debug__bar">
             <div class="debug__filter-group">${chips}</div>
+            <button type="button" class="debug__chip" id="debugRule3RunBtn" title="Walk State.chatHistory and emit a Rule 3/4 metadata.tool_result_for coverage report">Run Rule 3/4 probe</button>
         </div>
         <div class="debug__log">${rows}</div>
+        ${rule3Out}
     `;
+}
+
+// ============================================
+// Rule 3/4 coverage probe (sized roadmap slot)
+// ============================================
+
+let _rule3ReportMarkdown = '';
+let _rule3ReportJSON = '';
+
+async function _runRule3Probe() {
+    try {
+        const { probeRule3Coverage, formatRule3ReportMarkdown, formatRule3ReportJSON } =
+            await import('./chat/rule3-coverage-probe.js');
+        const report = probeRule3Coverage(State.chatHistory);
+        _rule3ReportMarkdown = formatRule3ReportMarkdown(report);
+        _rule3ReportJSON = formatRule3ReportJSON(report);
+        _renderActive();
+    } catch (err) {
+        console.error('[debug-slideout] Rule 3 probe failed:', err);
+        window.showToast?.('Rule 3/4 probe failed — see console', 'error');
+    }
+}
+
+async function _copyRule3Report() {
+    if (!_rule3ReportJSON) return;
+    try {
+        await navigator.clipboard.writeText(_rule3ReportJSON);
+        window.showToast?.('Rule 3/4 report copied to clipboard', 'success');
+    } catch (err) {
+        console.error('[debug-slideout] Failed to copy Rule 3 report:', err);
+        window.showToast?.('Failed to copy report — see console', 'error');
+    }
 }
 
 function _normalizeLevel(type) {
@@ -685,4 +733,6 @@ export const __test_resetState = () => {
     _logLevel = 'all';
     _lastIndexerEvent = null;
     _pluginErrors.length = 0;
+    _rule3ReportMarkdown = '';
+    _rule3ReportJSON = '';
 };
