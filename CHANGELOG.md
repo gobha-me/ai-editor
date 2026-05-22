@@ -4,6 +4,19 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### `docs/3.0-amendment-paper` — 3.X.X direction paper artifacts (doc-only, no version bump)
+
+Pre-architectural artifacts for the proposed 3.X.X direction — embodying the *Coherence at Speed* methodology amendment (six roles + work queue) as ai-editor's runtime. **Nothing in this slot ships behavior; the artifacts gate further design work.** Per `feedback_no_bump_for_measurement_only`, docs-only accumulates in `[Unreleased]`.
+
+- **New:** [`docs/METHODOLOGY-coherence-at-speed.md`](docs/METHODOLOGY-coherence-at-speed.md) — the base methodology this project adopted 2026-05-12 (operational form). Moved into the doc tree alongside the architecture docs.
+- **New:** [`docs/discussion/methodology-amendment.md`](docs/discussion/methodology-amendment.md) — operational form of the methodology amendment. Pre-architectural for ai-editor; **not** adopted. Carries the discussion-doc status header. Direction proposed for 3.X.X; trigger to promote is Claude Design Touch 4 returning + the 3.0 paper session.
+- **New:** [`docs/discussion/3.0-amendment-implementation.md`](docs/discussion/3.0-amendment-implementation.md) — load-bearing open-questions paper for the 3.0 architecture session. Eight questions named (substrate inversion, statefulness, dispatcher, profile shape, conversation-as-view, cost model, introspection load-bearing-ness, precedent guard).
+- **New:** [`docs/design/touch-4-amendment-prompt.md`](docs/design/touch-4-amendment-prompt.md) — paste-ready kickoff prompt for Claude Design Touch 4. Six surfaces requested: role-state, work queue substrate, fresh-Coder spawn, pause/resume/Architect-chat, cost visibility under multi-role, composition with Touch 3 Sessions.
+- **Updated:** [`docs/discussion/README.md`](docs/discussion/README.md) — new "3.X direction" section linking the amendment + the 3.0 paper.
+- **Filed:** [gitea#507](https://git.gobha.me/xcaliber/ai-editor/issues/507) — tracking ticket for the 3.0 paper session (gated on Touch 4 return).
+
+**Sequencing:** 2.X closes cleanly via [gitea#504](https://git.gobha.me/xcaliber/ai-editor/issues/504) introspection Phase 1 + [gitea#505](https://git.gobha.me/xcaliber/ai-editor/issues/505) sub-agent model override + [gitea#506](https://git.gobha.me/xcaliber/ai-editor/issues/506) introspection Phase 2 — all three pay forward into 3.X but do not assume the amendment shape. Touch 4 kickoff happens when Jeff is ready; 3.0 paper runs against the open-questions doc once Touch 4 returns.
+
 ### `RE-EVAL following 2.70.0` — eleventh re-eval slot (doc-only, no version bump)
 
 Cadence anchor: 2.70.0 (3 code minors past slot #10's `RE-EVAL following 2.67.0` anchor of 2.67.0). **Overrun by 5 missed anchors** (would-be slots at 2.70.0, 2.73.0, 2.76.0, 2.79.0, 2.82.0, 2.85.0 all skipped); we're at 2.86.0. The 2.86.0 ship preamble itself flagged this slot as the catch-up owner: *"Preamble below still references 2.76.0 as the most recent ship — 2.83.0 + 2.85.0 + 2.86.0 ship under a stale preamble; the next RE-EVAL slot owns the catch-up sync."* Single-slot absorption per slot #10 precedent (which absorbed an 8-minor delta). Naming follows cadence-from-anchor; same shape as slots #6–#10 which all fired overdue.

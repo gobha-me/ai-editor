@@ -47,4 +47,13 @@ Three discussion docs were seeded from existing ROADMAP "Deferred / unscheduled"
 - [`pr-review-polish.md`](pr-review-polish.md) — four PR Review polish follow-ups parked behind real usage signal post-2.14.0.
 - [`touch-3-window-v2-sessions.md`](touch-3-window-v2-sessions.md) — load-bearing thinking on Window v2 / Sessions; the actual Touch 3 design bundle lives at [`docs/design/touch-3-left-pane-and-window/`](../design/touch-3-left-pane-and-window/), this captures the architecture-vs-implementation seams.
 
+## 3.X direction (added 2026-05-22)
+
+Two paired docs frame the 3.X.X direction — the multi-role embodiment of the project's adopted methodology as ai-editor's runtime:
+
+- [`methodology-amendment.md`](methodology-amendment.md) — the operational form of the methodology amendment (Smith & Claude, May 2026). Six roles (Human / Architect / PM / Coder / Reviewer / Tester), a work queue as substrate, fresh-per-event sessions for execution, stateful sessions for judgment. The base methodology in [`../METHODOLOGY-coherence-at-speed.md`](../METHODOLOGY-coherence-at-speed.md) **is** adopted; the amendment is the **proposed** 3.X direction.
+- [`3.0-amendment-implementation.md`](3.0-amendment-implementation.md) — the load-bearing open questions a 3.0 architecture session would need to settle: substrate inversion, statefulness in a browser app, the dispatcher question, profile shape under 3.X, conversation-as-view, cost model under multi-role, introspection as load-bearing, precedent guard machinery.
+
+**Trigger to promote:** Claude Design Touch 4 returns with UX direction on the multi-role surface (kickoff prompt at [`../design/touch-4-amendment-prompt.md`](../design/touch-4-amendment-prompt.md)). The 3.0 paper session then runs against the open-questions doc; sections that firm up graduate into `docs/DESIGN-amendment-runtime.md` + a 3.X ROADMAP arc.
+
 Future discussion docs seed from sessions where Claude surfaces an architectural question Jeff isn't yet ready to answer — capture the design space, name the trigger, file here.
