@@ -4,6 +4,16 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.92.2] - 2026-05-22
+
+### Fix — Create Plugin button uses Icon.Puzzle SVG instead of raw 🧩 emoji (gobha-me/ai-editor#44)
+
+The Plugins-tab "Create Plugin" button rendered a raw `🧩` emoji, which doesn't match the SVG icons used by sibling buttons (Install, Save, Export JSON) — inconsistent size/color/baseline, not themeable via CSS custom properties. Swapped for `${Icon.Puzzle}` (already exported from [`js/ui/icons.js`](js/ui/icons.js); `Icon` is already imported in [`js/settings/plugins-tab.js`](js/settings/plugins-tab.js) at line 9). Also added `aria-label="Create a new plugin"` so the button is properly named for screen readers — the emoji-as-content shape had no accessible label.
+
+**External contribution.** First fix shipped to ai-editor from an external contributor — @xxiaoxiong, via gobha-me PR #48. Ferried to gitea as PR #518 with author + date preserved on the cherry-picked commit; this release-prep commit is separate so attribution reads cleanly in `git log`. Workflow note: the source-of-truth for ai-editor code is gitea (xcaliber/ai-editor); github (gobha-me/ai-editor) is a public mirror plus the issue tracker for in-app `list_issues` / `get_issue` plugin visibility. Merging on github directly would be silently overwritten by the next mirror sync — see follow-up issues filed during this loop.
+
+Closes gobha-me/ai-editor#44.
+
 ## [2.92.1] - 2026-05-22
 
 ### Fix — continue button now renders when assistant turn ends on a tool-result-only round (gobha-me/ai-editor#41)
