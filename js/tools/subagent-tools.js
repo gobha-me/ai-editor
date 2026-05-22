@@ -86,11 +86,19 @@ export function registerSubAgentTools(registry) {
             return { error: 'delegate_task: invalid recursion_depth on resolved profile (must be ≥ 0).' };
         }
 
+        // 2.89.0 (gitea#505) — per-call model override. `''` and non-string
+        // values normalize to null so the runner's resolver chain falls
+        // through cleanly to profile / workspace / primary.
+        const modelOverride = typeof args.model === 'string' && args.model.trim()
+            ? args.model.trim()
+            : null;
+
         const transcriptId = _generateTranscriptId();
         const capabilitySummary = buildCapabilitySummary({
             profileName,
             perCallNarrow,
             ceilings,
+            modelOverride,
         });
 
         // Reject up-front when the profile is unknown — the resolver's
@@ -121,6 +129,7 @@ export function registerSubAgentTools(registry) {
                 task,
                 contextHint,
                 profileName,
+                modelOverride,
                 capabilitySummary,
                 resolve,
             });
@@ -161,6 +170,10 @@ export function registerSubAgentTools(registry) {
                     run_timeout_ms: {
                         type: 'integer',
                         description: 'Optional. Wall-clock timeout in milliseconds for the sub-agent\'s entire run (default: profile\'s ceiling). Cannot raise above the profile default.',
+                    },
+                    model: {
+                        type: 'string',
+                        description: 'Optional. Per-call model override (e.g. `claude-haiku-4-5-20251001`). Defaults to the profile\'s `subagent.model`, then the workspace `subagentModelId` setting (Settings → Retrieval → Utility Models), then the paraphrase utility model, then the primary chat model. Provider stays locked to primary. The approval card surfaces the resolved model so the user sees the override before approving.',
                     },
                 },
                 required: ['task'],

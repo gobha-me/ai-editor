@@ -39,6 +39,11 @@ test('State.subagents has the documented initial shape', () => {
     assert.ok(State.subagents.session_cost && typeof State.subagents.session_cost === 'object');
     assert.equal(State.subagents.session_cost.dollars, 0);
     assert.equal(State.subagents.session_cost.tokens, 0);
+    // 2.89.0 (gitea#505) — byModel: {} extends the shape so cost split
+    // by resolved-child-model surfaces honestly. Scalar totals stay as
+    // the cap-check basis (subagent-tools.js:107-116 reads `.dollars`).
+    assert.ok(State.subagents.session_cost.byModel && typeof State.subagents.session_cost.byModel === 'object');
+    assert.equal(Object.keys(State.subagents.session_cost.byModel).length, 0, 'byModel starts empty');
 });
 
 test('pendingSubAgentApproval: getter returns null when nothing pending', () => {

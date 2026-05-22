@@ -164,11 +164,17 @@ export const SUBAGENT_V1 = {
     //   - `recursion_depth: 0` — no recursion in slice 2; Phase 3
     //     unlocks via a different profile (`subagent_recursive.v1` if
     //     it earns a slot), not by flipping this knob.
+    //   - `model: null` (2.89.0 gitea#505) — explicit unset; the
+    //     subagent-runner's 5-step resolver falls through to
+    //     `State.settings.subagentModelId` → `paraphraseModelId` →
+    //     primary `llmModel`. `null` over absence so the resolver's
+    //     intermediate step is unambiguous in tests.
     subagent: {
         enabled: true,
         run_timeout_ms: 300000,
         max_tokens: 50000,
         max_dollars: 0.50,
         recursion_depth: 0,
+        model: null,
     },
 };

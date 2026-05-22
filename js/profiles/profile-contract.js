@@ -170,6 +170,29 @@
  */
 
 /**
+ * Sub-agent block — per-profile defaults consumed by
+ * `resolveSubAgentConfig` in [`./resolve.js`](./resolve.js) and the
+ * `delegate_task` tool handler in
+ * [`../tools/subagent-tools.js`](../tools/subagent-tools.js).
+ *
+ * 2.89.0 (gitea#505) added the `model` field — the cheap-tier model id
+ * a child agent runs on by default. `null` means "resolve via the
+ * runner's chain" (see `js/chat/subagent-runner.js` resolver: profile
+ * model → `State.settings.subagentModelId` → `paraphraseModelId` →
+ * primary `llmModel`). Provider stays locked to primary across the
+ * chain (same constraint as the paraphrase/expander utility-model
+ * fields in retrieval-tab.js).
+ *
+ * @typedef {Object} SubAgentBlock
+ * @property {boolean}      enabled           When false, `delegate_task` is dropped from admission.
+ * @property {number}       run_timeout_ms    Wall-clock cap per call.
+ * @property {number}       max_tokens        Token cap per call.
+ * @property {number}       max_dollars       Dollar cap per call.
+ * @property {number}       recursion_depth   0 in Phase 1; raised in Phase 3 via a different profile.
+ * @property {string|null}  [model]           Optional cheap-tier model id; null resolves at call time.
+ */
+
+/**
  * The full profile contract.
  *
  * `systemPrompt` (1.23.0) is the profile-side replacement for the
@@ -178,6 +201,10 @@
  * means no addendum. Today only the synthetic `plugin-dev.v1` carries
  * a value (the SDK addendum lifted from `js/core.js`); other profiles
  * leave it absent.
+ *
+ * `subagent` (2.49.0) is the per-profile sub-agent defaults block;
+ * `subagent.model` (2.89.0 gitea#505) joins as the cheap-tier override
+ * knob.
  *
  * @typedef {Object} Profile
  * @property {string}             name           Canonical id, e.g. "coder.v1".
@@ -190,6 +217,7 @@
  * @property {ToolsConfig}        tools
  * @property {TaskLedgerConfig}   task_ledger
  * @property {string|null}        [systemPrompt] Optional profile-scoped prompt addendum.
+ * @property {SubAgentBlock}      [subagent]     Optional sub-agent defaults (consumed by `resolveSubAgentConfig`).
  */
 
 /**

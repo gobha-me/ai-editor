@@ -85,7 +85,7 @@ let pendingScriptApproval = null;  // { source, description, expected_output, re
 // `cancelToolLoop` path below already invokes `cancelSubAgentApproval`
 // so a future stop-button press during slice 2's first dogfood will not
 // leak the awaited Promise.
-let pendingSubAgentApproval = null;  // { transcriptId, task, contextHint, profileName, capabilitySummary, resolve }
+let pendingSubAgentApproval = null;  // { transcriptId, task, contextHint, profileName, modelOverride, capabilitySummary, resolve }  (2.89.0 gitea#505 — modelOverride field)
 
 // Control flags
 let _cancelToolLoop = false;  // Module-level cancel flag for stop button

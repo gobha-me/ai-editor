@@ -28,6 +28,10 @@ test('subagent.v1 → enabled=true with explicit DESIGN defaults', () => {
     assert.equal(cfg.max_tokens, 50000);
     assert.equal(cfg.max_dollars, 0.5);
     assert.equal(cfg.recursion_depth, 0);       // No recursion in Phase 1
+    // 2.89.0 (gitea#505) — model field defaults to null; resolver falls
+    // through to State.settings.subagentModelId then paraphraseModelId
+    // then primary in the runner's chain.
+    assert.equal(cfg.model, null);
 });
 
 test('chat.v1 → enabled=false (no subagent block; defaults apply)', () => {
@@ -38,6 +42,9 @@ test('chat.v1 → enabled=false (no subagent block; defaults apply)', () => {
     assert.equal(cfg.max_tokens, 50000);
     assert.equal(cfg.max_dollars, 0.5);
     assert.equal(cfg.recursion_depth, 0);
+    // 2.89.0 — chat.v1 has no subagent block at all; cfg.model defaults
+    // to null (the resolver normalizes missing/non-string to null).
+    assert.equal(cfg.model, null);
 });
 
 test('coder.v1 → enabled=true (slice 2 flips this when delegate_task admits)', () => {

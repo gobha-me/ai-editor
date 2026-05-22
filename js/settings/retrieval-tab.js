@@ -42,6 +42,10 @@ export const RETRIEVAL_DEFAULTS = Object.freeze({
     crossFileExpanderModelId: '',
     crossFileExpanderRounds: 3,
     crossFileExpanderTemperature: 0,
+    // 2.89.0 (gitea#505) — third Utility Models entry. Used by
+    // `delegate_task` sub-agents; empty string falls through to
+    // `paraphraseModelId` → primary in the runner's resolver chain.
+    subagentModelId: '',
 });
 
 const VALID_MODES = new Set(['off', 'primary', 'utility']);
@@ -64,6 +68,9 @@ function _read() {
         : RETRIEVAL_DEFAULTS.crossFileExpanderModelId;
     const expRounds = Number(cfg.crossFileExpanderRounds);
     const expTemp = Number(cfg.crossFileExpanderTemperature);
+    const subagentModelId = typeof cfg.subagentModelId === 'string'
+        ? cfg.subagentModelId
+        : RETRIEVAL_DEFAULTS.subagentModelId;
     return {
         paraphraseMode: mode,
         paraphraseModelId: modelId,
@@ -81,6 +88,7 @@ function _read() {
         crossFileExpanderTemperature: Number.isFinite(expTemp) && expTemp >= 0 && expTemp <= 1
             ? expTemp
             : RETRIEVAL_DEFAULTS.crossFileExpanderTemperature,
+        subagentModelId,
     };
 }
 
@@ -168,6 +176,10 @@ function _onChange(ev) {
         if (v > 1) v = 1;
         target.value = String(v);
         patch.crossFileExpanderTemperature = v;
+    } else if (key === 'subagentModelId') {
+        // 2.89.0 (gitea#505) — sub-agent utility model id. Consumed by
+        // `js/chat/subagent-runner.js` via the resolveSubAgentModel chain.
+        patch.subagentModelId = target.value.trim();
     } else {
         return;
     }
@@ -343,6 +355,31 @@ export function render() {
           LLM sampling temperature for expansion alts. Default
           <strong>${RETRIEVAL_DEFAULTS.crossFileExpanderTemperature}</strong>
           (deterministic). Raise to encourage broader identifier coverage.
+        </small>
+      </div>
+
+      <h4 style="margin-top: 1.6rem;">Sub-agent utility model</h4>
+      <p class="settings-help">
+        Cheap-tier model id <code>delegate_task</code> sub-agents run on by
+        default. Delivers the <em>spend</em> half of sub-agent
+        bounded-trust + bounded-spend
+        (<a href="../docs/DESIGN-sub-agents.md">DESIGN-sub-agents.md</a> §"The
+        Load-Bearing Decision") — the parent's tokens are saved by
+        context-isolation, the child's tokens cost less by running on a
+        smaller model. Empty falls through to the paraphrase utility model
+        above, then to the primary chat model. Per-call override available
+        via the <code>delegate_task({ model })</code> arg.
+      </p>
+
+      <div class="form-group" data-setting-key="retrieval.subagentModelId">
+        <label for="retrievalSubagentModelId">Sub-agent model id</label>
+        <input id="retrievalSubagentModelId" type="text"
+               data-retrieval-key="subagentModelId"
+               value="${c.subagentModelId.replace(/"/g, '&quot;')}"
+               placeholder="e.g. claude-haiku-4-5-20251001">
+        <small>
+          Provider must be the same as your primary chat model
+          (provider/endpoint/key are reused).
         </small>
       </div>
     `;

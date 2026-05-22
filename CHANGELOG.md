@@ -56,6 +56,38 @@ Header bump + 11-minor catch-up rolled into [`docs/ARCHITECTURE.md`](docs/ARCHIT
 
 **Next re-eval slot:** `RE-EVAL following 2.73.0` (3 code minors past 2.70.0 anchor; cadence-from-anchor not cadence-from-last-actually-ran — already overdue by 13 minors at 2.86.0). The 5-slot overrun pattern (2.73, 2.76, 2.79, 2.82, 2.85) suggests the cadence rule itself may need re-evaluation at the next slot rather than mechanical anchor advancement; deferred as a paper-half discussion item for the next slot to weigh.
 
+## [2.89.0] - 2026-05-22
+
+### Feature — sub-agent model override + cost-split accounting (gitea#505)
+
+`delegate_task` (shipped 2.49.0) advertises "delegate to bound your context" via the system-prompt block at [`js/prompts.js:478-490`](js/prompts.js) — but the economic premise of that encouragement never landed. [`js/chat/subagent-runner.js:233`](js/chat/subagent-runner.js) read `State.settings.llmModel` unconditionally, so a child agent always ran on the parent's currently-selected model. Delegating to Opus saved parent *context* but spent Opus *tokens* on the child. Per `DESIGN-sub-agents.md` §"The Load-Bearing Decision," the load-bearing motivation is **bounded trust + bounded spend** — restrictive profile composes with cheap-tier model. Trust shipped 2.49.0; spend never did. This minor closes the spend half.
+
+**Five-step resolver chain** lives in the new [`resolveSubAgentModel`](js/chat/subagent-runner.js) export. The runner asks: per-call `delegate_task({ model })` override → profile `subagent.model` (resolved via [`resolveSubAgentConfig`](js/profiles/resolve.js)) → workspace `State.settings.retrieval.subagentModelId` → workspace `State.settings.retrieval.paraphraseModelId` → primary `State.settings.llmModel`. Empty strings + whitespace-only values fall through. The resolver returns `{ id, source }` so the approval card can tell the user *which* tier fired ("primary model — `<id>`" vs the named cheap-tier id). Provider stays locked to primary across the entire chain — matches the existing utility-model constraint at [`js/settings/retrieval-tab.js:227,307`](js/settings/retrieval-tab.js).
+
+**Profile + tool surface.** [`SubAgentBlock`](js/profiles/profile-contract.js) typedef joins the profile contract with an optional `model: string|null` field; [`subagent.v1`](js/profiles/subagent-v1.js) carries `model: null` (explicit unset — resolver falls through). [`delegate_task` JSON schema](js/tools/subagent-tools.js) gains a `model?: string` parameter for per-call overrides. [`resolveSubAgentConfig`](js/profiles/resolve.js) normalizes the field (non-string / empty / whitespace → `null`) and surfaces it in the resolved envelope.
+
+**Cost-accounting split.** [`State.subagents.session_cost`](js/core.js) shape extends from `{ dollars, tokens }` to `{ dollars, tokens, byModel: { <id>: { dollars, tokens } } }` so the cost dashboard can show child vs parent split honestly. The scalar `dollars` / `tokens` totals stay — they're the cap-check basis ([`subagent-tools.js:107-116`](js/tools/subagent-tools.js) reads `.dollars`). Per-model accumulation happens at the runner's finalize block alongside the existing scalar roll-up. The cap check stays model-agnostic (safe overpredict using `ceilings.max_dollars`); per-model accounting is record-time only. `byModel` reuses the same `{<id>: {dollars, tokens}}` shape as [`ConvCost.byModel`](js/intelligence/cost/cost-store.js) — no new pricing math needed.
+
+**UX surfaces.**
+- [`SubAgentApprovalCard.js`](js/chat/subagent-approval-card/SubAgentApprovalCard.js) — new "Model" row in the capability table renders `cap.childModel`. Primary-source fallback shows `(primary model — <id>)` so the user notices when the cheap-tier path didn't fire; any other source shows just the id.
+- [`js/prompts.js:478-490`](js/prompts.js) — sub-agent guidance rewritten to honestly name cost-positive: "the child runs against a restrictive read-only profile by default AND on a cheap-tier utility model — delegation is **cost-positive for read-heavy work, not just context-positive**." Adds a one-line note on the `model` arg.
+- [`js/settings/retrieval-tab.js`](js/settings/retrieval-tab.js) — third "Utility Models" sub-section: `subagentModelId` text input parallel to paraphrase + cross-file-expander, same lock-to-primary-provider constraint.
+
+**Tests.** Two extended + two new. [`tests/test-profile-subagent-resolve.mjs`](tests/test-profile-subagent-resolve.mjs) pins `cfg.model === null` default on both `subagent.v1` and `chat.v1`. [`tests/test-subagent-state.mjs`](tests/test-subagent-state.mjs) pins `session_cost.byModel === {}` in the initial shape. New [`tests/test-subagent-model-override.mjs`](tests/test-subagent-model-override.mjs) — 11 subtests covering each step of the 5-step chain individually + capability-summary `childModel` shape under varied source states + per-call override + unknown-profile defensive fallback. New [`tests/test-subagent-model-coherence.mjs`](tests/test-subagent-model-coherence.mjs) — 11 source-scan subtests pinning the resolver chain identifiers across runner / profile / resolver / tool / settings / core / contract / approval-card source files; also pins `CONTRIBUTING.md` existence (Phase A regression guard). The bare-`State.settings.llmModel` count in `subagent-runner.js` is capped at 2 (resolver fallback + transport.chat fallback expression); any new bare read trips the lint.
+
+Closes gitea#505.
+
+### Also in this slot — PR conventions doc (Phase A admin)
+
+New [`CONTRIBUTING.md`](CONTRIBUTING.md) at repo root, ~50 lines covering: (1) gitea same-repo close keywords — `Closes #N` (bare) fires auto-close, `Closes gitea#N` does not (gitea parses `gitea` as a cross-repo owner and bails silently); (2) `gitea#N` / `github#N` prefixed forms reserved for human-prose contexts (CHANGELOG, ROADMAP, comments, PR descriptive body) — never as a close keyword; (3) github↔gitea workflow (gitea primary for code+PRs, github mirror + separate issue tracker; github issues do not auto-close from gitea PR merges); (4) version-bump + CHANGELOG promotion rule per `feedback_version_bump` and `feedback_no_bump_for_measurement_only` memories. Self-demonstrating: this PR's body uses bare `Closes #N` to close five tickets at once (gitea#505 + the four stranded gitea#493/#496/#499/#500 that shipped at 2.84.0/2.86.0/2.87.0/2.88.0 but stayed open because their PR bodies used the prefixed form).
+
+Closes gitea#493 (admin — shipped 2.84.0 PR #495).
+Closes gitea#496 (admin — shipped 2.86.0 PR #498).
+Closes gitea#499 (admin — shipped 2.87.0 PR #502).
+Closes gitea#500 (admin — shipped 2.88.0 PR #503).
+
+**Test count refresh.** 3719 (2.88.0) → **3743 / 3742 pass / 1 skipped / 0 fail** at 2.89.0 (+11 from [`tests/test-subagent-model-override.mjs`](tests/test-subagent-model-override.mjs) + 12 from [`tests/test-subagent-model-coherence.mjs`](tests/test-subagent-model-coherence.mjs) + 1 extended at [`tests/test-profile-subagent-resolve.mjs`](tests/test-profile-subagent-resolve.mjs) + 1 extended at [`tests/test-subagent-state.mjs`](tests/test-subagent-state.mjs); net +24 / actually 25 due to a parent-test count offset).
+
 ## [2.88.0] - 2026-05-22
 
 ### Fixed — preview SW bridge serves stale committed content (gitea#500)

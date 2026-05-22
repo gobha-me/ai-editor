@@ -104,12 +104,48 @@ function _buildSubAgentTools(profileName, perCallNarrow) {
 }
 
 /**
+ * Resolve the model id a sub-agent should run on. Five-step chain
+ * (gitea#505 / 2.89.0):
+ *
+ *   1. Per-call override from `delegate_task({ model })`
+ *   2. Profile-side default — `profile.subagent.model` (e.g.
+ *      `subagent.v1.subagent.model`, surfaced by `resolveSubAgentConfig`)
+ *   3. Workspace cheap-tier overlay — `State.settings.retrieval.subagentModelId`
+ *   4. Workspace paraphrase utility model — `State.settings.retrieval.paraphraseModelId`
+ *   5. Primary chat model — `State.settings.llmModel`
+ *
+ * Empty strings and non-string values are treated as "not set" and fall
+ * through. Returns the resolved id plus the source step for telemetry +
+ * the approval-card display path ("(primary model)" vs the named id).
+ *
+ * Provider stays locked to primary across the entire chain — same
+ * constraint as the existing utility-model fields in retrieval-tab.js.
+ *
+ * @param {{ perCallModel?: string|null, profileModel?: string|null }} args
+ * @returns {{ id: string, source: 'per_call'|'profile'|'workspace_subagent'|'workspace_paraphrase'|'primary' }}
+ */
+export function resolveSubAgentModel({ perCallModel = null, profileModel = null } = {}) {
+    const _isSet = (v) => typeof v === 'string' && v.trim().length > 0;
+    if (_isSet(perCallModel)) return { id: perCallModel.trim(), source: 'per_call' };
+    if (_isSet(profileModel)) return { id: profileModel.trim(), source: 'profile' };
+    const r = State.settings?.retrieval || {};
+    if (_isSet(r.subagentModelId)) return { id: r.subagentModelId.trim(), source: 'workspace_subagent' };
+    if (_isSet(r.paraphraseModelId)) return { id: r.paraphraseModelId.trim(), source: 'workspace_paraphrase' };
+    return { id: State.settings?.llmModel || '', source: 'primary' };
+}
+
+/**
  * Build a capability-summary object the approval card renders. This is
  * the security-load-bearing view per DESIGN §"Approval-card capability
  * summary". The handler in `js/tools/subagent-tools.js` calls this and
  * passes the result into `setPendingSubAgentApproval`.
  *
- * @param {{profileName?: string, perCallNarrow?: string[]|null, ceilings?: object}} args
+ * 2.89.0 (gitea#505) — surfaces the resolved `childModel` (id + source)
+ * so the approval card can display "(primary model — `<id>`)" vs the
+ * named cheap-tier id. The user sees the cost-tier choice before
+ * approving.
+ *
+ * @param {{profileName?: string, perCallNarrow?: string[]|null, ceilings?: object, modelOverride?: string|null}} args
  * @returns {{
  *   profile: string,
  *   profileRegistered: boolean,
@@ -118,15 +154,24 @@ function _buildSubAgentTools(profileName, perCallNarrow) {
  *   ceilings: {max_tokens: number, max_dollars: number, run_timeout_ms: number, recursion_depth: number},
  *   memoryWriteTools: string[],
  *   writeTools: string[],
+ *   childModel: { id: string, source: string },
  * }}
  */
-export function buildCapabilitySummary({ profileName, perCallNarrow, ceilings } = {}) {
+export function buildCapabilitySummary({ profileName, perCallNarrow, ceilings, modelOverride } = {}) {
     const profile = profileName || SUBAGENT_PROFILE;
     const profileRegistered = Profiles.has(profile);
     const profileToolsRaw = _buildSubAgentTools(profile, null);
     const profileTools = profileToolsRaw.map(t => t?.function?.name).filter(Boolean);
     const narrow = _intersectNarrow(profileTools, perCallNarrow);
     const admittedTools = narrow || profileTools;
+    // Resolve the child's model so the card shows the cost-tier choice.
+    // Falls back to `null` profileModel when the profile isn't registered;
+    // the runner will hit the same chain and resolve to primary then too.
+    const profileModel = profileRegistered ? resolveSubAgentConfig(profile).model : null;
+    const childModel = resolveSubAgentModel({
+        perCallModel: modelOverride ?? null,
+        profileModel,
+    });
     return {
         profile,
         profileRegistered,
@@ -140,6 +185,7 @@ export function buildCapabilitySummary({ profileName, perCallNarrow, ceilings } 
         },
         memoryWriteTools: admittedTools.filter(t => MEMORY_WRITE_TOOLS.has(t)),
         writeTools: admittedTools.filter(t => WRITE_TOOLS.has(t)),
+        childModel,
     };
 }
 
@@ -173,6 +219,16 @@ export function runSubAgent(pending, callbacks) {
         recursion_depth: pending.ceilings?.recursion_depth ?? cfg.recursion_depth,
     };
 
+    // 2.89.0 (gitea#505) — resolve the child's model via the 5-step chain.
+    // The approval card already computed and displayed this; recompute
+    // here so the runner doesn't depend on the capability-summary object
+    // being threaded through (the card may be bypassed in test paths).
+    const resolvedChild = resolveSubAgentModel({
+        perCallModel: pending.modelOverride ?? null,
+        profileModel: cfg.model,
+    });
+    const childModelId = resolvedChild.id;
+
     const subagentTools = _buildSubAgentTools(profileName, pending.perCallNarrow || null);
     const admittedToolNames = subagentTools.map(t => t?.function?.name).filter(Boolean);
     const systemPrompt = buildSubAgentSystemPrompt({
@@ -201,7 +257,7 @@ export function runSubAgent(pending, callbacks) {
     // home; this fills `transcripts[transcriptId]` with a live view so the
     // transcript panel (slice 2, step 6) can read it as the loop runs.
     if (!State.subagents) {
-        State.subagents = { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } };
+        State.subagents = { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0, byModel: {} } };
     }
     State.subagents.transcripts[pending.transcriptId] = {
         id: pending.transcriptId,
@@ -230,7 +286,12 @@ export function runSubAgent(pending, callbacks) {
 
     const transport = {
         chat: async (msgs, options = {}) => {
-            const model = State.settings.llmModel;
+            // 2.89.0 (gitea#505) — was `State.settings.llmModel` (parent's
+            // primary). Now resolved via the 5-step chain so the child can
+            // run on a cheap-tier utility model by default — delivers the
+            // *spend* half of DESIGN-sub-agents.md's bounded-trust +
+            // bounded-spend pair.
+            const model = childModelId || State.settings.llmModel;
             const result = await LLM.chat(msgs, {
                 ...options,
                 model,
@@ -394,11 +455,24 @@ export function runSubAgent(pending, callbacks) {
         // Roll session_cost so a future per-conversation budget warning has
         // the running aggregate. Re-initialize defensively in case slice 1's
         // single-pass init never ran (test environment).
+        // 2.89.0 (gitea#505) — `byModel` extends the shape so cost split
+        // by resolved-child-model surfaces honestly to the dashboard.
+        // Cap check at `subagent-tools.js:107-116` stays model-agnostic on
+        // the scalar total (safe overpredict).
         if (!State.subagents.session_cost) {
-            State.subagents.session_cost = { dollars: 0, tokens: 0 };
+            State.subagents.session_cost = { dollars: 0, tokens: 0, byModel: {} };
+        }
+        if (!State.subagents.session_cost.byModel) {
+            State.subagents.session_cost.byModel = {};
         }
         State.subagents.session_cost.dollars += cumulativeDollars;
         State.subagents.session_cost.tokens += cumulativeTokens;
+        if (childModelId) {
+            const byModelSlot = State.subagents.session_cost.byModel[childModelId]
+                || (State.subagents.session_cost.byModel[childModelId] = { dollars: 0, tokens: 0 });
+            byModelSlot.dollars += cumulativeDollars;
+            byModelSlot.tokens += cumulativeTokens;
+        }
 
         try {
             EventBus.emit('subagent:finished', { transcriptId: pending.transcriptId, envelope });

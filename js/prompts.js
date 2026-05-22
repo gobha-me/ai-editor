@@ -477,7 +477,7 @@ function buildSystemPrompt(opts = {}) {
     // over-delegation (DESIGN-sub-agents.md §Risks).
     if (admittedNames.has('delegate_task')) {
         prompt += `\n\n--- SUB-AGENT DELEGATION ---`;
-        prompt += `\nThe \`delegate_task\` tool spawns a bounded child agent on a focused investigative sub-task. The child runs against a restrictive read-only profile by default; you get a structured \`summary\` back without the intermediate tool-call sequence inflating your context.`;
+        prompt += `\nThe \`delegate_task\` tool spawns a bounded child agent on a focused investigative sub-task. The child runs against a restrictive read-only profile by default AND on a cheap-tier utility model — delegation is **cost-positive for read-heavy work, not just context-positive**. You get a structured \`summary\` back without the intermediate tool-call sequence inflating your context, and the child's tokens cost less than yours.`;
         prompt += `\n\nUse delegate_task when:`;
         prompt += `\n- The sub-task takes 5+ planned tool calls AND the intermediate results don't inform your final answer (e.g., "find every call site of X across N files", "summarize the test coverage for module Y").`;
         prompt += `\n- You can phrase the sub-task as a single clear question with a single returnable answer.`;
@@ -486,7 +486,7 @@ function buildSystemPrompt(opts = {}) {
         prompt += `\n- A single \`read_file\` or \`search_in_files\` — call those directly.`;
         prompt += `\n- Work that produces edits — sub-agents are read-only by default.`;
         prompt += `\n- Tasks where you need to see the intermediate reasoning (use direct tool calls so you stay in the loop).`;
-        prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation.`;
+        prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation. The optional \`model\` arg overrides the cheap-tier default when the sub-task needs a stronger model (e.g. dense reasoning over a long read).`;
     }
 
     // gitea#478 (2.77.0) — durable approved-plan visibility. The slot

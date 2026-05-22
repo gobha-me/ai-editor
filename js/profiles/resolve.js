@@ -550,8 +550,13 @@ export function resolvePluginConfig(profileName) {
  * Slice 2 wires `js/llm/api.js`'s `applySubAgentToolFilter` and the
  * `delegate_task` tool handler to read from this resolver.
  *
+ * 2.89.0 (gitea#505) — return shape gains `model: string|null`.
+ * Profile-side default model id for child agents; `null` means "fall
+ * through to the runner's workspace/primary resolver chain." Non-string
+ * non-null values normalize to `null` defensively.
+ *
  * @param {string|null|undefined} profileName
- * @returns {{ enabled: boolean, run_timeout_ms: number, max_tokens: number, max_dollars: number, recursion_depth: number, profileName: string }}
+ * @returns {{ enabled: boolean, run_timeout_ms: number, max_tokens: number, max_dollars: number, recursion_depth: number, model: string|null, profileName: string }}
  */
 export function resolveSubAgentConfig(profileName) {
     const name = typeof profileName === 'string' && Profiles.has(profileName)
@@ -579,6 +584,9 @@ export function resolveSubAgentConfig(profileName) {
         recursion_depth: Number.isInteger(cfg.recursion_depth) && cfg.recursion_depth >= 0
             ? cfg.recursion_depth
             : 0,
+        model: typeof cfg.model === 'string' && cfg.model.trim()
+            ? cfg.model.trim()
+            : null,
         profileName: resolved.name,
     };
 }

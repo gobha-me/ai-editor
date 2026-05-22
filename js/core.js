@@ -286,6 +286,12 @@ const State = {
             crossFileExpanderModelId: '',           // Used when crossFileExpansionMode === 'utility'
             crossFileExpanderRounds: 3,             // 1–5; default 3 mirrors the lever-B probe
             crossFileExpanderTemperature: 0,        // 0 = deterministic
+            // 2.89.0 (gitea#505) — third Utility Models entry. Cheap-tier
+            // model id `delegate_task` sub-agents run on by default; empty
+            // string falls through `paraphraseModelId` then to primary in
+            // `subagent-runner.js`'s 5-step resolver chain. Provider stays
+            // locked to primary (same constraint as paraphrase/expander).
+            subagentModelId: '',                    // Used by delegate_task sub-agents
         },
         
         // LLM Configuration
@@ -422,11 +428,17 @@ const State = {
     //   - `session_cost`              — cumulative across all sub-agent calls in
     //                                   the active parent conversation; gated
     //                                   by `State.settings.subagentSessionCap`
-    //                                   in slice 2.
+    //                                   in slice 2. 2.89.0 (gitea#505) extends
+    //                                   the shape with `byModel: { <id>: {
+    //                                   dollars, tokens } }` so the cost split
+    //                                   from running children on a cheap-tier
+    //                                   utility model surfaces honestly. The
+    //                                   scalar `dollars` / `tokens` totals
+    //                                   stay — they're the cap-check basis.
     // Slice 1 lands the shape; no consumer reads or writes it yet.
     // Persisted in the conv-{id} payload by `ConversationManager.save`
     // in slice 2 (DESIGN §"Lifecycle, step by step" — step 11).
-    subagents: { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0 } },
+    subagents: { tree: {}, transcripts: {}, session_cost: { dollars: 0, tokens: 0, byModel: {} } },
 
     // Workflow runs (bonus feature)
     workflowRuns: [],          // [{ id, name, status, conclusion }]

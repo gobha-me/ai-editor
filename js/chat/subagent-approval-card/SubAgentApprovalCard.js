@@ -78,6 +78,7 @@ function _formatMs(n) {
  *     ceilings?: { max_tokens?: number, max_dollars?: number, run_timeout_ms?: number, recursion_depth?: number },
  *     memoryWriteTools?: string[],
  *     writeTools?: string[],
+ *     childModel?: { id: string, source: string },
  *   },
  *   resolve: Function,
  * } }} props
@@ -106,6 +107,17 @@ export function SubAgentApprovalCard({ initial }) {
         : admittedTools.filter(t => WRITE_TOOL_NAMES.has(t));
     const hasWrite = writeTools.length > 0;
     const hasMemoryWrite = memoryWriteTools.length > 0;
+
+    // 2.89.0 (gitea#505) — resolved-child-model display. "primary" source
+    // shows "(primary model — <id>)" so the user notices when the cheap-
+    // tier fallback fired; any other source shows just the id (the source
+    // is implicit — non-primary means the cost-positive path is active).
+    const childModel = (cap.childModel && typeof cap.childModel === 'object')
+        ? cap.childModel
+        : { id: '', source: 'primary' };
+    const childModelLabel = childModel.source === 'primary'
+        ? `(primary model — ${childModel.id || '(unset)'})`
+        : (childModel.id || '(unset)');
 
     const onApprove = () => {
         if (phase !== 'review') return;
@@ -182,6 +194,10 @@ export function SubAgentApprovalCard({ initial }) {
                     <tr>
                         <th>Profile</th>
                         <td>${profile} ${profileRegistered ? html`<span class="subagent-approval-card__ok">(✓ registered)</span>` : html`<span class="subagent-approval-card__warn">(✗ unknown — falls back)</span>`}</td>
+                    </tr>
+                    <tr>
+                        <th>Model</th>
+                        <td><code>${childModelLabel}</code></td>
                     </tr>
                     <tr>
                         <th>Admitted tools</th>
