@@ -247,19 +247,21 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 });
 
 // ============================================
-// coder.v1 fixture — 28 names → 6 admitted, 22 unresolved
+// coder.v1 fixture — 6-tool fixture → 6 admitted, 36 unresolved
 // (3 meta-tools + 3 CI tools + 5 structural-anchor tools + 1 interaction
 //  tool (ask_user, 1.9.0) + 1 plan-mode approval tool
 //  (submit_plan_for_approval, 1.10.0 / github#25) + 1 sandbox approval
 //  tool (submit_script_for_approval, 1.16.0) + 3 preview tools
 //  (preview_start/stop/list, 1.22.0) + 4 Tier-2 capture readers
 //  (preview_console_logs/errors/logs/network, 2.7.0) + 5 Tier-3a tools
-//  (2.10.0) + 1 sub-agent tool (delegate_task, 2.49.0) intentionally
-//  absent from this fixture; each promotion expanded the unresolved
-//  set without changing what this fixture registers.)
+//  (2.10.0) + 1 sub-agent tool (delegate_task, 2.49.0) + 3 introspection
+//  Phase 1 tools (2.90.0, gitea#504) + 6 introspection Phase 2 tools
+//  (2.92.0, gitea#506) — all intentionally absent from this fixture; each
+//  promotion expanded the unresolved set without changing what this
+//  fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 30 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 36 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -278,6 +280,10 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 30 unresolve
         // unresolved-path assertion still has signal. Same pattern as
         // the 1.8.4 anchors below.
         'list_conversations', 'read_chat_history', 'search_chat_history',
+        // 2.92.0 (gitea#506) — introspection Phase 2 (runtime state +
+        // telemetry readers); same fixture-absent pattern.
+        'get_active_profile', 'get_budget_state', 'get_recent_errors',
+        'get_retrieval_stats', 'get_token_usage', 'list_loaded_tools',
         // 1.8.4 — structural-anchor tools, intentionally absent from the
         // fixture so the unresolved-path assertion still has signal.
         'scratchpad_write', 'scratchpad_read', 'scratchpad_clear',

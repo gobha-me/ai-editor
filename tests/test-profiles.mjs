@@ -205,6 +205,14 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'list_conversations',
         'read_chat_history',
         'search_chat_history',
+        // 2.92.0 (gitea#506) — introspection Phase 2 (runtime state +
+        // telemetry readers); same structural-anchor rationale as Phase 1.
+        'get_active_profile',
+        'get_budget_state',
+        'get_recent_errors',
+        'get_retrieval_stats',
+        'get_token_usage',
+        'list_loaded_tools',
         // 1.8.4 — structural-anchor tools (compression-survival).
         'scratchpad_write',
         'scratchpad_read',

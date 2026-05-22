@@ -28,6 +28,7 @@ import { registerPluginTools } from '../tools/plugin-tools.js';
 import { registerMemoryTools } from '../tools/memory-tools.js';
 import { registerMetaTools } from '../tools/meta-tools.js';
 import { registerIntrospectionTools } from '../tools/introspection-tools.js';
+import { init as initErrorRing } from '../intelligence/error-ring.js';
 
 // Import submodules
 import { 
@@ -71,6 +72,11 @@ import { initSubAgentTranscriptPanel } from './subagent-transcript-panel.js';
 // ============================================
 // TOOL REGISTRATION
 // ============================================
+
+// 2.92.0 (gitea#506) — wire the global error ring before any registration
+// runs so a crash during boot can still be surfaced by get_recent_errors.
+// Idempotent on repeat calls (hot-reload / test harness safe).
+initErrorRing();
 
 // Initialize tools on module load. Meta-tools first — they introspect the
 // catalog at call time, so order is not load-bearing, but registering them

@@ -51,16 +51,22 @@ const TOOLS_DIR = join(__dirname, '..', 'js', 'tools');
 
 // 2.90.0 (gitea#504) — three introspection tools (list_conversations,
 // read_chat_history, search_chat_history) added to each picker + sub-agent
-// baseline. Phase 1 of the self-introspection arc; admission shape
-// mirrors the meta-tools (find_tool / list_tool_categories /
-// list_tools_by_category) — niche per turn but structural anchor for
-// fresh-context spawns under 3.X amendment direction.
+// baseline. Phase 1 of the self-introspection arc.
+//
+// 2.92.0 (gitea#506) — six MORE introspection tools (get_active_profile,
+// list_loaded_tools, get_budget_state, get_token_usage,
+// get_retrieval_stats, get_recent_errors) added to chat.v1 + coder.v1
+// ONLY. subagent.v1 baseline is unchanged (Phase 2 clean-start boundary
+// per gitea#506 spec — sub-agents work against a fresh-shape view of
+// state). kb.v1 baseline unchanged per spec (chat.v1 + coder.v1 only).
 const CHAT_V1_ADMIT_BASELINE = [
     'ask_user', 'find_references', 'find_relevant_files', 'find_tool',
+    'get_active_profile', 'get_budget_state',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
+    'get_recent_errors', 'get_retrieval_stats', 'get_token_usage',
     'git_log', 'goto_line',
     'list_conversations',
-    'list_issues', 'list_open_tabs', 'list_projects',
+    'list_issues', 'list_loaded_tools', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
     'memory_recall', 'memory_remember', 'memory_revise',
     'open_file', 'peek_project_file', 'peek_project_tree', 'peek_read_lines',
@@ -82,10 +88,12 @@ const CODER_V1_ADMIT_BASELINE = [
     'create_file', 'create_issue', 'create_pull_request', 'delegate_task',
     'delete_file', 'delete_lines', 'edit_file', 'find_references',
     'find_relevant_files', 'find_tool',
+    'get_active_profile', 'get_budget_state',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
+    'get_recent_errors', 'get_retrieval_stats', 'get_token_usage',
     'git_log', 'goto_line', 'index_project', 'insert_at_cursor', 'insert_lines',
     'list_conversations',
-    'list_dirty_files', 'list_issues', 'list_open_tabs', 'list_projects',
+    'list_dirty_files', 'list_issues', 'list_loaded_tools', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
     'memory_recall', 'memory_remember', 'memory_revise', 'merge_pull_request',
     'open_file', 'peek_project_file', 'peek_project_tree', 'peek_read_lines',

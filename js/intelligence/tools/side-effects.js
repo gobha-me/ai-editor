@@ -68,6 +68,15 @@ export const SIDE_EFFECTS_BY_NAME = {
     'list_conversations': 'read',
     'read_chat_history': 'read',
     'search_chat_history': 'read',
+    // introspection — Phase 2 (2.92.0, gitea#506). Runtime state +
+    // telemetry readers. All snapshot the running app; no repo / external
+    // mutation. Admitted in plan mode (read class).
+    'get_active_profile': 'read',
+    'list_loaded_tools': 'read',
+    'get_budget_state': 'read',
+    'get_token_usage': 'read',
+    'get_retrieval_stats': 'read',
+    'get_recent_errors': 'read',
     'ask_user': 'read',
     'submit_plan_for_approval': 'read',
     'read_approved_plan': 'read',

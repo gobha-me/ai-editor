@@ -162,6 +162,17 @@ export const CODER_V1 = {
             'list_conversations',
             'read_chat_history',
             'search_chat_history',
+            // Introspection — Phase 2 (2.92.0, gitea#506). Runtime state
+            // + telemetry readers. Same structural-anchor rationale as
+            // Phase 1: fresh-context Coder spawns under 3.X amendment
+            // direction need to read the runtime they're working
+            // against without first running `find_tool`.
+            'get_active_profile',
+            'get_budget_state',
+            'get_recent_errors',
+            'get_retrieval_stats',
+            'get_token_usage',
+            'list_loaded_tools',
             // Structural-anchor tools — promoted to static in 1.8.4 alongside
             // the scratchpad visibility panel (github#34). Pre-1.3.15 these
             // tools were always-loaded; the 1.3.15 admission policy moved
@@ -293,10 +304,15 @@ export const CODER_V1 = {
             'find_references',
             'find_relevant_files',
             'find_tool',
+            'get_active_profile',
+            'get_budget_state',
             'get_ci_logs',
             'get_ci_status',
             'get_embeddings_status',
             'get_project_tree',
+            'get_recent_errors',
+            'get_retrieval_stats',
+            'get_token_usage',
             'git_log',
             'goto_line',
             'index_project',
@@ -305,6 +321,7 @@ export const CODER_V1 = {
             'list_conversations',
             'list_dirty_files',
             'list_issues',
+            'list_loaded_tools',
             'list_open_tabs',
             'list_projects',
             'list_pull_requests',

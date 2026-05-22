@@ -105,6 +105,16 @@ function registerStaticFixture() {
     reg('list_conversations',  'List chat conversations.',                { type: 'object', properties: {} });
     reg('read_chat_history',   'Read a slice of chat-history messages.',  { type: 'object', properties: { conversation_id: { type: 'string' }, offset: { type: 'number' }, limit: { type: 'number' } } });
     reg('search_chat_history', 'Search chat-history by keyword.',         { type: 'object', properties: { query: { type: 'string' }, conversation_id: { type: 'string' }, max_hits: { type: 'number' } } });
+    // 2.92.0 — introspection Phase 2 (gitea#506) joined the coder static
+    // set alongside Phase 1; runtime state + telemetry readers, same
+    // structural-anchor rationale. Static enumeration must resolve them
+    // through the catalog so the unresolved_static exit signal stays clean.
+    reg('get_active_profile',  'Read the currently-active profile shape.', { type: 'object', properties: {} });
+    reg('list_loaded_tools',   'Enumerate every tool currently registered on the runtime.', { type: 'object', properties: {} });
+    reg('get_budget_state',    'Estimate of the current context budget posture.', { type: 'object', properties: {} });
+    reg('get_token_usage',     'Token + cost telemetry across three lenses.', { type: 'object', properties: { scope: { type: 'string' } } });
+    reg('get_retrieval_stats', 'Snapshot of the retrieval subsystem.',     { type: 'object', properties: {} });
+    reg('get_recent_errors',   'Read up to 50 most-recent errors from the global ring.', { type: 'object', properties: { limit: { type: 'number' } } });
 }
 
 // ============================================

@@ -489,18 +489,21 @@ function buildSystemPrompt(opts = {}) {
         prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation. The optional \`model\` arg overrides the cheap-tier default when the sub-task needs a stronger model (e.g. dense reasoning over a long read).`;
     }
 
-    // Chat-history introspection (2.90.0, gitea#504, Phase 1). Gated on
+    // Self-introspection (2.90.0 gitea#504 Phase 1 — chat history;
+    // 2.92.0 gitea#506 Phase 2 — runtime state + telemetry). Gated on
     // admission so the system prompt stays clean for profiles that don't
     // admit these (matches the delegate_task / find_tool gating shape).
-    // The three tools are admitted as a unit across the picker + sub-agent
-    // profiles, so a single combined block is the cleanest carrier.
+    // Phase 2 tools have a different admission boundary by design:
+    // subagent.v1 admits the Phase 1 chat-history tools but NOT the
+    // Phase 2 runtime readers (clean-start boundary per gitea#506 spec).
+    const phase1Names = ['list_conversations', 'read_chat_history', 'search_chat_history'];
+    const phase2Names = ['get_active_profile', 'list_loaded_tools', 'get_budget_state', 'get_token_usage', 'get_retrieval_stats', 'get_recent_errors'];
     const introspectionAdmitted =
-        admittedNames.has('list_conversations') ||
-        admittedNames.has('read_chat_history') ||
-        admittedNames.has('search_chat_history');
+        phase1Names.some(n => admittedNames.has(n)) ||
+        phase2Names.some(n => admittedNames.has(n));
     if (introspectionAdmitted) {
-        prompt += `\n\n--- CHAT-HISTORY INTROSPECTION ---`;
-        prompt += `\nYou can inspect this conversation (and other stored conversations) without leaving the chat surface:`;
+        prompt += `\n\n--- INTROSPECTION ---`;
+        prompt += `\nYou can inspect this conversation, ai-editor's runtime state, and recent errors without leaving the chat surface:`;
         if (admittedNames.has('list_conversations')) {
             prompt += `\n- \`list_conversations()\` — cheapest call. Returns {active_id, conversations[]} so you see what exists and which one is current in a single call.`;
         }
@@ -510,7 +513,25 @@ function buildSystemPrompt(opts = {}) {
         if (admittedNames.has('search_chat_history')) {
             prompt += `\n- \`search_chat_history({query, conversation_id?, max_hits?})\` — tokenized AND-match (case-insensitive, ≥2-char tokens; same matcher \`find_tool\` uses). Default scope is the active conversation; pass \`conversation_id: "*"\` to scan all stored conversations.`;
         }
-        prompt += `\nUse these when the user references something they said earlier ("what did I tell you about X?"), when you need to re-anchor on prior context that fell out of your visible window, or when starting a fresh sub-task that needs context the user already prepared.`;
+        if (admittedNames.has('get_active_profile')) {
+            prompt += `\n- \`get_active_profile()\` — what profile is active right now: name, inherited base, full admitted_tools[] list, budget reserves, ceilings.`;
+        }
+        if (admittedNames.has('list_loaded_tools')) {
+            prompt += `\n- \`list_loaded_tools()\` — every tool the registry has loaded, with category + side_effects (read/write/external) + cache_mode (by-args/never). Reflects the registry, not profile admission (use \`get_active_profile.admitted_tools\` for that).`;
+        }
+        if (admittedNames.has('get_budget_state')) {
+            prompt += `\n- \`get_budget_state()\` — coarse budget posture: total ceiling, used so far, remaining_estimate (estimate — the compactor's exact allocation may differ), reserves per category, conversation depth.`;
+        }
+        if (admittedNames.has('get_token_usage')) {
+            prompt += `\n- \`get_token_usage({scope?})\` — token + cost telemetry. Always returns {conversation, session, by_model}. The optional \`scope\` arg is an informational hint ("conversation" / "session" / "all"); the three slices are always populated.`;
+        }
+        if (admittedNames.has('get_retrieval_stats')) {
+            prompt += `\n- \`get_retrieval_stats()\` — retrieval index posture: enabled, project, files_indexed, collections, embedder, last_queried_at.`;
+        }
+        if (admittedNames.has('get_recent_errors')) {
+            prompt += `\n- \`get_recent_errors({limit?})\` — ring buffer of up to 50 uncaught errors / unhandled rejections (newest-first, {ts, source, message, stack?}). Caught exceptions that never bubble are not captured.`;
+        }
+        prompt += `\nUse these when the user references something they said earlier ("what did I tell you about X?"), when you need to re-anchor on prior context that fell out of your visible window, when starting a fresh sub-task that needs context the user already prepared, or when answering "what's the state of the editor right now?" / "what just broke?" without flipping to DevTools.`;
     }
 
     // gitea#478 (2.77.0) — durable approved-plan visibility. The slot

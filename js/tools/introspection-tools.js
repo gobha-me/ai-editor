@@ -1,31 +1,55 @@
 // @ts-check
 /**
- * AI Editor — Introspection tools (gitea#504, self-introspection Phase 1).
+ * AI Editor — Introspection tools (gitea#504 Phase 1 + gitea#506 Phase 2).
  *
- * Three read-only handlers that let the model inspect its own conversation
- * history without leaving the chat surface:
+ * Read-only handlers that let the model inspect its own conversation history
+ * AND ai-editor's current runtime state without leaving the chat surface.
  *
+ * Phase 1 — chat history (shipped 2.90.0):
  *   - list_conversations()                                → {active_id, count, conversations[]}
  *   - read_chat_history({conversation_id?, offset?, limit?}) → {conversation_id, total, messages[]}
  *   - search_chat_history({query, conversation_id?, max_hits?}) → {query, scope, count, hits[]}
  *
- * Shape mirrors the meta-tool surface (`list_tool_categories → list_tools_by_category
- * → find_tool`) so the discovery affordance is recognizable. Tokenization for
- * search re-uses the AND-match strategy from `_scoreCategorical` in
- * `meta-tools.js:53-66`.
+ * Phase 2 — runtime state + telemetry (shipped 2.92.0):
+ *   - get_active_profile()                                → {name, base, admitted_tools[], budget, ceilings}
+ *   - list_loaded_tools()                                 → [{name, category, side_effects, cache_mode}]
+ *   - get_budget_state()                                  → {total, used, remaining_estimate, reserves, depth}
+ *   - get_token_usage({scope?})                           → {conversation, session, by_model}
+ *   - get_retrieval_stats()                               → {project, files_indexed, collections, last_indexed_at, embedder}
+ *   - get_recent_errors({limit?})                         → {count, errors[]}
+ *
+ * Phase 1 shape mirrors the meta-tool surface (`list_tool_categories →
+ * list_tools_by_category → find_tool`) so the discovery affordance is
+ * recognizable. Tokenization for search re-uses the AND-match strategy from
+ * `_scoreCategorical` in `meta-tools.js:53-66`.
+ *
+ * Phase 2 admission **differs** from Phase 1 by design (gitea#506 spec):
+ * `subagent.v1` admits the Phase 1 chat-history tools but NOT the Phase 2
+ * runtime readers — a clean-start boundary so a sub-agent works against a
+ * fresh-shape view of state, not parent runtime artifacts.
  *
  * Under the 3.X amendment direction (`docs/discussion/3.0-amendment-implementation.md`
- * §7), a fresh `Coder` sub-agent on spawn reads what PM has curated through these
- * tools. Phase 1 ships under the current 2.X substrate; Phase 2 (gitea#506) adds
- * runtime state + telemetry readers. Sub-agent transcript inspection
- * (`read_subagent_transcript`) is deferred to a follow-up — PM curates in chat
- * history, not in sub-agent panels.
+ * §7), a fresh `Coder` sub-agent on spawn reads what PM has curated through
+ * these tools. Phase 1 + 2 ship under the current 2.X substrate as primitives
+ * 3.X will compose.
  *
  * @module tools/introspection-tools
  */
 
 import { State, Storage } from '../core.js';
 import { ConversationManager } from '../chat/conversations.js';
+import { ToolRegistry } from './registry.js';
+import { Profiles } from '../profiles/registry.js';
+import {
+    getActiveProfileName,
+    resolveRetrievalConfig,
+} from '../profiles/resolve.js';
+import { resolveProfile } from '../profiles/inheritance.js';
+import { getSideEffectByName } from '../intelligence/tools/side-effects.js';
+import { Catalog } from '../intelligence/tools/catalog.js';
+import { getConvCost } from '../intelligence/cost/cost-store.js';
+import { RetrievalManager } from '../intelligence/retrieval/manager.js';
+import { read as readErrorRing } from '../intelligence/error-ring.js';
 
 const READ_DEFAULT_LIMIT = 20;
 const READ_MAX_LIMIT = 100;
@@ -33,6 +57,11 @@ const SEARCH_DEFAULT_MAX_HITS = 10;
 const SEARCH_MAX_MAX_HITS = 50;
 const SEARCH_SNIPPET_CHARS = 200;
 const LIST_MAX = 50;
+
+// Phase 2 (gitea#506).
+const ERRORS_DEFAULT_LIMIT = 50;
+const ERRORS_MAX_LIMIT = 50;
+const TOKEN_USAGE_SCOPES = ['conversation', 'session', 'all'];
 
 /* -------------------------------------------------------------------------- */
 /* Content normalization — handle multimodal arrays + tool-call-only assistant */
@@ -216,13 +245,143 @@ function resolveConvId(input) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Phase 2 helpers — runtime state + telemetry derivation                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolve the active profile to its fully-inherited shape. Mirrors what the
+ * tool registry / picker would see at admission time. Returns `null` when the
+ * profile name isn't registered (defensive — `getActiveProfileName` already
+ * falls back to `chat.v1` so a null here would mean the registry itself was
+ * cleared).
+ *
+ * @returns {{name: string, resolved: Object}|null}
+ */
+function resolveActiveProfile() {
+    const name = getActiveProfileName(State.settings);
+    const profileDef = Profiles.get(name);
+    if (!profileDef) return null;
+    const resolved = resolveProfile(profileDef, (n) => Profiles.get(n));
+    return { name, resolved };
+}
+
+/**
+ * Compute the per-tool entry surfaced by `list_loaded_tools`. Sources:
+ *   - `name`         ← `def.function.name`
+ *   - `category`     ← `Catalog.getByName(name).category` (falls back to `'misc'`)
+ *   - `side_effects` ← `getSideEffectByName(name)` (fails closed to `'external'`)
+ *   - `cache_mode`   ← `def.cache` (the 2.71.0 field; defaults to `'by-args'` when omitted)
+ *
+ * @param {Object} def  Entry from `ToolRegistry.definitions`.
+ * @returns {{name: string, category: string, side_effects: string, cache_mode: string}|null}
+ */
+function summarizeLoadedTool(def) {
+    const fn = def && def.function;
+    if (!fn || typeof fn.name !== 'string' || fn.name.length === 0) return null;
+    const name = fn.name;
+    const catalogEntry = Catalog.getByName(name);
+    const category = catalogEntry ? catalogEntry.category : 'misc';
+    return {
+        name,
+        category,
+        side_effects: getSideEffectByName(name),
+        cache_mode: (def.cache === 'never' || def.cache === 'by-args') ? def.cache : 'by-args',
+    };
+}
+
+/**
+ * Roll a `ConvCost` record into the slim shape `get_token_usage` surfaces.
+ * Drops the persisted bookkeeping fields (`byTool`, `byStrategy`, `firstAt`,
+ * etc.) — the tool's job is "what did this conversation cost me," not "dump
+ * the cost-store schema."
+ *
+ * @param {Object|null} convCost
+ * @returns {Object}
+ */
+function summarizeConvCost(convCost) {
+    if (!convCost) {
+        return {
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedTokens: 0,
+            reasoningTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            cost: 0,
+            cacheSavings: 0,
+            requests: 0,
+        };
+    }
+    return {
+        inputTokens: convCost.inputTokens || 0,
+        outputTokens: convCost.outputTokens || 0,
+        cachedTokens: convCost.cachedTokens || 0,
+        reasoningTokens: convCost.reasoningTokens || 0,
+        cacheReadTokens: convCost.cacheReadTokens || 0,
+        cacheCreationTokens: convCost.cacheCreationTokens || 0,
+        cost: convCost.cost || 0,
+        cacheSavings: convCost.cacheSavings || 0,
+        requests: convCost.requests || 0,
+    };
+}
+
+/**
+ * Slice `State.sessionCost` into a flat shape that mirrors `summarizeConvCost`.
+ * Field naming differs between the State slot and the ConvCost record
+ * (`totalInputTokens` vs `inputTokens`); this helper normalizes them so the
+ * scopes surfaced by `get_token_usage` are comparable.
+ *
+ * @returns {Object}
+ */
+function summarizeSessionCost() {
+    const sc = State.sessionCost || {};
+    return {
+        inputTokens: sc.totalInputTokens || 0,
+        outputTokens: sc.totalOutputTokens || 0,
+        cachedTokens: sc.cachedInputTokens || 0,
+        reasoningTokens: sc.reasoningTokens || 0,
+        cacheReadTokens: sc.cacheReadTokens || 0,
+        cacheCreationTokens: sc.cacheCreationTokens || 0,
+        cost: sc.totalCost || 0,
+        cacheSavings: sc.cacheSavings || 0,
+        requests: sc.requests || 0,
+    };
+}
+
+/**
+ * Surface the by-model split. `State.subagents.session_cost.byModel` (added
+ * 2.89.0 by gitea#505) tracks per-child-model spend; the primary
+ * conversation's model is read from `State.settings.llmModel` and aggregated
+ * separately under a synthetic `primary` key alongside the sub-agent entries.
+ * This gives the model a single object to scan when answering "where did the
+ * tokens go."
+ *
+ * @returns {Object<string, {dollars: number, tokens: number}>}
+ */
+function summarizeByModel() {
+    /** @type {Object<string, {dollars: number, tokens: number}>} */
+    const out = {};
+    const subagents = State.subagents || {};
+    const sessionCost = subagents.session_cost || {};
+    const byModel = sessionCost.byModel || {};
+    for (const id of Object.keys(byModel)) {
+        const entry = byModel[id] || {};
+        out[id] = {
+            dollars: entry.dollars || 0,
+            tokens: entry.tokens || 0,
+        };
+    }
+    return out;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Tool registration                                                           */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Register the three introspection tools on the supplied registry. Idempotent
- * only across registry-clear/register cycles (matches every other
- * `register*Tools` factory in `js/tools/`).
+ * Register the introspection tools (Phase 1 + Phase 2) on the supplied
+ * registry. Idempotent only across registry-clear/register cycles (matches
+ * every other `register*Tools` factory in `js/tools/`).
  *
  * @param {Object} registry  ToolRegistry instance.
  */
@@ -463,6 +622,241 @@ export function registerIntrospectionTools(registry) {
         readOnly: true,
         cache: 'never',
     });
+
+    /* ============================================================ */
+    /* PHASE 2 — runtime state + telemetry (gitea#506)              */
+    /* ============================================================ */
+
+    /* ============================================================ */
+    /* get_active_profile                                            */
+    /* ============================================================ */
+    registry.register('get_active_profile', async () => {
+        const active = resolveActiveProfile();
+        if (!active) {
+            return { error: 'No active profile resolvable. The profile registry returned no entry for the active name.' };
+        }
+        const { name, resolved } = active;
+        const tools = resolved.tools || {};
+        const budget = resolved.budget || {};
+        const taskLedger = resolved.task_ledger || {};
+        const subagent = resolved.subagent || null;
+        return {
+            name,
+            base: resolved.base || null,
+            admitted_tools: Array.isArray(tools.admit) ? tools.admit.slice() : [],
+            budget: {
+                total_tokens: budget.total_tokens || 0,
+                system_reserve: budget.system_reserve || 0,
+                output_reserve: budget.output_reserve || 0,
+                history_reserve: budget.history_reserve || 0,
+                memory_reserve: budget.memory_reserve || 0,
+            },
+            ceilings: {
+                tools_budget_tokens: tools.budget_tokens || 0,
+                task_ledger_capacity: taskLedger.capacity || 0,
+                novelty_threshold: typeof taskLedger.novelty_threshold === 'number' ? taskLedger.novelty_threshold : null,
+                subagent_max_tokens: subagent && typeof subagent.max_tokens === 'number' ? subagent.max_tokens : null,
+                subagent_max_dollars: subagent && typeof subagent.max_dollars === 'number' ? subagent.max_dollars : null,
+                subagent_recursion_depth: subagent && typeof subagent.recursion_depth === 'number' ? subagent.recursion_depth : null,
+            },
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_active_profile',
+            description: 'Read the currently-active profile shape: name, inherited base, full admitted tool name list, budget reserves, and capacity ceilings. Use this when you need to know what you can actually do right now — what tools are admitted, what budget you have to work within. Pairs with list_loaded_tools for the registry-side view.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
+
+    /* ============================================================ */
+    /* list_loaded_tools                                             */
+    /* ============================================================ */
+    registry.register('list_loaded_tools', async () => {
+        const defs = Array.isArray(ToolRegistry.definitions) ? ToolRegistry.definitions : [];
+        const tools = [];
+        for (const def of defs) {
+            const entry = summarizeLoadedTool(def);
+            if (entry) tools.push(entry);
+        }
+        tools.sort((a, b) => a.name.localeCompare(b.name));
+        return {
+            count: tools.length,
+            tools,
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'list_loaded_tools',
+            description: 'Enumerate every tool currently registered on the runtime with its category, side-effect class (read/write/external), and cache mode (by-args/never). Reflects what the registry sees — not profile-side admission (use get_active_profile.admitted_tools for that). Useful when find_tool turns up empty and you need to confirm a tool exists at all.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
+
+    /* ============================================================ */
+    /* get_budget_state                                              */
+    /* ============================================================ */
+    registry.register('get_budget_state', async () => {
+        const active = resolveActiveProfile();
+        if (!active) {
+            return { error: 'No active profile resolvable; cannot derive budget reserves.' };
+        }
+        const budget = active.resolved.budget || {};
+        const reserves = {
+            system: budget.system_reserve || 0,
+            output: budget.output_reserve || 0,
+            history: budget.history_reserve || 0,
+            memory: budget.memory_reserve || 0,
+        };
+        const total = budget.total_tokens || 0;
+        const reservesSum = reserves.system + reserves.output + reserves.history + reserves.memory;
+        // Used = total input + output spent so far this session. This is an
+        // estimate; the compactor's exact next-turn allocation may differ
+        // (eviction can reclaim tokens; large pending tool results inflate
+        // the actual prompt). Caller should treat the value as a hint, not a pin.
+        const sessionCost = State.sessionCost || {};
+        const used = (sessionCost.totalInputTokens || 0) + (sessionCost.totalOutputTokens || 0);
+        const remainingEstimate = Math.max(0, total - reservesSum - used);
+        const depth = Array.isArray(State.chatHistory) ? State.chatHistory.length : 0;
+        return {
+            total,
+            used,
+            remaining_estimate: remainingEstimate,
+            reserves,
+            depth,
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_budget_state',
+            description: 'Estimate of the current context budget posture: total ceiling, tokens used so far this session, a coarse remaining_estimate (NOT a pin — the compactor may reclaim or pending tool results may inflate), per-category reserves (system/output/history/memory), and conversation depth (turn count). Use this to decide whether to compact, delegate, or push on.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
+
+    /* ============================================================ */
+    /* get_token_usage                                               */
+    /* ============================================================ */
+    registry.register('get_token_usage', async (args) => {
+        const a = args || {};
+        const scope = typeof a.scope === 'string' ? a.scope : 'conversation';
+        if (!TOKEN_USAGE_SCOPES.includes(scope)) {
+            return { error: `scope must be one of: ${TOKEN_USAGE_SCOPES.join(', ')}.` };
+        }
+        const activeId = ConversationManager.getActiveId();
+        const convCost = activeId ? getConvCost(activeId) : null;
+        return {
+            scope,
+            conversation: summarizeConvCost(convCost),
+            session: summarizeSessionCost(),
+            by_model: summarizeByModel(),
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_token_usage',
+            description: 'Token + cost telemetry across three lenses: conversation (this chat\'s persisted ConvCost record), session (in-memory aggregates including cached/reasoning splits + request count), and by_model (per-model dollars + tokens, populated from sub-agent runs that landed on a cheap-tier override). The scope argument is informational (defaults to "conversation"); all three slices are always returned.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    scope: {
+                        type: 'string',
+                        description: `Optional hint about which slice the model cares about. One of: ${TOKEN_USAGE_SCOPES.join(', ')}. Defaults to "conversation".`,
+                    },
+                },
+                required: [],
+            },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
+
+    /* ============================================================ */
+    /* get_retrieval_stats                                           */
+    /* ============================================================ */
+    registry.register('get_retrieval_stats', async () => {
+        const stats = (typeof RetrievalManager.getStats === 'function')
+            ? RetrievalManager.getStats()
+            : {};
+        const active = resolveActiveProfile();
+        const retrievalConfig = active ? resolveRetrievalConfig(active.name) : null;
+        const collections = (retrievalConfig && Array.isArray(retrievalConfig.collections))
+            ? retrievalConfig.collections.slice()
+            : [];
+        const embedder = (State.settings && typeof State.settings.embeddingModel === 'string')
+            ? State.settings.embeddingModel
+            : null;
+        return {
+            enabled: !!stats.enabled,
+            indexing: !!stats.isIndexing,
+            project: stats.project || null,
+            files_indexed: stats.filesIndexed || 0,
+            collections,
+            // The retrieval manager tracks lastQueried (gitea#506 spec asks
+            // for last_indexed_at — not currently stored; lastQueried is the
+            // closest live signal and serves the model's question
+            // "is the index warm?"). Surfaced under the spec name and the
+            // honest name so a future patch can split them cleanly.
+            last_indexed_at: stats.lastQueried || null,
+            last_queried_at: stats.lastQueried || null,
+            embedder,
+            query_count: stats.queryCount || 0,
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_retrieval_stats',
+            description: 'Snapshot of the retrieval subsystem: whether it\'s enabled / mid-index, what project is indexed, how many files are in the index, which collections the active profile queries, the embedder model id, and a live-query heartbeat (last_queried_at). Use this when find_relevant_files returns surprising results or when deciding whether to call index_project.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
+
+    /* ============================================================ */
+    /* get_recent_errors                                             */
+    /* ============================================================ */
+    registry.register('get_recent_errors', async (args) => {
+        const a = args || {};
+        if (a.limit !== undefined) {
+            if (typeof a.limit !== 'number' || !Number.isInteger(a.limit) || a.limit < 1) {
+                return { error: 'limit must be a positive integer.' };
+            }
+            if (a.limit > ERRORS_MAX_LIMIT) {
+                return { error: `limit cannot exceed ${ERRORS_MAX_LIMIT}.` };
+            }
+        }
+        const limit = a.limit || ERRORS_DEFAULT_LIMIT;
+        const errors = readErrorRing({ limit });
+        return {
+            count: errors.length,
+            errors,
+        };
+    }, {
+        type: 'function',
+        function: {
+            name: 'get_recent_errors',
+            description: 'Read up to 50 most-recent errors captured from window.onerror + unhandled promise rejections, newest-first. Each entry carries {ts, source, message, stack?}. The ring captures uncaught failures only — caught exceptions that never bubble do not appear. Useful when the user reports "something broke" and you need to surface a stack trace without flipping to DevTools.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    limit: {
+                        type: 'number',
+                        description: `Optional: max errors to return, newest-first. Default ${ERRORS_DEFAULT_LIMIT}, max ${ERRORS_MAX_LIMIT}.`,
+                    },
+                },
+                required: [],
+            },
+        },
+        readOnly: true,
+        cache: 'never',
+    });
 }
 
 // Test seams.
@@ -479,4 +873,13 @@ export const _testing = {
     SEARCH_MAX_MAX_HITS,
     SEARCH_SNIPPET_CHARS,
     LIST_MAX,
+    // Phase 2 (gitea#506).
+    resolveActiveProfile,
+    summarizeLoadedTool,
+    summarizeConvCost,
+    summarizeSessionCost,
+    summarizeByModel,
+    ERRORS_DEFAULT_LIMIT,
+    ERRORS_MAX_LIMIT,
+    TOKEN_USAGE_SCOPES,
 };
