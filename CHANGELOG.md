@@ -4,6 +4,43 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.90.0] - 2026-05-22
+
+### Feature — chat history search + read tools (gitea#504, self-introspection Phase 1)
+
+Three new read-only tools that let the model navigate this conversation (and other stored conversations) without leaving the chat surface. Shape mirrors the existing meta-tool surface (`list_tool_categories → list_tools_by_category → find_tool`) so the discovery affordance is recognizable; tokenization for search reuses the AND-match strategy from `_scoreCategorical` in [`js/tools/meta-tools.js`](js/tools/meta-tools.js).
+
+**Why this matters.** Under the 3.X amendment direction ([`docs/discussion/3.0-amendment-implementation.md`](docs/discussion/3.0-amendment-implementation.md) §7 — *"The introspection surface (load-bearing under 3.X)"*), a fresh `Coder` sub-agent on spawn must read what PM has curated in chat history. The 3.X paper is gated on Touch 4 + the 3.0 design session, so this Phase 1 ships **under the current 2.X substrate** — the tools become primitives that 3.X will compose. Phase 2 (gitea#506 — runtime state + telemetry readers) follows.
+
+**The three tools** live in new [`js/tools/introspection-tools.js`](js/tools/introspection-tools.js) under a new `'introspection'` catalog category:
+
+- **`list_conversations()`** — cheapest call. Returns `{active_id, count, conversations[]}` in one shot so the active flag is visible without a follow-up call. Reuses `ConversationManager.list()` + `getActiveId()` (no new IDB access path). Capped at 50 conversations (mirrors `MAX_CONVERSATIONS` ceiling).
+- **`read_chat_history({conversation_id?, offset?, limit?})`** — fetch a slice of messages. Default scope is the active conversation; pass `conversation_id` to read another. `offset=0`, `limit=20`, max `limit=100` (mirrors `git_log`'s pagination envelope). Returns `{conversation_id, total, offset, limit, messages[]}`.
+- **`search_chat_history({query, conversation_id?, max_hits?})`** — tokenized AND-match scan. Default scope is the active conversation; `conversation_id: '*'` scans all stored conversations. Snippet hardcoded at 200 chars (no `snippet_chars` arg — schema mass for marginal benefit). Default `max_hits=10`, max 50.
+
+**Envelope normalization (load-bearing for tool-call-only + multimodal turns).** Pre-fix attempts to "just return the messages array" would have surfaced `undefined`/`""` content for tool-call-only assistant turns (`{role:'assistant', content:'', tool_calls:[...]}`) and base64-bloated multimodal arrays. The `normalizeMessage` helper handles three shapes:
+- Multimodal content arrays → text parts joined; `image_url` parts replaced with `[image]` markers.
+- Tool-call-only assistant turns → content synthesized as `<tool_calls: name1, name2>`; the names also surface in a separate `tool_calls` field on the envelope so the model can act on the structured form.
+- Tool result messages → `content` returned as-is; `_display` (renderer state) is dropped.
+
+**Profile admission** mirrors the existing meta-tool pattern. Added to `admit` lists in [`chat.v1`](js/profiles/chat-v1.js), [`coder.v1`](js/profiles/coder-v1.js), [`kb.v1`](js/profiles/kb-v1.js), [`pm.v1`](js/profiles/pm-v1.js), [`reviewer.v1`](js/profiles/reviewer-v1.js), [`plugin-dev.v1`](js/profiles/plugin-dev-v1.js), [`subagent.v1`](js/profiles/subagent-v1.js). Skipped for `rp.v1`/`chat_multi.v1` (deprioritized for ai-editor per `feedback_chat_multi_rp_no_utility_in_aieditor`); `full.v1` admits via `'*'` wildcard. Also promoted to `tools.static` in [`coder.v1`](js/profiles/coder-v1.js) + [`subagent.v1`](js/profiles/subagent-v1.js) alongside the meta-tools — structural anchor for fresh-context spawns that can't reliably discover via `find_tool` first.
+
+**Catalog + side-effects + system prompt.** [`CATEGORY_BY_NAME`](js/intelligence/tools/catalog.js) gains three entries (all → `'introspection'`); [`CATEGORY_DESCRIPTIONS`](js/intelligence/tools/catalog.js) gains the new category's one-line label. [`SIDE_EFFECTS_BY_NAME`](js/intelligence/tools/side-effects.js) classifies all three as `'read'` (no repo / external mutation) so the plan-mode dispatch gate admits them under restricted runs. [`js/prompts.js`](js/prompts.js) gains a combined `--- CHAT-HISTORY INTROSPECTION ---` block gated on `admittedNames.has(name)` for any of the three (per the `feedback_prompts_js_parallel_enumeration` lockstep convention). Cache policy is `'never'` on all three (chat history mutates every turn; `'by-args'` would serve stale results immediately).
+
+**Out of scope (Phase 2 + later):**
+- Sub-agent transcript inspection — different shape (`{messages, status, summary, transcriptId}`), persisted under `'conv-{id}'.subagentTranscripts`. PM curates in chat history, not sub-agent panels, so Coder-on-spawn doesn't need transcripts in Phase 1. Phase 2 follow-up: `read_subagent_transcript({transcriptId})`.
+- Semantic/embedding search — substring AND-match suffices; matches `find_tool`'s categorical-fallback envelope; semantic deferable.
+- Date-range filters (`since`/`until`) — add when a real signal asks.
+- Pack-budget enforcement — open question in 3.0 paper §7; not settled, don't pre-decide.
+
+Closes #504.
+
+**Test count refresh.** 3743 (2.89.0) → **3771 / 3770 pass / 1 skipped / 0 fail** at 2.90.0 (+28 from new [`tests/test-introspection-tools.mjs`](tests/test-introspection-tools.mjs); five pre-existing snapshot/baseline tests rebaselined for the new admit + static entries — [`tests/test-profile-admit-coverage.mjs`](tests/test-profile-admit-coverage.mjs), [`tests/test-profile-resolution.mjs`](tests/test-profile-resolution.mjs), [`tests/test-profile-filter-tools.mjs`](tests/test-profile-filter-tools.mjs), [`tests/test-profiles.mjs`](tests/test-profiles.mjs), [`tests/test-tools-composer.mjs`](tests/test-tools-composer.mjs); profile-snapshot fixtures regenerated via [`tests/update-profile-fixtures.mjs`](tests/update-profile-fixtures.mjs)).
+
+### Also in this slot — rolled-in doc-only entries from `[Unreleased]`
+
+The two doc-only `[Unreleased]` accumulations described below (`docs/3.0-amendment-paper` 3.X.X direction paper artifacts + `RE-EVAL following 2.70.0` eleventh re-eval slot) ride the same 2.90.0 release per `feedback_no_bump_for_measurement_only` (doc-only accumulates; no microscopic releases) + 2.89.0 precedent (bundling the `CONTRIBUTING.md` admin alongside the gitea#505 feat).
+
 ### `docs/3.0-amendment-paper` — 3.X.X direction paper artifacts (doc-only, no version bump)
 
 Pre-architectural artifacts for the proposed 3.X.X direction — embodying the *Coherence at Speed* methodology amendment (six roles + work queue) as ai-editor's runtime. **Nothing in this slot ships behavior; the artifacts gate further design work.** Per `feedback_no_bump_for_measurement_only`, docs-only accumulates in `[Unreleased]`.

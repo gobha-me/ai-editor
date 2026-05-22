@@ -489,6 +489,30 @@ function buildSystemPrompt(opts = {}) {
         prompt += `\n\nSupply a tight \`task\` and an optional \`context_hint\` that pre-loads facts you already know — the child has a fresh context and cannot see your conversation. The optional \`model\` arg overrides the cheap-tier default when the sub-task needs a stronger model (e.g. dense reasoning over a long read).`;
     }
 
+    // Chat-history introspection (2.90.0, gitea#504, Phase 1). Gated on
+    // admission so the system prompt stays clean for profiles that don't
+    // admit these (matches the delegate_task / find_tool gating shape).
+    // The three tools are admitted as a unit across the picker + sub-agent
+    // profiles, so a single combined block is the cleanest carrier.
+    const introspectionAdmitted =
+        admittedNames.has('list_conversations') ||
+        admittedNames.has('read_chat_history') ||
+        admittedNames.has('search_chat_history');
+    if (introspectionAdmitted) {
+        prompt += `\n\n--- CHAT-HISTORY INTROSPECTION ---`;
+        prompt += `\nYou can inspect this conversation (and other stored conversations) without leaving the chat surface:`;
+        if (admittedNames.has('list_conversations')) {
+            prompt += `\n- \`list_conversations()\` — cheapest call. Returns {active_id, conversations[]} so you see what exists and which one is current in a single call.`;
+        }
+        if (admittedNames.has('read_chat_history')) {
+            prompt += `\n- \`read_chat_history({conversation_id?, offset?, limit?})\` — fetch a slice of messages. Defaults to the active conversation; pass conversation_id to read another. Tool-call-only assistant turns are summarized as \`<tool_calls: name1, name2>\`; multimodal content is text-flattened with \`[image]\` markers.`;
+        }
+        if (admittedNames.has('search_chat_history')) {
+            prompt += `\n- \`search_chat_history({query, conversation_id?, max_hits?})\` — tokenized AND-match (case-insensitive, ≥2-char tokens; same matcher \`find_tool\` uses). Default scope is the active conversation; pass \`conversation_id: "*"\` to scan all stored conversations.`;
+        }
+        prompt += `\nUse these when the user references something they said earlier ("what did I tell you about X?"), when you need to re-anchor on prior context that fell out of your visible window, or when starting a fresh sub-task that needs context the user already prepared.`;
+    }
+
     // gitea#478 (2.77.0) — durable approved-plan visibility. The slot
     // (gitea#424, 2.52.0) was only readable on demand via
     // `read_approved_plan`; live sessions showed models re-calling

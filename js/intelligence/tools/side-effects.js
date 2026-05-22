@@ -63,6 +63,11 @@ export const SIDE_EFFECTS_BY_NAME = {
     'list_tool_categories': 'read',
     'list_tools_by_category': 'read',
     'find_tool': 'read',
+    // introspection — Phase 1 (2.90.0, gitea#504). Read chat history /
+    // conversation index; no repo / external mutation.
+    'list_conversations': 'read',
+    'read_chat_history': 'read',
+    'search_chat_history': 'read',
     'ask_user': 'read',
     'submit_plan_for_approval': 'read',
     'read_approved_plan': 'read',

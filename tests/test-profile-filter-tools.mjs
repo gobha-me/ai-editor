@@ -136,7 +136,11 @@ test('kb.v1 rejects every coder-only mutator', () => {
     assert.deepEqual(got, ['read_file']);
 });
 
-test('subagent.v1 admit is the trust-boundary 8-read-only enumeration', () => {
+test('subagent.v1 admit is the trust-boundary 11-read-only enumeration', () => {
+    // 2.90.0 (gitea#504) — three introspection tools (list_conversations,
+    // read_chat_history, search_chat_history) joined the sub-agent trust
+    // boundary. A fresh Coder spawn under the 3.X amendment direction must
+    // be able to read what PM curated; the chat-history surface is how.
     const probe = [
         { type: 'function', function: { name: 'read_file' } },        // admit
         { type: 'function', function: { name: 'read_lines' } },       // admit
@@ -146,6 +150,9 @@ test('subagent.v1 admit is the trust-boundary 8-read-only enumeration', () => {
         { type: 'function', function: { name: 'list_tool_categories' } }, // admit
         { type: 'function', function: { name: 'list_tools_by_category' } }, // admit
         { type: 'function', function: { name: 'find_tool' } },        // admit
+        { type: 'function', function: { name: 'list_conversations' } },  // admit (2.90.0)
+        { type: 'function', function: { name: 'read_chat_history' } },   // admit (2.90.0)
+        { type: 'function', function: { name: 'search_chat_history' } }, // admit (2.90.0)
         { type: 'function', function: { name: 'edit_file' } },        // REJECT
         { type: 'function', function: { name: 'mcp__server__tool' } }, // REJECT (no glob)
         { type: 'function', function: { name: 'delegate_task' } },    // REJECT (no recursion)
@@ -153,12 +160,15 @@ test('subagent.v1 admit is the trust-boundary 8-read-only enumeration', () => {
     const got = Profiles.filterTools(probe, 'subagent.v1').map(t => t.function.name);
     assert.deepEqual(got.sort(), [
         'find_tool',
+        'list_conversations',
         'list_dirty_files',
         'list_tool_categories',
         'list_tools_by_category',
+        'read_chat_history',
         'read_file',
         'read_lines',
         'scan_file',
+        'search_chat_history',
         'search_in_files',
     ]);
 });

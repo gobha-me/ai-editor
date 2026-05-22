@@ -44,23 +44,35 @@ const TOOLS_DIR = join(__dirname, '..', 'js', 'tools');
 //   kb.v1    — aggressive read-only trim; admit list now agrees with
 //               KB_SYSTEM_PROMPT's read-only consultation constraint.
 //               Drops mutating built-ins, drops the mcp__* glob.
-//   subagent  — unchanged 8-name read-only set; NO mcp__* glob
+//   subagent  — 11-name read-only set (was 8; 2.90.0 gitea#504 added
+//               the three introspection tools); NO mcp__* glob
 // Drift from these requires a deliberate follow-up curation PR.
 // ============================================
 
+// 2.90.0 (gitea#504) — three introspection tools (list_conversations,
+// read_chat_history, search_chat_history) added to each picker + sub-agent
+// baseline. Phase 1 of the self-introspection arc; admission shape
+// mirrors the meta-tools (find_tool / list_tool_categories /
+// list_tools_by_category) — niche per turn but structural anchor for
+// fresh-context spawns under 3.X amendment direction.
 const CHAT_V1_ADMIT_BASELINE = [
     'ask_user', 'find_references', 'find_relevant_files', 'find_tool',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
-    'git_log', 'goto_line', 'list_issues', 'list_open_tabs', 'list_projects',
+    'git_log', 'goto_line',
+    'list_conversations',
+    'list_issues', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
     'memory_recall', 'memory_remember', 'memory_revise',
     'open_file', 'peek_project_file', 'peek_project_tree', 'peek_read_lines',
     'preview_click', 'preview_console_logs', 'preview_errors', 'preview_fill',
     'preview_inspect', 'preview_list', 'preview_logs', 'preview_network',
     'preview_resize', 'preview_snapshot', 'preview_start', 'preview_stop',
-    'read_approved_plan', 'read_current_file', 'read_file', 'read_function',
+    'read_approved_plan',
+    'read_chat_history',
+    'read_current_file', 'read_file', 'read_function',
     'read_issue', 'read_lines', 'read_pull_request', 'scan_file',
     'scratchpad_clear', 'scratchpad_read', 'scratchpad_write',
+    'search_chat_history',
     'search_in_files', 'select_range',
     'submit_plan_for_approval', 'todo_read', 'todo_write', 'mcp__*',
 ];
@@ -72,6 +84,7 @@ const CODER_V1_ADMIT_BASELINE = [
     'find_relevant_files', 'find_tool',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
     'git_log', 'goto_line', 'index_project', 'insert_at_cursor', 'insert_lines',
+    'list_conversations',
     'list_dirty_files', 'list_issues', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
     'memory_recall', 'memory_remember', 'memory_revise', 'merge_pull_request',
@@ -79,10 +92,13 @@ const CODER_V1_ADMIT_BASELINE = [
     'preview_click', 'preview_console_logs', 'preview_errors', 'preview_fill',
     'preview_inspect', 'preview_list', 'preview_logs', 'preview_network',
     'preview_resize', 'preview_snapshot', 'preview_start', 'preview_stop',
-    'read_approved_plan', 'read_current_file', 'read_file', 'read_function',
+    'read_approved_plan',
+    'read_chat_history',
+    'read_current_file', 'read_file', 'read_function',
     'read_issue', 'read_lines', 'read_pull_request',
     'replace_lines', 'replace_selection', 'run_code', 'scan_file',
     'scratchpad_clear', 'scratchpad_read', 'scratchpad_write',
+    'search_chat_history',
     'search_in_files', 'select_range', 'set_active_project',
     'submit_plan_for_approval', 'submit_script_for_approval', 'sync_releases',
     'todo_read', 'todo_write', 'update_issue',
@@ -92,12 +108,18 @@ const CODER_V1_ADMIT_BASELINE = [
 const KB_V1_ADMIT_BASELINE = [
     'ask_user', 'find_references', 'find_relevant_files', 'find_tool',
     'get_ci_logs', 'get_ci_status', 'get_embeddings_status', 'get_project_tree',
-    'git_log', 'goto_line', 'list_issues', 'list_open_tabs', 'list_projects',
+    'git_log', 'goto_line',
+    'list_conversations',
+    'list_issues', 'list_open_tabs', 'list_projects',
     'list_pull_requests', 'list_tool_categories', 'list_tools_by_category',
     'memory_recall', 'open_file', 'peek_project_file', 'peek_project_tree',
-    'peek_read_lines', 'read_approved_plan', 'read_current_file', 'read_file',
+    'peek_read_lines', 'read_approved_plan',
+    'read_chat_history',
+    'read_current_file', 'read_file',
     'read_function', 'read_issue', 'read_lines', 'read_pull_request',
-    'scan_file', 'scratchpad_read', 'search_in_files', 'select_range',
+    'scan_file', 'scratchpad_read',
+    'search_chat_history',
+    'search_in_files', 'select_range',
     'todo_read',
 ];
 
@@ -105,6 +127,8 @@ const SUBAGENT_V1_ADMIT_BASELINE = [
     'find_tool', 'list_dirty_files', 'list_tool_categories',
     'list_tools_by_category', 'read_file', 'read_lines', 'scan_file',
     'search_in_files',
+    // 2.90.0 gitea#504 — introspection Phase 1.
+    'list_conversations', 'read_chat_history', 'search_chat_history',
 ];
 
 function resolved(name) {
@@ -158,7 +182,7 @@ test('kb.v1.admit carries no mutating tools (read-only by construction)', () => 
         'kb.v1 must not carry the mcp__* glob — MCP servers may be mutating; trust boundary requires explicit per-tool admission');
 });
 
-test('subagent.v1.admit equals the trust-boundary 8-read-only set (no mcp__* glob)', () => {
+test('subagent.v1.admit equals the trust-boundary 11-read-only set (no mcp__* glob)', () => {
     const out = resolved('subagent.v1');
     assert.deepEqual([...out.tools.admit].sort(), [...SUBAGENT_V1_ADMIT_BASELINE].sort());
     assert.ok(!out.tools.admit.includes('mcp__*'),

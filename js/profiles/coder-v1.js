@@ -152,6 +152,16 @@ export const CODER_V1 = {
             'list_tool_categories',
             'list_tools_by_category',
             'find_tool',
+            // Introspection — Phase 1 (2.90.0, gitea#504). Promoted to
+            // static alongside the meta-tools because they're the same
+            // shape of structural anchor: discovery-adjacent, niche per
+            // turn but load-bearing on the turns that need them. A
+            // fresh-context Coder spawn would not reliably discover
+            // these through `find_tool` first, especially under 3.X
+            // amendment direction (`docs/discussion/3.0-amendment-implementation.md` §7).
+            'list_conversations',
+            'read_chat_history',
+            'search_chat_history',
             // Structural-anchor tools — promoted to static in 1.8.4 alongside
             // the scratchpad visibility panel (github#34). Pre-1.3.15 these
             // tools were always-loaded; the 1.3.15 admission policy moved
@@ -292,6 +302,7 @@ export const CODER_V1 = {
             'index_project',
             'insert_at_cursor',
             'insert_lines',
+            'list_conversations',
             'list_dirty_files',
             'list_issues',
             'list_open_tabs',
@@ -320,6 +331,7 @@ export const CODER_V1 = {
             'preview_start',
             'preview_stop',
             'read_approved_plan',
+            'read_chat_history',
             'read_current_file',
             'read_file',
             'read_function',
@@ -333,6 +345,7 @@ export const CODER_V1 = {
             'scratchpad_clear',
             'scratchpad_read',
             'scratchpad_write',
+            'search_chat_history',
             'search_in_files',
             'select_range',
             'set_active_project',

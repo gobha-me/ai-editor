@@ -108,6 +108,14 @@ export const SUBAGENT_V1 = {
             'list_tool_categories',
             'list_tools_by_category',
             'find_tool',
+            // Introspection — Phase 1 (2.90.0, gitea#504). A fresh
+            // sub-agent on spawn reads what the parent (PM, under 3.X)
+            // curated through these tools. Load-bearing for the
+            // amendment direction even though the sub-agent profile
+            // itself doesn't yet ship the multi-role machinery.
+            'list_conversations',
+            'read_chat_history',
+            'search_chat_history',
         ],
         discovery_strategies: ['categorical'],
         budget_tokens: 2000,
@@ -131,6 +139,9 @@ export const SUBAGENT_V1 = {
             'list_tool_categories',
             'list_tools_by_category',
             'find_tool',
+            'list_conversations',
+            'read_chat_history',
+            'search_chat_history',
         ],
     },
 

@@ -199,6 +199,12 @@ test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () =>
         'list_tool_categories',
         'list_tools_by_category',
         'find_tool',
+        // 2.90.0 (gitea#504) — introspection Phase 1 tools promoted to
+        // static alongside the meta-tools (structural anchor for
+        // fresh-context spawns under 3.X amendment direction).
+        'list_conversations',
+        'read_chat_history',
+        'search_chat_history',
         // 1.8.4 — structural-anchor tools (compression-survival).
         'scratchpad_write',
         'scratchpad_read',

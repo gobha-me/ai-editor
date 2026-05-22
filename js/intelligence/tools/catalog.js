@@ -56,6 +56,11 @@ const CATEGORY_BY_NAME = {
     'list_tools_by_category': 'meta',
     'find_tool':              'meta',
 
+    // introspection — self-introspection Phase 1 (2.90.0, gitea#504).
+    'list_conversations':     'introspection',
+    'read_chat_history':      'introspection',
+    'search_chat_history':    'introspection',
+
     // code.file
     'read_file': 'code.file.read',
     'read_lines': 'code.file.read',
@@ -163,6 +168,7 @@ const CATEGORY_BY_NAME = {
  */
 const CATEGORY_DESCRIPTIONS = {
     'meta':              'Discovery: enumerate tools and find capabilities by description.',
+    'introspection':     'Read the current and past chat conversations — list, fetch slices, keyword search.',
     'code.file.read':    'Read-only file access (full files, line ranges, current buffer).',
     'code.file.navigate':'Open files in the editor and inspect open tabs.',
     'code.file.write':   'Create, overwrite, or delete entire files.',

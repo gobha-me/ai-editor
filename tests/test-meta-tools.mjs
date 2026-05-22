@@ -97,6 +97,14 @@ function registerStaticFixture() {
     // per-turn tool list. Static enumeration must still resolve it
     // through the catalog so the unresolved_static exit signal stays clean.
     reg('delegate_task', 'Delegate a focused sub-task to a bounded child sub-agent.', { type: 'object', properties: { task: { type: 'string' }, context_hint: { type: 'string' } } });
+    // 2.90.0 — introspection Phase 1 (gitea#504) joined the coder static
+    // set alongside the meta-tools; structural anchor for fresh-context
+    // spawns under the 3.X amendment direction. Static enumeration must
+    // resolve them through the catalog so the unresolved_static exit
+    // signal stays clean.
+    reg('list_conversations',  'List chat conversations.',                { type: 'object', properties: {} });
+    reg('read_chat_history',   'Read a slice of chat-history messages.',  { type: 'object', properties: { conversation_id: { type: 'string' }, offset: { type: 'number' }, limit: { type: 'number' } } });
+    reg('search_chat_history', 'Search chat-history by keyword.',         { type: 'object', properties: { query: { type: 'string' }, conversation_id: { type: 'string' }, max_hits: { type: 'number' } } });
 }
 
 // ============================================

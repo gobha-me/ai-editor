@@ -259,7 +259,7 @@ test('renderForLLM preserves declared order from admitted[]', () => {
 //  set without changing what this fixture registers.)
 // ============================================
 
-test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 27 unresolved', () => {
+test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 30 unresolved', () => {
     registerStaticFixture();
     const result = composeAdmission({
         task: 'coder-session', query: null,
@@ -273,6 +273,11 @@ test('coder.v1.tools.static against the 6-tool fixture: 6 admitted, 27 unresolve
     assert.equal(result.admitted.length, 6);
     assert.deepEqual(result.diagnostics.unresolved_static, [
         'list_tool_categories', 'list_tools_by_category', 'find_tool',
+        // 2.90.0 (gitea#504) — introspection Phase 1 tools promoted to
+        // static, intentionally absent from this fixture so the
+        // unresolved-path assertion still has signal. Same pattern as
+        // the 1.8.4 anchors below.
+        'list_conversations', 'read_chat_history', 'search_chat_history',
         // 1.8.4 — structural-anchor tools, intentionally absent from the
         // fixture so the unresolved-path assertion still has signal.
         'scratchpad_write', 'scratchpad_read', 'scratchpad_clear',

@@ -27,6 +27,7 @@ import { registerCursorTools } from '../tools/cursor-tools.js';
 import { registerPluginTools } from '../tools/plugin-tools.js';
 import { registerMemoryTools } from '../tools/memory-tools.js';
 import { registerMetaTools } from '../tools/meta-tools.js';
+import { registerIntrospectionTools } from '../tools/introspection-tools.js';
 
 // Import submodules
 import { 
@@ -97,6 +98,7 @@ registerEvalTools(ToolRegistry);
 registerCursorTools(ToolRegistry);
 registerPluginTools(ToolRegistry);
 registerMemoryTools(ToolRegistry);
+registerIntrospectionTools(ToolRegistry);
 
 // ============================================
 // INITIALIZATION
