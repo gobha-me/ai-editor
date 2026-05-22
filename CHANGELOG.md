@@ -4,6 +4,22 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.92.1] - 2026-05-22
+
+### Fix — continue button now renders when assistant turn ends on a tool-result-only round (gobha-me/ai-editor#41)
+
+When the tool loop ended with text committed mid-loop and a final round that produced no new text (typical shape: model says intro text → calls a tool → tool succeeds → loop terminates without further model text), the post-turn action buttons (continue + copy) were never rendered. Users had to manually type `continue` to push the model forward — recurring friction on any session that loops on small edits.
+
+**Root cause.** The early-return branch at the bottom of `handleGeneralRequest` ([`js/chat/handlers.js`](js/chat/handlers.js)) removed the trailing streaming-message placeholder and returned without calling `finalizeStreamingMessage`. That function is the *only* path that renders the continue/copy buttons. The qwen-3-6-plus session that originally drafted a fix (gitea PR #515) tried to call `finalizeStreamingMessage('')` after removing the placeholder — but `finalizeStreamingMessage` gates ALL button rendering on `document.getElementById('streaming-message')` finding a DOM element ([`js/chat/messages.js:296-355`](js/chat/messages.js#L296-L355)), and by the time the early-return branch fires the `onRoundCommit` hook ([`js/chat/handlers.js:399-412`](js/chat/handlers.js#L399-L412)) has already disposed of the element (either `removeAttribute('id')` after a text commit, or `partialEl.remove()` after a no-text round). So the gitea#515 attempt was a no-op.
+
+**The fix.** New exported `injectFinalizationButtons()` in [`js/chat/messages.js`](js/chat/messages.js) that calls two private helpers: an existing `_injectUserEditButtons` (already used by `finalizeStreamingMessage`) and a new `_injectAssistantContinueButtons` that mirrors the same pattern — query the last `.chat-message.assistant` in `chatContainer`, skip if `.message-actions` already exists, otherwise append a div with continue + copy buttons. The early-return branch in `handleGeneralRequest` now calls `injectFinalizationButtons()` after removing the placeholder, bypassing the unusable `finalizeStreamingMessage` path entirely. The normal-flow path through `finalizeStreamingMessage` is untouched — its inline button-rendering block continues to do the work when the placeholder *is* still in the DOM.
+
+**Test.** New [`tests/test-inject-finalization-buttons.mjs`](tests/test-inject-finalization-buttons.mjs) — hand-rolled DOM mock asserts that `injectFinalizationButtons` appends continue + copy onto the last assistant message and edit + retry onto the last user message, that it's idempotent (second call skips), and that it no-ops when there's no chat container or no matching messages. Confirmed under `node --test` alongside the rest of the suite.
+
+**History note.** This entry supersedes the gitea PR #515 fix attempt (commit `a956bb1`, `refactor: clean up imports in handlers.js`) — that commit message was auto-generated and wrong (the change was a fix, not a refactor, and touched no imports; the commit itself was a no-op for the bug). The broken line is replaced as part of this entry. See gobha-me#46 for follow-up on `commit_files` autogenerating wrong commit subjects.
+
+Closes gobha-me/ai-editor#41.
+
 ## [2.92.0] - 2026-05-22
 
 ### Feature — runtime state + telemetry readers (gitea#506, self-introspection Phase 2)

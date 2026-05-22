@@ -14,7 +14,8 @@ import {
     cleanupStreamingMessage,
     addToolCallMessage,
     addConsentCardMessage,
-    formatMessageContent
+    formatMessageContent,
+    injectFinalizationButtons
 } from './messages.js';
 import {
     getPendingEdit,
@@ -519,13 +520,19 @@ export async function handleGeneralRequest(input) {
     }
 
     // If text was already committed mid-loop AND the final round produced no
-    // new text, just clean up the placeholder and skip re-rendering.
+    // new text, clean up the trailing placeholder and inject the post-turn
+    // action buttons directly. We can't go through finalizeStreamingMessage
+    // here — its `streaming-message` placeholder has already been disposed
+    // of by `onRoundCommit` (either removed if the last round had no text,
+    // or had its id stripped after the mid-loop text commit), so the
+    // `if (messageEl)` branch that renders the buttons would be skipped.
+    // gobha-me/ai-editor#41.
     if (loopResult.textCommittedMidLoop && !loopResult.lastRoundContent.trim()) {
         const placeholder = document.getElementById('streaming-message');
         if (placeholder) placeholder.remove();
+        injectFinalizationButtons();
         return;
     }
-
     // Use last round's content for the final DOM element.
     // lastRoundReasoning carries the reasoning captured by _handleStream
     // for the round whose content we're rendering; older rounds' reasoning

@@ -1096,6 +1096,48 @@ function _injectUserEditButtons() {
 }
 
 /**
+ * Inject continue/copy buttons onto the last assistant message in the DOM.
+ * Used by the tool-loop early-return path in handlers.js when the loop ends
+ * with a tool-result-only turn — by that point `finalizeStreamingMessage`'s
+ * placeholder is already gone (id stripped or element removed by
+ * `onRoundCommit`), so the standard finalize path can't attach buttons.
+ * Safe to call multiple times — skips if buttons already exist.
+ *
+ * gobha-me/ai-editor#41.
+ */
+function _injectAssistantContinueButtons() {
+    const chatContainer = getChatContainer();
+    if (!chatContainer) return;
+
+    const assistantMessages = chatContainer.querySelectorAll('.chat-message.assistant');
+    if (assistantMessages.length === 0) return;
+
+    const lastAssistantEl = assistantMessages[assistantMessages.length - 1];
+
+    if (lastAssistantEl.querySelector('.message-actions')) return;
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'message-actions';
+    actionsEl.innerHTML = `
+        <button class="btn-action btn-continue" data-action="continueResponse" title="Continue generating">🔄 Continue</button>
+        <button class="btn-action btn-copy" data-action="copyMessage" title="Copy to clipboard"><svg class="icn icn--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg> Copy</button>
+    `;
+    lastAssistantEl.appendChild(actionsEl);
+}
+
+/**
+ * Inject finalization buttons on both the last assistant message (continue +
+ * copy) and the last user message (edit + retry). Single entry point for
+ * code paths that need to render the post-turn affordances without going
+ * through `finalizeStreamingMessage` (which requires the streaming-message
+ * placeholder to still be in the DOM).
+ */
+export function injectFinalizationButtons() {
+    _injectAssistantContinueButtons();
+    _injectUserEditButtons();
+}
+
+/**
  * Replace a user message bubble with an inline editor for editing and resending.
  * @param {HTMLElement} buttonEl - The edit button that was clicked
  */
