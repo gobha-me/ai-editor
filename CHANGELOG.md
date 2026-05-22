@@ -4,6 +4,27 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.91.0] - 2026-05-22
+
+### Fix — edit_file adjacent-duplicate seam detection + tighter success context (gitea#511)
+
+A 123-request qwen-3-6-plus dogfood against `xcaliber/HTML-Games#239` (PR #320, commit `621816c`) surfaced an off-by-one in the model's line accounting: `edit_file(start_line=X+1, end_line=Y, new_content="<block beginning with what's at line X>")`. Line X survived the replacement *and* `new_content[0]` re-emitted it, leaving adjacent duplicate lines. Measured impact: **~25–35 wasted calls / ~$0.80 of $3.14 session spend** in the recovery loop (re-read → re-edit → STALE LINE NUMBERS guard → re-read → clean). The bug is model-side line-arithmetic, not tool-side — but two tool-side mitigations close the loop without touching model behavior. Both ship here.
+
+**(1) Adjacent-duplicate seam detection.** New [`_detectAdjacentSeamDuplicate`](js/tools/multifile-tools.js) helper. After a `replace` or `insert` edit applies, the helper compares the pre-edit `lines[start_line - 2]` (the line that survived) against `new_content.split('\n')[0]` (the first new line). If they match AND the line trips one of seven `STRUCTURAL_TOKEN_PATTERNS` (`import `, `export `, `function X(`, `const X = () =>` / `const X = function`, `/**`, `class X`, `return {` / `throw {`) AND has ≥ 3 trimmed chars (admits bare `/**`, rejects bare `{` / `})`), the success envelope grows a `warnings: [{type, line, message}]` field and the `message:` prose carries `⚠️ Edit at L<n> appears to duplicate the surviving prior line ("…"). Verify — this may be an off-by-one in start_line.` Per [`docs/DESIGN-agent-loop.md`](docs/DESIGN-agent-loop.md) §"The Authorship Rule" + `agent-loop-contracts.js:99`, `SuccessEnvelope` is freeform-per-tool; no new entry in `VALID_CODES` (codes are reserved for `FailureEnvelope`). The dogfood signal explicitly cited `import {`, `/**`, `function X() {`, and `return {` as the recurring shapes — the pattern set covers each.
+
+**(2) Tighter success context.** The pre-2.91.0 success envelope echoed a ±5-line `context:` slice from `_getEditContext`, leaking neighbor lines outside the replaced range — those neighbors anchored the next wrong edit and inflated tokens on every call. The `replace` and `insert` branches now emit `replaced_content:` (literal new lines with their new line numbers, no neighbors) via the new [`_renderReplacedContent`](js/tools/multifile-tools.js) helper. The `_getEditContext` helper stays — still used by the `delete` branch + the `delete_lines` sibling, and the existing 5/5 width assertion at [`tests/test-tool-ergonomics-post-mortem.js`](tests/test-tool-ergonomics-post-mortem.js) still passes. No downstream consumer reads `result.context` from `edit_file` (verified by `grep -rn "result\.context" tests/ js/`); response-shape change is contract-safe.
+
+**Sibling-tool parity.** The same patch lands on `replace_lines` and `insert_lines` in [`js/tools/edit-tools.js`](js/tools/edit-tools.js) — they share the start/end/new_content envelope and the same off-by-one would repro there. The helper is imported from `multifile-tools._internals` (one source of truth) and re-exported from `edit-tools._internals` for testability. `delete_lines` / `edit_file:delete` are untouched — no `new_content` to seam against, no duplicate to produce.
+
+**Test count refresh.** 3771 (2.90.0) → **3791 / 3790 pass / 1 skipped / 0 fail** at 2.91.0 (+20 from new [`tests/test-edit-file-adjacent-duplicate-seam.mjs`](tests/test-edit-file-adjacent-duplicate-seam.mjs) — 5 positive seam shapes × structural-token coverage, 3 negative non-structural, 5 boundary cases for `start_line=1` / empty inputs / trivial duplicates, 4 `_renderReplacedContent` shape, 2 source-scan + response-shape envelope, 1 `STRUCTURAL_TOKEN_PATTERNS` export shape). Browser-side [`tests/test-tool-ergonomics-post-mortem.js`](tests/test-tool-ergonomics-post-mortem.js) extended with a parity block pinning `_renderReplacedContent` + `_detectAdjacentSeamDuplicate` re-exports across both tool barrels.
+
+**Out of scope (deferred).**
+- Mitigation (3) from the issue — content-anchored edit mode (`before_text` / `after_text`). Larger design surface (new tool args, profile schema, prompts.js block, paper on the spend-vs-correctness tradeoff for cheap-tier models). Separate ticket if signal recurs after (1)+(2) lands.
+- `delete` branch response shape — no `new_content` to seam, no duplicate to produce; the ±5 `_getEditContext` slice still applies.
+- Lint-pinning the `warnings: []` field shape — separate hardening slot if warning-shape divergence surfaces across tools.
+
+Closes #511.
+
 ## [2.90.0] - 2026-05-22
 
 ### Feature — chat history search + read tools (gitea#504, self-introspection Phase 1)

@@ -6,6 +6,9 @@
 import { State } from '../core.js';
 import { replaceRange, insertAtLine, deleteRange } from '../editor.js';
 import { EditTracker } from './edit-tracker.js';
+import { _internals as multifileInternals } from './multifile-tools.js';
+
+const { _detectAdjacentSeamDuplicate, _renderReplacedContent } = multifileInternals;
 
 /**
  * Return a few lines of surrounding context after an edit so the model
@@ -74,20 +77,23 @@ export function registerEditTools(registry) {
             };
         }
 
+        // gitea#511 — capture pre-edit lines BEFORE replaceRange mutates
+        // State.editorContent; the seam check needs the surviving prior line.
+        const preEditLines = State.editorContent?.split('\n') ?? [];
+
         // Use the replaceRange function from editor.js
         const result = replaceRange(start_line, end_line, new_content);
-        
+
         if (result.error) {
             return result;
         }
-        
+
         // Record this edit for future drift detection
         EditTracker.recordEdit(State.currentFile.path, 'replace', start_line, end_line, result.lineDelta);
-        
-        // Return surrounding context so the model can verify placement
-        // and know correct line numbers for subsequent edits
-        const ctx = _getEditContext(start_line, result.newLineCount, result.totalLines);
-        
+
+        const seam = _detectAdjacentSeamDuplicate(preEditLines, start_line, new_content);
+        const replaced_content = _renderReplacedContent(start_line, new_content);
+
         return {
             success: true,
             path: State.currentFile.path,
@@ -96,10 +102,14 @@ export function registerEditTools(registry) {
             new_line_count: result.newLineCount,
             line_delta: result.lineDelta,
             total_lines: result.totalLines,
-            context: ctx,
-            message: `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
-                     `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). ` +
-                     `IMPORTANT: Line numbers have shifted by ${result.lineDelta}. Use read_current_file or read_lines before your next edit.`
+            replaced_content,
+            ...(seam ? { warnings: [seam] } : {}),
+            message: seam
+                ? `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
+                  `⚠️ ${seam.message} Use read_current_file or read_lines before your next edit.`
+                : `Replaced lines ${start_line}-${end_line} (${result.originalLineCount} lines) with ${result.newLineCount} new lines. ` +
+                  `File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). ` +
+                  `IMPORTANT: Line numbers have shifted by ${result.lineDelta}. Use read_current_file or read_lines before your next edit.`
         };
     }, {
         type: 'function',
@@ -151,27 +161,35 @@ export function registerEditTools(registry) {
             };
         }
 
+        // gitea#511 — capture pre-edit lines BEFORE insertAtLine mutates.
+        const preEditLines = State.editorContent?.split('\n') ?? [];
+
         // Use the insertAtLine function from editor.js
         const result = insertAtLine(after_line, content);
-        
+
         if (result.error) {
             return result;
         }
-        
+
         // Record this edit for future drift detection
         EditTracker.recordEdit(State.currentFile.path, 'insert', after_line, after_line, result.newLineCount);
-        
-        const ctx = _getEditContext(after_line + 1, result.newLineCount, result.totalLines);
-        
+
+        const insertStartLine = after_line + 1;
+        const seam = _detectAdjacentSeamDuplicate(preEditLines, insertStartLine, content);
+        const replaced_content = _renderReplacedContent(insertStartLine, content);
+
         return {
             success: true,
             path: State.currentFile.path,
             inserted_after: result.insertedAfter,
             lines_inserted: result.newLineCount,
             total_lines: result.totalLines,
-            context: ctx,
-            message: `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. ` +
-                     `IMPORTANT: All lines after ${after_line} shifted by +${result.newLineCount}. Use read_lines before your next edit.`
+            replaced_content,
+            ...(seam ? { warnings: [seam] } : {}),
+            message: seam
+                ? `Inserted ${result.newLineCount} lines after line ${after_line}. ⚠️ ${seam.message} Use read_lines before your next edit.`
+                : `Inserted ${result.newLineCount} lines after line ${after_line}. File now has ${result.totalLines} lines. ` +
+                  `IMPORTANT: All lines after ${after_line} shifted by +${result.newLineCount}. Use read_lines before your next edit.`
         };
     }, {
         type: 'function',
@@ -267,5 +285,11 @@ export function registerEditTools(registry) {
 
 // Test seam — exported so tests can verify the 5/5 context width and the
 // stale-window slice behavior in isolation. Underscore prefix signals
-// "internal".
-export const _internals = { _getEditContext, _getStaleWindow };
+// "internal". The seam-detection helpers are re-exported from
+// multifile-tools._internals to give parity tests a single barrel.
+export const _internals = {
+    _getEditContext,
+    _getStaleWindow,
+    _detectAdjacentSeamDuplicate,
+    _renderReplacedContent,
+};

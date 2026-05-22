@@ -72,6 +72,64 @@ function _getEditContext(editStart, editLineCount, totalLines) {
 }
 
 /**
+ * Detect an adjacent-duplicate seam after a replace/insert edit.
+ *
+ * Origin: gitea#511 — qwen-3-6-plus dogfood (HTML-Games PR #320, 123-req
+ * session, 2026-05-22). The model passed `start_line=X+1` while writing
+ * `new_content` that began with what was at line X, so line X survived the
+ * replacement *and* the first new line re-emitted it. ~25–35 wasted calls
+ * (~$0.80 of $3.14) in one session went into re-read / re-edit cleanup.
+ *
+ * Predicate (true → warn):
+ *   1. `startLine >= 2` (line 1 has no prior line to duplicate against)
+ *   2. trimmed `preEditLines[startLine - 2]` === trimmed `newContent.split('\n')[0]`
+ *   3. that line matches one of STRUCTURAL_TOKEN_PATTERNS (so we skip routine
+ *      lines like `})` / `;` / blank that may duplicate intentionally)
+ *   4. line is non-trivial (≥ 4 trimmed chars) — guards bare braces and JSDoc terminators.
+ *
+ * Returns `{ type, line, message }` when the seam fires, else `null`.
+ */
+const STRUCTURAL_TOKEN_PATTERNS = [
+    /^\s*import\s+/,
+    /^\s*export\s+/,
+    /^\s*(async\s+)?function\s+\w+\s*\(/,
+    /^\s*(const|let|var)\s+\w+\s*=\s*(async\s+)?(function\b|\([^)]*\)\s*=>|\w+\s*=>)/,
+    /^\s*\/\*\*/,
+    /^\s*class\s+\w+/,
+    /^\s*(return|throw)\s+\{/,
+];
+
+function _detectAdjacentSeamDuplicate(preEditLines, startLine, newContent) {
+    if (!Array.isArray(preEditLines) || startLine < 2) return null;
+    const priorLine = (preEditLines[startLine - 2] ?? '').replace(/\s+$/, '');
+    const firstNew = (typeof newContent === 'string' ? newContent.split('\n')[0] : '').replace(/\s+$/, '');
+    if (!priorLine || priorLine !== firstNew) return null;
+    // Threshold 3 admits bare JSDoc opener `/**` (one of the load-bearing
+    // signals in #511's dogfood) while still rejecting `{`, `}`, `})`, `;`.
+    if (priorLine.trim().length < 3) return null;
+    if (!STRUCTURAL_TOKEN_PATTERNS.some(re => re.test(priorLine))) return null;
+    return {
+        type: 'adjacent_duplicate_seam',
+        line: startLine,
+        message: `Edit at L${startLine} appears to duplicate the surviving prior line ("${priorLine.trim().slice(0, 60)}"). Verify — this may be an off-by-one in start_line.`,
+    };
+}
+
+/**
+ * Render the literal new content as a line-numbered slice for the success
+ * envelope, replacing the pre-2.91.0 ±5-line `context:` field (gitea#511 §2).
+ * Returns a string formatted like `_getEditContext` ("${n}: ${text}") but
+ * restricted to the inserted/replaced range — no neighbor lines.
+ */
+function _renderReplacedContent(startLine, newContent) {
+    if (typeof newContent !== 'string') return null;
+    return newContent
+        .split('\n')
+        .map((line, i) => `${startLine + i}: ${line}`)
+        .join('\n');
+}
+
+/**
  * Build a 5-before / 5-after window of the *current* file content around
  * a drift-suggested target range. Inlined into STALE LINE NUMBERS errors
  * so the model can re-anchor without a follow-up read_lines round-trip.
@@ -221,11 +279,17 @@ export function registerMultiFileTools(registry) {
                 };
             }
 
+            // gitea#511 — capture pre-edit lines BEFORE replaceRange mutates
+            // State.editorContent; the seam check needs the surviving prior line.
+            const preEditLines = State.editorContent?.split('\n') ?? [];
+
             const result = replaceRange(start_line, end_line, new_content);
             if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'replace', start_line, end_line, result.lineDelta);
-            const ctx = _getEditContext(start_line, result.newLineCount, result.totalLines);
+
+            const seam = _detectAdjacentSeamDuplicate(preEditLines, start_line, new_content);
+            const replaced_content = _renderReplacedContent(start_line, new_content);
 
             return {
                 success: true, path, operation: 'replace',
@@ -234,8 +298,11 @@ export function registerMultiFileTools(registry) {
                 new_line_count: result.newLineCount,
                 line_delta: result.lineDelta,
                 total_lines: result.totalLines,
-                context: ctx,
-                message: `Replaced lines ${start_line}-${end_line} in ${path}. File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). Re-read before next edit.`
+                replaced_content,
+                ...(seam ? { warnings: [seam] } : {}),
+                message: seam
+                    ? `Replaced lines ${start_line}-${end_line} in ${path}. ⚠️ ${seam.message} Re-read before next edit.`
+                    : `Replaced lines ${start_line}-${end_line} in ${path}. File now has ${result.totalLines} lines (${result.lineDelta >= 0 ? '+' : ''}${result.lineDelta}). Re-read before next edit.`
             };
 
         } else if (op === 'insert') {
@@ -262,19 +329,28 @@ export function registerMultiFileTools(registry) {
                 };
             }
 
+            // gitea#511 — capture pre-edit lines BEFORE insertAtLine mutates.
+            const preEditLines = State.editorContent?.split('\n') ?? [];
+
             const result = insertAtLine(insertAfter, new_content);
             if (result.error) return { ...result, code: result.code || 'edit_error' };
 
             EditTracker.recordEdit(path, 'insert', insertAfter, insertAfter, result.newLineCount);
-            const ctx = _getEditContext(insertAfter + 1, result.newLineCount, result.totalLines);
+
+            const insertStartLine = insertAfter + 1;
+            const seam = _detectAdjacentSeamDuplicate(preEditLines, insertStartLine, new_content);
+            const replaced_content = _renderReplacedContent(insertStartLine, new_content);
 
             return {
                 success: true, path, operation: 'insert',
                 inserted_after: insertAfter,
                 lines_inserted: result.newLineCount,
                 total_lines: result.totalLines,
-                context: ctx,
-                message: `Inserted ${result.newLineCount} lines after line ${insertAfter} in ${path}. File now has ${result.totalLines} lines.`
+                replaced_content,
+                ...(seam ? { warnings: [seam] } : {}),
+                message: seam
+                    ? `Inserted ${result.newLineCount} lines after line ${insertAfter} in ${path}. ⚠️ ${seam.message}`
+                    : `Inserted ${result.newLineCount} lines after line ${insertAfter} in ${path}. File now has ${result.totalLines} lines.`
             };
 
         } else if (op === 'delete') {
@@ -457,4 +533,10 @@ export function registerMultiFileTools(registry) {
 // Test seam — exported so tests can verify the 5/5 context width and the
 // stale-window slice behavior in isolation, without needing to drive
 // edit_file through a full tool loop. Underscore prefix signals "internal".
-export const _internals = { _getEditContext, _getStaleWindow };
+export const _internals = {
+    _getEditContext,
+    _getStaleWindow,
+    _detectAdjacentSeamDuplicate,
+    _renderReplacedContent,
+    STRUCTURAL_TOKEN_PATTERNS,
+};

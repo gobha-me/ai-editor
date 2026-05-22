@@ -42,6 +42,62 @@ T.eq(ctxEdit, ctxMulti, 'edit-tools._getEditContext matches multifile-tools._get
 State.editorContent = origEditorContent;
 
 // ============================================
+// gitea#511 — edit_file replace/insert envelopes carry `replaced_content`
+// (literal new lines with line numbers), NOT `context` (±5 neighbors).
+// `_getEditContext` is still used by the delete branch + replace_lines'
+// delete sibling, so the helper itself is untouched; only the field name
+// + slice scope changed.
+// ============================================
+T.suite('gitea#511 — replaced_content slice shape');
+
+const renderMulti = multifileInternals._renderReplacedContent;
+const renderEdit = editInternals._renderReplacedContent;
+
+T.assert(typeof renderMulti === 'function', 'multifile _renderReplacedContent is exported');
+T.assert(typeof renderEdit === 'function', 'edit-tools _renderReplacedContent is exported (re-imported barrel)');
+
+const sliceSingle = renderMulti(42, 'const x = 1;');
+T.eq(sliceSingle, '42: const x = 1;', 'single-line slice is rendered with start_line');
+
+const sliceMulti = renderMulti(10, 'a\nb\nc');
+T.eq(sliceMulti, '10: a\n11: b\n12: c', 'multi-line slice carries consecutive line numbers');
+
+const sliceParity = renderEdit(10, 'a\nb\nc');
+T.eq(sliceParity, sliceMulti, 'edit-tools._renderReplacedContent matches multifile-tools barrel');
+
+T.eq(renderMulti(1, null), null, 'null new_content yields null (no field emitted)');
+
+// Predicate parity: structural-token duplicate fires from either barrel
+const detectMulti = multifileInternals._detectAdjacentSeamDuplicate;
+const detectEdit = editInternals._detectAdjacentSeamDuplicate;
+T.assert(typeof detectMulti === 'function', 'multifile _detectAdjacentSeamDuplicate is exported');
+T.assert(typeof detectEdit === 'function', 'edit-tools sees the same helper via the barrel re-export');
+
+const seamFires = detectMulti(
+    ['const a = 1;', 'import { foo } from "./a";', 'const x = 2;'],
+    3,
+    'import { foo } from "./a";\nconst y = 3;',
+);
+T.assert(seamFires, 'import-duplicate seam fires from multifile barrel');
+T.eq(seamFires.line, 3, 'warning carries the start_line');
+T.eq(seamFires.type, 'adjacent_duplicate_seam', 'warning has the expected type');
+
+const seamFiresEdit = detectEdit(
+    ['const a = 1;', 'import { foo } from "./a";', 'const x = 2;'],
+    3,
+    'import { foo } from "./a";\nconst y = 3;',
+);
+T.eq(seamFiresEdit?.line, 3, 'same predicate fires through edit-tools barrel');
+
+// Non-structural duplicate stays silent
+const seamSilent = detectMulti(
+    ['function f() {', '})', 'next();'],
+    3,
+    '})\ndoStuff();',
+);
+T.eq(seamSilent, null, '`})` is not a structural token — warning suppressed');
+
+// ============================================
 // L1 — _getStaleWindow returns 5/5 slice around suggested range
 // ============================================
 T.suite('L1 — STALE LINE NUMBERS content window');
