@@ -53,8 +53,8 @@ export function populatePluginsTab() {
             <div class="plugin-install-status" id="pluginInstallStatus"></div>
             <div class="plugin-install-hint" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>External plugins use <code>window.AIEditor</code> to access Plugins, EventBus, State, etc.</span>
-                <button type="button" class="btn btn-primary" id="btnCreatePlugin" style="white-space: nowrap; margin-left: 0.5rem;">
-                    🧩 Create Plugin
+                <button type="button" class="btn btn-primary" id="btnCreatePlugin" style="white-space: nowrap; margin-left: 0.5rem;" aria-label="Create a new plugin">
+                    ${Icon.Puzzle} Create Plugin
                 </button>
             </div>
         </div>
