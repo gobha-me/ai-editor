@@ -29,7 +29,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { buildRefusalPayload } from '../js/chat/refusal-hints.js';
+import {
+    isExplorationProgress,
+    PAGING_PROGRESS_TOOLS,
+} from '../js/chat/exploration-progress.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /* -------------------------------------------------------------------------- */
 /* Spec 1 — variedArgs:true prose accuracy (no "identical args" lie)           */
@@ -94,9 +103,12 @@ const DUP_REFUSE_THRESHOLD = 3;
 /**
  * Tiny algorithm fixture mirroring the in-loop state. Drift here would
  * silently un-pin the threshold values; pin them via the constants above.
+ * Imports `isExplorationProgress` from production so the gitea#517 exception
+ * is exercised against the real predicate (no re-implementation drift).
  */
 function simulateLoop(calls) {
     let lastInvokedToolName = null;
+    let lastInvokedArgs = null;
     let sameToolStreak = 0;
     const exactArgsStreak = new Map();
     const cacheByKey = new Map();
@@ -109,11 +121,14 @@ function simulateLoop(calls) {
         exactArgsStreak.set(cacheKey, argsStreak);
 
         if (tool === lastInvokedToolName) {
-            sameToolStreak++;
+            if (!isExplorationProgress(tool, lastInvokedArgs, args)) {
+                sameToolStreak++;
+            }
         } else {
             sameToolStreak = 1;
         }
         lastInvokedToolName = tool;
+        lastInvokedArgs = args;
 
         const exactArgsRefuse = isDup && argsStreak >= DUP_REFUSE_THRESHOLD;
         const sameToolRefuse = sameToolStreak >= SAME_TOOL_REFUSE_THRESHOLD;
@@ -229,4 +244,181 @@ test('same-tool refuses BEFORE exact-args when args genuinely vary', () => {
     assert.equal(trace[4].exactArgsRefuse, false);
     assert.equal(trace[4].variedArgs, true,
         'when ONLY same-tool fires, variedArgs:true → envelope says "varying args"');
+});
+
+/* -------------------------------------------------------------------------- */
+/* Spec 4 — gitea#517 progress-signal exception (paging + narrowing)          */
+/* -------------------------------------------------------------------------- */
+
+test('PAGING_PROGRESS_TOOLS holds the two tools the issue named (read_lines, search_in_files)', () => {
+    assert.equal(PAGING_PROGRESS_TOOLS.size, 2,
+        'wider extension should land in a later slice with its own rationale');
+    assert.ok(PAGING_PROGRESS_TOOLS.has('read_lines'));
+    assert.ok(PAGING_PROGRESS_TOOLS.has('search_in_files'));
+});
+
+test('isExplorationProgress: read_lines monotonic start_line on same path = progress', () => {
+    assert.equal(
+        isExplorationProgress('read_lines',
+            { path: 'a.js', start_line: 100, end_line: 200 },
+            { path: 'a.js', start_line: 200, end_line: 300 }),
+        true);
+    // Same start_line is NOT progress (stuck).
+    assert.equal(
+        isExplorationProgress('read_lines',
+            { path: 'a.js', start_line: 100, end_line: 200 },
+            { path: 'a.js', start_line: 100, end_line: 250 }),
+        false);
+    // Backwards start_line is NOT progress.
+    assert.equal(
+        isExplorationProgress('read_lines',
+            { path: 'a.js', start_line: 200, end_line: 300 },
+            { path: 'a.js', start_line: 100, end_line: 200 }),
+        false);
+    // Different path is NOT progress in this dimension (different-tool semantics will reset elsewhere).
+    assert.equal(
+        isExplorationProgress('read_lines',
+            { path: 'a.js', start_line: 100, end_line: 200 },
+            { path: 'b.js', start_line: 200, end_line: 300 }),
+        false);
+});
+
+test('isExplorationProgress: search_in_files narrowing path or lowering max_results = progress', () => {
+    // Adding a path scope where there was none = progress.
+    assert.equal(
+        isExplorationProgress('search_in_files',
+            { query: 'continue' },
+            { query: 'continue', path: 'js/chat/' }),
+        true);
+    // Deeper path = progress.
+    assert.equal(
+        isExplorationProgress('search_in_files',
+            { query: 'continue', path: 'js/' },
+            { query: 'continue', path: 'js/chat/' }),
+        true);
+    // Lower max_results = progress (narrowing).
+    assert.equal(
+        isExplorationProgress('search_in_files',
+            { query: 'continue', max_results: 20 },
+            { query: 'continue', max_results: 5 }),
+        true);
+    // Same path + same max_results + only query varied = NOT progress (stuck reformulation).
+    assert.equal(
+        isExplorationProgress('search_in_files',
+            { query: 'continue' },
+            { query: 'continue button' }),
+        false);
+    // Widening path (a/ → '' or a/b/ → a/) is NOT progress.
+    assert.equal(
+        isExplorationProgress('search_in_files',
+            { query: 'q', path: 'js/chat/' },
+            { query: 'q', path: 'js/' }),
+        false);
+});
+
+test('isExplorationProgress: non-paging tools always return false', () => {
+    assert.equal(isExplorationProgress('read_file', {}, {}), false);
+    assert.equal(isExplorationProgress('list_files', { dir: 'a' }, { dir: 'b' }), false);
+    assert.equal(isExplorationProgress('write_file', {}, {}), false);
+});
+
+test('isExplorationProgress: null/undefined args → false (defensive)', () => {
+    assert.equal(isExplorationProgress('read_lines', null, { path: 'a.js', start_line: 1 }), false);
+    assert.equal(isExplorationProgress('read_lines', { path: 'a.js', start_line: 1 }, null), false);
+    assert.equal(isExplorationProgress('read_lines', null, null), false);
+});
+
+test('gitea#517: 5 read_lines calls paging through a large file → NOT refused', () => {
+    const trace = simulateLoop([
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1,   end_line: 100 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 100, end_line: 200 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 200, end_line: 300 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 300, end_line: 400 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 400, end_line: 500 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 500, end_line: 600 } },
+    ]);
+    for (const row of trace) {
+        assert.equal(row.refused, false,
+            `read_lines paging (start_line=${row.args.start_line}) must NOT refuse`);
+    }
+    // The streak holds at 1 across all calls (held, not grown, not reset).
+    assert.equal(trace[5].sameToolStreak, 1,
+        'sameToolStreak held at 1 across 6 progress-bearing calls');
+});
+
+test('gitea#517: 5 read_lines calls with same start_line (stuck) → still refused at call 5', () => {
+    // Same path + same start_line + only end_line varies → NOT progress; streak grows.
+    const trace = simulateLoop([
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1, end_line: 100 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1, end_line: 101 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1, end_line: 102 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1, end_line: 103 } },
+        { tool: 'read_lines', args: { path: 'big.js', start_line: 1, end_line: 104 } },
+    ]);
+    for (let i = 0; i < 4; i++) {
+        assert.equal(trace[i].refused, false,
+            `stuck call ${i + 1} should not yet refuse`);
+    }
+    assert.equal(trace[4].refused, true, 'stuck pattern still refuses at 5');
+    assert.equal(trace[4].sameToolRefuse, true);
+});
+
+test('gitea#517: 5 search_in_files calls narrowing scope → NOT refused', () => {
+    const trace = simulateLoop([
+        { tool: 'search_in_files', args: { query: 'continue' } },
+        { tool: 'search_in_files', args: { query: 'continue', path: 'js/' } },
+        { tool: 'search_in_files', args: { query: 'continue', path: 'js/chat/' } },
+        { tool: 'search_in_files', args: { query: 'continue', path: 'js/chat/messages/' } },
+        { tool: 'search_in_files', args: { query: 'continue', path: 'js/chat/messages/', max_results: 5 } },
+    ]);
+    for (const row of trace) {
+        assert.equal(row.refused, false,
+            `narrowing search (path=${row.args.path}, max=${row.args.max_results}) must NOT refuse`);
+    }
+});
+
+test('gitea#517: 5 search_in_files calls with random reformulation → still refused', () => {
+    // No path narrowing, no max_results change — only query reformulation.
+    const trace = simulateLoop([
+        { tool: 'search_in_files', args: { query: 'continue button' } },
+        { tool: 'search_in_files', args: { query: 'continue affordance' } },
+        { tool: 'search_in_files', args: { query: 'continue' } },
+        { tool: 'search_in_files', args: { query: 'btn-continue' } },
+        { tool: 'search_in_files', args: { query: 'resumeChat' } },
+    ]);
+    assert.equal(trace[4].refused, true,
+        'random reformulation without narrowing still trips refusal');
+    assert.equal(trace[4].sameToolRefuse, true);
+    assert.equal(trace[4].variedArgs, true);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Spec 5 — source-scan pin: production loop calls isExplorationProgress      */
+/* -------------------------------------------------------------------------- */
+
+test('tool-loop-core.js calls isExplorationProgress in the streak-increment block', async () => {
+    const src = await readFile(
+        resolve(__dirname, '../js/chat/tool-loop-core.js'),
+        'utf8'
+    );
+    // The call site is the gitea#517 fix; if someone refactors it away
+    // without updating exploration-progress.js or the typedef, this fails loud.
+    assert.match(src, /from '\.\/exploration-progress\.js'/,
+        'tool-loop-core.js must import the predicate from exploration-progress.js');
+    assert.match(src, /isExplorationProgress\(toolName, lastInvokedArgs, args\)/,
+        'tool-loop-core.js must invoke isExplorationProgress with (toolName, lastInvokedArgs, args)');
+    assert.match(src, /let lastInvokedArgs = null;/,
+        'lastInvokedArgs declaration hoisted next to lastInvokedToolName');
+    assert.match(src, /lastInvokedArgs = args;/,
+        'lastInvokedArgs is updated after each tool call');
+});
+
+test('exploration-progress.js pins PAGING_PROGRESS_TOOLS to the two tools the issue named', async () => {
+    const src = await readFile(
+        resolve(__dirname, '../js/chat/exploration-progress.js'),
+        'utf8'
+    );
+    // Extension belongs in a later slice with its own rationale.
+    assert.match(src, /PAGING_PROGRESS_TOOLS = new Set\(\['read_lines', 'search_in_files'\]\)/,
+        'PAGING_PROGRESS_TOOLS must contain read_lines + search_in_files (extension belongs in a later slice)');
 });

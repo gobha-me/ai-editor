@@ -4,6 +4,37 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.93.0] - 2026-05-22
+
+### Fix — `find_relevant_files` auto-bootstraps the indexer on cold sessions (gitea#516)
+
+The cold-session return path used to be a dead-end: `find_relevant_files` returned `indexer_not_ready` with the hint "Run `index_project`, then retry," but the model had no way to know whether indexing had already started. On a fresh chat in an un-indexed project the recommended first-step burned a tool call to discover this, then fell back to `search_in_files` / `read_lines` — which then ate the same-tool streak guard (see gitea#517 below).
+
+The fix at [`js/tools/context-tools.js:41`](js/tools/context-tools.js#L41) reads `RetrievalManager.isIndexing()` before returning the envelope; when the indexer is idle, fires a fire-and-forget `RetrievalManager.indexProject()` so the next call has a chance to clear the gate. The hint text now pivots between `"Indexing started in background — retry find_relevant_files in a moment"` (idle path) and `"Indexing already in progress — retry find_relevant_files in a moment"` (busy path). Both branches preserve the existing `"Meanwhile use get_project_tree + read_file"` off-ramp so the model has a useful action even before indexing completes.
+
+`indexProject` is idempotent at the manager (short-circuits if already indexing or already indexed), so the fire-and-forget call is safe even if a `project:loaded` listener already kicked it off. The `.catch` handler logs to `console.warn` and does not rethrow — a failed background bootstrap must not surface as a tool error.
+
+New [`tests/test-find-relevant-files-bootstrap.mjs`](tests/test-find-relevant-files-bootstrap.mjs) (**6 subtests**) follows the source-scan idiom (`test-pr-review-draft-vs-conflict.mjs` spec 4; the production handler imports browser-bound modules and isn't directly Node-importable) — pins `wasIdle` derivation, fire-and-forget guard, hint-text pivot, envelope back-compat shape, threshold constant, and `.catch` handler shape. Behavior verification lives in the manual browser smoke step.
+
+Closes gitea#516.
+
+### Fix — same-tool streak guard holds on legit large-file exploration (gitea#517)
+
+The `SAME_TOOL_REFUSE_THRESHOLD = 5` guard shipped at 2.86.0 (gitea#496) refused after 5 consecutive same-name calls regardless of arg variation. Field replay (qwen-3-6-plus reviewing github#41, a 1251-line file): paging via `read_lines` in 100-line chunks (`L100-200 → L200-300 → L300-400 → L400-500 → L500-600`) tripped the refusal at call 5, forcing a context-switch even though every call made forward progress. Same shape for `search_in_files` when narrowing scope per the documented hint from its own truncation envelope (`{query} → {query, path: 'js/'} → {query, path: 'js/chat/'}` etc).
+
+The fix at [`js/chat/tool-loop-core.js`](js/chat/tool-loop-core.js) adds `isExplorationProgress(toolName, prevArgs, currArgs)` — a small predicate over a tight `PAGING_PROGRESS_TOOLS = new Set(['read_lines', 'search_in_files'])` allowlist:
+
+- `read_lines`: same path + monotonically increasing `start_line` = progress
+- `search_in_files`: adding a `path` scope where there was none, OR going to a deeper path, OR lowering `max_results` = progress
+
+When the predicate returns true, the same-tool streak is *held* (no increment) instead of incremented or reset. Holding mirrors the "different tool resets" semantics conservatively — a random pattern that emerges mid-session still gets caught. The args-exact guard (`DUP_REFUSE_THRESHOLD = 3`) is unaffected; identical-args repeats still trip first.
+
+`LoopState` in [`js/chat/agent-loop-contracts.js`](js/chat/agent-loop-contracts.js) gains a `lastInvokedArgs` field documenting the predicate input. `DupStreakPolicy` gets a note describing the exception. The allowlist is held tight to the two tools the issue named — wider extension belongs in a later slice with its own rationale per the "don't add abstractions beyond what's needed" rule.
+
+[`tests/test-tool-loop-anti-loop.mjs`](tests/test-tool-loop-anti-loop.mjs) extends 11 → 20 subtests: direct unit tests for `isExplorationProgress` (paging, narrowing, non-paging tools, defensive null args), full loop-simulation traces for paging and narrowing scenarios (both must NOT refuse), regression scenarios for stuck patterns (same `start_line`, random reformulation — both must still refuse), and a source-scan pin on the production call site so accidental removal fails loud. The existing `simulateLoop` fixture imports `isExplorationProgress` from production so the test exercises the real predicate (no re-implementation drift).
+
+Closes gitea#517.
+
 ## [2.92.2] - 2026-05-22
 
 ### Fix — Create Plugin button uses Icon.Puzzle SVG instead of raw 🧩 emoji (gobha-me/ai-editor#44)

@@ -53,6 +53,7 @@ import {
 } from './tool-classifications.js';
 import { isStatefulRead, getStatefulReadToolsLive } from './cache-policy.js';
 import { buildRefusalPayload } from './refusal-hints.js';
+import { isExplorationProgress, PAGING_PROGRESS_TOOLS } from './exploration-progress.js';
 import { getContextScale } from '../llm.js';
 
 const NO_PROGRESS_LIMIT = 3;
@@ -216,6 +217,9 @@ export async function runToolLoop(context, hooks, transport) {
     // the OR-gate at `SAME_TOOL_REFUSE_THRESHOLD`. Tracked across all
     // rounds in this request; reset when a different tool is invoked.
     let lastInvokedToolName = null;
+    // gitea#517 — args of the previous same-name call, compared via
+    // `isExplorationProgress` to hold the streak on legit paging/narrowing.
+    let lastInvokedArgs = null;
     let sameToolStreak = 0;
     let _hasRetried = false;  // request-scoped one-shot; do not hoist.
 
@@ -386,12 +390,21 @@ export async function runToolLoop(context, hooks, transport) {
                 // gitea#496 — same-name streak (args-independent). Tripping
                 // a different tool resets to 1; consecutive same-name calls
                 // grow monotonically across rounds.
+                // gitea#517 — exception: when the same-name call signals
+                // forward exploration progress (paging start_line, narrowing
+                // search scope), hold the streak instead of growing. Don't
+                // reset to 1 either — a random pattern could still emerge
+                // mid-session and we want to catch it. Holding mirrors the
+                // "different tool resets" semantics conservatively.
                 if (toolName === lastInvokedToolName) {
-                    sameToolStreak++;
+                    if (!isExplorationProgress(toolName, lastInvokedArgs, args)) {
+                        sameToolStreak++;
+                    }
                 } else {
                     sameToolStreak = 1;
                 }
                 lastInvokedToolName = toolName;
+                lastInvokedArgs = args;
 
                 const exactArgsRefuse = isDup && streak >= DUP_REFUSE_THRESHOLD;
                 const sameToolRefuse = sameToolStreak >= SAME_TOOL_REFUSE_THRESHOLD;

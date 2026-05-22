@@ -228,6 +228,7 @@
  * @property {Map<string, number>} duplicateStreak  Per-`callKeyHash` consecutive-identical counter (args-exact).
  * @property {number} sameToolStreak       Consecutive same-name calls (args-independent). Trips `SAME_TOOL_REFUSE_THRESHOLD`. gitea#496.
  * @property {string|null} lastInvokedToolName  Most recent `toolName` seen by the loop; resets `sameToolStreak` when a different name is invoked.
+ * @property {object|null} lastInvokedArgs  Most recent `args` payload for the same-name tool. gitea#517 — compared against the current call's args by `isExplorationProgress` in `./exploration-progress.js`; when paging (`read_lines` start_line monotonically increasing on same path) or narrowing (`search_in_files` adding path scope / lowering max_results), the `sameToolStreak` increment is skipped so legit large-file navigation doesn't trip `SAME_TOOL_REFUSE_THRESHOLD`.
  * @property {Map<string, object>} toolCallCache    Same-request LRU; key = `callKeyHash`.
  * @property {Array<object>} toolActionLog          Cross-request action log; bounded ~50 entries.
  * @property {Array<object>} [queuedInputFIFO]      User input typed during the previous round; drained at iteration boundary.
@@ -292,11 +293,21 @@
  * resets streak (a) to zero. Streak (b) resets only on a different tool
  * *name*.
  *
+ * gitea#517 — streak (b) also HOLDS (no increment, no reset) when the
+ * same-name call signals forward exploration progress against the
+ * previous call's args. `isExplorationProgress` in `./exploration-progress.js`
+ * defines the predicate; `PAGING_PROGRESS_TOOLS` enumerates participants
+ * (currently `read_lines`, `search_in_files`). Holding lets legit
+ * large-file paging and search-scope narrowing run their course without
+ * tripping `SAME_TOOL_REFUSE_THRESHOLD`, while still catching random
+ * patterns that emerge later in the session.
+ *
  * @typedef {object} DupStreakPolicy
  * @property {number} thresholdExactArgs              e.g. `DUP_REFUSE_THRESHOLD = 3` in `./tool-loop-core.js`.
  * @property {number} thresholdSameName               e.g. `SAME_TOOL_REFUSE_THRESHOLD = 5` in `./tool-loop-core.js`. gitea#496.
  * @property {(toolName: string, args: object) => string} callKeyHash
  * @property {boolean} intervening_progress_resets
+ * @property {(toolName: string, prevArgs: object, currArgs: object) => boolean} [explorationProgressOverride]  gitea#517 — when true, the same-name streak holds instead of incrementing for paging-friendly tools.
  */
 
 // JSDoc-only module; no runtime exports.

@@ -40,6 +40,17 @@ async function findRelevantFiles({ query, max_files }) {
     const eligible = RetrievalManager.getEligibleFileCount();
     if (eligible > 0 && indexed / eligible < READINESS_THRESHOLD) {
         const coverage = indexed / eligible;
+        // gitea#516 — fire-and-forget bootstrap so the next call has a chance
+        // to clear the gate without the model burning a tool call on a
+        // dead-end hint. `indexProject` is idempotent at the manager (short-
+        // circuits if already indexing or already indexed); safe to call even
+        // if a `project:loaded` listener already kicked it off.
+        const wasIdle = !RetrievalManager.isIndexing();
+        if (wasIdle) {
+            RetrievalManager.indexProject().catch(err => {
+                console.warn('[find_relevant_files] background bootstrap failed:', err?.message);
+            });
+        }
         return {
             success: false,
             error: 'indexer_not_ready',
@@ -47,7 +58,9 @@ async function findRelevantFiles({ query, max_files }) {
             estimated_total: eligible,
             coverage,
             message: `Index not ready: ${indexed} of ${eligible} eligible files indexed (${(coverage * 100).toFixed(1)}% < ${(READINESS_THRESHOLD * 100).toFixed(0)}% threshold).`,
-            hint: 'Run index_project, then retry. For navigation in the meantime, use get_project_tree + read_file.',
+            hint: wasIdle
+                ? 'Indexing started in background — retry find_relevant_files in a moment. Meanwhile use get_project_tree + read_file.'
+                : 'Indexing already in progress — retry find_relevant_files in a moment. Meanwhile use get_project_tree + read_file.',
             files: []
         };
     }
