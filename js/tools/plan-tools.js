@@ -38,6 +38,7 @@
  * @module tools/plan-tools
  */
 
+import { State } from '../core.js';
 import { setPendingPlanApproval, getApprovedPlan } from '../chat/state.js';
 
 /**
@@ -53,6 +54,26 @@ export function registerPlanTools(registry) {
             return { error: 'submit_plan_for_approval requires a non-empty "plan" string (markdown).' };
         }
         const plan = args.plan.trim();
+        // gitea#499 — idempotency guard. If the same plan body was already
+        // approved in this conversation AND any non-issue tab still carries
+        // uncommitted edits, refuse the re-submission instead of mounting a
+        // second approval card. The executor's prior work is in flight; a
+        // fresh approval would restart it from step 1 (~2-3M tokens of waste
+        // observed in the field session). Mirrors the 2.84.0 / gitea#493
+        // dirty-tab idiom in `js/tools/pr-tools.js`.
+        const approvedSlot = getApprovedPlan();
+        if (approvedSlot && approvedSlot.plan === plan) {
+            const dirtyTabs = (State.openTabs || []).filter(t => t.dirty && t.type !== 'issue');
+            if (dirtyTabs.length > 0) {
+                const dirty_paths = dirtyTabs.map(t => t.path);
+                return {
+                    error: `Plan already approved at ${new Date(approvedSlot.approvedAt).toISOString()} and ${dirty_paths.length} file(s) carry uncommitted edits (${dirty_paths.join(', ')}). Call read_approved_plan to recover the plan body and continue execution, or call commit_files to flush the in-flight edits. Do not re-submit the same plan.`,
+                    code: 'already_approved',
+                    dirty_paths,
+                    approved_at: approvedSlot.approvedAt,
+                };
+            }
+        }
         return new Promise((resolve) => {
             setPendingPlanApproval({ plan, resolve });
         });

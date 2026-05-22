@@ -43,6 +43,55 @@ Header bump + 11-minor catch-up rolled into [`docs/ARCHITECTURE.md`](docs/ARCHIT
 
 **Next re-eval slot:** `RE-EVAL following 2.73.0` (3 code minors past 2.70.0 anchor; cadence-from-anchor not cadence-from-last-actually-ran — already overdue by 13 minors at 2.86.0). The 5-slot overrun pattern (2.73, 2.76, 2.79, 2.82, 2.85) suggests the cadence rule itself may need re-evaluation at the next slot rather than mechanical anchor advancement; deferred as a paper-half discussion item for the next slot to weigh.
 
+## [2.87.0] - 2026-05-22
+
+### Fixed — `submit_plan_for_approval` accepts duplicate plan bodies (gitea#499)
+
+Field replay (qwen-3-6-plus on 2.85.0-dev, 2026-05-21 dogfood against `xcaliber/HTML-Games` issue #288): the model called `submit_plan_for_approval` a second time with a **byte-identical plan body** ~25 minutes into execution. The plan store accepted the duplicate and re-mounted the approval card; the user approved it again; the executor restarted from step 1 and "re-discovered" its own prior edits via `read_lines` against files it had already modified. The session burned ~7.0M tokens / $4.47 / 159 requests; an estimated 2–3M of those tokens were spent re-executing already-executed work after the second approval. The dirty-tabs list was the clean signal that nobody consulted — `create_pull_request` rejected the eventual PR with `code: 'uncommitted_changes'` listing all four still-dirty paths (the 2.84.0 / gitea#493 guard firing correctly), but the plan-submit path had no analogous check.
+
+**Fix.** Add an idempotency guard at the top of the `submit_plan_for_approval` handler in [`js/tools/plan-tools.js`](js/tools/plan-tools.js), after the two arg-validation returns and before the `setPendingPlanApproval` call that mounts the card. The guard reads the existing `getApprovedPlan()` slot (gitea#424 / 2.52.0) and compares the trimmed incoming plan against `approvedPlan.plan`. If they match AND `(State.openTabs || []).filter(t => t.dirty && t.type !== 'issue').length > 0`, the handler returns the T1-conformant failure envelope:
+
+```js
+{
+  error: `Plan already approved at <ISO> and N file(s) carry uncommitted edits (a, b, c). Call read_approved_plan to recover the plan body and continue execution, or call commit_files to flush the in-flight edits. Do not re-submit the same plan.`,
+  code: 'already_approved',
+  dirty_paths: [...],
+  approved_at: <ms>,
+}
+```
+
+The pattern is verbatim from the 2.84.0 / gitea#493 fix in [`js/tools/pr-tools.js`](js/tools/pr-tools.js) — same `State.openTabs` filter (`.dirty && t.type !== 'issue'`), same `dirty_paths` field name, same `error`/`code`/recovery-field envelope shape. Adding `import { State } from '../core.js';` to `plan-tools.js` is the only new import; `getApprovedPlan` was already imported at line 41 for the `read_approved_plan` companion tool.
+
+**Why both conditions (plan-body match AND dirty exists), not plan-body match alone.** A model that legitimately committed all prior work and then re-submits the same plan to restart from a clean state should not be blocked. The bug signature is "I'm re-submitting the same plan and there's still in-flight work" — `dirty.length > 0` is the discriminator. This matches the recommendation in the gitea#499 issue body verbatim and mirrors the discrimination logic in `create_pull_request` (where having uncommitted edits is the discriminator that converts an otherwise-legitimate PR creation into a fail-loud).
+
+**Why exact-byte trimmed equality, not canonicalization.** The dogfood bug fired on byte-identical JSON re-emitted from working memory unchanged. A canonicalizing comparator (sort steps, strip whitespace) is YAGNI until a near-duplicate case is observed; if it ever is, that's a follow-on with a recorded signal — same scope-discipline rule the 2.84.0 fix applied (`allow_dirty:true` escape hatch deferred until field evidence).
+
+**T1 failure-shape contract.** `'already_approved'` joins the `VALID_CODES` closed set in [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs). `submit_plan_for_approval` is **not** added to `T1_CONFORMANT_TOOLS` in this PR — graduating it would require codes on the two existing `{error: '...'}` arg-validation returns (lines 50/53 of `plan-tools.js`), which is scope creep. Tracked as a trivial follow-on.
+
+### Files
+
+| File | Change |
+|---|---|
+| [`js/tools/plan-tools.js`](js/tools/plan-tools.js) | EDIT — added `import { State } from '../core.js';`. New idempotency guard inside the `submit_plan_for_approval` handler: reads `getApprovedPlan()`; if `approvedSlot.plan === plan` AND `State.openTabs` has any dirty non-issue tab, returns the `code: 'already_approved'` envelope with `error` / `dirty_paths` / `approved_at` fields. Existing behavior (no prior approval, prior approval with no dirty tabs, prior approval with a different plan body) byte-identical. Guard precedes the `setPendingPlanApproval` call so the loud refusal short-circuits before any user-pause card mounts. |
+| [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) | EDIT — `'already_approved'` added to the `VALID_CODES` closed set. |
+| [`tests/test-plan-tools-duplicate-plan.mjs`](tests/test-plan-tools-duplicate-plan.mjs) | NEW — source-scan lint mirroring [`tests/test-pr-tools-uncommitted-changes.mjs`](tests/test-pr-tools-uncommitted-changes.mjs) (the gitea#493 / 2.84.0 sibling). 5 subtests pin: (1) handler reads `State.openTabs` + filters on `.dirty` + excludes `type === 'issue'`; (2) returns `code: 'already_approved'` on the duplicate branch; (3) returns a `dirty_paths` field; (4) reads `getApprovedPlan()` to compare against the incoming plan; (5) the guard appears textually BEFORE the `setPendingPlanApproval` call in the handler body. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | EDIT — "Last updated" header gains a 2.87.0 leader sentence. Preamble body untouched; the next RE-EVAL slot owns the absorption sweep (the prior re-eval block already acknowledged 2.83.0 / 2.85.0 / 2.86.0 drift for the next slot; 2.87.0 extends that note inline). |
+| [`CHANGELOG.md`](CHANGELOG.md) | EDIT — this entry. `[Unreleased]` left in place (the eleventh re-eval block from PR #501 stays at the top until the next re-eval slot folds it into ARCHITECTURE.md). |
+| [`js/version.js`](js/version.js) | EDIT — `'2.86.0'` → `'2.87.0'`. |
+
+### Verification
+
+- `node --test tests/test-plan-tools-duplicate-plan.mjs tests/test-tool-failure-shapes.mjs` — 5 new + existing subtests green.
+- `node --test tests/test-*.mjs` — full Node suite green (3707 baseline at 2.86.0 → 3712 expected at 2.87.0).
+- Browser smoke (manual): enter plan mode, submit a plan and approve it, make at least one `edit_file` so a tab is dirty (do not commit), then re-submit the byte-identical plan via `submit_plan_for_approval` — the tool result should be the new envelope (`code: 'already_approved'`, `dirty_paths` listing the dirty paths, `approved_at` ISO). After `commit_files`, the same re-submission should succeed (no dirty tabs → guard does not fire). A plan with a different body should mount the approval card normally.
+
+### Out of scope
+
+- "Executor amnesia" (failure B in the issue body) — the executor's lack of an "already-applied" memory across approvals is a separate bug surface that only matters when a non-duplicate plan is approved twice; not observed. The duplicate-plan guard removes the trigger condition responsible for the field budget leak.
+- `allow_dirty:true` escape hatch on `submit_plan_for_approval` — same YAGNI-until-field-evidence rule as the 2.84.0 `create_pull_request` escape hatch.
+- Canonicalizing plan-body comparator — defer until a near-duplicate (not byte-identical) case is observed.
+- Graduating `plan-tools.js` to `T1_CONFORMANT_TOOLS` in [`tests/test-tool-failure-shapes.mjs`](tests/test-tool-failure-shapes.mjs) — trivial follow-on.
+
 ## [2.86.0] - 2026-05-21
 
 ### Fixed — anti-loop guard defeated by 1-line arg variation (gitea#496)
