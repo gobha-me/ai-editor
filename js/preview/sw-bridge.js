@@ -24,6 +24,7 @@
 
 import { State } from '../core.js';
 import { Git } from '../git.js';
+import { resolveFileContent } from '../tools/_file-content.js';
 
 let _bridgeAttached = false;
 
@@ -116,6 +117,29 @@ async function _resolveWorkspacePath(path) {
     if (!cleanPath) {
         return { ok: false, status: 400, error: 'Empty path' };
     }
+    const lastDot = cleanPath.lastIndexOf('.');
+    const ext = lastDot >= 0 ? cleanPath.slice(lastDot + 1).toLowerCase() : '';
+
+    // gitea#500 — text extensions go through the same buffer-aware resolver
+    // the read tools use, so the preview reflects in-flight `edit_file` edits
+    // that haven't been committed yet. Binary extensions stay on the raw
+    // `Git.getFile` path so the atob byte-recovery contract (gitea#338) is
+    // preserved — and edit_file never touches binary tabs anyway.
+    if (!BINARY_EXTS.has(ext)) {
+        try {
+            const { content } = await resolveFileContent(cleanPath);
+            const bytes = new TextEncoder().encode(content);
+            return { ok: true, body: bytes.buffer, ext };
+        } catch (err) {
+            const status = err && err.status === 404 ? 404 : 500;
+            return {
+                ok: false,
+                status,
+                error: err && err.message ? err.message : 'Failed to read file',
+            };
+        }
+    }
+
     const { owner, repo } = State.currentProject;
     const branch = State.currentBranch || 'main';
     let file;
@@ -132,19 +156,8 @@ async function _resolveWorkspacePath(path) {
     if (!file || typeof file.content !== 'string') {
         return { ok: false, status: 404, error: 'Empty file envelope' };
     }
-    const lastDot = cleanPath.lastIndexOf('.');
-    const ext = lastDot >= 0 ? cleanPath.slice(lastDot + 1).toLowerCase() : '';
 
-    // Binary files: gitea.js's atob fallback gives us a raw-byte
-    // string (each char a byte). Re-interpret without UTF-8 to
-    // preserve the bytes. Text files: encode the JS string as UTF-8.
-    let bytes;
-    if (BINARY_EXTS.has(ext)) {
-        bytes = _binaryStringToBytes(file.content);
-    } else {
-        bytes = new TextEncoder().encode(file.content);
-    }
-
+    const bytes = _binaryStringToBytes(file.content);
     return {
         ok: true,
         body: bytes.buffer,
@@ -159,4 +172,15 @@ async function _resolveWorkspacePath(path) {
  */
 export function _resetForTests() {
     _bridgeAttached = false;
+}
+
+/**
+ * Test seam — exposes the internal path resolver so the buffer-aware
+ * contract (gitea#500 / 2.88.0) can be pinned without a MessageChannel
+ * round-trip. Not used by the bridge itself.
+ *
+ * @param {string} path
+ */
+export function _resolveWorkspacePathForTests(path) {
+    return _resolveWorkspacePath(path);
 }

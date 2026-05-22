@@ -43,6 +43,29 @@ Header bump + 11-minor catch-up rolled into [`docs/ARCHITECTURE.md`](docs/ARCHIT
 
 **Next re-eval slot:** `RE-EVAL following 2.73.0` (3 code minors past 2.70.0 anchor; cadence-from-anchor not cadence-from-last-actually-ran — already overdue by 13 minors at 2.86.0). The 5-slot overrun pattern (2.73, 2.76, 2.79, 2.82, 2.85) suggests the cadence rule itself may need re-evaluation at the next slot rather than mechanical anchor advancement; deferred as a paper-half discussion item for the next slot to weigh.
 
+## [2.88.0] - 2026-05-22
+
+### Fixed — preview SW bridge serves stale committed content (gitea#500)
+
+Field replay (qwen-3-6-plus on 2.85.0-dev, 2026-05-21 dogfood against `xcaliber/HTML-Games` issue #288 — same session as gitea#499): the model fixed a pre-existing syntax error in `oregon-trail/js/events/regions/desert.js`, then could not get the preview to reflect the fix despite **five `preview_stop` → `preview_start` cycles**. Each fresh `serverId` returned the same `preview_errors` payload pointing at the pre-edit content, even though `read_lines` against the same path returned the fixed content. The model spent ~30 minutes and an estimated 1M tokens cycling stop/start/snapshot/errors before the user interrupted; the broken preview also indirectly accelerated the gitea#499 plan-re-approval loop (with no working preview the model couldn't run the verify-and-screenshot step the system prompt requires, so it stayed in research-mode longer).
+
+**Root cause** is one layer deeper than the ticket's diagnosis (which framed it as a browser ES-module cache problem). [`js/preview/sw-bridge.js`](js/preview/sw-bridge.js) `_resolveWorkspacePath()` called `Git.getFile(owner, repo, path, branch)` directly, which for a remote provider HTTPs the provider's contents endpoint and returns the **committed** content. `edit_file` writes to `State.openTabs[i].content` / `State.editorContent` but does not commit to the remote until `commit_files`. So `read_lines` (which goes through the buffer-aware [`resolveFileContent`](js/tools/_file-content.js) — editor → tab → remote) saw the dirty edit, but the SW bridge re-read committed Gitea state on every preview restart. The browser ES-module cache was a red herring — `preview_start` allocates a fresh `serverId` which keys the iframe URL, so the module map already invalidates per restart; the bytes coming out of the SW were just stale at the source.
+
+**Fix.** Route text extensions in the SW bridge through `resolveFileContent` instead of raw `Git.getFile`. Binary extensions (`BINARY_EXTS` — woff2 / png / mp3 / wasm / etc.) stay on the existing `Git.getFile` path with the `_binaryStringToBytes` byte-recovery contract intact (gitea#338 regression guard — those file types never appear in `openTabs` because the editor never opens them as text). `BINARY_EXTS.has(ext)` becomes the routing fork; the text branch encodes via `TextEncoder` exactly as before, just from buffer-aware bytes. Error envelopes preserved: 503 for no-project, 400 for empty path, 404/500 mapped from thrown errors. New test seam `_resolveWorkspacePathForTests` exports the resolver so the contract can be pinned without a MessageChannel round-trip.
+
+Three layers in the resolver chain after the fix (text path):
+1. `State.currentFile.path === path` → `State.editorContent` (active tab's live buffer)
+2. `State.openTabs[i].path === path` → `openTabs[i].content` (background tab's saved-on-switch buffer)
+3. `Git.getFile(...)` → committed remote content (cold-file fallback)
+
+`tests/test-preview-sw-bridge.mjs` (new, 7 subtests) pins all four routes plus the gitea#500 trace itself: active-editor short-circuit, dirty-tab short-circuit, cold-file remote read, binary-extension byte-recovery preservation, 503 / 400 error envelopes, and the dogfood trace where `desert.js` is dirty in a non-active tab and the preview must serve the dirty content not the stale Gitea content.
+
+Pattern note. Sibling shape to gitea#472 / 2.71.0 (`list_dirty_files` stale tool-result cache) — both are "two read paths for the same logical file, only one is dirty-buffer-aware" instances. 2.71.0 lifted `cache: 'by-args'|'never'` onto `ToolDefinition` registration so the tool-result layer can't drift. The SW bridge sits one layer below the tool registry (it serves the iframe, not the model) and so wasn't covered by that fix; this is the buffer-awareness retrofit for that layer. The two new bridges-into-`_file-content.js` (read-tools cohort + preview SW bridge) suggest `js/tools/_file-content.js` may want to lift to a neutral location (`js/file-content.js`) at the next ICD #1 sweep — flagged but not done in this PR.
+
+Closes gitea#500.
+
+**Test count refresh.** 3712 (2.87.0) → **3719 / 3718 pass / 1 skipped / 0 fail** at 2.88.0 (+7 from `test-preview-sw-bridge.mjs`).
+
 ## [2.87.0] - 2026-05-22
 
 ### Fixed — `submit_plan_for_approval` accepts duplicate plan bodies (gitea#499)
