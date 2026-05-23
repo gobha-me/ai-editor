@@ -45,7 +45,8 @@ export function populatePluginsTab() {
             <div class="plugin-install-title">Install Plugin from URL</div>
             <div class="plugin-install-row">
                 <input type="text" id="pluginInstallUrl"
-                    placeholder="https://example.com/my-plugin.js">
+                    placeholder="https://example.com/my-plugin.js"
+                    aria-label="Plugin URL to install">
                 <button type="button" class="btn btn-primary" id="btnInstallPlugin">
                     Install
                 </button>

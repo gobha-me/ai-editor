@@ -4,13 +4,41 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
-### Docs — `docs/ROADMAP.md` trim
+## [2.95.0] - 2026-05-23
+
+Dogfood bugs cohort — two unrelated single-file findings from the same v2.94.0 follow-on triage (github#42 cost-dashboard silent null coerce + github#43 plugin URL input a11y). Same cohort shape as v2.94.0; both fixes carry their remediation in the issue body verbatim, so this minor is mechanical against those. Also promotes the docs-only `[Unreleased]` ROADMAP trim that has been accumulating since v2.93.0 per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md).
+
+### Fix — cost dashboard rejects zero/negative budgets up front (github#42)
+
+The Settings → Cost dashboard's daily/monthly budget inputs accepted any number including `0` and negatives. On Save, the UI fired a `Budget saved` success toast — but [`setBudget`](js/intelligence/cost/cost-store.js#L262) at L264-265 silently coerced any `<= 0` value to `null` (no budget) via its `> 0 ? : null` defensive filter. The user saw a success toast for a value the store dropped.
+
+The fix at [`js/settings/cost-tab.js`](js/settings/cost-tab.js) `_onSaveBudget` (L378-395) adds a guard right after the `parseFloat` calls: if either non-null value isn't `> 0`, fire `window.showToast('Budget must be greater than 0', 'error')` and `return` without calling `setBudget`. Empty string still means "clear the budget" (the `null` path skips the check). The defensive filter in `cost-store.js` stays — it remains the last line of defense against any caller that bypasses the front-end.
+
+Closes github#42.
+
+### Fix — plugin URL input gains programmatic label (github#43)
+
+The Plugins tab's "Install Plugin from URL" input had a visual title in a sibling `<div class="plugin-install-title">` but no programmatic association — no `<label for>`, no `aria-label`, no `aria-labelledby`. Screen-reader users heard the input as unlabeled.
+
+The fix at [`js/settings/plugins-tab.js:47-49`](js/settings/plugins-tab.js#L47) adds `aria-label="Plugin URL to install"` to the `#pluginInstallUrl` input. The visible `plugin-install-title` div stays as-is (no CSS-affecting markup change). Matches the existing `aria-label="Create a new plugin"` pattern at L56 of the same template — only existing a11y attribute in `js/settings/*.js`.
+
+Closes github#43.
+
+### Docs — `docs/ROADMAP.md` trim (promoted from `[Unreleased]`)
 
 The roadmap had accreted ship-history that already lives in `CHANGELOG.md`. Concrete shape: the header preamble blockquote was a single 11,527-char "line" of full-paragraph ship summaries (v2.87.0 + slot-#11 re-eval + a mini-changelog of 2.76.0 → 2.86.0 with each gitea#NNN scope/test/closes prose); a 7,716-char "translation" paragraph after the Forward ICD presence check table chained the disposition of every finding across all 11 RE-EVAL slots; the `Now / Next / Later`, `Re-evaluation cadence`, and `Forward ICD presence check` tables each carried full ship/finding detail per row. Roadmap line 386 commits the doc to "Forward cadence, not changelog. Shipped work and per-PR rationale live in CHANGELOG. This doc describes where we're going" — the prior state violated its own rule.
 
 Trim is surgical: four bloated sections rewritten with `→ CHANGELOG.md` pointers and one-line role descriptions per row. Nothing forward-looking dropped — every `[strong]` / `[medium]` / `[fuzzy]` band label, every open `gitea#NNN` / `github#NN` ticket, every queued ICD finding (#6/#2 SSE transport, #1/#3 cleanup callback), every `DESIGN-*.md` reference, every `discussion/` pointer survives. Sections preserved verbatim: `## How to read this doc`, `## How to read the bands`, `## TL;DR — architectural commitments`, `## Cadence and versioning`, `## 2.X path — what's still open`, `## After 2.0.0 — Phase 2/3/4 continuation`, `## 2026-Q2 code audit + sweep track`, `## Deferred / parked` (including all `[fuzzy]` parked-but-named subsections), `## Known open issues — not yet scheduled`, `## Decisions` (load-bearing architecture commitments), `## What's out of scope for the 2.x arc`, `## What this roadmap commits to`, `## See also`. The header version reference also caught up from v2.87.0 → v2.93.0 (6-minor drift). The 9-ICD backfill program is now a one-line-per-target table linking to each `docs/ICD-*.md`; per-slot deliverables and code-aware findings are linked to their absorbing release's CHANGELOG entry.
 
-Numbers: 408 lines / 207 KB → 320 lines / 40 KB (~80% byte reduction). Longest line dropped from 11,527 → 1,345 chars. No `js/` code changed; no version bump (per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md)); accumulates in `[Unreleased]`. Third application of Decision §13 (paper-only planning sessions as scheduled re-layout passes) after the 2026-05-08 path-to-2.0.0 re-layout and the 2026-05-12 methodology adoption.
+Numbers: 408 lines / 207 KB → 320 lines / 40 KB (~80% byte reduction). Longest line dropped from 11,527 → 1,345 chars. Originally accumulated in `[Unreleased]` per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md); promoted here when the code cohort bumped the minor. Third application of Decision §13 (paper-only planning sessions as scheduled re-layout passes) after the 2026-05-08 path-to-2.0.0 re-layout and the 2026-05-12 methodology adoption.
+
+The `## Now / Next / Later` "Last updated" header and the §"Re-evaluation cadence" overdue count also refresh in this PR: `v2.93.0 shipped` → `v2.95.0 shipped`; `overdue by 7 minors at v2.93.0` → `overdue by 9 minors at v2.95.0`.
+
+### Tests
+
+New [`tests/test-dogfood-bugs-cohort.mjs`](tests/test-dogfood-bugs-cohort.mjs) — 5 source-scan subtests across the two issues, following the idiom from [`test-commit-flow-cohort.mjs`](tests/test-commit-flow-cohort.mjs) (settings/* handlers import browser-bound DOM, so behavior verification stays in the manual browser smoke step; the source-scan pins production text + structural shape so accidental regressions fail loud at CI time).
+
+Subtest groups: github#42 (3) — `_onSaveBudget` guards `<= 0` ahead of `setBudget`, error toast text matches, `cost-store.js` defensive filter (`> 0 ? : null`) unchanged for both daily and monthly; github#43 (2) — `#pluginInstallUrl` has the expected `aria-label`, visible `plugin-install-title` div text is preserved (regression guard against the alternative `<label for>` markup change the issue called out as bigger-CSS-risk).
 
 ## [2.94.0] - 2026-05-23
 

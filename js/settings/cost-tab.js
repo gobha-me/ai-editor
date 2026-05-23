@@ -377,6 +377,15 @@ function _onSaveBudget() {
 
     const daily = dailyEl.value === '' ? null : parseFloat(dailyEl.value);
     const monthly = monthlyEl.value === '' ? null : parseFloat(monthlyEl.value);
+    // github#42: reject zero/negative entries up front so the success toast
+    // doesn't lie about what was stored (cost-store.js setBudget silently
+    // coerces <=0 to null as a defensive last line).
+    if ((daily !== null && !(daily > 0)) || (monthly !== null && !(monthly > 0))) {
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+            window.showToast('Budget must be greater than 0', 'error');
+        }
+        return;
+    }
     setBudget({ daily, monthly });
     _renderBudget();
     if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
