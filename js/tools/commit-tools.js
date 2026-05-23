@@ -128,7 +128,7 @@ ToolRegistry.register('commit_files', commitFiles, {
     type: 'function',
     function: {
         name: 'commit_files',
-        description: 'Commit dirty (unsaved) files from the editor to the Git repository. Generates an AI commit message automatically if none is provided. Lists dirty files if you want to see what would be committed before committing.',
+        description: 'Commit dirty (unsaved) files from the editor. **Provide `message` explicitly when you know what to write** (e.g., when this commit is the implementation of a known issue or follows a clear bug-fix shape) — auto-generation can misclassify small or stylistic changes (e.g., labeling a one-line behavior fix as a refactor). Lists dirty files if you want to see what would be committed before committing.',
         parameters: {
             type: 'object',
             properties: {
@@ -139,7 +139,7 @@ ToolRegistry.register('commit_files', commitFiles, {
                 },
                 message: {
                     type: 'string',
-                    description: 'Optional: custom commit message. If omitted, an AI-generated conventional commit message is used.'
+                    description: 'Custom commit message (one-line, conventional-commit format, e.g. `fix(scope): description`). Prefer providing this explicitly; auto-generation is a fallback for callers with no context.'
                 }
             },
             required: []

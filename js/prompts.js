@@ -269,6 +269,8 @@ Respond with the complete updated file content in a code block, followed by a br
 
 {{diff_summary}}
 
+Type must be one of: \`feat\` (new functionality), \`fix\` (behavior bug fix), \`refactor\` (no behavior change), \`docs\`, \`test\`, \`chore\`. Read what the diff *does* (lines added/removed), not where it lives — a one-line addition inside a function body that fixes a bug is \`fix:\`, not \`refactor:\`.
+
 Respond with ONLY the commit message — no thinking, no explanation, no quotes, no code fences. One line, conventional commit format (type: description).`,
 
     issueAnalysisPrompt: `Analyze this issue and suggest an implementation approach.

@@ -27,6 +27,18 @@ Supported keywords: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resol
 
 **Reserve `gitea#N` and `github#N` for prose.** In CHANGELOG.md / ROADMAP.md / code comments / the descriptive body of a PR, the prefixed forms are the right disambiguator. In the close-keyword line at the top of the PR body, drop the prefix.
 
+### Cross-host close keywords
+
+If the issue lives on github (per [`feedback_ai_editor_issues_in_github`](.claude/projects/-config-Projects-ai-editor/memory/feedback_ai_editor_issues_in_github.md), all ai-editor self-edit-eligible issues do), **do not use bare `Fixes #N`** in the gitea PR body — bare `#N` parses to the gitea repo and would close an unrelated gitea issue (different content, possibly already closed). Cross-host close hooks don't exist either way; the github issue stays open until you close it manually per the next section.
+
+Use the prose form in the PR body instead:
+
+```
+Refs github#N (closes manually after merge per CONTRIBUTING.md "GitHub issues — manual close")
+```
+
+This shape was added in 2.94.0 after github#47 surfaced the failure mode during a qwen-3-6-plus session: gitea PR #515 used bare `Fixes #41`, which on merge would have closed gitea#41 (unrelated) while github#41 stayed open.
+
 ### GitHub issues — manual close
 
 GitHub issues do not auto-close from gitea PR merges (no cross-host hook). After shipping work that resolves a `github#N` ticket, close it manually:

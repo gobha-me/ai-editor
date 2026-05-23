@@ -85,7 +85,7 @@ export function registerPRTools(registry) {
                     },
                     body: {
                         type: 'string',
-                        description: 'PR description — what changed, why, and any testing notes (markdown supported)'
+                        description: 'PR description (markdown supported). **Close-keyword convention:** use bare `Fixes #N` / `Closes #N` ONLY for issues on the same tracker as the PR repo (e.g. gitea PR closing a gitea issue). For cross-host issues (gitea PR closing a github-tracked issue), write prose `Refs github#N (closes manually after merge)` — bare `#N` parses to the gitea repo and would close an unrelated issue. See CONTRIBUTING.md §"Cross-host close keywords."'
                     },
                     head: {
                         type: 'string',

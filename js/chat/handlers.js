@@ -120,7 +120,7 @@ export async function handleUserInputDirect(input) {
                 await handleExplainRequest(input);
                 break;
             case 'commit':
-                await handleCommitRequest();
+                await handleCommitRequest(input);
                 break;
             case 'issue':
                 await handleIssueRequest(input);
@@ -258,10 +258,18 @@ async function handleExplainRequest(input) {
 
 /**
  * Handle commit message generation request
+ *
+ * github#45 — no-dirty-file branch falls back to handleGeneralRequest
+ * (mirrors handleEditRequest at L219-224). The intent matcher is purely
+ * substring-based; "commit message" / "generate commit" appears in plenty
+ * of prompts where the user is asking *about* commits, not requesting one.
  */
-async function handleCommitRequest() {
+async function handleCommitRequest(input) {
     if (!State.currentFile || !State.editorDirty) {
-        addMessage('system', '⚠️ No changes to commit.');
+        // No editor-dirty file — the user probably means something else
+        // (review a commit message, discuss recent commits, etc.). Route
+        // to general handler so the model can use tools to investigate.
+        await handleGeneralRequest(input);
         return;
     }
 

@@ -12,6 +12,53 @@ Trim is surgical: four bloated sections rewritten with `→ CHANGELOG.md` pointe
 
 Numbers: 408 lines / 207 KB → 320 lines / 40 KB (~80% byte reduction). Longest line dropped from 11,527 → 1,345 chars. No `js/` code changed; no version bump (per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md)); accumulates in `[Unreleased]`. Third application of Decision §13 (paper-only planning sessions as scheduled re-layout passes) after the 2026-05-08 path-to-2.0.0 re-layout and the 2026-05-12 methodology adoption.
 
+## [2.94.0] - 2026-05-23
+
+Commit-flow cohort — three independent dogfood findings from the same qwen-3-6-plus session that produced gitea PR #515 (the github#41 continue-button fix). All three broke or misrouted the commit/PR loop in the same window, so they bundle into one minor. Only one of the three is a real handler-logic change; the other two are description / system-prompt tightenings against existing tool APIs that the model wasn't using correctly.
+
+### Fix — `handleCommitRequest` falls back to `handleGeneralRequest` on no-dirty-file (github#45)
+
+The intent matcher in [`detectIntent`](js/chat/handlers.js#L173) is purely substring-based: any user message containing `"commit message"` or `"generate commit"` routes to [`handleCommitRequest`](js/chat/handlers.js#L262). Pre-2.94.0 the handler dead-ended with `⚠️ No changes to commit.` when no editor-dirty file was open — even when the user was asking *about* a commit (`"look at the commit message in PR #515"`, `"why did the commit message say refactor"`) rather than requesting one. The reference pattern was already in [`handleEditRequest`](js/chat/handlers.js#L219) at L219-224: route the no-precondition branch through `handleGeneralRequest(input)` so the model can use tools to investigate what the user actually meant.
+
+The fix at [`js/chat/handlers.js`](js/chat/handlers.js) — three edits, identical shape to the `handleEditRequest` fallback. `handleCommitRequest()` gains an `input` parameter, the dispatch site at the switch (L123) passes it through, and the no-dirty-file branch now `await handleGeneralRequest(input); return;` instead of emitting the system message. The model sees the full conversation and answers what was actually asked.
+
+Closes github#45.
+
+### Fix — `commit_files` description nudges explicit `message` + tightened auto-gen prompt (github#46)
+
+The qwen-3-6-plus session that fixed github#41 committed with the subject `refactor: clean up imports in handlers.js`. The diff was a single-line addition inside a function body, touched no imports, was a behavior fix — every axis wrong. Investigation: `commit_files` already accepts an optional `message` arg ([`commit-tools.js:19`](js/tools/commit-tools.js#L19)); the schema at L140-143 already declares it optional and L64 already skips auto-generation when provided. The dogfood failure was the **model omitting the arg** because the description led with `Optional: ... If omitted, an AI-generated ... is used` — reading as "skip it, the tool handles it."
+
+Two textual changes close the gap without touching tool logic:
+
+1. **Top-level tool description** ([`commit-tools.js:131`](js/tools/commit-tools.js#L131)) now leads with the imperative `**Provide \`message\` explicitly when you know what to write**` plus a concrete warning about misclassification (`labeling a one-line behavior fix as a refactor`) — the exact failure mode from the github#41 session.
+2. **`message` parameter description** (L140-143) drops the `Optional:` lead in favor of `Prefer providing this explicitly; auto-generation is a fallback for callers with no context.`
+
+The fallback path also got tightened — [`commitMessagePrompt`](js/prompts.js#L268) gains a type-rules block enumerating the allowed conventional-commit types (`feat` / `fix` / `refactor` / `docs` / `test` / `chore`) with concise definitions, plus the diff-shape rule (`Read what the diff does, not where it lives — a one-line addition inside a function body that fixes a bug is fix:, not refactor:`). So even when the model omits `message`, the auto-gen has better odds of picking the right type.
+
+Per [`feedback_prompts_js_parallel_enumeration`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_prompts_js_parallel_enumeration.md), `commit_files`'s presence in the system-prompt tool enumeration is unchanged (the description text the model sees at call-time is the API tools-array `description:`, not a separate prompts.js stanza).
+
+Closes github#46.
+
+### Fix — `create_pull_request` body description teaches cross-host close keywords (github#47)
+
+In the gitea PR #515 that fixed github#41, the PR body used `Fixes #41`. Bare `#N` in a gitea PR body parses to the gitea repo — so on merge, gitea would have closed gitea#41 (a completely unrelated, possibly already-closed issue) while github#41 stayed open (no cross-host hook). The model didn't know; the convention wasn't surfaced where it could see it.
+
+[`create_pull_request`](js/tools/pr-tools.js#L27) passes the body verbatim to `Git.createMergeRequest` — the tool doesn't compose the body, the model does. So the fix lives where the model *sees* the rule at call-time: the `body:` parameter description ([`pr-tools.js:86-89`](js/tools/pr-tools.js#L86)). It now states explicitly: bare `Fixes #N` / `Closes #N` are gitea-only; cross-host issues use the prose form `Refs github#N (closes manually after merge)`. A pointer to CONTRIBUTING.md carries the rest of the convention.
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) gains a new `### Cross-host close keywords` subsection between the existing close-keyword table and the `### GitHub issues — manual close` section. It surfaces the failure mode (bare `#N` would close an unrelated gitea issue), the prose form to use instead, and section history pointing back at github#47 + the [`feedback_ai_editor_issues_in_github`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_ai_editor_issues_in_github.md) memory that established why ai-editor issues live on github in the first place.
+
+This PR's own body applies the lesson — `Refs github#45 github#46 github#47`, closed manually post-merge.
+
+Closes github#47.
+
+### Tests
+
+New [`tests/test-commit-flow-cohort.mjs`](tests/test-commit-flow-cohort.mjs) — 14 source-scan subtests across the three issues (handlers + tool descriptions + CONTRIBUTING.md), following the idiom from [`test-find-relevant-files-bootstrap.mjs`](tests/test-find-relevant-files-bootstrap.mjs) (handlers and tools import browser-bound code via `core.js` / `git.js`, so behavior verification stays in the manual browser smoke step; the source-scan pins production text + structural shape so accidental regressions fail loud at CI time).
+
+Subtest groups: github#45 fallback shape (4) — signature, `handleGeneralRequest(input)` branch, dead-end-message-removed, switch dispatch passes input; github#46 commit_files imperative (3) + prompt type-rules (2) — description nudges explicit, parameter description prefers explicit, schema stays optional, type enumeration pinned, diff-shape rule pinned; github#47 create_pull_request guidance (3) + CONTRIBUTING.md subsection (2) — body description teaches cross-host, warns about wrong-issue close, references CONTRIBUTING.md, subsection heading exists, cites origin + memory.
+
+Browser-side [`tests/test-handlers.js`](tests/test-handlers.js) is unchanged — `detectIntent`'s routing isn't changing, only the handler's no-precondition branch.
+
 ## [2.93.0] - 2026-05-22
 
 ### Fix — `find_relevant_files` auto-bootstraps the indexer on cold sessions (gitea#516)
