@@ -4,6 +4,14 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Docs — `docs/ROADMAP.md` trim
+
+The roadmap had accreted ship-history that already lives in `CHANGELOG.md`. Concrete shape: the header preamble blockquote was a single 11,527-char "line" of full-paragraph ship summaries (v2.87.0 + slot-#11 re-eval + a mini-changelog of 2.76.0 → 2.86.0 with each gitea#NNN scope/test/closes prose); a 7,716-char "translation" paragraph after the Forward ICD presence check table chained the disposition of every finding across all 11 RE-EVAL slots; the `Now / Next / Later`, `Re-evaluation cadence`, and `Forward ICD presence check` tables each carried full ship/finding detail per row. Roadmap line 386 commits the doc to "Forward cadence, not changelog. Shipped work and per-PR rationale live in CHANGELOG. This doc describes where we're going" — the prior state violated its own rule.
+
+Trim is surgical: four bloated sections rewritten with `→ CHANGELOG.md` pointers and one-line role descriptions per row. Nothing forward-looking dropped — every `[strong]` / `[medium]` / `[fuzzy]` band label, every open `gitea#NNN` / `github#NN` ticket, every queued ICD finding (#6/#2 SSE transport, #1/#3 cleanup callback), every `DESIGN-*.md` reference, every `discussion/` pointer survives. Sections preserved verbatim: `## How to read this doc`, `## How to read the bands`, `## TL;DR — architectural commitments`, `## Cadence and versioning`, `## 2.X path — what's still open`, `## After 2.0.0 — Phase 2/3/4 continuation`, `## 2026-Q2 code audit + sweep track`, `## Deferred / parked` (including all `[fuzzy]` parked-but-named subsections), `## Known open issues — not yet scheduled`, `## Decisions` (load-bearing architecture commitments), `## What's out of scope for the 2.x arc`, `## What this roadmap commits to`, `## See also`. The header version reference also caught up from v2.87.0 → v2.93.0 (6-minor drift). The 9-ICD backfill program is now a one-line-per-target table linking to each `docs/ICD-*.md`; per-slot deliverables and code-aware findings are linked to their absorbing release's CHANGELOG entry.
+
+Numbers: 408 lines / 207 KB → 320 lines / 40 KB (~80% byte reduction). Longest line dropped from 11,527 → 1,345 chars. No `js/` code changed; no version bump (per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md)); accumulates in `[Unreleased]`. Third application of Decision §13 (paper-only planning sessions as scheduled re-layout passes) after the 2026-05-08 path-to-2.0.0 re-layout and the 2026-05-12 methodology adoption.
+
 ## [2.93.0] - 2026-05-22
 
 ### Fix — `find_relevant_files` auto-bootstraps the indexer on cold sessions (gitea#516)
