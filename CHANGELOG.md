@@ -4,6 +4,55 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+## [2.96.0] - 2026-05-24
+
+PR Review dock — the ✅ Merge button is visible again on small viewports (the user-visible bug from gitea#523), plus two defense-in-depth structural changes that surfaced from the misdiagnosis path so the same investigative trail doesn't burn again next time.
+
+### Fix — Merge controls pinned to dock viewport so they don't scroll off-screen (gitea#523, primary user-visible fix)
+
+The reported symptom — "the merge button is missing on my open gitea PR" — turned out to be a CSS layout issue, not a capability gate. The dock at [`css/pr-review.css:730-740`](css/pr-review.css#L730) carries `max-height: 38vh; overflow-y: auto`. On smaller viewports the dock's combined content (drafts list + Submit Review section + merge controls) exceeds 38% of viewport height, the merge controls scroll below the fold, and the scroll affordance only appears on mouse-over. The user can't see the ✅ Merge button and assumes it isn't rendering. DOM inspection confirmed the button was always present (`document.querySelector('.pr-dock__merge')` returned a node with text `"SquashMergeRebaseDelete branch✅ Merge"`); resizing the window taller made the button visible without any code change.
+
+**Fix.** [`css/pr-review.css`](css/pr-review.css) `.pr-dock__merge` (and the `.pr-dock__merge-fallback` notice that replaces it under the anomaly defense below) gets `position: sticky; bottom: 0; background: var(--bg-secondary); z-index: 1`. Works inside `.pr-dock` because the parent has `overflow-y: auto` (sticky's `bottom: 0` pins the element to the scroll container's bottom edge). The background-color match prevents the scrolled content above from bleeding through the dashed top border. No JS change for this part — pure CSS.
+
+### Fix — Capabilities mutation hardening + visible diagnostic for the silent gate (gitea#523, defense-in-depth)
+
+While investigating the wrong hypothesis ("`capabilities.merge` is being mutated to false somewhere"), two real structural defects came to light that ship alongside the CSS fix because the investigation paid for them:
+
+- [`js/git-providers/registry.js:36`](js/git-providers/registry.js#L36) used to install `merged.capabilities` as a one-shot data property via `{ ...BASE_GIT_PROVIDER, ...provider }`. Object spread invokes each getter once and stores the returned object. [`Git.capabilities`](js/git.js#L505) then handed out that *same* shared object on every read — so any caller (plugin, defensive normalizer, over-eager memo) that wrote `caps.merge = false` mutated the shared object and the mutation persisted across every subsequent render. Wasn't triggered in this case, but the bug class was reachable; closing it now is cheap.
+- [`js/pr-review/PrReviewDock.js:439-445`](js/pr-review/PrReviewDock.js#L439) gated PrMergeControls on a silent `${supportsMerge && html<.../>}`. If the gate ever fails for an open PR that has reviewSubmission (the exact anomaly case), the buttons vanish with no console signal and no on-screen breadcrumb — which is what made the original triage start with a wrong hypothesis.
+
+**Fix A — capabilities returns a fresh frozen clone per access.** `register()` now, *after* the existing spread, reinstalls `capabilities` as a getter on `merged` via `Object.defineProperty`. The getter looks up the original capability getters from `BASE_GIT_PROVIDER` and from the raw `provider` (via `Object.getOwnPropertyDescriptor(..., 'capabilities').get`), invokes them on each access, and returns `Object.freeze({ ...base, ...own })`. Three properties: (a) writes to the returned object throw in strict mode or no-op in sloppy — the mutation hole is closed; (b) each read returns a *new* frozen object, so no shared reference survives for a mutator to corrupt; (c) the shape that consumers see (`Git.capabilities.X`) is unchanged. Providers that don't declare a `capabilities` getter (local.js) still inherit base's defaults, same as before.
+
+**Fix B — silent gate becomes a visible notice + one-shot `console.warn`.** A new `mergeGateAnomaly` flag is computed right after the existing `prClosed` derivation:
+
+```
+const mergeGateAnomaly = !prClosed
+    && capabilities?.reviewSubmission === true
+    && capabilities?.merge !== true;
+```
+
+The conjunctive condition narrows to *exactly* the anomalous case — providers that legitimately don't support merge (gitlab today) also don't claim `reviewSubmission`, so they will never trip it. The `${supportsMerge && html\`<${PrMergeControls}.../>\`}` render is converted into a ternary whose else-branch renders a `.pr-dock__notice.pr-dock__merge-fallback` with `role="alert"` when `mergeGateAnomaly` fires: `⚠️ Merge controls suppressed — capabilities.merge = <value> on this provider for an open PR. See browser console for diagnostic payload (gitea#523).` A `useEffect` keyed on `[mergeGateAnomaly]` fires a one-shot `console.warn` with `connectionId`, `projectOwner`, `projectRepo`, `capabilitiesMerge`, `capabilityKeys: Object.keys(capabilities)`, `prState`, `prMerged`, and `version: VERSION`. The fallback notice also gets the same `position: sticky` treatment as the merge controls so a future anomaly is visible regardless of dock scroll.
+
+### What this PR is NOT
+
+- **Not** relaxing `supportsMerge` to fall back on "if `Git.mergePullRequest` exists, render the button anyway" — that hides real capability mismatches and unwinds the very signal the new notice exists to surface. The `supportsMerge` declaration shape is pinned by [`tests/test-pr-review-merge-gate-warns-on-open.mjs`](tests/test-pr-review-merge-gate-warns-on-open.mjs).
+- **Not** removing the dock's `max-height: 38vh` constraint. Letting the dock grow unbounded would eat the diff view on small screens; the sticky pin gives us the same visibility guarantee without taking floor space from the scrollable content.
+- **Not** adding instrumentation inside `Git.capabilities` itself. The dock-level notice sits where the user actually feels the bug.
+
+### Tests
+
+New [`tests/test-pr-review-merge-gate-warns-on-open.mjs`](tests/test-pr-review-merge-gate-warns-on-open.mjs) — **9 subtests** following the source-scan idiom from [`test-pr-review-draft-vs-conflict.mjs`](tests/test-pr-review-draft-vs-conflict.mjs) (PrReviewDock.js `await`s Preact at module top so isn't directly Node-importable). Subtest groups:
+
+1. **Provider capability literals** (2) — gitea + github capabilities getters return `reviewSubmission: true` AND `merge: true` (and `mergeConflictResolution: true`). Catches the exact drift class that the structural defense protects against.
+2. **registry.js getter shape** (2) — `Object.defineProperty(merged, 'capabilities', ...)` call shape pinned; `Object.freeze({...base, ...own})` return shape pinned; behavior round-trip asserts the returned object is frozen and each read returns a new reference (mutation attempt doesn't persist).
+3. **PrReviewDock anomaly + notice** (3) — `mergeGateAnomaly` declaration carries `!prClosed`, `reviewSubmission === true`, `merge !== true`; fallback notice element renders with `role="alert"` and references gitea#523; `console.warn` carries the diagnostic payload (`capabilityKeys`, `version`).
+4. **PrReviewDock gate-shape pin** (1) — the `supportsMerge` declaration text is pinned exactly so a future "relax" that drops the capability check fails CI.
+5. **CSS sticky-merge pin** (1) — `css/pr-review.css` contains a `position: sticky; bottom: 0;` rule applied to both `.pr-dock__merge` and `.pr-dock__merge-fallback`. This is the user-visible fix; the source-scan stops a future CSS edit from accidentally removing it.
+
+Full Node suite: `node --test tests/test-*.mjs` (auto-globbed by CI per [`reference_testing_ci`](../.claude/projects/-config-Projects-ai-editor/memory/reference_testing_ci.md)).
+
+Closes #523.
+
 ## [2.95.0] - 2026-05-23
 
 Dogfood bugs cohort — two unrelated single-file findings from the same v2.94.0 follow-on triage (github#42 cost-dashboard silent null coerce + github#43 plugin URL input a11y). Same cohort shape as v2.94.0; both fixes carry their remediation in the issue body verbatim, so this minor is mechanical against those. Also promotes the docs-only `[Unreleased]` ROADMAP trim that has been accumulating since v2.93.0 per [`feedback_no_bump_for_measurement_only`](../.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md).

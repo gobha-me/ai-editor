@@ -35,6 +35,7 @@ import { concatJobLogs, tailTruncate } from './diagnose-logs.js';
 import { buildDiagnoseFixMessages } from './diagnose-prompt.js';
 import { parsePatchResponse } from './diagnose-parse.js';
 import { getPending, setPending, clearPending } from './diagnose-state.js';
+import { VERSION } from '../version.js';
 
 const { html, useState, useLayoutEffect, useEffect } = await getPreact();
 
@@ -100,6 +101,34 @@ export function PrReviewDock({ prNumber, pr, ci, capabilities, threadsTotal, thr
     const supportsDiagnose = ci?.state === 'failure'
         && pr?.state === 'open' && !pr?.merged && !!pr?.headSha;
     const prClosed = pr?.state !== 'open' || pr?.merged;
+
+    // gitea#523 — when a provider advertises `reviewSubmission` but not
+    // `merge` on an open PR, the merge controls used to silently vanish
+    // (visible since 2.13.0; rediscovered at 2.95.0). The conjunctive
+    // gate below narrows to *exactly* the anomalous case: providers that
+    // legitimately don't support merge (gitlab today) also don't claim
+    // reviewSubmission, so they won't trip it. Used both for the visible
+    // dock notice + the one-shot console.warn below.
+    const mergeGateAnomaly = !prClosed
+        && capabilities?.reviewSubmission === true
+        && capabilities?.merge !== true;
+
+    useEffect(() => {
+        if (!mergeGateAnomaly) return;
+        console.warn(
+            '[pr-review] Merge controls suppressed despite reviewSubmission capability — capabilities.merge !== true on an open PR (gitea#523).',
+            {
+                connectionId: State.currentProject?.connectionId,
+                projectOwner: State.currentProject?.owner,
+                projectRepo: State.currentProject?.repo,
+                capabilitiesMerge: capabilities?.merge,
+                capabilityKeys: Object.keys(capabilities || {}),
+                prState: pr?.state,
+                prMerged: pr?.merged,
+                version: VERSION,
+            }
+        );
+    }, [mergeGateAnomaly]);
 
     async function handleSubmit() {
         if (submitting) return;
@@ -436,13 +465,19 @@ export function PrReviewDock({ prNumber, pr, ci, capabilities, threadsTotal, thr
                             </div>
                         </div>
                     `}
-                    ${supportsMerge && html`
-                        <${PrMergeControls}
-                            prNumber=${prNumber}
-                            pr=${pr}
-                            capabilities=${capabilities}
-                            onError=${(msg) => setError(msg)} />
-                    `}
+                    ${supportsMerge
+                        ? html`
+                            <${PrMergeControls}
+                                prNumber=${prNumber}
+                                pr=${pr}
+                                capabilities=${capabilities}
+                                onError=${(msg) => setError(msg)} />
+                        `
+                        : mergeGateAnomaly && html`
+                            <div class="pr-dock__notice pr-dock__merge-fallback" role="alert">
+                                ⚠️ Merge controls suppressed — capabilities.merge = ${String(capabilities?.merge)} on this provider for an open PR. See browser console for diagnostic payload (gitea#523).
+                            </div>
+                        `}
                 `}
         </div>
     `;

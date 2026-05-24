@@ -39,6 +39,24 @@ const GitProviderRegistry = {
             ...BASE_GIT_PROVIDER.contributes,
             ...(provider.contributes || {})
         };
+        // `capabilities` must NOT be a single shared data property — the
+        // plain spread above invokes each getter once and stores the
+        // result as a data property that any later caller can mutate
+        // (e.g. `Git.capabilities.merge = false`), and the mutation
+        // persists across every subsequent read. Reinstall as a getter
+        // that re-invokes the original getters and returns a fresh
+        // frozen clone per access. Closes that bug class — gitea#523.
+        const baseCapsGetter = Object.getOwnPropertyDescriptor(BASE_GIT_PROVIDER, 'capabilities')?.get;
+        const ownCapsGetter  = Object.getOwnPropertyDescriptor(provider, 'capabilities')?.get;
+        Object.defineProperty(merged, 'capabilities', {
+            get() {
+                const base = baseCapsGetter ? baseCapsGetter.call(BASE_GIT_PROVIDER) : {};
+                const own  = ownCapsGetter  ? ownCapsGetter.call(provider) : {};
+                return Object.freeze({ ...base, ...own });
+            },
+            enumerable: true,
+            configurable: true,
+        });
         _providers.set(merged.id, merged);
         console.log(`[GitProviders] Registered: ${merged.name} (${merged.id})`);
         return true;

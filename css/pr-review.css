@@ -905,6 +905,21 @@ body.pr-review-active #editorSplit {
     justify-content: flex-end;
 }
 
+.pr-dock__merge,
+.pr-dock__merge-fallback {
+    /* gitea#523 — pin the merge controls (or the fallback notice that
+     * replaces them when capabilities are wrong) to the bottom of the
+     * dock's scroll viewport so the ✅ Merge button stays visible even
+     * when the dock's `max-height: 38vh; overflow-y: auto` (line 738-739)
+     * would otherwise scroll it below the fold on small viewports.
+     * `position: sticky` works inside the dock because the parent has
+     * `overflow-y: auto`. Background match prevents the scrolled content
+     * above from bleeding through the dashed border. */
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-secondary, #252525);
+    z-index: 1;
+}
 .pr-dock__merge {
     display: flex;
     flex-wrap: wrap;
