@@ -1,8 +1,6 @@
 /**
- * Worked-example inheritance assertions for the Phase 2 profiles
- * (`chat_multi.v1`, `rp.v1`, `kb.v1`) per ROADMAP §"After 2.0.0" line 111
- * — *"Inheritance through one level (base → leaf); per-profile worked-
- * example test fixtures."*
+ * Worked-example inheritance assertions for `chat_multi.v1`, `rp.v1`, and
+ * `kb.v1`.
  *
  * Distinct from `test-profiles-inheritance.mjs` (generic `resolveProfile`
  * helper coverage from 1.14.0) and `test-profiles-fixtures.mjs` (byte-

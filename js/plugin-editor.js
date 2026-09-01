@@ -148,8 +148,8 @@ export async function openPluginEditor(pluginId = null) {
 // The plugin-editor tab used to auto-switch the global profile to
 // `plugin-dev.v1` on activation (`State.settings.profile` mutated via a
 // `tab:switched` listener, predating per-chat binding (2.8.0) + the 2.58.0
-// `plugin.enabled` capability overlay). ICD-plugin-lifecycle finding #2
-// retired that mechanism at 2.66.0 — the overlay (Settings → Tools →
+// `plugin.enabled` capability overlay). The plugin lifecycle contract retired
+// that mechanism — the overlay (Settings → Tools →
 // Plugin development mode) is now the sole non-destructive admission path
 // for the 5-tool plugin-dev cohort. The banner below surfaces the overlay
 // from inside the plugin editor so the user doesn't need to leave the tab
@@ -488,7 +488,7 @@ registerTabRenderer('plugin-editor', renderPluginEditorTab);
 
 // 2.66.0 — the auto-profile-switch on `tab:switched` retired here.
 // Pre-2.66.0 this listener mutated `State.settings.profile` to
-// `'plugin-dev.v1'` on tab enter + restored on leave. ICD-plugin-lifecycle
-// finding #2 documented three failure modes (per-chat binding divergence,
+// `'plugin-dev.v1'` on tab enter + restored on leave. The lifecycle contract
+// identifies three failure modes (per-chat binding divergence,
 // capability-overlay redundancy, restore-target staleness); the in-tab
 // overlay banner above is the replacement affordance.

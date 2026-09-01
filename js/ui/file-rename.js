@@ -65,7 +65,7 @@ export function closeRenameModal() {
  * Bind a delegated click handler for the rename modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2a of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  */
 let _wired = false;
 export function mountRenameModal({ onClose, onSubmit } = {}) {

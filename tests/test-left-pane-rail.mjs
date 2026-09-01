@@ -571,9 +571,7 @@ test('BUILTIN_PRIORITY is a frozen object with the four built-in keys', () => {
 });
 
 test('BUILTIN_PRIORITY values are strictly ascending with ≥10 spacing (room for provider insertion)', () => {
-    // The spacing convention argued in `docs/audit-2026-Q2/inventory.md`
-    // (`[HC] [S] [maybe-intentional] BUILTIN_VIEWS priority spacing`):
-    // gaps of 10 leave room for a provider contribution to slot between
+    // Gaps of 10 leave room for a provider contribution to slot between
     // built-ins by picking an in-between priority (e.g. 25 between Issues
     // and PRs). If this assertion ever fires, either the spacing
     // tightened (think hard before allowing) or a built-in was added.

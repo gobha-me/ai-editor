@@ -246,7 +246,7 @@ test('Scenario 3 — hybrid: subsumption + invalidation cascade', async () => {
 // Phase C (turns 20-29): verify. 2 broader re-reads of related files,
 //                        a write, a few user/assistant turns.
 //
-// This shape is what ROADMAP §1.2.0 calls "tool-heavy session" —
+// This shape is our "tool-heavy session" —
 // expected reduction ≥40%.
 
 function build30TurnDebugSession() {
@@ -300,7 +300,7 @@ function build30TurnDebugSession() {
     return turns;
 }
 
-test('Scenario 4 — realistic 30-turn debug session ≥40% (ROADMAP §1.2.0 target)', async () => {
+test('Scenario 4 — realistic 30-turn debug session ≥40% (the 40% target)', async () => {
     const fx = build30TurnDebugSession();
     const m = await measure(fx, { preserve_recent: 2 });
     logSavings('S4 30-turn debug', m);
@@ -308,11 +308,11 @@ test('Scenario 4 — realistic 30-turn debug session ≥40% (ROADMAP §1.2.0 tar
     assert.ok(m.turns_in >= 28 && m.turns_in <= 32,
         `fixture should be ~30 turns, got ${m.turns_in}`);
 
-    // ROADMAP §1.2.0 exit criterion: ≥40% reduction on tool-heavy sessions.
+    // Compression regression threshold: ≥40% reduction on tool-heavy sessions.
     // Observed: 78.7%. Far above the §1.2.0 floor — Decision §8 gate met.
     // Bounds ±3pp around the deterministic value.
     assert.ok(m.reduction_pct >= 75,
-        `S4 lower regression bound: reduction ≥75%, got ${m.reduction_pct.toFixed(1)}% (ROADMAP §1.2.0 floor is 40%)`);
+        `S4 lower regression bound: reduction ≥75%, got ${m.reduction_pct.toFixed(1)}% (the floor is 40%)`);
     assert.ok(m.reduction_pct <= 82,
         `S4 upper regression bound: reduction ≤82%, got ${m.reduction_pct.toFixed(1)}%`);
 
@@ -399,7 +399,7 @@ test('Scenario 5 — realistic 50-turn agentic session ≥40% (Tier 2 floor)', a
     // default) should land at or above this number. If it lands below,
     // either the deployed Compactor is mis-wired or organic input
     // doesn't match the synthetic shape — either is worth a follow-up.
-    // Observed: 90.3%. ROADMAP §1.2.0 floor is 40% — synthetic far above it.
+    // Observed: 90.3%. the floor is 40% — synthetic far above it.
     // Bounds ±3pp around the deterministic value.
     assert.ok(m.reduction_pct >= 87,
         `S5 lower regression bound: reduction ≥87%, got ${m.reduction_pct.toFixed(1)}% (Tier 2 deployed floor is 40%)`);
@@ -414,7 +414,7 @@ test('Scenario 5 — realistic 50-turn agentic session ≥40% (Tier 2 floor)', a
 // Aggregate snapshot — print a single summary line at the end
 // ============================================
 
-test('Aggregate — all scenarios collectively beat the ROADMAP §1.2.0 target', async () => {
+test('Aggregate — all scenarios collectively beat the 40% target', async () => {
     const scenarios = [
         ['S1 subsumption', buildSubsumptionFixture()],
         ['S2 invalidation', buildInvalidationFixture()],
@@ -439,11 +439,11 @@ test('Aggregate — all scenarios collectively beat the ROADMAP §1.2.0 target',
     const agg_pct = 100 * (1 - total_out / total_in);
     console.log(`  [AGGREGATE] ${agg_pct.toFixed(1)}% reduction across all 5 scenarios — ${total_in.toLocaleString()} → ${total_out.toLocaleString()} tok · ${total_turns} turns, ${total_evicted} evicted`);
 
-    // Observed: 79.2%. ROADMAP §1.2.0 floor is 40%; the aggregate is the
+    // Observed: 79.2%. the floor is 40%; the aggregate is the
     // headline number quoted in the CHANGELOG entry for this PR.
     // Bounds ±3pp around the deterministic value.
     assert.ok(agg_pct >= 76,
-        `aggregate lower regression bound: ≥76%, got ${agg_pct.toFixed(1)}% (ROADMAP §1.2.0 floor is 40%)`);
+        `aggregate lower regression bound: ≥76%, got ${agg_pct.toFixed(1)}% (the floor is 40%)`);
     assert.ok(agg_pct <= 82,
         `aggregate upper regression bound: ≤82%, got ${agg_pct.toFixed(1)}%`);
 });

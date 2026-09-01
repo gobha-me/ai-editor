@@ -11,7 +11,7 @@
  * slice the retrieval manager has zero direct `CODER_V1` imports
  * (ICD #5 finding #1).
  *
- * Per ROADMAP §Decisions 7 "Removability check," the rewire's exit
+ * The the rewire's exit
  * criterion is **zero behavior diff** against the pre-slice direct
  * reads. That's exactly what this file proves: every field returned
  * by `resolveTaskLedgerConfig('coder.v1')` is element-equal to the

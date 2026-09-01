@@ -1,8 +1,6 @@
 /**
- * SettingsTabActivation — per-tab activation/teardown hook registry.
- * 2.44.0.2 (2026-Q2 audit sweep entry [HC][S][needs-investigation] at
- * `docs/audit-2026-Q2/inventory.md` §settings — "Settings tab module
- * list in `js/settings/persistence.js`?").
+ * SettingsTabActivation — per-tab activation/teardown hook registry. Tab
+ * modules own their lifecycle hooks instead of a parallel central list.
  *
  * Replaces the 11-branch switch statement in `js/settings-manager.js`
  * (pre-2.44.0.2 `populateSettingsForm()` lines 462-482) that dispatched

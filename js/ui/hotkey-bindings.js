@@ -1,9 +1,7 @@
 /**
  * HotkeyBindings — document-level keyboard-shortcut dispatcher driven by
- * the `HOTKEYS` display registry in `js/help/hotkey-registry.js`. 2.36.0
- * (2026-Q2 audit sweep entry [HC][S] at `docs/audit-2026-Q2/inventory.md`
- * — `Keyboard-shortcut handlers in setupKeyboardShortcuts mirror
- * hotkey-registry.js`).
+ * the `HOTKEYS` display registry in `js/help/hotkey-registry.js`, keeping
+ * displayed and executable shortcuts on one source.
  *
  * Replaces the pre-2.36.0 hand-rolled keydown chain in `js/app.js`
  * `setupKeyboardShortcuts` (~158 LOC of `if (e.ctrlKey && e.key === 's')

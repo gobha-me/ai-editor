@@ -2,8 +2,8 @@
 /**
  * Sub-agent-approval card — Preact component (2.49.0 slice 2).
  *
- * Renders the security-load-bearing **capability summary** per
- * DESIGN-sub-agents.md §"Approval-card capability summary": profile,
+ * Renders the security-load-bearing capability summary defined in
+ * docs/DESIGN-sub-agents.md: profile,
  * admitted tools, per-call narrow, cost ceiling, run timeout,
  * recursion, memory, **write-access ✗/✓ with warning class when ✓**.
  * The user sees exactly what the sub-agent *can do* — not just what

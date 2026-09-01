@@ -30,7 +30,7 @@
  * async (args) => {` boundary, brace-walk to the matching `}`, regex-anchor
  * `EditTracker.recordRead(` inside the extracted body. Same `read file →
  * stripComments → regex-anchor in extracted function body` idiom called out
- * as a settled source-scan-precedent in ROADMAP §"Testing & CI."
+ * as a settled source-scan-precedent in the source-validation contract.
  *
  * Runs under `node --test`.
  *

@@ -105,7 +105,7 @@ export const CHAT_V1 = {
             'ask_user',
         ],
         discovery_strategies: ['categorical'], // Same default as coder.v1; semantic discovery in 1.4.1.
-        budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
+        budget_tokens: 5000,    // Default tool-definition budget.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
         // 2.54.0 (gitea#438) — explicit admission. Replaces the legacy
         // `allowed_groups: ['all', 'pm', 'reviewer']` tag-intersection

@@ -13,8 +13,7 @@
  * scroll-up. When the user returns to the bottom, prune the oldest tail of
  * the rendered window so we never hold more than MAX_WINDOW nodes.
  *
- * TODO(ChatHistoryStore): docs/ROADMAP.md §"Other deferred" plans a
- * `ChatHistoryStore` module that fronts `State.chatHistory`. When it lands,
+ * If a `ChatHistoryStore` module is introduced to front `State.chatHistory`,
  * subscribe to its append event instead of relying on `addMessage` calling
  * `notifyAppended` directly. The current wiring works because there are
  * only two live-append paths in the renderer (`addMessage` and

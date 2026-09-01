@@ -1,8 +1,7 @@
 // ============================================
 // SETTINGS — CONNECTIONS TAB (1.3.8 Touch 2 layout)
 //
-// Provider-grouped, N-of-each-provider per
-// docs/design/touch-2-facelift/project/connections.jsx.
+// Provider-grouped, N-of-each-provider connection surface.
 // The shared editor form below remains the single add/edit
 // surface; per-provider "Add" buttons preselect the provider
 // when opening it.

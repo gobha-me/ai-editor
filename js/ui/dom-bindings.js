@@ -1,8 +1,7 @@
 /**
  * DomBindings — DOM event-listener registry that survives post-init DOM
- * mutations. 2.44.0.1 (2026-Q2 audit sweep entry [ST][M] at
- * `docs/audit-2026-Q2/inventory.md` §app-boot — `safeAdd pattern + bareword
- * global reference fragility in setupEventListeners`).
+ * mutations. This replaces bare global references with explicit owner-scoped
+ * registration.
  *
  * Replaces the pre-2.44.0.1 closure-local `safeAdd(id, event, handler)`
  * helper in `js/app.js#setupEventListeners` (~31 wirings that silently

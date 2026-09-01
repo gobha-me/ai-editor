@@ -99,7 +99,7 @@ export function renderPrRowsHtml(ctx) {
 
 /**
  * Bind a delegated click handler for PR rows. Phase 3a of the
- * inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  * Scoped to `#prsPanel` — `renderPullRequests()` rewrites the panel's
  * innerHTML on every refresh, so the document-level listener survives
  * container re-creation.

@@ -672,9 +672,7 @@
 
 /* ============================================
    Files "Now strip" — Touch 3 1.x candidate C (2.17.0).
-   Read-only indicator above #fileTree. Mirrors
-   docs/design/touch-3-left-pane-and-window/project/facelift-v3-extras.css
-   (.lp2__now*) using canonical token names.
+   Read-only indicator above #fileTree using canonical token names.
    ============================================ */
 .lp2__now {
     margin: 0 6px 8px;

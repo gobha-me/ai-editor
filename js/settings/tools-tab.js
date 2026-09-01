@@ -149,8 +149,7 @@ function _readSubAgent() {
     const overlay = (State.settings && State.settings.subagent) || {};
     const enabled = typeof overlay.enabled === 'boolean' ? overlay.enabled : cfg.enabled;
     // `sessionCap` is workspace-wide (parallel to ScriptAutomation's
-    // timeout/byte caps). DESIGN-sub-agents.md §Decision §6 names this
-    // as a workspace setting, not a per-profile knob.
+    // timeout/byte caps). It is a workspace setting, not a per-profile knob.
     const overlaySessionCap = Number(overlay.sessionCap);
     const sessionCap = Number.isFinite(overlaySessionCap) && overlaySessionCap > 0
         ? overlaySessionCap
@@ -371,8 +370,7 @@ function _renderPluginSection() {
         onto whatever profile is active — flip it on mid-session without
         burning the working system prompt, budget, scratchpad, or
         conversation ledger. Mirrors the <code>preview.enabled</code>
-        pattern. Decision recorded at
-        <code>docs/discussion/plugin-dev-mode-vs-profile.md</code>.
+        pattern. See <code>docs/PLUGIN.md</code>.
         Per-profile default for the current profile:
         <strong>${profileLabel}</strong>.
       </p>

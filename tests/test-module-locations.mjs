@@ -7,8 +7,7 @@
  *   - the directory or file does NOT exist at the retired path
  *   - no live JS code imports from the retired path
  *
- * Why this exists — the 2026-Q2 audit-sweep wave (`docs/audit-2026-Q2/inventory.md`)
- * retired `js/managers/` at 2.44.0.3 (its lone occupant `search-manager.js`
+ * `js/managers/` was retired after its lone occupant `search-manager.js`
  * moved to the top-level sibling `js/search-manager.js`; the singleton-class
  * shape matches the `tab-manager.js` / `project-manager.js` / `file-tree.js`
  * idiom). Future retirements append a row to RETIRED_PATHS.

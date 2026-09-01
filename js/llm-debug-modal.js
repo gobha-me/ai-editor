@@ -14,7 +14,7 @@ function esc(s) {
  * Render the per-exchange Compactor diagnostics block. Returns HTML
  * suitable for splicing into the per-exchange details panel. Designed
  * to be the load-bearing surface for "what did compression actually
- * do this turn?" per ROADMAP §1.2.0.
+ * do this turn?"
  *
  * @param {object} diag  CompressionResult.diagnostics
  * @returns {string}

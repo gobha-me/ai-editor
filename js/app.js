@@ -186,8 +186,8 @@ window.ErrorLogger = ErrorLogger;
 // Quick-open palette — kept as a DevTools probe surface (window.QuickOpen.open()).
 window.QuickOpen = QuickOpen;
 
-// Dev-mode flag: ?debug=metadata enables the chat-history metadata-coverage
-// probe (see js/chat/metadata-probe.js, docs/ROADMAP.md §1.1.0). Read-only;
+// Dev-mode flag: ?debug=metadata enables the read-only chat-history
+// metadata-coverage probe in js/chat/metadata-probe.js;
 // the flag is global so it can be inspected from the DevTools console.
 {
     const dbg = new URLSearchParams(window.location.search).get('debug') || '';
@@ -433,8 +433,7 @@ function setupKeyboardShortcuts() {
 // ============================================
 // TOOLBAR (Debug + others)
 // ============================================
-// Plugin modal owner moved to js/plugin-modal.js (2.29.0 — Phase 2b
-// of the inline-handlers migration).
+// Plugin modal event ownership lives in js/plugin-modal.js.
 
 /**
  * Initialize the top-bar Debug dropdown (1.3.6).
@@ -563,8 +562,7 @@ function setupEventListeners() {
     // 2.44.0.1: button wirings flow through `dom-bindings.js` so that
     // plugin-mounted buttons (any element mounted into a SlotManager slot
     // after `init()` runs) wire on the next `slot:rail-views:changed`
-    // emission instead of being silently dropped. See
-    // `docs/audit-2026-Q2/inventory.md` §app-boot.
+    // emission instead of being silently dropped.
 
     // Top-bar (1.3.6 Restructure)
     bindClick('btnCommit', openCommitModal);
@@ -821,7 +819,7 @@ async function init() {
         onCloseSecondaryPane: closeSecondaryPane,
         onOpenReplayModal: openReplayModal,
     });
-    // Phase 3a of inline-handlers migration — JS-renderer surfaces.
+    // UI event-dispatch contract — JS-renderer surfaces.
     mountDiffViewer({
         onSetViewMode: diffSetViewMode,
         onPreviousChange: diffPreviousChange,

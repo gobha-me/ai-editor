@@ -157,8 +157,7 @@ export const CODER_V1 = {
             // shape of structural anchor: discovery-adjacent, niche per
             // turn but load-bearing on the turns that need them. A
             // fresh-context Coder spawn would not reliably discover
-            // these through `find_tool` first, especially under 3.X
-            // amendment direction (`docs/discussion/3.0-amendment-implementation.md` §7).
+            // these through `find_tool` first.
             'list_conversations',
             'read_chat_history',
             'search_chat_history',
@@ -257,7 +256,7 @@ export const CODER_V1 = {
             // it — the handler is read-only; the side effect is gated by
             // the approval card.
             'delegate_task',
-            // Always-loaded coder essentials — ROADMAP §1.4.0.
+            // Always-loaded coder essentials.
             'read_file',
             'read_lines',
             'scan_file',
@@ -272,8 +271,8 @@ export const CODER_V1 = {
             'wait_for_ci',
             'get_ci_logs',
         ],
-        discovery_strategies: ['categorical'], // ROADMAP §1.4.0: categorical only; semantic in 1.4.1.
-        budget_tokens: 5000,    // ROADMAP §Decisions 5: tool budget defaults to 5000.
+        discovery_strategies: ['categorical'], // Default to deterministic catalog discovery.
+        budget_tokens: 5000,    // Default tool-definition budget.
         expansion_mode: 'short', // Lazy schema — name + 1-line on discovery; full on first call.
         // 2.54.0 (gitea#438) — explicit admission. Replaces the legacy
         // `allowed_groups: ['all', 'coder']` model with an explicit list

@@ -101,7 +101,7 @@ export function renderIssueRowsHtml(ctx) {
 
 /**
  * Bind a delegated click handler for issue rows (open in tab, start work,
- * dependency-link chat trigger). Phase 3a of the inline-handlers migration
+ * dependency-link chat trigger). UI event-dispatch contract
  * (DESIGN-ui-event-dispatch.md). Scoped to `#issuesPanel` —
  * `renderIssues()` rewrites the panel's innerHTML on every refresh, so the
  * document-level listener survives container re-creation.

@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/commit.js#mountCommitModal — Phase 1 of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountCommitModal({ onClose, onCommit, onGenerate })` installs ONE
  * document-level click listener that routes to the typed callback when:

@@ -8,10 +8,9 @@
  * invocation hook in `js/chat/handlers.js` writes to it after every
  * successful tool call.
  *
- * **1.3.17 scope (PR 4 of 1.4.0 Tools Phase 1).** One ledger per
- * conversation; `taskId === conversationId`. ROADMAP §1.4.0 explicitly
- * defers auto-detected task boundaries to 2.0 ("explicit `/task` markers
- * in 1.4.0; auto-detection in 2.0"). Ledgers live only in memory — no
+ * One ledger exists per conversation; `taskId === conversationId`.
+ * Auto-detected task boundaries are deliberately unsupported. Ledgers live
+ * only in memory — no
  * IDB, no persistence across reload — matching `task-ledger.js` lifecycle:
  * *"Ledgers do not survive session end by default."*
  *

@@ -73,7 +73,7 @@ let approvedPlan = null;  // { plan: string, approvedAt: number } | null
 let pendingScriptApproval = null;  // { source, description, expected_output, resolve }
 
 // Sub-agent approval pending state — single-slot, mirrors pendingScriptApproval.
-// 2.49.0.0 — slice 1 of github#24 Phase 1 (DESIGN-sub-agents.md §"Gap 6").
+// The delegate_task handler owns this state under docs/DESIGN-sub-agents.md.
 // Set by the `delegate_task` tool handler (slice 2); resolved by the
 // SubAgentApprovalCard component (slice 2) after the sub-agent loop
 // completes, on Reject, or on Cancel. Held separately because the

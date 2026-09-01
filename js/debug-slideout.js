@@ -1,7 +1,7 @@
 /**
  * Debug slide-out — 1.3.9 Touch 2 net-new surface
  *
- * Right-edge drawer per `docs/design/touch-2-facelift/project/debug.jsx`.
+ * Right-edge drawer built on the shared slide-out shell.
  * Replaces the 1.3.6 dropdown bridge (`#tbDebugDropdown`) plus the
  * legacy `#errorLogModal` and `#llmDebugModal`. Five tabs:
  *

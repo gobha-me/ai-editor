@@ -6,11 +6,8 @@
  * unmounts cleanly. The loader caches its result so multiple mounts
  * share one Preact instance.
  *
- * Why this exists: Decision §9 (project_constraints.md, ROADMAP §1.3.0)
- * loosens the no-framework rule for new state-heavy surfaces from
- * 1.3.0 onward — Memory tab is the first target, active-tools chip
- * row in 1.4.0 is the second, profile picker in 2.0 is the third.
- * Existing tabs/sidebar/file tree/editor frame/chat stay vanilla.
+ * State-heavy surfaces may use Preact through this single shared runtime.
+ * Existing tabs, sidebar, file tree, editor frame, and chat stay vanilla.
  *
  * Components written against this helper import from the resolved
  * module returned by `getPreact()`:

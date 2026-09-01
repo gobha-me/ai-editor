@@ -208,7 +208,7 @@ test('listByCategoryPrefix does not match by character prefix only', () => {
 // Profile integration — coder.v1.tools.static
 // ============================================
 
-test('coder.v1.tools.static contains the ROADMAP §1.4.0 set', () => {
+test('coder.v1.tools.static contains the required static tool set', () => {
     assert.ok(Array.isArray(CODER_V1.tools.static));
     const expected = [
         'list_tool_categories',

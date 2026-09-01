@@ -152,7 +152,7 @@
  * @property {ToolDefRef[]} catalog               Available tools for this surface.
  * @property {string[]}     static                Always-loaded subset (tool names — `ToolID` once 1.4.0 lands).
  * @property {string[]}     discovery_strategies  "categorical" | "semantic" | "frequency".
- * @property {number}       budget_tokens         Ceiling for the tool slice (default 5000 per ROADMAP §Decision 5).
+ * @property {number}       budget_tokens         Ceiling for the tool slice (default 5000).
  * @property {"short"|"full"} expansion_mode      Default lazy-schema state for discovered tools.
  * @property {string[]}     [admit]               Profile-side admission set: explicit tool names, plus `'*'` (full bypass) or `'<prefix>__*'` glob entries.
  * @property {string[]}     [admit_add]           Inheritance operator: names to set-union onto inherited `admit`. Ignored if child also declares literal `admit`.

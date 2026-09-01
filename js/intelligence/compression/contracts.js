@@ -124,9 +124,9 @@
  * under budget; returns a single synthesized `Turn` (role: "system") to
  * replace the span. May be async.
  *
- * Phase 1 implementation: `rules/summarization.js` wraps the existing
+ * `rules/summarization.js` wraps the existing
  * `js/chat/summarizer.js` so users not yet hitting eviction patterns see
- * no behavior change. Tighter integration is ROADMAP §1.2.4.
+ * no behavior change.
  *
  * @typedef {(span: Turn[]) => (Turn|Promise<Turn>)} SummarizerFn
  */
@@ -154,8 +154,7 @@
 
 /**
  * Diagnostics emitted by every `Compactor.compress()` call. Cheap to
- * populate. Surfaced in the LLM debug modal per ROADMAP §1.2.0 exit
- * criteria — `rules_skipped` is the load-bearing field that distinguishes
+ * populate and surfaced in the LLM debug modal. `rules_skipped` distinguishes
  * "no rule applied" from "rule skipped because metadata absent."
  *
  * @typedef {Object} Diagnostics

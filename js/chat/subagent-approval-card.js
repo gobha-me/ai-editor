@@ -1,9 +1,7 @@
 // @ts-check
 /**
  * Chat sub-agent-approval card — mount lifecycle around the
- * `SubAgentApprovalCard` Preact component (2.49.0 slice 2 of
- * github#24 Phase 1 — DESIGN-sub-agents.md §"Gap 6", §"Approval-card
- * capability summary").
+ * `SubAgentApprovalCard` Preact component. See docs/DESIGN-sub-agents.md.
  *
  * Mirrors `plan-approval-card.js`/`script-approval-card.js`. Differs
  * from script-approval in that the side-effect after Approve runs

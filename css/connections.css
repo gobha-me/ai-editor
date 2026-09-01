@@ -1,8 +1,7 @@
 /**
  * Settings → Connections panel — 1.3.8 Touch 2 net-new surface
  *
- * Per `docs/design/touch-2-facelift/project/connections.jsx`:
- * provider-grouped layout with N-of-each-provider rows, an "Add"
+ * Provider-grouped layout with N-of-each-provider rows, an "Add"
  * affordance per group, and a status pill per row. Both shipped
  * themes (Refined IDE, Editorial Calm) render identical markup
  * via the frozen `--tk-*` contract — no per-theme variants, no

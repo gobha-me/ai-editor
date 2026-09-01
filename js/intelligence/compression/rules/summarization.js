@@ -14,14 +14,11 @@
  * called) and instead invokes the SummarizerFn passed in
  * `CompressionRequest.summarizer` when the budget check fails.
  *
- * **Phase-1 integration is loose** per ROADMAP §1.2.0:
- *   "Existing summarizer stays in place under chat/summarizer.js, called
- *    as Rule 5 fallback by the new pipeline. No behavior change for
- *    users not yet hitting eviction patterns."
- * Tighter refactor — folding the existing summarizer into the pipeline
- * cleanly — is the explicit scope of ROADMAP §1.2.4.
+ * The existing summarizer stays under `chat/summarizer.js` and is called as
+ * the Rule 5 fallback. Users not hitting eviction patterns see no behavior
+ * change.
  *
- * **What this module ships in 1.2.0:**
+ * This module provides:
  *   - `SUMMARIZATION_RULE`: the marker registration profiles add to their
  *     `compression.rules` array. `is_summarizer: true` tells the
  *     Compactor to skip it in per-turn evaluation. Carries a no-op

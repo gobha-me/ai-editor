@@ -7,8 +7,7 @@
  * shape definition) and the emit-site dispatcher in `js/slot-manager.js`
  * — but even those should call `forSlot()` in production paths.
  *
- * Why this exists — the 2.41.0 slot-channel hygiene sweep (`docs/audit-2026-Q2/inventory.md`
- * §slot-manager) replaced the dynamic-name pattern at `js/slot-manager.js:169`
+ * The slot-channel boundary replaced the dynamic-name pattern
  * with `forSlot(slotId)` so the channel name becomes grep-discoverable and
  * input validation rejects malformed slot ids (e.g. `'rail:views'` would
  * silently produce `slot:rail:views:changed` under the old template literal).

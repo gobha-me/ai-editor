@@ -1,7 +1,6 @@
 /**
  * Tests for the 12K-per-turn truncation applied to sub-agent
- * transcripts on persistence (DESIGN-sub-agents.md §Risks line 536 —
- * "Sub-agent transcripts grow large" — the mitigation is hard cap on
+ * transcripts on persistence. The mitigation is a hard cap on
  * retained tool_result content). Slice 2 of github#24 Phase 1 (2.49.0).
  *
  * Pins:

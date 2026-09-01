@@ -13,8 +13,8 @@
  * context construction by dropping orphans and warning, rather than
  * 400-ing the provider.
  *
- * Spec: docs/design/long-chat-stability/findings.md §401-418 (PR 2,
- * "drop + warn" option).
+ * Invalid history entries are dropped with a visible warning so malformed
+ * local state cannot make the provider reject the entire request.
  */
 
 /**

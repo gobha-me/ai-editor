@@ -569,7 +569,7 @@ test('marker text includes "; ~{prior.tokens} tokens" suffix per DESIGN-profiles
     );
     assert.equal(result.suppressedCount, 1);
     const marker = result.kept[0];
-    // Pin the exact full-format text per ROADMAP §1.15.0.
+    // Pin the exact full-format text.
     assert.equal(
         marker.content,
         '[Already admitted: chunk_authmw — see turn turn_0; ~3000 tokens]',

@@ -113,7 +113,7 @@ T.eq(c.preserve_recent, 24, 'preserve_recent kept at 24 — see coder-v1.js for 
 T.assert(!!c.summarizer, 'summarizer present');
 T.eq(c.summarizer.mode, 'balanced', 'summarizer mode matches default');
 
-T.eq(CODER_V1.tools.budget_tokens, 5000, 'tool budget 5000 per ROADMAP §Decisions 5');
+T.eq(CODER_V1.tools.budget_tokens, 5000, 'tool budget 5000');
 T.deepEq(CODER_V1.tools.catalog, [], 'tools.catalog scaffold (Phase 1 doesn\'t populate yet)');
 T.deepEq(CODER_V1.tools.static, [
     'list_tool_categories',

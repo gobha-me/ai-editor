@@ -9,7 +9,7 @@
  * `.aieditor/memory/*.md` files are read and seeded into the structured
  * store.
  *
- * Why this exists: ROADMAP §1.3.0 Decision §1 says repo-committed
+ * Why this exists: the repository-memory contract says repo-committed
  * `.aieditor/memory/*.md` is **opt-in per workspace**. The Settings → Memory
  * tab toggle that ships in Memory PR #5 is the production opt-in surface.
  * Until then, this URL flag enables manual end-to-end testing of the file

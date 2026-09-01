@@ -5,8 +5,7 @@
  *
  * **Why a queue, not an immediate write.** Before PR #6, `memory_remember`
  * with `source: 'agent_proposed'` wrote directly to the IDB store. The
- * consent UX (Touch 1 Flow 1, `docs/design/touch-1-memory-ux/project/
- * flow1-consent.jsx`) requires that the user explicitly Accept / Edit /
+ * consent contract requires that the user explicitly Accept / Edit /
  * Dismiss a proposal before the record becomes durable. Three concerns
  * argued against the cheaper "write-immediately, revise/softDelete on
  * action" alternative:

@@ -28,10 +28,7 @@
  * runtime readers — a clean-start boundary so a sub-agent works against a
  * fresh-shape view of state, not parent runtime artifacts.
  *
- * Under the 3.X amendment direction (`docs/discussion/3.0-amendment-implementation.md`
- * §7), a fresh `Coder` sub-agent on spawn reads what PM has curated through
- * these tools. Phase 1 + 2 ship under the current 2.X substrate as primitives
- * 3.X will compose.
+ * A fresh delegated Coder reads what PM has curated through these tools.
  *
  * @module tools/introspection-tools
  */

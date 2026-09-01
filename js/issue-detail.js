@@ -664,7 +664,7 @@ export function closeIssueDetailModal() {
  * Bind a delegated click handler for the issue-detail modal's close buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2a of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  * Only `closeIssueDetailModal` migrates here — the `Start Work` button is
  * wired directly via `btnIssueStartWork.onclick` in `openIssueDetailModal`,
  * and the `Expand All` button's `event.stopPropagation()` is now handled

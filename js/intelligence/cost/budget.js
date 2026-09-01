@@ -2,9 +2,7 @@
 /**
  * Budget threshold helpers — pure, no IO.
  *
- * Soft warnings only. Per ROADMAP §1.2.1 (Decision §8 measurement-
- * before-scale), 1.2.1 surfaces budget pressure but never blocks a
- * request. Hard halts can revisit if the dashboard data shows demand.
+ * Soft warnings only: budget pressure never blocks a request.
  *
  * @module intelligence/cost/budget
  */

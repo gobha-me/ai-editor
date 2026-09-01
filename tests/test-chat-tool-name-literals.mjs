@@ -2,9 +2,7 @@
  * Anti-regression CI guard: every tool-name string literal that the `js/chat/`
  * module switches on or compares against must name a real registered tool.
  *
- * Why this exists — `docs/audit-2026-Q2/inventory.md` §tools entry
- * "Tool-name string-literals dotted around chat module" (`[HC] [M]
- * [needs-investigation]`). The chat module does case-dispatch on tool
+ * The chat module does case-dispatch on tool
  * names in three places — `summarizeToolArgs` / `summarizeToolResult`
  * (`js/chat/messages.js`) for compact tool-call rendering, `_writeRange`
  * / `_readRange` (`js/chat/turn-enrich.js`) for FileOp range extraction,

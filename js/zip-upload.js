@@ -222,7 +222,7 @@ export async function closeZipUpload() {
  * Bind a delegated click handler for the zip-upload modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2a of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  * `zipSelectAll` carries a typed `data-zip-select="all"` / `"none"` payload
  * per design Decision 3 (no JSON in attributes).
  */

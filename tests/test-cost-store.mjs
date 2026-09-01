@@ -3,7 +3,7 @@
  *
  * Pure-function aggregation logic over the in-memory localStorage stub
  * from `_node-shim.mjs`. Browser IDB path is exercised in the manual
- * verification per ROADMAP §1.2.1; here we validate the math.
+ * verification; here we validate the math.
  *
  * 1.6.7 — `recordTurn` is now async and serializes its read-modify-write
  * regions through a `KeyMutex` (gitea#188). All `recordTurn(...)`

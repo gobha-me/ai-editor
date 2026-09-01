@@ -1,7 +1,7 @@
 /**
  * Help slide-out — 1.3.10 Touch 2 net-new surface
  *
- * Right-edge drawer per `docs/design/touch-2-facelift/project/help.jsx`.
+ * Right-edge drawer built on the shared slide-out shell.
  * Inherits `.slide-out-overlay` + `.slide-out` from `css/slide-out.css`
  * (the 1.3.9 shell). Adds the `.slide-out--wide` modifier (820px) so
  * the left-rail nav + content pane both fit, plus all the `.help__*`

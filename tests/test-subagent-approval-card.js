@@ -1,8 +1,6 @@
 /**
  * Tests for the sub-agent approval card's mount lifecycle, capability
- * summary rendering, and resolution paths (2.49.0 slice 2 of
- * github#24 Phase 1 — DESIGN-sub-agents.md §"Approval-card capability
- * summary").
+ * summary rendering, and resolution paths from docs/DESIGN-sub-agents.md.
  *
  * Browser-only because the card is a Preact component (Decision §9)
  * and the lifecycle wrapper subscribes to EventBus events that must

@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/chat/messages.js#mountChatMessages — Phase 3b
- * of the inline-handlers migration
+ * of the UI event-dispatch contract
  * (docs/DESIGN-ui-event-dispatch.md), the final HTML-side
  * slice. Scoped to `#chatMessages`.
  *

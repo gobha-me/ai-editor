@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/plugin-modal.js#mountPluginModal — Phase 2b of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountPluginModal({ onClose })` installs ONE document-level click listener
  * scoped to `#pluginModal` and routed by `data-action`. The module was

@@ -175,12 +175,12 @@ test('CODER_V1 compression registers Rules 1, 2, and 5 (1.2.0)', () => {
     assert.equal(c.summarizer.mode, 'balanced');
 });
 
-test('CODER_V1 tools.budget_tokens matches ROADMAP §Decisions 5 default', () => {
+test('CODER_V1 tools.budget_tokens is 5000', () => {
     assert.equal(CODER_V1.tools.budget_tokens, 5000);
     // catalog stays empty — source of truth is js/tools/registry.js via the Catalog adapter (1.3.4).
     assert.deepEqual(CODER_V1.tools.catalog, []);
     // static was populated in 1.3.4 (PR 1 of 1.4.0 Tools Phase 1) with the
-    // ROADMAP §1.4.0 set: meta-tools + read_file/read_lines/scan_file +
+    // required static tool set: meta-tools + read_file/read_lines/scan_file +
     // edit_file + commit_files + list_dirty_files. Names that do not yet
     // exist in the registry (the meta-tools, until 1.4.0 PR 3) are
     // silently skipped by the admission consumer.

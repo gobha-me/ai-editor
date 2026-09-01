@@ -51,7 +51,7 @@ const TOOL_VERSION = '1';
  * @type {Object.<string, string>}
  */
 const CATEGORY_BY_NAME = {
-    // meta — discovery interface (1.3.16; ROADMAP §1.3.16, DESIGN-tools.md §"Meta-Tools").
+    // meta — discovery interface (1.3.16; the tool discovery contract, DESIGN-tools.md §"Meta-Tools").
     'list_tool_categories':   'meta',
     'list_tools_by_category': 'meta',
     'find_tool':              'meta',

@@ -397,7 +397,7 @@ test('DEFAULT_THRESHOLD is 0.4 (the sized-for-MiniLM/bge-small default)', () => 
     assert.equal(DEFAULT_THRESHOLD, 0.4);
 });
 
-test('DISCOVERY_ADMISSION_CAP is 3 (per ROADMAP §1.4.1)', () => {
+test('DISCOVERY_ADMISSION_CAP is 3 ', () => {
     assert.equal(DISCOVERY_ADMISSION_CAP, 3);
 });
 

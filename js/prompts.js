@@ -476,7 +476,7 @@ function buildSystemPrompt(opts = {}) {
     // profile + settings overlay. When admitted, this block tells the
     // model *when* delegation pays off — single dense investigative
     // task with discardable intermediates — and warns against
-    // over-delegation (DESIGN-sub-agents.md §Risks).
+    // over-delegation (docs/DESIGN-sub-agents.md).
     if (admittedNames.has('delegate_task')) {
         prompt += `\n\n--- SUB-AGENT DELEGATION ---`;
         prompt += `\nThe \`delegate_task\` tool spawns a bounded child agent on a focused investigative sub-task. The child runs against a restrictive read-only profile by default AND on a cheap-tier utility model — delegation is **cost-positive for read-heavy work, not just context-positive**. You get a structured \`summary\` back without the intermediate tool-call sequence inflating your context, and the child's tokens cost less than yours.`;
