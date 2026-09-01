@@ -1,7 +1,7 @@
 /**
  * Plugin Modal — generic container for plugin-contributed modals.
  *
- * Phase 2b of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Phase 2b of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
  * Extracted from js/app.js — the open/close helpers + mountPluginModal owner.
  *
  * Plugins register modal definitions via `Plugins.registerModal({id, title, render})`;

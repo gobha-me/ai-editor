@@ -32,7 +32,7 @@ const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
  * enumeration. The pre-2.0.0 `Roles.filterTools` consumer was retired
  * at 2.0.0; the 2.0.0 → 2.54.0 `Profile.tools.allowed_groups` consumer
  * was retired at 2.54.0 (composer's `user_groups` filter is a pass-
- * through). See [docs/ICD-mcp-bridge.md] §"Code-aware findings #1".
+ * through). See [docs/DESIGN-mcp.md] §"Code-aware findings #1".
  *
  * The field, this validator, and the Settings form are preserved
  * unchanged for back-compat with IDB records pre-dating 2.54.0 —

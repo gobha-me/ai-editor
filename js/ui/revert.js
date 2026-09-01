@@ -112,7 +112,7 @@ export function closeRevertModal() {
  * Bind a delegated click handler for the revert modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Phase 2a of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
  * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
  */
 let _wired = false;

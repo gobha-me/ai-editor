@@ -1,6 +1,6 @@
 /**
  * Tests for the SlotManager renderer that ships against the locked contract
- * in docs/DESIGN-git-providers-and-ui-extensions.md §4 (lines 193-412).
+ * in docs/DESIGN-git-providers.md §4 (lines 193-412).
  *
  * Pure-logic Node tests; the appendChild path uses a stub HTMLElement
  * class so the production `el instanceof HTMLElement` check exercises the

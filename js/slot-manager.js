@@ -1,7 +1,7 @@
 /**
  * SlotManager — declarative UI extension renderer.
  *
- * Contract: docs/DESIGN-git-providers-and-ui-extensions.md §4 (lines 193-633).
+ * Contract: docs/DESIGN-git-providers.md §4 (lines 193-633).
  * Six named slots; per-contribution try/catch; sort by (priority ?? 50)
  * ascending with insertion-stable ties; schema version `'1.1'` is the only
  * value the v1 renderer accepts. Plugin/provider contributions return either

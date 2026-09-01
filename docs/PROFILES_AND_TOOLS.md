@@ -2,7 +2,7 @@
 
 Profile-based admission for the LLM tool surface. Each profile enumerates the tool names it admits in `tools.admit`; [`Profiles.filterTools`](../js/profiles/registry.js) is the sole admission gate, called by both the per-turn API tools array and the system-prompt tool TOC.
 
-For the deep admission contract — five classification axes, three carve-outs (`'*'`, `'<prefix>__*'`, default-OFF), inheritance operators, forward-evolution rules — see [`ICD-tool-registry.md`](ICD-tool-registry.md). For the profile contract itself (budget / retrieval / memory / compression / tools / task-ledger slices), see [`DESIGN-profiles.md`](DESIGN-profiles.md) §"Inheritance > Tool admission".
+For the deep admission contract — five classification axes, three carve-outs (`'*'`, `'<prefix>__*'`, default-OFF), inheritance operators, forward-evolution rules — see [`DESIGN-tools.md`](DESIGN-tools.md). For the profile contract itself (budget / retrieval / memory / compression / tools / task-ledger slices), see [`DESIGN-profiles.md`](DESIGN-profiles.md) §"Inheritance > Tool admission".
 
 For per-tool descriptions and examples, see [`TOOLS.md`](TOOLS.md).
 
@@ -187,6 +187,6 @@ To restrict an MCP server's tools to a subset of profiles today, the option is e
 ## References
 
 - Source: [`js/tools/registry.js`](../js/tools/registry.js), [`js/profiles/registry.js`](../js/profiles/registry.js), [`js/profiles/inheritance.js`](../js/profiles/inheritance.js), [`js/profiles/{chat,coder,kb,full,pm,reviewer,plugin-dev,chat-multi,rp,subagent}-v1.js`](../js/profiles/).
-- Contract docs: [`ICD-tool-registry.md`](ICD-tool-registry.md) — admission seam (read the §⚠️ Superseded banner for the pre-2.54.0 model); [`DESIGN-profiles.md`](DESIGN-profiles.md) — profile schema + inheritance + Two-View Configuration.
+- Contract docs: [`DESIGN-tools.md`](DESIGN-tools.md) — admission seam (read the §⚠️ Superseded banner for the pre-2.54.0 model); [`DESIGN-profiles.md`](DESIGN-profiles.md) — profile schema + inheritance + Two-View Configuration.
 - Paper-session decisions: [`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md), [`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md), [`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md).
 - Tests: [`tests/test-profile-admit-coverage.mjs`](../tests/test-profile-admit-coverage.mjs) (coverage gate), [`tests/test-profile-filter-tools.mjs`](../tests/test-profile-filter-tools.mjs) (filter semantics), [`tests/test-profiles-inheritance.mjs`](../tests/test-profiles-inheritance.mjs) (`admit_add` / `admit_remove` operators).

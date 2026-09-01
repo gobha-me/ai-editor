@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/file-create.js#mountNewFileModal — Phase 2a of the
- * inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  */
 import './_node-shim.mjs';
 import { test } from 'node:test';

@@ -1,7 +1,7 @@
 /**
  * Left Pane Rail — Touch 3 sidebar layout (2.11.0); consumer of the
  * `rail-views` SlotManager slot kind (2.23.0, Decision 1 of
- * docs/DESIGN-git-providers-and-ui-extensions.md §"Decisions").
+ * docs/DESIGN-git-providers.md §"Decisions").
  *
  * Replaces the stacked, resizable Files / Issues / PRs sections with a
  * vertical icon rail plus a single content area that swaps between views.
@@ -140,7 +140,7 @@ const BRANCHES_BODY_HTML =
  * (10 between built-ins, 50+ default for new contributions) leaves room
  * for provider-shipped views to slot anywhere in the order.
  *
- * Cross-references: `docs/DESIGN-git-providers-and-ui-extensions.md` §4
+ * Cross-references: `docs/DESIGN-git-providers.md` §4
  * (slot priorities).
  */
 export const BUILTIN_PRIORITY = Object.freeze({

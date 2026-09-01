@@ -604,7 +604,7 @@ export function closeCreatePRModal() {
  * Bind a delegated click handler for the create-PR modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2b of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Phase 2b of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
  * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
  */
 let _createPRModalWired = false;

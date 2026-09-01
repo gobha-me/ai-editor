@@ -5,7 +5,7 @@
  *
  * Asserts the rail rendering decisions documented in the 2.11.0 plan, now
  * driven by the 2.23.0 `rail-views` SlotManager contract (Decision 1 of
- * docs/DESIGN-git-providers-and-ui-extensions.md):
+ * docs/DESIGN-git-providers.md):
  *   - 4 built-in buttons (files / issues / prs / branches) registered as
  *     `rail-views` contributions at mount time, in priority order
  *     (10/20/30/40).

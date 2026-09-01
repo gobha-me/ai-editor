@@ -3,7 +3,7 @@
  *
  * Bind a single delegated click handler for non-modal action buttons rendered
  * into the editor-panel and chat-panel app-shell containers. Phase 2b of the
- * inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (DESIGN-ui-event-dispatch.md).
  *
  * Replicates the `mountCommitModal` (js/ui/commit.js:116) shape, scoped to
  * `.editor-panel, .chat-panel` since the buttons split across two top-level

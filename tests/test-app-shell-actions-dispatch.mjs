@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/app-shell-actions.js#mountAppShellActions —
- * Phase 2b of the inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * Phase 2b of the inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountAppShellActions({ onOpenSettings, onOpenZipUpload,
  * onToggleSecondaryFullscreen, onCloseSecondaryPane, onOpenReplayModal })`

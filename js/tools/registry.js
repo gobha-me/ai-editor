@@ -415,7 +415,7 @@ export const ToolRegistry = {
      * shim under the old `getToolsForRole` name; that shim retired at
      * 2.1.0 as planned. There is no plugin-side alias today — callers
      * import `getToolsForProfile` directly. See
-     * [`docs/ICD-tool-registry.md`](../../docs/ICD-tool-registry.md)
+     * [`docs/DESIGN-tools.md`](../../docs/DESIGN-tools.md)
      * §"Per-export contract" for the admission contract.
      *
      * @param {string} [profileName] - Profile name (defaults to active)
@@ -446,7 +446,7 @@ export const ToolRegistry = {
      * introspection — the conservative correct outcome).
      *
      * Name preserved for compatibility — `js/llm/api.js` and any other
-     * consumer of the public surface (per `docs/ICD-tool-registry.md`)
+     * consumer of the public surface (per `docs/DESIGN-tools.md`)
      * continue to call `filterReadOnly`. The function is no longer
      * planMode-state-sensitive: it always returns the plan-mode-admitted
      * subset regardless of whether plan mode is active. Callers gate on

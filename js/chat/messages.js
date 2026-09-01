@@ -1209,7 +1209,7 @@ export function commitEdit(buttonEl) {
 /**
  * Bind a delegated click handler for chat-message action buttons —
  * Phase 3b of the inline-handlers migration
- * (docs/DESIGN-html-inline-handlers-migration.md). Scoped to
+ * (docs/DESIGN-ui-event-dispatch.md). Scoped to
  * `#chatMessages` (the persistent message container declared in
  * `html/chat-panel.html`); `renderMessages()` rewrites the panel's
  * innerHTML on every refresh and the virtualizer recycles message

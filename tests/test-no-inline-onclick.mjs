@@ -5,7 +5,7 @@
  * of `data-action=` + a delegated mount listener. This test fails if any
  * future PR sneaks an inline `onclick=` back in.
  *
- * See docs/DESIGN-html-inline-handlers-migration.md §Phase 4.
+ * See docs/DESIGN-ui-event-dispatch.md §Phase 4.
  *
  * Scope:
  *  - html/ : every .html template must be onclick-free. The 5 dispatchers
@@ -63,7 +63,7 @@ test('html/*.html contains no inline onclick=', () => {
     assert.equal(
         offenders.length,
         0,
-        `Inline onclick= attribute(s) found — migrate to data-action + delegated listener (see docs/DESIGN-html-inline-handlers-migration.md):\n${offenders.join('\n')}`,
+        `Inline onclick= attribute(s) found — migrate to data-action + delegated listener (see docs/DESIGN-ui-event-dispatch.md):\n${offenders.join('\n')}`,
     );
 });
 

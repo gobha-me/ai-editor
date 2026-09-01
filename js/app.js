@@ -177,7 +177,7 @@ console.log(`Starting ${VERSION_DISPLAY}`);
 // inline handler — `ondblclick`, `onchange`, `onkeydown` — deliberately
 // out of Phase 3's scope). Each entry below cites who relies on it; if
 // the last consumer goes, the alias goes with it.
-// See docs/DESIGN-html-inline-handlers-migration.md §Phase 4.
+// See docs/DESIGN-ui-event-dispatch.md §Phase 4.
 
 // Diagnostic console hooks — internal error path bridges window.ErrorLogger
 // at js/chat/tools.js:11 (decoupled init).

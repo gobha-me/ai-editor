@@ -218,7 +218,7 @@ export function renderEditorTabs() {
 
 /**
  * Bind a delegated click handler for editor tabs (switch + close). Phase 3a
- * of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
  * Scoped to `#editorTabs` — `renderEditorTabs()` rewrites the bar's innerHTML
  * on every state change, so the document-level listener survives re-creation.
  *

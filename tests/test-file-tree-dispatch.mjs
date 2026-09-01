@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/file-tree.js#mountFileTree — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `#fileTree`. Four actions:
  *   - `handleTreeClick` reads `data-path` + `data-type` (called with the event)

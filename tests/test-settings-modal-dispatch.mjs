@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/settings-manager.js#mountSettingsModal — Phase 2b
- * of the inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * of the inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountSettingsModal({ onClose, onSave, onExport, onImport, onFetchModels,
  * onFetchEmbedModels })` installs ONE document-level click listener scoped to
