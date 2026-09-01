@@ -1,323 +1,95 @@
-# AI Editor — Roadmap
+# AI Editor Roadmap
 
-> Last updated: 2026-05-23 (**v2.95.0 shipped** — dogfood bugs cohort: cost dashboard rejects zero/negative budgets ([github#42](https://github.com/gobha-me/ai-editor/issues/42)); plugin URL input gains programmatic label ([github#43](https://github.com/gobha-me/ai-editor/issues/43)). Per-minor detail in [CHANGELOG.md](../CHANGELOG.md); this doc commits to forward cadence, not ship history.
->
-> **Next forward step:** `RE-EVAL following 2.73.0` (overdue by 9 minors at v2.95.0; cadence-rule re-examination is the paper-half agenda item — the 5-slot overrun pattern visible at slots #6/#10/#11 suggests the every-3-minor rule itself needs weighing).
+> Reset 2026-09-01. GitHub is the code authority. The changelog records shipped
+> work; this document states product outcomes, evidence, and deliberate deferrals.
 
-## How to read this doc
+## User, job, and promise
 
-Roadmap = **where we're going**. Forward cadence; what's queued; what's parked; what's open.
+The primary user is a self-hosting individual developer who wants to work on a
+Git-hosted repository from a browser while retaining control over credentials,
+edits, commits, and merges.
 
-- Shipped work and per-PR rationale → [CHANGELOG.md](../CHANGELOG.md). Don't duplicate it here.
-- System shape, layer boundaries, data flows → [ARCHITECTURE.md](ARCHITECTURE.md). (Stale; refresh scheduled — see §"Re-evaluation cadence.")
-- Multi-version design arcs (preview, profiles, retrieval, etc.) → `docs/DESIGN-*.md`.
-- X.Y.Z.N versioning convention for in-flight multi-PR work → [VERSIONING.md](VERSIONING.md).
-- Pre-architecture thinking (questions parked behind triggers) → [`docs/discussion/`](discussion/).
-- Audit + sweep queue → [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md).
-- Dogfood + measurement battery → [`docs/dogfood-battery/`](dogfood-battery/) (per-session traces + README).
+The core job is to take a repository task from understanding through an
+explicitly approved, reviewed pull request without losing work or leaving the
+browser for routine Git operations.
 
-## How to read the bands
+AI Editor promises a Git-native, provider-flexible workspace where the model can
+help investigate and edit, but user-visible approval boundaries remain
+authoritative.
 
-Every pending milestone in this doc carries a commitment-band label per the methodology adopted 2026-05-12 (see [`VERSIONING.md`](VERSIONING.md) for related X.Y.Z.N convention; the Plinth methodology at `/config/Projects/plinth/docs/METHODOLOGY-llm-assisted-development.md` is the source). For ai-editor:
+## Current pain
 
-- **`[strong]`** — load-bearing for the next 3 milestones. Code-ready: ICD or DESIGN-doc contract exists; a code session can pick this up and implement. Deviation requires an architecture session, not a code-session decision.
-- **`[medium]`** — directional for the 4–7 milestone window. Shape is committed; precise wording tightens as the milestone approaches. A medium-band milestone needs a tightening session ahead of its code session.
-- **`[fuzzy]`** — sketch for work beyond 7 milestones or with unknown preconditions. Narrative coherence only; not a constraint. A fuzzy-band milestone needs an architecture session first, then tightening, then coding.
+- The implementation has broad capability, but delivery depended on a privileged
+  Gitea workflow that mixed validation, image publication, and deployment.
+- The previous roadmap optimized release and review cadence instead of the
+  reliability of the core user job.
+- Recent dogfood findings concentrated on recovery and visibility in the
+  repo-to-PR loop, while several public issues describe speculative future
+  capabilities rather than current blockers.
+- One browser-only test remains outside automated CI; manual checks must remain
+  explicit until that path becomes hermetic.
 
-**Re-evaluation cadence: every 3 code minors** (see §"Re-evaluation cadence" below). Re-eval slots are doc-only and accumulate in `[Unreleased]` — they do **not** consume a version slot. The cadence counts code minors only; the slot in between does not bump. The cadence keeps the sliding window aligned: content promotes (fuzzy→medium→strong) as milestones approach; content demotes or relocates as milestones slip.
+## Now
 
-**Unlabeled = strong.** New roadmap rows added without an explicit band are implicit `[strong]` — the methodology says that commitment should feel heavy. If in doubt, label `[medium]` and tighten at the next re-eval.
+### Trustworthy GitHub delivery
 
----
+Outcome: every pull request and `main` commit receives the same least-privilege
+Node, source-policy, dependency, container-build, and runtime checks. Future
+release images are produced by a separate tag-only GHCR workflow. Production
+deployment is not a repository workflow.
 
-## Now / Next / Later
+Success signals:
 
-| Phase | Track | Band |
-|---|---|---|
-| **Now (next up)** | **`RE-EVAL following 2.73.0`** (overdue by 9 minors at v2.95.0, doc-only) plus three carryover items: ICD #6 finding #2 (SSE transport, gated on architecture decision — pairs with [github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2 OAuth and [`DESIGN-mcp-oauth.md`](DESIGN-mcp-oauth.md) authoring); ICD #1 finding #3 (custom tab renderer cleanup callback, gated on real-leak signal in [`issue-detail.js`](../js/issue-detail.js) + [`plugin-editor.js`](../js/plugin-editor.js)); paper-half discussion item — cadence-rule re-examination (5-slot overrun pattern surfaced at slots #6/#10/#11). | `RE-EVAL following 2.73.0` (overdue, doc-only); two `[medium]` carryovers; one `[medium]` paper-half discussion |
-| **Just shipped (2.46.0 → 2.95.0)** | Fifty releases spanning the retrieval Composer docstring fix (2.46.0) through the dogfood bugs cohort (2.95.0). Highlights: profile admission inversion ([gitea#438](https://git.gobha.me/xcaliber/ai-editor/issues/438)–[gitea#443](https://git.gobha.me/xcaliber/ai-editor/issues/443), 2.54.0 → 2.60.0); sub-agents Phase 1 (github#24, 2.49.0); 9 ICD backfills shipped across 11 re-eval slots; plan-mode dispatch-side gate ([gitea#480](https://git.gobha.me/xcaliber/ai-editor/issues/480), 2.76.0); T1 tool-authored failure shape conformance (2.78.0); agent-loop contract centralization (2.83.0); `create_pull_request` dirty-tab guard ([gitea#493](https://git.gobha.me/xcaliber/ai-editor/issues/493), 2.84.0); Rule 3/4 coverage probe (2.85.0); same-tool-name streak guard ([gitea#496](https://git.gobha.me/xcaliber/ai-editor/issues/496), 2.86.0); `submit_plan_for_approval` idempotency guard ([gitea#499](https://git.gobha.me/xcaliber/ai-editor/issues/499), 2.87.0); runtime state + telemetry readers ([gitea#506](https://git.gobha.me/xcaliber/ai-editor/issues/506), 2.92.0); agent-loop tuning ([gitea#516](https://git.gobha.me/xcaliber/ai-editor/issues/516) + [gitea#517](https://git.gobha.me/xcaliber/ai-editor/issues/517), 2.93.0); commit-flow cohort ([github#45](https://github.com/gobha-me/ai-editor/issues/45) + [github#46](https://github.com/gobha-me/ai-editor/issues/46) + [github#47](https://github.com/gobha-me/ai-editor/issues/47), 2.94.0); dogfood bugs cohort ([github#42](https://github.com/gobha-me/ai-editor/issues/42) + [github#43](https://github.com/gobha-me/ai-editor/issues/43), 2.95.0). **Per-minor detail in [CHANGELOG.md](../CHANGELOG.md).** | mixed |
-| **Later** | Tier 3b in-editor preview (sidecar + build-step support; gating probe not operational); [github#37](https://github.com/gobha-me/ai-editor/issues/37) Phase 2 (re-scope from dogfood signal); [github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 3 self-hosted templates; [github#24](https://github.com/gobha-me/ai-editor/issues/24) sub-agents Phase 2 (DESIGN shipped 2.37.0; Phase 1 shipped 2.49.0; Phase 2 spec'd 2026-05-16); [github#18](https://github.com/gobha-me/ai-editor/issues/18) cross-device sync (post-2.0). | `[medium]` / `[fuzzy]` per row in §"Known open issues" |
-| **Deferred** | Foundations (was 1.1.x), Compression Rules 3–5, various UI items — see §"Deferred / parked" below. | `[fuzzy]` per row |
+- Required checks pass on the exact PR and merge SHAs.
+- Locked dependencies audit cleanly at moderate severity or higher.
+- The pinned container builds and serves both `/` and a configured sub-path.
+- No PR or `main` validation job receives production secrets or write authority.
 
----
+### Establish the core-loop baseline
 
-## TL;DR — architectural commitments
+Outcome: use representative issue-to-PR dogfood sessions to identify the first
+load-bearing failure in task understanding, approval, editing, verification, or
+review. Record the failure before scheduling a repair.
 
-The four DESIGN subsystems (`docs/DESIGN-*.md`) describe an intelligence-layer rebuild — retrieval, memory, compression, tools — coordinated by per-surface profiles. Three load-bearing commitments:
+Success signals:
 
-1. **Admissibility, not accumulation** — every byte the model sees has earned its place.
-2. **Git-native memory** — memory and conversation state can opt into living in `.aieditor/*` files committed with the repo. No backend; notes follow the code across machines and forks.
-3. **Measurement before scale** — the cost dashboard ships with the first eviction subsystem, not at the end of the arc. Each subsequent track lands against measured baselines.
+- Representative sessions complete without lost edits or bypassed approvals.
+- Failures are reproducible and tied to a user-visible outcome before code is
+  refactored.
+- Stable complex code is left alone when the baseline finds no defect.
 
-A 2.0 ships when profiles become the load-bearing configuration surface. **The 2.0 cut shipped at 2.0.0 (PR #322 sequence); the role selector retired with it.** The "what's still open" view of the 2.X path is in §"2.X path — what's still open" below.
+## Next
 
----
+- Repair the highest-impact reproducible core-loop blocker, with a regression
+  test at the narrowest stable boundary.
+- Convert critical browser-only coverage to hermetic tests when the missing path
+  affects the core job; do not chase a coverage percentage as an objective.
+- Curate GitHub issues by observed user impact. Close shipped work promptly and
+  preserve historical Gitea identifiers without bulk-importing the old tracker.
 
-## Cadence and versioning
+Promotion signal: a repeatable dogfood failure or multiple reports showing the
+same blocked outcome.
 
-**SemVer with intent.**
+## Later
 
-| Bump | Triggered by |
-|---|---|
-| Patch (`X.Y.Z → X.Y.Z+1`) | Bug fixes, doc updates, security, small UI polish, single-rule additions inside an active track |
-| Minor (`X.Y → X.(Y+1)`) | New subsystem track lands Phase 1, or a self-contained feature spans multiple files |
-| Major (`X.Y → (X+1).0`) | Load-bearing surface change (the 2.0 cut was the profile contract becoming load-bearing) |
+- [GitHub #27](https://github.com/gobha-me/ai-editor/issues/27): MCP discovery
+  and OAuth, after a security contract and demonstrated configuration friction.
+- [GitHub #24](https://github.com/gobha-me/ai-editor/issues/24): parallel
+  sub-agents, after delegated work repeatedly blocks the core loop.
+- [GitHub #18](https://github.com/gobha-me/ai-editor/issues/18): cross-device
+  settings sync, after repeated demand and an explicit trust/recovery model.
+- User-authored profiles and a larger 3.x product amendment remain preserved
+  concepts, not scheduled commitments.
 
-**The X.Y.Z.N sub-patch convention.** Multi-PR / multi-slice work develops in `X.Y.Z.N` space (sub-patch) until tag-ready; the single `vX.Y.Z` tag fires when the feature is testable end-to-end. Full convention + composition with the existing versioning feedback memories: see [`VERSIONING.md`](VERSIONING.md).
+## Deliberate deferrals
 
-**Branching.** Main is protected. Every change goes through a PR from a topic branch. Gitea CI runs security lint + Docker build on every PR; tag push deploys to production. PR title convention: `feat(track):`, `fix(area):`, `chore(release):`, `docs(...)`. Squash + delete on merge. No "preview" or "beta" channels — `:dev` Docker tag for PRs and `:test` for `main` provide preview environments.
+- Kubernetes deployment, cluster credentials, environments, rollback, and live
+  promotion belong to the cluster authority, not this repository.
+- No preview or `edge` image channel; release images are tag-only.
+- No wholesale rewrite, framework migration, collaborative editing, plugin
+  marketplace, persona system, or multimodal architecture without new evidence.
+- Release frequency and scheduled re-evaluation slots are not product outcomes.
 
-**Release-readiness gate (added 2026-05-04, retroactive from `v1.6.0`).** Gates **release tag pushes** (`X.Y.Z`-shaped only — `X.Y.Z.N` sub-patches don't fire the gate). Drive a real chat session of ~10 turns with tool calls, run `find_relevant_files` against a query, make a code edit + commit, all in this repo. No silent history truncation; no broken-history 400s; no stale-state regressions in surfaces touched since the previous tag. Honor-system today; the dogfood result is recorded on the release tag annotation alongside the bundled-PR list. **Why this exists:** between 1.5.5 and 1.5.13 the retrieval track shipped seven internally-correct minor versions while the chat surface had a known summarizer regression that made the editor unusable for long sessions. The X.Y.Z.N convention is the upstream slowdown; the gate is the downstream check.
-
----
-
-## Re-evaluation cadence
-
-Per methodology §Phase 3, every 3 code minors past the next-N window get a re-evaluation slot. Re-eval items appear inline in forward cadence here, distinguished from code milestones by the `[rewrite session]` tag (no band label — re-eval isn't code work). **Re-eval slots are doc-only and accumulate in `[Unreleased]`; they do not consume a version slot** (policy refinement adopted at `RE-EVAL following 2.46.0`; see also Decision §14).
-
-**What each re-evaluation does** (both halves run unless explicitly noted; default is run both):
-
-- **Paper half** — promote `[fuzzy]` content whose preconditions materialized; tighten `[medium]` content whose milestone window is approaching; demote or relocate content whose milestone slipped. Update milestone band labels to reflect dependency changes. Verify the Forward ICD presence check (§ below) for the next-3 `[strong]` window.
-- **Code-aware half** — read `js/` against the ARCHITECTURE.md claims; find architectural decisions embedded in code comments that should be promoted; find new interfaces in code that aren't in any DESIGN doc; find tests missing for `[strong]`-band claims. Produce a gap analysis that feeds back here.
-
-**Slots #1–#11 ran 2026-05-12 → 2026-05-22.** All 9 named ICD-backfill targets shipped (see §"Per-subsystem ICD backfill program" below). Per-slot deliverables and ICD-author dates are documented under each absorbing release's [CHANGELOG.md](../CHANGELOG.md) entry. **Pattern observed across slots #6/#10/#11:** 5-slot overrun at the cadence anchor — paper-half discussion item for the next slot to weigh whether the every-3-minor rule itself needs re-evaluation toward something looser (every 5 minors? rolling-window absorption?) rather than mechanical anchor advancement that bakes in known overruns.
-
-**Next re-eval slot: `RE-EVAL following 2.73.0`** — anchored per the 3-code-minor cadence-from-anchor rule (3 code minors past 2.70.0). Overdue by 9 minors at v2.95.0; agenda includes (1) paper-half cadence-rule re-evaluation and (2) ARCHITECTURE.md catch-up sync from 2.86.0 forward.
-
-**Subsequent re-evals.** Inline as `RE-EVAL following 2.76.0`, `RE-EVAL following 2.79.0`, etc. — every 3 code minors. Skip the code-aware half only when nothing meaningful has merged since the last pass. **All re-evals from this slot forward accumulate in `[Unreleased]`** — they do not consume a version slot.
-
-### Per-subsystem ICD backfill program
-
-Existing code accreted contracts as inline classification sets, registry filters, and base interfaces rather than written ICDs. The ICD backfill program covered the highest-drift subsystems, one per re-eval slot. **All 9 named targets shipped 2026-05-12 → 2026-05-19**; subsequent re-evals run the paper + code-aware halves against the established 9 ICDs and surface new candidates only if cross-ICD drift accumulates.
-
-| # | Subsystem | ICD | Authoring slot |
-|---|---|---|---|
-| 1 | Chat handlers + classification axes | [`ICD-chat-handlers.md`](ICD-chat-handlers.md) | `RE-EVAL following 2.41.0` (2.42.0) |
-| 2 | Intelligence-layer Composer seam | [`ICD-intelligence-composers.md`](ICD-intelligence-composers.md) | `RE-EVAL following 2.44.0` (2.45.0) |
-| 3 | Tool registry admission contract | [`ICD-tool-registry.md`](ICD-tool-registry.md) | `RE-EVAL following 2.46.0` (admission surface superseded by ICD #8 post-2.54.0 inversion) |
-| 4 | `git-providers/base.js` 55-method interface | [`ICD-git-providers.md`](ICD-git-providers.md) | `RE-EVAL following 2.49.0` |
-| 5 | Retrieval manager + ingest pipeline + lifecycle + persistence + diagnostics | [`ICD-retrieval-manager.md`](ICD-retrieval-manager.md) | `RE-EVAL following 2.52.0` |
-| 6 | MCP bridge + protocol + registry + catalog/discovery + auto-test | [`ICD-mcp-bridge.md`](ICD-mcp-bridge.md) | `RE-EVAL following 2.55.0` |
-| 7 | Plugin lifecycle | [`ICD-plugin-lifecycle.md`](ICD-plugin-lifecycle.md) | `RE-EVAL following 2.58.0` |
-| 8 | Profiles registry (post-2.54.0 admission boundary; pairs with ICD #3) | [`ICD-profiles-registry.md`](ICD-profiles-registry.md) | `RE-EVAL following 2.61.0` |
-| 9 | Editor instance + tab-manager | [`ICD-editor-instance.md`](ICD-editor-instance.md) | `RE-EVAL following 2.64.0` |
-
-**Trade-off realized.** ~1–2 hours per subsystem × 9 subsystems ≈ 12–16 hours of architecture-session time, spread across 8 days. Per-slot code-aware findings cohort detail is in [CHANGELOG.md](../CHANGELOG.md) under each absorbing release.
-
----
-
-## Forward ICD presence check
-
-Per methodology §3.1, every `[strong]` milestone in the next-N window must have a contract (ICD or DESIGN doc) on hand. If the contract is missing, the milestone is not actually strong; either demote it (acknowledging the contract gap) or schedule a contract-authoring slot ahead of the milestone.
-
-**Current state (v2.95.0).** No `[strong]`-band milestones are queued in the next-3 window. Current queue + contract status:
-
-| Item | Band | Contract | Status |
-|---|---|---|---|
-| `RE-EVAL following 2.73.0` | `[rewrite session]` | Plinth methodology + the 9 established ICDs | Queued (doc-only; overdue by 9 minors) |
-| ICD #6 finding #2 — SSE transport | `[medium]` | [`ICD-mcp-bridge.md`](ICD-mcp-bridge.md) §"Code-aware findings #2" + paper-first slot at [`DESIGN-mcp-oauth.md`](DESIGN-mcp-oauth.md) (currently nonexistent) | Gated on architecture decision; pairs with [github#27](https://github.com/gobha-me/ai-editor/issues/27) Phase 2 OAuth |
-| ICD #1 finding #3 — custom tab renderer cleanup callback | `[medium]` | [`ICD-editor-instance.md`](ICD-editor-instance.md) §"Code-aware findings #3" | Gated on real-leak signal in production renderers |
-| Cadence-rule re-examination | `[medium]` | Paper-half discussion item; new entry to be authored at `RE-EVAL following 2.73.0` | Slot #11 paper-half hand-off |
-
-**All `[strong]`-band milestones shipped 2.42.0 → 2.95.0 had on-hand contracts** — each ship's CHANGELOG entry names its ICD or DESIGN-doc anchor; see [CHANGELOG.md](../CHANGELOG.md) for per-ship detail.
-
----
-
-## 2.X path — what's still open
-
-The 1.14.0 → 2.0.0 profiles arc shipped end-to-end through 14 slices (1.14.0 → 2.0.0, including parallel 1.X tracks for Sandbox/LLM-authored automation, Plugin Discoverability, Tier-1/2/3a preview, Retrieval ingest hardening). **See [CHANGELOG.md](../CHANGELOG.md) for per-slice rationale.** The verification footing (§Decisions §7 Removability check) held: every slice's profile-read could be replaced with the prior hardcode and the regression suite passed; the user-visible slices (1.15.0 ledger markers, 1.17.0 `preserve_recent` reconciliation, 1.21.0 picker UI, 2.0.0 role-removal) each have explicit regression tests.
-
-**Still open:** **2.0.x stabilization patches** `[medium]`. Advanced view of the picker (forked profile definitions, raw `Profile` struct edits per [`DESIGN-profiles.md`](DESIGN-profiles.md) line 587 Two-View Configuration); migration-script edge cases; per-profile diagnostics polish. Power-user surface, deferrable without breaking the 2.0 load-bearing claim. No specific ICD yet; will tighten when a real edge case surfaces.
-
----
-
-## After 2.0.0 — Phase 2/3/4 continuation
-
-| Slice | Maps to design | What ships | Band |
-|---|---|---|---|
-| ~~Phase 2 (data + harness) shipped 2.6.0; `kb.v1` picker-promoted 2.8.0~~ | `DESIGN-profiles.md` line 455 | *see [CHANGELOG §2.6.0](../CHANGELOG.md) and [§2.8.0](../CHANGELOG.md)* | — |
-| **Phase 2 picker promotion — `chat_multi.v1` / `rp.v1`** | `DESIGN-profiles.md` | Profiles target consumers (multi-user shared chat, role-play personas) that don't exist in ai-editor; promotion needs a different consumer (custom plugin profile inheriting `base: 'rp.v1'`, or a separate product surface) — that's the Phase 4 authoring API path. Picker-list tests pinned at `['chat.v1', 'coder.v1', 'kb.v1']`. | `[fuzzy]` (no real consumer; deprioritized for ai-editor) |
-| **2.3.0 Phase 3 — operational maturity** | `DESIGN-profiles.md` | Task boundary detection heuristics (replaces explicit markers), novelty-score tuning from real usage, per-profile dashboards. | `[fuzzy]` (no ICD; gated on Phase 2 dogfood signal) |
-| **2.4.0+ Phase 4 — extensibility** | `DESIGN-profiles.md` | Custom profile authoring API, profile diffing, profile regression testing harness. Unblocks plugin-defined surfaces. | `[fuzzy]` (no ICD; gated on Phase 3) |
-
----
-
-## Parallel work streams
-
-| Stream | Status | Band |
-|---|---|---|
-| ~~LLM-authored automation (Tier 0 sandbox + Plan-Mode-shaped approval card)~~ | ✅ Phase 1 shipped 1.16.0; validated against HTML-Games (~200× cost collapse vs. manual). Phases 2–5 park behind real usage data per [`DESIGN-llm-authored-automation.md`](DESIGN-llm-authored-automation.md). | — |
-| ~~Plugin Discoverability~~ | ✅ shipped 2.1.0 | — |
-| ~~In-editor preview Tier 1 (sandboxed iframe + Service Worker)~~ | ✅ shipped 1.22.0 | — |
-| ~~In-editor preview Tier 2 (console + error capture)~~ | ✅ shipped 2.7.0; closed the Sokoban class on HTML-Games | — |
-| ~~In-editor preview Tier 3a (driveable preview, selector-shaped)~~ | ✅ shipped 2.10.0; `preview_eval` decision settled (does not ship); `preview_screenshot` deliberately deferred | — |
-| **In-editor preview Tier 3b (sidecar + build-step support)** | Playwright (or equivalent) sidecar per workspace; container isolation; per-workspace `npm run dev` lifecycle. Closes the Cogfall (Vite/TS/Pixi) class. **Gating mechanism not yet operational** — needs a probe that classifies "this bug would have been served by Tier 3b but not Tier 3a + Tier 2 + Tier 1." Independent of the Profiles arc. | `[fuzzy]` (gating mechanism undefined) |
-| ~~Retrieval ingest hardening (delta-indexing 2.2.0; language-stats + token cap 2.4.0)~~ | ✅ shipped; track closed | — |
-| ~~T1 tool-authored failure shape conformance~~ | ✅ shipped 2.78.0 — `code:` field + closed `VALID_CODES` set + 11 conformant handlers + source-scan lint at [`tests/test-tool-failure-shapes.mjs`](../tests/test-tool-failure-shapes.mjs). Contract in [`DESIGN-tools.md`](DESIGN-tools.md) §"Tool-authored failure shape contract." See [CHANGELOG.md](../CHANGELOG.md). | — |
-| ~~Agent-loop contract centralization (post-`DESIGN-agent-loop.md`)~~ | ✅ shipped 2.83.0 — new JSDoc-only [`js/chat/agent-loop-contracts.js`](../js/chat/agent-loop-contracts.js) carrying typedefs (`EnvelopeShape`, `LoopState`, `CacheResult`, `DupStreakPolicy`) + Authorship Rule table verbatim from [`DESIGN-agent-loop.md`](DESIGN-agent-loop.md); 4 consumers cite via `@see`; source-scan citation lint. No behavior change. See [CHANGELOG.md](../CHANGELOG.md). | — |
-| ~~**Rule 3/4 coverage measurement probe + log/debug pane button**~~ | ✅ shipped 2.85.0 — pure-Node-importable [`js/chat/rule3-coverage-probe.js`](../js/chat/rule3-coverage-probe.js) + 3-bucket classifier + 9-path dispatch inferer + debug-pane button in [`js/debug-slideout.js`](../js/debug-slideout.js); 37 subtests at [`tests/test-rule3-coverage-probe.mjs`](../tests/test-rule3-coverage-probe.mjs). **Rule 3 / Rule 4 deferrals stay open** — clears once ≥10 sessions on coder.v1 measure ≥95% per-current-path coverage. See [CHANGELOG.md](../CHANGELOG.md). | `[medium] [S]` (shipped) |
-
----
-
-## 2026-Q2 code audit + sweep track ~~`[strong]`~~ (✅ closed 2026-05-14 at 2.44.0)
-
-> *Started 2026-05-11 post-2.23.0 SlotManager migration. Measurement-first sweep — read the codebase, catalog refactor candidates, burn them down at ~1 entry per spare slot. Closed 2026-05-14 at 2.44.0 (PR #408 wave-close) after 22 entries resolved across 11 system buckets.*
-
-Living inventory: [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md) — retained as historical record + queue for the next sweep wave whenever the next audit pass starts. Categories (**HC** hardcode wall · **EV** missing event wiring · **DUP** duplicate implementation · **REG** should-be-registered-isn't · **ST** style drift), system buckets, confidence tags, and per-entry touch points all live there.
-
-**Closure summary.** Two waves shipped in X.Y.Z.N space: the 2.33.0 → 2.39.0 wave (orphan-emit hygiene + early sweep entries; closed 2.39.0 per `js/version.js` `.N` strip) and the 2.44.0 wave (4 slices: tool-name string-literals, `safeAdd` registry, settings-tab activation, `managers/` placement; closed 2.44.0 with three remaining open entries triage-closed as no-op-or-precondition-not-met). The X.Y.Z.N wave shape (one tag covering many sub-step closures) is now established precedent for future sweep waves.
-
-**Triage policy + sizing.** Confidence-tag rules (likely → ship; needs-investigation → audit-first; maybe-intentional → designate as public extension API or delete). Sizing: **[S]** (single PR, <100 LOC) folds into in-track patches; **[M]** earns its own minor slot; **[L]** earns a design doc first. Closure threshold: fewer than ~5 entries remain that survive triage — fired 2.44.0.3.
-
----
-
-## Deferred / parked
-
-> **Why this section exists.** Foundations (was 1.1.x) and Compression (was 1.2.x) were sequenced before Memory + Tools jumped ahead. Some items are gated on metrics the cost dashboard produces (shipped 1.2.1; export shipped 1.6.6). Some may be obsolete now that adjacent tracks shipped their equivalents (e.g. `TaskLedger` landed in 1.3.17). Sorting paused-vs-abandoned is part of each re-evaluation pass.
->
-> **Three buckets per methodology.** Items here are either `[fuzzy]`-band parked (still visible on the roadmap; preconditions named or unknown), pre-architecture thinking in [`docs/discussion/`](discussion/), or eventually slipped past the planned horizon (`docs/deferred/` — not bootstrapped; allocate when needed).
-
-### `[fuzzy]` parked-but-named
-
-**Foundations (was 1.1.x)** — `[fuzzy]` until a precondition fires:
-
-| Item | Trigger to promote |
-|---|---|
-| Turn metadata enrichment | Compression Rules 1–3 ship; their measurement loop needs `file_ops` + `tool_result_for` coverage |
-| Migration coverage probe | Same — gated alongside Rules 1–3 |
-| Pre-merge version coherence check (CI lint) | Recurring drift incident; one evening to fix forever |
-| Embedder hardening (provider decoupling, filetype filters, in-browser embedder validation, Settings → Embeddings tab) | Real-repo measurement showing the file-count ceiling or filetype noise is dominating cost |
-| Vim keybindings | User demand |
-| Glassworm / Trojan-Source protection (CI lint + editor decoration + plugin-install warning) | Already partially addressed at 2.17.1 (tool-return scan); remaining work gated on a real attack class |
-
-**Compression (was 1.2.x)** — `[fuzzy]` post-Rules-1+2 measurement:
-
-| Item | Trigger to promote |
-|---|---|
-| Rules 1+2 (Subsumption, Invalidation) | Cost-dashboard export landed 1.6.6 → unblocked; ship-then-validate per `project_cost_quality_tradeoff` memory |
-| Rule 3 (Consumption) | ≥95% `tool_result_for` coverage on production sessions (2026-05-21 design-doc re-read confirms trigger stands; backref metadata already wired at compression contracts). **Evidence-collection mechanism** = "Rule 3/4 coverage measurement probe + log/debug pane button" in §"Parallel work streams" — ship the probe, run it against ≥10 coder.v1 sessions on the collected corpus, the report's per-current-path coverage number is the gate. |
-| Rule 4 (Resolution) | Rule 3 numbers matching design (2026-05-21 design-doc re-read confirms trigger stands; template placeholders defined in contracts). Sequential gate — needs Rule 3 to ship first, then measure `(tokens evicted by Rule 3) / (total session tokens)` against the design's predicted reduction. Probe extends with a `_rule3_token_impact` block when Rule 3 lands. |
-| Rule 5 tuning | Pipeline plumbing existing summarizer cleanly |
-| Settings → Compression panel refresh | Rules 1–5 live |
-
-**Other deferred (banded inline):**
-
-- PR Review polish follow-ups → moved to [`discussion/pr-review-polish.md`](discussion/pr-review-polish.md). `[fuzzy]` (gated on usage signal post-2.14.0).
-- Chat panel facelift (three Touch 2 variants) — `[fuzzy]` until a direction is picked or roll into the next major.
-- Persona memory scope — `[fuzzy]` (deferred indefinitely; workspace + user scopes cover demand).
-- In-app help renderer (sidebar pane instead of modal) — `[fuzzy]`.
-- Mobile secondary pane rework — `[fuzzy]`.
-- Issue/PR tab visual hierarchy — `[fuzzy]` (lo-pri).
-- Plugin marketplace — `[fuzzy]` (defer to a major post-2.x once the architecture stabilizes).
-- Plugin settings panel tab — `[fuzzy]` (richer config UI beyond auto-generated `configSchema`).
-- CodeMirror extension bridge — `[fuzzy]` (expose `EditorView` to plugins).
-- Tools settings page — `[fuzzy]` (dedicated tab showing all registered tools).
-- Custom role creation UI — `[fuzzy]` (post-2.0; profiles changed the picture).
-- Cross-project tools (`peek_scan_file`, `peek_search_in_files`, `peek_read_function`) — `[fuzzy]` (needs cross-repo provider work first).
-- More languages in `scan_file` (Go, Rust, Java, C/C++) — `[fuzzy]`.
-- Expand `.mjs` test coverage — `[fuzzy]` (port browser-only suites to `node:test`).
-- Generic / custom git provider — `[fuzzy]`.
-- Offline / PWA support — `[fuzzy]`.
-
-### Pre-architecture thinking → `docs/discussion/`
-
-Three discussion docs are seeded; future discussion docs land here as Claude sessions surface architectural questions Jeff isn't yet ready to answer:
-
-- [`discussion/github-37-phase-2.md`](discussion/github-37-phase-2.md) — eight design questions for CLAUDE.md Phase 2.
-- [`discussion/pr-review-polish.md`](discussion/pr-review-polish.md) — four PR Review follow-ups.
-- [`discussion/touch-3-window-v2-sessions.md`](discussion/touch-3-window-v2-sessions.md) — Window v2 / Sessions architectural seams.
-
-Cite as "see `discussion/X.md` for the thinking," never as a source of truth (per [`discussion/README.md`](discussion/README.md)).
-
-### Deferred — slipped past the planned horizon
-
-`docs/deferred/` is not bootstrapped yet. Allocate when the first item graduates from `[fuzzy]` to "preconditions slipped past horizon; preserved but inactive."
-
----
-
-## Known open issues — not yet scheduled
-
-User-facing gaps tracked as filed issues but not yet slotted into a track. **Issue trackers split by audience:** internal/dogfood-only on Gitea (`git.gobha.me/xcaliber/ai-editor`); public-facing on the GitHub mirror (`github.com/gobha-me/ai-editor`).
-
-**Open:**
-
-| Issue | Summary | Band | Rationale |
-|---|---|---|---|
-| [github#37 Phase 2](https://github.com/gobha-me/ai-editor/issues/37) | Re-scope CLAUDE.md analogue from dogfood signal | `[medium]` if dogfood signal arrives; `[fuzzy]` until then | Phase 1 may turn out to be the whole answer. 8 design questions parked at [`discussion/github-37-phase-2.md`](discussion/github-37-phase-2.md). |
-| [github#27 Phase 2 OAuth flows](https://github.com/gobha-me/ai-editor/issues/27) | MCP server OAuth | `[medium]` (retained at `RE-EVAL following 2.55.0`; security surface warrants paper-first contract) | Sized; `docs/DESIGN-mcp-oauth.md` authoring slot queued (no milestone target yet). ICD #6 §Code-aware findings #2 (SSE transport plumbed-but-falls-through) explicitly pairs with the OAuth implementation — both touch [`js/mcp/protocol.js`](../js/mcp/protocol.js), both gain from a single architecture-decision session. Picker-list tests stay pinned. |
-| [github#24 Sub-agents Phase 2](https://github.com/gobha-me/ai-editor/issues/24) | Parallel sub-agents (Phase 1 shipped 2.49.0; Phase 2 spec'd 2026-05-16) | `[fuzzy]` (Phase 2 fully spec'd in [`DESIGN-sub-agents.md`](DESIGN-sub-agents.md) §Phasing → Phase 2; implementation gated on §"Phase 1 dogfood-signal definition" Triggers A/B/C — none satisfied yet) | Spec pins batched approval card + `pendingSubAgentApprovalBatch` state + `subagentCostMutex` + parent-loop batch-await contract. Implementation slot fires on first dogfood trigger. |
-| [github#18 Cross-device sync](https://github.com/gobha-me/ai-editor/issues/18) | Settings sync via QR/P2P | `[fuzzy]` (designed in [`DESIGN-cross-device-sync.md`](DESIGN-cross-device-sync.md); post-2.0 by design) | "Cross-process / distributed state" is out of scope for 1.x→2.0; this is the design-on-paper edge. Revisit post-profile-contract. |
-
-**Closed:** see [CHANGELOG.md](../CHANGELOG.md) — every previously-listed closed issue is documented there. Removed from this doc on 2026-05-12 to drop ~70 lines of duplicated history (CHANGELOG remains authoritative).
-
-**Closed prior to 2.42.0 (recorded at this re-eval for paper-half drift fix):**
-
-- ~~[gitea#392](https://git.gobha.me/xcaliber/ai-editor/issues/392)~~ — `[ui] Branch switcher: clicking a branch switches it but active highlight/overlay doesn't move`. Closed pre-2.42.0; no in-doc fix-PR ref captured. The 2.41.0 ROADMAP listed this as open `[strong]`; this re-eval's paper-half catches the drift.
-- ~~[gitea#393](https://git.gobha.me/xcaliber/ai-editor/issues/393)~~ — `[ui] Left-panel rail views: clicking a group should trigger a refresh`. Closed pre-2.42.0 (resolved by the `view.onActivate(viewId)` shape extension noted in [`js/ui/left-pane-rail.js`](../js/ui/left-pane-rail.js) module header — *"Activation refresh (gitea#393, 2.38.1)"*). The 2.41.0 ROADMAP listed this as open `[strong]`; this re-eval's paper-half catches the drift.
-
----
-
-## Decisions
-
-> Resolved from discussion. **Strong-band architecture commitments.** New decisions land here only via an architecture session — code sessions cite these, they don't add to them.
-
-1. **Memory storage is two-tier.** Browser cache default (per-tab); repo-committed `.aieditor/memory/*.md` opt-in per workspace. Toggle in Settings → Memory.
-2. **Roles got replaced by the profile picker at 2.0.** No dual-surface; one selector. Migration script translated stored `role` to a profile preset. **Shipped 2.0.0.**
-3. **Compression diagnostics surface as a public status-bar pill** (e.g., "📉 60% kept"), not just debug-mode. Full eviction trace stays in the LLM debug modal for power users.
-4. **Memory files auto-stage on commit when repo mode is opt-in AND the current branch isn't protected.** On protected branches, the memory diff surfaces in the commit modal as an unstageable warning.
-5. **Tool budget defaults to 5000 tokens** (per design), exposed as a tunable in Settings → Tools.
-6. **Branching: per-PR feature branches off `main`. Squash + delete on merge.** No long-lived track branches.
-7. **Removability is an explicit checkpoint, not a vibe.** Every Phase-1 milestone carries a Removability check in its exit criteria. If "subsystem removed → no user-visible degradation," the next minor is gated on closing that gap.
-8. **Measurement before scale.** Cost dashboard shipped at 1.2.1; export at 1.6.6 — both unblocking. Each subsequent track lands against measured baselines.
-9. **Preact + `htm` allowed for new state-heavy surfaces from 1.3.0; vanilla everywhere else.** Existing tabs / sidebar / file tree / editor frame / chat stay vanilla forever; no migration. Bigger uniform-UI consolidation is a post-2.0 arc.
-10. **claude.ai/design engages on a three-touch model.** Touches 1 + 2 shipped (Memory UX → 1.3.0; whole-app facelift → 1.3.5–1.3.13); Touch 3 received 2026-05-07 (left pane + window architecture). Touch 3's Rail v2 / PR Review / Merge Conflict / zip-flow shipped; **Window v2 / Sessions is the only Touch 3 surface left, post-2.0 by design.**
-11. **Two-view configuration for every settings panel.** Preset view (intent) + advanced view (parameters), reachable via the same toggle name and position in every panel. Editing in advanced flips the preset selector to "Custom"; switching back to a named preset snaps every knob to that preset's defaults. **No separate "Developer mode" sections.** Full contract in [`DESIGN-profiles.md`](DESIGN-profiles.md) §"Two-View Configuration."
-12. **Release-readiness gate (2026-05-04).** Release tag pushes (`X.Y.Z`-shaped; **`X.Y.Z.N` sub-patches don't fire the gate**) require a passing 10-turn dogfood in this repo. See §"Cadence and versioning."
-13. **Paper-only planning sessions are scheduled, not ad-hoc.** When the path forward grows vague — sessions answer roadmap questions with "n-z more changes" instead of pinned slices, or the same question gets re-asked across sessions — a **docs-only re-layout pass** holds the active queue before any implementation continues. Output: an updated ROADMAP section with pinned version slices, a verification footing, and a sizing call-out. No code is written in a planning session. **First applied 2026-05-08** in the path-to-2.0.0 re-layout. **The 2026-05-12 methodology adoption (this restructure) is the second application** — same shape, larger scope (added the X.Y.Z.N convention, banded all pending milestones, bootstrapped `discussion/`, scheduled re-eval cadence).
-14. **Re-evaluation is a scheduled roadmap item, not an ad-hoc decision (added 2026-05-12).** Every 3 code minors, an inline `RE-EVAL following X.Y.Z [rewrite session]` item gates the next code milestone. Both halves run (paper + code-aware) unless explicitly skipped per methodology §3.3. The sliding-window mechanism is visible to any session reading the roadmap; if a session reaches a re-eval item, it picks up the re-eval before the next code milestone. See §"Re-evaluation cadence" for what each pass does. **Sub-clause (refined at `RE-EVAL following 2.46.0`, 2026-05-14):** Re-eval sessions are doc-only PRs that accumulate in `[Unreleased]`; they do **not** consume a version slot. The version-slot reservation applies to the next code minor, not the re-eval. This composes with the [`feedback_no_bump_for_measurement_only`](file:///config/.claude/projects/-config-Projects-ai-editor/memory/feedback_no_bump_for_measurement_only.md) memory rule — both apply to docs-only / measurement-only changes. The 2.42.0 (first re-eval) and 2.45.0 (second re-eval) doc-only releases were the pre-refinement shape; the rule corrects forward from the third slot onward.
-
----
-
-## What's out of scope for the 2.x arc
-
-- **Multi-modal context.** Image/audio chunks. Vision models work for images today (paste-to-chat); structured handling is a future-major topic.
-- **Cross-process / distributed state.** Stays single-process. No sync server, no multi-tab live coordination beyond the existing tab-isolation model.
-- **Real-time collaborative editing.** Two users editing the same file simultaneously. Not a context problem; not in scope.
-- **Plugin marketplace.** Defer to a post-2.x major after the profile contract stabilizes against real plugin consumers.
-- **Markdown-as-source AST chunking.** Phase 1 code chunker is regex-based; tree-sitter-grade is gated on measured need.
-- **Custom embedding model fine-tuning.** Use the user's chosen provider.
-- **Cross-project task ledger.** Task ledgers stay session-scoped. Continuity goes through memory with consent.
-- **Persona stack** (entire [`DESIGN-persona.md`](DESIGN-persona.md) surface — identity composition above Profile; `persona` memory scope axis; Persona tool overlay; Persona-authored system-prompt contribution). The doc landed 2026-05-21 architecturally complete but designed for multi-identity products (single-Persona chatbots; multi-Persona assistants; shared-Persona RPGs; character-driven applications). **Ai-editor is single-identity by product profile** — User ≠ Persona; coding agents don't take on character voices. Persona-memory-scope was already deferred indefinitely under §"Deferred / parked" → "Other deferred"; this entry generalizes to the whole Persona surface.
-- **Multi-author system prompt slot.** [`DESIGN-profiles.md`](DESIGN-profiles.md) commits to (Admin | User | Persona | Profile-directives) contributors to the system prompt with deterministic merge. Ai-editor has Admin (fixed system prompt) + optional Profile directives only. The User and Persona contributors are RP / chat-shaped; the merge-order policy is a future-product concern.
-- **RP / multi-user-shaped admission paths.** [`chat_multi.v1`](../js/profiles/chat-multi-v1.js) and [`rp.v1`](../js/profiles/rp-v1.js) profile data files exist but are **deprioritized for ai-editor** (Phase 4 authoring API). Picker stays pinned at `['chat.v1', 'coder.v1', 'kb.v1']`. RP-specific compression rules (Rule 4 by scene boundary, Rule 5 in-voice) and Memory's cross-user `visibility` axis don't earn implementation in this product.
-- **W1 / W2 / W3 watchlist items** from [`DESIGN-CHANGES-2026-05-21.md`](DESIGN-CHANGES-2026-05-21.md) — verifier-as-emission-gate (one-sided RAG evidence); plan-mode artifacts as references (profile-design failure, not architectural gap); cross-subsystem signaling via the loop (pattern, not commitment). Each deferred with an explicit promotion criterion in the change pack; no work scheduled until a second independent piece of evidence accumulates per item.
-
----
-
-## What this roadmap commits to
-
-- **Now / Next / Later** at the top — the doc's first job is to answer *what's being worked on, what's queued, what's not*.
-- **Band labels on every pending milestone.** Unlabeled = `[strong]`; that commitment should feel heavy.
-- **Forward cadence, not changelog.** Shipped work and per-PR rationale live in CHANGELOG. This doc describes where we're going.
-- **Admissibility, not accumulation** as the architectural principle every PR is reviewed against.
-- **Git-native memory and session state** as the externally-tellable story.
-- **Measurement before scale.** Cost dashboard is gating infrastructure; tracks that nominally depend on it stay deferred until their precondition fires.
-- **Removability discipline.** Every Phase-1 milestone exit criteria asks: with this subsystem removed, what user-visible behavior degrades?
-- **Re-evaluation as a first-class roadmap entry.** Every 3 minors. Both halves (paper + code-aware) unless explicitly skipped.
-- **The DESIGN docs are the contract.** When implementation diverges from a DESIGN doc, the doc updates first (in an architecture session), then the code.
-- **Honest deferrals.** Multi-modal, collaboration, marketplace are not on this roadmap.
-
-Push back on any of this. The roadmap is a hypothesis. The first track that drifts more than two weeks past its target gets the next milestone re-scoped, not the deadline pushed.
-
----
-
-## See also
-
-- [VERSIONING.md](VERSIONING.md) — X.Y.Z.N convention; composition with the three versioning feedback memories.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — module dependency map; per-subsystem detail in `docs/DESIGN-*.md`.
-- [DESIGN-INDEX.md](DESIGN-INDEX.md) — Intelligence architecture doc-set index (8 canonical design docs: intelligence, retrieval, memory, compression, tools, profiles, persona, agent-loop). Distinct from `ARCHITECTURE.md` (which is the project-wide ai-editor module layer map).
-- [CHANGELOG.md](../CHANGELOG.md) — authoritative running history.
-- [`docs/discussion/`](discussion/) — pre-architecture thinking.
-- [`docs/audit-2026-Q2/inventory.md`](audit-2026-Q2/inventory.md) — sweep queue.
-- [`docs/dogfood-battery/`](dogfood-battery/) — measurement battery.
-- Plinth methodology source: `/config/Projects/plinth/docs/METHODOLOGY-llm-assisted-development.md`.
+Existing DESIGN, ICD, architecture, and security documents remain contracts
+where they match the implementation. Version-stamped narratives and methodology
+documents are evidence of earlier decisions, not an automatic work queue.

@@ -2,6 +2,10 @@
 # ============================================
 # AI Editor - Kubernetes Deployment Template
 # ============================================
+# LEGACY, NON-AUTHORITATIVE REFERENCE. GitHub Actions never applies this file.
+# Deployment is deferred to the cluster project until it defines digest-pinned
+# provenance, credential authority, protected environments, and rollback.
+#
 # Variables substituted by CI/CD via envsubst:
 #   DEPLOY_NAME    - Deployment name (ai-editor, ai-editor-dev, ai-editor-test)
 #   ENVIRONMENT    - production, dev, or test

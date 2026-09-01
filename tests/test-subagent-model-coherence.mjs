@@ -170,18 +170,18 @@ test('SubAgentApprovalCard.js renders a Model row in the capability table', () =
         'card must format the primary-source fallback as "primary model — <id>"');
 });
 
-test('CONTRIBUTING.md exists and names the close-keyword rule', () => {
-    // Phase A artifact — sanity check that the doc lives at the
-    // root and carries the gitea-same-repo close rule. If a future
-    // refactor deletes or renames the file, this lint flags it.
+test('CONTRIBUTING.md exists and names the GitHub PR gate', () => {
+    // The repository transition keeps this root-level contribution contract
+    // but replaces the retired Gitea close-keyword rule with exact-SHA GitHub
+    // validation and pull-request authority.
     const contributing = readFileSync(
         new URL('../CONTRIBUTING.md', import.meta.url),
         'utf8',
     );
-    assert.match(contributing, /Closes #N/,
-        'CONTRIBUTING.md must name the bare `Closes #N` form');
-    assert.match(contributing, /\bgitea#N\b/,
-        'CONTRIBUTING.md must name the prose `gitea#N` form');
-    assert.match(contributing, /does not fire|silently skips/i,
-        'CONTRIBUTING.md must explain why `gitea#N` fails');
+    assert.match(contributing, /sole\s+normal code authority/,
+        'CONTRIBUTING.md must name GitHub as the code authority');
+    assert.match(contributing, /Node and policy/,
+        'CONTRIBUTING.md must name the required source/test check');
+    assert.match(contributing, /exact merge SHA/,
+        'CONTRIBUTING.md must require post-merge exact-SHA validation');
 });

@@ -7,7 +7,7 @@
  * invisible character in the current selection.
  *
  * Powered by `js/security/invisible-unicode.js` — the character ranges
- * live there.  The CI lint at `.gitea/workflows/ci.yaml` covers the same
+ * live there. The CI validator at `scripts/ci/validate.mjs` covers the same
  * ranges at PR time; this module covers source the user opens in the
  * editor.
  *
