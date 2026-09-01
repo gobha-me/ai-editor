@@ -168,22 +168,21 @@ test('github#47: body description references CONTRIBUTING.md', async () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* github#47 — CONTRIBUTING.md "Cross-host close keywords" subsection         */
+/* GitHub code-authority transition — CONTRIBUTING.md                         */
 /* -------------------------------------------------------------------------- */
 
-test('github#47: CONTRIBUTING.md adds a Cross-host close keywords subsection', async () => {
+test('CONTRIBUTING.md names GitHub as the sole normal code authority', async () => {
     const src = await readSrc('CONTRIBUTING.md');
-    assert.match(src, /### Cross-host close keywords/,
-        'CONTRIBUTING.md must add a "Cross-host close keywords" subsection heading');
-    assert.match(src, /Refs github#N \(closes manually after merge/,
-        'subsection must surface the prose form `Refs github#N`');
+    assert.match(src, /GitHub.*is the sole\s+normal code authority/s,
+        'CONTRIBUTING.md must make GitHub code authority explicit');
+    assert.match(src, /New work uses GitHub issues and pull requests/,
+        'new contribution references must use GitHub');
 });
 
-test('github#47: CONTRIBUTING.md cites the github#47 origin + feedback memory', async () => {
+test('CONTRIBUTING.md preserves historical Gitea provenance without restoring its authority', async () => {
     const src = await readSrc('CONTRIBUTING.md');
-    // Anchor the section history so a future re-reader can trace the failure
-    // mode back to the original dogfood incident.
-    assert.match(src, /github#47/, 'subsection cites github#47 as the origin');
-    assert.match(src, /feedback_ai_editor_issues_in_github/,
-        'subsection cites the memory file naming the github-issue convention');
+    assert.match(src, /Historical `gitea#N` references/,
+        'historical issue identifiers must remain stable provenance');
+    assert.match(src, /Do not\s+bulk-import old Gitea issues/s,
+        'the transition must not imply an uncurated metadata import');
 });

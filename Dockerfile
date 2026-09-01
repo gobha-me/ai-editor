@@ -1,121 +1,75 @@
-# ============================================
-# AI Editor - Multi-stage Docker Build
-# ============================================
-# Stage 1: Bundle vendor dependencies (CodeMirror, marked, DOMPurify)
-# Stage 2: Slim production image with all assets baked in
-#
-# The final image requires NO internet access at runtime.
-# ============================================
+# syntax=docker/dockerfile:1
 
-# --------------------------------------------------
-# Stage 1: Vendor dependency bundling
-# --------------------------------------------------
-FROM node:22-slim AS vendor-build
+# Immutable build/runtime inputs. Keep the human-readable tags for update
+# discovery; the digests are the authority used by every build.
+FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS vendor-build
 
 WORKDIR /build
 
-# Install wget for UMD library downloads
-RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+COPY vendor/package.json vendor/package-lock.json ./
+RUN npm ci --ignore-scripts \
+    && npm audit --audit-level=moderate
 
-# Bundle CodeMirror + Preact/htm into single ESM files
-COPY vendor/package.json vendor/codemirror-entry.mjs vendor/preact-htm-entry.mjs ./
-RUN npm install --ignore-scripts \
-    && npx esbuild codemirror-entry.mjs \
+COPY vendor/codemirror-entry.mjs vendor/preact-htm-entry.mjs ./
+RUN ./node_modules/.bin/esbuild codemirror-entry.mjs \
         --bundle \
         --format=esm \
         --minify \
         --outfile=codemirror-bundle.js \
         --target=es2020 \
         --tree-shaking=true \
-    && npx esbuild preact-htm-entry.mjs \
+    && ./node_modules/.bin/esbuild preact-htm-entry.mjs \
         --bundle \
         --format=esm \
         --minify \
         --outfile=preact-htm-bundle.js \
         --target=es2020 \
-        --tree-shaking=true
-
-# Download UMD libraries (pinned versions for reproducibility)
-RUN wget -q -O marked.min.js \
-        "https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js" \
-    && wget -q -O purify.min.js \
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" \
-    && wget -q -O jszip.min.js \
-        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" \
-    && wget -q -O htmx.min.js \
-        "https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js"
-
-# Verify downloads aren't empty
-RUN test -s codemirror-bundle.js \
+        --tree-shaking=true \
+    && cp node_modules/marked/lib/marked.umd.js marked.min.js \
+    && cp node_modules/dompurify/dist/purify.min.js purify.min.js \
+    && cp node_modules/jszip/dist/jszip.min.js jszip.min.js \
+    && cp node_modules/htmx.org/dist/htmx.min.js htmx.min.js \
+    && test -s codemirror-bundle.js \
     && test -s preact-htm-bundle.js \
     && test -s marked.min.js \
     && test -s purify.min.js \
     && test -s jszip.min.js \
-    && test -s htmx.min.js \
-    && echo "All vendor files built successfully" \
-    || (echo "ERROR: Vendor build produced empty files" && exit 1)
+    && test -s htmx.min.js
 
-# Optional: @xenova/transformers for local embeddings (~15MB minified)
-# Uncomment if you need browser-based embedding generation in air-gapped mode.
-# Most deployments use server-side embeddings and don't need this.
-# RUN wget -q -O transformers.min.js \
-#         "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js"
+FROM nginx:1-alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
 
-# --------------------------------------------------
-# Stage 2: Production image (nginx)
-# --------------------------------------------------
-FROM nginx:1-alpine
+ARG VCS_REF=""
+ARG VERSION=""
 
-# OCI image metadata — overrides inherited nginx base image labels
 LABEL org.opencontainers.image.title="AI Editor" \
       org.opencontainers.image.description="Browser-based code editor with integrated AI assistance" \
       org.opencontainers.image.url="https://github.com/gobha-me/ai-editor" \
       org.opencontainers.image.source="https://github.com/gobha-me/ai-editor" \
       org.opencontainers.image.vendor="gobha-me" \
       org.opencontainers.image.licenses="MIT" \
-      maintainer=""
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.version="${VERSION}"
 
-# Runtime configuration: set BASE_PATH to serve from a sub-path
-# Examples: / (root), /editor, /test, /dev
 ENV BASE_PATH=/
 
-# Security headers and gzip configuration
-COPY --from=vendor-build /build/codemirror-bundle.js /tmp/vendor/
-COPY --from=vendor-build /build/preact-htm-bundle.js /tmp/vendor/
-COPY --from=vendor-build /build/marked.min.js        /tmp/vendor/
-COPY --from=vendor-build /build/purify.min.js         /tmp/vendor/
-COPY --from=vendor-build /build/jszip.min.js          /tmp/vendor/
-COPY --from=vendor-build /build/htmx.min.js           /tmp/vendor/
-
-# Copy application source
-COPY . /usr/share/nginx/html/
-
-# Copy vendor bundles into the served directory
+COPY index.html /usr/share/nginx/html/
+COPY CHANGELOG.md /usr/share/nginx/html/
+COPY assets /usr/share/nginx/html/assets
+COPY css /usr/share/nginx/html/css
+COPY docs /usr/share/nginx/html/docs
+COPY html /usr/share/nginx/html/html
+COPY js /usr/share/nginx/html/js
+COPY plugins /usr/share/nginx/html/plugins
+COPY swaggers /usr/share/nginx/html/swaggers
 COPY --from=vendor-build /build/codemirror-bundle.js /usr/share/nginx/html/vendor/
 COPY --from=vendor-build /build/preact-htm-bundle.js /usr/share/nginx/html/vendor/
-COPY --from=vendor-build /build/marked.min.js        /usr/share/nginx/html/vendor/
-COPY --from=vendor-build /build/purify.min.js         /usr/share/nginx/html/vendor/
-COPY --from=vendor-build /build/jszip.min.js          /usr/share/nginx/html/vendor/
-COPY --from=vendor-build /build/htmx.min.js           /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/marked.min.js /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/purify.min.js /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/jszip.min.js /usr/share/nginx/html/vendor/
+COPY --from=vendor-build /build/htmx.min.js /usr/share/nginx/html/vendor/
 
-# Remove build-only files from final image
-RUN rm -rf /usr/share/nginx/html/vendor/node_modules \
-           /usr/share/nginx/html/vendor/package-lock.json \
-           /usr/share/nginx/html/vendor/package.json \
-           /usr/share/nginx/html/vendor/codemirror-entry.mjs \
-           /usr/share/nginx/html/vendor/preact-htm-entry.mjs \
-           /usr/share/nginx/html/Dockerfile \
-           /usr/share/nginx/html/deployment.yaml \
-           /usr/share/nginx/html/nginx.conf \
-           /usr/share/nginx/html/nginx.conf.template \
-           /usr/share/nginx/html/docker-entrypoint.sh \
-           /usr/share/nginx/html/20-configure-base-path.sh \
-           /usr/share/nginx/html/.gitea \
-    # Remove default nginx config (entrypoint.d script generates it)
-    && rm -f /etc/nginx/conf.d/default.conf
+RUN rm -f /etc/nginx/conf.d/default.conf
 
-# Startup hook: generates nginx config from BASE_PATH env var
 COPY 20-configure-base-path.sh /docker-entrypoint.d/20-configure-base-path.sh
 RUN chmod +x /docker-entrypoint.d/20-configure-base-path.sh
 

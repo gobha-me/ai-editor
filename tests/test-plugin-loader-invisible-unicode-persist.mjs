@@ -153,7 +153,7 @@ test('installPlugin rejects with findings when source contains invisible Unicode
     Storage.set(STORAGE_KEY, []);
     try {
         // Construct via String.fromCodePoint so the lint that scans test files
-        // for invisible Unicode (see .gitea/workflows/ci.yaml) doesn't fire.
+        // for invisible Unicode (see scripts/ci/validate.mjs) doesn't fire.
         const zwsp = String.fromCodePoint(0x200B);
         const tampered = `Plugins.register({ id: 'tampered', name: 'Tampered${zwsp}' });`;
         globalThis.fetch = async () => ({

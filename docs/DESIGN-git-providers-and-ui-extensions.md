@@ -452,7 +452,7 @@ Four contract clarifications a 1.4.x implementation must honor:
    `textContent`, or pre-sanitize untrusted content with DOMPurify
    before returning the string. The project-wide rule against
    `return raw;` near a DOMPurify call (enforced by the CI security
-   lint in `.gitea/workflows/ci.yaml`) applies inside plugin render
+   lint in `scripts/ci/validate.mjs`) applies inside plugin render
    functions just as it does in core code.
 
 3. **Priority and tie-breaking.** Sort key is `(priority ?? 50)`

@@ -4,6 +4,19 @@ All notable changes to AI Editor are documented here.
 
 ## [Unreleased]
 
+### Changed — GitHub delivery and product reset
+
+- GitHub is the sole normal code authority, with separate least-privilege
+  validation and tag-only GHCR publication workflows. Pull requests never
+  receive registry, deployment, or production-secret authority.
+- Container inputs are locked and integrity-checked: base images are pinned by
+  digest, npm uses a committed lockfile, DOMPurify is updated to 3.4.14, esbuild
+  is updated to 0.28.2, and runtime smoke checks cover root and sub-path serving.
+- The roadmap now centers the self-hosting developer's repo-to-PR job and uses
+  Now/Next/Later outcomes and evidence gates instead of release cadence.
+- Production deployment is explicitly deferred to the cluster authority. The
+  legacy Kubernetes manifest remains a non-authoritative reference.
+
 ## [2.96.0] - 2026-05-24
 
 PR Review dock — the ✅ Merge button is visible again on small viewports (the user-visible bug from gitea#523), plus two defense-in-depth structural changes that surfaced from the misdiagnosis path so the same investigative trail doesn't burn again next time.

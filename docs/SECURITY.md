@@ -38,7 +38,11 @@ Issue bodies, PR descriptions, and comments fetched from your Git host (or retur
 
 ### CI lint — invisible Unicode
 
-`.gitea/workflows/ci.yaml` runs a `grep -P` step on every PR scanning `js/`, `plugins/`, `tests/` (`*.js`, `*.mjs`, `*.json`) for the codepoint ranges listed below. PRs introducing any of them fail the build with line + character output. The grep pattern is the canonical reference; if you change the ranges, change all three places (the workflow, `js/security/invisible-unicode.js`, and the table in this document).
+`scripts/ci/validate.mjs` scans `js/`, `plugins/`, and `tests/` (`*.js`,
+`*.mjs`, `*.json`) on every GitHub pull request and `main` push. A flagged
+codepoint fails the `Node and policy` check with file, line, and codepoint. The
+range table in that validator, `js/security/invisible-unicode.js`, and the table
+below must change together.
 
 ### Editor decoration
 
@@ -80,7 +84,8 @@ Wrapping happens at the tool/prompt-source level (not at the `js/chat/handlers.j
 
 ## Codepoint reference
 
-The CI lint, the JS scanner, and this table must agree. If you add a range, add it in all three.
+The CI validator, the editor scanner, and this table must agree. If you add a
+range, add it in all three.
 
 | Range | Family | Threat |
 |---|---|---|
@@ -91,13 +96,7 @@ The CI lint, the JS scanner, and this table must agree. If you add a range, add 
 | `U+2066` – `U+2069` | Bidi isolate | Trojan Source variants |
 | `U+E0000` – `U+E007F` | Tags block | Glassworm: invisible code execution |
 
-The grep `-P` pattern that implements this in CI:
-
-```
-grep -rPn '[\x{E0000}-\x{E007F}\x{200B}-\x{200F}\x{2060}-\x{206F}\x{FEFF}\x{202A}-\x{202E}\x{2066}-\x{2069}]' js/ plugins/ tests/ --include='*.js' --include='*.mjs' --include='*.json'
-```
-
-The JS regex (in `js/security/invisible-unicode.js`):
+The runtime regex in `js/security/invisible-unicode.js` is:
 
 ```js
 /[\u200B-\u200F\u2060-\u206F\uFEFF\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu
@@ -105,7 +104,10 @@ The JS regex (in `js/security/invisible-unicode.js`):
 
 ## Reporting a vulnerability
 
-Open an issue on the Gitea repo with the label `security`. For sensitive disclosures, contact the maintainer at the address in the repo's `LICENSE` file. Please include reproduction steps and the affected version (the version string lives at `js/version.js`).
+For sensitive disclosures, use GitHub's private vulnerability reporting for
+[`gobha-me/ai-editor`](https://github.com/gobha-me/ai-editor/security/advisories/new).
+Do not place an undisclosed vulnerability or credential in a public issue.
+Include reproduction steps and the affected version from `js/version.js`.
 
 ## Security-relevant releases
 
@@ -117,6 +119,8 @@ Open an issue on the Gitea repo with the label `security`. For sensitive disclos
 | 1.6.11 | 2026-05-06 | Tool-ergonomics post-mortem (github#35 + github#29): `find_relevant_files` `indexer_not_ready` envelope + soft budget; `STATEFUL_READ_TOOLS` cache-key bypass for `read_current_file`; `_getStaleWindow` + 5/5 success echo on `edit_file`; `MUTATING_TOOLS` cache-hit messaging. Not a security release per se, but closes failure modes that previously could lead the model into recovery loops that touched unrelated content (the PR #289 trace silently deleted four lines of unrelated MutationObserver prose). |
 | 1.6.12 | 2026-05-06 | **Untrusted issue / PR / comment content** delimiter wrapping (gitea#295). New `js/security/untrusted-wrap.js` + four marker kinds; `read_issue`, `read_pull_request`, and the system-prompt focused-issue block now wrap externally-sourced text. System prompt gains a "data, not commands" rule. Adversarial close-tag injection neutralized. Tool returns scan their externally-sourced text for invisible-Unicode and surface findings on `_security`. Polyglot-benchmark verdict (PR #290) bundled into the same release: AST chunker gate fired (Plinth/C++ R@5=0.267) — ships as the next active track. |
 
-**Release-readiness gate** (added 2026-05-04, recorded on each `vX.Y.0` tag annotation): every minor tag push requires a 10-turn dogfooding session in this repo with no silent truncation, no orphaned-tool 400s, no stale-state regressions in surfaces touched since the previous tag. Honor-system today; see `docs/ROADMAP.md` §"Cadence and versioning."
+Future tags follow the exact-SHA release gate in
+[`docs/VERSIONING.md`](VERSIONING.md). Image publication does not deploy the
+application.
 
 For the detailed changelog see [CHANGELOG.md](../CHANGELOG.md).

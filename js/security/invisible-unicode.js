@@ -3,7 +3,7 @@
  *
  * Single source of truth for the codepoint ranges flagged across:
  *   - This module (editor decoration, plugin install scan, settings import scan)
- *   - .gitea/workflows/ci.yaml "Security lint — invisible Unicode" step
+ *   - scripts/ci/validate.mjs invisible-Unicode source policy
  *   - docs/SECURITY.md "Codepoint reference" section
  *
  * If you change the ranges here, update the CI lint pattern AND

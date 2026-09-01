@@ -1,65 +1,58 @@
 # Contributing to AI Editor
 
-Conventions for working in this repo. The product itself has its own docs (see [ARCHITECTURE.md](docs/ARCHITECTURE.md), [ROADMAP.md](docs/ROADMAP.md), [DESIGN-*.md](docs/)); this file covers the *workflow* — how PRs reference tickets, how versions get bumped, and how the two trackers (gitea + github) compose.
+GitHub [`gobha-me/ai-editor`](https://github.com/gobha-me/ai-editor) is the sole
+normal code authority. Gitea remains a supported product-side Git provider, but
+the retired `xcaliber/ai-editor` repository is not a code destination.
 
-## Tracker layout
+Historical `gitea#N` references in code, design documents, and the changelog are
+stable provenance. New work uses GitHub issues and pull requests. Do not
+bulk-import old Gitea issues; promote an item only when it maps to a current,
+user-visible outcome and retain its original identifier in the new issue.
 
-The project lives on two hosts:
+## Pull request workflow
 
-- **Gitea (`git.gobha.me/xcaliber/ai-editor`) — primary.** All code, all PRs, and most issues. Use [`tea`](https://gitea.com/gitea/tea) (`tea issues list`, `tea pulls create`) to interact.
-- **GitHub (`github.com/gobha-me/ai-editor`) — read-only code mirror + a separate public issue tracker.** Use [`gh`](https://cli.github.com) for issues there.
+1. Create a short-lived `feat/`, `fix/`, `docs/`, or `chore/` branch from
+   `main` in an isolated worktree when another session may share the checkout.
+2. Make the narrowest evidence-backed change and add regression coverage.
+3. Run `node scripts/ci/validate.mjs`, `node --test tests/test-*.mjs`, the locked
+   dependency audit, and the relevant container/browser checks.
+4. Open a GitHub pull request with a summary, test results, risks, and issue
+   references. Use `Fixes #N` only when the PR fully resolves that GitHub issue.
+5. Require the `Node and policy` and `Container` checks on the exact head SHA.
+   Address review threads before squash-merging and delete the topic branch.
+6. Wait for terminal `Validation` success on the exact merge SHA before calling
+   the change delivered.
 
-Tickets carry independent numbering. Prefix as **`gitea#N`** or **`github#N`** in prose (changelog entries, ROADMAP rows, code comments, PR bodies) so the tracker is unambiguous. Reserve the bare `#N` form for one purpose only — the close keyword (next section).
+`main` requires a pull request and green checks. A second-person approval is not
+mandatory for the solo-maintainer workflow; force-pushes, deletion, and merge
+commits are not part of normal delivery.
 
-## PR close keywords
+## Version and changelog
 
-Gitea auto-closes a referenced issue when a PR is merged to the default branch, *if* the PR body or a commit message contains one of these forms:
+- `js/version.js` and the latest released `CHANGELOG.md` heading must agree for
+  a released `X.Y.Z` build.
+- Multi-PR work may use `X.Y.Z.N` while its entries remain under `Unreleased`.
+  Four-segment versions are never tagged or published.
+- Changes that do not alter served behavior stay under `Unreleased` without a
+  release. Release timing follows product value and readiness, not cadence.
+- Historical versions and tags are immutable.
 
-| Form | Closes |
-|---|---|
-| `Closes #N` (or `Fixes #N`, `Resolves #N`) | Issue `N` in **this same repo**. |
-| `Closes xcaliber/ai-editor#N` | Same as above, explicit form. |
-| `Closes xcaliber/HTML-Games#N` | Issue `N` in a different repo on the same gitea instance. |
+See [docs/VERSIONING.md](docs/VERSIONING.md) for the release gate.
 
-Supported keywords: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved` (and `reopen`/`reopens`/`reopened` for the inverse).
+## Release and image policy
 
-**Do not use `Closes gitea#N`.** Gitea parses `gitea` as the owner of a cross-repo reference, finds no repo, and silently skips the close action. Four shipped tickets (#493/#496/#499/#500) stayed open through 2.84.0–2.88.0 because of this exact mistake. The fix landed in 2.89.0 (this PR self-demonstrates by closing all five).
+Git tags, GitHub Releases, and GHCR images belong to this repository. Deployment
+does not.
 
-**Reserve `gitea#N` and `github#N` for prose.** In CHANGELOG.md / ROADMAP.md / code comments / the descriptive body of a PR, the prefixed forms are the right disambiguator. In the close-keyword line at the top of the PR body, drop the prefix.
+1. Merge the release-ready change and wait for both required `Validation` jobs
+   to succeed on the exact merge SHA.
+2. Confirm `js/version.js`, `CHANGELOG.md`, and the intended annotated
+   `vX.Y.Z` tag agree.
+3. Create the tag only after that evidence exists. The tag workflow verifies the
+   commit is on `main` and rechecks the exact-SHA conclusions before publishing
+   `ghcr.io/gobha-me/ai-editor:vX.Y.Z` and `latest` with SBOM and provenance.
+4. Confirm the immutable digest and public package visibility, then create the
+   GitHub Release from the approved changelog.
 
-### Cross-host close keywords
-
-If the issue lives on github (per [`feedback_ai_editor_issues_in_github`](.claude/projects/-config-Projects-ai-editor/memory/feedback_ai_editor_issues_in_github.md), all ai-editor self-edit-eligible issues do), **do not use bare `Fixes #N`** in the gitea PR body — bare `#N` parses to the gitea repo and would close an unrelated gitea issue (different content, possibly already closed). Cross-host close hooks don't exist either way; the github issue stays open until you close it manually per the next section.
-
-Use the prose form in the PR body instead:
-
-```
-Refs github#N (closes manually after merge per CONTRIBUTING.md "GitHub issues — manual close")
-```
-
-This shape was added in 2.94.0 after github#47 surfaced the failure mode during a qwen-3-6-plus session: gitea PR #515 used bare `Fixes #41`, which on merge would have closed gitea#41 (unrelated) while github#41 stayed open.
-
-### GitHub issues — manual close
-
-GitHub issues do not auto-close from gitea PR merges (no cross-host hook). After shipping work that resolves a `github#N` ticket, close it manually:
-
-```bash
-gh issue close N --repo gobha-me/ai-editor --comment "Shipped at vX.Y.Z (gitea#M)."
-```
-
-Batch-closing in admin sweeps is fine — just don't expect the PR merge to do it for you.
-
-## Version + CHANGELOG
-
-- **Feat / fix PRs** bump `js/version.js` and promote the `[Unreleased]` block in [CHANGELOG.md](CHANGELOG.md) to a numbered section in the same PR. Version coherence is gated by [`tests/test-version-coherence.mjs`](tests/test-version-coherence.mjs).
-- **Docs-only / measurement-only PRs** accumulate in `[Unreleased]` without a version bump. Examples: re-eval slots, design-doc churn, probe/benchmark code that ships no behavior change. Per `feedback_no_bump_for_measurement_only`.
-- **In-track patches** (`X.Y.Z.N`) carry a single tag covering many sub-step closures. See [ROADMAP.md §"2026-Q2 code audit"](docs/ROADMAP.md) for the established shape.
-
-## PR workflow
-
-1. Branch off `main`: `git checkout -b feat/gitea-NNN-short-description` (or `fix/...`, `docs/...`).
-2. Implement; add/extend tests under [`tests/`](tests/). The Node suite (`*.mjs` files) runs in CI; browser-only tests live in `tests/index.html` and are manual.
-3. Bump `js/version.js` and promote `[Unreleased]` if the PR ships behavior. Both gated by the coherence lint.
-4. Commit with `feat(X.Y.Z): description (gitea#N)` or `fix(X.Y.Z): description (gitea#N)` in the subject. The `gitea#N` in the subject is prose (human disambiguation); the close keyword goes in the PR body.
-5. Open the PR via `tea pulls create`. PR body leads with `Closes #N.` (bare). Body mirrors the recent PRs' shape — Summary / Test plan / Sibling pattern / CI ticks. See [PR #503](https://git.gobha.me/xcaliber/ai-editor/pulls/503) as a recent example.
-6. After merge, verify gitea closed the referenced issues. If any github issues were also addressed, close them manually via `gh`.
+Do not publish a release to prove a migration, and do not add cluster credentials
+or deployment steps to product workflows.

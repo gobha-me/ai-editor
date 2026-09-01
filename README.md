@@ -29,7 +29,7 @@ Open `http://localhost:8080`, press **Ctrl+,** to open Settings, and configure a
 
 **Multi-provider LLM** — Venice, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Streaming, function calling, embeddings. Ollama gets dedicated capability detection via `/api/show`.
 
-**Active development** — semantic retrieval, git-tracked memory, cost dashboard, and an MCP bridge ship today; see [docs/ROADMAP.md](docs/ROADMAP.md) for the 2.0 profiles track and [docs/SECURITY.md](docs/SECURITY.md) for the threat model (including the audited prompt-injection gap on untrusted issue content).
+**Active development** — semantic retrieval, git-tracked memory, cost dashboard, and an MCP bridge ship today; see [docs/ROADMAP.md](docs/ROADMAP.md) for the outcome-based product direction and [docs/SECURITY.md](docs/SECURITY.md) for the threat model.
 
 **Plugin system** — manifest-based registration with lifecycle hooks, toolbar buttons, modal UI, LLM tool registration, CSS injection, and configurable settings. Write plugins in the built-in editor with AI assistance, or install from URL. See [docs/PLUGIN.md](docs/PLUGIN.md) and [docs/SECURITY.md](docs/SECURITY.md) for the threat model.
 
@@ -156,6 +156,9 @@ docker build -t ai-editor .
 docker run -p 8080:8000 ai-editor
 ```
 
+See [CONTAINERS.md](CONTAINERS.md) for locked build inputs and future GHCR
+release coordinates.
+
 ### Multi-environment with BASE_PATH
 
 ```bash
@@ -164,15 +167,13 @@ docker run -p 80:8000 -e BASE_PATH=/test ai-editor        # /test
 docker run -p 80:8000 -e BASE_PATH=/dev ai-editor         # /dev
 ```
 
-### Kubernetes
+### Deployment authority
 
-Deployment manifest included (`k8s/deployment.yaml`). The CI/CD pipeline automates:
-
-| Trigger | Image tag | BASE_PATH |
-|---------|-----------|-----------|
-| PR opened/synced | `:dev` | `/dev` |
-| Push to main | `:test` | `/test` |
-| Tag `v*` | `:latest` + `:vX.Y.Z` | `/` |
+GitHub Actions validates pull requests and `main`; approved `vX.Y.Z` tags can
+publish `ghcr.io/gobha-me/ai-editor:vX.Y.Z` and `latest`. No repository workflow
+deploys the application. The existing `k8s/deployment.yaml` is a legacy,
+non-authoritative reference pending a cluster-owned provenance, secrets,
+environment-protection, health-check, and rollback contract.
 
 ### Local development
 
@@ -188,6 +189,7 @@ Vendor dependencies load from CDN fallback when not bundled locally.
 ai-editor/
 ├── index.html              # App shell (loads HTML partials)
 ├── Dockerfile              # Multi-stage build (vendor → nginx)
+├── CONTAINERS.md           # Container build and publication policy
 ├── REPOS.md                # Git provider setup & permissions
 ├── CHANGELOG.md
 ├── css/                    # Design system (CSS variables, no build)
@@ -204,9 +206,9 @@ ai-editor/
 │   ├── settings/           # Settings panel modules (6 files)
 │   └── ...                 # Search, resize, managers, workers, etc.
 ├── plugins/                # 5 bundled plugins
-├── tests/                  # Browser-based test suite
+├── tests/                  # Node and browser test suites
 ├── docs/                   # Architecture, tools, plugin guide, roadmap
-└── k8s/                    # Kubernetes deployment manifest
+└── k8s/                    # Legacy deployment reference (not automated)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full module map and data flow.
