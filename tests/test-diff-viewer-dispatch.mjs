@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/diff-viewer.js#mountDiffViewer — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `.diff-controls`. Three actions:
  *   - `setViewMode` reads `data-mode` ("unified" | "side-by-side")

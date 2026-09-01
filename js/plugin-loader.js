@@ -39,7 +39,7 @@ const STORAGE_KEY = 'installedPlugins';
  *   Findings captured at install time when the user bypassed the invisible-Unicode
  *   pre-flight scan. Opt-in / absent on plugins installed pre-2.65.0 + on clean
  *   installs (back-compat automatic). Audit-visibility surface only — not consulted
- *   at boot-load. See [`docs/ICD-plugin-lifecycle.md`](../docs/ICD-plugin-lifecycle.md) §"Code-aware findings #3".
+ *   at boot-load. See [`docs/PLUGIN.md`](../docs/PLUGIN.md) §"Code-aware findings #3".
  */
 
 /**

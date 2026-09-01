@@ -17,7 +17,7 @@
  * persistence path can't be exercised under Node (dynamic `import()` of a
  * blob URL doesn't work), which is why the helper extraction exists.
  *
- * See [`docs/ICD-plugin-lifecycle.md`](../docs/ICD-plugin-lifecycle.md)
+ * See [`docs/PLUGIN.md`](../docs/PLUGIN.md)
  * §"Code-aware findings #3" for the failure-mode analysis.
  */
 import './_node-shim.mjs';

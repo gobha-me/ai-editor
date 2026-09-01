@@ -60,7 +60,7 @@
  * `js/context-manager.js` file-level path retired in the same cutover.
  * Removability is inverted — deleting this module breaks structural
  * ancestor-walk expansion in production retrieval. ICD contract:
- * [`docs/ICD-intelligence-composers.md`](../../../../docs/ICD-intelligence-composers.md).
+ * [`docs/DESIGN-intelligence.md`](../../../../docs/DESIGN-intelligence.md).
  *
  * @module intelligence/retrieval/strategies/structural
  */

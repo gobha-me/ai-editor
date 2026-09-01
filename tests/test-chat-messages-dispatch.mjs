@@ -1,7 +1,7 @@
 /**
  * Dispatcher tests for js/chat/messages.js#mountChatMessages — Phase 3b
  * of the inline-handlers migration
- * (docs/DESIGN-html-inline-handlers-migration.md), the final HTML-side
+ * (docs/DESIGN-ui-event-dispatch.md), the final HTML-side
  * slice. Scoped to `#chatMessages`.
  *
  * Routes 9 callback actions + an internal DOM-only `toggleExpanded`:

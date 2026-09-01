@@ -35,7 +35,7 @@
  * every chunk in the production store. Removability is inverted —
  * deleting this module breaks the Structural strategy's ancestor walk
  * and degrades `findRelevantFiles()` recall. ICD contract:
- * [`docs/ICD-intelligence-composers.md`](../../../docs/ICD-intelligence-composers.md).
+ * [`docs/DESIGN-intelligence.md`](../../../docs/DESIGN-intelligence.md).
  *
  * @module intelligence/retrieval/structure-extractor
  */

@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/issue-detail.js#mountIssueTab — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `.issue-tab-content` (the issue-tab body, distinct from the
  * `#issueDetailModal` covered by mountIssueDetailModal). One action:

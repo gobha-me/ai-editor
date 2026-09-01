@@ -664,7 +664,7 @@ export function closeIssueDetailModal() {
  * Bind a delegated click handler for the issue-detail modal's close buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2a of the inline-handlers migration (DESIGN-html-inline-handlers-migration.md).
+ * Phase 2a of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
  * Only `closeIssueDetailModal` migrates here — the `Start Work` button is
  * wired directly via `btnIssueStartWork.onclick` in `openIssueDetailModal`,
  * and the `Expand All` button's `event.stopPropagation()` is now handled
@@ -690,7 +690,7 @@ export function mountIssueDetailModal({ onClose } = {}) {
 /**
  * Bind a delegated click handler for issue-tab content surfaces (currently
  * just the error-fallback Retry button). Phase 3a of the inline-handlers
- * migration (DESIGN-html-inline-handlers-migration.md). Scoped to
+ * migration (DESIGN-ui-event-dispatch.md). Scoped to
  * `.issue-tab-content` — the tab body is rebuilt on each render, so the
  * document-level listener survives container re-creation.
  */

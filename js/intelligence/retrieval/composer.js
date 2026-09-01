@@ -32,7 +32,7 @@
  * `compose` and drives `findRelevantFiles()` through it. Legacy
  * `js/context-manager.js` was retired in the same cutover. Removability is
  * inverted now — deleting `composer.js` breaks `findRelevantFiles()`. ICD
- * contract: [`docs/ICD-intelligence-composers.md`](../../../docs/ICD-intelligence-composers.md).
+ * contract: [`docs/DESIGN-intelligence.md`](../../../docs/DESIGN-intelligence.md).
  *
  * **Dependency injection mirrors 1.4.15 / 1.4.16:** the caller supplies
  * the strategy list and a `getChunkByID` for `priority_pins`, so the

@@ -525,7 +525,7 @@ window.DiffViewer = {
 /**
  * Bind a delegated click handler for diff-viewer controls (view-mode toggle,
  * prev/next navigation). Phase 3a of the inline-handlers migration
- * (DESIGN-html-inline-handlers-migration.md). Scoped to `.diff-controls` —
+ * (DESIGN-ui-event-dispatch.md). Scoped to `.diff-controls` —
  * the header re-renders on every unified/side-by-side toggle, so the single
  * document-level listener survives container re-creation.
  */

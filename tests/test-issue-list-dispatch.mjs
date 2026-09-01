@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/issue-list.js#mountIssueList — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-html-inline-handlers-migration.md).
+ * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `#issuesPanel`. Three actions:
  *   - `sendDepMessage` reads `data-issue` (coerced to Number) → dep-link chat trigger
