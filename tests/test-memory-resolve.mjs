@@ -4,7 +4,7 @@
  * The 1.18.0 slice replaced a hardcoded literal in
  * `js/tools/memory-tools.js` (`a.scope || 'workspace'`) with a
  * profile-keyed lookup (`a.scope || resolveDefaultRememberScope(...)`).
- * Per ROADMAP §Decisions 7 "Removability check," the rewire's exit
+ * The the rewire's exit
  * criterion is **zero behavior diff** against the pre-slice literal
  * for the surface that actually exercises memory tools (coder).
  *

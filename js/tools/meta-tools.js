@@ -13,8 +13,7 @@
  * they sat in `diagnostics.unresolved_static[]` because the handlers didn't
  * exist yet. After 1.3.16, the Composer admits all 9/9 static names.
  *
- * `find_tool` is **categorical/text scoring only** in 1.3.16; semantic
- * matching arrives in 1.4.1 per ROADMAP §1.4.1.
+ * `find_tool` supports bounded categorical, text, and semantic discovery.
  *
  * Authorization: discovery is read-only introspection. All three
  * handlers are listed in every picker profile's `tools.admit` array

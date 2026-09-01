@@ -7,7 +7,7 @@
  *   - One button per row, three states: ▶ Start / 🔀 Switch & Start / ✅ Active.
  *   - Active state is disabled (so the row's openIssueTab is still the way in).
  *   - The button + row use delegated `data-action` attributes (2.30.0, Phase 3a
- *     of the inline-handlers migration); closest() naturally routes button
+ *     of the UI event-dispatch contract); closest() naturally routes button
  *     clicks to the inner action and not to the row's `openIssueTab`.
  *   - Issue title is HTML-escaped; aria labels are populated.
  *   - Active / focused row classes from the legacy renderer are preserved.

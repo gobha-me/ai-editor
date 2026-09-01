@@ -380,7 +380,7 @@ export async function deleteFolder(folderPath) {
 
 /**
  * Bind a delegated click handler for tree rows + per-row rename/delete
- * buttons. Phase 3a of the inline-handlers migration
+ * buttons. UI event-dispatch contract
  * (DESIGN-ui-event-dispatch.md). Scoped to `#fileTree` —
  * `renderFileTree` rebuilds the entire tree on each refresh, so the
  * document-level listener survives container re-creation.

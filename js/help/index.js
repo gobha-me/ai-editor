@@ -1,7 +1,7 @@
 /**
  * Help slide-out — 1.3.10 Touch 2 net-new surface (PR 6 of facelift arc).
  *
- * Right-edge drawer per `docs/design/touch-2-facelift/project/help.jsx`.
+ * Right-edge drawer built on the shared slide-out shell.
  * Replaces the 6-tab `#helpModal` and inherits the 1.3.9 `.slide-out`
  * shell. Left-rail nav with grouped pages; data-driven Hotkeys page;
  * search-all across all 10 docs; Plugin SDK / Tools / Profiles / Memory /

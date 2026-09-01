@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/revert.js#mountRevertModal — Phase 2a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountRevertModal({ onClose, onRevertCurrent, onRevertAll })` installs ONE
  * document-level click listener scoped to `#revertModal` and routed by

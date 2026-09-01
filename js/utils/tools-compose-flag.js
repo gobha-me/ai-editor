@@ -11,7 +11,7 @@
  * runtime behavior* on the tools track — 1.3.4 was data-only with an
  * implicit removability check ("delete `js/intelligence/tools/`"). With
  * the Composer wired into the chat path, the roadmap's removability
- * check (ROADMAP §1.4.0 line 396) requires an explicit in-product kill-
+ * check (the tool-composition contract) requires an explicit in-product kill-
  * switch so an operator can A/B the admission against the legacy path
  * without redeploying. Same shape as `?compression=off` from the
  * compression track.

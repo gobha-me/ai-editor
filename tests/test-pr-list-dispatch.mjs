@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/pr-list.js#mountPrList — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `#prsPanel`. One action:
  *   - `openPrReview` reads `data-number` (coerced to Number)

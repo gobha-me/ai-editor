@@ -1,7 +1,7 @@
 /**
  * Anti-regression CI guard: the `tab:switched` profile-mutation listener
  * that lived at [`js/plugin-editor.js`](../js/plugin-editor.js) pre-2.66.0
- * (ICD-plugin-lifecycle finding #2) must stay retired, and the in-tab
+ * must stay retired under the plugin lifecycle contract, and the in-tab
  * overlay-banner replacement must keep reading the 2.58.0
  * `State.settings.plugin` shape.
  *
@@ -40,7 +40,7 @@ const CODE = stripComments(RAW_SOURCE);
 test('auto-profile-switch retired: no `tab:switched` listener subscribes in plugin-editor.js', () => {
     assert.ok(
         !/EventBus\.on\s*\(\s*['"]tab:switched['"]/.test(CODE),
-        'plugin-editor.js must not subscribe to tab:switched — ICD-plugin-lifecycle finding #2 retired at 2.66.0'
+        'plugin-editor.js must not subscribe to tab:switched — see docs/PLUGIN.md'
     );
 });
 

@@ -1,7 +1,5 @@
 /**
- * Long-chat regression for the 1.17.0 profile-keyed compression
- * resolver. Per ROADMAP §"2.X path" (1.17.0 row): *"Needs long-chat
- * regression test before tagging."*
+ * Long-chat regression for the profile-keyed compression resolver.
  *
  * Drives `Compactor.compress` over a synthetic 30-turn history under
  * both resolved configs (coder.v1 and chat.v1) and asserts the
@@ -161,9 +159,8 @@ test('chat.v1 over 30-turn history with no budget pressure: Rule 5 does not fire
     // Rule 5 (Summarization) needs budget pressure to evict. With
     // budget_tokens: Infinity (matching js/chat/compactor-integration.js)
     // chat surfaces are effectively a pass-through today. The
-    // preserve_recent: 4 reconciliation matters when the future
-    // tighter Rule 5 integration (ROADMAP §1.2.4) ships — this test
-    // pins today's behavior so that future change is visible.
+    // This test pins the preserve_recent: 4 behavior so a later Rule 5
+    // integration change remains visible.
     const cfg = resolveCompressionConfig('chat.v1');
     resetSeq();
     const history = [];

@@ -6,7 +6,7 @@
  * into a single icon menu; this file ships the surface those items
  * become tabs inside. Help (1.3.10) reuses `.slide-out` verbatim.
  *
- * Per `docs/design/touch-2-facelift/project/debug.jsx`:
+ * Current contract: a shared right-edge drawer shell with:
  * head row + 5 tabs (Logs / Connections / Indexer / AI / Plugins) +
  * tab-local panels. Both shipped themes (Refined IDE, Editorial Calm)
  * render identical markup via the frozen `--tk-*` contract — no

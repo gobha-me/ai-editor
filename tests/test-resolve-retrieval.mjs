@@ -11,7 +11,7 @@
  * so profiles are load-bearing internally even though the Settings
  * surface is still role-keyed.
  *
- * Per ROADMAP §Decisions 7 "Removability check," the rewire's exit
+ * The the rewire's exit
  * criterion is **zero behavior diff** against the pre-slice direct
  * reads. That's exactly what this file proves: every field returned
  * by `resolveRetrievalConfig('coder.v1')` is element-equal to the

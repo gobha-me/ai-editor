@@ -1,7 +1,7 @@
 /**
  * AI Editor — Icon Library
  *
- * Lucide-shaped line icons ported from `docs/design/touch-2-facelift/project/icons.jsx`.
+ * Lucide-shaped line icons bundled locally for offline use.
  *
  * **Offline by construction.** Every SVG path is inlined as a string. Nothing
  * fetches at runtime; the icon set ships with the JS bundle. Air-gapped Docker

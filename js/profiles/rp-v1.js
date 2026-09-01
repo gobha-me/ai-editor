@@ -3,15 +3,12 @@
  * `rp.v1` — role-play / personas. Inherits from `chat.v1` (per
  * `docs/DESIGN-profiles.md` §"Canonical Profiles" → "rp.v1").
  *
- * Phase 2 of the profiles arc per ROADMAP §"After 2.0.0" line 111. Ships
- * the design overrides whose runtime consumers exist today (retrieval
+ * Ships the overrides whose runtime consumers exist today (retrieval
  * collections, memory scope, retrieval strategy weights, compression
  * `preserve_recent`). Deferred to a follow-up slice:
  *
- *   - **Rule 4 (Resolution) keyed off `scene_id` boundaries** — Rule 4 is
- *     in the Compression deferred bucket per `docs/ROADMAP.md` §"Compression
- *     (was 1.2.x)"; rp.v1 ships with chat.v1's Rule-5-only inherited until
- *     Rule 4 itself lands.
+ *   - **Rule 4 (Resolution) keyed off `scene_id` boundaries** — rp.v1
+ *     inherits chat.v1's Rule-5-only behavior until Rule 4 exists.
  *   - **Voice-preserving Rule 5 prompt** — `summarizer.promptTemplate`
  *     plumbing isn't there; profile inherits chat.v1's `null` template.
  *   - **Chunker metadata fields** (`persona_id`, `in_character`, `scene_id`)

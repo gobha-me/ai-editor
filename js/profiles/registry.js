@@ -31,8 +31,7 @@
  * behave indistinguishably from `chat.v1` for the user. Promoting them
  * back into `ENTRIES` is gated on profile-specific `systemPrompt` addenda
  * (per the 1.23.x `plugin-dev.v1` precedent) — that's the lift that makes
- * picking each one observable. See `SYNTHETIC_ENTRIES` rationale below
- * and ROADMAP §"After 2.0.0" for the promotion trigger.
+ * picking each one observable. See `SYNTHETIC_ENTRIES` below.
  *
  * **2.8.0 — first granular promotion: `kb.v1`.** `kb.v1` carries a
  * `systemPrompt` addendum (*"answer only from attached docs, cite line
@@ -126,8 +125,7 @@ const ENTRIES = [
  *      is per-profile `systemPrompt` addenda mirroring 1.23.x's
  *      `plugin-dev.v1` precedent. `kb.v1` graduated this way at 2.8.0
  *      (*"answer only from attached docs, cite line ranges, no edits"*)
- *      and now lives in `ENTRIES`. See ROADMAP §"After 2.0.0" → "Profiles
- *      Phase 2 picker promotion" for the trigger spec. Custom plugin
+ *      and now lives in `ENTRIES`. Custom plugin
  *      profiles inheriting `base: 'rp.v1'` etc. unlock with the Phase 4
  *      authoring API.
  *

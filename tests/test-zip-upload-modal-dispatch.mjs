@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/zip-upload.js#mountZipUpload — Phase 2a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * The zip-upload modal is the only Phase 2a modal with a payload-arg action:
  * `zipSelectAll` carries a `data-zip-select="all"|"none"` attribute that

@@ -205,7 +205,7 @@ function applyToolPairCoherence(verdicts, history, diag) {
  * Post-pass — count tool_result turns that lacked the metadata each
  * file-ops rule needs. Surfaces the `rules_skipped` diagnostic that lets
  * the LLM debug modal distinguish "no rule applied" from "rule skipped
- * because metadata absent" (per ROADMAP §1.2.0 exit criteria).
+ * because metadata absent" (per the compression baseline exit criteria).
  *
  * @param {Diagnostics} diag
  * @param {Turn[]}      history

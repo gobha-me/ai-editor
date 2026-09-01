@@ -422,7 +422,7 @@ const State = {
     // Owned by the `delegate_task` tool family per
     // `docs/DESIGN-sub-agents.md` §"Gap 1" — *not* aliased to chat
     // surfaces. Single top-level slot preserves the single-global-state
-    // constraint (`project_constraints.md`).
+    // constraint.
     //   - `tree[transcriptId]`        — live `SubAgentContext` objects (slice 2)
     //   - `transcripts[transcriptId]` — per-sub-agent message + result history
     //   - `session_cost`              — cumulative across all sub-agent calls in
@@ -1488,9 +1488,7 @@ const Providers = {
 // ROLE DEFINITIONS — RETIRED AT 2.0.0
 // ============================================
 //
-// The pre-2.0.0 `Roles` namespace + `BUILTIN_ROLES` + `Roles.filterTools`
-// retired with slice 3 of path-to-2.0.0 (ROADMAP §"2.X path"). The profile
-// picker is the only configuration surface; admission filtering goes through
+// The profile picker is the configuration surface; admission filtering goes through
 // `Profiles.filterTools` (`js/profiles/registry.js`).
 //
 // External plugins that imported `Roles` from `window.AIEditor` get a

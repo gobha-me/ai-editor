@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/ui/file-rename.js#mountRenameModal — Phase 2a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  */
 import './_node-shim.mjs';
 import { test } from 'node:test';

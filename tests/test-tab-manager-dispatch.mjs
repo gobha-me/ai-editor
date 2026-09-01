@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/tab-manager.js#mountTabManager — Phase 3a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * Scoped to `#editorTabs`. Two actions:
  *   - `switchToTab` reads `data-index` (coerced to Number)

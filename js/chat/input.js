@@ -362,7 +362,7 @@ export function renderImagePreview() {
 
 /**
  * Bind a delegated click handler for the image preview strip's remove
- * buttons. Phase 3a of the inline-handlers migration
+ * buttons. UI event-dispatch contract
  * (DESIGN-ui-event-dispatch.md). Scoped to
  * `#imagePreviewStrip` — `renderImagePreview()` rewrites the strip's
  * innerHTML on every attach/remove, so the document-level listener

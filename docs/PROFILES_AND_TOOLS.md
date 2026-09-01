@@ -163,7 +163,10 @@ registry.register('my_new_tool', async (args) => {
 
 ## Adding a new profile
 
-A user-authored profile authoring API is **deferred to Phase 4** per the github#40 paper decisions ([`docs/discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md)). Today profiles live as `.js` files under [`js/profiles/`](../js/profiles/) and register in [`registry.js`](../js/profiles/registry.js)'s `ENTRIES` (picker) or `SYNTHETIC_ENTRIES` (lookup-only).
+A user-authored profile API is not implemented. Today profiles live as `.js`
+files under [`js/profiles/`](../js/profiles/) and register in
+[`registry.js`](../js/profiles/registry.js)'s `ENTRIES` (picker) or
+`SYNTHETIC_ENTRIES` (lookup-only).
 
 To prototype a new profile in-tree:
 
@@ -187,6 +190,6 @@ To restrict an MCP server's tools to a subset of profiles today, the option is e
 ## References
 
 - Source: [`js/tools/registry.js`](../js/tools/registry.js), [`js/profiles/registry.js`](../js/profiles/registry.js), [`js/profiles/inheritance.js`](../js/profiles/inheritance.js), [`js/profiles/{chat,coder,kb,full,pm,reviewer,plugin-dev,chat-multi,rp,subagent}-v1.js`](../js/profiles/).
-- Contract docs: [`DESIGN-tools.md`](DESIGN-tools.md) — admission seam (read the §⚠️ Superseded banner for the pre-2.54.0 model); [`DESIGN-profiles.md`](DESIGN-profiles.md) — profile schema + inheritance + Two-View Configuration.
-- Paper-session decisions: [`discussion/profiles-pick-tools.md`](discussion/profiles-pick-tools.md), [`discussion/plugin-dev-mode-vs-profile.md`](discussion/plugin-dev-mode-vs-profile.md), [`discussion/user-built-profile-trees.md`](discussion/user-built-profile-trees.md).
+- Contract docs: [`DESIGN-tools.md`](DESIGN-tools.md) — admission seam;
+  [`DESIGN-profiles.md`](DESIGN-profiles.md) — profile schema and inheritance.
 - Tests: [`tests/test-profile-admit-coverage.mjs`](../tests/test-profile-admit-coverage.mjs) (coverage gate), [`tests/test-profile-filter-tools.mjs`](../tests/test-profile-filter-tools.mjs) (filter semantics), [`tests/test-profiles-inheritance.mjs`](../tests/test-profiles-inheritance.mjs) (`admit_add` / `admit_remove` operators).

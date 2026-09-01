@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/chat/replay.js#mountReplayModal — Phase 2a of the
- * inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  */
 import './_node-shim.mjs';
 import { test } from 'node:test';

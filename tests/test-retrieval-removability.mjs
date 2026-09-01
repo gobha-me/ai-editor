@@ -1,9 +1,8 @@
 /**
  * Removability check for 1.15.0 / Task Ledger Phase 1.
  *
- * 1.15.0 is the first profiles slice where ROADMAP §Decisions 7 lists
- * "User-visible: Yes" — markers replacing re-pasted chunks is the
- * intended effect. Per the §Decisions 7 protocol, every "User-visible:
+ * Markers replacing re-pasted chunks are the intended user-visible effect.
+ * Under the removability protocol, every "User-visible:
  * Yes" slice gets an explicit regression test that pins the visible
  * change against the pre-slice behavior.
  *

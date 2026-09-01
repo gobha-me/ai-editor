@@ -511,8 +511,7 @@ test('rail-views: applyProviderContributions wires structured panels from provid
     }
 });
 
-// 2.43.0 — regression guard for `audit-2026-Q2/inventory.md` §sidebar/rail
-// `[REG][M][likely]` closure. The 6 dead `panels: [{slot: 'sidebar-panels'}]`
+// Regression guard: the 6 dead `panels: [{slot: 'sidebar-panels'}]`
 // entries (gitea-issues, gitea-prs, github-issues, github-prs, gitlab-issues,
 // gitlab-mrs) were render-less flat-slot entries silently skipped at
 // `slot-manager.js`. Providers now ship empty `panels: []`; `rail-views` is
@@ -671,8 +670,7 @@ test('rail-views rejects view.headerActions entry with empty id', () => {
 });
 
 /* ============================================================ */
-/* plugin-mounted button wiring (2.44.0.1)                      */
-/* — closes audit-2026-Q2/inventory.md §app-boot [ST][M][likely] */
+/* plugin-mounted button wiring                                 */
 /* ============================================================ */
 
 import {

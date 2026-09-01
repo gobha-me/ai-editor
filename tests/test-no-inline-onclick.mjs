@@ -1,5 +1,5 @@
 /**
- * Phase 4 anti-regression coverage — asserts the inline-handlers migration
+ * Phase 4 anti-regression coverage — asserts the UI event-dispatch contract
  * stays migrated. After Phases 1–3b (shipped 2.27.0 → 2.31.0), every
  * `onclick=` in html/* + js/ui/* + js/chat/messages.js was retired in favor
  * of `data-action=` + a delegated mount listener. This test fails if any

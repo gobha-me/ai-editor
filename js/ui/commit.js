@@ -103,7 +103,7 @@ export function closeCommitModal() {
  * Bind a delegated click handler for the commit modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 1 of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  * Pilot replicating the `mountBranchPanel` (js/ui/branch-panel.js:216) shape
  * on the commit modal. The HTML carries `data-action="closeCommitModal"`,
  * `"generateCommitMsg"`, `"commitAndPush"` instead of `onclick="window.foo()"`;

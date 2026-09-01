@@ -727,10 +727,8 @@ async function findRelevantFiles(query, topK = 5) {
         // DESIGN-profiles.md "novelty threshold low"). The chat-v1
         // threshold (0.5) doesn't ship through here in 1.20.0 either —
         // chat surfaces don't call `find_relevant_files` today; the
-        // role↔profile translator at the call-site lands with the
-        // 1.21.0 picker UI per ROADMAP §"2.X path".
-        // 1.20.0 — read via `resolveRetrievalConfig` (last subsystem
-        // rewire of the path-to-2.0.0 arc). Behavior unchanged —
+        // Role-keyed callers pass through the role↔profile translator.
+        // Read via `resolveRetrievalConfig`; behavior is unchanged —
         // §Decisions 7 Removability check is `tests/test-resolve-retrieval.mjs`.
         composeOpts.turnId = turnId;
         if (Array.isArray(queryEmbedding)) composeOpts.queryEmbedding = queryEmbedding;

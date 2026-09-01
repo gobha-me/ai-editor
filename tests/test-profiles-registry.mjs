@@ -72,11 +72,7 @@ test("Profiles.has('constructor') === false (prototype-pollution safety)", () =>
 // ============================================
 
 test("Profiles.list() returns chat.v1 + coder.v1 + kb.v1 (kb.v1 promoted at 2.8.0; chat_multi.v1 / rp.v1 still lookup-only)", () => {
-    // 2.6.0 — chat_multi.v1, rp.v1, kb.v1 landed as lookup-only synthetics.
-    // 2.8.0 — kb.v1 graduates to ENTRIES carrying its systemPrompt addendum
-    // (the cheapest first lever per ROADMAP §"After 2.0.0" → "Profiles
-    // Phase 2 picker promotion"); chat_multi.v1 / rp.v1 stay in
-    // SYNTHETIC_ENTRIES until each earns its own addendum.
+    // kb.v1 is picker-visible; chat_multi.v1 and rp.v1 remain lookup-only.
     const entries = Profiles.list();
     assert.equal(entries.length, 3);
     const names = entries.map(e => e.name);

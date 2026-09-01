@@ -6,8 +6,7 @@
  * Memory PRs add the chat consent card (PR #6), commit-modal section
  * (PR #7), and inline `@memory` chip (PR #8).
  *
- * Layout follows Touch 1 design Flow 2A
- * (`docs/design/touch-1-memory-ux/project/flow2-settings.jsx`):
+ * Memory management layout:
  *   - Toolbar: ◆ Memory · count · file-mode toggle · Audit · Export
  *   - Repo-mode banner (when file mode is active)
  *   - Filters: search input + scope chips (all/user/workspace)

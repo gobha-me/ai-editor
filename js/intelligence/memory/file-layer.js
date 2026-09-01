@@ -1,8 +1,7 @@
 // @ts-check
 /**
  * Memory file layer — transparent `.aieditor/memory/*.md` projection of the
- * workspace-scope structured store. The "killer integration" of the Memory
- * track per ROADMAP §1.3.0 "Why now": memory committed with the repo
+ * workspace-scope structured store. Memory committed with the repo
  * round-trips through Git so opening the same project on a second machine
  * surfaces the same memories.
  *

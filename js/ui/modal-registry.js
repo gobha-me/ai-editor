@@ -1,8 +1,6 @@
 /**
- * ModalRegistry — single source of truth for "what overlays exist and how do
- * we close one?" 2.33.0 (2026-Q2 audit sweep entry [HC][S] at
- * `docs/audit-2026-Q2/inventory.md` — `closeAllModals enumerates magic
- * selectors instead of registry`).
+ * ModalRegistry — single source of truth for what overlays exist and how to
+ * close them without enumerating selectors at each call site.
  *
  * Replaces the pre-2.33.0 hand-rolled chain in `js/app.js` Esc handler
  * (5 stacked `if (isXxxActive()) { closeXxx(); return; }`) and popstate

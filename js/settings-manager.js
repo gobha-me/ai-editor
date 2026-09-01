@@ -125,7 +125,7 @@ export function closeSettings() {
  * Bind a delegated click handler for the settings modal's action buttons.
  * Idempotent — safe to call from `init()` multiple times.
  *
- * Phase 2b of the inline-handlers migration (DESIGN-ui-event-dispatch.md).
+ * UI event-dispatch contract (DESIGN-ui-event-dispatch.md).
  * Replicates the Phase 1 `mountCommitModal` (js/ui/commit.js:116) shape.
  *
  * Scope `#settingsModal` covers both the modal-body footer buttons (export,

@@ -4,15 +4,13 @@
  * semantics. Inherits from `chat.v1` (per `docs/DESIGN-profiles.md`
  * §"Canonical Profiles" → "chat_multi.v1").
  *
- * Phase 2 of the profiles arc per ROADMAP §"After 2.0.0" line 111: surface
- * count goes from 1 to 4 (chat-family). The chunker / metadata extension
+ * The chunker / metadata extension
  * fields (`speaker_id`) and the speaker-attribution Rule 5 prompt remain
  * deferred until the corresponding pipes exist; this slice ships the data
  * fields whose runtime consumers already exist (retrieval collections +
  * memory collections).
  *
- * Field provenance: every override mirrors the chat_multi.v1 row at
- * `docs/DESIGN-profiles.md` lines 252–260 trimmed to the realized subset.
+ * The profile includes only fields with current runtime consumers.
  *
  * @module profiles/chat-multi-v1
  */

@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/project-manager.js#mountCreatePRModal — Phase 2b of
- * the inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * the UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * `mountCreatePRModal({ onClose, onSubmit })` installs ONE document-level
  * click listener scoped to `#createPRModal` and routed by `data-action`.

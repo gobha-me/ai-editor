@@ -1,7 +1,6 @@
 // @ts-check
 /**
- * MemoryConsentCard — Preact + htm component for Touch 1 Flow 1
- * (`docs/design/touch-1-memory-ux/project/flow1-consent.jsx`).
+ * MemoryConsentCard — Preact + htm approval component.
  *
  * Renders inline in the chat stream when `memory_remember` returns
  * `{status: 'pending_consent', candidate_id}`. Drives a 4-state machine —

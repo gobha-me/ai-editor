@@ -2,11 +2,8 @@
 /**
  * Settings migration — `settings.role` (pre-2.0.0) → `settings.profile`.
  *
- * Slice 3 of the path-to-2.0.0 retirement (ROADMAP §"2.X path"). Slice 1
- * (1.23.0) registered the four synthetic profiles + `Profiles.filterTools`;
- * slice 2 (1.24.0) flipped consumer call sites to read profile-keyed via
- * `getActiveProfileName`. Slice 3 (this module + `loadSettings` consumer)
- * runs the one-shot rewrite of stored settings.
+ * This module runs the one-shot rewrite of stored settings. Current consumers
+ * read profile-keyed configuration through `getActiveProfileName`.
  *
  * The 5-key table mirrors `tests/test-profile-filter-tools.mjs`'s
  * `ROLE_TO_PROFILE` constant verbatim. Divergence across the two is a

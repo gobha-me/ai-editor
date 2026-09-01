@@ -4,8 +4,7 @@
  * modules route through the `Storage` API — `Storage.get`, `Storage.set`,
  * `Storage.remove`, `Storage.migrateLegacyKey`.
  *
- * Why this exists — the 2.40.0 storage-discipline sweep (`docs/audit-2026-Q2/inventory.md`
- * §plumbing/storage entries) replaced ~17 ad-hoc `localStorage.setItem` /
+ * The storage-discipline boundary replaced ad-hoc `localStorage.setItem` /
  * `getItem` / `removeItem` call sites scattered across 6 files with the
  * Storage wrapper. Memory `feedback_storage_idb_authoritative.md` notes
  * that raw localStorage usage is a recurring miss (incidents 1.5.9 #16 and

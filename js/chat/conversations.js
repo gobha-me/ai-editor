@@ -25,7 +25,7 @@ import { pickProfileName } from '../profiles/resolve.js';
 import { cancelToolLoop, clearApprovedPlan } from './state.js';
 import { clearAutoCommitted } from '../tools/_session-auto-commits.js';
 
-/** 2.49.0 — DESIGN-sub-agents.md §Risks line 536: bound transcript
+/** Bound sub-agent transcript
  *  bloat by capping `tool_result` content per turn on persistence.
  *  Same scale as the parent's `TOOL_RESULT_LIMIT`. The runtime
  *  transcript retains full content (re-runnable from the transcript
@@ -304,8 +304,7 @@ const ConversationManager = {
         // would clear the previously-saved conversation's cached messages —
         // and the queued async IDB write would persist the corrupted state.
         // 2.49.0 — Sub-agent transcripts persist per-conversation
-        // (DESIGN-sub-agents.md §Phasing Phase 1, §Risks line 536 —
-        // 12K-per-tool-result truncation on persistence). Cross-session
+        // with 12K-per-tool-result truncation on persistence. Cross-session
         // promotion is Phase 5; for Phase 1 the transcripts live with
         // their originating conversation and discard on delete().
         const subagentTranscripts = _serializeSubAgentTranscripts(

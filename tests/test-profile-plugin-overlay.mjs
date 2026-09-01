@@ -2,8 +2,7 @@
  * `resolvePluginConfig` + `PLUGIN_TOOL_NAMES` — the `plugin.enabled`
  * capability-overlay flag wired at 2.58.0 (gitea#442).
  *
- * Decision recorded at `docs/discussion/plugin-dev-mode-vs-profile.md`:
- * plugin-dev is a *capability* anyone can engage as needed (flag), not a
+ * Plugin development is a *capability* anyone can engage as needed (flag), not a
  * *role* someone takes on for a session (profile). The flag defaults OFF
  * everywhere — opt-in only. When ON, the resolved profile + settings
  * overlay admits `PLUGIN_TOOL_NAMES` onto whatever profile is active.
@@ -27,10 +26,8 @@ test('PLUGIN_TOOL_NAMES — frozen', () => {
 });
 
 test('PLUGIN_TOOL_NAMES — pinned 5-name membership (gitea#442)', () => {
-    // Add to this list ONLY with a paired roadmap row + ROADMAP §"Now"
-    // entry — admission widening must be deliberate per
-    // `docs/discussion/plugin-dev-mode-vs-profile.md` §"What 'done' looks
-    // like".
+    // Admission widening must be deliberate and covered by the profile/tool
+    // contract and a paired regression test.
     assert.deepEqual([...PLUGIN_TOOL_NAMES].sort(), [
         'list_user_plugins',
         'read_docs',

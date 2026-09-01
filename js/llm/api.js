@@ -1133,7 +1133,7 @@ export const LLMTools = {
         // `plugin.enabled === false`. Default is OFF everywhere — the
         // flag is opt-in; flipping it admits `PLUGIN_TOOL_NAMES` onto
         // whatever profile is active, preserving the user's working
-        // state. Decision: `docs/discussion/plugin-dev-mode-vs-profile.md`.
+        // state. See docs/PLUGIN.md.
         // Mirror of `applyPreviewToolFilter` above — same shape, different
         // membership set. The synthetic `plugin-dev.v1` profile (used by
         // the legacy `'plugin-dev'`-role migration) admits these names

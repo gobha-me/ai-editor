@@ -9,7 +9,7 @@
  * (existing CM6 behavior); mid-line / after non-whitespace, Tab triggers
  * a completion. Same convention as Copilot/Cursor.
  *
- * Cost-control framing (per ROADMAP §1.4.7): the overlay is *never*
+ * Cost control: the overlay is *never*
  * automatic. There is no idle polling, no debounced auto-trigger, no
  * "pre-warm on cursor move." One LLM call per user keypress, throttled
  * to a single in-flight request at a time.

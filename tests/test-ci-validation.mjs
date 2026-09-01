@@ -8,12 +8,12 @@ import {
     validateVersionText,
 } from '../scripts/ci/validate.mjs';
 
-const releasedChangelog = '# Changelog\n\n## [Unreleased]\n\n## [2.96.0] - 2026-05-24\n';
+const releasedChangelog = '# Changelog\n\n## [Unreleased]\n\n## [2.93.0] - 2026-05-22\n';
 
 test('released version matches the latest changelog heading', () => {
     assert.deepEqual(
-        validateVersionText("export const VERSION = '2.96.0';\n", releasedChangelog),
-        { version: '2.96.0', latestRelease: '2.96.0', inFlight: false },
+        validateVersionText("export const VERSION = '2.93.0';\n", releasedChangelog),
+        { version: '2.93.0', latestRelease: '2.93.0', inFlight: false },
     );
 });
 
@@ -26,23 +26,27 @@ test('released version rejects changelog drift', () => {
 
 test('in-flight version requires a new target and Unreleased section', () => {
     assert.deepEqual(
-        validateVersionText("export const VERSION = '2.97.0.1';\n", releasedChangelog),
-        { version: '2.97.0.1', latestRelease: '2.96.0', inFlight: true },
+        validateVersionText("export const VERSION = '2.94.0.1';\n", releasedChangelog),
+        { version: '2.94.0.1', latestRelease: '2.93.0', inFlight: true },
     );
     assert.throws(
-        () => validateVersionText("export const VERSION = '2.96.0.1';\n", releasedChangelog),
+        () => validateVersionText("export const VERSION = '2.93.0.1';\n", releasedChangelog),
         /conflicts with released/u,
+    );
+    assert.throws(
+        () => validateVersionText("export const VERSION = '2.92.0.1';\n", releasedChangelog),
+        /must be newer/u,
     );
 });
 
 test('release tag must exactly match a released three-segment version', () => {
     assert.doesNotThrow(() => validateVersionText(
-        "export const VERSION = '2.96.0';\n",
+        "export const VERSION = '2.93.0';\n",
         releasedChangelog,
-        'v2.96.0',
+        'v2.93.0',
     ));
     assert.throws(
-        () => validateVersionText("export const VERSION = '2.96.0';\n", releasedChangelog, 'v2.95.0'),
+        () => validateVersionText("export const VERSION = '2.93.0';\n", releasedChangelog, 'v2.92.0'),
         /does not match/u,
     );
 });

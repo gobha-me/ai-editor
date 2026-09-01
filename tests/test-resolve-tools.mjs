@@ -7,7 +7,7 @@
  * resolved (`base`-chain merged) profile, mirroring 1.17.0's
  * `resolveCompressionConfig` and 1.18.0's `resolveMemoryConfig`.
  *
- * Per ROADMAP §Decisions 7 "Removability check," the rewire's exit
+ * The the rewire's exit
  * criterion is **zero behavior diff** against the pre-slice direct
  * reads. That's exactly what this file proves: the `static` array
  * returned by `resolveTools('coder.v1')` is element-equal to

@@ -20,6 +20,17 @@ const INVISIBLE_RANGES = [
     [0x2066, 0x2069],
 ];
 
+function compareThreeSegmentVersions(left, right) {
+    const leftParts = left.split('.').map(Number);
+    const rightParts = right.split('.').map(Number);
+    for (let index = 0; index < 3; index += 1) {
+        if (leftParts[index] !== rightParts[index]) {
+            return leftParts[index] < rightParts[index] ? -1 : 1;
+        }
+    }
+    return 0;
+}
+
 export function validateVersionText(versionSource, changelogSource, releaseTag = null) {
     const version = VERSION_RE.exec(versionSource)?.[1] ?? '';
     const latestRelease = RELEASE_HEADING_RE.exec(changelogSource)?.[1] ?? '';
@@ -31,6 +42,9 @@ export function validateVersionText(versionSource, changelogSource, releaseTag =
         const target = version.slice(0, version.lastIndexOf('.'));
         if (target === latestRelease) {
             throw new Error(`In-flight version ${version} conflicts with released ${latestRelease}`);
+        }
+        if (compareThreeSegmentVersions(target, latestRelease) < 0) {
+            throw new Error(`In-flight target ${target} must be newer than released ${latestRelease}`);
         }
         if (!/^## \[Unreleased\]\s*$/m.test(changelogSource)) {
             throw new Error('In-flight versions require a CHANGELOG.md [Unreleased] section');

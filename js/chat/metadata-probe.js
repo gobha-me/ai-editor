@@ -5,8 +5,8 @@
  * each enrichment field added in PR #170 (`tool_name`, `tool_args`,
  * `tool_result_for`, `file_ops`).
  *
- * Per docs/ROADMAP.md §1.1.0: surfaces in dev mode (?debug=metadata). Tells
- * 1.2.0 what its baseline coverage is *before* compression rules consult the
+ * Surfaces in dev mode (`?debug=metadata`) so baseline coverage is visible
+ * before compression rules consult the
  * data, so when a rule underperforms its target we can distinguish "no rule
  * applied" from "rule skipped because metadata absent."
  *

@@ -4,15 +4,10 @@
  * Inherits from `chat.v1` (per `docs/DESIGN-profiles.md` §"Canonical
  * Profiles" → "kb.v1").
  *
- * Phase 2 of the profiles arc per ROADMAP §"After 2.0.0" line 111. From
- * the design (line 307): *"The KB profile is a useful demonstration that
- * the architecture is opt-in at the profile level. A surface that doesn't
- * need compression pays no cost for it. A surface that doesn't need a
- * task ledger pays no cost for it."*
+ * It demonstrates that profile capabilities are opt-in: a surface that does
+ * not need compression or a task ledger pays no cost for either.
  *
- * Field provenance: overrides mirror the kb.v1 row at
- * `docs/DESIGN-profiles.md` lines 292–306. The "minimal (citation lookup)"
- * tools row is realized as `allowed_groups: ['all']` — universal-tagged
+ * The minimal tool set is realized as `allowed_groups: ['all']` — universal-tagged
  * tools only (drops the `'pm'` / `'reviewer'` baselines chat.v1 carries).
  * No standalone `citation_lookup` tool exists today; reserved for a
  * follow-up slice.

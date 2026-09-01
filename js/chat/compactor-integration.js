@@ -21,8 +21,7 @@
  *   Final messages array (LLM input)
  *
  * The Compactor receives no `summarizer` in 1.2.0 — Rule 5 stays in
- * `chat/summarizer.js` as before. Tighter Rule-5 integration is
- * ROADMAP §1.2.4. With no summarizer, the Compactor's pipeline is just
+ * `chat/summarizer.js` as before. With no summarizer, the Compactor's pipeline is
  * Rules 1+2 (eviction) + the tool-pair coherence pass.
  *
  * Diagnostics emitted by the Compactor are recorded onto the active

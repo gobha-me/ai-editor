@@ -3,13 +3,11 @@
  * Profile resolver — bridges role-keyed callers to a profile-keyed
  * lookup over the resolved (`base`-chain merged) profile.
  *
- * Phase 2 (1.17.0) of the path-to-2.0.0 profile arc per ROADMAP §"2.X
- * path": `resolveCompressionConfig` now takes a profile name and reads
+ * `resolveCompressionConfig` takes a profile name and reads
  * from a *resolved* profile (deep-merge consulted at lookup) rather than
  * branching on `role` and reading raw `CODER_V1`. The companion
- * `roleToProfileName` translator keeps the existing call site
- * role-keyed; the picker UI flips that at 1.21.0 and the role selector
- * retires at 2.0.0.
+ * `roleToProfileName` translator preserves compatibility for role-keyed
+ * call sites.
  *
  * The chat-side `rule5_only_shim` returned in 1.2.0–1.16.0 is retired
  * by this slice — `chat.v1.compression` (Rule 5 only,
@@ -256,12 +254,8 @@ export function resolveTools(profileName) {
  * on top of its `base` chain).
  *
  * Mirrors `resolveCompressionConfig`, `resolveMemoryConfig`, and
- * `resolveTools` byte-for-byte in shape. The fourth and final consumer
- * rewire of the path-to-2.0.0 profile arc per ROADMAP §"2.X path":
- * after this slice ships, every intelligence subsystem reads from a
- * resolved profile, so profiles are load-bearing internally even
- * though the Settings surface is still role-keyed (the picker UI
- * lands at 1.21.0; the role selector retires at 2.0.0).
+ * `resolveTools` in shape. Every intelligence subsystem therefore reads
+ * from a resolved profile, while role-keyed callers remain supported.
  *
  * Today the surface that consumes it is the retrieval Composer call
  * site at `js/intelligence/retrieval/manager.js:findRelevantFiles` —
@@ -465,8 +459,7 @@ export function resolvePreviewConfig(profileName) {
  * Plugin SDK + doc tool names. The capability-overlay membership for the
  * `plugin.enabled` flag (gitea#442). Four tools registered in
  * [`js/tools/plugin-tools.js`](../tools/plugin-tools.js) +
- * `read_docs` from [`js/tools/doc-tools.js`](../tools/doc-tools.js) — the
- * co-tagged doc tool noted in [`docs/discussion/plugin-dev-mode-vs-profile.md`](../../docs/discussion/plugin-dev-mode-vs-profile.md).
+ * `read_docs` from [`js/tools/doc-tools.js`](../tools/doc-tools.js).
  *
  * Frozen so `Profiles.findAdmittingProfiles(name, { overlayNames })` and
  * `applyPluginToolFilter` share one immutable membership.
@@ -489,9 +482,7 @@ export const PLUGIN_TOOL_NAMES = Object.freeze([
  * today — every profile resolves to `enabled: false`. Settings overlay
  * (`State.settings.plugin`) is the only flip surface.
  *
- * **2.58.0 (gitea#442).** Decision settled in
- * [`docs/discussion/plugin-dev-mode-vs-profile.md`](../../docs/discussion/plugin-dev-mode-vs-profile.md):
- * plugin-dev is a *capability anyone can engage as needed*, not a *role
+ * Plugin development is a *capability anyone can engage as needed*, not a *role
  * someone takes on for a session*. Default is OFF everywhere — opt-in
  * only. Flipping the flag admits `PLUGIN_TOOL_NAMES` onto whatever
  * profile is active, preserving the user's working state (system prompt,

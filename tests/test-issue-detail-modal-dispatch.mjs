@@ -1,6 +1,6 @@
 /**
  * Dispatcher tests for js/issue-detail.js#mountIssueDetailModal — Phase 2a of
- * the inline-handlers migration (docs/DESIGN-ui-event-dispatch.md).
+ * the UI event-dispatch contract (docs/DESIGN-ui-event-dispatch.md).
  *
  * The issue-detail modal only has `closeIssueDetailModal` to migrate; the
  * Start Work button is wired directly via `btnIssueStartWork.onclick` inside

@@ -2,10 +2,8 @@
  * AI Editor — Memory tab styles (Memory PR #5, 1.3.0).
  *
  * Settings → Memory tab is the first Preact + htm consumer in the
- * codebase (Decision §9). Class names mirror those used by the Touch 1
- * design canvas (`docs/design/touch-1-memory-ux/project/styles.css`)
- * so the visual vocabulary is consistent if/when more memory surfaces
- * adopt it (consent card PR #6, commit-modal PR #7, @memory chip PR #8).
+ * codebase. The consent card, settings tab, commit surface, and citation
+ * chip share this visual vocabulary.
  *
  * No persona scope, no confidence visuals — kickoff Decisions §1, §2.
  */
