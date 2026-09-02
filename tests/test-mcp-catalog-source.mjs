@@ -9,8 +9,8 @@
  * Key invariants this file gates:
  *   • `remote: false` items in a list response are filtered out (the
  *     `?q=is:remote` query is belt-and-braces; the parser also enforces).
- *   • Stdio entries can never reach the bridge — every parsed entry
- *     ships `transport ∈ {streamable-http, sse}`.
+ *   • Unsupported transports can never reach the bridge — every parsed entry
+ *     ships `transport === streamable-http`.
  *   • The detail parser tolerates connections without `deploymentUrl`
  *     and returns `null` rather than `{url: ''}` (would silently break
  *     the add-form pre-fill).
@@ -90,9 +90,8 @@ test('parseSmitheryListResponse — every emitted entry has a supported transpor
         ],
     };
     const out = parseSmitheryListResponse(json);
-    const valid = new Set(['streamable-http', 'sse']);
     for (const e of out) {
-        assert.ok(valid.has(e.transport), `${e.id}: invalid transport "${e.transport}"`);
+        assert.equal(e.transport, 'streamable-http', `${e.id}: invalid transport "${e.transport}"`);
     }
 });
 
@@ -167,12 +166,12 @@ test('parseSmitheryDetailResponse — picks the http connection', () => {
     assert.deepEqual(out, { url: 'https://exa.run.tools', transport: 'streamable-http' });
 });
 
-test('parseSmitheryDetailResponse — picks the sse connection', () => {
+test('parseSmitheryDetailResponse — rejects an SSE-only connection', () => {
     const json = {
         connections: [{ type: 'sse', deploymentUrl: 'https://example.com/sse' }],
     };
     const out = parseSmitheryDetailResponse(json);
-    assert.deepEqual(out, { url: 'https://example.com/sse', transport: 'sse' });
+    assert.equal(out, null);
 });
 
 test('parseSmitheryDetailResponse — recognizes streamable-http as alias for http', () => {
@@ -183,7 +182,7 @@ test('parseSmitheryDetailResponse — recognizes streamable-http as alias for ht
     assert.equal(out.transport, 'streamable-http');
 });
 
-test('parseSmitheryDetailResponse — skips connections without deploymentUrl', () => {
+test('parseSmitheryDetailResponse — skips empty URLs and unsupported SSE', () => {
     const json = {
         connections: [
             { type: 'http', deploymentUrl: '' },
@@ -192,7 +191,20 @@ test('parseSmitheryDetailResponse — skips connections without deploymentUrl', 
         ],
     };
     const out = parseSmitheryDetailResponse(json);
-    assert.deepEqual(out, { url: 'https://fallback/sse', transport: 'sse' });
+    assert.equal(out, null);
+});
+
+test('parseSmitheryDetailResponse — skips SSE and selects a later Streamable HTTP connection', () => {
+    const json = {
+        connections: [
+            { type: 'sse', deploymentUrl: 'https://legacy.example/sse' },
+            { type: 'streamable-http', deploymentUrl: 'https://current.example/mcp' },
+        ],
+    };
+    assert.deepEqual(parseSmitheryDetailResponse(json), {
+        url: 'https://current.example/mcp',
+        transport: 'streamable-http',
+    });
 });
 
 test('parseSmitheryDetailResponse — skips unknown transport types', () => {

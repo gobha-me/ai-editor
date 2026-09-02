@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 
 import { MCP_CATALOG, getCategories, categoryIcon } from '../js/mcp/catalog.js';
 
-const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 test('catalog has at least 6 entries (lower-bound surface check)', () => {
@@ -45,10 +44,17 @@ test('ids are unique across the catalog', () => {
     assert.equal(set.size, ids.length, `duplicate id(s) in catalog: ${ids.join(', ')}`);
 });
 
-test('transport is in {streamable-http, sse} (no stdio)', () => {
+test('every bundled entry uses the implemented Streamable HTTP transport', () => {
     for (const e of MCP_CATALOG) {
-        assert.ok(VALID_TRANSPORTS.has(e.transport), `${e.id}: invalid transport "${e.transport}"`);
+        assert.equal(e.transport, 'streamable-http', `${e.id}: invalid transport "${e.transport}"`);
     }
+});
+
+test('Firecrawl and Linear use their current Streamable HTTP endpoints', () => {
+    const firecrawl = MCP_CATALOG.find(e => e.id === 'firecrawl');
+    const linear = MCP_CATALOG.find(e => e.id === 'linear');
+    assert.equal(firecrawl?.url, 'https://mcp.firecrawl.dev/{API_KEY}/v2/mcp');
+    assert.equal(linear?.url, 'https://mcp.linear.app/mcp');
 });
 
 test('category is in the enumerated set', () => {

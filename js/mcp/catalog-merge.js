@@ -64,8 +64,8 @@ export function mergeCatalogs(bundled, remote) {
 
 /**
  * Minimum required fields for a usable catalog entry. Both bundled and
- * remote entries must satisfy this; anything missing `id` or `name` is
- * filtered out so the picker doesn't render empty rows.
+ * remote entries must satisfy this; anything missing `id` or `name`, or
+ * advertising an unsupported transport, is filtered out.
  *
  * @param {*} entry
  * @returns {boolean}
@@ -74,6 +74,7 @@ function isUsableEntry(entry) {
     if (!entry || typeof entry !== 'object') return false;
     if (typeof entry.id !== 'string' || !entry.id) return false;
     if (typeof entry.name !== 'string' || !entry.name) return false;
+    if (entry.transport !== 'streamable-http') return false;
     return true;
 }
 

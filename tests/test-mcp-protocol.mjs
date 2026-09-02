@@ -7,7 +7,7 @@
  *   - tools/call envelope
  *   - JSON-RPC error mapping
  *   - HTTP error mapping (401 → AUTH_INVALID_TOKEN, 5xx → LLM_API_ERROR)
- *   - SSE response framing (text/event-stream body)
+ *   - Streamable HTTP event-stream response framing
  *   - abort() rejects in-flight calls cleanly
  *   - timeout enforcement (mocked clock)
  *
@@ -98,12 +98,46 @@ test('toolsCall: passes name + arguments and returns content envelope', async ()
     setFetch(ORIG_FETCH);
 });
 
-test('SSE response: parses event-stream body', async () => {
+test('Streamable HTTP response: parses text/event-stream body', async () => {
     reset();
     setFetch(async () => sseResponse([{ jsonrpc: '2.0', id: 1, result: { tools: [] } }]));
     const result = await protocol.toolsList({ id: 's4', url: 'https://mcp.example/mcp' });
     assert.deepEqual(result, { tools: [] });
     setFetch(ORIG_FETCH);
+});
+
+test('unsupported transports reject every request path before fetch', async () => {
+    reset();
+    let fetchCalls = 0;
+    setFetch(async () => {
+        fetchCalls++;
+        throw new Error('unsupported transport must not fetch');
+    });
+    try {
+        await assert.rejects(
+            protocol.initialize({ id: 'legacy-init', url: 'https://mcp.example/sse', transport: 'sse' }),
+            /supports Streamable HTTP only/
+        );
+        await assert.rejects(
+            protocol.toolsList({ id: 'legacy-list', url: 'https://mcp.example/sse', transport: 'sse' }),
+            /supports Streamable HTTP only/
+        );
+        await assert.rejects(
+            protocol.toolsCall({ id: 'legacy-call', url: 'https://mcp.example/sse', transport: 'sse' }, 'echo', {}),
+            /supports Streamable HTTP only/
+        );
+        await assert.rejects(
+            protocol.toolsList({ id: 'unknown-list', url: 'https://mcp.example/custom', transport: 'mystery' }),
+            /supports Streamable HTTP only/
+        );
+        await assert.rejects(
+            protocol.toolsList({ id: 'empty-list', url: 'https://mcp.example/custom', transport: '' }),
+            /supports Streamable HTTP only/
+        );
+        assert.equal(fetchCalls, 0);
+    } finally {
+        setFetch(ORIG_FETCH);
+    }
 });
 
 test('JSON-RPC error: throws EditorError with method context', async () => {

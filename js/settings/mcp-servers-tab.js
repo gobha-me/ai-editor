@@ -34,6 +34,9 @@ let _filterSource = /** @type {'all'|'curated'|'remote'} */ ('all');
 let _searchInputDebounce = null;
 
 function statusFor(server) {
+    if ((server.transport == null ? 'streamable-http' : server.transport) !== 'streamable-http') {
+        return { kind: 'warn', label: `unsupported ${server.transport}` };
+    }
     if (!server.enabled) return { kind: 'disabled', label: 'disabled' };
     if (server._unreachable) return { kind: 'warn', label: 'unreachable' };
     if (!server.url) return { kind: 'warn', label: 'no URL' };
@@ -142,12 +145,13 @@ function renderMCPServersList() {
 
 function renderRow(server) {
     const status = statusFor(server);
+    const supported = (server.transport == null ? 'streamable-http' : server.transport) === 'streamable-http';
     const idAttr = escapeAttr(server.id);
-    const disabledClass = server.enabled ? '' : ' conn__row--disabled';
+    const disabledClass = server.enabled && supported ? '' : ' conn__row--disabled';
     const url = server.url || '—';
     const toolCount = server._toolCount || 0;
     const toolWord = toolCount === 1 ? 'tool' : 'tools';
-    const toolMeta = server.enabled ? `${toolCount} ${toolWord} loaded` : 'disabled';
+    const toolMeta = !supported ? 'migration required' : (server.enabled ? `${toolCount} ${toolWord} loaded` : 'disabled');
     const rolesMeta = formatRoles(server.roles);
 
     return `
@@ -170,7 +174,7 @@ function renderRow(server) {
                 <span class="conn__status conn__status--${status.kind}">
                     <span class="conn__status-dot"></span> ${escapeHtml(status.label)}
                 </span>
-                <button type="button" class="conn__row-action" data-mcp-action="toggle" data-mcp-id="${idAttr}" title="${server.enabled ? 'Disable' : 'Enable'}">${server.enabled ? '⏸' : '▶'}</button>
+                <button type="button" class="conn__row-action" data-mcp-action="toggle" data-mcp-id="${idAttr}" title="${supported ? (server.enabled ? 'Disable' : 'Enable') : 'Edit this server to migrate it to Streamable HTTP'}"${supported ? '' : ' disabled'}>${server.enabled ? '⏸' : '▶'}</button>
                 <button type="button" class="conn__row-action" data-mcp-action="edit" data-mcp-id="${idAttr}" title="Edit">✏️</button>
                 <button type="button" class="conn__row-action conn__row-action--danger" data-mcp-action="remove" data-mcp-id="${idAttr}" title="Remove">🗑</button>
             </div>
@@ -183,6 +187,7 @@ function showServerEditor(serverId, starter) {
     const editor = document.getElementById('mcpServerEditor');
     const title = document.getElementById('mcpServerEditorTitle');
     const result = document.getElementById('mcpServerTestResult');
+    const migrationWarning = document.getElementById('mcpTransportMigrationWarning');
     if (!editor) return;
 
     if (serverId) {
@@ -192,8 +197,11 @@ function showServerEditor(serverId, starter) {
         document.getElementById('mcpEditLabel').value = server.label || '';
         document.getElementById('mcpEditUrl').value = server.url || '';
         document.getElementById('mcpEditToken').value = server.token || '';
-        document.getElementById('mcpEditTransport').value = server.transport || 'streamable-http';
+        document.getElementById('mcpEditTransport').value = 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = server.enabled !== false;
+        if (migrationWarning) {
+            migrationWarning.style.display = server.transport && server.transport !== 'streamable-http' ? 'block' : 'none';
+        }
         setRolesCheckboxes(server.roles);
         _preSaveSnapshot = { ...server };
     } else {
@@ -203,6 +211,7 @@ function showServerEditor(serverId, starter) {
         document.getElementById('mcpEditToken').value = starter?.token ?? '';
         document.getElementById('mcpEditTransport').value = starter?.transport ?? 'streamable-http';
         document.getElementById('mcpEditEnabled').checked = starter?.enabled !== false;
+        if (migrationWarning) migrationWarning.style.display = 'none';
         setRolesCheckboxes(starter?.roles ?? 'all');
         _preSaveSnapshot = null;
     }
@@ -213,6 +222,8 @@ function showServerEditor(serverId, starter) {
 function hideServerEditor() {
     const editor = document.getElementById('mcpServerEditor');
     if (editor) editor.style.display = 'none';
+    const migrationWarning = document.getElementById('mcpTransportMigrationWarning');
+    if (migrationWarning) migrationWarning.style.display = 'none';
     _editingServerId = null;
     _preSaveSnapshot = null;
 }
@@ -262,6 +273,12 @@ function saveServerFromEditor() {
     }
     if (!url) {
         window.showToast('Server URL is required', 'warning');
+        return;
+    }
+    if (_preSaveSnapshot
+        && (_preSaveSnapshot.transport == null ? 'streamable-http' : _preSaveSnapshot.transport) !== 'streamable-http'
+        && url === String(_preSaveSnapshot.url || '').trim()) {
+        window.showToast('Update this legacy server URL to its Streamable HTTP endpoint before saving', 'warning');
         return;
     }
 
@@ -340,6 +357,12 @@ async function testServerFromEditor() {
         showTestResult(resultEl, 'error', 'URL is required to test');
         return;
     }
+    if (_preSaveSnapshot
+        && (_preSaveSnapshot.transport == null ? 'streamable-http' : _preSaveSnapshot.transport) !== 'streamable-http'
+        && url === String(_preSaveSnapshot.url || '').trim()) {
+        showTestResult(resultEl, 'error', 'Update this legacy server URL to its Streamable HTTP endpoint before testing');
+        return;
+    }
 
     btn.disabled = true;
     btn.textContent = 'Testing...';
@@ -371,6 +394,10 @@ function showTestResult(el, type, message) {
 function toggleServer(serverId) {
     const server = MCPServerRegistry.getServer(serverId);
     if (!server) return;
+    if ((server.transport == null ? 'streamable-http' : server.transport) !== 'streamable-http') {
+        window.showToast('Edit this server and migrate its URL to Streamable HTTP before enabling it', 'warning');
+        return;
+    }
     MCPServerRegistry.updateServer(serverId, { enabled: !server.enabled });
     renderMCPServersList();
     EventBus.emit('mcp:serversChanged', { serverId });
@@ -603,7 +630,7 @@ async function onCatalogPick(entryId) {
 
     if (!detail || !detail.url) {
         if (window.showToast) {
-            window.showToast(`"${entry.name}" has no usable HTTP/SSE connection in the registry.`, 'warning');
+            window.showToast(`"${entry.name}" has no usable Streamable HTTP connection in the registry.`, 'warning');
         }
         return;
     }

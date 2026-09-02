@@ -6,11 +6,9 @@
  *   - "streamable-http" (current spec): POST /mcp returning either
  *     application/json (single response) or text/event-stream (one or more
  *     SSE-framed JSON-RPC messages).
- *   - "sse" (legacy spec): POST messages, GET /sse for the response stream.
- *     1.4.2 ships only the streamable-http path; the transport field is
- *     plumbed but "sse" falls through to streamable-http with a logged
- *     warning. A dedicated SSE transport lands when a real-world server
- *     forces it.
+ * Legacy HTTP+SSE is not implemented. Explicit unsupported transports are
+ * rejected before any network request; they never fall through to the
+ * streamable-http path.
  *
  * Stdio transport is intentionally absent: the editor runs in a browser
  * with no subprocess capability. A future backend relay companion would
@@ -46,6 +44,22 @@ const _inflight = new Map();
 const _sessions = new Map();
 
 let _nextRequestId = 1;
+
+/**
+ * Fail closed before any MCP network activity. A missing transport is the
+ * persisted/default streamable-http shape; every explicit value must match
+ * the one transport implemented by this browser client.
+ *
+ * @param {{transport?: string}|null|undefined} server
+ */
+function assertSupportedTransport(server) {
+    const transport = server?.transport == null ? 'streamable-http' : String(server.transport);
+    if (transport === 'streamable-http') return;
+    throw new EditorError(
+        `Unsupported MCP transport "${transport}". AI Editor supports Streamable HTTP only; update the server URL to its Streamable HTTP endpoint.`,
+        { code: ErrorCode.UNKNOWN }
+    );
+}
 
 function nextId() {
     return _nextRequestId++;
@@ -131,7 +145,7 @@ async function readJsonRpcResponse(response, expectedId) {
                 if (msg.id === expectedId) return msg;
             } catch { /* skip non-JSON event */ }
         }
-        throw new EditorError(`MCP SSE stream ended without response id=${expectedId}`, { code: ErrorCode.LLM_STREAM_ERROR });
+        throw new EditorError(`MCP event stream ended without response id=${expectedId}`, { code: ErrorCode.LLM_STREAM_ERROR });
     }
     const text = await response.text();
     throw new EditorError(
@@ -149,6 +163,7 @@ async function readJsonRpcResponse(response, expectedId) {
  * @returns {Promise<any>}
  */
 async function rpc(server, method, params) {
+    assertSupportedTransport(server);
     const id = nextId();
     const body = JSON.stringify({ jsonrpc: '2.0', id, method, params: params || {} });
     const session = _sessions.get(server.id) || { initialized: false, sessionId: null };
@@ -216,6 +231,7 @@ async function rpc(server, method, params) {
  * @returns {Promise<{ protocolVersion: string, capabilities: Object, serverInfo: Object }>}
  */
 export async function initialize(server) {
+    assertSupportedTransport(server);
     const result = await rpc(server, 'initialize', {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
@@ -226,6 +242,7 @@ export async function initialize(server) {
     _sessions.set(server.id, session);
     // Per spec, send the initialized notification (no id, no response).
     try {
+        assertSupportedTransport(server);
         await fetch(server.url, {
             method: 'POST',
             headers: buildHeaders(server, session.sessionId),

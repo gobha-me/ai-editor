@@ -260,21 +260,15 @@ test('public-surface-shape: testConnection failure envelope is exactly {error, o
     }
 });
 
-// ----- transport coercion -------------------------------------------------
+// ----- transport validation -----------------------------------------------
 
-test('public-surface-shape: addServer coerces unknown transport to streamable-http; sse is preserved verbatim', () => {
+test('public-surface-shape: addServer rejects explicit unsupported transports', () => {
     MCPServerRegistry.__test_reset();
-    const bogus = MCPServerRegistry.addServer({
-        id: 'shape_bogus',
-        url: 'https://example.invalid/mcp',
-        transport: 'mystery',
-    });
-    assert.equal(bogus.transport, 'streamable-http');
-    const sse = MCPServerRegistry.addServer({
-        id: 'shape_sse',
-        url: 'https://example.invalid/mcp',
-        transport: 'sse',
-    });
-    assert.equal(sse.transport, 'sse');
+    assert.throws(() => MCPServerRegistry.addServer({
+        id: 'shape_bogus', url: 'https://example.invalid/mcp', transport: 'mystery',
+    }), /supports Streamable HTTP only/);
+    assert.throws(() => MCPServerRegistry.addServer({
+        id: 'shape_sse', url: 'https://example.invalid/sse', transport: 'sse',
+    }), /supports Streamable HTTP only/);
     MCPServerRegistry.__test_reset();
 });

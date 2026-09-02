@@ -21,6 +21,8 @@ Git tags or GitHub Releases were published, so they are not public versions.
   failures instead of release cadence.
 - Consolidated implementation contracts and removed duplicate or historical
   planning context from the active tree.
+- Made MCP transport handling fail closed on legacy HTTP+SSE and updated the
+  bundled Firecrawl and Linear starters to their Streamable HTTP endpoints.
 
 ## [2.93.0] - 2026-05-22
 

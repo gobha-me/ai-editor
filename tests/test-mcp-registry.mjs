@@ -7,6 +7,7 @@
 import './_node-shim.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { MCPServerRegistry } from '../js/mcp/registry.js';
 
@@ -38,10 +39,20 @@ test('addServer: requires id and url', () => {
     assert.throws(() => MCPServerRegistry.addServer({ id: 'fs' }), /id and url/);
 });
 
-test('addServer: invalid transport falls back to streamable-http', () => {
+test('addServer: rejects explicit unsupported transports', () => {
     reset();
-    const s = MCPServerRegistry.addServer({ id: 'fs', url: 'https://x/mcp', transport: 'mystery' });
-    assert.equal(s.transport, 'streamable-http');
+    assert.throws(
+        () => MCPServerRegistry.addServer({ id: 'fs', url: 'https://x/mcp', transport: 'mystery' }),
+        /supports Streamable HTTP only/
+    );
+    assert.throws(
+        () => MCPServerRegistry.addServer({ id: 'legacy', url: 'https://x/sse', transport: 'sse' }),
+        /supports Streamable HTTP only/
+    );
+    assert.throws(
+        () => MCPServerRegistry.addServer({ id: 'empty', url: 'https://x/mcp', transport: '' }),
+        /supports Streamable HTTP only/
+    );
 });
 
 test('updateServer: partial merge preserves untouched fields', () => {
@@ -57,11 +68,11 @@ test('updateServer: rejects unknown id', () => {
     assert.throws(() => MCPServerRegistry.updateServer('ghost', { label: 'x' }), /not found/);
 });
 
-test('updateServer: rejects invalid transport (keeps prior)', () => {
+test('updateServer: rejects invalid transport and keeps the supported record', () => {
     reset();
-    MCPServerRegistry.addServer({ id: 'fs', url: 'https://x/mcp', transport: 'sse' });
-    const updated = MCPServerRegistry.updateServer('fs', { transport: 'bogus' });
-    assert.equal(updated.transport, 'sse');
+    MCPServerRegistry.addServer({ id: 'fs', url: 'https://x/mcp' });
+    assert.throws(() => MCPServerRegistry.updateServer('fs', { transport: 'bogus' }), /supports Streamable HTTP only/);
+    assert.equal(MCPServerRegistry.getServer('fs').transport, 'streamable-http');
 });
 
 test('removeServer: returns false for unknown id', () => {
@@ -118,4 +129,62 @@ test('loadServers: drops records missing id or url', () => {
     const all = MCPServerRegistry.listServers();
     assert.equal(all.length, 1);
     assert.equal(all[0].id, 'good');
+});
+
+test('loadServers: quarantines persisted SSE without losing its migration data', () => {
+    reset();
+    MCPServerRegistry.loadServers([{
+        id: 'legacy',
+        label: 'Legacy',
+        url: 'https://x/sse',
+        token: 'preserve-me',
+        transport: 'sse',
+        enabled: true,
+    }]);
+    const legacy = MCPServerRegistry.getServer('legacy');
+    assert.equal(legacy.transport, 'sse');
+    assert.equal(legacy.enabled, false);
+    assert.equal(legacy.token, 'preserve-me');
+    assert.deepEqual(MCPServerRegistry.listServers(true), []);
+    assert.throws(() => MCPServerRegistry.updateServer('legacy', { enabled: true }), /supports Streamable HTTP only/);
+
+    const [persisted] = MCPServerRegistry.serialize();
+    assert.equal(persisted.transport, 'sse');
+    assert.equal(persisted.enabled, false);
+    assert.equal(persisted.token, 'preserve-me');
+
+    const migrated = MCPServerRegistry.updateServer('legacy', {
+        url: 'https://x/mcp',
+        transport: 'streamable-http',
+        enabled: true,
+    });
+    assert.equal(migrated.transport, 'streamable-http');
+    assert.equal(migrated.enabled, true);
+    assert.equal(migrated.token, 'preserve-me');
+});
+
+test('testConnection: rejects unsupported transport before fetch', async () => {
+    reset();
+    const originalFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async () => { fetchCalls++; throw new Error('must not fetch'); };
+    try {
+        const result = await MCPServerRegistry.testConnection({
+            url: 'https://x/sse',
+            transport: 'sse',
+        });
+        assert.equal(result.ok, false);
+        assert.match(result.error, /supports Streamable HTTP only/);
+        assert.equal(fetchCalls, 0);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('settings transport selector advertises Streamable HTTP only', () => {
+    const html = readFileSync(new URL('../html/settings-tabs.html', import.meta.url), 'utf8');
+    const selector = html.match(/<select id="mcpEditTransport">([\s\S]*?)<\/select>/)?.[1] || '';
+    assert.match(selector, /value="streamable-http"/);
+    assert.doesNotMatch(selector, /value="sse"/);
+    assert.match(html, /mcpTransportMigrationWarning/);
 });
