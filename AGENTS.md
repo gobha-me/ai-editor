@@ -41,7 +41,8 @@ or rewrite stable, complex code solely because it was AI-authored.
   historical state: never restore synchronization, push GitHub-only commits
   back to it, or archive/delete it from work in this repository.
 - `main` is protected. Work on a topic branch and deliver changes through a
-  pull request with the required `Node and policy` and `Container` checks.
+  pull request with the required `Node and policy`, `Browser`, and `Container`
+  checks.
 
 ## Authority and security boundaries
 
@@ -106,11 +107,11 @@ Test how a change fails, not only its happy path. Start with malformed input,
 missing authority, stale state, provider errors, partial responses, boundaries,
 and recovery. A successful smoke case belongs after that failure matrix.
 
-Tests intended for CI must match `tests/test-*.mjs`. Prefer pure extracted
+Node tests intended for CI must match `tests/test-*.mjs`. Prefer pure extracted
 helpers and the smallest existing Node shim over copying production logic into
 a test. Browser-only behavior belongs in `tests/index.html` and its `.js`
-suites; until that harness is automated, report browser checks as manual and do
-not call an unrun browser path covered.
+suites; `scripts/ci/run-browser-tests.mjs` runs that harness in the locked
+headless Firefox environment and rejects external requests.
 
 ## How to verify a change
 
@@ -120,18 +121,23 @@ Always run:
 node scripts/ci/validate.mjs
 node --test tests/test-*.mjs
 (cd vendor && npm ci --ignore-scripts && npm audit --audit-level=moderate)
+node scripts/ci/run-browser-tests.mjs --output browser-test-results.json
 git diff --check
 ```
 
-The Node suite currently has one deliberate browser-only skip. If that count
-changes, explain why; CI asserts the current count so a silent coverage loss is
-a failure.
+The browser runner requires the Firefox revision locked by Playwright 1.62.1.
+CI's digest-pinned Playwright image is authoritative; a local checkout may use
+`(cd vendor && npx playwright install firefox)` after the locked install.
+
+The Node suite currently has one deliberate browser-only skip whose real DOM
+assertion runs in the required Browser check. If that count changes, explain
+why; CI asserts the current count so a silent coverage loss is a failure.
 
 For container, asset, base-path, or runtime-serving changes, build the image and
 verify both `/` and a non-root `BASE_PATH`, following
 `.github/workflows/validation.yml`. For DOM, service-worker, IndexedDB,
-CodeMirror, or interaction changes, run the relevant browser suites and state
-the browser used. Unavailable checks and skipped paths are not passes.
+CodeMirror, or interaction changes, inspect the machine-readable browser result
+and state the browser used. Unavailable checks and skipped paths are not passes.
 
 ## Versions, images, and deployment
 

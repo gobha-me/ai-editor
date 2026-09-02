@@ -26,11 +26,15 @@ await T.throwsAsync(
 
 T.suite('Blame — Secondary Pane Integration');
 
-// Verify blame button exists in DOM
-const btnBlame = document.getElementById('btnToggleBlame');
-// The button may not exist since we're in a test page, not the full app.
-// This test validates the concept — in the full app it would pass.
-T.assert(true, 'Blame button expected in editor toolbar (btnToggleBlame)');
+// Load the real editor fragment and assert the shipped DOM contract rather
+// than granting a no-op pass because the test runner is not the app shell.
+const editorResponse = await fetch('../html/editor-panel.html');
+T.assert(editorResponse.ok, 'editor panel fragment is available locally');
+const editorDocument = new DOMParser().parseFromString(await editorResponse.text(), 'text/html');
+const btnBlame = editorDocument.getElementById('btnToggleBlame');
+T.assert(btnBlame instanceof HTMLButtonElement, 'blame control is a real button in the editor toolbar');
+T.eq(btnBlame?.getAttribute('type'), 'button', 'blame button cannot submit a surrounding form');
+T.eq(btnBlame?.getAttribute('aria-label'), 'Toggle blame view', 'blame button has an accessible label');
 
 // Import blame toggle to verify it's exported
 try {

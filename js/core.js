@@ -694,8 +694,12 @@ const Storage = {
      * This is best-effort — IDB is the authoritative store.
      */
     _writeLocalStorage(key, value) {
+        // Native Storage methods cannot be reassigned reliably in browsers.
+        // Keep the backend injectable at this narrow boundary so quota
+        // recovery can be exercised with a hermetic fake.
+        const backend = this._localStorageBackend || localStorage;
         try {
-            localStorage.setItem(this._prefix + key, JSON.stringify(value));
+            backend.setItem(this._prefix + key, JSON.stringify(value));
         } catch (e) {
             if (e.name === 'QuotaExceededError') {
                 // Do NOT prune chatHistory: IDB + _cache hold the full payload,
@@ -705,10 +709,10 @@ const Storage = {
                     const drafts = this._getDraftsByAge();
                     let evicted = 0;
                     for (const draft of drafts) {
-                        localStorage.removeItem(draft.key);
+                        backend.removeItem(draft.key);
                         evicted++;
                         try {
-                            localStorage.setItem(this._prefix + key, JSON.stringify(value));
+                            backend.setItem(this._prefix + key, JSON.stringify(value));
                             console.warn(`[Storage] Quota exceeded — evicted ${evicted} draft(s) to free space`);
                             return;
                         } catch {

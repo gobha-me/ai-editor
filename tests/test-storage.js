@@ -129,16 +129,23 @@ T.suite('Storage — Quota Recovery (regression for 1.6.5)');
         timestamp: 1_700_000_000_000 + i,
     }));
 
+    const originalBackend = Storage._localStorageBackend;
     const originalSetItem = localStorage.setItem.bind(localStorage);
+    const originalRemoveItem = localStorage.removeItem.bind(localStorage);
     let threwOnce = false;
-    localStorage.setItem = function (k, v) {
-        if (!threwOnce && k === fullChatLsKey) {
-            threwOnce = true;
-            const err = new Error('synthetic quota');
-            err.name = 'QuotaExceededError';
-            throw err;
-        }
-        return originalSetItem(k, v);
+    Storage._localStorageBackend = {
+        setItem(k, v) {
+            if (!threwOnce && k === fullChatLsKey) {
+                threwOnce = true;
+                const err = new Error('synthetic quota');
+                err.name = 'QuotaExceededError';
+                throw err;
+            }
+            return originalSetItem(k, v);
+        },
+        removeItem(k) {
+            return originalRemoveItem(k);
+        },
     };
 
     const idbCalls = [];
@@ -165,7 +172,7 @@ T.suite('Storage — Quota Recovery (regression for 1.6.5)');
 
     // Restore stubs/spies before assertions so a failed assertion doesn't
     // leak into the rest of the suite.
-    localStorage.setItem = originalSetItem;
+    Storage._localStorageBackend = originalBackend;
     if (originalIdbSet) Storage._idb.set = originalIdbSet;
     console.warn = originalWarn;
 

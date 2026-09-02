@@ -1,5 +1,6 @@
 # Build artifacts
 vendor/node_modules/
+browser-test-results.json
 
 # Git
 .git/

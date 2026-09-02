@@ -119,6 +119,15 @@ T.deepEq(CODER_V1.tools.static, [
     'list_tool_categories',
     'list_tools_by_category',
     'find_tool',
+    'list_conversations',
+    'read_chat_history',
+    'search_chat_history',
+    'get_active_profile',
+    'get_budget_state',
+    'get_recent_errors',
+    'get_retrieval_stats',
+    'get_token_usage',
+    'list_loaded_tools',
     // 1.8.4 — structural-anchor tools.
     'scratchpad_write',
     'scratchpad_read',
@@ -150,7 +159,7 @@ T.deepEq(CODER_V1.tools.static, [
     'get_ci_status',
     'wait_for_ci',
     'get_ci_logs',
-], 'tools.static populated through 2.49.0');
+], 'tools.static matches the current coder structural-anchor set');
 T.eq(CODER_V1.tools.expansion_mode, 'short', 'lazy schema short by default');
 
 T.suite('Profiles — CODER_V1 task ledger config');

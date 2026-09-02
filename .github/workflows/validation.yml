@@ -45,6 +45,39 @@ jobs:
           npm ci --ignore-scripts
           npm audit --audit-level=moderate
 
+  browser:
+    name: Browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+      options: --ipc=host
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: vendor/package-lock.json
+
+      - name: Install locked browser-test dependencies
+        working-directory: vendor
+        run: npm ci --ignore-scripts
+
+      - name: Run hermetic Firefox suite
+        run: node scripts/ci/run-browser-tests.mjs --output browser-test-results.json
+
+      - name: Upload machine-readable browser results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.1
+        with:
+          name: browser-test-results
+          path: browser-test-results.json
+          if-no-files-found: error
+
   container:
     name: Container
     runs-on: ubuntu-latest

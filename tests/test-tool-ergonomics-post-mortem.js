@@ -147,6 +147,8 @@ T.suite('L4 — find_relevant_files readiness gate');
 // Save and restore the surface we're patching
 const origFilesIndexed = RetrievalManager.getFilesIndexed;
 const origEligibleCount = RetrievalManager.getEligibleFileCount;
+const origIsIndexing = RetrievalManager.isIndexing;
+const origIndexProject = RetrievalManager.indexProject;
 const origUseEmbeddings = State.settings.useEmbeddings;
 const origFileTree = State.fileTree;
 
@@ -156,6 +158,9 @@ State.fileTree = Array.from({ length: 505 }, (_, i) => ({ path: `f${i}.js`, type
 // Coverage 6/505 = 1.2% — well below 30% threshold → indexer_not_ready
 RetrievalManager.getFilesIndexed = () => 6;
 RetrievalManager.getEligibleFileCount = () => 505;
+RetrievalManager.isIndexing = () => false;
+let indexProjectCalls = 0;
+RetrievalManager.indexProject = async () => { indexProjectCalls++; };
 
 const cold = await findRelevantFiles({ query: 'auth logic' });
 T.eq(cold.success, false, 'thin coverage returns success=false');
@@ -163,7 +168,8 @@ T.eq(cold.error, 'indexer_not_ready', 'thin coverage emits indexer_not_ready env
 T.eq(cold.indexed, 6, 'envelope echoes indexed count');
 T.eq(cold.estimated_total, 505, 'envelope echoes eligible count');
 T.assert(cold.coverage > 0 && cold.coverage < 0.05, 'coverage fraction reflects 6/505');
-T.assert(cold.hint?.includes('index_project'), 'hint mentions index_project recovery');
+T.assert(cold.hint?.includes('Indexing started in background'), 'hint reports automatic background indexing');
+T.eq(indexProjectCalls, 1, 'cold idle index starts exactly one background indexing pass');
 T.assert(Array.isArray(cold.files) && cold.files.length === 0, 'envelope returns empty files array');
 
 // Coverage 200/505 = 39.6% — above threshold → gate passes (but we don't
@@ -220,6 +226,8 @@ T.assert(partial.hint?.includes('Retry'), 'hint mentions retry path');
 RetrievalManager.findRelevantFiles = origManagerFRF;
 RetrievalManager.getFilesIndexed = origFilesIndexed;
 RetrievalManager.getEligibleFileCount = origEligibleCount;
+RetrievalManager.isIndexing = origIsIndexing;
+RetrievalManager.indexProject = origIndexProject;
 State.settings.useEmbeddings = origUseEmbeddings;
 State.settings.toolTimeout = origToolTimeout;
 State.fileTree = origFileTree;

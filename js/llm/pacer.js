@@ -1,10 +1,10 @@
 // @ts-check
 /**
- * Production wrapper around the eval-canonical rate-limit pacer.
+ * Production wrapper around the shared rate-limit implementation.
  *
  * The math (header ingestion, 10% headroom, null-cap fallback, per-model
- * isolation) lives in [`evals/pacing.js`](../../evals/pacing.js) and is
- * pinned by [`evals/test-haystack.mjs`](../../evals/test-haystack.mjs):172–230.
+ * isolation) lives in [`rate-limiter.js`](./rate-limiter.js) and is pinned by
+ * [`evals/test-haystack.mjs`](../../evals/test-haystack.mjs):172–230.
  * This module is the production seam — owns the process-global singleton
  * pool and a conservative input-token estimator. Re-exports the canonical
  * classes so callers don't reach across the eval boundary directly.
@@ -20,7 +20,7 @@
  *
  * @module llm/pacer
  */
-import { RateLimiter, RateLimiterPool, sleep } from '../../evals/pacing.js';
+import { RateLimiter, RateLimiterPool, sleep } from './rate-limiter.js';
 import { CHARS_PER_TOKEN } from '../intelligence/compression/tokens.js';
 
 export { RateLimiter, RateLimiterPool, sleep };
