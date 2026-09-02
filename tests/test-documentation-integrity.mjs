@@ -83,7 +83,8 @@ test('current documentation remains concise and names one contract layer', async
     assert.ok((await stat(path.join(root, 'CHANGELOG.md'))).size < 12_000);
     assert.doesNotMatch(architecture, /Last sync|RE-EVAL/u);
     assert.doesNotMatch(roadmap, /github\.com\/gobha-me\/ai-editor\/issues\/\d+/u);
+    assert.match(changelog, /^## \[2\.94\.0\] - 2026-09-02$/mu);
     assert.match(changelog, /^## \[2\.93\.0\]/mu);
-    assert.doesNotMatch(changelog, /^## \[2\.(?:94|95|96)\.0\]/mu);
+    assert.doesNotMatch(changelog, /^## \[2\.(?:95|96)\.0\]/mu);
     assert.equal((await readdir(path.join(root, 'docs'))).some(name => name.startsWith('ICD-')), false);
 });

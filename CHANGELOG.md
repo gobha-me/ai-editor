@@ -6,8 +6,10 @@ GitHub Releases page, and the offline Gitea collaboration archive.
 
 ## [Unreleased]
 
-Current source is `2.94.0.1`, an in-flight build targeting the next public
-`v2.94.0` release. It includes all source changes on `main` after `v2.93.0`.
+## [2.94.0] - 2026-09-02
+
+First GitHub-authoritative public release after `v2.93.0`. It includes all
+source changes that passed the required Node, browser, and container gates.
 The former 2.94–2.96 changelog headings were internal working labels: no matching
 Git tags or GitHub Releases were published, so they are not public versions.
 
