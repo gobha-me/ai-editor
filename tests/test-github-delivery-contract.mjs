@@ -23,6 +23,7 @@ test('validation exposes stable required check names', async () => {
     assert.match(workflow, /node --test tests\/test-\*\.mjs/u);
     assert.match(workflow, /run-browser-tests\.mjs --output browser-test-results\.json/u);
     assert.match(workflow, /mcr\.microsoft\.com\/playwright:v1\.62\.1-noble@sha256:[0-9a-f]{64}/u);
+    assert.match(workflow, /options: --user pwuser --ipc=host/u);
     assert.match(workflow, /npm audit --audit-level=moderate/u);
 });
 
