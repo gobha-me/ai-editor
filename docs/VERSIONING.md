@@ -23,8 +23,10 @@ node scripts/ci/validate.mjs
 
 Release authority is ordered and fail-closed:
 
-1. Merge through a pull request with `Node and policy` and `Container` green.
-2. Wait for those checks to finish successfully on the exact `main` merge SHA.
+1. Merge through a pull request with `Node and policy`, `Browser`, and
+   `Container` green.
+2. Wait for all three checks to finish successfully on the exact `main` merge
+   SHA.
 3. Promote `Unreleased`, set the final `X.Y.Z`, and rerun local validation.
 4. Create the annotated `vX.Y.Z` tag.
 5. The tag workflow verifies main ancestry and the exact-SHA checks, then

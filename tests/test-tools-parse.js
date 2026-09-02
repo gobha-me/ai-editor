@@ -18,7 +18,7 @@ T.eq(
     'read_file with path → passes'
 );
 T.eq(
-    validateToolParameters('create_file', { path: 'new.js', content: 'code', message: 'init' }),
+    validateToolParameters('create_file', { path: 'new.js', content: 'code' }),
     null,
     'create_file with all required params → passes'
 );
@@ -44,11 +44,9 @@ T.assert(missingPath !== null, 'read_file without path → error');
 T.assert(missingPath.missingParams.includes('path'), 'Error identifies missing "path"');
 T.assert(missingPath.error.includes('read_file'), 'Error message includes tool name');
 
-const missingMultiple = validateToolParameters('create_file', { path: 'file.js' });
-T.assert(missingMultiple !== null, 'create_file missing content+message → error');
-T.eq(missingMultiple.missingParams.length, 2, 'Two missing params identified');
-T.assert(missingMultiple.missingParams.includes('content'), 'Missing "content"');
-T.assert(missingMultiple.missingParams.includes('message'), 'Missing "message"');
+const missingContent = validateToolParameters('create_file', { path: 'file.js' });
+T.assert(missingContent !== null, 'create_file missing content → error');
+T.deepEq(missingContent.missingParams, ['content'], 'Only content is required after path');
 
 // Empty string counts as missing
 const emptyParam = validateToolParameters('read_file', { path: '' });

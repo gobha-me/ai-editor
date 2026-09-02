@@ -17,7 +17,7 @@ Empirical test of the project's load-bearing assumption that *modern transformer
 - `index.html` — driver page (mounts the runner, gauges, heatmap). Tier dropdowns populate from the live provider catalog at runtime — no hardcoded model IDs, so deprecations / additions don't require a code change.
 - `haystack.js` — corpus loader + needle planter
 - `scoring.js` — case-insensitive substring match
-- `pacing.js` — header-driven RPM/TPM pacer with **per-model bucketing** (`RateLimiterPool`). Venice publishes different caps per model (e.g. `qwen3-5-9b` = 3M TPM vs `deepseek-v3.2` = 10M TPM vs `deepseek-v4-flash` = 1000 RPM, no TPM cap).
+- `pacing.js` — compatibility re-export of the production-owned header-driven RPM/TPM pacer with **per-model bucketing** (`RateLimiterPool`). Venice publishes different caps per model (e.g. `qwen3-5-9b` = 3M TPM vs `deepseek-v3.2` = 10M TPM vs `deepseek-v4-flash` = 1000 RPM, no TPM cap).
 - `cost-preflight.js` — pre-flight estimator. ETA = `max(per-tier)` in parallel mode (default), `sum(per-tier)` in sequential mode.
 - `run-niah.js` — grid orchestrator. Tiers run **concurrently** by default; cells **within** a tier remain sequential because they share a model and therefore a limiter. Bypasses `LLM.chat()` to capture rate-limit response headers.
 - `render-heatmap.js` — DOM heatmap + SVG line chart + JSON/Markdown export

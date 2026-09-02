@@ -375,3 +375,4 @@ window._removeConnection = removeConnection;
 // without booting `initConnectionsTab` (which assumes the editor form exists).
 export const __test_renderConnectionsGroups = renderConnectionsGroups;
 export const __test_showConnectionEditor = showConnectionEditor;
+export const __test_glyphFor = glyphFor;

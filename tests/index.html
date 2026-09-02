@@ -44,7 +44,33 @@
     <script type="module">
         // Minimal test framework
         const results = [];
+        const runtimeErrors = [];
         let currentSuite = null;
+
+        window.__AI_EDITOR_TEST_RESULTS__ = { status: 'running' };
+
+        function errorDetail(value) {
+            if (value instanceof Error) {
+                return { message: value.message, stack: value.stack || '' };
+            }
+            return { message: String(value), stack: '' };
+        }
+
+        function recordRuntimeError(value) {
+            const detail = errorDetail(value);
+            runtimeErrors.push(detail);
+            if (window.__AI_EDITOR_TEST_RESULTS__?.status === 'complete') {
+                window.__AI_EDITOR_TEST_RESULTS__.runtimeErrors.push({ ...detail });
+                window.__AI_EDITOR_TEST_RESULTS__.failed++;
+            }
+        }
+
+        window.addEventListener('error', event => {
+            recordRuntimeError(event.error || event.message);
+        });
+        window.addEventListener('unhandledrejection', event => {
+            recordRuntimeError(event.reason);
+        });
 
         window.T = {
             suite(name) {
@@ -306,12 +332,15 @@
             // so the tally never reads "0 failed" while IMPORT FAILED boxes
             // exist on screen.
             const importFailures = errors.length;
-            totalFail += importFailures;
+            totalFail += importFailures + runtimeErrors.length;
 
             const summaryEl = document.getElementById('summary');
             const allGood = totalFail === 0;
             const suiteCount = results.length + importFailures;
-            const importNote = importFailures > 0 ? ` (${importFailures} import${importFailures === 1 ? '' : 's'} failed)` : '';
+            const failureNotes = [];
+            if (importFailures > 0) failureNotes.push(`${importFailures} import${importFailures === 1 ? '' : 's'} failed`);
+            if (runtimeErrors.length > 0) failureNotes.push(`${runtimeErrors.length} runtime error${runtimeErrors.length === 1 ? '' : 's'}`);
+            const importNote = failureNotes.length > 0 ? ` (${failureNotes.join(', ')})` : '';
             summaryEl.className = `summary ${allGood ? 'all-pass' : 'has-fail'}`;
             summaryEl.innerHTML = `${allGood ? '🎉' : '⚠️'} <strong>${totalPass} passed</strong>, <strong>${totalFail} failed</strong>${importNote} across ${suiteCount} suites`;
 
@@ -326,9 +355,38 @@
                 `<span class="suite-pill fail">⚠️ ${name} — import failed</span>`
             );
             suiteSummaryEl.innerHTML = [...suitePills, ...errorPills].join('');
+
+            window.__AI_EDITOR_TEST_RESULTS__ = {
+                status: 'complete',
+                passed: totalPass,
+                failed: totalFail,
+                suiteCount,
+                suites: results.map(suite => ({
+                    name: suite.name,
+                    passed: suite.passed,
+                    failed: suite.failed,
+                    tests: suite.tests.map(test => ({ ...test })),
+                })),
+                importFailures: errors.map(([name, error]) => ({
+                    name,
+                    ...errorDetail(error),
+                })),
+                runtimeErrors: runtimeErrors.map(error => ({ ...error })),
+            };
         }
 
-        run();
+        run().catch(error => {
+            runtimeErrors.push(errorDetail(error));
+            window.__AI_EDITOR_TEST_RESULTS__ = {
+                status: 'complete',
+                passed: 0,
+                failed: 1,
+                suiteCount: results.length,
+                suites: results,
+                importFailures: [],
+                runtimeErrors: runtimeErrors.map(item => ({ ...item })),
+            };
+        });
     </script>
 </body>
 </html>

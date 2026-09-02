@@ -23,8 +23,8 @@ authoritative.
   which parts of the repo-to-PR loop are reliable in representative use.
 - Earlier planning generated features and release labels faster than evidence
   about the primary user job.
-- One browser-only test remains outside automated CI; manual checks must remain
-  explicit until that path becomes hermetic.
+- Required Firefox CI now catches DOM-harness drift, but it does not replace
+  representative end-to-end repo-to-PR dogfood evidence.
 
 ## Delivered foundation
 
@@ -50,8 +50,8 @@ Success signals:
 
 - Repair the highest-impact reproducible core-loop blocker, with a regression
   test at the narrowest stable boundary.
-- Convert browser-only coverage to hermetic tests when the uncovered path affects
-  the core job; do not chase a coverage percentage as an objective.
+- Add browser coverage when a reproduced core-job failure crosses a real DOM or
+  browser API boundary; do not chase a coverage percentage as an objective.
 - Keep the issue queue actionable: close shipped work promptly and preserve old
   Gitea identifiers as provenance without importing its backlog.
 

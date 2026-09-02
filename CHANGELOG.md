@@ -23,6 +23,10 @@ Git tags or GitHub Releases were published, so they are not public versions.
   planning context from the active tree.
 - Made MCP transport handling fail closed on legacy HTTP+SSE and updated the
   bundled Firecrawl and Linear starters to their Streamable HTTP endpoints.
+- Added a locked, offline Firefox integration suite as a required pull-request
+  and `main` check with machine-readable failure results.
+- Moved shared rate-limit pacing into the shipped runtime tree so the container
+  no longer imports a module from the deliberately excluded evaluation tree.
 
 ## [2.93.0] - 2026-05-22
 

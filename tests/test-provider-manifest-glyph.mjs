@@ -73,3 +73,10 @@ test('GitProviderRegistry.get returns a falsy lookup for an unregistered id', as
     assert.ok(!GitProviderRegistry.get('bitbucket'), 'bitbucket must not resolve');
     assert.ok(!GitProviderRegistry.get('does-not-exist'), 'unknown id must not resolve');
 });
+
+test('registered provider without a glyph uses the documented id fallback', async () => {
+    const { __test_glyphFor } = await import('../js/settings/connections-tab.js');
+    GitProviderRegistry.register({ id: 'custom-host', name: 'Custom Host' });
+    assert.equal(GitProviderRegistry.get('custom-host')?.glyph, null);
+    assert.equal(__test_glyphFor('custom-host'), 'CU');
+});

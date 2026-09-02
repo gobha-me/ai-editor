@@ -34,6 +34,12 @@ const GitProviderRegistry = {
             return false;
         }
         const merged = { ...BASE_GIT_PROVIDER, ...provider };
+        // `glyph` is optional on contributed providers. Do not let the base
+        // provider's "GE" placeholder mask an omission: the Connections UI
+        // owns the documented first-two-characters fallback.
+        if (!Object.prototype.hasOwnProperty.call(provider, 'glyph')) {
+            merged.glyph = null;
+        }
         // Deep-merge contributes so partial declarations work
         merged.contributes = {
             ...BASE_GIT_PROVIDER.contributes,

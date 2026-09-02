@@ -59,15 +59,15 @@ const priorConnections = GitProviderRegistry.listConnections();
 GitProviderRegistry.loadConnections([]);
 
 const fakeGithub = {
-    id: 'github', name: 'GitHub', icon: '🐙', fixedUrl: 'https://api.github.com',
+    id: 'github', name: 'GitHub', icon: '🐙', glyph: 'GH', fixedUrl: 'https://api.github.com',
     listRepos: async () => [], testConnection: async () => ({ ok: true })
 };
 const fakeGitea = {
-    id: 'gitea', name: 'Gitea', icon: '🍵',
+    id: 'gitea', name: 'Gitea', icon: '🍵', glyph: 'GT',
     listRepos: async () => [], testConnection: async () => ({ ok: true })
 };
 const fakeGitlab = {
-    id: 'gitlab', name: 'GitLab', icon: '🦊', fixedUrl: 'https://gitlab.com/api/v4',
+    id: 'gitlab', name: 'GitLab', icon: '🦊', glyph: 'GL', fixedUrl: 'https://gitlab.com/api/v4',
     listRepos: async () => [], testConnection: async () => ({ ok: true })
 };
 
