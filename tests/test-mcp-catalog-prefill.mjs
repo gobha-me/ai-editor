@@ -42,20 +42,16 @@ test('starter.url preserves {placeholder} segments verbatim', () => {
     const starter = catalogEntryToStarter({
         id: 'fc',
         name: 'FC',
-        url: 'https://mcp.foo/{API_KEY}/sse',
-        transport: 'sse',
+        url: 'https://mcp.foo/{API_KEY}/v2/mcp',
+        transport: 'streamable-http',
     });
-    assert.equal(starter.url, 'https://mcp.foo/{API_KEY}/sse');
+    assert.equal(starter.url, 'https://mcp.foo/{API_KEY}/v2/mcp');
 });
 
-test('starter.transport falls back to streamable-http for unknown transport', () => {
-    const starter = catalogEntryToStarter({ id: 'x', name: 'X', url: 'https://x/mcp', transport: 'mystery' });
-    assert.equal(starter.transport, 'streamable-http');
-});
-
-test('starter.transport === "sse" when entry.transport === "sse"', () => {
-    const starter = catalogEntryToStarter({ id: 'x', name: 'X', url: 'https://x/mcp', transport: 'sse' });
-    assert.equal(starter.transport, 'sse');
+test('unsupported or missing transports are rejected instead of coerced', () => {
+    assert.equal(catalogEntryToStarter({ id: 'x', name: 'X', url: 'https://x/mcp', transport: 'mystery' }), null);
+    assert.equal(catalogEntryToStarter({ id: 'x', name: 'X', url: 'https://x/sse', transport: 'sse' }), null);
+    assert.equal(catalogEntryToStarter({ id: 'x', name: 'X', url: 'https://x/mcp' }), null);
 });
 
 test('starter.enabled defaults to true', () => {
@@ -82,7 +78,7 @@ test('every shipped catalog entry produces a valid starter (round-trip smoke)', 
         assert.equal(typeof starter.label, 'string');
         assert.equal(typeof starter.url, 'string');
         assert.equal(starter.token, '');
-        assert.ok(['streamable-http', 'sse'].includes(starter.transport));
+        assert.equal(starter.transport, 'streamable-http');
         assert.equal(starter.enabled, true);
         assert.equal(starter.roles, 'all');
     }

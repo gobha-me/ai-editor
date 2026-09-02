@@ -25,9 +25,8 @@
  *   url             — server endpoint. May contain `{placeholder}` segments
  *                     (e.g. `{API_KEY}` in the path) — preserved verbatim by
  *                     the pre-fill, the user substitutes manually before Save.
- *   transport       — 'streamable-http' | 'sse'. **No stdio** — the bridge
- *                     does not support it (`js/mcp/protocol.js` only speaks
- *                     HTTP).
+ *   transport       — 'streamable-http'. Legacy HTTP+SSE and stdio are not
+ *                     implemented by the browser bridge.
  *   requiresToken   — drives the "🔑 token required" badge. The token field
  *                     is NEVER pre-filled regardless of this flag.
  *   tokenHint?      — optional one-liner shown after pre-fill, describing
@@ -38,8 +37,8 @@
  *
  * ## How to add a 9th entry
  *
- * 1. Find a public MCP server reachable via streamable-http or sse. (Stdio
- *    servers will not work in the browser — skip them.)
+ * 1. Find a public MCP server reachable via streamable-http. Legacy HTTP+SSE
+ *    and stdio servers will not work in the browser — skip them.
  * 2. Pick a slug id (`^[a-z0-9][a-z0-9-]*$`) that doesn't collide.
  * 3. Add an object to `MCP_CATALOG` below with all required fields.
  * 4. If `requiresToken: true`, include a `tokenHint` describing how to get one.
@@ -56,7 +55,7 @@
  * @property {string} description
  * @property {'web-search'|'dev-tools'|'docs'|'productivity'|'integration'} category
  * @property {string} url
- * @property {'streamable-http'|'sse'} transport
+ * @property {'streamable-http'} transport
  * @property {boolean} requiresToken
  * @property {string} [tokenHint]
  * @property {string} docsUrl
@@ -112,10 +111,10 @@ export const MCP_CATALOG = Object.freeze([
         name: 'Firecrawl',
         description: 'Web scraping and extraction. Crawl whole sites, extract structured data, and convert pages to LLM-ready markdown.',
         category: 'web-search',
-        url: 'https://mcp.firecrawl.dev/{API_KEY}/sse',
-        transport: 'sse',
+        url: 'https://mcp.firecrawl.dev/{API_KEY}/v2/mcp',
+        transport: 'streamable-http',
         requiresToken: true,
-        tokenHint: 'API key: get one at https://www.firecrawl.dev/app/api-keys. Replace {API_KEY} in the URL above before saving — no separate token field needed.',
+        tokenHint: 'API key: get one at https://www.firecrawl.dev/app/api-keys. Replace {API_KEY} in the URL before saving — the URL contains the credential, so leave the separate token field empty.',
         docsUrl: 'https://docs.firecrawl.dev/mcp',
     },
     {
@@ -123,11 +122,11 @@ export const MCP_CATALOG = Object.freeze([
         name: 'Linear',
         description: 'Read and write Linear issues, projects, and cycles. Plan work and triage tickets without leaving the chat.',
         category: 'productivity',
-        url: 'https://mcp.linear.app/sse',
-        transport: 'sse',
+        url: 'https://mcp.linear.app/mcp',
+        transport: 'streamable-http',
         requiresToken: true,
         tokenHint: 'Personal API key: Linear → Settings → Account → Security & access → Personal API keys.',
-        authNote: 'Linear\u2019s production posture is OAuth; bearer-token mode is the documented workaround until OAuth lands in Phase 1.5.',
+        authNote: 'Linear recommends OAuth for interactive clients; its MCP endpoint also accepts a Linear API key or OAuth token in the bearer-token field.',
         docsUrl: 'https://linear.app/docs/mcp',
     },
     {
@@ -190,21 +189,23 @@ export function categoryIcon(category) {
  *
  * Invariants enforced here (and verified by tests/test-mcp-catalog-prefill.mjs):
  *   • `token` is always `''`. Catalog entries never carry secrets.
- *   • `transport` falls back to 'streamable-http' on any unrecognised value.
+ *   • Unsupported or missing transports return `null`; catalog data is never
+ *     silently coerced into the implemented transport.
  *   • `roles` defaults to 'all'.
  *   • URL placeholder segments (e.g. `{API_KEY}`) are preserved verbatim — the
  *     user substitutes them in the form before clicking Save.
  *   • `null` / non-object input returns `null` (defensive).
  *
  * @param {CatalogEntry|null|undefined} entry
- * @returns {{label: string, url: string, transport: 'streamable-http'|'sse', token: string, enabled: boolean, roles: string} | null}
+ * @returns {{label: string, url: string, transport: 'streamable-http', token: string, enabled: boolean, roles: string} | null}
  */
 export function catalogEntryToStarter(entry) {
     if (!entry || typeof entry !== 'object') return null;
+    if (entry.transport !== 'streamable-http') return null;
     return {
         label: String(entry.name || ''),
         url: String(entry.url || ''),
-        transport: entry.transport === 'sse' ? 'sse' : 'streamable-http',
+        transport: 'streamable-http',
         token: '',
         enabled: true,
         roles: 'all',

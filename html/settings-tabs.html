@@ -773,8 +773,10 @@
             <label for="mcpEditTransport">Transport:</label>
             <select id="mcpEditTransport">
                 <option value="streamable-http">Streamable HTTP (default)</option>
-                <option value="sse">SSE (legacy)</option>
             </select>
+            <small id="mcpTransportMigrationWarning" role="alert" style="display: none; color: var(--tk-color-warning); font-size: var(--font-sm); margin-top: 0.35rem;">
+                This saved server uses an unsupported legacy transport. Update its URL to the provider's Streamable HTTP endpoint before saving or testing it.
+            </small>
         </div>
 
         <div class="form-group">

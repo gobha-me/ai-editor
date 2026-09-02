@@ -10,7 +10,7 @@
  * Two endpoints used:
  *   - LIST (`?q=is:remote&pageSize=100`) — paginated metadata only. The
  *     `remote: true` filter excludes stdio entries the bridge can't speak
- *     to (`js/mcp/protocol.js` is HTTP/SSE only).
+ *     to (`js/mcp/protocol.js` implements Streamable HTTP only).
  *   - DETAIL (`/{qualifiedName}`) — fetched lazily when the user picks an
  *     entry, because the list endpoint does NOT include the connection
  *     URL (`connections[].deploymentUrl`).
@@ -54,9 +54,8 @@ export function parseSmitheryListResponse(json) {
  * settings tab needs to fill in the add-server form. Pure.
  *
  * Smithery's `connections[]` array can contain multiple entries; we pick
- * the first whose `type` matches one of our supported transports. The
+ * the first whose `type` matches our supported transport. The
  * mapping rules:
- *   - `type === 'sse'`         → `transport: 'sse'`
  *   - `type === 'http'` /
  *     `type === 'streamable-http'` → `transport: 'streamable-http'`
  *   - anything else            → skipped (next connection is tried)
@@ -66,7 +65,7 @@ export function parseSmitheryListResponse(json) {
  * case rather than silently failing.
  *
  * @param {*} json
- * @returns {{url: string, transport: 'streamable-http'|'sse'} | null}
+ * @returns {{url: string, transport: 'streamable-http'} | null}
  */
 export function parseSmitheryDetailResponse(json) {
     if (!json || typeof json !== 'object') return null;
@@ -76,7 +75,6 @@ export function parseSmitheryDetailResponse(json) {
         const type = typeof conn.type === 'string' ? conn.type.toLowerCase() : '';
         const url = typeof conn.deploymentUrl === 'string' ? conn.deploymentUrl.trim() : '';
         if (!url) continue;
-        if (type === 'sse') return { url, transport: 'sse' };
         if (type === 'http' || type === 'streamable-http') return { url, transport: 'streamable-http' };
     }
     return null;
@@ -174,13 +172,13 @@ export async function fetchRemoteList({
  * Fetch a single server's detail (specifically: its connection URL and
  * transport). Used lazily on "Use this server" click for remote entries.
  *
- * Returns `null` when the server has no usable HTTP/SSE connection, so
+ * Returns `null` when the server has no usable Streamable HTTP connection, so
  * the settings tab can show a clear "no usable connection" toast rather
  * than pre-filling a broken form.
  *
  * @param {string} qualifiedName
  * @param {{fetchImpl?: typeof fetch}} [opts]
- * @returns {Promise<{url: string, transport: 'streamable-http'|'sse'} | null>}
+ * @returns {Promise<{url: string, transport: 'streamable-http'} | null>}
  */
 export async function fetchRemoteDetail(qualifiedName, { fetchImpl = globalThis.fetch } = {}) {
     if (typeof qualifiedName !== 'string' || !qualifiedName.trim()) {

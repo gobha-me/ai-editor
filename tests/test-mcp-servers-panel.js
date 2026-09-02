@@ -5,7 +5,8 @@
  *   - Renders one row per registered MCP server with label, URL, transport
  *     and tool-count meta.
  *   - Empty registry shows the "+ Add MCP Server" empty-state line.
- *   - Status pill resolution: ok / warn (_unreachable, no URL) / disabled.
+ *   - Status pill resolution: ok / warn (unreachable, no URL, unsupported) /
+ *     disabled.
  *   - showServerEditor(id) populates the form fields from the registry
  *     record; showServerEditor(null) blanks them.
  *
@@ -15,6 +16,7 @@
 
 import { MCPServerRegistry } from '../js/mcp/registry.js';
 import {
+    initMCPServersTab,
     __test_renderMCPServersList,
     __test_showServerEditor,
 } from '../js/settings/mcp-servers-tab.js';
@@ -40,37 +42,42 @@ fixture.innerHTML = `
             <input id="mcpEditToken">
             <select id="mcpEditTransport">
                 <option value="streamable-http">Streamable HTTP</option>
-                <option value="sse">SSE</option>
             </select>
+            <small id="mcpTransportMigrationWarning" style="display: none;"></small>
             <input type="checkbox" id="mcpEditEnabled">
+            <button id="btnTestMCPServer"></button>
+            <button id="btnCancelMCPServer"></button>
+            <button id="btnSaveMCPServer"></button>
             <div id="mcpServerTestResult"></div>
         </div>
     </div>
 `;
 document.body.appendChild(fixture);
+initMCPServersTab();
 
 // ----- Snapshot + seed -----
 
 const priorServers = MCPServerRegistry.serialize();
 MCPServerRegistry.__test_reset();
 
-MCPServerRegistry.addServer({
-    id: 'fs-demo',
-    label: 'Filesystem Demo',
-    url: 'https://mcp.example/fs',
-    token: 'tok-1',
-    transport: 'streamable-http',
-    enabled: true,
-});
+MCPServerRegistry.loadServers([
+    {
+        id: 'fs-demo',
+        label: 'Filesystem Demo',
+        url: 'https://mcp.example/fs',
+        token: 'tok-1',
+        transport: 'streamable-http',
+        enabled: true,
+    },
+    {
+        id: 'gh-demo',
+        label: 'GitHub MCP',
+        url: 'https://mcp.example/gh/sse',
+        transport: 'sse',
+        enabled: true,
+    },
+]);
 MCPServerRegistry.updateServer('fs-demo', { _toolCount: 4, _lastSync: Date.now() });
-
-MCPServerRegistry.addServer({
-    id: 'gh-demo',
-    label: 'GitHub MCP',
-    url: 'https://mcp.example/gh',
-    transport: 'sse',
-    enabled: false,
-});
 
 // ----- Row rendering -----
 
@@ -87,8 +94,10 @@ T.assert(fsRow.textContent.includes('4 tools'), 'fs-demo row meta includes tool 
 T.assert(fsRow.querySelector('.conn__status--ok'), 'fs-demo (enabled, has URL) shows status--ok');
 
 const ghRow = fixture.querySelector('[data-mcp-id="gh-demo"]');
-T.assert(ghRow.classList.contains('conn__row--disabled'), 'gh-demo (enabled:false) carries disabled modifier');
-T.assert(ghRow.querySelector('.conn__status--disabled'), 'gh-demo renders status--disabled');
+T.assert(ghRow.classList.contains('conn__row--disabled'), 'gh-demo quarantine carries disabled modifier');
+T.assert(ghRow.querySelector('.conn__status--warn'), 'gh-demo renders an unsupported-transport warning');
+T.assert(ghRow.textContent.includes('migration required'), 'gh-demo tells the user migration is required');
+T.assert(ghRow.querySelector('[data-mcp-action="toggle"]').disabled, 'gh-demo cannot be enabled before migration');
 
 // ----- Empty state -----
 
@@ -104,22 +113,52 @@ T.assert(
 // ----- Editor populate-from-registry round-trip -----
 
 MCPServerRegistry.__test_reset();
-MCPServerRegistry.addServer({
+MCPServerRegistry.loadServers([{
     id: 'edit-demo',
     label: 'Edit Demo',
-    url: 'https://mcp.example/x',
+    url: 'https://mcp.example/x/sse',
     token: 'tok-x',
     transport: 'sse',
-    enabled: false,
-});
+    enabled: true,
+}]);
 
 __test_showServerEditor('edit-demo');
 T.eq(fixture.querySelector('#mcpEditLabel').value, 'Edit Demo', 'Editor label populated');
-T.eq(fixture.querySelector('#mcpEditUrl').value, 'https://mcp.example/x', 'Editor URL populated');
+T.eq(fixture.querySelector('#mcpEditUrl').value, 'https://mcp.example/x/sse', 'Editor URL populated');
 T.eq(fixture.querySelector('#mcpEditToken').value, 'tok-x', 'Editor token populated');
-T.eq(fixture.querySelector('#mcpEditTransport').value, 'sse', 'Editor transport populated');
+T.eq(fixture.querySelector('#mcpEditTransport').value, 'streamable-http', 'Editor offers the implemented transport');
 T.eq(fixture.querySelector('#mcpEditEnabled').checked, false, 'Editor enabled checkbox populated');
+T.eq(fixture.querySelector('#mcpTransportMigrationWarning').style.display, 'block', 'Editor shows migration warning');
 T.eq(fixture.querySelector('#mcpServerEditorTitle').textContent, 'Edit MCP Server', 'Editor title reads "Edit"');
+
+// ----- Legacy migration guards -----
+
+const originalFetch = globalThis.fetch;
+const originalShowToast = window.showToast;
+let fetchCalls = 0;
+let lastToast = '';
+globalThis.fetch = async () => { fetchCalls++; throw new Error('legacy guard must not fetch'); };
+window.showToast = message => { lastToast = message; };
+
+fixture.querySelector('#btnTestMCPServer').click();
+T.eq(fetchCalls, 0, 'Testing an unchanged legacy URL never reaches fetch');
+T.assert(
+    fixture.querySelector('#mcpServerTestResult').textContent.includes('Update this legacy server URL'),
+    'Testing an unchanged legacy URL shows migration guidance'
+);
+
+fixture.querySelector('#btnSaveMCPServer').click();
+T.eq(MCPServerRegistry.getServer('edit-demo').transport, 'sse', 'Saving an unchanged legacy URL is blocked without coercion');
+T.assert(lastToast.includes('Update this legacy server URL'), 'Blocked save shows migration guidance');
+
+fixture.querySelector('#mcpEditUrl').value = 'https://mcp.example/x/mcp';
+fixture.querySelector('#btnSaveMCPServer').click();
+T.eq(MCPServerRegistry.getServer('edit-demo').transport, 'streamable-http', 'Changed legacy URL migrates explicitly to Streamable HTTP');
+T.eq(MCPServerRegistry.getServer('edit-demo').url, 'https://mcp.example/x/mcp', 'Migration saves the user-supplied endpoint');
+T.eq(MCPServerRegistry.getServer('edit-demo').token, 'tok-x', 'Migration preserves the saved token');
+
+globalThis.fetch = originalFetch;
+window.showToast = originalShowToast;
 
 // ----- Editor reset for new -----
 

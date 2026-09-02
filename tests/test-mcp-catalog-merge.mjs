@@ -18,8 +18,8 @@ const BUNDLED_LINEAR = {
     name: 'Linear',
     description: 'Curated description.',
     category: 'productivity',
-    url: 'https://mcp.linear.app/sse',
-    transport: 'sse',
+    url: 'https://mcp.linear.app/mcp',
+    transport: 'streamable-http',
     requiresToken: true,
     tokenHint: 'CURATED hint with real research',
     authNote: 'OAuth caveat we wrote by hand',
@@ -95,16 +95,16 @@ test('bundled and non-overlapping remote both pass through; bundled comes first'
 });
 
 test('preserves the order bundled was passed in', () => {
-    const a = { id: 'a', name: 'A' };
-    const b = { id: 'b', name: 'B' };
-    const c = { id: 'c', name: 'C' };
+    const a = { id: 'a', name: 'A', transport: 'streamable-http' };
+    const b = { id: 'b', name: 'B', transport: 'streamable-http' };
+    const c = { id: 'c', name: 'C', transport: 'streamable-http' };
     const out = mergeCatalogs([a, b, c], []);
     assert.deepEqual(out.map(e => e.id), ['a', 'b', 'c']);
 });
 
 test('preserves the order remote was passed in (after the bundled section)', () => {
-    const r1 = { id: 'r1', name: 'R1', source: 'remote' };
-    const r2 = { id: 'r2', name: 'R2', source: 'remote' };
+    const r1 = { id: 'r1', name: 'R1', transport: 'streamable-http', source: 'remote' };
+    const r2 = { id: 'r2', name: 'R2', transport: 'streamable-http', source: 'remote' };
     const out = mergeCatalogs([], [r1, r2]);
     assert.deepEqual(out.map(e => e.id), ['r1', 'r2']);
 });
@@ -139,7 +139,7 @@ test('drops malformed entries (missing id or name)', () => {
         { id: 'no-name' },
         { name: 'no-id' },
         { id: '', name: 'empty-id' },
-        { id: 'good', name: 'Good' },
+        { id: 'good', name: 'Good', transport: 'streamable-http' },
     ];
     const out = mergeCatalogs(malformed, []);
     assert.equal(out.length, 1);
@@ -147,18 +147,27 @@ test('drops malformed entries (missing id or name)', () => {
 });
 
 test('source: "bundled" is set when entry omits the field', () => {
-    const out = mergeCatalogs([{ id: 'x', name: 'X' }], []);
+    const out = mergeCatalogs([{ id: 'x', name: 'X', transport: 'streamable-http' }], []);
     assert.equal(out[0].source, 'bundled');
 });
 
 test('source: "remote" is set on remote entries when the field is missing', () => {
-    const out = mergeCatalogs([], [{ id: 'r', name: 'R' }]);
+    const out = mergeCatalogs([], [{ id: 'r', name: 'R', transport: 'streamable-http' }]);
     assert.equal(out[0].source, 'remote');
 });
 
 test('preserves an explicit source field if already set on bundled', () => {
-    const out = mergeCatalogs([{ id: 'x', name: 'X', source: 'curated-special' }], []);
+    const out = mergeCatalogs([{ id: 'x', name: 'X', transport: 'streamable-http', source: 'curated-special' }], []);
     assert.equal(out[0].source, 'curated-special');
+});
+
+test('drops catalog entries that advertise unsupported or missing transports', () => {
+    const out = mergeCatalogs([
+        { id: 'sse', name: 'Legacy SSE', transport: 'sse' },
+        { id: 'missing', name: 'Missing Transport' },
+        { id: 'http', name: 'HTTP', transport: 'streamable-http' },
+    ], []);
+    assert.deepEqual(out.map(e => e.id), ['http']);
 });
 
 // ============================================
@@ -170,7 +179,7 @@ test('round-trip with real MCP_CATALOG and a couple of fake remote entries', () 
         REMOTE_LINEAR_BY_ID,
         REMOTE_LINEAR_BY_NAME,
         REMOTE_NEW_ENTRY,
-        { id: 'duplicate-of-deepwiki', name: 'DeepWiki', source: 'remote' }, // soft collision
+        { id: 'duplicate-of-deepwiki', name: 'DeepWiki', transport: 'streamable-http', source: 'remote' }, // soft collision
     ];
     const out = mergeCatalogs(MCP_CATALOG, remote);
     const ids = out.map(e => e.id);
@@ -201,8 +210,10 @@ test('round-trip with real MCP_CATALOG and a couple of fake remote entries', () 
 // Internal helper
 // ============================================
 
-test('isUsableEntry — gates on id + name', () => {
-    assert.equal(__test_isUsableEntry({ id: 'a', name: 'A' }), true);
+test('isUsableEntry — gates on id, name, and implemented transport', () => {
+    assert.equal(__test_isUsableEntry({ id: 'a', name: 'A', transport: 'streamable-http' }), true);
+    assert.equal(__test_isUsableEntry({ id: 'a', name: 'A', transport: 'sse' }), false);
+    assert.equal(__test_isUsableEntry({ id: 'a', name: 'A' }), false);
     assert.equal(__test_isUsableEntry({ id: 'a' }), false);
     assert.equal(__test_isUsableEntry({ name: 'A' }), false);
     assert.equal(__test_isUsableEntry(null), false);

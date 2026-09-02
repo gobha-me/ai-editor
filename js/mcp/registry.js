@@ -22,7 +22,23 @@ import * as protocol from './protocol.js';
 /** @type {Array<Object>} */
 let _servers = [];
 
-const VALID_TRANSPORTS = new Set(['streamable-http', 'sse']);
+const SUPPORTED_TRANSPORT = 'streamable-http';
+
+function normalizedTransport(transport) {
+    return transport == null ? SUPPORTED_TRANSPORT : String(transport);
+}
+
+function unsupportedTransportError(transport) {
+    return new Error(
+        `Unsupported MCP transport "${transport}". AI Editor supports Streamable HTTP only; update the server URL to its Streamable HTTP endpoint.`
+    );
+}
+
+function requireSupportedTransport(transport) {
+    const normalized = normalizedTransport(transport);
+    if (normalized !== SUPPORTED_TRANSPORT) throw unsupportedTransportError(normalized);
+    return normalized;
+}
 
 /**
  * Dead-letter validator (post-2.54.0). The per-server `roles:` field is
@@ -65,26 +81,37 @@ function normaliseRoles(roles) {
 const MCPServerRegistry = {
     /**
      * Load servers from settings (called by the bundled plugin at init).
-     * Coerces unknown fields to safe defaults so partial old records don't
-     * crash the registry.
+     * Normalizes missing fields so partial old records don't crash the
+     * registry. Explicit unsupported transports are preserved for migration
+     * but forced disabled.
      *
      * @param {Array<Object>|null|undefined} servers
      */
     loadServers(servers) {
         _servers = (servers || [])
             .filter(s => s && typeof s === 'object')
-            .map(s => ({
-                id: String(s.id || ''),
-                label: String(s.label || s.id || ''),
-                url: String(s.url || ''),
-                token: String(s.token || ''),
-                transport: VALID_TRANSPORTS.has(s.transport) ? s.transport : 'streamable-http',
-                enabled: s.enabled !== false,
-                roles: normaliseRoles(s.roles),
-                _toolCount: Number.isFinite(s._toolCount) ? s._toolCount : 0,
-                _lastSync: s._lastSync || null,
-                _unreachable: !!s._unreachable,
-            }))
+            .map(s => {
+                const transport = normalizedTransport(s.transport);
+                const supported = transport === SUPPORTED_TRANSPORT;
+                if (!supported) {
+                    console.warn(`[MCPRegistry] Loaded disabled server "${String(s.id || '')}" with unsupported transport "${transport}"`);
+                }
+                return {
+                    id: String(s.id || ''),
+                    label: String(s.label || s.id || ''),
+                    url: String(s.url || ''),
+                    token: String(s.token || ''),
+                    // Preserve unsupported persisted values for an explicit,
+                    // user-visible migration instead of silently coercing or
+                    // discarding the record.
+                    transport,
+                    enabled: supported && s.enabled !== false,
+                    roles: normaliseRoles(s.roles),
+                    _toolCount: Number.isFinite(s._toolCount) ? s._toolCount : 0,
+                    _lastSync: s._lastSync || null,
+                    _unreachable: !!s._unreachable,
+                };
+            })
             .filter(s => s.id && s.url);
         console.log(`[MCPRegistry] Loaded ${_servers.length} server(s)`);
     },
@@ -101,7 +128,7 @@ const MCPServerRegistry = {
         if (_servers.find(s => s.id === config.id)) {
             throw new Error(`MCP server ID already exists: ${config.id}`);
         }
-        const transport = VALID_TRANSPORTS.has(config.transport) ? config.transport : 'streamable-http';
+        const transport = requireSupportedTransport(config.transport);
         const server = {
             id: config.id,
             label: config.label || config.id,
@@ -128,8 +155,9 @@ const MCPServerRegistry = {
         const idx = _servers.findIndex(s => s.id === id);
         if (idx === -1) throw new Error(`MCP server not found: ${id}`);
         const next = { ..._servers[idx], ...updates };
-        if (updates.transport && !VALID_TRANSPORTS.has(updates.transport)) {
-            next.transport = _servers[idx].transport;
+        if ('transport' in updates) next.transport = requireSupportedTransport(updates.transport);
+        if (next.enabled && next.transport !== SUPPORTED_TRANSPORT) {
+            throw unsupportedTransportError(next.transport);
         }
         if ('roles' in updates) {
             next.roles = normaliseRoles(updates.roles);
@@ -179,13 +207,13 @@ const MCPServerRegistry = {
      */
     async testConnection(cfg) {
         const id = cfg.id || `__test_${Date.now()}`;
-        const probe = {
-            id,
-            url: cfg.url,
-            token: cfg.token || '',
-            transport: cfg.transport || 'streamable-http',
-        };
         try {
+            const probe = {
+                id,
+                url: cfg.url,
+                token: cfg.token || '',
+                transport: requireSupportedTransport(cfg.transport),
+            };
             const init = await protocol.initialize(probe);
             const list = await protocol.toolsList(probe);
             const toolCount = Array.isArray(list?.tools) ? list.tools.length : 0;

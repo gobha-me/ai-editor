@@ -130,6 +130,13 @@ function makeRegistration(server, mcpTool) {
 export async function connect(serverId) {
     const server = MCPServerRegistry.getServer(serverId);
     if (!server) return { ok: false, toolCount: 0, error: `Unknown MCP server: ${serverId}` };
+    if ((server.transport == null ? 'streamable-http' : server.transport) !== 'streamable-http') {
+        return {
+            ok: false,
+            toolCount: 0,
+            error: `Unsupported MCP transport "${server.transport}". AI Editor supports Streamable HTTP only; update the server URL to its Streamable HTTP endpoint.`,
+        };
+    }
     if (!server.enabled) return { ok: false, toolCount: 0, error: `MCP server "${serverId}" is disabled` };
 
     // Tear down any prior registration so a server-side schema change doesn't

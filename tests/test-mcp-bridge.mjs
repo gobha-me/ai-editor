@@ -23,7 +23,7 @@ import { ToolRegistry } from '../js/tools/registry.js';
 import { Catalog } from '../js/intelligence/tools/catalog.js';
 import { MCPServerRegistry } from '../js/mcp/registry.js';
 import * as bridge from '../js/mcp/bridge.js';
-import { State } from '../js/core.js';
+import { Plugins, State } from '../js/core.js';
 import {
     getOrCreateLedger,
     sweepLedgersByToolId,
@@ -211,6 +211,45 @@ test('connect: disabled server short-circuits with error', async () => {
     const result = await bridge.connect('demo');
     assert.equal(result.ok, false);
     assert.match(result.error, /disabled/);
+});
+
+test('connect: quarantined SSE server reports migration error without fetch', async () => {
+    resetAll();
+    let fetchCalls = 0;
+    globalThis.fetch = async () => { fetchCalls++; throw new Error('must not fetch'); };
+    try {
+        MCPServerRegistry.loadServers([{
+            id: 'legacy',
+            url: 'https://mcp.example/sse',
+            transport: 'sse',
+            enabled: true,
+        }]);
+        const result = await bridge.connect('legacy');
+        assert.equal(result.ok, false);
+        assert.match(result.error, /supports Streamable HTTP only/);
+        assert.equal(fetchCalls, 0);
+    } finally {
+        globalThis.fetch = ORIG_FETCH;
+    }
+});
+
+test('Plugins.registerMCPServer: rejects SSE before registration or fetch', async () => {
+    resetAll();
+    let fetchCalls = 0;
+    globalThis.fetch = async () => { fetchCalls++; throw new Error('must not fetch'); };
+    try {
+        const result = await Plugins.registerMCPServer('unit-test', {
+            id: 'legacy-plugin',
+            url: 'https://mcp.example/sse',
+            transport: 'sse',
+        });
+        assert.equal(result.ok, false);
+        assert.match(result.error, /supports Streamable HTTP only/);
+        assert.equal(MCPServerRegistry.getServer('legacy-plugin'), null);
+        assert.equal(fetchCalls, 0);
+    } finally {
+        globalThis.fetch = ORIG_FETCH;
+    }
 });
 
 test('sweepLedgersByToolId: only removes matching predicate', () => {

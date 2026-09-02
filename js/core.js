@@ -1360,10 +1360,9 @@ const Plugins = {
      * (`find_tool` / `list_tools_by_category`) + sticky admission, in
      * line with the §1.4.0 admissibility principle.
      *
-     * 1.4.2 supports `transport: "streamable-http"` (default) only; `"sse"`
-     * is plumbed but falls through with a warning until a real-world
-     * server forces a dedicated implementation. Stdio is not supported
-     * (browser runtime, no subprocess capability).
+     * Supports `transport: "streamable-http"` (default) only. Legacy HTTP+SSE
+     * and stdio are rejected before network access; the browser runtime has no
+     * subprocess capability.
      *
      * @param {string} pluginId - Owning plugin ID (for logging)
      * @param {Object} opts
@@ -1371,7 +1370,7 @@ const Plugins = {
      * @param {string} opts.url - HTTP endpoint of the MCP server.
      * @param {string} [opts.label] - Display label (defaults to id).
      * @param {string} [opts.token] - Bearer token for the `Authorization` header.
-     * @param {string} [opts.transport] - "streamable-http" (default) | "sse".
+     * @param {string} [opts.transport] - "streamable-http" (default).
      * @param {boolean} [opts.enabled] - Default true.
      * @returns {Promise<{ ok: boolean, toolCount: number, error?: string }>}
      */
@@ -1394,7 +1393,7 @@ const Plugins = {
                     label: opts.label || opts.id,
                     url: opts.url,
                     token: opts.token || '',
-                    transport: opts.transport || 'streamable-http',
+                    transport: opts.transport ?? 'streamable-http',
                     enabled: opts.enabled !== false,
                 });
             }
